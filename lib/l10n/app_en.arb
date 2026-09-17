@@ -923,5 +923,75 @@
   "legacyAnalysisNotSaved": "Not saved",
   "@legacyAnalysisNotSaved": {
     "description": "Legacy analysis inspection"
+  },
+  "builderCopyNeedsVerification": "Copy needs verification: {destination}. The draft is retained; this append will not be repeated.",
+  "@builderCopyNeedsVerification": {
+    "description": "Builder durable workspace recovery",
+    "placeholders": {
+      "destination": {
+        "type": "String"
+      }
+    }
+  },
+  "builderInspectCopy": "Inspect copy",
+  "@builderInspectCopy": {
+    "description": "Builder durable workspace recovery"
+  },
+  "builderLineSaveFailed": "Line edits are retained. Saving failed.",
+  "@builderLineSaveFailed": {
+    "description": "Builder durable workspace recovery"
+  },
+  "builderSourceChanged": "The source changed or is missing. Restored edits are a scratch line; save them to an explicit destination.",
+  "@builderSourceChanged": {
+    "description": "Builder durable workspace recovery"
+  },
+  "builderSaveDraftCopy": "Save draft as a new line…",
+  "@builderSaveDraftCopy": {
+    "description": "Builder durable workspace recovery"
+  },
+  "builderRetainedDraftsTooltip": "Retained Builder drafts",
+  "@builderRetainedDraftsTooltip": {
+    "description": "Builder durable workspace recovery"
+  },
+  "builderScratch": "Scratch",
+  "@builderScratch": {
+    "description": "Builder durable workspace recovery"
+  },
+  "builderDraftRetained": "The draft is retained. Choose a destination and try saving it again.",
+  "@builderDraftRetained": {
+    "description": "Builder durable workspace recovery"
+  },
+  "builderRetainedDraftCount": "Retained drafts ({count})",
+  "@builderRetainedDraftCount": {
+    "description": "Builder durable workspace recovery",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "builderCopyInspectionFailed": "Destination could not be inspected. The copy intent and draft are retained.",
+  "@builderCopyInspectionFailed": {
+    "description": "Builder durable workspace recovery"
+  },
+  "builderVerifyCopy": "Verify the saved copy",
+  "@builderVerifyCopy": {
+    "description": "Builder durable workspace recovery"
+  },
+  "builderVerifyCopyExplanation": "Confirm only if the intended line is present in this observed file. Keeping the draft does not repeat the append.",
+  "@builderVerifyCopyExplanation": {
+    "description": "Builder durable workspace recovery"
+  },
+  "builderKeepDraft": "Keep draft",
+  "@builderKeepDraft": {
+    "description": "Builder durable workspace recovery"
+  },
+  "builderCopyPresent": "Copy is present",
+  "@builderCopyPresent": {
+    "description": "Builder durable workspace recovery"
+  },
+  "builderCopyRetained": "The copy and draft are retained. Inspect the destination before trying again.",
+  "@builderCopyRetained": {
+    "description": "Builder durable workspace recovery"
   }
 }

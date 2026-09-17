@@ -207,13 +207,14 @@ class BuilderWorkspaceController extends ChangeNotifier
 
   void _captureDraft() {
     if (!_dirty || _suspended) return;
+    final detached = sourceChanged ? _drafts[_key] : null;
     _drafts[_key] = BuilderDraft(
       key: _key,
-      repertoire: document.currentRepertoire,
+      repertoire: detached?.repertoire ?? document.currentRepertoire,
       content: _content(),
-      sourcePgn: document.repertoirePgn,
-      lineId: document.selectedPgnLine?.id,
-      linePgn: document.selectedPgnLine?.fullPgn,
+      sourcePgn: detached?.sourcePgn ?? document.repertoirePgn,
+      lineId: detached?.lineId ?? document.selectedPgnLine?.id,
+      linePgn: detached?.linePgn ?? document.selectedPgnLine?.fullPgn,
       title: _title,
       cursor: board.path.toList(),
       label: _label,
@@ -533,28 +534,31 @@ class BuilderWorkspaceController extends ChangeNotifier
       );
     }
     _captureDraft();
+    var sourceUnavailable = false;
     if (draft.repertoire != null) {
       final loading = document.setRepertoire(draft.repertoire!);
       final intent = _intentRevision;
       await loading;
-      if (intent != _intentRevision ||
-          document.currentRepertoire != draft.repertoire ||
-          document.loadError != null) {
+      if (intent != _intentRevision) {
         throw StateError(
           'The draft destination could not be opened. Its checkpoint is retained.',
         );
       }
+      sourceUnavailable =
+          document.loadError != null ||
+          document.currentRepertoire != draft.repertoire;
     }
     // Only an exact source match may reattach a recovered editor to autosave.
     // Changed/missing sources retain the tree as scratch for an explicit save.
     RepertoireLine? target;
-    if (document.repertoirePgn == draft.sourcePgn) {
+    if (!sourceUnavailable && document.repertoirePgn == draft.sourcePgn) {
       for (final line in document.repertoireLines) {
         if (line.id == draft.lineId && line.fullPgn == draft.linePgn)
           target = line;
       }
     }
-    sourceChanged = draft.lineId != null && target == null;
+    sourceChanged =
+        sourceUnavailable || (draft.lineId != null && target == null);
     document.selectLine(target);
     _saveLine = target == null ? null : document.selectedLineSaver;
     _applyDraft(draft, parsed: parsed);

@@ -12,6 +12,8 @@
 library;
 
 import 'package:chess_auto_prep/app/builder_lifetime.dart';
+import 'package:chess_auto_prep/features/repertoires/models/builder_workspace_snapshot.dart';
+import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
 import '../support/generation_artifacts_fixture.dart';
 import 'package:chess_auto_prep/features/generation/services/generation_artifacts.dart';
 import 'package:chess_auto_prep/features/generation/controllers/generation_publication_controller.dart';
@@ -186,6 +188,54 @@ void main() {
     PathProviderPlatform.instance = originalPaths;
     if (await storageRoot.exists()) await storageRoot.delete(recursive: true);
   });
+
+  testWidgets(
+    'unreadable source recovery exposes detached editor and save-copy',
+    (tester) async {
+      final path = _writeRepertoire(tester);
+      File(path).deleteSync();
+      Directory(path).createSync();
+      await _pumpScreen(tester, repertoirePath: path);
+      final lifetime = tester
+          .element(find.byType(RepertoireScreen))
+          .read<BuilderLifetime>();
+      await tester.runAsync(
+        () => lifetime.workspace.restoreWorkspace(
+          BuilderWorkspaceSnapshot(
+            drafts: [
+              BuilderDraft(
+                key: 'unreadable-recovery',
+                repertoire: RepertoireMetadata(
+                  filePath: path,
+                  name: 'Unreadable',
+                  lastModified: DateTime(2026),
+                ),
+                content:
+                    '[Event "Recovered scratch"]\n\n1. e4 {retained annotation} e5 *',
+                sourcePgn: _chapterPgn,
+                lineId: 'original',
+                linePgn: _chapterPgn,
+                title: 'Recovered scratch',
+                cursor: [0],
+              ),
+            ],
+            activeKey: 'unreadable-recovery',
+          ),
+        ),
+      );
+      await _settle(tester, cycles: 3);
+      expect(find.byType(InteractivePgnEditor), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('save-builder-draft-copy')),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('source changed or is missing'),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('loaded Builder exposes detached legacy analysis recovery', (
     tester,

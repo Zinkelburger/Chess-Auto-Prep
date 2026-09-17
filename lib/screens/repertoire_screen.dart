@@ -5,6 +5,8 @@ library;
 import '../features/repertoires/models/builder_workspace_snapshot.dart';
 import '../features/documents/models/pgn_document.dart';
 import '../app/builder_lifetime.dart';
+import '../features/repertoires/widgets/builder_copy_inspection_dialog.dart';
+import '../l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/features/audit/services/repertoire_audit_service.dart';
 import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
 import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
@@ -1079,33 +1081,37 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
             for (final copy in _controller.uncertainCopies)
               MaterialBanner(
                 content: Text(
-                  'Copy needs verification: ${copy.destination}. The draft is retained; this append will not be repeated.',
+                  AppLocalizations.of(
+                    context,
+                  ).builderCopyNeedsVerification(copy.destination),
                 ),
                 actions: [
                   TextButton(
                     onPressed: _controller.copyInProgress(copy.draftKey)
                         ? null
                         : () => unawaited(_inspectDraftCopy(copy)),
-                    child: const Text('Inspect copy'),
+                    child: Text(
+                      AppLocalizations.of(context).builderInspectCopy,
+                    ),
                   ),
                 ],
               ),
             if (_controller.saveError != null)
               MaterialBanner(
-                content: const Text('Line edits are retained. Saving failed.'),
+                content: Text(
+                  AppLocalizations.of(context).builderLineSaveFailed,
+                ),
                 actions: [
                   TextButton(
                     onPressed: () => unawaited(_controller.saveActiveLine()),
-                    child: const Text('Retry'),
+                    child: Text(AppLocalizations.of(context).retry),
                   ),
                 ],
               ),
             if (_controller.sourceChanged)
-              const Padding(
-                padding: EdgeInsets.all(8),
-                child: Text(
-                  'The source changed or is missing. Restored edits are a scratch line; save them to an explicit destination.',
-                ),
+              Padding(
+                padding: const EdgeInsets.all(8),
+                child: Text(AppLocalizations.of(context).builderSourceChanged),
               ),
             if (_controller.captureWorkspace().activeKey != null)
               Align(
@@ -1114,20 +1120,24 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
                   key: const ValueKey('save-builder-draft-copy'),
                   onPressed: _saveCurrentDraft,
                   icon: const Icon(Icons.save_as),
-                  label: const Text('Save draft as a new line…'),
+                  label: Text(
+                    AppLocalizations.of(context).builderSaveDraftCopy,
+                  ),
                 ),
               ),
             if (_controller.retainedDrafts.isNotEmpty)
               Align(
                 alignment: Alignment.centerLeft,
                 child: PopupMenuButton(
-                  tooltip: 'Retained Builder drafts',
+                  tooltip: AppLocalizations.of(
+                    context,
+                  ).builderRetainedDraftsTooltip,
                   itemBuilder: (context) => [
                     for (final draft in _controller.retainedDrafts)
                       PopupMenuItem(
                         value: draft,
                         child: Text(
-                          '${draft.repertoire?.name ?? 'Scratch'} · ${draft.title}',
+                          '${draft.repertoire?.name ?? AppLocalizations.of(context).builderScratch} · ${draft.title}',
                         ),
                       ),
                   ],
@@ -1138,7 +1148,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
                       if (mounted)
                         showAppSnackBar(
                           context,
-                          'Draft is retained: $error',
+                          AppLocalizations.of(context).builderDraftRetained,
                           isError: true,
                         );
                     }
@@ -1146,7 +1156,9 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
                   child: Padding(
                     padding: const EdgeInsets.all(8),
                     child: Text(
-                      'Retained drafts (${_controller.retainedDrafts.length})',
+                      AppLocalizations.of(context).builderRetainedDraftCount(
+                        _controller.retainedDrafts.length,
+                      ),
                     ),
                   ),
                 ),
@@ -1181,6 +1193,23 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     }
 
     final loadError = _controller.document.loadError;
+    if (_controller.document.currentRepertoire == null &&
+        _controller.captureWorkspace().activeKey != null) {
+      return (
+        appBar: RepertoireToolbar(
+          title: Text(AppLocalizations.of(context).builderScratch),
+          showSelectRepertoireAction: true,
+          onSettingsClosed: _reclaimFocus,
+          onSelectRepertoire: _showRepertoireSelection,
+        ),
+        body: RepertoireLoadingFrame(
+          loadError: loadError,
+          onDismissError: _controller.document.dismissLoadError,
+          isLoading: _controller.document.isLoading,
+          child: _buildShortcuts(child: _buildCompactLayout()),
+        ),
+      );
+    }
     if (loadError != null && _controller.document.currentRepertoire == null) {
       return (
         appBar: RepertoireToolbar(
@@ -1207,7 +1236,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
                   onPressed: () =>
                       unawaited(_controller.document.loadRepertoire()),
                   icon: const Icon(Icons.refresh),
-                  label: const Text('Retry'),
+                  label: Text(AppLocalizations.of(context).retry),
                 ),
               ],
             ),

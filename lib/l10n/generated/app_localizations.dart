@@ -1269,6 +1269,96 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Not saved'**
   String get legacyAnalysisNotSaved;
+
+  /// Builder durable workspace recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Copy needs verification: {destination}. The draft is retained; this append will not be repeated.'**
+  String builderCopyNeedsVerification(String destination);
+
+  /// Builder durable workspace recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Inspect copy'**
+  String get builderInspectCopy;
+
+  /// Builder durable workspace recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Line edits are retained. Saving failed.'**
+  String get builderLineSaveFailed;
+
+  /// Builder durable workspace recovery
+  ///
+  /// In en, this message translates to:
+  /// **'The source changed or is missing. Restored edits are a scratch line; save them to an explicit destination.'**
+  String get builderSourceChanged;
+
+  /// Builder durable workspace recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Save draft as a new line…'**
+  String get builderSaveDraftCopy;
+
+  /// Builder durable workspace recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Retained Builder drafts'**
+  String get builderRetainedDraftsTooltip;
+
+  /// Builder durable workspace recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Scratch'**
+  String get builderScratch;
+
+  /// Builder durable workspace recovery
+  ///
+  /// In en, this message translates to:
+  /// **'The draft is retained. Choose a destination and try saving it again.'**
+  String get builderDraftRetained;
+
+  /// Builder durable workspace recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Retained drafts ({count})'**
+  String builderRetainedDraftCount(int count);
+
+  /// Builder durable workspace recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Destination could not be inspected. The copy intent and draft are retained.'**
+  String get builderCopyInspectionFailed;
+
+  /// Builder durable workspace recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Verify the saved copy'**
+  String get builderVerifyCopy;
+
+  /// Builder durable workspace recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm only if the intended line is present in this observed file. Keeping the draft does not repeat the append.'**
+  String get builderVerifyCopyExplanation;
+
+  /// Builder durable workspace recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Keep draft'**
+  String get builderKeepDraft;
+
+  /// Builder durable workspace recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Copy is present'**
+  String get builderCopyPresent;
+
+  /// Builder durable workspace recovery
+  ///
+  /// In en, this message translates to:
+  /// **'The copy and draft are retained. Inspect the destination before trying again.'**
+  String get builderCopyRetained;
 }
 
 class _AppLocalizationsDelegate

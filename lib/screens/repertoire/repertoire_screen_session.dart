@@ -253,44 +253,16 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
       if (observed is! PgnOpened) {
         showAppSnackBar(
           context,
-          'Destination could not be inspected. The copy intent and draft are retained.',
+          AppLocalizations.of(context).builderCopyInspectionFailed,
           isError: true,
         );
         return;
       }
       final keep = await showDialog<bool>(
         context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Verify the saved copy'),
-          content: SizedBox(
-            width: 700,
-            height: 420,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(copy.destination),
-                const Text(
-                  'Confirm only if the intended line is present in this observed file. Keeping the draft does not repeat the append.',
-                ),
-                const SizedBox(height: 12),
-                Expanded(
-                  child: SingleChildScrollView(
-                    child: SelectableText(observed.snapshot.content),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Keep draft'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Copy is present'),
-            ),
-          ],
+        builder: (context) => BuilderCopyInspectionDialog(
+          destination: copy.destination,
+          content: observed.snapshot.content,
         ),
       );
       if (keep == true) await _controller.acknowledgeInspectedCopy(current);
@@ -298,7 +270,7 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
       if (mounted)
         showAppSnackBar(
           context,
-          'Copy and draft are retained: $error',
+          AppLocalizations.of(context).builderCopyRetained,
           isError: true,
         );
     }
@@ -325,7 +297,11 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
       await _controller.saveDraftToChapter(draft, chapters.first);
     } catch (error) {
       if (mounted)
-        showAppSnackBar(context, 'Draft is retained: $error', isError: true);
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context).builderDraftRetained,
+          isError: true,
+        );
     }
     _reclaimFocus();
   }

@@ -665,6 +665,46 @@ void main() {
   });
 
   test(
+    'unreadable source restores detached exact draft and permits explicit copy',
+    () async {
+      final first = workspace();
+      await first.document.setRepertoire(chapter('/a'));
+      first.selectLine(first.document.repertoireLines.single);
+      documents.files['/a'] = first.document.repertoireLines.single.fullPgn;
+      first.board.setCommentAtPath(const TreePath([0]), 'retained annotation');
+      final snapshot = first.captureWorkspace();
+      await first.document.flushDocumentForClose();
+      first.dispose();
+      documents.failure = StateError('source permission denied');
+      final restarted = workspace();
+      addTearDown(restarted.dispose);
+      await restarted.restoreWorkspace(snapshot);
+      expect(restarted.sourceChanged, isTrue);
+      expect(
+        restarted.document.loadError,
+        contains('source permission denied'),
+      );
+      expect(restarted.document.selectedPgnLine, isNull);
+      expect(
+        restarted.board.tree.toPgnMoveText(),
+        contains('retained annotation'),
+      );
+      expect(
+        restarted.captureWorkspace().drafts.single.content,
+        snapshot.drafts.single.content,
+      );
+      final original = documents.files['/a'];
+      documents.failure = null;
+      await restarted.saveDraftToChapter(
+        restarted.captureWorkspace().drafts.single,
+        chapter('/b'),
+      );
+      expect(documents.files['/a'], original);
+      expect(documents.files['/b'], contains('retained annotation'));
+    },
+  );
+
+  test(
     'native recovery store reopens annotations, custom FEN and cursor after lifetime ends',
     () async {
       final directory = await Directory.systemTemp.createTemp(
