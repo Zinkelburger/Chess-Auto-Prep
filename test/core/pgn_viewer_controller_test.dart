@@ -43,6 +43,21 @@ class _GatedStorage extends IOStorageService {
       (size: 1, modified: DateTime.fromMillisecondsSinceEpoch(1));
 }
 
+class _RecoveryStorage extends _GatedStorage {
+  final retained = <String>[];
+  @override
+  Future<void> writeFile(
+    String path,
+    String content, {
+    bool createOnly = false,
+    String? expectedContent,
+  }) async {
+    expect(path, startsWith('recovery/'));
+    expect(createOnly, isTrue);
+    retained.add(content);
+  }
+}
+
 /// Stub analysis controller: no isolates, no engine, no IO. Lets us exercise
 /// `loadCurrentGame` (called by every navigation/slice method) deterministically.
 class _FakeAnalysisController extends GameAnalysisController {
@@ -51,6 +66,15 @@ class _FakeAnalysisController extends GameAnalysisController {
 
   @override
   void cancel() {}
+}
+
+class _AbandonAnalysis extends _FakeAnalysisController {
+  int cancellations = 0;
+  int clears = 0;
+  @override
+  void cancel() => cancellations++;
+  @override
+  void clearEvals() => clears++;
 }
 
 class _GatedOpeningController extends PgnViewerController {
@@ -499,6 +523,86 @@ void main() {
       expect(c.isLoading, isFalse);
     });
   });
+
+  for (final transition in [
+    'file open',
+    'pasted text',
+    'decoded adoption',
+    'workspace recovery',
+    'navigation restoration',
+    'close',
+  ]) {
+    test(
+      '$transition abandons playback and analysis from the old collection',
+      () async {
+        final storage = _RecoveryStorage();
+        StorageFactory.instanceForTest = storage;
+        final decoder = _ControlledDecoder();
+        final analysis = _AbandonAnalysis();
+        final c = _makeController(decoder: decoder, analysis: analysis);
+        addTearDown(c.dispose);
+        _seed(c, [_game()]);
+        c.setAutoDetectOpenings(false);
+        final snapshot = c.captureWorkspace();
+        final restoreNavigation = c.captureNavigationContext();
+        final cancellations = analysis.cancellations;
+        final clears = analysis.clears;
+        c.startAutoPlay();
+        expect(c.isAutoPlaying, isTrue);
+        final replacement = DecodedPgnCollection([_game(white: 'New')], '');
+        switch (transition) {
+          case 'file open':
+            final operation = c.loadFile('/tmp/replacement.pgn');
+            // Work stops at the request, before the slow file can finish.
+            expect(c.isAutoPlaying, isFalse);
+            await Future<void>.delayed(Duration.zero);
+            storage.reads['/tmp/replacement.pgn']!.complete(null);
+            await operation;
+          case 'pasted text':
+            final operation = c.loadPgnContent('new games');
+            expect(c.isAutoPlaying, isFalse);
+            decoder.pending.complete(replacement);
+            await operation;
+          case 'decoded adoption':
+            c.adoptDecodedCollection(replacement);
+          case 'workspace recovery':
+            final operation = c.restoreWorkspace(snapshot);
+            decoder.pending.complete(DecodedPgnCollection([_game()], ''));
+            await operation;
+            expect(storage.retained.single, contains('1. e4 e5'));
+          case 'navigation restoration':
+            await restoreNavigation();
+          case 'close':
+            c.closeFile();
+        }
+        expect(c.isAutoPlaying, isFalse);
+        expect(analysis.cancellations, greaterThan(cancellations));
+        expect(analysis.clears, greaterThan(clears));
+      },
+    );
+  }
+
+  test(
+    'close publishes completed teardown before a listener opens another collection',
+    () {
+      final c = _makeController();
+      addTearDown(c.dispose);
+      _seed(c, [_game(white: 'Departing')]);
+      c.startAutoPlay();
+      var reopened = false;
+      c.addListener(() {
+        if (!c.isAutoPlaying && !reopened) {
+          reopened = true;
+          c.adoptDecodedCollection(
+            DecodedPgnCollection([_game(white: 'New')], ''),
+          );
+        }
+      });
+      c.closeFile();
+      expect(reopened, isTrue);
+      expect(c.allGames.single.headers['White'], 'New');
+    },
+  );
 
   group('game navigation', () {
     test('goToGame moves to a valid index', () {

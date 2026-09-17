@@ -128,13 +128,7 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
       throw const FormatException('No valid games in the document');
     }
     return () {
-      _collectionLoads.invalidate();
-      _gameLoadEpoch++;
-      _filters.invalidate();
-      isLoading = false;
-      isPreparingCollection = false;
-      _restoringSession = false;
-      _fenIndex.reset();
+      _abandonInFlightWork();
       _adoptCollection(
         path: path,
         entries: entries,
@@ -655,6 +649,42 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
     return collectionsDir;
   }
 
+  /// End work tied to the departing collection before invoking cancellation
+  /// callbacks. Pending document writes retain their own captured destination;
+  /// they are flushed by adoption/close and are never treated as cancelled.
+  bool _abandoningWork = false;
+
+  @override
+  void notifyListeners() {
+    // Cancellation can synchronously notify through playback or Solitaire.
+    // The replacing command publishes once its collection transition is ready.
+    if (!_abandoningWork) super.notifyListeners();
+  }
+
+  int _abandonInFlightWork() {
+    final revision = _collectionLoads.invalidate();
+    _gameLoadEpoch++;
+    _openingEpoch++;
+    _filters.invalidate();
+    _filters.clearPendingRestore();
+    isLoading = false;
+    isPreparingCollection = false;
+    _restoringSession = false;
+    _abandoningWork = true;
+    try {
+      _fenIndex.reset();
+      _viewerTree.cancelBuild();
+      _autoPlay.stop();
+      analysisController.cancel();
+      analysisController.clearEvals();
+      if (_solitaireSession.isActive) _solitaireSession.stop();
+      _solitaireSession.cancelSetup();
+    } finally {
+      _abandoningWork = false;
+    }
+    return revision;
+  }
+
   /// Adopt [entries] as the loaded collection.
   ///
   /// The one place collection-scoped state is set, so the two load paths and
@@ -706,16 +736,10 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
   Future<void> loadFile(String path, {bool restoreSavedSlice = true}) async {
     if (!canReplaceCollection()) return;
     unawaited(saveSession());
+    _abandonInFlightWork();
     final loading = _collectionLoads.loadFile(path);
     final loadEpoch = _loadEpoch;
-    isPreparingCollection = false;
-    _restoringSession = false;
-    // A collection request also makes any cached-analysis parse for the old
-    // selected game stale immediately, before the new file finishes reading.
-    _gameLoadEpoch++;
     errorMessage = null;
-    _filters.clearPendingRestore();
-    _filters.invalidate();
     final fileName = p.basename(path);
 
     isLoading = true;
@@ -741,7 +765,6 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
       final loaded = result as ViewerCollectionLoaded;
       final entries = List<PgnGameEntry>.of(loaded.document.games);
 
-      _filters.invalidate();
       _restoringSession = true;
       _adoptCollection(
         path: path,
@@ -758,7 +781,6 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
 
       await addToRecentFiles(path);
       if (!_isCurrentLoad(loadEpoch)) return;
-      _fenIndex.reset();
       final detect = await preferences.autoDetectOpenings();
       if (!_isCurrentLoad(loadEpoch)) return;
       autoDetectOpenings = detect;
@@ -853,17 +875,7 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
   }) {
     if (isDisposed || !isActive() || !canReplaceCollection()) return null;
     unawaited(saveSession());
-    final revision = _collectionLoads.invalidate();
-    _gameLoadEpoch++;
-    _filters.invalidate();
-    _filters.clearPendingRestore();
-    _fenIndex.reset();
-    stopAutoPlay();
-    analysisController.cancel();
-    analysisController.clearEvals();
-    isLoading = false;
-    isPreparingCollection = false;
-    _restoringSession = false;
+    final revision = _abandonInFlightWork();
     errorMessage = null;
     _adoptCollection(
       path: null,
@@ -891,14 +903,10 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
   Future<void> loadPgnContent(String content, {String? initialFen}) async {
     if (!canReplaceCollection()) return;
     unawaited(saveSession());
+    _abandonInFlightWork();
     final loading = _collectionLoads.loadText(content);
     final loadEpoch = _loadEpoch;
-    isPreparingCollection = false;
-    _restoringSession = false;
-    _gameLoadEpoch++;
     errorMessage = null;
-    _filters.clearPendingRestore();
-    _filters.invalidate();
     isLoading = true;
     notifyListeners();
     final result = await loading;
@@ -960,14 +968,7 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
     final initialFen = pgnInitialFen;
     return () async {
       if (isDisposed || !isActive() || !canReplaceCollection()) return false;
-      final loadEpoch = _collectionLoads.invalidate();
-      isPreparingCollection = false;
-      _filters.invalidate();
-      _gameLoadEpoch++;
-      stopAutoPlay();
-      analysisController.cancel();
-      analysisController.clearEvals();
-      _fenIndex.reset();
+      final loadEpoch = _abandonInFlightWork();
       _adoptCollection(
         path: path,
         entries: List.of(entries),
@@ -1018,21 +1019,8 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
     if (!canReplaceCollection()) return;
     unawaited(saveSession());
     unawaited(_reportSessionResult(_sessions.close()));
-    _restoringSession = false;
-    // Bumped first: an in-flight load or slice recompute would otherwise land
-    // its results — and its isLoading release — on the cleared state.
-    _collectionLoads.invalidate();
-    isPreparingCollection = false;
-    _gameLoadEpoch++;
-    _filters.invalidate();
-    stopAutoPlay();
-    if (isSolitaireMode) _solitaireSession.stop();
-    _solitaireSession.cancelSetup();
-    analysisController.cancel();
-    analysisController.clearEvals();
-    isLoading = false;
+    _abandonInFlightWork();
     errorMessage = null;
-    _filters.clearPendingRestore();
     // An empty collection: _adoptCollection nulls the protagonist fields the
     // same way this used to by hand.
     _adoptCollection(
@@ -1042,7 +1030,6 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
     );
     currentPosition = Chess.initial;
     boardFlipped = false;
-    _fenIndex.reset();
     notifyListeners();
   }
 

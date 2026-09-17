@@ -109,6 +109,30 @@ void main() {
       },
     );
 
+    test('a previous run cannot stop playback started after replacement', () {
+      fakeAsync((async) {
+        final board = _FakeBoard(['end']);
+        final frames = <void Function()>[];
+        final engine = AutoPlayEngine(
+          isActive: () => true,
+          currentFen: () => board.currentFen,
+          goForward: board.goForward,
+          hasNextGame: () => false,
+          nextGame: () {},
+          onChanged: () {},
+          schedulePostFrame: frames.add,
+        );
+        engine.start();
+        async.elapse(AutoPlayEngine.firstStepDelay);
+        engine.stop();
+        engine.start();
+        frames.single();
+        expect(engine.isPlaying, isTrue);
+        expect(async.pendingTimers, hasLength(1));
+        engine.dispose();
+      });
+    });
+
     test('dispose cancels the timer (no further ticks)', () {
       fakeAsync((async) {
         final board = _FakeBoard(['a', 'b', 'c']);
