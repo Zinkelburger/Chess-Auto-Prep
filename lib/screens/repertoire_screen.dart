@@ -6,6 +6,7 @@ import '../features/repertoires/repositories/repertoire_document_repository.dart
 import '../features/repertoires/repositories/repertoire_decoder.dart';
 
 import '../app/legacy_theme_boundary.dart';
+import '../features/generation/controllers/generation_publication_controller.dart';
 
 import 'dart:async';
 import '../features/documents/controllers/document_close_coordinator.dart';
@@ -129,8 +130,10 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   late final RepertoireController _controller;
   final _workspaceNavigation = WorkspaceNavigationController();
   AppState? _appState;
-  final GenerationSessionController _generationController =
-      GenerationSessionController();
+  late final GenerationSessionController _generationController =
+      GenerationSessionController(
+        publication: context.read<GenerationPublicationFactory>()(),
+      );
   final GlobalKey<RepertoireGenerationTabState> _generationTabKey =
       GlobalKey<RepertoireGenerationTabState>();
   final AuditSessionController _auditController = AuditSessionController();

@@ -1,0 +1,140 @@
+import 'dart:io';
+
+import 'package:chess_auto_prep/constants/chess_constants.dart';
+import 'package:chess_auto_prep/core/generation_artifacts.dart';
+import 'package:chess_auto_prep/core/generation_session_controller.dart';
+import 'package:chess_auto_prep/core/generation_session_types.dart';
+import 'package:chess_auto_prep/features/generation/controllers/generation_publication_controller.dart';
+import 'package:chess_auto_prep/infrastructure/generation/storage_generation_draft_repository.dart';
+import 'package:chess_auto_prep/models/build_tree_node.dart';
+import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
+import 'package:chess_auto_prep/services/generation/generation_config.dart';
+import 'package:chess_auto_prep/services/jobs/repertoire_job.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
+
+import '../support/scripted_document_store.dart';
+import 'fake_storage.dart';
+
+class _Lifecycle implements EngineLifecycle {
+  void Function()? onEnter;
+  @override
+  Future<void> enterGeneration(int threads) async => onEnter?.call();
+  @override
+  Future<void> exitGeneration() async {}
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+BuildTree _completedTree() {
+  final root = BuildTreeNode(
+    fen: kStandardStartFen,
+    moveSan: '',
+    moveUci: '',
+    ply: 0,
+    isWhiteToMove: true,
+    nodeId: 0,
+  )..engineEvalCp = 20;
+  root.children.add(
+    BuildTreeNode(
+      fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1',
+      moveSan: 'e4',
+      moveUci: 'e2e4',
+      ply: 1,
+      isWhiteToMove: false,
+      nodeId: 1,
+      parent: root,
+    )..engineEvalCp = -20,
+  );
+  return BuildTree(root: root, maxPlyReached: 1)..computeMetadata();
+}
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  for (final conflict in [false, true]) {
+    test(
+      'full pipeline ${conflict ? 'fails a stale source without reporting lines saved' : 'publishes once before reporting saved lines'}',
+      () async {
+        final directory = await Directory.systemTemp.createTemp(
+          'generation-pipeline-',
+        );
+        addTearDown(() => directory.delete(recursive: true));
+        final path = p.join(directory.path, 'Main.pgn');
+        final documents = Store()..current = snapshot('original', path: path);
+        final storage = MemoryStorage();
+        final lifecycle = _Lifecycle();
+        if (conflict) {
+          lifecycle.onEnter = () {
+            documents.current = snapshot(
+              'external edit',
+              path: path,
+              revision: '2',
+            );
+          };
+        }
+        final controller = GenerationSessionController(
+          publication: GenerationPublicationController(
+            documents: documents,
+            drafts: StorageGenerationDraftRepository(
+              storage,
+              prepareDirectory: (_) async {},
+            ),
+          ),
+          artifacts: GenerationArtifactStore(storage: () => storage),
+          engineLifecycle: lifecycle,
+        );
+        addTearDown(controller.dispose);
+        final job = RepertoireJob(
+          id: 'pipeline',
+          type: JobType.generation,
+          label: 'Generate',
+        );
+        addTearDown(job.dispose);
+        controller.currentJob = job;
+        final saved = <GeneratedLineExport>[];
+        await controller.startBuild(
+          GenerationRequest(
+            config: const TreeBuildConfig(
+              startFen: kStandardStartFen,
+              playAsWhite: true,
+              maxPly: 1,
+              useMasterGames: false,
+              downloadMasterGamesIfMissing: false,
+              verifyFinal: false,
+              modelGameCount: 0,
+              refutationLines: false,
+              alternativeLines: false,
+              engineTailPlies: 0,
+            ),
+            repertoireFilePath: path,
+            buildRootFen: kStandardStartFen,
+            lineMovePrefix: const [],
+            repertoireStartFen: kStandardStartFen,
+            existingTree: _completedTree(),
+            onLinesSaved: (lines) {
+              expect(documents.saves, hasLength(1));
+              saved.addAll(lines);
+            },
+          ),
+        );
+        expect(controller.isGenerating, isFalse);
+        expect(documents.saves, hasLength(1));
+        if (conflict) {
+          expect(job.status, JobStatus.failed);
+          expect(controller.lastError, contains('manifest.json'));
+          expect(saved, isEmpty);
+          expect(documents.current.content, 'external edit');
+          expect(
+            storage.files.keys.any((path) => path.endsWith('_tree.json')),
+            isFalse,
+          );
+        } else {
+          expect(controller.lastError, isNull);
+          expect(job.status, JobStatus.completed);
+          expect(saved, isNotEmpty);
+          expect(documents.current.content, contains('e4'));
+        }
+      },
+    );
+  }
+}

@@ -11,6 +11,9 @@
 /// way the rest of the app does: an [AppState] handoff.
 library;
 
+import 'package:chess_auto_prep/features/generation/controllers/generation_publication_controller.dart';
+import '../support/generation_publication_fixture.dart';
+
 import 'package:chess_auto_prep/infrastructure/repertoires/isolate_repertoire_decoder.dart';
 import 'package:chess_auto_prep/features/repertoires/repositories/repertoire_document_repository.dart';
 import 'package:chess_auto_prep/features/repertoires/repositories/repertoire_decoder.dart';
@@ -122,6 +125,9 @@ Future<AppState> _pumpScreen(
     tester,
     MultiProvider(
       providers: [
+        Provider<GenerationPublicationFactory>(
+          create: (_) => generationPublicationFixture,
+        ),
         ChangeNotifierProvider<AppState>.value(value: appState),
         Provider<RepertoireDocumentRepository>.value(
           value: testRepertoireDocuments(),

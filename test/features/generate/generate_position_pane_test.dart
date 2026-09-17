@@ -1,3 +1,4 @@
+import '../../support/generation_publication_fixture.dart';
 import 'dart:async';
 
 import 'package:chess_auto_prep/constants/chess_constants.dart';
@@ -14,7 +15,9 @@ void main() {
   testWidgets(
     'settings stay in the overlay and apply to both generation actions',
     (tester) async {
-      final gen = GenerationSessionController();
+      final gen = GenerationSessionController(
+        publication: generationPublicationFixture(),
+      );
       addTearDown(gen.dispose);
       final calls = <({String? san, int depth, int cores})>[];
       final coverageCalls = <(int, double)>[];
@@ -124,7 +127,9 @@ void main() {
   testWidgets('late ChessDB results cannot populate a different position', (
     tester,
   ) async {
-    final gen = GenerationSessionController();
+    final gen = GenerationSessionController(
+      publication: generationPublicationFixture(),
+    );
     addTearDown(gen.dispose);
     final pending = <String, Completer<DbMoveList>>{};
     Future<DbMoveList> lookup(String fen) =>
@@ -176,7 +181,9 @@ void main() {
   testWidgets('shared source control handles switching and generation', (
     tester,
   ) async {
-    final gen = GenerationSessionController();
+    final gen = GenerationSessionController(
+      publication: generationPublicationFixture(),
+    );
     addTearDown(gen.dispose);
     final requests = <Completer<DbMoveList>>[];
     var chessDb = true;

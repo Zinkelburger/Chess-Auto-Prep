@@ -18,8 +18,9 @@ library;
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:path/path.dart' as p;
 
+import '../features/generation/controllers/generation_publication_controller.dart';
+import '../features/generation/models/generation_publication.dart';
 import '../models/build_tree_node.dart';
 import '../models/eval_database_settings.dart';
 import '../models/trap_line_info.dart';
@@ -35,7 +36,6 @@ import '../services/generation/fen_map.dart';
 import '../services/generation/generation_config.dart';
 import '../services/generation/line_extractor.dart';
 import '../services/generation/line_pruner.dart';
-import '../services/generation/pgn_export.dart';
 import '../services/generation/repertoire_selector.dart';
 import '../services/generation/repertoire_verifier.dart';
 import '../services/generation/run_debug_dump.dart';
@@ -68,16 +68,21 @@ import 'snapshot_exporter.dart';
 class GenerationSessionController extends ChangeNotifier
     with SafeChangeNotifier {
   GenerationSessionController({
+    required GenerationPublicationController publication,
+    GenerationArtifactStore? artifacts,
     StockfishPool? enginePool,
     EngineLifecycle? engineLifecycle,
-  }) : _enginePool = enginePool ?? StockfishPool.instance,
+  }) : _publication = publication,
+       _artifacts = artifacts ?? GenerationArtifactStore(),
+       _enginePool = enginePool ?? StockfishPool.instance,
        _engineLifecycle = engineLifecycle ?? EngineLifecycle.instance;
 
   static const String _logName = 'GenerationSession';
 
-  /// Lines queued before the PGN file is flushed mid-export, so a long
-  /// export neither sits in memory nor rewrites the file per line.
-  static const int _pgnFlushEveryLines = 10;
+  final GenerationPublicationController _publication;
+  GenerationSource? _publicationSource;
+  Future<void> _partialSave = Future.value();
+  Future<void> _engineControl = Future.value();
 
   final StockfishPool _enginePool;
   final EngineLifecycle _engineLifecycle;
@@ -89,7 +94,7 @@ class GenerationSessionController extends ChangeNotifier
   /// this controller is constructed.
   MasterGamesService Function() masterGames = () => MasterGamesService.instance;
 
-  final GenerationArtifactStore _artifacts = GenerationArtifactStore();
+  final GenerationArtifactStore _artifacts;
   final MasterGamesWait _masterWait = MasterGamesWait();
   late final ExpectimaxDatabase _database = ExpectimaxDatabase(
     store: _artifacts,
@@ -135,7 +140,6 @@ class GenerationSessionController extends ChangeNotifier
     fenMap: () => _database.current?.fenMap,
   );
 
-  final PgnBatchWriter _pgnWriter = PgnBatchWriter();
   Stopwatch _pipelineSw = Stopwatch();
 
   bool _isGenerating = false;
@@ -256,10 +260,10 @@ class GenerationSessionController extends ChangeNotifier
 
   /// Bring the shared engine pool up if nothing has started it yet.
   Future<void> _ensureEnginePool() async {
-    if (StockfishPool.instance.workerCount != 0) return;
+    if (_enginePool.workerCount != 0) return;
     final threads = activeConfig?.resolvedEngineThreads;
     if (threads == null) return;
-    await StockfishPool.instance.prepareForTreeBuild(threads);
+    await _enginePool.prepareForTreeBuild(threads);
   }
 
   // ── Pipeline ─────────────────────────────────────────────────────────
@@ -274,7 +278,7 @@ class GenerationSessionController extends ChangeNotifier
   /// be read (or changed) without holding the whole pipeline in your head.
   /// Cancellation is checked between phases rather than inside them.
   Future<void> startBuild(GenerationRequest request) async {
-    if (_isGenerating) return;
+    if (_isGenerating || isDisposed) return;
 
     // Resolve how exported lines relate to the repertoire root before any
     // state changes, so a resume-position mismatch is a clean refusal.
@@ -294,6 +298,13 @@ class GenerationSessionController extends ChangeNotifier
 
     var engineEntered = false;
     try {
+      if (!request.expectimaxOnly) {
+        _publicationSource = await _publication.begin(
+          filePath,
+          config.toJson(),
+        );
+        if (_cancelRequested) return;
+      }
       // Before the engine is claimed: an empty master-games database that
       // the config asked to fill is downloaded here, so the build that
       // wanted master practice actually gets it. Holding the engine across
@@ -305,6 +316,12 @@ class GenerationSessionController extends ChangeNotifier
       }
 
       engineEntered = await _enterEngineIfNeeded(config);
+      await _engineControl;
+      if (_cancelRequested || isDisposed) {
+        lastRunSummary =
+            lastError ?? 'Cancelled before the tree build started.';
+        return;
+      }
 
       final built = await _buildTreePhase(request, prefix);
       // Null means the run was cancelled mid-build; the summary is already set.
@@ -346,6 +363,7 @@ class GenerationSessionController extends ChangeNotifier
       onTreeBuilt(tree);
 
       await _exportLinesPhase(tree, extracted, request, prefix);
+      if (_cancelRequested || isDisposed) return;
       await _persistArtifactsPhase(tree, analysis, extracted, config, filePath);
       lastRunSummary = composeRunSummary(
         tree: tree,
@@ -370,7 +388,7 @@ class GenerationSessionController extends ChangeNotifier
             ? lastRunSummary
             : 'Build cancelled.';
       } else {
-        await _recordFailure(config, filePath, e);
+        await _recordFailure(config, e);
       }
     } finally {
       await _endRun(engineEntered: engineEntered, filePath: filePath);
@@ -443,7 +461,6 @@ class GenerationSessionController extends ChangeNotifier
     activeConfig = config;
     progress.maxPlyConfig = config.maxPly;
     progress.bestFirst = config.bestFirst;
-    _pgnWriter.clear();
     _pipelineSw = Stopwatch()..start();
     progress.startElapsedTicker();
 
@@ -477,9 +494,23 @@ class GenerationSessionController extends ChangeNotifier
     required bool engineEntered,
     required String filePath,
   }) async {
+    await _engineControl;
     if (engineEntered) {
-      await _engineLifecycle.exitGeneration();
+      try {
+        await _engineLifecycle.exitGeneration();
+      } catch (error) {
+        final message = 'Engine cleanup failed: $error';
+        lastError = message;
+        lastRunSummary = message;
+        currentJob?.fail(message);
+      }
     }
+    // A pause/cancel write must finish before discard or a new run can
+    // remove/replace its partial tree.
+    await _partialSave;
+    final source = _publicationSource;
+    if (source != null) _publication.finish(source);
+    _publicationSource = null;
     // A discarded build leaves nothing to resume: drop the partial tree
     // that cancelBuild would otherwise have saved.
     if (_discardRequested) {
@@ -518,22 +549,14 @@ class GenerationSessionController extends ChangeNotifier
     _cancelRequested = false;
     _discardRequested = false;
     _activeRequest = null;
+    _repertoireFilePath = null;
     activeConfig = null;
     progress.reset();
     progress.flushNotify();
   }
 
-  /// Flush whatever was queued, dump diagnostics, and fail the job tile.
-  Future<void> _recordFailure(
-    TreeBuildConfig config,
-    String filePath,
-    Object error,
-  ) async {
-    try {
-      await _pgnWriter.flush(filePath);
-    } catch (_) {
-      // Keep the original error; a failed flush must not mask it.
-    }
+  /// Retain the staged proposal, dump diagnostics, and fail the job tile.
+  Future<void> _recordFailure(TreeBuildConfig config, Object error) async {
     await _writeFailureDump(config, error);
     final message = 'Generation failed: $error';
     lastError = message;
@@ -797,8 +820,8 @@ class GenerationSessionController extends ChangeNotifier
   }
 
   /// Compose the extracted lines into a course — chapters cut at branch
-  /// points, named from the ECO book, with model games appended — and write
-  /// it out, flushing in batches so a long export does not sit in memory.
+  /// points, named from the ECO book. Stage the complete output before one
+  /// revision-checked source commit; never flush an incomplete export.
   Future<void> _exportLinesPhase(
     BuildTree tree,
     ExtractedLines extracted,
@@ -829,10 +852,6 @@ class GenerationSessionController extends ChangeNotifier
         _duplicatesSkipped++;
         continue;
       }
-      _pgnWriter.queue(entry.pgn);
-      if (_pgnWriter.lineCount >= _pgnFlushEveryLines) {
-        await _pgnWriter.flush(filePath);
-      }
       saved.add(
         GeneratedLineExport(
           moves: entry.movesSan,
@@ -841,24 +860,37 @@ class GenerationSessionController extends ChangeNotifier
         ),
       );
     }
-    await _pgnWriter.flush(filePath);
-    await _writeModelGamesFile(course, filePath);
-    if (saved.isNotEmpty) {
-      request.onLinesSaved(saved);
+    if (_cancelRequested || isDisposed) return;
+    final result = await _publication.publish(
+      _publicationSource!,
+      games: saved.map((line) => line.pgn),
+      modelGames: course.modelGamePgns.isEmpty ? null : course.modelGamesPgn(),
+    );
+    switch (result) {
+      case GenerationPublished(:final staged, :final receiptError):
+        final path = staged.modelGamesPath;
+        if (path != null) {
+          lastModelGameNote = '$lastModelGameNote Model games saved to $path.';
+        }
+        if (receiptError != null) {
+          lastModelGameNote =
+              '$lastModelGameNote PGN saved; publication receipt needs '
+              'reconciliation at ${staged.manifestPath}.';
+        }
+        if (saved.isNotEmpty && !isDisposed) request.onLinesSaved(saved);
+        if (_cancelRequested) {
+          lastRunSummary = 'Generated PGN saved before cancellation.';
+        }
+      case GenerationPublicationRefused(:final reason, :final staged):
+        throw StateError(
+          '$reason. Generated output retained at ${staged.manifestPath}.',
+        );
+      case GenerationPublicationUncertain(:final staged):
+        throw StateError(
+          'Publication outcome is uncertain; inspect '
+          '${staged.manifestPath} before retrying.',
+        );
     }
-  }
-
-  /// Write the model games as a companion game collection beside the course
-  /// (see [GenerationArtifactStore.writeModelGames]). The chapter inside the
-  /// course stays — it is what the study/trainer flow reads.
-  Future<void> _writeModelGamesFile(
-    ComposedCourse course,
-    String courseFilePath,
-  ) async {
-    final path = await _artifacts.writeModelGames(course, courseFilePath);
-    if (path == null) return;
-    lastModelGameNote =
-        '$lastModelGameNote Model games also saved to ${p.basename(path)}.';
   }
 
   /// Write the side artifacts: serialized tree, run debug dump, trap index,
@@ -899,13 +931,13 @@ class GenerationSessionController extends ChangeNotifier
     if (trapLines != null) await _artifacts.writeTrapIndex(trapLines, filePath);
 
     // A budget/finish-now stop leaves the tree resumable: keep the partial
-    // file so the Generate tab offers to continue it.  savePartialTree
+    // file so the Generate tab offers to continue it.  _savePartialTree
     // reads buildService.currentTree, which the skip-build resume path
     // never set — there the on-disk partial already holds this tree.
     if (tree.buildComplete) {
       await _artifacts.deletePartialTree(filePath);
     } else if (identical(buildService.currentTree, tree)) {
-      await savePartialTree();
+      await _savePartialTree();
     }
   }
 
@@ -956,7 +988,7 @@ class GenerationSessionController extends ChangeNotifier
   // ── Partial tree save ────────────────────────────────────────────────
 
   /// Persist the in-progress tree to `{repertoire}_partial_tree.json`.
-  Future<void> savePartialTree() async {
+  Future<void> _savePartialTree() async {
     final tree = buildService.currentTree;
     if (tree == null) return;
     final filePath = _repertoireFilePath;
@@ -966,7 +998,11 @@ class GenerationSessionController extends ChangeNotifier
         tree.root.fen == _startFen) {
       tree.startMoves = _startMoveSequence.join(' ');
     }
-    await _artifacts.writePartialTree(tree, filePath);
+    final pending = _partialSave.then(
+      (_) => _artifacts.writePartialTree(tree, filePath),
+    );
+    _partialSave = pending;
+    await pending;
   }
 
   // ── Control methods (callable from anywhere) ────────────────────────
@@ -979,9 +1015,9 @@ class GenerationSessionController extends ChangeNotifier
     currentJob?.updateStatus(JobStatus.paused);
     // A probe is not resumable from the Generate tab, so it leaves no
     // partial file for that tab to offer.
-    if (!isExpectimaxProbe) unawaited(savePartialTree());
+    if (!isExpectimaxProbe) unawaited(_savePartialTree());
     // Hand the engine back so analysis works everywhere while paused.
-    unawaited(EngineLifecycle.instance.pauseGeneration());
+    _controlEngine(_engineLifecycle.pauseGeneration);
     progress.flushNotify();
   }
 
@@ -996,14 +1032,30 @@ class GenerationSessionController extends ChangeNotifier
       // Re-take the engine (cancels interactive analysis, restores the
       // build's thread config) before releasing the pause gate, so the
       // first build evals don't race user analysis.
-      unawaited(
-        EngineLifecycle.instance
-            .enterGeneration(cfg.resolvedEngineThreads)
-            .whenComplete(buildService.resumeBuild),
-      );
+      _controlEngine(() async {
+        await _engineLifecycle.enterGeneration(cfg.resolvedEngineThreads);
+        if (!_cancelRequested && !isDisposed) buildService.resumeBuild();
+      });
     } else {
       buildService.resumeBuild();
     }
+  }
+
+  /// Drain pause/resume commands before releasing the run's engine ownership.
+  /// A control failure is a failed job, never an unobserved async exception.
+  void _controlEngine(Future<void> Function() action) {
+    _engineControl = _engineControl.then((_) async {
+      if (_cancelRequested || isDisposed) return;
+      try {
+        await action();
+      } catch (error) {
+        final message = 'Engine control failed: $error';
+        lastError = message;
+        lastRunSummary = message;
+        currentJob?.fail(message);
+        cancelBuild();
+      }
+    });
   }
 
   /// Request cancellation.  The pipeline unwinds cooperatively;
@@ -1012,9 +1064,10 @@ class GenerationSessionController extends ChangeNotifier
   void cancelBuild() {
     if (!_isGenerating || _cancelRequested) return;
     _cancelRequested = true;
+    _publication.cancel();
     // A discard throws the tree away, so there is no point saving it here —
     // the unwind deletes the partial file instead.
-    if (!_discardRequested && !isExpectimaxProbe) unawaited(savePartialTree());
+    if (!_discardRequested && !isExpectimaxProbe) unawaited(_savePartialTree());
     if (_isPaused) {
       _isPaused = false;
       _pipelineSw.start();
@@ -1095,7 +1148,7 @@ class GenerationSessionController extends ChangeNotifier
   ///
   /// Idle only — a running build owns the bundle until it finishes.
   Future<void> loadSavedTreeFor(String repertoireFilePath) async {
-    if (_isGenerating) return;
+    if (_isGenerating || isDisposed) return;
     final outcome = await _database.load(
       repertoireFilePath,
       canApply: () => !_isGenerating && !isDisposed,
@@ -1144,6 +1197,7 @@ class GenerationSessionController extends ChangeNotifier
   /// Evaluate a single move and persist its engine continuation, without
   /// exploring an opponent-policy tree or manufacturing an expected score.
   Future<String?> computeMovePv(ExpectimaxProbeTarget target) async {
+    if (isDisposed) return 'Generation was closed.';
     if (_isGenerating) return 'A calculation is already running.';
     final moves = target.moves;
     final fen = _probeRootFen(target);
@@ -1229,6 +1283,7 @@ class GenerationSessionController extends ChangeNotifier
   /// when there was none) with everything that is not about scoring the
   /// position switched off — see [ExpectimaxProbeTarget.probeConfig].
   Future<String?> computeExpectimax(ExpectimaxProbeTarget target) async {
+    if (isDisposed) return 'Generation was closed.';
     if (_isGenerating) {
       return isExpectimaxProbe
           ? 'An expectimax probe is already running.'
@@ -1313,6 +1368,9 @@ class GenerationSessionController extends ChangeNotifier
 
   @override
   void dispose() {
+    _cancelRequested = true;
+    _publication.cancel();
+    _masterWait.stopWaiting();
     progress.dispose();
     buildService.stopBuild();
     coherenceService.dispose();

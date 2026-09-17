@@ -1,3 +1,4 @@
+import '../support/generation_publication_fixture.dart';
 // The expectimax database on GenerationSessionController: loading what a
 // repertoire saved, refusing a probe it cannot place, and keeping a
 // probe-origin main tree when a full build arrives.
@@ -45,6 +46,7 @@ BuildTree _tree(String rootFen, {String childFen = _afterE4}) {
 }
 
 class _CapturingGeneration extends GenerationSessionController {
+  _CapturingGeneration() : super(publication: generationPublicationFixture());
   GenerationRequest? request;
   @override
   Future<void> startBuild(GenerationRequest request) async {
@@ -98,6 +100,7 @@ void main() {
       depth: 14,
     );
     final controller = GenerationSessionController(
+      publication: generationPublicationFixture(),
       enginePool: pool,
       engineLifecycle: _PvLifecycle(),
     );
@@ -113,6 +116,7 @@ void main() {
     final lifecycle = _PvLifecycle()..gate = Completer<void>();
     final pool = FakeStockfishPool();
     final controller = GenerationSessionController(
+      publication: generationPublicationFixture(),
       enginePool: pool,
       engineLifecycle: lifecycle,
     );
@@ -161,7 +165,9 @@ void main() {
       storage.files['/r/x_expectimax.json'] = ExpectimaxProbeStore.encode([
         _tree(_afterE4C5, childFen: 'probe-child'),
       ]);
-      final controller = GenerationSessionController();
+      final controller = GenerationSessionController(
+        publication: generationPublicationFixture(),
+      );
 
       await controller.loadSavedTreeFor('/r/x.pgn');
 
@@ -179,7 +185,9 @@ void main() {
         _tree(_afterE4C5, childFen: 'probe-child'),
         _tree(_afterE4, childFen: 'other-child'),
       ]);
-      final controller = GenerationSessionController();
+      final controller = GenerationSessionController(
+        publication: generationPublicationFixture(),
+      );
 
       await controller.loadSavedTreeFor('/r/x.pgn');
 
@@ -189,7 +197,9 @@ void main() {
     });
 
     test('a repertoire with nothing saved ends with no tree', () async {
-      final controller = GenerationSessionController();
+      final controller = GenerationSessionController(
+        publication: generationPublicationFixture(),
+      );
       controller.onTreeBuilt(_tree(kStandardStartFen));
 
       await controller.loadSavedTreeFor('/r/none.pgn');
@@ -202,7 +212,9 @@ void main() {
       storage.files['/r/x_expectimax.json'] = ExpectimaxProbeStore.encode([
         _tree(_afterE4C5, childFen: 'probe-child'),
       ]);
-      final controller = GenerationSessionController();
+      final controller = GenerationSessionController(
+        publication: generationPublicationFixture(),
+      );
       await controller.loadSavedTreeFor('/r/x.pgn');
 
       controller.onTreeBuilt(_tree(kStandardStartFen));
@@ -270,7 +282,9 @@ void main() {
       },
     );
     test('refuses moves it cannot play from the start', () async {
-      final controller = GenerationSessionController();
+      final controller = GenerationSessionController(
+        publication: generationPublicationFixture(),
+      );
 
       final error = await controller.computeExpectimax(
         const ExpectimaxProbeTarget(

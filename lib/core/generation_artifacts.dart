@@ -3,8 +3,9 @@
 /// Every artifact is named from the repertoire file path: the serialized
 /// tree of the last full build (`_tree.json`), the resumable partial tree of
 /// an unfinished build (`_partial_tree.json`), the probe trees of the
-/// expectimax database (`_expectimax.json`), the trap index (`_traps.json`)
-/// and the model-games companion (`_model_games.pgn`).
+/// expectimax database (`_expectimax.json`), and the trap index (`_traps.json`).
+/// Full-generation PGN and model-game publication belongs to the injected
+/// generation publication controller.
 ///
 /// Owned by [GenerationSessionController], which decides *when* each file is
 /// written; this class only knows *where* and *how*. Reads and writes go
@@ -17,8 +18,6 @@ import 'package:path/path.dart' as p;
 
 import '../models/build_tree_node.dart';
 import '../models/trap_line_info.dart';
-import '../services/generation/course/course_builder.dart';
-import '../services/generation/course/course_composer.dart';
 import '../services/generation/expectimax_probe.dart';
 import '../services/generation/trap_extractor.dart';
 import '../services/generation/tree_serialization.dart';
@@ -50,10 +49,6 @@ class GenerationArtifactStore {
   /// `<repertoire>_expectimax.json` — the probe trees.
   static String probesPathFor(String repertoireFilePath) =>
       ExpectimaxProbeStore.pathFor(repertoireFilePath);
-
-  /// `<repertoire>_model_games.pgn` — the model games as a game collection.
-  static String modelGamesPathFor(String repertoireFilePath) =>
-      CourseBuilder.modelGamesPathFor(repertoireFilePath);
 
   /// Write [tree] as the build's tree file, encoded off the UI isolate.
   ///
@@ -207,30 +202,6 @@ class GenerationArtifactStore {
         name: _logName,
         error: e,
       );
-    }
-  }
-
-  /// Write the course's model games again as a companion game collection —
-  /// real headers, real results, the same annotations — so the PGN viewer
-  /// opens them as games rather than study chapters. A course with no model
-  /// games removes a stale companion from an earlier run so the two never
-  /// disagree. Returns the path written, or null when nothing was (no games,
-  /// or a failure, which is logged and not fatal).
-  Future<String?> writeModelGames(
-    ComposedCourse course,
-    String repertoireFilePath,
-  ) async {
-    final path = modelGamesPathFor(repertoireFilePath);
-    try {
-      if (course.modelGamePgns.isEmpty) {
-        await _storage().deleteFile(path);
-        return null;
-      }
-      await _storage().writeFile(path, course.modelGamesPgn());
-      return path;
-    } catch (e) {
-      log.w('model games file not written: $path', name: _logName, error: e);
-      return null;
     }
   }
 
