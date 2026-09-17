@@ -1,6 +1,6 @@
 # Architecture renewal
 
-**Status: Partial — S0 verified on Linux; milestones 1/2 and 3 in progress; milestones 4–7 not started.** Planning baseline: 2026-09-16. This is the canonical
+**Status: Partial — S0 verified on Linux; milestones 1/2–5 in progress; milestones 6–7 not started.** Planning baseline: 2026-09-16. This is the canonical
 rewrite plan. [FUTURE_FEATURES.md](FUTURE_FEATURES.md) tracks feature backlog;
 [COMPONENT_MAP.md](COMPONENT_MAP.md) describes implemented behavior. Update
 milestone evidence and selected decisions here as work proceeds.
@@ -2198,6 +2198,105 @@ cross-store snapshot or proof for all remaining domain formats. No user data or
 credentials enter the fixture. A formatting parse failure in the new PGN fixture
 was corrected before the passing run.
 
+Profile-mode baseline budgets, selected before measurement: the existing
+20,000-node annotated Study fixture must open/decode/receive within 5 seconds;
+30 warm distant-navigation commands and 30 comment-edit/projection commands
+must each have p95 at most 50 ms; RSS growth over
+that bounded sequence must stay within 64 MiB. These are initial regression
+ceilings on the two-CPU Linux runner, not a claim of 60 Hz rendering. Frame
+build/raster times and GC counts are captured separately by the native Flutter
+performance binding. `scripts/ci.sh profile` uses the existing bounded headless
+runner and writes `build/renewal_performance.json`, including failure evidence.
+It refuses a debug run. Undo, allocation attribution, image memory and
+other hosts remain additional STATE-02 measurements; navigation does not certify
+them. This extends the integrating agent's scope by one active hour (half an
+hour harness, half an hour validation) to replace debug-only evidence.
+
+The first profile run exposed an unmet frame budget despite passing command
+latencies: distant navigation built below 7 ms, while repeated comment edits
+built near 398 ms. The existing stage diagnostic isolated full row-index
+comment filtering at 363 ms. The repair preserves filtered paragraphs for
+unchanged move nodes with weak cache keys and checks source text for mutable
+legacy callers. The profile gate now requires p99 frame builds within 32 ms on
+the bounded headless host, in addition to command/memory budgets. This is a
+regression ceiling, not a 60 Hz/GPU claim: headless raster timings reported
+near zero and cannot establish production GPU latency. Study performance repair
+adds one active hour within the authorized scope. The second profile's Dart
+assertions passed, but its shell wrapper failed because the wrapper was edited
+while executing; the complete command must pass on the final source.
+
+The final complete profile command **passed** after immutable annotation
+revisions began reusing unchanged rows and the redundant document-wide row-key
+map was removed. Structural/paragraph-count changes still use full indexing;
+mutable legacy callers never enter the snapshot reuse path. On the recorded
+fixture, open/decode/receive took 302 ms and first frame 987 ms; navigation p95
+was 0.153 ms, edit/projection p95 0.304 ms, navigation frame p99 6.913 ms and
+edit frame p99 **9.346 ms** (worst 11.951 ms). RSS decreased during the bounded
+sequence. [Recorded scalar report](evidence/renewal-linux-profile.json) retains
+budgets and scope limitations. Eighteen focused layout/editor tests passed,
+including annotation parity, structural fallback, paragraph keys, immutable
+rows, 20,000-node navigation, 200% wrapping and draft eviction/autosave behavior.
+
+### Larger ownership completions (2026-09-17)
+
+| Source commit / requirement | Production change and retired owner | Evidence and remaining scope |
+|-----------------------------|-------------------------------------|------------------------------|
+| `b4c22ad1` / ARCH-01, DATA-02/03, STATE-01/02, TEST-01 | `RepertoireDocumentSession` owns load epochs, destination, parsed document/metadata and pending edit queue. Host shrinks from 781 to 281 lines; production test hooks removed. Public line collections are defensive immutable copies. | 243 focused tests, six final session tests, four native journeys and a standalone Dart VM probe passed. Failed loads retain destination, board, selection, color/root and undo together; pending save failures keep blocking navigation/close. [Inspected recovery screenshot](images/renewal-builder-document-recovery.png). Opening graph privacy, scratch recovery and native undo provenance remain. |
+| `1e104097` / ARCH-01, DATA-06, STATE-01, TEST-01 | All 14 `services/training/` libraries retired. Session/phase/progress owners and pure settings have canonical training paths; app composition injects source/review/header/answers/config ports, with filesystem/preferences adapters under infrastructure. | 232 focused tests passed, including source/chapter/settings/rating races, duplicate completion, partial-write retry and failed header mirror. Analyze/lint passed with nine existing infos. [Inspected production Retry component](images/renewal-training-retry.png). Existing CSV/JSONL formats and identities retained. In-memory retry is not crash-resume or cross-file atomicity; ordinary settings still require one app-scoped writer and explicit active-sitting policy. |
+| `a7d8dfd7` / DATA-02/07, PROC-01, ARCH-01, TEST-01 | Per-session generation publication captures source/config before work; stages complete course/model output and a manifest in a retained run directory; commits once through the document store and records a separate receipt. `PgnBatchWriter`, blind companion overwrite/delete and public partial-tree save are retired. | 99 affected tests passed, including actual full-pipeline source conflicts, native staging and cancellation/disposal/engine failure lifecycles. Analyze/lint passed with 12 infos. Old companions survive; conflicts/uncertain writes report retained manifests and never auto-replay. Tree/probe/trap/partial caches and a recovery browser remain. |
+| `8231b2bc` / ARCH-01, STATE-01, PROC-01, TEST-01 | Retired `core/pgn_viewer_controller.dart` and all `core/pgn/` owners after injecting index storage, cancellable computation, opening data, Solitaire settings/trophies and analysis ports. Removed unused collection merge helper and its obsolete mirror tests. | 339 broad tests passed; five transient load failures were fixed and the affected files passed in a 48-test rerun. Four native Viewer workflows passed, plus adapter failure checks and analyze/lint. [Inspected tree/board screenshot](images/renewal-viewer-workspace.png). Disposable `.fenidx` v1 is rebuilt as source-fingerprinted v2. Concrete reader/analysis construction remains an explicit app bridge. |
+| `c83a895d` / DATA-02/07, STATE-01, TEST-01 | Removed `GeneratedLineExport`, `onLinesSaved` and `appendNewLines`. Generation awaits a complete committed-document receipt; Builder validates the receiving session and atomically refreshes it. Ordinary line saves now return a complete document baseline and refresh it before later actions. | 125 affected tests and 34 final receipt/adapter/pipeline tests passed; analyze/lint passed. Replayed callbacks, A→B→A handoffs, late decode, failed refresh, external other-game edits and line-save→append→undo are covered. Full decode per acknowledged line edit is a remaining large-chapter cost. |
+| `a455747d` / SET-01, STATE-01, TEST-01 | One app-scoped training settings owner serializes immutable field patches. Concurrent panels share committed/draft/failure state and retry. Running sittings, including auto-next, freeze their effective configuration; edits apply to the next sitting. | 204 focused tests passed with no skips; analyze/lint passed. Native production panels exercised save failure→Retry→persist→restart with synthetic preferences. [Inspected failure UI](images/renewal-training-settings-failed.png). Legacy keys/defaults preserved. Drafts remain in memory, cross-process serialization and atomic multi-key preferences are not claimed. |
+
+An accidentally broad training test command was interrupted after roughly
+4,000 passes, eight skips and one unidentified failure. A captured integration
+run subsequently completed with **6,396 passes, 11 skips and one failure**:
+the MainScreen test fixture lacked the newly required training document
+dependency. `a455747d` fixes that fixture through production boundaries; the
+final combined suite **passed with 6,408 tests and 11 skips**. Those skips include
+opt-in engine/live-network checks and documented existing algorithm cases, not
+11 newly passing release gates. Merged analyze/lint passed with 13 informational
+findings and no warnings/errors; boundary regressions (23), check-dispatch
+regressions and the worktree helper's six tests passed. The check launcher
+now rejects misplaced focused targets
+before starting any named step; `scripts/ci.sh analyze lint` and
+`scripts/ci.sh test <targets>` are separate commands.
+
+The next independent bounded owners are Viewer host retirement (five active
+hours including one validation reserve, based on `9036708c`) and completion of
+training SET-01 (four active hours including one reserve, explicit dependency
+`1e104097`). The Viewer slice must replace implicit FEN-index/classification/
+Solitaire collaborators before retiring its remaining `core/` host. Training
+must serialize field edits through one app-scoped committed owner and prove
+concurrent panels, failure/retry/restart and current-sitting configuration.
+Midpoint is production wiring. These scopes continue the original whole-plan
+objective; they do not graduate milestones or erase the residual gates above.
+
+The generation follow-up extends the same document-authority repair by one
+active hour, including validation: generation hands Builder a committed document
+receipt rather than appended line deltas, and ordinary line saves must advance
+the whole-document baseline before a subsequent edit. The confirmed stale
+baseline is not left behind as an unrelated cleanup.
+
+After Viewer handoff, the next Builder owner has six active hours including one
+validation reserve for native-revision append/undo provenance and private opening
+graph ownership (DATA-03/04, STATE-02, ARCH-01). Its dependencies are `b4c22ad1`
+and the generation receipt follow-up; midpoint is production wiring. Durable
+scratch recovery remains a separate open requirement. The integrating owner's
+Study frame repair gets one further active hour to reuse immutable annotation
+rows after caching alone reduced, but did not meet, the 32 ms frame gate.
+
+The next two independent owners each have five active hours including one
+validation reserve. Generation completes DATA-07 for tree/probe/trap/partial
+artifacts through versioned bundles and one validated current manifest, wiring
+both producers and actual readers; it depends on `c83a895d` and the current
+training adapter. Settings completes SET-01 for engine, bulk-analysis and
+board-display keys through section owners and captured active-job configuration;
+it depends on `a455747d`, excludes credentials/external-eval database settings,
+and retains explicit injected read-only bridges for legacy engine lifetimes.
+Midpoint for each is production wiring. Parent integration owns shared docs,
+boundary gates and the combined checks; neither agent independently advances main.
+
 ### Persisted authority and native inventory (2026-09-17)
 
 This ledger supplements the workflow map below. It is based on source at
@@ -2245,6 +2344,7 @@ Preference key ownership is explicit at each migration boundary:
 | `document_file_io` private package | Native identity/read/flush handles behind document adapter; repository AGPL-3.0 | Linux package/journeys verified in earlier checkpoints. Windows replacement and macOS full-sync remain unavailable locally |
 | SQLite and cdbdirect | Database/FFI handle owners; pinned lockfile/native asset build | Saved-game schemas/upgrade guards exist; full backup and host ABI checks are scoped separately |
 | Desktop plugins | File picker, path provider, preferences, window manager/screen retriever, launcher/share/package info and JNI; exact versions in `pubspec.lock` | Generated plugin registrants enumerate Linux/Windows/macOS builds. Registration is not install/signing/vault/screen-reader evidence |
+| Proposed credential vault | [flutter_secure_storage desktop prerequisites](https://pub.dev/packages/flutter_secure_storage#linux) | Linux preflight found `gnome-keyring-daemon`, but `pkg-config libsecret-1` lacks its development package and noninteractive sudo is unavailable. No vault dependency/migration has been installed or certified. |
 
 The available verification host is Linux. Windows/macOS signed installation,
 vault availability, native screen reader, forced-parent-death and update checks
@@ -3487,7 +3587,7 @@ a process does not simulate lost hardware caches.
 S0 is **complete for the scoped Linux cases** and milestone 0 has a
 **partial inventory** above.
 Milestone 1/2 is **Partial** (implementation checkpoints above); milestone 3 is **Partial** (Study adoption checkpoint above); milestones
-4–7 are **Not started**. Each row yields a reviewable result; later
+4–5 are **Partial** (parallel ownership repairs below); 6–7 are **Not started**. Each row yields a reviewable result; later
 rows depend on the contracts established earlier, not on an unbounded framework
 build. Reorder later feature slices after the dependency inventory, with a
 recorded reason. No current mode is silently dropped.

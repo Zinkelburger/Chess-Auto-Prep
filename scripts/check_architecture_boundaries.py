@@ -9,6 +9,11 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 DIRECTIVE = re.compile(r"^\s*(?:import|export)\s+['\"]([^'\"]+)['\"]", re.M)
 DEPENDENCIES = re.compile(r"^\s*(?:import|export|part)\s+([^;]+);", re.M)
+MIGRATED_FEATURES = ('repertoires', 'documents', 'settings', 'studies', 'training', 'generation')
+FEATURE_ROOTS = tuple(f'lib/features/{name}/' for name in MIGRATED_FEATURES)
+WIDGET_ROOTS = tuple(f'{root}widgets/' for root in FEATURE_ROOTS)
+CHECKED_ROOTS = (*FEATURE_ROOTS, 'lib/chess_core/', 'lib/infrastructure/', 'lib/design_system/')
+
 RETIRED_BUILDER_LIBRARIES = {
     'lib/core/repertoire_controller.dart',
     'lib/core/repertoire_writer.dart',
@@ -55,6 +60,12 @@ def violations(relative: str, source: str) -> list[str]:
     executable = re.sub(r'(?m)^\s*//.*$', '', source)
     if relative in RETIRED_BUILDER_LIBRARIES:
         errors.append(f'{relative}: retired Builder library; use the canonical feature/chess-core owner')
+    if relative.startswith('lib/core/pgn/') or relative in ('lib/core/pgn_viewer_controller.dart', 'lib/services/pgn_opening_headers.dart'):
+        errors.append(f'{relative}: retired Viewer library; use the injected feature/chess-core owner')
+    if relative.startswith('lib/services/training/') or relative == 'lib/models/training_settings.dart':
+        errors.append(f'{relative}: retired training library; use the injected feature owner')
+    if relative.startswith('lib/') and re.search(r'\b(?:class|new)\s+PgnBatchWriter\b|\bPgnBatchWriter\s*\(', executable):
+        errors.append(f'{relative}: retired generation PGN writer; use guarded generation publication')
     if relative.startswith('lib/') and relative != 'lib/chess_core/pgn/pgn_parser.dart' and re.search(r'\bPgnGame\.parsePgn\s*\(', executable):
         errors.append(f'{relative}: single-game parsing must use chess_core/pgn/pgn_parser.dart')
     if relative in ('lib/features/repertoires/controllers/repertoire_controller.dart', 'lib/features/repertoires/controllers/repertoire_writer.dart'):
@@ -63,7 +74,7 @@ def violations(relative: str, source: str) -> list[str]:
                 errors.append(f'{relative}: Builder document access must use injected contracts: {uri}')
         if re.search(r'\b\w+\.instance\b', executable):
             errors.append(f'{relative}: Builder bypasses injected document dependencies')
-    feature = relative.startswith(('lib/features/repertoires/', 'lib/features/documents/', 'lib/features/settings/', 'lib/features/studies/'))
+    feature = relative.startswith(FEATURE_ROOTS)
     chess = relative.startswith('lib/chess_core/')
     infrastructure = relative.startswith('lib/infrastructure/')
     design = relative.startswith('lib/design_system/')
@@ -83,7 +94,7 @@ def violations(relative: str, source: str) -> list[str]:
         forbidden = (
             design and (uri.startswith(('dart:io', 'dart:ffi', 'package:provider/', 'package:flutter_riverpod/', 'package:widgetbook/')) or (local and not local.startswith('lib/design_system/')))
             or catalog and (uri.startswith(('dart:io', 'dart:ffi')) or local.startswith(('lib/infrastructure/', 'lib/app/', 'lib/services/storage/')))
-            or relative.startswith(('lib/features/repertoires/widgets/', 'lib/features/documents/widgets/', 'lib/features/settings/widgets/', 'lib/features/studies/widgets/')) and local.startswith('lib/theme/')
+            or relative.startswith(WIDGET_ROOTS) and local.startswith('lib/theme/')
             or pure and (uri.startswith(('dart:io', 'dart:isolate', 'dart:ffi', 'package:flutter', 'package:riverpod')) or local.startswith(('lib/services/', 'lib/infrastructure/', 'lib/app/')))
             or feature and (uri.startswith(('dart:io', 'dart:ffi', 'package:document_file_io/', 'package:shared_preferences/')) or local.startswith(('lib/infrastructure/', 'lib/app/', 'lib/services/storage/')))
             or controller and ('/widgets/' in local or '/screens/' in local or local.startswith('lib/services/'))
@@ -92,7 +103,7 @@ def violations(relative: str, source: str) -> list[str]:
         )
         if forbidden:
             errors.append(f'{relative}: forbidden dependency {uri}')
-    if (design and not relative.startswith('lib/design_system/theme/') or relative.startswith(('lib/features/repertoires/widgets/', 'lib/features/documents/widgets/', 'lib/features/settings/widgets/', 'lib/features/studies/widgets/'))) and re.search(r'\b(?:AppColors|AppTextStyles|AppPalette)\b|\bColors\.|\bColor(?:\.fromARGB|\.fromRGBO)?\s*\(|\bfontSize\s*:', source):
+    if (design and not relative.startswith('lib/design_system/theme/') or relative.startswith(WIDGET_ROOTS)) and re.search(r'\b(?:AppColors|AppTextStyles|AppPalette)\b|\bColors\.|\bColor(?:\.fromARGB|\.fromRGBO)?\s*\(|\bfontSize\s*:', source):
         errors.append(f'{relative}: widget bypasses active theme/typography')
     # A widget's frame scheduling is framework lifecycle, not an application
     # service locator. Keep this exception narrow; domain owners still inject
@@ -118,19 +129,21 @@ def main() -> int:
         'lib/features/documents/controllers/viewer_presentation_controller.dart',
         'lib/features/documents/controllers/viewer_collection_controller.dart',
         'lib/features/repertoires/controllers/repertoire_board_controller.dart',
+        'lib/features/repertoires/controllers/repertoire_document_session.dart',
+        'lib/features/generation/controllers/generation_publication_controller.dart',
         'lib/features/repertoires/models/repertoire_authoring.dart',
         'lib/features/repertoires/models/loaded_repertoire.dart',
         'lib/features/repertoires/repositories/repertoire_decoder.dart',
         'lib/features/repertoires/repositories/repertoire_document_repository.dart',
     ])
+    pure_roots.extend(path for path in sources if path.startswith(('lib/features/training/models/', 'lib/features/training/repositories/', 'lib/features/generation/models/', 'lib/features/generation/repositories/')))
     errors.extend(pure_dependency_violations(sources, pure_roots))
-    for folder in ('lib/features/repertoires', 'lib/features/documents', 'lib/features/settings', 'lib/features/studies', 'lib/chess_core', 'lib/infrastructure', 'lib/design_system', 'widgetbook'):
+    for folder in (*CHECKED_ROOTS, 'widgetbook'):
         for path in (ROOT / folder).rglob('*.dart'):
             errors.extend(violations(path.relative_to(ROOT).as_posix(), path.read_text()))
-    checked_roots = ('lib/features/repertoires/', 'lib/features/documents/', 'lib/features/settings/', 'lib/features/studies/', 'lib/chess_core/', 'lib/infrastructure/', 'lib/design_system/')
     for path in (ROOT / 'lib').rglob('*.dart'):
         relative = path.relative_to(ROOT).as_posix()
-        if not relative.startswith(checked_roots):
+        if not relative.startswith(CHECKED_ROOTS):
             errors.extend(violations(relative, path.read_text()))
     legacy = json.loads((ROOT / 'scripts/legacy_theme_consumers.json').read_text())
     observed = set()
@@ -148,7 +161,7 @@ def main() -> int:
         print(error, file=sys.stderr)
     if errors:
         return 1
-    print('Renewal architecture boundaries: OK (catalog, documents, studies, settings, chess core, infrastructure and design system)')
+    print('Renewal architecture boundaries: OK (catalog, documents, studies, settings, training, generation, chess core, infrastructure and design system)')
     return 0
 
 

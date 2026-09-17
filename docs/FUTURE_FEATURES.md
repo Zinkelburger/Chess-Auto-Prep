@@ -16,7 +16,18 @@ Consolidated list of planned or incomplete capabilities (from `tree_builder/TODO
 
 ## Architecture renewal and eventual replacement
 
-**Status: Partial.** The current-code save/undo safety prerequisite is
+**Status: Partial.** Parallel ownership work retires the old training service and
+Viewer core hierarchies, separates Builder document lifecycle from its board,
+and guards generated PGN publication with retained per-run output. Training now
+has one app-scoped configuration writer and an explicit next-sitting policy;
+durable sitting resume, tactics and shared UI adoption remain. Builder still needs private
+opening-graph ownership, scratch recovery and full native undo provenance.
+Stopped-profile cross-store restore has a Linux rehearsal; the bounded
+20,000-node Study profile passes its command, frame-build and RSS budgets.
+Generation's remaining derived caches, broader performance/restore coverage and
+native platform gates remain open. These are completions within the full renewal.
+
+The current-code save/undo safety prerequisite is
 implemented and tested on Linux. The first replacement slice is partial:
 repertoire catalog actions now use injected repository/controller boundaries
 and the new hierarchy. Linux catalog creation now uses the typed native-identity

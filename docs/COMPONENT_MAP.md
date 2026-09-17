@@ -456,6 +456,14 @@ This is in-memory navigation retention. Full document-session restart restore,
 deep-link routing, retained-branch memory budgets, nested interactive-engine
 visibility and frame profiling are still open renewal gates.
 
+Builder's `RepertoireDocumentSession` owns destination, decoded lines, metadata,
+load epochs and queued edits independently of the Flutter host. Failed source
+switches retain the current board, selected line and undo; the mounted editor
+shows a dismissible error banner. Failed queued edits block later switches and
+close attempts until resolved. Tests inject document/decoder contracts instead
+of production debug hooks. Opening-graph privacy and durable scratch-session
+recovery remain unfinished.
+
 #### Shared document save interaction
 
 `features/documents/controllers/document_save_session.dart` owns a loaded
@@ -1334,10 +1342,30 @@ main board also refreshes an already open hover board.
 
 ```
 RepertoireTrainingScreen
-  → RepertoireService.parse trainable lines from PGN
-  → TrainingSessionController (phases, streaks, FSRS-like review)
-  → TrainingSettings (persisted)
+  → app/training_dependencies.dart (production composition)
+  → features/training/controllers/TrainingSessionController
+  → injected source/review/header/answers/settings contracts
+  → infrastructure/training adapters and existing format owners
 ```
+
+Training session, phases, chapter scope and review progress have canonical
+owners under `features/training/`; the old `services/training/` libraries and
+`models/training_settings.dart` are removed. Models no longer persist themselves.
+Epoch guards reject stale source, layout, settings and rating completions.
+Outcome persistence resumes failed stages without repeating confirmed history
+appends or tallying twice. The existing error panel retries the pending action;
+failed header mirrors remain queued. This retry state is in memory; crash-resume
+remains a separate requirement.
+
+`AppDependencies` owns one `TrainingSettingsController`. Settings panels submit
+immutable field patches and share committed values, pending drafts and visible
+save failures with Retry. Fresh reads and serialized writes preserve changes
+from concurrent panels; the existing preference keys and default migration are
+unchanged. A sitting captures its committed configuration, including auto-next
+lines, and later changes apply while browsing or at the next sitting. Initial
+settings load failure blocks training startup and uses the same retry path.
+Drafts are in memory, and partially completed multi-key writes are reconciled
+from storage before retry; cross-process transactions are not implied.
 
 Train opens a repertoire directly; chapters remain an optional filter. Whole-folder
 sessions include each chapter and retain its original per-file review identity.
@@ -1816,8 +1844,8 @@ Key files: `pgn_comment_utils.dart` (`buildGameMovetext`, the one serializer for
 Guess one side's moves of the loaded game; the game unfolds as you get them right. The underlying PGN-viewer session UI remains, but the simplified Actions menu no longer offers solitaire and the Ctrl+S / Shift+S entry shortcuts were removed.
 
 - **Setup strip** (`SolitaireSetupStrip`): the toolbar button opens a one-line strip above the movetext instead of starting at once. Choices: **Guess for** White/Black (defaults to the side at the bottom of the board), **Start** from the game start or **from here** (only offered when the cursor is on the mainline mid-game; the moves before it stay visible), **Include variations** (only when the game has saved sidelines), and **Hint and reveal after** 0–120 s (persisted as `solitaire_reveal_delay_sec`). Enter starts, Esc cancels. The side is fixed for the session: flipping the board or changing perspective no longer restarts it. A new game under a running session restarts with the side read from the board again and the same sidelines choice (`solitaire_include_variations`).
-- **Script** (`lib/core/pgn/solitaire_script.dart`): `buildSolitaireScript` lays the session out up front as a list of `SolitaireStep`s — mainline moves from the start ply, and with variations every saved sideline in movetext order: a move, then the alternatives to it, then the line resumes. A sideline's first move is a **premise** (`isPremise`): shown after a 700 ms pause, never asked. Null-move plies are walked through but never asked; ephemeral scratch lines are never drilled.
-- **Reveal state** (`lib/core/pgn/solitaire_reveal.dart`): `SolitaireReveal` = mainline frontier ply + revealed sideline node ids + whether unreached sidelines are hidden. Pushed into the PGN widget through `PgnViewerHandle.setSolitaireReveal` synchronously on every controller change, *before* the controller's navigation callbacks fire, so a jump to the new frontier is never clamped against the old one (the old prop-based `revealedPly` lagged a frame). `ViewerGameController.reveal` clamps mainline navigation, refuses hidden sideline nodes, and `PgnMovetextView.reveal` prunes them from rendering; the fork bar and ←/→ inside a sideline respect it too.
+- **Script** (`lib/features/documents/models/solitaire_script.dart`): `buildSolitaireScript` lays the session out up front as a list of `SolitaireStep`s — mainline moves from the start ply, and with variations every saved sideline in movetext order: a move, then the alternatives to it, then the line resumes. A sideline's first move is a **premise** (`isPremise`): shown after a 700 ms pause, never asked. Null-move plies are walked through but never asked; ephemeral scratch lines are never drilled.
+- **Reveal state** (`lib/features/documents/models/solitaire_reveal.dart`): `SolitaireReveal` = mainline frontier ply + revealed sideline node ids + whether unreached sidelines are hidden. Pushed into the PGN widget through `PgnViewerHandle.setSolitaireReveal` synchronously on every controller change, *before* the controller's navigation callbacks fire, so a jump to the new frontier is never clamped against the old one (the old prop-based `revealedPly` lagged a frame). `ViewerGameController.reveal` clamps mainline navigation, refuses hidden sideline nodes, and `PgnMovetextView.reveal` prunes them from rendering; the fork bar and ←/→ inside a sideline respect it too.
 - **Guessing**: a board move counts as a guess only when the board sits on the position the current step is asked from (`mainLineIndex == step.mainlinePly`, or inside a sideline `currentVariationNodeId == step.parentNodeId`); anywhere else it is exploratory analysis. Wrong tries appear live as ephemeral alternatives (sideline roots on the mainline, children of the current node inside a sideline). The opponent's reply auto-plays after 400 ms.
 - **Hint** (`H`, lightbulb chip): after the delay, highlights the square of the piece that moves (`ChessBoardWidget.highlightedSquares`). One per move; a hinted move is logged `wasHinted` — not first-try, not revealed. **Reveal** (`R`) gives the move up. Both chips stay visible and grey until available; the countdown sits in its own fixed-width slot so nothing jitters.
 - **Status bar** (`SolitaireStatusBar`): "Solitaire · White", a turn cue ("Your move · 2 wrong", "Black replies…", "Sideline: 1… c5", "Sideline 1… c5 · White replies…"), progress over script steps, first-try tally.
@@ -1827,7 +1855,7 @@ Guess one side's moves of the loaded game; the game unfolds as you get them righ
 - **Trophies**: `detectSolitaireTrophies` evaluates each wrong attempt at a mainline position and compares it with the game move's eval (sideline guesses have no eval and are skipped). Trophies persist to `solitaire_trophies.json`, show as markers in the analysis tab, and the cabinet dialog is always listed in the viewer's overflow menu ("Solitaire trophies", with a hint while empty) so the loop is discoverable before the first one is earned.
 - **Toolbar adaptation**: in solitaire the `GameNavBar` shows game counter, Hint, Reveal, Fullscreen, Exit and Prev/Next; the app bar hides slice chips, opening tree, amend and perspective; the side-panel tabs, engine bar and Analysis tab are hidden. The engine bar is also hidden while the setup strip is open.
 
-Key files: `lib/core/pgn/solitaire_script.dart` (`SolitaireStep`, `SolitaireScript`, `buildSolitaireScript`), `lib/core/pgn/solitaire_reveal.dart`, `lib/core/pgn/solitaire_controller.dart` (cursor over the script, hints, countdown, score, `SolitaireGuess`), `lib/core/pgn/viewer_solitaire_session.dart` (`SolitaireSetup`, board glue, guess routing, note injection), `lib/core/pgn/pgn_viewer_handle.dart` (the widget surface core may touch), `lib/core/pgn_viewer_controller.dart` (delegating API, `onViewerGameLoaded`), `lib/widgets/pgn/solitaire_status_widgets.dart` (setup strip, status bar, completion banner), `lib/widgets/game_nav_bar.dart` (Hint/Reveal chips), `lib/screens/pgn_viewer_screen.dart` (confirm-on-leave, `H`/`R`/Enter/Esc bindings, analyse action), `lib/widgets/pgn/pgn_movetext_view.dart` + `pgn_movetext_variations.dart` (reveal-aware rendering), `lib/models/solitaire_trophy.dart`, `lib/services/solitaire_trophy_service.dart`, `lib/services/solitaire_trophy_detector.dart`, `lib/widgets/solitaire_trophy_cabinet.dart`.
+Key files: `lib/features/documents/models/solitaire_script.dart` (`SolitaireStep`, `SolitaireScript`, `buildSolitaireScript`), `lib/features/documents/models/solitaire_reveal.dart`, `lib/features/documents/controllers/solitaire_controller.dart` (cursor over the script, hints, countdown, score, `SolitaireGuess`), `lib/features/documents/controllers/viewer_solitaire_session.dart` (`SolitaireSetup`, board glue, guess routing, note injection), `lib/features/documents/repositories/pgn_viewer_handle.dart` (the widget surface core may touch), `lib/features/documents/controllers/pgn_viewer_controller.dart` (delegating API, `onViewerGameLoaded`), `lib/widgets/pgn/solitaire_status_widgets.dart` (setup strip, status bar, completion banner), `lib/widgets/game_nav_bar.dart` (Hint/Reveal chips), `lib/screens/pgn_viewer_screen.dart` (confirm-on-leave, `H`/`R`/Enter/Esc bindings, analyse action), `lib/widgets/pgn/pgn_movetext_view.dart` + `pgn_movetext_variations.dart` (reveal-aware rendering), `lib/models/solitaire_trophy.dart`, `lib/services/solitaire_trophy_service.dart`, `lib/services/solitaire_trophy_detector.dart`, `lib/widgets/solitaire_trophy_cabinet.dart`.
 
 ### Generate repertoire from PGN viewer games
 
@@ -1902,38 +1930,70 @@ Used by:
 |------|----------------|
 | `controllers/repertoire_board_controller.dart` | Pure board, cursor, immutable projections, editing commands and adoption-bound draft undo receipts; no Flutter or I/O |
 | `controllers/repertoire_controller.dart` | Injected document/decoder coordination, selected line, opening-graph synchronization and Flutter notifications |
+| `controllers/repertoire_document_session.dart` | Destination, load epochs, complete parsed document state and serialized pending edits; failed handoffs retain the current workspace |
 | `controllers/repertoire_writer.dart` | Serialized append/undo with document preconditions and session guards |
 | `models/repertoire_authoring.dart` | Pure line construction/rebuilding, PGN numbering and prefix matching |
 
 Shared cursor navigation lives in `chess_core/moves/move_navigation.dart`.
 Course header interpretation and variation expansion live in `chess_core/pgn/`.
 The original libraries are retired, and tests mirror the new ownership paths.
-Full document-lifetime recovery, private opening-graph ownership and legacy
-screen migration remain pending.
+Durable scratch recovery, private opening-graph ownership and legacy screen
+migration remain pending.
+
+### `lib/features/documents/` Viewer workspace
+
+The Viewer host, opening-tree owner, FEN-index owner, Solitaire session and
+workspace/router/autoplay controllers now live under feature controllers.
+`ViewerPositionIndexRepository`, `ViewerOpeningRepository`,
+`ViewerSolitaireRepository` and `ViewerAnalysisPort` are injected. Worker adapters
+own cancellation; resets and disposal invalidate late results. The v2 `.fenidx`
+wrapper fingerprints exact source game records, so metadata saves cannot
+revalidate a stale cache by refreshing file timestamps. Legacy v1 sidecars are
+disposable and rebuilt. Solitaire preference writes check platform acknowledgements.
+
+Pure replay/serialization/opening-header helpers live in `chess_core/pgn/`;
+`sideline_tree.dart` lives in `chess_core/moves/`. Solitaire models are feature
+models. All `core/pgn/` files and the old Viewer host are retired without shims;
+the unused collection-merge helper was removed. `PgnViewerLifetime` still adapts
+the concrete reader and analysis controller until those UI/engine owners migrate.
+
+### `lib/features/generation/` publication owner
+
+`GenerationPublicationController` captures the native source revision and an
+immutable configuration before work starts. App composition creates one owner
+per generation session and injects document and draft repositories. The
+infrastructure adapter stages the proposed course and optional model games under
+`.cap-generation/<chapter.pgn>/<runId>/`, with a manifest; a successful source
+commit adds a separate publication receipt. Older companions remain intact.
+Conflicts and uncertain results retain the proposal and report its exact path;
+an uncertain publication is never automatically appended again. The former
+`PgnBatchWriter` and blind model-game overwrite/delete path are retired.
+Generation awaits `onPublished(PgnSnapshot)` before job success. Builder binds
+the receiver to its loaded chapter/session, drains pending edits and atomically
+adopts the current complete document. Stale or replayed callbacks cannot add
+lines twice. Ordinary line saves also refresh the complete baseline, opening
+tree and metadata, preserving newer actions and unrelated external game edits.
+Tree/probe/trap/partial caches still use the legacy artifact owner, and a recovery
+browser remains pending.
 
 ### `lib/core/`
 
 | File | Purpose | Public API / state |
 |------|---------|-------------------|
 | `app_state.dart` | Global app mode, usernames, board position, builder↔trainer↔study pending handoffs (`pendingTrainStudyPath` = "Train" in Study mode, `pendingStudyPath` = "Edit study" in the Trainer); **tactics auto-fetch preferences** (`tacticsAutoFetch`, `lichessLastFetch`, `chesscomLastFetch`) persisted via SharedPreferences; `AppMode.usesInteractiveEngine` names which IndexedStack children keep an engine pane | `setMode`, `switchToBuilder`/`switchToTrainer`/`switchToStudyTraining`/`switchToStudyEdit`/`switchToBuilderWithGeneration`, `setRepertoireGenerating`, `setTacticsAutoFetch`, `setLichessLastFetch`/`setChesscomLastFetch`, `notifyListeners` |
-| `generation_session_controller.dart` | **Generation session** — owns `TreeBuildService` + `CoherenceService`; the running order of the pipeline, pause/resume/cancel/finishNow, and the probe entry points (`computeExpectimax`, `computeMovePv`); everything else is a collaborator below. No re-exports: import `generation_session_types.dart` / `services/jobs/generation_phase.dart` directly | `startBuild`, `pauseBuild`, `resumeBuild`, `cancelBuild`, `discardBuild`, `finishNow`, `onTreeBuilt`, `clearTree`, `loadSavedTreeFor`, `savePartialTree`, `skipMasterGamesDownload`, `progress`, `snapshots`, `current` |
+| `generation_session_controller.dart` | **Generation session** — owns `TreeBuildService` + `CoherenceService`; pipeline, pause/resume/cancel/finishNow and probes; injected publication owner stages and commits source output. Disposal releases waits and drains owned commands. | `startBuild`, `pauseBuild`, `resumeBuild`, `cancelBuild`, `discardBuild`, `finishNow`, `onTreeBuilt`, `clearTree`, `loadSavedTreeFor`, `skipMasterGamesDownload`, `progress`, `snapshots`, `current` |
 | `expectimax_database.dart` | The published `GeneratedRepertoire` bundle and its probe trees: publish, load from disk, land a probe (graft or keep), record an engine PV, persist. Loads replace prior analysis; full builds retain probes and supersede pending loads. Main-tree mutations refresh derived artifacts; probe-only changes reuse them. Never notifies — the controller does | `publish`, `clear`, `dropTree`, `load` → `ExpectimaxLoadOutcome`, `addBoundedProbe`, `landProbe`, `recordEnginePv`, `persist`; `enginePvProbe` |
-| `generation_artifacts.dart` | `GenerationArtifactStore` — the files beside a repertoire: `_tree.json`, `_partial_tree.json`, `_expectimax.json`, `_traps.json`, `_model_games.pgn`; tree and probe reads recover independently from damaged files; storage-backed so tests use an in-memory store | `writeTree`, `writePartialTree`, `deletePartialTree`, `readDatabase`, `writeDatabase`, `writeTrapIndex`, `writeModelGames`, `*PathFor` |
+| `generation_artifacts.dart` | `GenerationArtifactStore` — legacy derived files beside a repertoire: `_tree.json`, `_partial_tree.json`, `_expectimax.json`, `_traps.json`; tree and probe reads recover independently from damaged files; storage-backed for tests. Course/model PGN publication has a separate owner above. | `writeTree`, `writePartialTree`, `deletePartialTree`, `readDatabase`, `writeDatabase`, `writeTrapIndex`, `*PathFor` |
 | `master_games_wait.dart` | `MasterGamesWait` — parks a run on the master-games download (start or join a sync, mirror its status, release on finish / "start now without them" / cancel); `MasterGamesSync` is the service slice it needs | `park`, `stopWaiting`, `decline`, `isWaiting`, `declined` |
 | `generation_run_summary.dart` | Pure wording of a finished run's outcome sentence | `composeRunSummary`, `courseNote`, `bookSourceNote` |
 | `generation_progress.dart` | Throttled BFS / phase stats for the Jobs panel; owned by the session controller | `update`, `setStatus`, `handleBuildProgress`, `flushNotify` |
 | `snapshot_exporter.dart` | Mid-run export of lines found so far to a new repertoire file | `export`, `nameSuggestion` |
-| `generation_session_types.dart` | `GenerationRequest` (+ `expectimaxProbe`, `resolveLinePrefix`), `GeneratedLineExport`, `TreeAnalysis`, `ExtractedLines`, `ExpectimaxProbeTarget` (+ `moves`, `probeConfig`, `movePvConfig`) | — |
+| `generation_session_types.dart` | `GenerationRequest` (+ `expectimaxProbe`, `resolveLinePrefix`), `TreeAnalysis`, `ExtractedLines`, `ExpectimaxProbeTarget` (+ `moves`, `probeConfig`, `movePvConfig`) | — |
 | `game_sorting.dart` | Comparators behind the PGN viewer's `GameSortMode`s | `sortGamesInPlace`, `compareGamesBy*` |
 | `features/audit/controllers/audit_session_controller.dart` | **Audit session state** — owns `RepertoireAuditService` + result, live findings, progress, config, interrupted snapshot; handles persistence via `AuditPersistence`; `onLiveFinding` creates a new list on each addition (avoids stale-reference bugs in widget comparisons) | `pause`, `resume`, `cancel`, `saveProgress`, `tryRestore`, `launch`, `launchResume`, `startFresh`, `onAuditingChanged`, `onResultReady`, `onLiveFinding`, `onProgress` |
 | `features/coverage/controllers/coverage_controller.dart` | **Coverage session state** — result, progress, running flag | `calculate`, `clear` |
 | `board_preview_controller.dart` | Debounced hover FEN overlay for board | `setPreview`, `clearPreview`, `previewFen`, `isPreview` |
 | `navigation_stack.dart` | Breadcrumb stack for repertoire navigation | push/pop/jump |
-| `pgn_viewer_controller.dart` | PGN viewer file load, game index & navigation | `loadFile`, `errorMessage`, slice/export/tree APIs; `collectionRevision` invalidates search snapshots after in-place header/movetext changes; movetext edits invalidate the FEN index and use replay until rebuilt; `detectProtagonist`, `detectBothPlayers` (two-player matchup detection); `loadCurrentGame` parks at `pgnInitialFen` when set (tree landing / restored game cursor), else game start; `applySlice` no-ops when indices + `SliceConfig` unchanged (skips opening-tree rebuild); loads persisted `.fenidx` companion file on open (validated against PGN file size + mtime + game count; FENIDX3, RAVs included), or builds `fenIndex` in background, for instant position-filter and tree-position lookups; re-persists `.fenidx` after PGN metadata writes to keep stat values fresh; solitaire mode (`toggleSolitaire`, `SolitaireController`); used by `PgnViewerScreen` |
-| `pgn/viewer_opening_tree.dart` | PGN-viewer opening-tree mode: build progress, cursor, games-at-position lookup | `toggle`/`enter` restore the saved tree cursor instead of syncing from the remounted game; `snapshotCursor(leavingForGame:)` for games-at-position return; `hasSavedPosition` gates the app-bar back button |
-| `pgn/mainline_positions.dart` | Shared position replay memo over the owner's private mainline | The Viewer supplies the memo to movetext; standalone hosts use `ofSnapshots`. Annotation revisions do not replay SAN. |
-| `pgn/viewer_game_serializer.dart` | Mainline/sideline conversion for save and line export | Copies mainline annotations before synchronizing engine references; preserves variation starting comments before their move. |
-| `pgn/pgn_dummy_mainline.dart` | `promoteNullMoveDummyMainline` — splice a childless `Z0`/`--` dummy whose only sibling is the real lesson onto the mainline | used by the viewer, FEN index, and opening-tree walk |
 
 ### `lib/models/`
 
@@ -2287,7 +2347,7 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `features/tactics/services/tactics_parallel_analyzer.dart` / `features/tactics/services/tactics_parallel_analyzer_stub.dart` | Parallel puzzle analysis |
 | `features/tactics/controllers/tactics_session_controller.dart` | Puzzle session; `startSession(settings)` delegates to DB queue; `setRating(star)` on current position |
 | `features/tactics/services/tactics_import_coordinator.dart` | Import UI coordination; `TacticsImportMode.recent` / `TacticsImportMode.sinceDate` for count-based vs date-based fetch; passes `since` param through to service; **resume analysis**: `refreshPendingCount()` diffs stored PGN game IDs against `analyzedGameIds` to detect interrupted imports; `resumeAnalysis()` re-processes only un-analyzed games from storage (no re-download); `pendingGameCount`/`totalStoredGames` drive the resume button; `_statusMessage(ImportResult)` picks "Games were already analyzed" / "No new blunders found" / "Added N …" based on `gamesAnalyzed` count |
-| `training/training_session_controller.dart` | Repertoire training flow; `TrainingMode` × `RepetitionMode`; owns queue, drill, and session stats. Learn walkthrough and missed-move replay are collaborators (`LearnPhase`, `ReplayPhase`); chapter grouping is `ChapterScope`; disk review state is `ReviewProgressStore` |
+| `features/training/controllers/training_session_controller.dart` | Injected repertoire training flow; `TrainingMode` × `RepetitionMode`; owns queue, drill, and session stats. Learn walkthrough and missed-move replay are collaborators (`LearnPhase`, `ReplayPhase`); chapter grouping is `ChapterScope`; disk review state is `ReviewProgressStore` |
 | `training/learn_phase.dart` | New-line acknowledge / quiz walkthrough |
 | `training/replay_phase.dart` | Missed-move replay after a drill with mistakes |
 | `training/chapter_scope.dart` | Chapter grouping and training scope |
@@ -2455,7 +2515,7 @@ release smoke testing. No release or update is triggered by these tests.
 | `pgn_with_analysis_pane.dart` | PGN + analysis dock split |
 | `pgn_with_engine.dart` | PGN pane with inline engine bar |
 | `pgn_viewer_widget.dart` | Game list + board for viewer; `_variationsByPly` holds mainline + **multiple ephemeral RAVs** per branch point (`addEphemeralMove` / `clearEphemeralMoves`); movetext via `PgnMovetextView` (near-white `PgnTextStyles`, comments/variations on own rows; reading column capped at 900 logical pixels with 24–32 pixel side insets, prose capped at 640 pixels for readability); larger branch chips + Return-to-mainline + nav icons; **Edit mode** (`editMode` prop): NAG inline display, annotation panel, right-click context menu with promote/delete gated by `protectOriginal`; `_toggleNag` modifies `PgnNodeData.nags` and persists via `buildGameMovetext` |
-| `core/pgn/pgn_analysis_variations.dart` | Converts classified legacy/new engine PVs to standard RAVs, reuses existing branches, and synchronizes the `[%bestline]` display reference after edits; shared by full review, tactics annotation and viewer loading. |
+| `chess_core/pgn/pgn_analysis_variations.dart` | Converts classified legacy/new engine PVs to standard RAVs, reuses existing branches, and synchronizes the `[%bestline]` display reference after edits; shared by full review, tactics annotation and viewer loading. |
 | `pgn/pgn_movetext_view.dart` | Mainline + sideline + comment rendering; analyzed games annotate every classified move for both sides (Interesting, Inaccuracy, Mistake, Blunder), including short games and scores mixed with prose, using the graph’s shared classifier; move suffixes show `!?`, `?!`, `?`, or `??` even for older cached games. Full review and tactics analysis also save these as standard PGN NAGs, preserving existing author glyphs and positional annotations; verdicts and their saved RAVs share an inset block with a left rule and extra space before play resumes; those same nodes handle navigation and edits, with no duplicated preview line. Uses `PgnTextStyles` (comments upright, not italic). ChessBase/Chessable **null moves** (`--` / `Z0`) are hidden in the SAN but still pass the turn. Chessable intro dummies are promoted to the mainline before render, so `1. Z0 (1. d4 Z0 2. Nf3 …)` shows the lesson text on the spine |
 | `pgn/pgn_opening_tree_panel.dart` | Opening-tree side panel (replaces Game/Analysis + nav bar). Resizable split between `OpeningTreeWidget` and `PgnTreeGamesList`. While the tree is open, `/` searches the games-at-position list (not the full file) and picking a row/`G` number calls `loadGameFromTree` |
 | `pgn/pgn_tree_games_list.dart` | Games at the tree cursor: `GameNumberField` + `GameSearchButton` + **Show moves** checkbox. Default expanded rows show title + truncated comment-free mainline PV from this FEN (`mainlineSansAfterFen`). With Show moves off, the blue play arrow previews one line and the title opens the game |
@@ -2652,6 +2712,6 @@ Areas where behavior could not be fully determined without runtime testing:
 4. **Compact vs wide layout** — all breakpoint transitions and state preservation paths in `RepertoireScreen` (complex conditional tree).
 5. **Training FSRS parameters** — exact scheduling algorithm vs documented FSRS.
 
-**Recently closed:** generation cancel now UCI-stops in-flight evals (`StockfishPool.stopAll` + `forEachParallel` abort); dead workers are dropped and respawned up to the last `ensureWorkers` target. `loadRepertoire` is epoch-guarded like `StudyController.openStudy`. Board annotation types live in `lib/models/board_annotation.dart` so utils/services no longer import widgets. `FenMap` is frozen when published on `GeneratedRepertoire`. Transposition cycle checks share `isTranspositionCycle` / `enterFenPath` in `fen_map.dart`. Settings persist is fire-and-forget via `EngineSettings._persist` / `TrainingSettings.saveSoon`; eval cache writes from search pipelines use `EvalCache.putEvalCpWhiteSoon`. Training review headers are awaited after FSRS updates. `copyToClipboard` in `app_messages.dart` is the shared clipboard helper. `MainScreen` suspends the engine on `paused`/`hidden`/`detached` and on leaving interactive-engine modes (`AppMode.usesInteractiveEngine`); `resume` restores it on `resumed` and when re-entering those modes. Findings/report dismiss menus share `showAnchorMenu`. Single-file picks use `FilePicker.pickFile`; multi-file picks use `pickFiles` without deprecated `withData`/`withReadStream`/`allowMultiple`.
+**Recently closed:** generation cancel now UCI-stops in-flight evals (`StockfishPool.stopAll` + `forEachParallel` abort); dead workers are dropped and respawned up to the last `ensureWorkers` target. `loadRepertoire` is epoch-guarded like `StudyController.openStudy`. Board annotation types live in `lib/models/board_annotation.dart` so utils/services no longer import widgets. `FenMap` is frozen when published on `GeneratedRepertoire`. Transposition cycle checks share `isTranspositionCycle` / `enterFenPath` in `fen_map.dart`. Legacy engine settings persist through `EngineSettings._persist`; training uses the app-scoped serialized settings owner described above; eval cache writes from search pipelines use `EvalCache.putEvalCpWhiteSoon`. Training review headers are awaited after FSRS updates. `copyToClipboard` in `app_messages.dart` is the shared clipboard helper. `MainScreen` suspends the engine on `paused`/`hidden`/`detached` and on leaving interactive-engine modes (`AppMode.usesInteractiveEngine`); `resume` restores it on `resumed` and when re-entering those modes. Findings/report dismiss menus share `showAnchorMenu`. Single-file picks use `FilePicker.pickFile`; multi-file picks use `pickFiles` without deprecated `withData`/`withReadStream`/`allowMultiple`.
 
 For planned work not yet in code, see **[`docs/FUTURE_FEATURES.md`](FUTURE_FEATURES.md)** (backlog only — do not treat as current behavior).
