@@ -1,6 +1,8 @@
 @Timeout(Duration(seconds: 45))
 library;
 
+import 'package:chess_auto_prep/widgets/study/study_import_status_chip.dart';
+import 'package:chess_auto_prep/features/documents/widgets/document_save_dialog.dart';
 import 'package:chess_auto_prep/features/studies/models/study_document.dart';
 import 'package:chess_auto_prep/features/studies/widgets/study_import_close_guard.dart';
 import 'package:chess_auto_prep/features/documents/widgets/document_close_scope.dart';
@@ -63,8 +65,15 @@ void main() {
       DocumentCloseCoordinator close,
     })
   >
-  host(WidgetTester tester, {bool dark = true, double scale = 1}) async {
-    tester.view.physicalSize = const Size(1600, 1000);
+  host(
+    WidgetTester tester, {
+    bool dark = true,
+    double scale = 1,
+    bool isolated = false,
+  }) async {
+    tester.view.physicalSize = isolated
+        ? const Size(480, 1000)
+        : const Size(1600, 1000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -130,7 +139,25 @@ void main() {
             child: StudyImportCloseGuard(
               importer: importer,
               chooseCopyDestination: (_) async => '/chosen.pgn',
-              child: const StudyScreen(),
+              child: isolated
+                  ? Scaffold(
+                      body: Center(
+                        child: Builder(
+                          builder: (context) => StudyImportStatusChip(
+                            controller: importer,
+                            onReview: () => showDocumentSaveDialog(
+                              context,
+                              title: AppLocalizations.of(
+                                context,
+                              ).studyImportReview,
+                              session: importer.publicationRecovery!,
+                              chooseCopyDestination: (_) async => '/copy.pgn',
+                            ),
+                          ),
+                        ),
+                      ),
+                    )
+                  : const StudyScreen(),
             ),
           ),
         ),
@@ -202,59 +229,60 @@ void main() {
       studyName: 'Downloaded',
     );
     await tester.pumpAndSettle();
-    await run; 
+    await run;
     final closing = f.close.prepareClose();
     await tester.pumpAndSettle();
     expect(find.byType(DocumentSavePanel), findsOneWidget);
     expect(f.importer.publicationRecovery!.state.uncertain, isTrue);
-    await tester.tap(find.text('Keep app open')); 
+    await tester.tap(find.text('Keep app open'));
     await tester.pumpAndSettle();
     expect((await closing).disposition, DocumentCloseDisposition.cancelled);
     expect(f.importer.needsPublicationReview, isTrue);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('temporary existing screen scale audit before importing', (tester) async {
-    await host(tester, scale: 1.5);
-    expect(tester.takeException(), isNull, reason: 'Before any import runs or new control appears');
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
-
-  for (final dark in [false, true]) {
-    testWidgets(
-      'uncertain import exposes destination and copy recovery, dark=$dark',
-      (tester) async {
-        final f = await host(tester, dark: dark);
-        final run = f.importer.startCollectionDownload(
-          gameIds: ['1'],
-          studyName: 'Downloaded',
-        );
-        await tester.pumpAndSettle();
-        expect((await run).failure, StudyImportFailure.uncertainPublication);
-        await tester.tap(find.text('Review downloaded study').last);
-        await tester.pumpAndSettle();
-        expect(find.byType(DocumentSavePanel), findsOneWidget);
-        expect(find.text('/studies/Downloaded.pgn'), findsOneWidget);
-        final save = tester.widget<FilledButton>(
-          find.byKey(const ValueKey('document-save')),
-        );
-        expect(
-          save.onPressed,
-          isNull,
-          reason: 'uncertain writes cannot be retried blindly',
-        );
-        expect(
-          find.byKey(const ValueKey('document-save-copy')),
-          findsOneWidget,
-        );
-        expect(f.importer.publicationRecovery!.state.content, _game);
-        expect(
-          f.importer.publicationRecovery!.state.outcome,
-          same(f.importer.lastResult!.publication!.outcome),
-        );
-        expect(tester.takeException(), isNull);
-        await tester.pumpWidget(const SizedBox.shrink());
-      },
-    );
+  for (final isolated in [false, true]) {
+    for (final dark in [false, true]) {
+      testWidgets(
+        'uncertain import exposes destination and copy recovery, dark=$dark isolated=$isolated',
+        (tester) async {
+          final f = await host(
+            tester,
+            dark: dark,
+            scale: isolated ? 2 : 1.5,
+            isolated: isolated,
+          );
+          final run = f.importer.startCollectionDownload(
+            gameIds: ['1'],
+            studyName: 'Downloaded',
+          );
+          await tester.pumpAndSettle();
+          expect((await run).failure, StudyImportFailure.uncertainPublication);
+          await tester.tap(find.byTooltip('Review downloaded study'));
+          await tester.pumpAndSettle();
+          expect(find.byType(DocumentSavePanel), findsOneWidget);
+          expect(find.text('/studies/Downloaded.pgn'), findsOneWidget);
+          final save = tester.widget<FilledButton>(
+            find.byKey(const ValueKey('document-save')),
+          );
+          expect(
+            save.onPressed,
+            isNull,
+            reason: 'uncertain writes cannot be retried blindly',
+          );
+          expect(
+            find.byKey(const ValueKey('document-save-copy')),
+            findsOneWidget,
+          );
+          expect(f.importer.publicationRecovery!.state.content, _game);
+          expect(
+            f.importer.publicationRecovery!.state.outcome,
+            same(f.importer.lastResult!.publication!.outcome),
+          );
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox.shrink());
+        },
+      );
+    }
   }
 }

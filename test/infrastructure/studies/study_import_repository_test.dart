@@ -21,7 +21,7 @@ import 'package:http/testing.dart';
 class _UnavailableLibrary extends MemoryStudyLibrary {
   @override
   Future<String> pathForName(String name) async =>
-      throw FileSystemException('directory unavailable');
+      throw const FileSystemException('directory unavailable');
 }
 
 class _ThrowingJobs implements StudyImportJobs {

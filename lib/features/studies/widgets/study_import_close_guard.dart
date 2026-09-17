@@ -22,8 +22,9 @@ class StudyImportCloseGuard extends StatelessWidget {
   Future<DocumentCloseApproval?> _prepare(BuildContext context) async {
     await importer.stop();
     if (!context.mounted) return null;
-    if (!importer.needsPublicationReview)
+    if (!importer.needsPublicationReview) {
       return DocumentCloseApproval(importer.closeRevision);
+    }
     return showDialog<DocumentCloseApproval>(
       context: context,
       builder: (dialogContext) => ListenableBuilder(

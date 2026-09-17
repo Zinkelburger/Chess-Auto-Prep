@@ -119,12 +119,13 @@ class _StudyScreenState extends State<StudyScreen> {
     try {
       opened = await _study.openStudy(handoff.studyPath);
     } catch (_) {
-      if (mounted && epoch == _handoffEpoch)
+      if (mounted && epoch == _handoffEpoch) {
         showAppSnackBar(
           context,
           AppLocalizations.of(context).studyOpenFailed,
           isError: true,
         );
+      }
       return;
     }
     if (!mounted || epoch != _handoffEpoch || !opened) return;
@@ -260,8 +261,9 @@ class _StudyScreenState extends State<StudyScreen> {
     if (plan == null || !mounted) return;
     if (plan is LichessStudyPlan &&
         plan.appendToCurrent &&
-        session != _study.title.session)
+        session != _study.title.session) {
       return;
+    }
 
     switch (plan) {
       case LichessStudyPlan():
@@ -363,7 +365,7 @@ class _StudyScreenState extends State<StudyScreen> {
       context,
       message,
       isError: failure != null,
-      requiresAttention: review,
+      requiresAttention: true,
       actionLabel: review
           ? l10n.studyImportReviewAction
           : result.wroteAnything
@@ -402,15 +404,17 @@ class _StudyScreenState extends State<StudyScreen> {
     if (!mounted) return;
     try {
       final added = await _study.importFile(path);
-      if (mounted && added > 0)
+      if (mounted && added > 0) {
         showAppSnackBar(context, 'Added $added chapters.');
+      }
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         showAppSnackBar(
           context,
           AppLocalizations.of(context).studyImportPgnFailed,
           isError: true,
         );
+      }
     }
   }
 
@@ -624,8 +628,9 @@ class _StudyScreenState extends State<StudyScreen> {
         !mounted ||
         _study.title.filePath != path ||
         _study.chapterIndex != chapter ||
-        _study.navigationRevision != revision)
+        _study.navigationRevision != revision) {
       return;
+    }
     context.read<AppState>().switchToStudyTraining(path: path, lineId: lineId);
   }
 
@@ -659,8 +664,9 @@ class _StudyScreenState extends State<StudyScreen> {
         !mounted ||
         _study.title.filePath != path ||
         _study.chapterIndex != chapter ||
-        _study.navigationRevision != revision)
+        _study.navigationRevision != revision) {
       return;
+    }
     context.read<AppState>().switchToPgnViewer(
       path: path,
       gameIndex: _study.chapterIndex,

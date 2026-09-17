@@ -29,12 +29,18 @@ class StudyImportStatusChip extends StatelessWidget {
       listenable: import,
       builder: (context, _) {
         if (!import.isRunning) {
-          if (import.needsPublicationReview)
-            return TextButton.icon(
-              onPressed: onReview,
-              icon: const Icon(Icons.warning_amber),
-              label: Text(AppLocalizations.of(context).studyImportReview),
+          if (import.needsPublicationReview) {
+            return Tooltip(
+              message: AppLocalizations.of(context).studyImportReview,
+              child: TextButton.icon(
+                onPressed: onReview,
+                icon: const Icon(Icons.warning_amber),
+                label: Text(
+                  AppLocalizations.of(context).studyImportReviewAction,
+                ),
+              ),
             );
+          }
           return const SizedBox.shrink();
         }
         return Tooltip(

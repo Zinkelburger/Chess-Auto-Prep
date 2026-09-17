@@ -841,8 +841,9 @@ class StudyController extends ChangeNotifier
     final document = _doc;
     final opened = await _documents.open(path);
     if (isDisposed || !identical(document, _doc)) return 0;
-    if (opened is! PgnOpened)
+    if (opened is! PgnOpened) {
       throw StateError('Could not read the imported PGN');
+    }
     return importChapters(opened.snapshot.content);
   }
 

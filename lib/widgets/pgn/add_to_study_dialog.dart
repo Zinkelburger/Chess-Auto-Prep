@@ -71,11 +71,12 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
   Future<void> _loadStudies() async {
     try {
       final studies = await widget.loadStudies();
-      if (mounted)
+      if (mounted) {
         setState(() {
           _studies = List.unmodifiable(studies);
           _loadFailed = false;
         });
+      }
     } catch (_) {
       if (mounted) setState(() => _loadFailed = true);
     }

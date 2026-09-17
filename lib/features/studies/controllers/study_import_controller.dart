@@ -72,8 +72,8 @@ class StudyImportController extends ChangeNotifier with SafeChangeNotifier {
   StudyImportController({
     required this.repository,
     required this.jobs,
-    required PgnDocumentStore documents,
-  }) : _documents = documents;
+    required this._documents,
+  });
 
   final PgnDocumentStore _documents;
 
@@ -234,12 +234,13 @@ class StudyImportController extends ChangeNotifier with SafeChangeNotifier {
         ),
       );
     } catch (_) {
-      return await _finish(
+      final result = await _finish(
         studyName: studyName,
         chapters: const [],
         failed: 0,
         failure: StudyImportFailure.startup,
       );
+      return result;
     } finally {
       client?.close();
       _source = null;

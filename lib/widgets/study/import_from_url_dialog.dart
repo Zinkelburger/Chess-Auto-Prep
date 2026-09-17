@@ -159,11 +159,12 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
         });
       }
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _busy = false;
           _error = AppLocalizations.of(context).studyImportDownloadFailed;
         });
+      }
     }
   }
 
