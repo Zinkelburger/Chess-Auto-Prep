@@ -242,6 +242,68 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
     }
   }
 
+  Future<void> _inspectDraftCopy(BuilderCopyUncertainty copy) async {
+    try {
+      final observed = await _controller.inspectCopy(copy);
+      if (!mounted) return;
+      final current = _controller.uncertainCopies
+          .where((item) => item.draftKey == copy.draftKey)
+          .firstOrNull;
+      if (current == null) return;
+      if (observed is! PgnOpened) {
+        showAppSnackBar(
+          context,
+          'Destination could not be inspected. The copy intent and draft are retained.',
+          isError: true,
+        );
+        return;
+      }
+      final keep = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Verify the saved copy'),
+          content: SizedBox(
+            width: 700,
+            height: 420,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(copy.destination),
+                const Text(
+                  'Confirm only if the intended line is present in this observed file. Keeping the draft does not repeat the append.',
+                ),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: SelectableText(observed.snapshot.content),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Keep draft'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Copy is present'),
+            ),
+          ],
+        ),
+      );
+      if (keep == true) await _controller.acknowledgeInspectedCopy(current);
+    } catch (error) {
+      if (mounted)
+        showAppSnackBar(
+          context,
+          'Copy and draft are retained: $error',
+          isError: true,
+        );
+    }
+  }
+
   Future<void> _saveCurrentDraft() async {
     final snapshot = _controller.captureWorkspace();
     final draft = snapshot.drafts

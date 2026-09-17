@@ -9,6 +9,7 @@ import '../../../utils/pgn_utils.dart' show escapeHeaderValue;
 import '../../../constants/chess_constants.dart';
 import '../models/builder_workspace_snapshot.dart';
 import '../models/repertoire_metadata.dart';
+import '../../documents/models/pgn_document.dart';
 import '../repositories/repertoire_decoder.dart';
 import '../repositories/repertoire_document_repository.dart';
 import 'repertoire_board_controller.dart';
@@ -21,6 +22,7 @@ import 'repertoire_writer.dart';
 class BuilderWorkspaceController extends ChangeNotifier
     with SafeChangeNotifier {
   BuilderWorkspaceController({
+    required this.checkpoint,
     required RepertoireDocumentRepository documents,
     required RepertoireDecoder decoder,
   }) {
@@ -69,7 +71,14 @@ class BuilderWorkspaceController extends ChangeNotifier
     );
     board.addListener(_boardChanged);
   }
+  final Future<void> Function() checkpoint;
   final board = RepertoireBoardController();
+  final Map<String, BuilderCopyUncertainty> _uncertainCopies = {};
+  final Set<String> _pendingCopies = {};
+  final Map<String, int> _copyFailureRevisions = {};
+  List<BuilderCopyUncertainty> get uncertainCopies =>
+      List.unmodifiable(_uncertainCopies.values);
+  bool copyInProgress(String key) => _pendingCopies.contains(key);
   late final RepertoireDocumentSession document;
   late final RepertoireWriter writer;
   final Map<String, BuilderDraft> _drafts = {};
@@ -111,10 +120,15 @@ class BuilderWorkspaceController extends ChangeNotifier
     notifyListeners();
   }
 
+  void _beginUserIntent() {
+    _intentRevision++;
+    document.cancelPendingLoad();
+  }
+
   void _boardChanged() {
     document.syncOpeningTree(board.moveHistory, board.cursorFens);
     if (!_suspended) {
-      _intentRevision++;
+      _beginUserIntent();
       final changed = _boardStructure != board.structureVersion;
       _boardStructure = board.structureVersion;
       if (changed) {
@@ -181,6 +195,7 @@ class BuilderWorkspaceController extends ChangeNotifier
 
   void setTitle(String title) {
     if (_title == title) return;
+    _beginUserIntent();
     _title = title;
     _dirty = true;
     _editRevision++;
@@ -216,7 +231,7 @@ class BuilderWorkspaceController extends ChangeNotifier
   }
 
   void selectLine(RepertoireLine line) {
-    _intentRevision++;
+    _beginUserIntent();
     _captureDraft();
     _saveLine = null;
     document.selectLine(line);
@@ -236,7 +251,7 @@ class BuilderWorkspaceController extends ChangeNotifier
   }
 
   bool composePosition(String fen) {
-    _intentRevision++;
+    _beginUserIntent();
     _captureDraft();
     var accepted = false;
     _withoutCapture(() => accepted = board.setPositionFromFen(fen));
@@ -255,7 +270,7 @@ class BuilderWorkspaceController extends ChangeNotifier
   }
 
   void composeMoves(List<String> moves) {
-    _intentRevision++;
+    _beginUserIntent();
     _captureDraft();
     _saveLine = null;
     document.selectLine(null);
@@ -271,6 +286,7 @@ class BuilderWorkspaceController extends ChangeNotifier
   }
 
   void inspectAnnotatedTree(MoveTree tree, {TreePath? cursor, String? label}) {
+    _beginUserIntent();
     _captureDraft();
     _saveLine = null;
     document.selectLine(null);
@@ -298,32 +314,146 @@ class BuilderWorkspaceController extends ChangeNotifier
     BuilderDraft draft,
     RepertoireMetadata destination,
   ) async {
-    final failure = document.lineSaveRevision;
+    if (_uncertainCopies.containsKey(draft.key) ||
+        !_pendingCopies.add(draft.key)) {
+      throw StateError(
+        'Inspect the previous copy before trying another append.',
+      );
+    }
+    _drafts.putIfAbsent(draft.key, () => draft);
+    final intent = _intentRevision;
+    final edit = _editRevision;
+    _copyFailureRevisions[draft.key] = document.lineSaveRevision;
+    var publishing = false;
+    _uncertainCopies[draft.key] = BuilderCopyUncertainty(
+      draftKey: draft.key,
+      destination: destination.filePath,
+      content: draft.content,
+      outcome: const PgnWriteUncertain(
+        error: 'Copy interrupted before acknowledgement.',
+        before: null,
+        observed: null,
+      ),
+    );
+    notifyListeners();
     try {
-      await document.appendDraftTo(destination.filePath, draft.content);
-      if (_drafts[draft.key]?.content == draft.content)
-        _drafts.remove(draft.key);
-      if (_activeKey == draft.key && _content() == draft.content) {
-        _dirty = false;
-        saveError = null;
-        sourceChanged = false;
-        document.resolveCopiedLineFailure(failure);
+      // This intent must be durable before the destination namespace can change.
+      await checkpoint();
+      publishing = true;
+      final result = await document.appendDraftTo(
+        destination.filePath,
+        draft.content,
+      );
+      switch (result) {
+        case PgnWriteUncertain():
+          _uncertainCopies[draft.key] = BuilderCopyUncertainty(
+            draftKey: draft.key,
+            destination: destination.filePath,
+            content: draft.content,
+            outcome: result,
+          );
+          notifyListeners();
+          await checkpoint();
+          return;
+        case PgnSaved():
+          _resolveCopiedDraft(_uncertainCopies[draft.key]!);
+        case PgnWriteFailed(:final error):
+          _uncertainCopies.remove(draft.key);
+          throw error;
+        case PgnConflict():
+          _uncertainCopies.remove(draft.key);
+          throw StateError('The copy destination changed.');
+        case PgnNameCollision():
+          _uncertainCopies.remove(draft.key);
+          throw StateError('The copy destination already exists.');
       }
-      if (document.currentRepertoire?.filePath == destination.filePath) {
+      if (intent == _intentRevision &&
+          edit == _editRevision &&
+          document.currentRepertoire?.filePath == destination.filePath) {
         await document.loadRepertoire();
       }
       notifyListeners();
+      await checkpoint();
     } catch (error) {
-      saveError = error;
-      notifyListeners();
+      if (!publishing) _uncertainCopies.remove(draft.key);
+      if (intent == _intentRevision &&
+          edit == _editRevision &&
+          _activeKey == draft.key) {
+        saveError = error;
+        notifyListeners();
+      }
       rethrow;
+    } finally {
+      _pendingCopies.remove(draft.key);
+      notifyListeners();
     }
+  }
+
+  void _resolveCopiedDraft(BuilderCopyUncertainty copy) {
+    _uncertainCopies.remove(copy.draftKey);
+    if (_drafts[copy.draftKey]?.content == copy.content)
+      _drafts.remove(copy.draftKey);
+    if (_activeKey == copy.draftKey && _content() == copy.content) {
+      _dirty = false;
+      saveError = null;
+      sourceChanged = false;
+      document.resolveCopiedLineFailure(
+        _copyFailureRevisions.remove(copy.draftKey) ?? -1,
+      );
+    }
+  }
+
+  /// A fresh native observation may prove installation or prove that the old
+  /// namespace remains untouched. Equal PGN text by itself proves neither.
+  Future<PgnOpenResult> inspectCopy(BuilderCopyUncertainty copy) async {
+    if (_pendingCopies.contains(copy.draftKey))
+      return PgnReadFailed(StateError('Copy still pending.'));
+    final result = await document.documents.read(copy.destination);
+    if (!identical(_uncertainCopies[copy.draftKey], copy)) return result;
+    if (result case PgnOpened(:final snapshot)) {
+      if (copy.outcome.installedRevision != null &&
+          snapshot.revision == copy.outcome.installedRevision) {
+        _resolveCopiedDraft(copy);
+      } else if (copy.outcome.before != null &&
+          snapshot.revision == copy.outcome.before!.revision) {
+        _uncertainCopies.remove(copy.draftKey);
+      } else {
+        _uncertainCopies[copy.draftKey] = BuilderCopyUncertainty(
+          draftKey: copy.draftKey,
+          destination: copy.destination,
+          content: copy.content,
+          outcome: PgnWriteUncertain(
+            error: copy.outcome.error,
+            before: copy.outcome.before,
+            observed: snapshot,
+            installedRevision: copy.outcome.installedRevision,
+            recoveryPath: copy.outcome.recoveryPath,
+          ),
+        );
+      }
+    }
+    notifyListeners();
+    await checkpoint();
+    return result;
+  }
+
+  /// Explicit user acknowledgement after inspecting the observed copy. No
+  /// append is retried and no document bytes are changed by this decision.
+  Future<void> acknowledgeInspectedCopy(BuilderCopyUncertainty copy) async {
+    if (_pendingCopies.contains(copy.draftKey) ||
+        !identical(_uncertainCopies[copy.draftKey], copy) ||
+        copy.outcome.observed == null)
+      return;
+    _resolveCopiedDraft(copy);
+    notifyListeners();
+    await checkpoint();
   }
 
   BuilderWorkspaceSnapshot captureWorkspace() {
     _captureDraft();
     return BuilderWorkspaceSnapshot(
       drafts: _drafts.values.toList(),
+      uncertainCopies: _uncertainCopies.values.toList(),
       activeKey: _drafts.containsKey(_activeKey) ? _activeKey : null,
     );
   }
@@ -344,7 +474,14 @@ class BuilderWorkspaceController extends ChangeNotifier
       _drafts[draft.key] = draft;
       restored[incoming.key] = draft;
     }
-    if (restored.isEmpty) return;
+    for (final copy in snapshot.uncertainCopies) {
+      final key = restored[copy.draftKey]?.key ?? copy.draftKey;
+      _uncertainCopies[key] = copy.withKey(key);
+    }
+    if (restored.isEmpty) {
+      notifyListeners();
+      return;
+    }
     await openRetainedDraft(
       restored[snapshot.activeKey] ?? restored.values.first,
     );

@@ -20,6 +20,12 @@ import '../models/repertoire_metadata.dart';
 import '../repositories/repertoire_decoder.dart';
 import '../repositories/repertoire_document_repository.dart';
 
+String? _readContent(PgnOpenResult result) => switch (result) {
+  PgnOpened(:final snapshot) => snapshot.content,
+  PgnMissing() => null,
+  PgnReadFailed(:final error) => throw error,
+};
+
 class RepertoireDocumentSession {
   RepertoireDocumentSession({
     required this.documents,
@@ -385,11 +391,12 @@ class RepertoireDocumentSession {
         if (!isCurrent(generation)) return;
         final current = await documents.read(path);
         if (!isCurrent(generation)) return;
-        if (!current.exists) {
+        final content = _readContent(current);
+        if (content == null) {
           throw StateError('The published chapter is no longer available.');
         }
         final loaded = await decoder.build(
-          current.pgn,
+          content,
           fallbackIsWhite: _isRepertoireWhite,
         );
         if (!isCurrent(generation)) return;
@@ -531,7 +538,8 @@ class RepertoireDocumentSession {
       final read = await documents.read(filePath);
       if (!isCurrent(generation)) return;
 
-      if (!read.exists) {
+      final content = _readContent(read);
+      if (content == null) {
         _currentRepertoire = repertoire;
         _applyLoaded(LoadedRepertoire.missing);
         _resetTree();
@@ -539,7 +547,7 @@ class RepertoireDocumentSession {
       }
 
       final loaded = await decoder.build(
-        read.pgn,
+        content,
         fallbackIsWhite: _isRepertoireWhite,
       );
       if (!isCurrent(generation)) return;
@@ -638,7 +646,7 @@ class RepertoireDocumentSession {
 
     final colorLabel = isWhite ? 'White' : 'Black';
     await runDocumentMutation(() async {
-      final existing = (await documents.read(filePath)).pgn;
+      final existing = _readContent(await documents.read(filePath));
       if (existing == null) {
         throw StateError('The selected chapter is unavailable.');
       }
@@ -663,7 +671,7 @@ class RepertoireDocumentSession {
       startingFen: startingFen() ?? kStandardStartFen,
     );
     await runDocumentMutation(() async {
-      final existing = (await documents.read(filePath)).pgn;
+      final existing = _readContent(await documents.read(filePath));
       if (existing == null) {
         throw StateError('The selected chapter is unavailable.');
       }
@@ -680,17 +688,10 @@ class RepertoireDocumentSession {
   /// An explicit copy preserves the editable tree and never replaces its
   /// original game. This independent destination can resolve a failed source
   /// save, so it waits for the queue without requiring that source to recover.
-  Future<void> appendDraftTo(String filePath, String pgn) {
-    final result = _lineSaveTail.then((_) async {
+  Future<PgnWriteResult> appendDraftTo(String filePath, String pgn) {
+    final result = _lineSaveTail.then((_) {
       if (_disposed) throw StateError('The document session is closed.');
-      final existing = (await documents.read(filePath)).pgn;
-      if (existing == null)
-        throw StateError('The selected chapter is unavailable.');
-      await documents.replace(
-        filePath,
-        '$existing\n\n$pgn\n',
-        expectedContent: existing,
-      );
+      return documents.appendPgn(filePath, pgn);
     });
     _lineSaveTail = result.then<void>(
       (_) {},
@@ -721,7 +722,7 @@ class RepertoireDocumentSession {
     final gameCount = expanded.gameCount;
 
     await runDocumentMutation(() async {
-      final existing = (await documents.read(filePath)).pgn;
+      final existing = _readContent(await documents.read(filePath));
       if (existing == null) {
         throw StateError('The selected chapter is unavailable.');
       }
@@ -742,6 +743,15 @@ class RepertoireDocumentSession {
     }
 
     return gameCount > 0 ? gameCount : 1;
+  }
+
+  /// A newer workspace edit supersedes a pending read without resetting the
+  /// current document or board. Already-started writes retain their own queue.
+  void cancelPendingLoad() {
+    if (_disposed || !_isLoading) return;
+    _loadGeneration++;
+    _requestedRepertoire = _currentRepertoire;
+    _setLoading(false);
   }
 
   /// Returns a Future that completes when the current load finishes.

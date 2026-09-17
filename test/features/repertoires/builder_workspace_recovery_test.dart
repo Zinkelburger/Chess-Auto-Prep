@@ -1,3 +1,5 @@
+import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
+import 'package:chess_auto_prep/models/move_tree.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
@@ -22,6 +24,25 @@ RepertoireMetadata chapter(String path) => RepertoireMetadata(
 
 class CopyDocuments extends MemoryDocuments {
   Completer<void>? saveGate;
+  PgnWriteResult? appendOutcome;
+  int appendCalls = 0;
+  @override
+  Future<PgnWriteResult> appendPgn(String path, String content) async {
+    appendCalls++;
+    final opened = await read(path);
+    if (opened is! PgnOpened)
+      return PgnWriteFailed(StateError('Missing destination'));
+    final before = opened.snapshot;
+    await saveGate?.future;
+    if (appendOutcome case final outcome?) return outcome;
+    if (files[path] != before.content) return const PgnConflict(null);
+    files[path] = '${before.content}\n\n$content\n';
+    return PgnSaved(
+      before: before,
+      after: (await read(path) as PgnOpened).snapshot,
+    );
+  }
+
   @override
   Future<void> replace(
     String path,
@@ -39,6 +60,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late CopyDocuments documents;
   BuilderWorkspaceController workspace() => BuilderWorkspaceController(
+    checkpoint: () async {},
     documents: documents,
     decoder: const IsolateRepertoireDecoder(),
   );
@@ -259,6 +281,7 @@ void main() {
     () async {
       final decoder = GatedRepertoireDecoder();
       final owner = BuilderWorkspaceController(
+        checkpoint: () async {},
         documents: documents,
         decoder: decoder,
       );
@@ -322,6 +345,66 @@ void main() {
       expect(owner.closeRevision, isNot(close));
     },
   );
+
+  for (final titleOnly in [false, true]) {
+    test(
+      'edit supersedes pending recovery before document adoption; titleOnly=$titleOnly',
+      () async {
+        final owner = workspace();
+        addTearDown(owner.dispose);
+        await owner.document.setRepertoire(chapter('/a'));
+        owner.composeMoves(['e4']);
+        final draft = owner.captureWorkspace().drafts.single;
+        final gate = documents.readGate = Completer<void>();
+        final restoring = owner.openRetainedDraft(draft);
+        final failed = expectLater(restoring, throwsStateError);
+        if (titleOnly) {
+          owner.setTitle('New intent');
+        } else {
+          owner.inspectAnnotatedTree(
+            MoveTree.fromPgn('1. d4 d5 *'),
+            label: 'New inspection',
+          );
+        }
+        final board = owner.board.tree;
+        gate.complete();
+        await failed;
+        expect(owner.board.tree, same(board));
+        expect(owner.document.isLoading, isFalse);
+        expect(
+          titleOnly ? owner.title : owner.annotatedLineLabel,
+          titleOnly ? 'New intent' : 'New inspection',
+        );
+      },
+    );
+  }
+
+  for (final navigationOnly in [false, true]) {
+    test(
+      'same-destination copy cannot reload over newer board intent; navigationOnly=$navigationOnly',
+      () async {
+        final owner = workspace();
+        addTearDown(owner.dispose);
+        await owner.document.setRepertoire(chapter('/a'));
+        owner.composeMoves(['e4', 'e5']);
+        final draft = owner.captureWorkspace().drafts.single;
+        final gate = documents.saveGate = Completer<void>();
+        final copying = owner.saveDraftToChapter(draft, chapter('/a'));
+        if (navigationOnly) {
+          owner.board.jump(TreePath.empty);
+        } else {
+          owner.inspectAnnotatedTree(MoveTree.fromPgn('1. d4 d5 *'));
+        }
+        final tree = owner.board.tree;
+        final cursor = owner.board.path;
+        gate.complete();
+        await copying;
+        expect(owner.board.tree, same(tree));
+        expect(owner.board.path, cursor);
+        expect(documents.files['/a'], contains(draft.content));
+      },
+    );
+  }
 
   test(
     'native recovery store reopens annotations, custom FEN and cursor after lifetime ends',

@@ -2,6 +2,8 @@
 /// Shows repertoire positions with board + PGN + context tabs layout.
 library;
 
+import '../features/repertoires/models/builder_workspace_snapshot.dart';
+import '../features/documents/models/pgn_document.dart';
 import '../app/builder_lifetime.dart';
 import 'package:chess_auto_prep/features/audit/services/repertoire_audit_service.dart';
 import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
@@ -1073,6 +1075,20 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
       builder: (context, _) => Material(
         child: Column(
           children: [
+            for (final copy in _controller.uncertainCopies)
+              MaterialBanner(
+                content: Text(
+                  'Copy needs verification: ${copy.destination}. The draft is retained; this append will not be repeated.',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: _controller.copyInProgress(copy.draftKey)
+                        ? null
+                        : () => unawaited(_inspectDraftCopy(copy)),
+                    child: const Text('Inspect copy'),
+                  ),
+                ],
+              ),
             if (_controller.saveError != null)
               MaterialBanner(
                 content: const Text('Line edits are retained. Saving failed.'),
@@ -1114,8 +1130,18 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
                         ),
                       ),
                   ],
-                  onSelected: (draft) =>
-                      unawaited(_controller.openRetainedDraft(draft)),
+                  onSelected: (draft) async {
+                    try {
+                      await _controller.openRetainedDraft(draft);
+                    } catch (error) {
+                      if (mounted)
+                        showAppSnackBar(
+                          context,
+                          'Draft is retained: $error',
+                          isError: true,
+                        );
+                    }
+                  },
                   child: Padding(
                     padding: const EdgeInsets.all(8),
                     child: Text(

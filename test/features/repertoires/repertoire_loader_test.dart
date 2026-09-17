@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
 /// Direct tests for the repertoire load path's pure pieces —
 /// [parseRepertoireHeaders], [upsertMetadataComment] — and for
 /// [RepertoireLoader.build] as a value-producing function.
@@ -173,8 +174,8 @@ void main() {
       final loader = DocumentRepertoireRepository(
         LegacyPgnDocumentStore(storage),
       );
-      expect(await loader.read('/gone.pgn'), (exists: false, pgn: null));
-      expect(await loader.read('/empty.pgn'), (exists: true, pgn: ''));
+      expect(await loader.read('/gone.pgn'), isA<PgnMissing>());
+      expect((await loader.read('/empty.pgn') as PgnOpened).snapshot.content, '');
     });
   });
 

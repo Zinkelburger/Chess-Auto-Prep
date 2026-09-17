@@ -23,6 +23,7 @@ class BuilderLifetime {
     required WorkspaceRecoveryStore<BuilderWorkspaceSnapshot> store,
   }) {
     workspace = BuilderWorkspaceController(
+      checkpoint: () => recovery.flush(),
       documents: documents,
       decoder: decoder,
     );

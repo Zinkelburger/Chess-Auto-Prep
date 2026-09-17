@@ -1,3 +1,4 @@
+import '../../documents/models/pgn_document.dart';
 import 'repertoire_metadata.dart';
 
 /// An unsaved editable tree, including its original file precondition. Recovery
@@ -36,12 +37,34 @@ class BuilderDraft {
   );
 }
 
+class BuilderCopyUncertainty {
+  const BuilderCopyUncertainty({
+    required this.draftKey,
+    required this.destination,
+    required this.content,
+    required this.outcome,
+  });
+  final String draftKey;
+  final String destination;
+  final String content;
+  final PgnWriteUncertain outcome;
+  BuilderCopyUncertainty withKey(String value) => BuilderCopyUncertainty(
+    draftKey: value,
+    destination: destination,
+    content: content,
+    outcome: outcome,
+  );
+}
+
 class BuilderWorkspaceSnapshot {
   BuilderWorkspaceSnapshot({
     required List<BuilderDraft> drafts,
     required this.activeKey,
-  }) : drafts = List.unmodifiable(drafts);
+    List<BuilderCopyUncertainty> uncertainCopies = const [],
+  }) : drafts = List.unmodifiable(drafts),
+       uncertainCopies = List.unmodifiable(uncertainCopies);
   final List<BuilderDraft> drafts;
   final String? activeKey;
-  bool get needsRecovery => drafts.isNotEmpty;
+  final List<BuilderCopyUncertainty> uncertainCopies;
+  bool get needsRecovery => drafts.isNotEmpty || uncertainCopies.isNotEmpty;
 }

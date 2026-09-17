@@ -44,6 +44,7 @@ void main() {
     );
     decoder = GatedRepertoireDecoder();
     builder = BuilderWorkspaceController(
+      checkpoint: () async {},
       documents: DocumentRepertoireRepository(documents),
       decoder: decoder,
     );

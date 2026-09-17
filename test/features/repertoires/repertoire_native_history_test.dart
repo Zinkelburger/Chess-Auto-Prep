@@ -44,6 +44,7 @@ void main() {
       },
     );
     owner = BuilderWorkspaceController(
+      checkpoint: () async {},
       documents: DocumentRepertoireRepository(store),
       decoder: const IsolateRepertoireDecoder(),
     );

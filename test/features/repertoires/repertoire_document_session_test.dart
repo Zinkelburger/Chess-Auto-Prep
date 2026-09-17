@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
 import 'dart:async';
 
 import 'package:chess_auto_prep/features/repertoires/controllers/repertoire_document_session.dart';
@@ -22,13 +23,26 @@ class MemoryDocuments implements RepertoireDocumentRepository {
   Completer<void>? readGate;
   Completer<void>? readStarted;
   @override
-  Future<({bool exists, String? pgn})> read(String path) async {
+  Future<PgnOpenResult> read(String path) async {
     if (readStarted case final started? when !started.isCompleted) {
       started.complete();
     }
     await readGate?.future;
     if (failure case final error?) throw error;
-    return (exists: files.containsKey(path), pgn: files[path]);
+    final content = files[path];
+    return content == null
+        ? const PgnMissing()
+        : PgnOpened(
+            PgnSnapshot(
+              path: path,
+              content: content,
+              revision: PgnRevision(
+                documentId: path,
+                nativeIdentity: '$path:$content',
+                sha256: content.hashCode.toString(),
+              ),
+            ),
+          );
   }
 
   @override

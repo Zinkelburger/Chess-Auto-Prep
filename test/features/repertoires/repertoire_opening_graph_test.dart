@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
 import 'package:chess_auto_prep/features/repertoires/models/loaded_repertoire.dart';
 import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
 import 'package:chess_auto_prep/features/repertoires/repositories/repertoire_decoder.dart';
@@ -8,8 +9,17 @@ import '../../support/repertoire_dependencies.dart';
 
 class _Documents implements RepertoireDocumentRepository {
   @override
-  Future<({bool exists, String? pgn})> read(String path) async =>
-      (exists: true, pgn: '1. d4 Nf6 2. e3 c5 *');
+  Future<PgnOpenResult> read(String path) async => PgnOpened(
+    PgnSnapshot(
+      path: path,
+      content: '1. d4 Nf6 2. e3 c5 *',
+      revision: const PgnRevision(
+        documentId: 'test',
+        nativeIdentity: 'test',
+        sha256: 'test',
+      ),
+    ),
+  );
   @override
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
 }

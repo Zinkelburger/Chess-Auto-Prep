@@ -16,6 +16,7 @@ BuilderWorkspaceController testBuilderWorkspace({
   RepertoireDocumentRepository? documents,
   RepertoireDecoder decoder = const IsolateRepertoireDecoder(),
 }) => BuilderWorkspaceController(
+  checkpoint: () async {},
   documents: documents ?? testRepertoireDocuments(),
   decoder: decoder,
 );
