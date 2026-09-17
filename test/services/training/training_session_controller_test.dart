@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/app/training_dependencies.dart';
 import '../../support/repertoire_dependencies.dart';
 import 'dart:io';
 
@@ -5,9 +6,9 @@ import 'package:chess_auto_prep/models/repertoire_line.dart';
 import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
 import 'package:chess_auto_prep/models/repertoire_move_progress.dart';
 import 'package:chess_auto_prep/models/repertoire_review_entry.dart';
-import 'package:chess_auto_prep/models/training_settings.dart';
-import 'package:chess_auto_prep/services/training/training_phase.dart';
-import 'package:chess_auto_prep/services/training/training_session_controller.dart';
+import 'package:chess_auto_prep/features/training/models/training_settings.dart';
+import 'package:chess_auto_prep/features/training/models/training_phase.dart';
+import 'package:chess_auto_prep/features/training/controllers/training_session_controller.dart';
 import 'package:dartchess/dartchess.dart' hide File;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
@@ -35,7 +36,7 @@ void main() {
   });
 
   TrainingSessionController buildController() {
-    return TrainingSessionController(
+    return createTrainingSession(
       session: testRepertoireController(),
       repertoireService: repService,
       reviewService: reviewService,
@@ -671,20 +672,24 @@ void main() {
       controller.startLine(line);
       await waitFor(() => controller.waitingForUser);
 
+      controller.startLine(line);
       controller.lineHadMistake = false;
       await controller.rateLine(ReviewRating.good);
+      controller.startLine(line);
       controller.lineHadMistake = false;
       await controller.rateLine(ReviewRating.good);
       expect(controller.sessionCorrect, 2);
       expect(controller.sessionStreak, 2);
       expect(controller.sessionBestStreak, 2);
 
+      controller.startLine(line);
       controller.lineHadMistake = true;
       await controller.rateLine(ReviewRating.good);
       expect(controller.sessionIncorrect, 1);
       expect(controller.sessionStreak, 0, reason: 'mistake resets the streak');
       expect(controller.sessionBestStreak, 2, reason: 'best streak survives');
 
+      controller.startLine(line);
       controller.lineHadMistake = false;
       await controller.rateLine(ReviewRating.good);
       expect(controller.sessionCorrect, 3);

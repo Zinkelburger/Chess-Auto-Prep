@@ -5,9 +5,9 @@
 /// tested without a board or a notifier.
 library;
 
-import '../../models/repertoire_line.dart';
-import '../../models/training_settings.dart';
-import '../../utils/pgn_comment_utils.dart' show filterDisplayComment;
+import '../../../models/repertoire_line.dart';
+import 'training_settings.dart';
+import '../../../utils/pgn_comment_utils.dart' show filterDisplayComment;
 
 /// How much of a line is trained and where the quiz starts.
 ///

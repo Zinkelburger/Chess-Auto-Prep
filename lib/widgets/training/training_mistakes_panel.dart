@@ -1,7 +1,7 @@
+import '../../features/training/repositories/training_review_repository.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/repertoire_line.dart';
-import '../../services/repertoire_review_service.dart';
 import '../../theme/app_text_styles.dart';
 import '../../utils/fen_utils.dart' show plyFromFen;
 import '../../utils/movetext_builder.dart';
@@ -18,7 +18,7 @@ class TrainingMistakesPanel extends StatefulWidget {
     required this.onClose,
     required this.onRead,
   });
-  final RepertoireReviewService service;
+  final TrainingReviewRepository service;
   final Set<String> sourcePaths;
   final List<RepertoireLine> lines;
   final VoidCallback onClose;

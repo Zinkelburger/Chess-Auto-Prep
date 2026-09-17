@@ -1,6 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
-import '../../models/training_settings.dart';
+import '../../features/training/models/training_settings.dart';
 import '../../theme/app_text_styles.dart';
 import '../settings/settings_widgets.dart';
 import '../common/choice_field.dart';
@@ -8,6 +9,7 @@ import '../common/choice_field.dart';
 /// Focused preference pages, using the same rows and cards as app settings.
 class TrainingSettingsPanel extends StatefulWidget {
   final TrainingSettings settings;
+  final Future<void> Function() saveSettings;
   final VoidCallback onQueueSettingsChanged;
   final VoidCallback onSettingsChanged;
   final VoidCallback? onChapterSettingsChanged;
@@ -27,6 +29,7 @@ class TrainingSettingsPanel extends StatefulWidget {
   const TrainingSettingsPanel({
     super.key,
     required this.settings,
+    required this.saveSettings,
     required this.onQueueSettingsChanged,
     required this.onSettingsChanged,
     this.onChapterSettingsChanged,
@@ -58,7 +61,7 @@ class _TrainingSettingsPanelState extends State<TrainingSettingsPanel> {
   }) {
     if (!mounted) return;
     update();
-    settings.saveSoon();
+    unawaited(widget.saveSettings());
     if (queue) widget.onQueueSettingsChanged();
     if (chapters) widget.onChapterSettingsChanged?.call();
     widget.onSettingsChanged();

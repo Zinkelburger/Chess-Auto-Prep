@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../../design_system/components/item_title.dart';
 
-import '../../services/training/chapter_layout.dart';
+import '../../features/training/models/chapter_layout.dart';
 import '../../theme/app_colors.dart';
 
 /// Returns true to sort into chapters, false to keep one flat list, null if

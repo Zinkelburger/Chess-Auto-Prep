@@ -19,10 +19,11 @@
 /// them, and a cached copy would strand a run under the previous rules.
 library;
 
-import '../../models/line_status.dart';
-import '../../models/repertoire_line.dart';
-import '../../models/repertoire_review_entry.dart' show RepertoireReviewEntry;
-import '../../models/training_settings.dart';
+import '../../../models/line_status.dart';
+import '../../../models/repertoire_line.dart';
+import '../../../models/repertoire_review_entry.dart'
+    show RepertoireReviewEntry;
+import '../models/training_settings.dart';
 
 class TrainingRun {
   TrainingRun({

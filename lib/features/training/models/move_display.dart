@@ -7,8 +7,8 @@ library;
 
 import 'package:dartchess/dartchess.dart';
 
-import '../../models/repertoire_line.dart';
-import '../../utils/movetext_builder.dart';
+import '../../../models/repertoire_line.dart';
+import '../../../utils/movetext_builder.dart';
 
 /// Full move number of the move at [moveIndex] within [line].
 ///

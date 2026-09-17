@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:path/path.dart' as p;
 
-import '../storage/storage_service.dart';
+import '../../services/storage/storage_service.dart';
 
 /// Durable answers, independent of line ratings and their current chapter.
 /// Storage is injected so owned file moves can repoint history without a

@@ -7,8 +7,8 @@
 /// silently applied, because guessing wrong turns one list into 40 stubs.
 library;
 
-import '../../models/repertoire_line.dart';
-import '../../models/training_settings.dart';
+import '../../../models/repertoire_line.dart';
+import 'training_settings.dart';
 
 /// One chapter of a proposed layout: its title and how many lines land in it.
 class ChapterSummary {

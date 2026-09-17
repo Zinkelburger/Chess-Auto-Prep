@@ -25,24 +25,12 @@
 /// is also how "ask me again" is implemented.
 library;
 
+import '../features/training/repositories/training_answers.dart';
+
 import 'dart:convert';
 
 import '../utils/log.dart';
 import 'storage/storage_factory.dart';
-
-/// Ids of the ask-once questions. Keep them here so the file stays readable
-/// and two features can never collide on a key.
-abstract final class AskedQuestion {
-  /// "Looks like a course export — sort it into chapters?", per repertoire
-  /// or study file.
-  static const chapterLayout = 'chapterLayout';
-
-  /// "Which side does this file train?", per repertoire file. `true` means
-  /// White. Only ever recorded when the user sets it by hand — a file that
-  /// declares `// Color:` or whose move tree answers the question needs no
-  /// entry here, and the absence of one is what lets those keep winning.
-  static const trainingColor = 'trainingColor';
-}
 
 /// A recorded answer plus enough context to make the file self-explanatory.
 class AskedQuestionAnswer {
@@ -79,7 +67,7 @@ class AskedQuestionAnswer {
   }
 }
 
-class AskedQuestionsStore {
+class AskedQuestionsStore implements TrainingAnswers {
   AskedQuestionsStore({this._fileName = defaultFileName});
 
   static const defaultFileName = 'asked_questions.json';
@@ -105,6 +93,7 @@ class AskedQuestionsStore {
   }
 
   /// Convenience for the common "have they said yes or no?" check.
+  @override
   Future<bool?> boolAnswerFor(
     String questionId, {
     String subject = globalSubject,
@@ -112,6 +101,7 @@ class AskedQuestionsStore {
 
   /// Record the user's answer so the question is never asked again for
   /// [subject].
+  @override
   Future<void> record(
     String questionId, {
     String subject = globalSubject,
@@ -130,6 +120,7 @@ class AskedQuestionsStore {
 
   /// Forget an answer, so the question is asked again next time. Pass no
   /// [subject] to forget every subject of [questionId].
+  @override
   Future<void> forget(String questionId, {String? subject}) async {
     final all = await _loadAll();
     if (subject == null) {
