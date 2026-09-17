@@ -1,13 +1,14 @@
 /// Repertoire selection screen
-/// Full-screen push that wraps [RepertoireListBody] with its own Scaffold.
+/// Workspace destination that wraps [RepertoireListBody] with a destination heading.
 /// Pops a [ChapterPick]: the chosen chapter file, plus the course chapter
 /// inside it when the user tapped one.
 library;
 
 import 'package:flutter/material.dart';
+import '../../../l10n/generated/app_localizations.dart';
 
-import '../widgets/chapter_list_body.dart' show ChapterPick;
-import '../features/repertoires/widgets/repertoire_list_body.dart';
+import '../../../widgets/chapter_list_body.dart' show ChapterPick;
+import 'repertoire_list_body.dart';
 
 class RepertoireSelectionScreen extends StatelessWidget {
   const RepertoireSelectionScreen({super.key});
@@ -17,10 +18,10 @@ class RepertoireSelectionScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        title: const Text('Select Repertoire'),
+        title: Text(AppLocalizations.of(context).selectRepertoire),
         actions: [
           IconButton(
-            tooltip: 'Back',
+            tooltip: AppLocalizations.of(context).back,
             onPressed: () => Navigator.of(context).maybePop(),
             icon: const Icon(Icons.arrow_back),
           ),

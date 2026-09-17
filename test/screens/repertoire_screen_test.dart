@@ -12,6 +12,8 @@
 library;
 
 import 'package:chess_auto_prep/app/app_dependencies.dart';
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
+import 'package:chess_auto_prep/widgets/escape_to_pop_scope.dart';
 
 import 'dart:async';
 import 'dart:io';
@@ -114,7 +116,12 @@ Future<AppState> _pumpScreen(
     tester,
     ChangeNotifierProvider<AppState>.value(
       value: appState,
-      child: const MaterialApp(home: RepertoireScreen()),
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: (_, child) => EscapeToPopScope(child: child!),
+        home: const RepertoireScreen(),
+      ),
     ),
   );
   await tester.pump();
@@ -162,6 +169,53 @@ void main() {
     app.handOff(OpenBuilder(repertoirePath: path, reloadFromDisk: true));
     await _settleUntil(tester, find.text('Updated in library'));
     expect(find.text('Italian Game'), findsNothing);
+  });
+
+  testWidgets(
+    'picker retains builder editor and returns keyboard focus without exposing hidden commands',
+    (tester) async {
+      await _pumpScreen(tester, repertoirePath: _writeRepertoire(tester));
+      final editor = tester.state(find.byType(InteractivePgnEditor));
+      await tester.tap(find.text('Actions'));
+      await _settle(tester, cycles: 3);
+      await tester.tap(find.text('Choose repertoire…'));
+      await _settle(tester);
+      expect(find.text('Select repertoire'), findsOneWidget);
+      expect(find.text('Actions').hitTestable(), findsOneWidget);
+      expect(find.byTooltip('Switch mode').hitTestable(), findsOneWidget);
+      expect(find.byTooltip('Settings').hitTestable(), findsOneWidget);
+      await tester.tap(find.text('Actions'));
+      await _settle(tester, cycles: 3);
+      expect(find.text('Back to previous view'), findsOneWidget);
+      expect(find.text('Plan the lines…'), findsNothing);
+      await tester.tap(find.text('Back to previous view'));
+      await _settle(tester);
+      expect(tester.state(find.byType(InteractivePgnEditor)), same(editor));
+      expect(find.text('Italian Game'), findsWidgets);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('new source handoff waits until the picker closes', (
+    tester,
+  ) async {
+    final path = _writeRepertoire(tester);
+    final app = await _pumpScreen(tester, repertoirePath: path);
+    await tester.tap(find.text('Actions'));
+    await _settle(tester, cycles: 3);
+    await tester.tap(find.text('Choose repertoire…'));
+    await _settle(tester);
+    final next = File('${File(path).parent.path}/Second.pgn')
+      ..writeAsStringSync(
+        _chapterPgn.replaceAll('Italian Game', 'Second chapter'),
+      );
+    app.handOff(OpenBuilder(repertoirePath: next.path));
+    await _settle(tester);
+    expect(app.hasPending<OpenBuilder>(), isTrue);
+    expect(find.text('Select repertoire'), findsOneWidget);
+    await tester.tap(find.byTooltip('Back'));
+    await _settleUntil(tester, find.text('Second chapter'));
+    expect(app.hasPending<OpenBuilder>(), isFalse);
   });
 
   group('wide layout', () {

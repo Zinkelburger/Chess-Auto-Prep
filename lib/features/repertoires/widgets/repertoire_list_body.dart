@@ -1,6 +1,6 @@
 /// Embeddable repertoire list with import / rename / delete actions.
 ///
-/// Used both inside [RepertoireSelectionScreen] (full-screen push) and inline
+/// Used both inside [RepertoireSelectionScreen] (workspace navigation push) and inline
 /// in screens that need a repertoire before they can function (Builder, Trainer).
 library;
 
@@ -22,7 +22,7 @@ import 'package:flutter/material.dart';
 import '../../../design_system/components/item_title.dart';
 
 import '../models/repertoire_metadata.dart';
-import '../../../screens/repertoire_chapters_screen.dart';
+import 'repertoire_chapters_screen.dart';
 import 'repertoire_creation_screen.dart';
 import 'repertoire_import_dialog.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

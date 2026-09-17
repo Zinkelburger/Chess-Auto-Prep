@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../constants/ui_breakpoints.dart';
+import '../design_system/layout/workspace_branch.dart';
 import '../core/app_state.dart';
 import '../services/games_library/games_library_service.dart'
     show GamesPlatform;
@@ -245,13 +246,16 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         index: _supportedModes.indexOf(activeMode),
         children: [
           for (final mode in _supportedModes)
-            TickerMode(
-              enabled: mode == activeMode && !_appBackgrounded,
-              child:
-                  _modeViews[mode] ??
-                  (mode == activeMode
-                      ? const _ModeLoadingView()
-                      : const SizedBox.shrink()),
+            WorkspaceBranch(
+              active: mode == activeMode,
+              child: TickerMode(
+                enabled: mode == activeMode && !_appBackgrounded,
+                child:
+                    _modeViews[mode] ??
+                    (mode == activeMode
+                        ? const _ModeLoadingView()
+                        : const SizedBox.shrink()),
+              ),
             ),
         ],
       ),

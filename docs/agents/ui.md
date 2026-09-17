@@ -39,6 +39,8 @@ Reuse these widgets (paths relative to `lib/`):
 
 | Need | Use |
 |---|---|
+| Retain a workspace toolbar while navigating | `WorkspaceShell` and `WorkspaceNavigationController` in `design_system/layout/`; host supplies root and destination toolbars |
+| Park a mode and restore keyboard focus | `WorkspaceBranch` in `design_system/layout/workspace_branch.dart` |
 | Search a list or catalog | `ListSearchField` in `design_system/components/list_search_field.dart` |
 | Labelled number | `InlineStat` / `StackedStat` in `widgets/common/stat_display.dart` |
 | Confirmation | `confirmAction` in `design_system/components/confirm_dialog.dart` |

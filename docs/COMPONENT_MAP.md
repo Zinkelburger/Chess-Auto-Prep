@@ -365,6 +365,43 @@ setup, engine settings, chapter naming and import confirmations remain forms,
 not modes. These are ownership decisions; the remaining work is tracked in
 [Layout & navigation](FUTURE_FEATURES.md#layout--navigation).
 
+#### Persistent repertoire workspaces
+
+`design_system/layout/workspace_shell.dart` and its
+`WorkspaceNavigationController` retain a nested Navigator beneath the toolbar.
+Repertoire library, Builder and Trainer own separate instances; mode switches
+retain their nested destinations in `MainScreen`'s lazy stack. Popup routes do
+not count as workspace pages. Back and Escape target the nested navigator and
+respect `PopScope`; root dialogs remain separate modal tasks.
+
+`app/navigation/workspace_destination_toolbar.dart` keeps Actions / View /
+Settings and the owning mode label visible. While a picker or configuration
+page is open, Actions offers navigation back; board/editor commands remain in
+the retained root toolbar and cannot receive focus or pointer input. Keeping
+that root toolbar mounted also preserves its live settings registration. The
+secondary Settings entry opens that existing owner rather than registering a
+replacement. `design_system/layout/workspace_branch.dart` excludes inactive
+mode branches from keyboard focus/traversal and restores their last attached
+focus destination on return. A root modal keeps keyboard ownership.
+
+The catalog and chapter destinations now have canonical paths under
+`features/repertoires/widgets/`; the old `screens/` files are removed. Builder
+planning/build/audit routes also use its nested navigator. New Builder/Trainer
+source handoffs wait while a nested destination is open; Builder also waits for
+active generation. Closing a destination applies a pending request, while an
+explicit selection made later supersedes an older request. Builder focus is
+reclaimed only while its root is visible in the active mode.
+
+Library refresh now refreshes the injected controller without replacing the
+catalog widget. Opening an outline keeps the catalog mounted, preserving its
+filter and scroll state for return. `widgetbook/workspace_cases.dart` pairs the
+production shell and memory catalog with a small illustrative editor to
+exercise retained navigation and creation forms.
+
+This is in-memory navigation retention. Full document-session restart restore,
+deep-link routing, retained-branch memory budgets, nested interactive-engine
+visibility and frame profiling are still open renewal gates.
+
 #### Shared document save interaction
 
 `features/documents/controllers/document_save_session.dart` owns a loaded
@@ -1647,7 +1684,7 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 |------|---------|
 | `main_screen.dart` | Mode `IndexedStack`; engine suspend/resume on leaving/entering interactive-engine modes and on `paused`/`hidden`/`detached` (not `inactive`) |
 | `repertoire_screen.dart` | **Composition root** — wires `GenerationSessionController`, `AuditSessionController`, `CoverageController` to widgets; owns board, PGN, ephemeral finding preview, layout; when no repertoire is selected shows `RepertoireListBody` inline instead of a placeholder button; keyboard shortcuts via `RepertoireShortcuts`; status bar shows "Audit paused" when audit is paused; Jobs panel listens to both `_jobManager` and `_generationController` via `Listenable.merge` |
-| `repertoire_selection_screen.dart` | Full-screen push wrapper around `RepertoireListBody`; pops with selected `RepertoireMetadata` |
+| `features/repertoires/widgets/repertoire_selection_screen.dart` | Workspace destination around `RepertoireListBody`; returns a typed `ChapterPick` |
 | `repertoire_training_screen.dart` | Repertoire and study trainer: a stable board beside the source picker, chapter/line browser or current lesson; Learn and Review respect the selected chapter and session size. Read opens the canonical PGN Viewer. The settings gear follows the global mode switcher; Skip is visible, and Line actions include persistent exclusion. The browser restores excluded lines without discarding review history. Keyboard: Space acknowledges the next learning step, arrows skip lines, `/` focuses move input, Escape returns to the browser. |
 | `analysis_screen.dart` | Game weakness / position analysis |
 | `study_screen.dart` | **Composition root** for Study mode — wires `StudyController` to `StudyBoardPane`, `StudySidePane`, `StudyPickerBar`, `StudyChapterSidebar`; keyboard, import/export, train/browse handoffs stay on the screen |

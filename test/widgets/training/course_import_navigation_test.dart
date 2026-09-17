@@ -3,7 +3,7 @@ import 'package:chess_auto_prep/app/app_dependencies.dart';
 import 'dart:io';
 
 import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
-import 'package:chess_auto_prep/screens/repertoire_chapters_screen.dart';
+import 'package:chess_auto_prep/features/repertoires/widgets/repertoire_chapters_screen.dart';
 import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/widgets/pgn_import_dialog.dart';

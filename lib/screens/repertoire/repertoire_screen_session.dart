@@ -249,7 +249,7 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
   }
 
   Future<void> _showRepertoireSelection() async {
-    final pick = await Navigator.of(context).push<ChapterPick>(
+    final pick = await _workspaceNavigation.push<ChapterPick>(
       MaterialPageRoute(
         builder: (context) => const RepertoireSelectionScreen(),
       ),
@@ -258,6 +258,8 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
     // A course chapter picked inside a file opens that file: the outline
     // already shows the chapters.
     if (pick != null && mounted) {
+      // A selection made now supersedes an older deferred source request.
+      _appState?.takeHandoff<OpenBuilder>();
       final picked = pick.chapter;
       final chapters = p.extension(picked.filePath).toLowerCase() == '.pgn'
           ? [picked]
@@ -490,12 +492,13 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
     if (current == null) return;
     final folder = _chapterStore.folderMetadata(current.filePath);
 
-    final chapter = (await Navigator.of(context).push<ChapterPick>(
+    final chapter = (await _workspaceNavigation.push<ChapterPick>(
       MaterialPageRoute(
         builder: (_) => RepertoireChaptersScreen(repertoire: folder),
       ),
     ))?.chapter;
 
+    if (chapter != null && mounted) _appState?.takeHandoff<OpenBuilder>();
     if (chapter != null && mounted && chapter.filePath != current.filePath) {
       await _controller.setRepertoire(chapter);
     }

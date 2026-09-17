@@ -394,4 +394,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String restoreRetainedDraftNumber(int number) {
     return 'Restore draft $number';
   }
+
+  @override
+  String get backToPreviousView => 'Back to previous view';
+
+  @override
+  String get selectRepertoire => 'Select repertoire';
+
+  @override
+  String get back => 'Back';
 }

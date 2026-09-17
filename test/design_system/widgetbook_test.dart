@@ -6,6 +6,39 @@ import '../../widgetbook/main.dart';
 
 void main() {
   testWidgets(
+    'Widgetbook retains the workspace draft and nested library filter',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1600, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        const RenewalWidgetbook(
+          initialRoute: '/?path=workspace/navigation/retained-library',
+        ),
+      );
+      await tester.pumpAndSettle();
+      final draft = find.byWidgetPredicate(
+        (w) => w is TextField && w.decoration?.labelText == 'Workspace draft',
+      );
+      await tester.enterText(draft, 'Board note');
+      await tester.tap(find.text('Open library'));
+      await tester.pumpAndSettle();
+      final search = find.byWidgetPredicate(
+        (w) => w is TextField && w.decoration?.hintText == 'Search repertoires',
+      );
+      await tester.enterText(search, 'Sicilian');
+      await tester.tap(find.text('Switch workspace'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Return to workspace'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(search).controller!.text, 'Sicilian');
+      await tester.tap(find.text('Back'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(draft).controller!.text, 'Board note');
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'Widgetbook copy dialog keeps localization, theme and scale and saves the restored draft',
     (tester) async {
       await tester.binding.setSurfaceSize(const Size(1600, 1000));

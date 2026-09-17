@@ -1,4 +1,9 @@
 import 'dart:async';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../features/repertoires/controllers/repertoire_catalog_controller.dart';
+import '../design_system/layout/workspace_navigation_controller.dart';
+import '../design_system/layout/workspace_shell.dart';
+import '../app/navigation/workspace_destination_toolbar.dart';
 
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
@@ -20,15 +25,16 @@ import '../features/repertoires/widgets/repertoire_list_body.dart';
 
 /// Material management independent of an editor, engine or training session.
 /// Structural edits use the same controller and Undo as the builder outline.
-class RepertoireLibraryScreen extends StatefulWidget {
+class RepertoireLibraryScreen extends ConsumerStatefulWidget {
   const RepertoireLibraryScreen({super.key});
 
   @override
-  State<RepertoireLibraryScreen> createState() =>
+  ConsumerState<RepertoireLibraryScreen> createState() =>
       _RepertoireLibraryScreenState();
 }
 
-class _RepertoireLibraryScreenState extends State<RepertoireLibraryScreen> {
+class _RepertoireLibraryScreenState
+    extends ConsumerState<RepertoireLibraryScreen> {
   late final RepertoireOutlineController _outline = RepertoireOutlineController(
     onActiveChapterMoved: (path) {
       if (!mounted) return;
@@ -38,7 +44,10 @@ class _RepertoireLibraryScreenState extends State<RepertoireLibraryScreen> {
   AppState? _app;
   AppMode? _lastMode;
   RepertoireMetadata? _folder;
-  int _revision = 0;
+  final _workspaceNavigation = WorkspaceNavigationController();
+
+  void _refreshCatalog() =>
+      unawaited(ref.read(repertoireCatalogProvider(false).notifier).refresh());
   int _openEpoch = 0;
 
   @override
@@ -60,7 +69,7 @@ class _RepertoireLibraryScreenState extends State<RepertoireLibraryScreen> {
     // Other views can import, rename and edit the same material while this
     // IndexedStack child is parked. Refresh only on re-entry.
     if (_folder == null) {
-      setState(() => _revision++);
+      _refreshCatalog();
     } else {
       unawaited(_outline.refresh());
     }
@@ -121,7 +130,7 @@ class _RepertoireLibraryScreenState extends State<RepertoireLibraryScreen> {
     _outline.close();
     setState(() {
       _folder = null;
-      _revision++;
+      _refreshCatalog();
     });
   }
 
@@ -144,11 +153,17 @@ class _RepertoireLibraryScreenState extends State<RepertoireLibraryScreen> {
   void dispose() {
     _app?.removeListener(_modeChanged);
     _outline.dispose();
+    _workspaceNavigation.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) => WorkspaceShell(
+    navigation: _workspaceNavigation,
+    destinationAppBar: WorkspaceDestinationToolbar(
+      mode: AppMode.repertoireLibrary,
+      navigation: _workspaceNavigation,
+    ),
     appBar: AppBar(
       titleSpacing: 16,
       title: AppBarTitleWithTrail(
@@ -176,7 +191,7 @@ class _RepertoireLibraryScreenState extends State<RepertoireLibraryScreen> {
               onRun: () {
                 if (!mounted) return;
                 if (_folder == null) {
-                  setState(() => _revision++);
+                  _refreshCatalog();
                 } else {
                   unawaited(_outline.refresh());
                 }
@@ -188,13 +203,18 @@ class _RepertoireLibraryScreenState extends State<RepertoireLibraryScreen> {
         const AppSettingsButton(mode: AppMode.repertoireLibrary),
       ],
     ),
-    body: _folder == null
-        ? RepertoireListBody(
-            key: ValueKey(_revision),
+    body: IndexedStack(
+      index: _folder == null ? 0 : 1,
+      children: [
+        ExcludeFocus(
+          excluding: _folder != null,
+          child: RepertoireListBody(
             onRepertoireSelected: (folder) => unawaited(_openFolder(folder)),
             onSelected: _openChapterFolder,
-          )
-        : Align(
+          ),
+        ),
+        if (_folder != null)
+          Align(
             alignment: Alignment.topCenter,
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 1040),
@@ -285,6 +305,10 @@ class _RepertoireLibraryScreenState extends State<RepertoireLibraryScreen> {
                 },
               ),
             ),
-          ),
+          )
+        else
+          const SizedBox.shrink(),
+      ],
+    ),
   );
 }

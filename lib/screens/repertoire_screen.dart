@@ -78,8 +78,8 @@ import 'package:chess_auto_prep/core/navigation_stack.dart';
 import '../models/board_annotation.dart';
 import '../models/explorer_response.dart';
 import '../utils/chess_utils.dart' show sanToUci;
-import 'repertoire_chapters_screen.dart';
-import 'repertoire_selection_screen.dart';
+import '../features/repertoires/widgets/repertoire_chapters_screen.dart';
+import '../features/repertoires/widgets/repertoire_selection_screen.dart';
 import '../features/repertoire/controllers/generation_notification_router.dart';
 import '../features/repertoire/controllers/audit_entry_router.dart';
 import '../features/repertoire/controllers/repertoire_outline_controller.dart';
@@ -92,6 +92,10 @@ import '../features/planner/widgets/plan_runner_banner.dart';
 import '../services/generation/generation_config.dart';
 import '../services/generation/generation_presets.dart';
 import '../constants/chess_constants.dart';
+import '../design_system/layout/workspace_navigation_controller.dart';
+import '../design_system/layout/workspace_shell.dart';
+import '../app/navigation/workspace_destination_toolbar.dart';
+
 import '../services/storage/app_paths.dart';
 
 part 'repertoire/repertoire_screen_layout.dart';
@@ -116,6 +120,7 @@ const _kGenRebuildInterval = Duration(milliseconds: 250);
 abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
     with TickerProviderStateMixin {
   late final RepertoireController _controller;
+  final _workspaceNavigation = WorkspaceNavigationController();
   AppState? _appState;
   final GenerationSessionController _generationController =
       GenerationSessionController();
@@ -270,7 +275,7 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   }) async {
     if (_configRouteOpen) return;
     _configRouteOpen = true;
-    await Navigator.of(context).push(
+    await _workspaceNavigation.push(
       MaterialPageRoute<void>(
         builder: (_) => BuildConfigScreen(
           repertoireName: _configRouteTitle,
@@ -312,7 +317,7 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
               final app = context.read<AppState>();
               final path = await study.createStudyFromPgn(name, pgn);
               if (!mounted) return;
-              Navigator.of(context).pop();
+              await _workspaceNavigation.maybePop();
               app.switchToStudyEdit(path: path);
             },
           ),
@@ -333,7 +338,7 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
     final path = _repertoireFilePath;
     final isWhite = _controller.isRepertoireWhite;
     final label = _controller.currentRepertoire?.name;
-    await Navigator.of(context).push(
+    await _workspaceNavigation.push(
       MaterialPageRoute<void>(
         builder: (_) => BuildConfigScreen(
           repertoireName: _configRouteTitle,
@@ -433,8 +438,13 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
     return panel != null && action(panel);
   }
 
-  void _reclaimFocus() =>
-      reclaimFocusAfterFrame(_focusNode, mounted: () => mounted);
+  void _reclaimFocus() => reclaimFocusAfterFrame(
+    _focusNode,
+    mounted: () =>
+        mounted &&
+        !_workspaceNavigation.hasDestination &&
+        (_appState?.currentMode == AppMode.repertoire),
+  );
 
   // Outline column actions, implemented on the concrete state and called
   // from the layout mixin.
@@ -463,6 +473,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
       ..addListener(_onPlanRunnerChanged);
     _layout.addListener(_onLayoutChanged);
     unawaited(_layout.load());
+    _workspaceNavigation.addListener(_onAppStateChanged);
     _controller = RepertoireController();
     _controller.addListener(_onRepertoireChanged);
     _generationController.addListener(_onGenerationChanged);
@@ -482,7 +493,24 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     });
   }
 
+  bool _handoffCheckQueued = false;
   void _onAppStateChanged() {
+    if (!mounted || _handoffCheckQueued) return;
+    _handoffCheckQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _handoffCheckQueued = false;
+      if (mounted) _applyPendingHandoff();
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  void _applyPendingHandoff() {
+    // Preserve the document underlying an open picker/configuration. A new
+    // source request waits until that destination closes and generation ends.
+    if (_workspaceNavigation.hasDestination ||
+        _generationController.isGenerating) {
+      return;
+    }
     final appState = _appState;
     if (appState == null) return;
     if (appState.currentMode != AppMode.repertoire) return;
@@ -839,7 +867,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
             startFen: kStandardStartFen,
             playAsWhite: isWhite,
           );
-    final result = await Navigator.of(context).push<PlanBuildResult>(
+    final result = await _workspaceNavigation.push<PlanBuildResult>(
       MaterialPageRoute(
         fullscreenDialog: true,
         builder: (_) => PlanBuildScreen(
@@ -964,6 +992,8 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     _outline.dispose();
     _planRunner.dispose();
     _focusNode.dispose();
+    _workspaceNavigation.removeListener(_onAppStateChanged);
+    _workspaceNavigation.dispose();
     _boardPreview.dispose();
     _coverageController.removeListener(_onCoverageChanged);
     _coverageController.dispose();
@@ -982,8 +1012,32 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
 
   @override
   Widget build(BuildContext context) {
+    final root = _buildWorkspaceRoot(context);
+    return WorkspaceShell(
+      navigation: _workspaceNavigation,
+      appBar: PreferredSize(
+        preferredSize: root.appBar.preferredSize,
+        child: AbsorbPointer(
+          absorbing: _controller.isLoading && _lastRepertoireId != null,
+          child: ExcludeFocus(
+            excluding: _controller.isLoading && _lastRepertoireId != null,
+            child: root.appBar,
+          ),
+        ),
+      ),
+      destinationAppBar: WorkspaceDestinationToolbar(
+        mode: AppMode.repertoire,
+        navigation: _workspaceNavigation,
+      ),
+      body: root.body,
+    );
+  }
+
+  ({PreferredSizeWidget appBar, Widget body}) _buildWorkspaceRoot(
+    BuildContext context,
+  ) {
     if (_controller.isLoading && _lastRepertoireId == null) {
-      return Scaffold(
+      return (
         appBar: RepertoireToolbar(
           title: const Text('Repertoire Builder'),
           onSettingsClosed: _reclaimFocus,
@@ -1003,7 +1057,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
 
     final loadError = _controller.loadError;
     if (loadError != null) {
-      return Scaffold(
+      return (
         appBar: RepertoireToolbar(
           title: const Text('Repertoire Builder'),
           showSelectRepertoireAction: true,
@@ -1037,7 +1091,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     }
 
     if (_controller.currentRepertoire == null) {
-      return Scaffold(
+      return (
         appBar: RepertoireToolbar(
           title: const Text('Repertoire Builder'),
           showSelectRepertoireAction: true,
@@ -1064,49 +1118,49 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     }
 
     final repertoire = _controller.currentRepertoire!;
-    return RepertoireLoadingFrame(
-      isLoading: _controller.isLoading,
-      child: Scaffold(
-        appBar: RepertoireToolbar(
-          title: RepertoireBreadcrumbTitle(
-            repertoireName: p.basename(
-              StorageFactory.instance.parentPath(repertoire.filePath),
-            ),
-            chapterName: repertoire.name,
-            chapters: _chapters,
-            currentChapterPath: repertoire.filePath,
-            enabled: !_generationController.isGenerating,
-            onSwitchRepertoire: _showRepertoireSelection,
-            onSelectChapter: _onChapterSelected,
-            onAddChapter: _addChapterInline,
-            onViewChapters: _showChapterList,
+    return (
+      appBar: RepertoireToolbar(
+        title: RepertoireBreadcrumbTitle(
+          repertoireName: p.basename(
+            StorageFactory.instance.parentPath(repertoire.filePath),
           ),
-          isGenerating: _generationController.isGenerating,
-          isGenerationPaused: _generationController.isPaused,
-          isExpectimaxProbe: _generationController.isExpectimaxProbe,
-          showTrainAction: true,
-          showSelectRepertoireAction: true,
-          generationLocked: _generationController.isGenerating,
-          onSettingsClosed: _reclaimFocus,
-          onSelectRepertoire: _showRepertoireSelection,
-          onTrainRepertoire: _trainRepertoire,
-          onOpenGeneration: _openGenerateTab,
-          onPlanBuild: () => unawaited(_openPlanner()),
-          onOpenAudit: _openAuditDialog,
-          onImportPgn: _importPgn,
-          onReload: _reloadRepertoire,
-          onGenerationSettings: () =>
-              showPositionGenerationSettings(context, _generationController),
-          trapNavigation: _buildTrapNavigation(),
-          repertoireSettingsBuilder: (_) => RepertoireSettingsBody(
-            isWhiteRepertoire: _controller.isRepertoireWhite,
-            sideChangeEnabled: !_generationController.isGenerating,
-            onSideChanged: _setRepertoireSide,
-            boardSize: _layout.boardSize,
-            onBoardSizeChanged: _layout.setBoardSize,
-          ),
+          chapterName: repertoire.name,
+          chapters: _chapters,
+          currentChapterPath: repertoire.filePath,
+          enabled: !_generationController.isGenerating,
+          onSwitchRepertoire: _showRepertoireSelection,
+          onSelectChapter: _onChapterSelected,
+          onAddChapter: _addChapterInline,
+          onViewChapters: _showChapterList,
         ),
-        body: GestureDetector(
+        isGenerating: _generationController.isGenerating,
+        isGenerationPaused: _generationController.isPaused,
+        isExpectimaxProbe: _generationController.isExpectimaxProbe,
+        showTrainAction: true,
+        showSelectRepertoireAction: true,
+        generationLocked: _generationController.isGenerating,
+        onSettingsClosed: _reclaimFocus,
+        onSelectRepertoire: _showRepertoireSelection,
+        onTrainRepertoire: _trainRepertoire,
+        onOpenGeneration: _openGenerateTab,
+        onPlanBuild: () => unawaited(_openPlanner()),
+        onOpenAudit: _openAuditDialog,
+        onImportPgn: _importPgn,
+        onReload: _reloadRepertoire,
+        onGenerationSettings: () =>
+            showPositionGenerationSettings(context, _generationController),
+        trapNavigation: _buildTrapNavigation(),
+        repertoireSettingsBuilder: (_) => RepertoireSettingsBody(
+          isWhiteRepertoire: _controller.isRepertoireWhite,
+          sideChangeEnabled: !_generationController.isGenerating,
+          onSideChanged: _setRepertoireSide,
+          boardSize: _layout.boardSize,
+          onBoardSizeChanged: _layout.setBoardSize,
+        ),
+      ),
+      body: RepertoireLoadingFrame(
+        isLoading: _controller.isLoading,
+        child: GestureDetector(
           behavior: HitTestBehavior.translucent,
           onTap: _reclaimFocus,
           child: _buildShortcuts(

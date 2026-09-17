@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:chess_auto_prep/app/app_dependencies.dart';
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
+import '../../widgetbook/repertoire_cases.dart'
+    show FixtureRepertoireRepository, CatalogScenario;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -47,7 +51,16 @@ void main() {
               create: (_) => AppHistory(appState),
             ),
           ],
-          child: const MaterialApp(home: MainScreen()),
+          child: AppDependencies(
+            repertoireCatalog: FixtureRepertoireRepository(
+              CatalogScenario.empty,
+            ),
+            child: const MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: MainScreen(),
+            ),
+          ),
         ),
       );
       await pumpNavigation();

@@ -720,6 +720,53 @@ unfinished. Draft retention here is in memory and lasts only for the session;
 it is not crash recovery. Persistent shell, appearance/settings, performance,
 owner review and PLAN-02 remain open for the first slice.
 
+### Persistent navigation checkpoint — repertoire workspaces
+
+After shared-save checkpoint `e6111e70`, the repertoire library, Builder and
+Trainer use `WorkspaceShell` with an owned nested Navigator. Repertoire/chapter
+pickers and Builder planning/build/audit destinations retain the owning toolbar.
+Child Actions targets navigation, not the hidden board; View and Settings remain
+available. The root toolbar stays mounted to preserve its settings owner while
+excluding its hidden controls from focus/pointer/semantics. Popup routes do not
+replace workspace chrome. Back/Escape use the innermost route and respect busy
+`PopScope` guards. Global modal tasks remain outside the workspace stack.
+
+STATE-01/UI-02: mode changes retain nested pages, picker input and creation
+forms. The library refreshes its injected catalog controller without changing
+widget identity, and keeps the catalog mounted behind an open outline. Main's
+inactive branches cannot claim keyboard focus; `WorkspaceBranch` restores the
+last attached focus destination on return without taking focus from root
+modals. Builder focus returns only to
+its visible, active root. Builder/Trainer defer source handoffs while a nested
+page is open, preventing a planning form's underlying source changing silently;
+Builder also defers until generation ends. A newer explicit picker choice
+supersedes an older pending request. Deferred work runs after navigation and
+job callbacks complete, rather than mutating their source mid-callback.
+
+Picker screen ownership moves into `features/repertoires/widgets/`, with all
+imports retargeted and no shims. The production shell has a Widgetbook fixture
+combining a memory catalog, actual creation controls and illustrative editor.
+The nested-Navigator default remains selected; no router package is introduced.
+
+Verification: 30 distinct focused shell, Widgetbook, MainScreen, Builder and
+course-navigation regression cases pass (the final seven-case shell rerun
+corrects a missing Material ancestor in its new test fixture). Four native
+Linux application journeys pass: retained Builder picker/filter/position and
+settings owner; creation draft and Escape after actual mode-menu round trips;
+catalog create/search/rename/restart/delete/restore; multi-chapter publication
+and reopen. The native round trip initially exposed lost keyboard focus;
+`WorkspaceBranch` fixes it and both focused and native regressions pass.
+`scripts/ci.sh analyze lint` passes with nine pre-existing informational
+analyzer findings and eleven architecture-checker tests. Headless production
+screens were inspected at 1280×720: [creation draft under its owning toolbar](images/renewal-workspace-creation.png)
+and [Builder picker under its owning toolbar](images/renewal-workspace-picker.png).
+The preview used disposable data and was stopped. Full release tests and
+Windows/macOS native runs were not run for this checkpoint.
+
+This does not graduate UI-02 or milestone 1/2: persisted document sessions, deep links, memory/frame profiling and nested
+interactive-engine visibility remain unverified. Appearance/settings, remaining
+recovery/platform/performance gates, owner review and PLAN-02 remain open.
+
 ### Initial parity and ownership inventory (milestone 0, partial)
 
 The starting tree has 885 files under `lib/` and 674 under `test/`; these counts
@@ -1952,7 +1999,7 @@ a process does not simulate lost hardware caches.
 
 S0 is **complete for the scoped Linux cases** and milestone 0 has a
 **partial inventory** above.
-Milestone 1/2 is **Partial** (catalog boundary checkpoint below); milestones
+Milestone 1/2 is **Partial** (implementation checkpoints above); milestones
 3–7 are **Not started**. Each row yields a reviewable result; later
 rows depend on the contracts established earlier, not on an unbounded framework
 build. Reorder later feature slices after the dependency inventory, with a

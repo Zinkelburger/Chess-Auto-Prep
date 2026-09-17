@@ -717,6 +717,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Restore draft {number}'**
   String restoreRetainedDraftNumber(int number);
+
+  /// Workspace navigation: backToPreviousView
+  ///
+  /// In en, this message translates to:
+  /// **'Back to previous view'**
+  String get backToPreviousView;
+
+  /// Workspace navigation: selectRepertoire
+  ///
+  /// In en, this message translates to:
+  /// **'Select repertoire'**
+  String get selectRepertoire;
+
+  /// Workspace navigation: back
+  ///
+  /// In en, this message translates to:
+  /// **'Back'**
+  String get back;
 }
 
 class _AppLocalizationsDelegate

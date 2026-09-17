@@ -6,10 +6,11 @@
 library;
 
 import 'package:flutter/material.dart';
+import '../../../l10n/generated/app_localizations.dart';
 
-import '../features/repertoires/models/repertoire_metadata.dart';
-import '../widgets/chapter_list_body.dart';
-import '../design_system/components/item_title.dart';
+import '../models/repertoire_metadata.dart';
+import '../../../widgets/chapter_list_body.dart';
+import '../../../design_system/components/item_title.dart';
 
 class RepertoireChaptersScreen extends StatelessWidget {
   final RepertoireMetadata repertoire;
@@ -24,7 +25,7 @@ class RepertoireChaptersScreen extends StatelessWidget {
         title: ItemTitle(repertoire.name, maxLines: 1),
         actions: [
           IconButton(
-            tooltip: 'Back',
+            tooltip: AppLocalizations.of(context).back,
             onPressed: () => Navigator.of(context).maybePop(),
             icon: const Icon(Icons.arrow_back),
           ),

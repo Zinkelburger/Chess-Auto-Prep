@@ -488,5 +488,17 @@
         "type": "int"
       }
     }
+  },
+  "backToPreviousView": "Back to previous view",
+  "@backToPreviousView": {
+    "description": "Workspace navigation: backToPreviousView"
+  },
+  "selectRepertoire": "Select repertoire",
+  "@selectRepertoire": {
+    "description": "Workspace navigation: selectRepertoire"
+  },
+  "back": "Back",
+  "@back": {
+    "description": "Workspace navigation: back"
   }
 }

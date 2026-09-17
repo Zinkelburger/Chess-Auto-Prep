@@ -5,6 +5,9 @@ library;
 import '../models/repertoire_review_entry.dart' show ReviewRating;
 
 import 'dart:async' show unawaited;
+import '../design_system/layout/workspace_navigation_controller.dart';
+import '../design_system/layout/workspace_shell.dart';
+import '../app/navigation/workspace_destination_toolbar.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -40,8 +43,8 @@ import '../widgets/training/trainer_browser.dart';
 import '../widgets/training/training_board_controls.dart';
 import '../widgets/training/training_results_panel.dart';
 import '../widgets/training/training_settings_panel.dart';
-import 'repertoire_selection_screen.dart';
-import 'repertoire_chapters_screen.dart';
+import '../features/repertoires/widgets/repertoire_selection_screen.dart';
+import '../features/repertoires/widgets/repertoire_chapters_screen.dart';
 
 // ---------------------------------------------------------------------------
 // TRAINING SCREEN
@@ -64,6 +67,7 @@ class RepertoireTrainingScreen extends StatefulWidget {
 
 class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
   late final TrainingSessionController _training;
+  final _workspaceNavigation = WorkspaceNavigationController();
   bool _showPgn = false;
 
   final PgnViewerWidgetController _pgnController = PgnViewerWidgetController();
@@ -78,6 +82,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
   @override
   void initState() {
     super.initState();
+    _workspaceNavigation.addListener(_resumePendingHandoff);
     _training = TrainingSessionController();
     _training.onLineStarted = () {
       _pgnRevealedLineId = null;
@@ -97,6 +102,8 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
     _appStateRef?.removeListener(_onAppStateChanged);
     _training.removeListener(_onTrainingChanged);
     _training.dispose();
+    _workspaceNavigation.removeListener(_resumePendingHandoff);
+    _workspaceNavigation.dispose();
     super.dispose();
   }
 
@@ -127,7 +134,14 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
     }
   }
 
+  void _resumePendingHandoff() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _onAppStateChanged();
+    });
+  }
+
   void _onAppStateChanged() {
+    if (_workspaceNavigation.hasDestination) return;
     final appState = _appStateRef;
     if (appState == null || !mounted) return;
     if (appState.currentMode != AppMode.repertoireTrainer) return;
@@ -155,10 +169,11 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
   }
 
   Future<void> _selectRepertoire() async {
-    final pick = await Navigator.of(context).push<ChapterPick>(
+    final pick = await _workspaceNavigation.push<ChapterPick>(
       MaterialPageRoute(builder: (_) => const RepertoireSelectionScreen()),
     );
     if (mounted && pick != null) {
+      _appStateRef?.takeHandoff<TrainerHandoff>();
       _training.setRepertoire(pick.chapter);
       await _training.loadRepertoire(startChapter: pick.courseChapter);
     }
@@ -170,7 +185,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
     final directory = p.extension(source.filePath).toLowerCase() == '.pgn'
         ? p.dirname(source.filePath)
         : source.filePath;
-    final pick = await Navigator.of(context).push<ChapterPick>(
+    final pick = await _workspaceNavigation.push<ChapterPick>(
       MaterialPageRoute(
         builder: (_) => RepertoireChaptersScreen(
           repertoire: RepertoireMetadata(
@@ -182,6 +197,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
       ),
     );
     if (!mounted || pick == null) return;
+    _appStateRef?.takeHandoff<TrainerHandoff>();
     _training.setRepertoire(pick.chapter);
     await _training.loadRepertoire(startChapter: pick.courseChapter);
   }
@@ -218,10 +234,18 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return BoardKeyboardScope(
-      moveInputKey: _moveInputKey,
-      bindings: () => _keyBindings,
-      child: Scaffold(appBar: _buildAppBar(), body: _buildBody()),
+    return WorkspaceShell(
+      navigation: _workspaceNavigation,
+      appBar: _buildAppBar(),
+      destinationAppBar: WorkspaceDestinationToolbar(
+        mode: AppMode.repertoireTrainer,
+        navigation: _workspaceNavigation,
+      ),
+      body: BoardKeyboardScope(
+        moveInputKey: _moveInputKey,
+        bindings: () => _keyBindings,
+        child: _buildBody(),
+      ),
     );
   }
 
