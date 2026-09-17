@@ -199,8 +199,8 @@ void main() {
 
       // Every path mutation funnels through the syncing setter, so the
       // opening-tree cursor must agree with the move history.
-      expect(controller.openingTree, isNotNull);
-      expect(controller.openingTree!.currentMovePath, controller.moveHistory);
+      expect(controller.openingGraph, isNotNull);
+      expect(controller.openingGraph!.currentMovePath, controller.moveHistory);
     });
   });
 
@@ -416,7 +416,7 @@ void main() {
         controller.navigateToLineMove(['e4']);
         assertNavigationInvariants(controller);
 
-        final treePathBefore = controller.openingTree!.currentNode
+        final treePathBefore = controller.openingGraph!.currentNode
             .getMovePath();
         expect(treePathBefore, ['e4']);
 
@@ -425,7 +425,10 @@ void main() {
         expect(controller.moveHistory, ['e4', 'e5']);
         expect(controller.currentMoveIndex, 1);
         expect(controller.currentMoveSequence, ['e4', 'e5']);
-        expect(controller.openingTree!.currentNode.getMovePath(), ['e4', 'e5']);
+        expect(controller.openingGraph!.currentNode.getMovePath(), [
+          'e4',
+          'e5',
+        ]);
         expect(controller.fen, fenAfterMoves(['e4', 'e5']));
         assertNavigationInvariants(controller);
       },
@@ -451,16 +454,16 @@ void main() {
         controller.playMove('d4');
         controller.playMove('c5');
         controller.playMove('e3');
-        expect(controller.openingTree!.inBook, isFalse);
+        expect(controller.openingGraph!.inBook, isFalse);
         expect(
-          controller.openingTree!.continuations.map((g) => g.move),
+          controller.openingGraph!.continuations.map((g) => g.move),
           contains('Nf6'),
         );
 
         controller.userSelectedTreeMove('Nf6');
 
         expect(controller.currentMoveSequence, ['d4', 'c5', 'e3', 'Nf6']);
-        expect(controller.openingTree!.inBook, isTrue);
+        expect(controller.openingGraph!.inBook, isTrue);
         expect(controller.fen, fenAfterMoves(['d4', 'c5', 'e3', 'Nf6']));
         assertNavigationInvariants(controller);
       },
@@ -531,7 +534,7 @@ void main() {
 
         expect(controller.repertoireLines, hasLength(1));
         expect(controller.repertoireLines.single.moves, ['e4', 'c5', 'Nf3']);
-        expect(controller.openingTree, isNotNull);
+        expect(controller.openingGraph, isNotNull);
       },
     );
 

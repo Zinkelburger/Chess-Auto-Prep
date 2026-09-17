@@ -229,7 +229,7 @@ void main() {
   );
 
   test(
-    'a slower line refresh cannot replace a later document action',
+    'a slower line refresh serializes the next append acknowledgement',
     () async {
       final entered = Completer<void>();
       final release = Completer<void>();
@@ -242,12 +242,14 @@ void main() {
         builder.selectedPgnLine!.fullPgn.replaceFirst('e5', 'e5 {annotation}'),
       );
       await entered.future;
-      await builder.writer.addMovesAtPosition(
+      final append = builder.writer.addMovesAtPosition(
         pathFromRoot: ['e4', 'e5'],
         sans: ['Nf3'],
       );
+      expect(await file.readAsString(), isNot(contains('Nf3')));
       release.complete();
       expect(await save, isTrue);
+      await append;
       expect(builder.repertoirePgn, await file.readAsString());
       expect(builder.repertoirePgn, contains('Nf3'));
       expect(builder.repertoirePgn, contains('annotation'));

@@ -166,7 +166,7 @@ mixin _RepertoireTabContent
       },
       evaluationsBuilder: (menu, chessDb) =>
           _buildGenerateTabContent(sourceControl: menu, chessDbSource: chessDb),
-      tree: _controller.openingTree,
+      tree: _controller.openingGraph,
       repertoireLines: _controller.repertoireLines,
       onHoverTreeMove: _onTreeMoveHover,
       onGoBack: _controller.goBack,
@@ -396,7 +396,7 @@ mixin _RepertoireTabContent
     final tree = _controller.tree;
     final path = _controller.path;
     final children = path.isEmpty ? tree.roots : tree.nodeAt(path)?.children;
-    final saved = _controller.openingTree;
+    final saved = _controller.openingGraph;
     return {
       if (children != null)
         for (final child in children) child.san,

@@ -1,4 +1,5 @@
-import '../../../chess_core/pgn/repertoire_document_mutation.dart';
+import '../../documents/models/pgn_document.dart';
+import '../models/repertoire_mutation_receipt.dart';
 
 /// Exact acknowledged document and target game after a line edit. Consumers
 /// advance their full-document baseline only from this committed result.
@@ -16,7 +17,6 @@ abstract interface class RepertoireDocumentRepository {
     String path,
     String content, {
     required String expectedContent,
-    bool reconcileInstalled = false,
   });
   Future<bool> deleteLine(
     String path,
@@ -30,7 +30,11 @@ abstract interface class RepertoireDocumentRepository {
     String content, {
     required String expectedContent,
   });
-  Future<AppendMovesResult> append(
+
+  /// Restore only the captured native revision; never reopen to rebase it.
+  Future<PgnSnapshot> restore(PgnSnapshot expected, String content);
+
+  Future<RepertoireMutationReceipt> append(
     String path,
     List<String> prefix,
     List<String> moves, {

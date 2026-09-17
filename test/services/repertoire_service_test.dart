@@ -1,3 +1,5 @@
+import 'package:chess_auto_prep/infrastructure/repertoires/document_repertoire_repository.dart';
+import 'package:chess_auto_prep/infrastructure/documents/native_pgn_document_store.dart';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -441,19 +443,14 @@ void main() {
       final filePath = '${tempDir.path}/empty.pgn';
       await File(filePath).writeAsString('');
 
-      final result = await service.files.appendMoveAtPath(
-        filePath,
-        [],
-        'e4',
-        isWhiteRepertoire: true,
-      );
-
-      expect(result.success, isTrue);
-      expect(result.updatedContent, contains('[Event "Repertoire Line"]'));
-      expect(result.updatedContent, contains('1. e4'));
+      final result = await DocumentRepertoireRepository(
+        NativePgnDocumentStore(),
+      ).append(filePath, [], ['e4'], isWhiteRepertoire: true);
+      expect(result.after.content, contains('[Event "Repertoire Line"]'));
+      expect(result.after.content, contains('1. e4'));
 
       final disk = await File(filePath).readAsString();
-      expect(disk, result.updatedContent);
+      expect(disk, result.after.content);
       expect(service.parseRepertoirePgn(disk).single.moves, ['e4']);
     });
 
@@ -473,17 +470,12 @@ void main() {
 1. e4 e5
 ''');
 
-        final result = await service.files.appendMoveAtPath(
-          filePath,
-          ['e4', 'e5'],
-          'Nf3',
-          isWhiteRepertoire: true,
-        );
-
-        expect(result.success, isTrue);
-        expect(result.updatedContent, contains('Nf3'));
-        expect(service.parseRepertoirePgn(result.updatedContent), hasLength(1));
-        expect(service.parseRepertoirePgn(result.updatedContent).single.moves, [
+        final result = await DocumentRepertoireRepository(
+          NativePgnDocumentStore(),
+        ).append(filePath, ['e4', 'e5'], ['Nf3'], isWhiteRepertoire: true);
+        expect(result.after.content, contains('Nf3'));
+        expect(service.parseRepertoirePgn(result.after.content), hasLength(1));
+        expect(service.parseRepertoirePgn(result.after.content).single.moves, [
           'e4',
           'e5',
           'Nf3',
@@ -507,15 +499,10 @@ void main() {
 1. e4 e5
 ''');
 
-        final result = await service.files.appendMoveAtPath(
-          filePath,
-          ['e4', 'c5'],
-          'Nf3',
-          isWhiteRepertoire: true,
-        );
-
-        expect(result.success, isTrue);
-        final lines = service.parseRepertoirePgn(result.updatedContent);
+        final result = await DocumentRepertoireRepository(
+          NativePgnDocumentStore(),
+        ).append(filePath, ['e4', 'c5'], ['Nf3'], isWhiteRepertoire: true);
+        final lines = service.parseRepertoirePgn(result.after.content);
         expect(lines, hasLength(2));
         expect(lines[0].moves, ['e4', 'e5']);
         expect(lines[1].moves, ['e4', 'c5', 'Nf3']);
