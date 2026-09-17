@@ -167,9 +167,9 @@ apply to the complete replacement, including its existing UI and helper files:
 
 - ARCH-01/ARCH-02: continue inventorying the whole production dependency graph,
   including feature services and shared `lib/models/` types. Enforced/complete
-  feature services now reject transitive legacy-service imports, exports,
-  conditional alternatives and parts; regression cases cover alternate owner
-  paths. Pure generation artifact codecs/models also pass the transitive
+  feature `services/` folders now reject transitive legacy-service imports, exports,
+  conditional alternatives and parts; regression cases cover renamed/nested
+  service paths. Pure generation artifact codecs/models also pass the transitive
   pure-Dart gate, closing that service loophole. Wider shared-model and workflow
   coverage remains open: an `enforced` classification alone does not certify a
   complete workflow. Close remaining edges through final pure algorithms or
@@ -4247,7 +4247,7 @@ and `serializeTreeInIsolate` are retired with no forwarding exports. The probe
 codec is removed from the graft/rescore library, so reading saved artifacts no
 longer imports the generation engine dependency closure.
 
-The checker follows every enforced/complete feature service through project
+The checker follows owners in every enforced/complete feature `services/` folder through project
 imports, exports, conditional branches and parts, rejecting any legacy service
 owner. The pure artifact closure also rejects native, Flutter and isolate
 imports. New regression cases cover indirect dependencies, moved owner paths,
@@ -4259,3 +4259,16 @@ keys, and opaque historical configuration. Operational `TreeBuildConfig`,
 probe graft/rescore, trap extraction and build/engine orchestration remain
 unfinished responsibilities outside this codec cutover. This does not certify
 the complete Generation feature or add legacy resume/proposal-browser parity.
+
+Validation: `scripts/ci.sh analyze lint` passes with 63 pre-existing analyzer
+infos and no errors/warnings; 43 checker regressions pass with the exact 1,459
+entry debt ledger unchanged. The focused 20-file generation/algorithm/native
+artifact/recovery/FEN batch passes 134 tests (zero failures or skips). A plain
+Dart VM contract runner passes historical tree/probe/trap fixtures and 64 seeded
+evaluation/probability/PV round trips, independently proving the codec no longer
+requires Flutter to compile. The application-service regression confirms a tree
+edit after asynchronous encoding starts cannot change the captured output.
+The initial analyzer run found one unused legacy import and two new CLI-test
+infos; those were corrected before the passing rerun. No UI behavior changed,
+so this cutover reuses the preceding inspected recovery screenshots rather than
+claiming a new platform/UI validation. No full-suite or non-Linux gate is claimed.

@@ -1,13 +1,13 @@
 /// Tree codecs and complete bundle staging over the artifact authority.
 library;
 
-import '../../../chess_core/generation/expectimax_probe_codec.dart';
 import 'dart:convert';
 import 'dart:isolate';
 
 import '../models/generation_artifacts.dart';
 import '../repositories/generation_artifact_repository.dart';
 import '../../../chess_core/generation/build_tree_node.dart';
+import '../../../chess_core/generation/expectimax_probe_codec.dart';
 import '../../../chess_core/generation/trap_line_info.dart';
 import '../../../chess_core/generation/tree_serialization.dart';
 

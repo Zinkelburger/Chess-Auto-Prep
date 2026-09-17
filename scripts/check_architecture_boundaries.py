@@ -216,8 +216,8 @@ def check(root: Path) -> tuple[list[str], int, int]:
     pure_roots.extend(path for path in sources if path.startswith(('lib/features/training/models/', 'lib/features/training/repositories/', 'lib/features/generation/models/', 'lib/features/generation/repositories/')))
     errors.extend(pure_dependency_violations(sources, pure_roots))
     ledger = json.loads((root / 'scripts/architecture_feature_debt.json').read_text())
-    # Apply the final service boundary from feature state, not a filename
-    # allowlist. Moving an owner within an enforced feature cannot evade it.
+    # Apply the final service-folder boundary from feature state, not a
+    # filename allowlist; nested/renamed services in those folders stay covered.
     service_roots = [
         path for path in sources
         if path.startswith('lib/features/')
