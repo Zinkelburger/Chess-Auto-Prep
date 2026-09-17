@@ -1459,6 +1459,13 @@ before the glyph action. Its fixture now explicitly focuses the field and verifi
 entered text before asserting saved annotations. Two nonexistent focused-test
 paths were also corrected to the actual Viewer widget suite.
 
+The headless production app also opened a disposable PGN, focused its Sicilian
+variation, typed a replacement note and selected the Good move glyph. The
+[1280×720 screenshot](images/renewal-viewer-variation-owner.png) shows the focused
+reader updated in place, with its introduction, selected move and new note.
+The saved PGN contains both the note and `$1`, with the mainline preserved.
+The preview was stopped; its recovery banners belong to prior disposable tests.
+
 Remaining: legacy collection orchestration, async game-load lifetime, nested
 annotation reconciliation, Viewer movetext windowing, scoped presentation state,
 workspace/undo/performance parity and remaining hierarchy/bridge retirement.
