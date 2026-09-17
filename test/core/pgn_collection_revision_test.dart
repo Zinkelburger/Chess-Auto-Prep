@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/features/documents/models/viewer_collection_load.dart';
 import '../support/fake_desktop_fullscreen_port.dart';
 import 'package:chess_auto_prep/features/documents/models/viewer_perspective.dart';
 import 'dart:async';
@@ -97,8 +98,7 @@ void main() {
       headers: {'Event': 'Practice', 'White': 'A', 'Black': 'B'},
       pgnText: '[Event "Practice"]\n[White "A"]\n[Black "B"]\n\n1. e4 e5 *\n',
     );
-    controller.allGames = [game];
-    controller.filteredGames = [game];
+    controller.adoptDecodedCollection(DecodedPgnCollection([game], ''));
     addTearDown(() async {
       await controller.flushPendingMetadata();
       controller.dispose();
@@ -186,15 +186,32 @@ void main() {
     );
   }
 
-  test(
-    'late edits to an outgoing game do not invalidate the new collection',
-    () {
-      controller.closeFile();
-      final before = controller.collectionRevision;
-      controller.persistMoveCommentsFor(game, '1. d4 d5 *', writeToFile: false);
-      expect(controller.collectionRevision, before);
-    },
-  );
+  for (final writeToFile in [false, true]) {
+    test(
+      'late outgoing annotations cannot edit or dirty a replacement (write=$writeToFile)',
+      () {
+        final original = game.pgnText;
+        controller.closeFile();
+        controller.adoptDecodedCollection(
+          DecodedPgnCollection([
+            PgnGameEntry(
+              headers: {'Event': 'Replacement'},
+              pgnText: '[Event "Replacement"]\n\n1. c4 *',
+            ),
+          ], ''),
+        );
+        final before = controller.collectionRevision;
+        controller.persistMoveCommentsFor(
+          game,
+          '1. d4 d5 *',
+          writeToFile: writeToFile,
+        );
+        expect(controller.collectionRevision, before);
+        expect(controller.hasUnsavedChanges, isFalse);
+        expect(game.pgnText, original);
+      },
+    );
+  }
 
   test(
     'metadata rewrite refreshes the raw PGN snapshot before notifying',

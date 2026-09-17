@@ -1,12 +1,11 @@
 /// Orderings of a game list for each [GameSortMode].
 ///
-/// Pulled out of [PgnViewerController.applySortMode] so the comparators can
-/// be read and tested without a controller.
+/// Pure comparators shared by collection ordering and its tests.
 library;
 
-import '../models/pgn_filter_models.dart';
-import '../models/pgn_game_entry.dart';
-import '../utils/pgn_date_utils.dart';
+import '../../models/pgn_filter_models.dart';
+import '../../models/pgn_game_entry.dart';
+import '../../utils/pgn_date_utils.dart';
 
 /// Where an unrated game (study rating 0) sits among rated ones: as a
 /// middling rating, so it lands between good and bad rather than at an end.

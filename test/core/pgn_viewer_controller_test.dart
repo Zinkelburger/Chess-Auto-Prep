@@ -109,6 +109,25 @@ class _ControlledFilter implements PgnCollectionFilter {
   }
 }
 
+class _GatedAnalysis extends _FakeAnalysisController {
+  int enrichments = 0;
+  @override
+  Future<void> fillMissingBestLines(
+    String pgnText, {
+    void Function(String)? onAnnotatedMovetext,
+  }) async {
+    enrichments++;
+  }
+
+  final reads = <Completer<bool>>[];
+  @override
+  Future<bool> tryLoadFromPgn(String pgnText) {
+    final result = Completer<bool>();
+    reads.add(result);
+    return result.future;
+  }
+}
+
 class _FailingWindow extends FakeDesktopFullscreenPort {
   bool fail = true;
   @override
@@ -120,6 +139,7 @@ class _FailingWindow extends FakeDesktopFullscreenPort {
 
 PgnViewerController _makeController({
   FakeDesktopFullscreenPort? window,
+  GameAnalysisController? analysis,
   PgnCollectionDecoder decoder = const IsolatePgnCollectionDecoder(),
   PgnCollectionFilter matcher = const IsolatePgnCollectionFilter(),
 }) {
@@ -140,16 +160,14 @@ PgnViewerController _makeController({
       StorageFactory.instance,
     ),
     pgnWidgetController: PgnViewerWidgetController(),
-    analysisController: _FakeAnalysisController(),
+    analysisController: analysis ?? _FakeAnalysisController(),
   );
 }
 
 /// Populate the game list without going through `loadFile` (which needs storage
 /// IO). Mirrors the post-load state the controller expects.
 void _seed(PgnViewerController c, List<PgnGameEntry> games) {
-  c.allGames = List.of(games);
-  c.filteredGames = List.of(games);
-  c.currentGameIndex = 0;
+  expect(c.adoptDecodedCollection(DecodedPgnCollection(games, '')), isNotNull);
 }
 
 void main() {
@@ -610,6 +628,129 @@ void main() {
     );
   });
 
+  test('decoded adoption invalidates a pending pasted decode', () async {
+    final decoder = _ControlledDecoder();
+    final c = _makeController(decoder: decoder);
+    addTearDown(c.dispose);
+    final pending = c.loadPgnContent('[Event "Departed"]\n\n1. e4 *');
+    final incoming = _game(white: 'Incoming');
+    c.adoptDecodedCollection(DecodedPgnCollection([incoming], ''));
+    decoder.pending.complete(
+      DecodedPgnCollection([_game(white: 'Departed')], ''),
+    );
+    await pending;
+    expect(c.allGames, [incoming]);
+    expect(c.isLoading, isFalse);
+    expect(c.currentGameIndex, 0);
+  });
+
+  test(
+    'reentrant same-row selection before analysis starts supersedes the earlier intent',
+    () async {
+      final analysis = _GatedAnalysis();
+      final c = _makeController(analysis: analysis);
+      addTearDown(c.dispose);
+      _seed(c, [_game()]);
+      var armed = true;
+      Future<bool>? next;
+      c.addListener(() {
+        if (!armed) return;
+        armed = false;
+        next = c.selectGame(0);
+      });
+      expect(await c.selectGame(0), isFalse);
+      expect(analysis.reads, hasLength(1));
+      analysis.reads.single.complete(false);
+      expect(await next!, isTrue);
+    },
+  );
+
+  test(
+    'reentrant selection during orientation owns its own analysis acknowledgement',
+    () async {
+      final analysis = _GatedAnalysis();
+      final c = _makeController(analysis: analysis);
+      addTearDown(c.dispose);
+      _seed(c, [_game()]);
+      var notifications = 0;
+      Future<bool>? reentrant;
+      c.addListener(() {
+        notifications++;
+        // The first notification publishes selection, the second orientation.
+        if (notifications == 2) reentrant = c.selectGame(0);
+      });
+      final first = c.selectGame(0);
+      expect(analysis.reads, hasLength(2));
+      analysis.reads.last.complete(false);
+      expect(await first, isFalse);
+      analysis.reads.first.complete(false);
+      expect(await reentrant!, isTrue);
+    },
+  );
+
+  test(
+    'disposal rejects pending selection without launching annotation work',
+    () async {
+      final analysis = _GatedAnalysis();
+      final c = _makeController(analysis: analysis);
+      _seed(c, [_game()]);
+      final pending = c.selectGame(0);
+      c.dispose();
+      analysis.reads.single.complete(true);
+      expect(await pending, isFalse);
+      expect(analysis.enrichments, 0);
+      await c.loadCurrentGame();
+      expect(analysis.reads, hasLength(1));
+    },
+  );
+
+  test(
+    'a superseded awaited selection does not report readiness for the departed game',
+    () async {
+      final analysis = _GatedAnalysis();
+      final c = _makeController(analysis: analysis);
+      addTearDown(c.dispose);
+      _seed(c, [_game(white: 'First'), _game(white: 'Second')]);
+      final first = c.selectGame(0);
+      final second = c.selectGame(1);
+      analysis.reads.first.complete(false);
+      expect(await first, isFalse);
+      analysis.reads.last.complete(false);
+      expect(await second, isTrue);
+      expect(c.currentGameIndex, 1);
+      expect(await c.selectGame(8), isFalse);
+    },
+  );
+
+  test(
+    'decoded adoption protects membership and refuses replacement of manual edits',
+    () {
+      final c = _makeController();
+      addTearDown(c.dispose);
+      final games = [_game(white: 'First'), _game(white: 'Second')];
+      _seed(c, games);
+      final all = c.allGames;
+      final visible = c.filteredGames;
+      games.clear();
+      expect(c.allGames, hasLength(2));
+      expect(() => c.allGames.removeLast(), throwsUnsupportedError);
+      expect(() => c.filteredGames.sort((a, b) => 0), throwsUnsupportedError);
+      c.setSortMode(GameSortMode.fileOrder);
+      expect(all, hasLength(2));
+      expect(visible, hasLength(2));
+      c.setAutoSave(false);
+      c.setRating(5);
+      expect(
+        c.adoptDecodedCollection(
+          DecodedPgnCollection([_game(white: 'New')], ''),
+        ),
+        isNull,
+      );
+      expect(c.allGames, same(all));
+      expect(c.errorMessage, contains('Unsaved changes'));
+    },
+  );
+
   group('perspective', () {
     test(
       'window failure is retryable and cannot replace newer unrelated errors',
@@ -647,9 +788,9 @@ void main() {
 
     test('orientation follows perspective for the current game', () {
       final c = _makeController();
-      // allGames empty so persistPerspective short-circuits (no debounce timer),
-      // but filteredGames drives board orientation.
-      c.filteredGames = [_game(white: 'hero', black: 'villain')];
+      _seed(c, [_game(white: 'hero', black: 'villain')]);
+      c.setAutoSave(false);
+      addTearDown(c.dispose);
 
       c.setPerspective(const Perspective(mode: PerspectiveMode.white));
       expect(c.boardFlipped, isFalse);
@@ -670,6 +811,41 @@ void main() {
   });
 
   group('slicing', () {
+    test(
+      'filter apply and reset publish the selected sort order atomically',
+      () {
+        final c = _makeController();
+        addTearDown(c.dispose);
+        final games = [
+          _game(white: 'Oldest'),
+          _game(white: 'Newest'),
+          _game(white: 'Middle'),
+        ];
+        for (var i = 0; i < games.length; i++) {
+          games[i].headers['Date'] = [
+            '2020.01.01',
+            '2026.01.01',
+            '2023.01.01',
+          ][i];
+        }
+        _seed(c, games);
+        c.setSortMode(GameSortMode.dateDesc);
+        final published = <List<String>>[];
+        c.addListener(
+          () => published.add(
+            c.filteredGames.map((g) => g.headers['Date']!).toList(),
+          ),
+        );
+        c.applySlice([0, 2], const SliceConfig.empty());
+        expect(c.filteredGames, [games[2], games[0]]);
+        c.resetFilters();
+        expect(c.filteredGames, [games[1], games[2], games[0]]);
+        for (final dates in published) {
+          expect(dates, List.of(dates)..sort((a, b) => b.compareTo(a)));
+        }
+      },
+    );
+
     test('applySlice filters to the given indices and resets position', () {
       final c = _makeController();
       final games = List.generate(5, (i) => _game(white: 'P$i'));
@@ -743,15 +919,16 @@ void main() {
       expect(c.boardFlipped, isFalse);
     });
 
-    test('the emptied allGames list is mutable too', () {
+    test('closed collection membership remains protected', () {
       final c = _makeController();
       _seed(c, [_game(white: 'A'), _game(white: 'B')]);
 
       c.closeFile();
 
-      // A const [] would throw here. loadFile assigns allGames as given
-      // rather than copying, so the close path has to hand it a real list.
-      expect(() => c.allGames.add(_game()), returnsNormally);
+      expect(() => c.allGames.add(_game()), throwsUnsupportedError);
+      expect(() => c.filteredGames.add(_game()), throwsUnsupportedError);
+      _seed(c, [_game()]);
+      expect(c.allGames, hasLength(1));
     });
 
     test('clears the protagonist detected from the closed collection', () {
@@ -778,7 +955,7 @@ void main() {
       expect(c.recentFiles, ['/tmp/a.pgn', '/tmp/b.pgn']);
     });
 
-    test('leaves the emptied lists mutable for the next sort', () {
+    test('closed membership still supports a later sort through the owner', () {
       final c = _makeController();
       _seed(c, [_game(white: 'A'), _game(white: 'B')]);
 

@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 
 import '../chess_core/pgn/pgn_collection_players.dart';
 import '../features/documents/controllers/pgn_collection_editor.dart';
+import '../features/documents/controllers/viewer_collection_controller.dart';
 import '../features/documents/controllers/viewer_collection_load_controller.dart';
 import '../features/documents/controllers/viewer_filter_controller.dart';
 import '../features/documents/controllers/viewer_presentation_controller.dart';
@@ -31,7 +32,6 @@ import '../services/opening_book_service.dart';
 import '../services/pgn_opening_headers.dart';
 import '../utils/chess_utils.dart';
 import '../utils/safe_change_notifier.dart';
-import 'game_sorting.dart';
 import 'pgn/auto_play_engine.dart';
 import 'pgn/pgn_fen_index.dart';
 import 'pgn/pgn_viewer_handle.dart';
@@ -157,7 +157,7 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
     await _editor.restoreWorkspace(snapshot);
     final epoch = _loadEpoch;
     if (allGames.isNotEmpty) {
-      currentGameIndex = snapshot.gameIndex.clamp(0, allGames.length - 1);
+      _collection.select(snapshot.gameIndex.clamp(0, allGames.length - 1));
       _resumePlyByGame[allGames[currentGameIndex]] = snapshot.ply;
       await loadCurrentGame(enrich: false);
       if (!_isCurrentLoad(epoch)) return;
@@ -199,8 +199,11 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
     PgnGameEntry game,
     String movetext, {
     bool writeToFile = true,
-  }) =>
-      _editor.persistMoveCommentsFor(game, movetext, writeToFile: writeToFile);
+  }) {
+    if (isDisposed || !_collection.containsGame(game)) return;
+    _editor.persistMoveCommentsFor(game, movetext, writeToFile: writeToFile);
+  }
+
   Future<void> flushPendingMetadata() async {
     final path = filePath;
     final total = allGames.length;
@@ -228,7 +231,8 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
   /// and a screen that reuses an already-loaded collection would otherwise
   /// show the pre-patch text, graph and all missing.
   DateTime? loadedFileModified;
-  List<PgnGameEntry> allGames = [];
+  final _collection = ViewerCollectionController();
+  List<PgnGameEntry> get allGames => _collection.games;
 
   /// Monotonic version of the loaded collection's headers and movetext.
   /// Cache game-record snapshots by this value as well as [allGames] identity:
@@ -243,7 +247,7 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
     _filters.sourceChanged();
   }
 
-  List<PgnGameEntry> filteredGames = [];
+  List<PgnGameEntry> get filteredGames => _collection.visibleGames;
   bool get hasActiveFilters => _filters.selection.active;
 
   SliceConfig get activeSliceConfig => _filters.selection.config;
@@ -290,7 +294,7 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
     if (asBlack > 0 && asWhite == 0) protagonistFixedSide = Side.black;
   }
 
-  int currentGameIndex = 0;
+  int get currentGameIndex => _collection.selectedIndex;
   Position currentPosition = Chess.initial;
 
   /// Last mainline ply visited in each game of the open collection. Entries
@@ -555,7 +559,7 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
   bool get autoNextGame => _autoPlay.autoNextGame;
   double get autoPlayDelaySec => _autoPlay.delaySec;
 
-  GameSortMode sortMode = GameSortMode.fileOrder;
+  GameSortMode get sortMode => _collection.sortMode;
 
   List<String> recentFiles = [];
   static const maxRecentFiles = 10;
@@ -665,15 +669,12 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
     // from-memory collection has none. Cleared here so it can never outlive
     // the file it described.
     loadedFileModified = null;
-    allGames = entries;
+    _collection.adopt(entries);
     _markCollectionChanged();
-    _editor.adoptPersistedGames(entries, baseline: baseline);
+    _editor.adoptPersistedGames(allGames, baseline: baseline);
     collectionPreamble = preamble;
     _detectProtagonist(entries);
-    filteredGames = List.of(entries);
     _filters.reset();
-    sortMode = GameSortMode.fileOrder;
-    currentGameIndex = 0;
     _resumePlyByGame.clear();
     pgnInitialFen = null;
     _gameCursorFen = null;
@@ -777,14 +778,13 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
         final session = await _sessions.load(path);
         if (!_isCurrentLoad(loadEpoch)) return;
         if (session != null) {
-          sortMode = session.sortMode;
-          applySortMode();
+          _applySortMode(session.sortMode);
           final index = session.locate(allGames);
           if (index >= 0) {
             final game = allGames[index];
             _resumePlyByGame[game] = session.ply;
             final filteredIndex = filteredGames.indexOf(game);
-            if (filteredIndex >= 0) currentGameIndex = filteredIndex;
+            if (filteredIndex >= 0) _collection.select(filteredIndex);
           }
         }
       }
@@ -826,6 +826,44 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
     };
   }
 
+  /// Adopt a decoded in-memory document through the same collection boundary
+  /// as file loading. This synchronous handoff validates draft protection and
+  /// invalidates outgoing async work before publishing. The host can then await
+  /// [loadCurrentGame] to restore reader/analysis state. Returns the request
+  /// revision, or null when adoption is refused.
+  int? adoptDecodedCollection(
+    DecodedPgnCollection document, {
+    String? initialFen,
+  }) {
+    if (isDisposed || !isActive() || !canReplaceCollection()) return null;
+    unawaited(saveSession());
+    final revision = _collectionLoads.invalidate();
+    _gameLoadEpoch++;
+    _filters.invalidate();
+    _filters.clearPendingRestore();
+    _fenIndex.reset();
+    stopAutoPlay();
+    analysisController.cancel();
+    analysisController.clearEvals();
+    isLoading = false;
+    isPreparingCollection = false;
+    _restoringSession = false;
+    errorMessage = null;
+    _adoptCollection(
+      path: null,
+      entries: document.games,
+      newPerspective: Perspective.forCollection(
+        document.games,
+        current: perspective,
+      ),
+      preamble: document.preamble,
+    );
+    pgnInitialFen = initialFen;
+    if (allGames.isEmpty) currentPosition = Chess.initial;
+    notifyListeners();
+    return revision;
+  }
+
   /// Load PGN games directly from raw text (e.g. pasted from the clipboard).
   /// Held in memory only — there is no backing file, so rating/comment edits
   /// are not persisted to disk.
@@ -863,33 +901,25 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
       return;
     }
     final loaded = result as ViewerCollectionLoaded;
-    final entries = List<PgnGameEntry>.of(loaded.document.games);
-
-    isLoading = false;
-    _filters.invalidate();
-    _fenIndex.reset();
-    _adoptCollection(
-      path: null,
-      entries: entries,
-      newPerspective: Perspective.forCollection(entries, current: perspective),
-      preamble: loaded.document.preamble,
+    final adoptedEpoch = adoptDecodedCollection(
+      loaded.document,
+      initialFen: initialFen,
     );
-    pgnInitialFen = initialFen;
-    notifyListeners();
+    if (adoptedEpoch == null || !_isCurrentLoad(adoptedEpoch)) return;
 
     await loadCurrentGame();
-    if (!_isCurrentLoad(loadEpoch)) return;
+    if (!_isCurrentLoad(adoptedEpoch)) return;
     try {
       final detect = await preferences.autoDetectOpenings();
-      if (!_isCurrentLoad(loadEpoch)) return;
+      if (!_isCurrentLoad(adoptedEpoch)) return;
       autoDetectOpenings = detect;
     } catch (_) {
-      if (!_isCurrentLoad(loadEpoch)) return;
+      if (!_isCurrentLoad(adoptedEpoch)) return;
       autoDetectOpenings = false;
       errorMessage = 'Could not load opening-detection preferences.';
       notifyListeners();
     }
-    unawaited(_prepareCollection(loadEpoch));
+    unawaited(_prepareCollection(adoptedEpoch));
   }
 
   /// Capture the live collection and reading cursor for app navigation. Games
@@ -898,7 +928,7 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
   Future<bool> Function() captureNavigationContext() {
     _rememberCurrentPlace();
     final entries = List<PgnGameEntry>.of(allGames);
-    final filtered = List<PgnGameEntry>.of(filteredGames);
+    final visibleIndices = _collection.visibleIndices;
     final path = filePath;
     final modified = loadedFileModified;
     final preamble = collectionPreamble;
@@ -928,10 +958,12 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
         preamble: preamble,
       );
       loadedFileModified = modified;
-      filteredGames = List.of(filtered);
+      _collection.restoreView(
+        indices: visibleIndices,
+        selectedIndex: gameIndex,
+        sortMode: sorting,
+      );
       _filters.restoreSelection(filterSelection);
-      sortMode = sorting;
-      currentGameIndex = gameIndex;
       _resumePlyByGame.addAll(bookmarks);
       pgnInitialFen = cursorFen ?? initialFen;
       isLoading = false;
@@ -1125,7 +1157,7 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
       detectBothPlayersFrom(allGames);
 
   Future<void> loadCurrentGame({bool enrich = true}) async {
-    if (filteredGames.isEmpty) return;
+    if (isDisposed || !isActive() || filteredGames.isEmpty) return;
     final gameLoadEpoch = ++_gameLoadEpoch;
     stopAutoPlay();
     analysisController.cancel();
@@ -1138,7 +1170,7 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
     }
     orientBoardForCurrentGame();
     final restored = await analysisController.tryLoadFromPgn(game.pgnText);
-    if (!isActive() || gameLoadEpoch != _gameLoadEpoch) return;
+    if (isDisposed || !isActive() || gameLoadEpoch != _gameLoadEpoch) return;
     notifyListeners();
     onReclaimFocus?.call();
     if (restored && enrich) unawaited(_fillMissingBestLines(game));
@@ -1149,10 +1181,11 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
   /// searches, written back onto [game] so it happens once. The widget
   /// adopts the new comments in place, so the reader is not moved.
   Future<void> _fillMissingBestLines(PgnGameEntry game) async {
+    final source = allGames;
     await analysisController.fillMissingBestLines(
       game.pgnText,
       onAnnotatedMovetext: (movetext) {
-        if (!isActive()) return;
+        if (isDisposed || !isActive() || !identical(source, allGames)) return;
         persistMoveCommentsFor(game, movetext);
         notifyListeners();
       },
@@ -1163,9 +1196,8 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
     if (filteredGames.isEmpty) return;
     _rememberCurrentPlace();
     pgnInitialFen = null;
-    currentGameIndex = (currentGameIndex + 1).clamp(
-      0,
-      filteredGames.length - 1,
+    _collection.select(
+      (currentGameIndex + 1).clamp(0, filteredGames.length - 1),
     );
     notifyListeners();
     unawaited(loadCurrentGame());
@@ -1175,21 +1207,47 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
     if (filteredGames.isEmpty) return;
     _rememberCurrentPlace();
     pgnInitialFen = null;
-    currentGameIndex = (currentGameIndex - 1).clamp(
-      0,
-      filteredGames.length - 1,
+    _collection.select(
+      (currentGameIndex - 1).clamp(0, filteredGames.length - 1),
     );
     notifyListeners();
     unawaited(loadCurrentGame());
   }
 
-  void goToGame(int index) {
-    if (index < 0 || index >= filteredGames.length) return;
+  void goToGame(int index) => unawaited(selectGame(index));
+
+  /// Select through the owner and await cached-analysis restoration before a
+  /// caller decides whether this game needs another engine pass.
+  Future<bool> selectGame(int index) async {
+    if (isDisposed ||
+        !isActive() ||
+        index < 0 ||
+        index >= filteredGames.length) {
+      return false;
+    }
     _rememberCurrentPlace();
+    final source = allGames;
+    final game = filteredGames[index];
     pgnInitialFen = null;
-    currentGameIndex = index;
+    _collection.select(index);
+    final selection = _collection.selectionRevision;
     notifyListeners();
-    unawaited(loadCurrentGame());
+    if (selection != _collection.selectionRevision ||
+        !identical(source, allGames) ||
+        filteredGames.isEmpty ||
+        !identical(filteredGames[currentGameIndex], game)) {
+      return false;
+    }
+    final request = _gameLoadEpoch + 1;
+    final pending = loadCurrentGame();
+    await pending;
+    return !isDisposed &&
+        isActive() &&
+        request == _gameLoadEpoch &&
+        selection == _collection.selectionRevision &&
+        identical(source, allGames) &&
+        filteredGames.isNotEmpty &&
+        identical(filteredGames[currentGameIndex], game);
   }
 
   void toggleAutoPlay() {
@@ -1288,8 +1346,8 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
     final request = _filters.revision;
     final path = filePath;
     if (!restoring) _rememberCurrentPlace();
-    filteredGames = selection.indices!.map((i) => allGames[i]).toList();
-    currentGameIndex = 0;
+    _collection.applyFilter(selection.indices!);
+    _applySortMode(null);
     pgnInitialFen = null;
     if (!restoring) _viewerTree.clearTree();
     notifyListeners();
@@ -1319,14 +1377,13 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
     final request = _filters.revision;
     final path = filePath;
     isLoading = false;
-    filteredGames = List.of(allGames);
-    currentGameIndex = 0;
+    _collection.resetFilter();
+    _applySortMode(null);
     pgnInitialFen = null;
     _viewerTree.clearTree();
     notifyListeners();
     if (!_filters.isCurrent(request)) return;
     unawaited(_persistFilter(path, const SliceConfig.empty()));
-    applySortMode();
     if (showOpeningTree) unawaited(_viewerTree.rebuild());
     unawaited(loadCurrentGame());
   }
@@ -1356,10 +1413,7 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
 
   void setSortMode(GameSortMode mode) {
     _rememberCurrentPlace();
-    sortMode = mode;
-    notifyListeners();
-    applySortMode();
-    currentGameIndex = 0;
+    _applySortMode(mode, resetSelection: true);
     pgnInitialFen = null;
     notifyListeners();
     unawaited(loadCurrentGame());
@@ -1372,22 +1426,13 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
   /// flash of someone else's game.
   void sortNewestFirst() {
     if (sortMode == GameSortMode.dateDesc) return;
-    sortMode = GameSortMode.dateDesc;
-    applySortMode();
+    _applySortMode(GameSortMode.dateDesc);
     notifyListeners();
   }
 
-  void applySortMode() {
+  void _applySortMode(GameSortMode? mode, {bool resetSelection = false}) {
     _viewerTree.clearCache();
-    if (sortMode == GameSortMode.fileOrder) {
-      // File order is the collection's own order, restored from it rather
-      // than sorted for; a slice keeps only its games in that order.
-      filteredGames = hasActiveFilters
-          ? allGames.where(filteredGames.toSet().contains).toList()
-          : List.of(allGames);
-      return;
-    }
-    sortGamesInPlace(filteredGames, sortMode);
+    _collection.sort(mode ?? sortMode, resetSelection: resetSelection);
   }
 
   void onPositionChanged(Position pos) {
@@ -1508,7 +1553,7 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
     pgnInitialFen = landingFen;
     _gameCursorFen = landingFen;
     _viewerTree.hide();
-    currentGameIndex = filteredIndex;
+    _collection.select(filteredIndex);
     currentPosition = _tryParseFen(landingFen) ?? Chess.initial;
     notifyListeners();
     unawaited(loadCurrentGame());

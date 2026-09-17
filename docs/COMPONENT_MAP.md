@@ -1505,6 +1505,28 @@ selects its storage adapter and the directory supplier. The unused slice-export
 write bypass is removed; production export retains the shared exclusive-copy
 interaction.
 
+`features/documents/controllers/viewer_collection_controller.dart` owns file
+membership, visible indices/order, sort preference and selected game. The host's
+`allGames`, `filteredGames`, `currentGameIndex` and `sortMode` are read-only.
+Adoption captures caller-owned membership, filters validate indices atomically,
+and navigation restoration validates both order and selection before adoption.
+Sorting publishes fixed lists and uses file position to break ties; previously
+published order cannot change through an in-place sort. Applying and clearing
+filters respect the chosen sort before notifying. Selection shares the
+existing lists, including large collections; identical views retain their revision
+and list identities. The pure sort helpers now live in
+`chess_core/pgn/pgn_game_sorting.dart`, with the old core path retired.
+
+Decoded in-memory documents enter through `adoptDecodedCollection`, which applies
+draft protection and invalidates outgoing work before publication; paste uses this
+same handoff. The screen awaits `selectGame` before deciding whether cached
+analysis is ready, and a superseded selection reports false. Identity membership
+rejects delayed annotation callbacks for departed games before they can mutate
+the old game or dirty the new collection; hidden games in the current filter remain
+valid edit targets. These lists protect
+membership/order only: `PgnGameEntry` contents still use the legacy mutable editor
+model, so complete private game-value ownership remains pending.
+
 `features/documents/controllers/viewer_filter_controller.dart` now owns accepted
 filter selection, immutable config/index snapshots, request lifetime, failure
 state and saved-filter restoration notices. The slice mixin is retired.

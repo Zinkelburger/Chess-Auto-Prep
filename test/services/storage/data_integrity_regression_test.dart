@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/features/documents/models/viewer_collection_load.dart';
 import '../../support/fake_desktop_fullscreen_port.dart';
 import 'dart:io';
 import 'dart:async';
@@ -345,9 +346,8 @@ void main() {
         headers: {'Event': 'Audit', 'White': 'A', 'Black': 'B'},
         pgnText: originalGame,
       );
+      c.adoptDecodedCollection(DecodedPgnCollection([entry], ''));
       c.filePath = file.path;
-      c.allGames = [entry];
-      c.filteredGames = [entry];
       await file.writeAsString(
         '$originalGame\n\n${game('1. d4 d5', round: '2')}',
       );

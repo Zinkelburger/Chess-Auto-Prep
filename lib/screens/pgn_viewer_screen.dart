@@ -620,12 +620,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       );
     }
     if (index < 0) return false;
-    _controller.currentGameIndex = index;
-    // Awaited (goToGame fires loadCurrentGame without waiting): the
-    // cached-eval restore must finish before autoAnalyze decides whether an
-    // engine pass is still needed.
-    await _controller.loadCurrentGame();
-    return true;
+    return _controller.selectGame(index);
   }
 
   /// Start the engine review of the current game unless cached `[%eval]`s

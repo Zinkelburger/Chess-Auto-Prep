@@ -1904,6 +1904,76 @@ undo/panel parity, Builder storage/recovery, theme/localization migration, later
 feature migrations and platform/performance/release gates. Milestones 1/2 and 3
 remain partial; 4–7 are unfinished. This is not full-renewal completion.
 
+### Viewer collection membership checkpoint (2026-09-17)
+
+Following board/window checkpoint `03673c8f`, the pure
+`features/documents/controllers/viewer_collection_controller.dart` owns file
+membership, visible indices/order, selected index and sort preference. The host
+publishes read-only lists/getters instead of independently assignable fields.
+Adoption captures the caller's list; filtering validates bounds and duplicates
+before changing anything. Navigation restoration validates order and selected
+index atomically. Sorting publishes new fixed lists, uses original file position
+for deterministic ties, and preserves previously published order. File-order
+restoration distinguishes repeated occurrences of the same entry object.
+Selection shares the existing lists; identical views retain list identities and
+view revision. Pure sort helpers move to `chess_core/pgn/pgn_game_sorting.dart`
+without a forwarding shim. Transitive purity enforcement includes the new owner.
+
+The screen no longer assigns the selected index. It awaits `selectGame`, which
+reports false for superseded cached-analysis loads instead of authorizing work
+for a departed selection. Decoded documents enter through an explicit adoption
+command with draft protection and request invalidation; paste uses the same
+boundary. The returned request revision lets paste reject reentrant handoffs
+made during notification. Navigation captures immutable visible indices rather
+than a mutable filtered list.
+
+A strengthened regression reproduced an existing callback leak: late annotations
+for a departed game could mutate that old object and mark the new collection
+dirty. Identity membership now rejects those callbacks before the editor sees
+them; games hidden by a filter remain valid members. Background annotation
+completion also checks the captured collection identity. Both screen-only and
+persisted late-edit regressions now pass.
+
+A reentrant-selection regression also reproduced a false readiness result: an
+older selection could borrow the newer load's generation during orientation
+notification. Selection now has its own accepted-intent token, separate from
+view revision, so selecting the same row again supersedes pending work without
+rebuilding lists. Both pre-load and in-load reentrancy are covered. Disposal
+rejects pending selections and does not start late annotation enrichment.
+
+A final combination test reproduced another existing inconsistency: applying a
+filter ignored the selected sort, and clearing it briefly published file order
+while still reporting newest-first. Both operations now apply the chosen ordering
+before notifying. The native collection journey covers this combined behavior.
+
+Verification: all 128 selected unit/widget regressions pass across collection
+ordering, sorting, Viewer, session restoration, metadata, recovery, file safety,
+data integrity and screens/shortcuts. All 85 affected final follow-up cases pass after
+the stale-edit, reentrancy and filter/sort corrections; these batches overlap. The nine pure
+collection-owner cases include a 20,000-game selection loop that retains the
+same membership/order objects; this is allocation-shape evidence, not a complete
+frame/GC/performance-budget certification. All four selected Linux native cases
+pass: sorted collection navigation/history/reopen with exact source-byte
+preservation, filter apply/reopen/clear, clean-session reopen and retained-draft
+recovery. The collection and both restart/recovery cases pass again after the
+membership and selection guards. The expanded collection journey passes again
+after the filter/sort correction. No selected cases are skipped. Full-suite,
+engine, other-platform and release gates were not run for this checkpoint.
+Analyze/lint passes with nine existing informational notices and all 18
+architecture-checker cases.
+
+Visual verification uses the private Linux preview and disposable native-test
+profile. The [restored board and move](images/renewal-viewer-collection-order.png)
+show game 2 of 3 at `c4`; the [game picker](images/renewal-viewer-collection-list.png)
+shows newest/middle/oldest order with the middle game selected. Both screenshots
+were inspected. Recovery banners belong to the disposable fixture profile.
+
+These are fixed membership/order views, not immutable snapshots of game values:
+`PgnGameEntry` contents still use the legacy mutable editor model. Private entry
+ownership/projections, scoped widgets and complete session/undo/panel parity are
+still required. This checkpoint does not graduate milestone 3 or complete the
+full renewal; later features, performance and platform/release gates remain open.
+
 ### Initial parity and ownership inventory (milestone 0, partial)
 
 The starting tree has 885 files under `lib/` and 674 under `test/`; these counts

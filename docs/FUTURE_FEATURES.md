@@ -93,6 +93,9 @@ its matcher. Board orientation/fullscreen now have a pure presentation owner,
 with injected native operations, serialized intent, failure/retry and app-lifetime
 listener disposal. The last Viewer part/mixin is retired; perspective edits share
 the collection save/recovery path and preserve drill-only annotations on screen.
+Collection membership/order/selection now have one pure owner with fixed published
+lists, atomic filter/navigation validation and deterministic sorting. External
+list/index writes are retired; game entry contents still need private ownership.
 Legacy collection presentation/widget ownership, generation inline
 filter wiring, remaining Builder storage/
 session ownership and draft recovery, incremental editor indexing, undo receipts, variation-cursor/panel
