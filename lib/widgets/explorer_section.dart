@@ -100,7 +100,7 @@ class _ExplorerSectionState extends State<ExplorerSection> {
     _candidateService = CandidateService(
       tree: widget.tree,
       fenMap: widget.fenMap,
-      openingTree: widget.controller.openingTree,
+      openingTree: widget.controller.openingGraph,
       coverage: widget.coverageResult,
       coverageService: CoverageService(),
     );
@@ -274,7 +274,7 @@ class _ExplorerSectionState extends State<ExplorerSection> {
   }
 
   Widget _buildTreeContent() {
-    if (widget.controller.openingTree == null) {
+    if (widget.controller.openingGraph == null) {
       return const Padding(
         padding: EdgeInsets.all(12),
         child: Text('No opening tree available', style: AppTextStyles.caption),
@@ -283,7 +283,7 @@ class _ExplorerSectionState extends State<ExplorerSection> {
     return SizedBox(
       height: 200,
       child: OpeningTreeWidget(
-        tree: widget.controller.openingTree!,
+        tree: widget.controller.openingGraph!,
         showPgnSearch: false,
         repertoireLines: widget.controller.repertoireLines,
         currentMoveSequence: widget.controller.currentMoveSequence,

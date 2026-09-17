@@ -5,13 +5,13 @@
 /// access (shared client and cache).
 library;
 
+import 'package:chess_auto_prep/chess_core/moves/opening_graph.dart';
 import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
 
 import '../../../models/build_tree_node.dart';
 import '../../../models/explorer_response.dart';
-import '../../../models/opening_tree.dart';
 import '../../../services/explorer_cache_service.dart';
 import '../../../services/generation/fen_map.dart';
 import '../../coverage/services/coverage_service.dart';
@@ -112,7 +112,7 @@ class CandidateService {
 
   final BuildTree? tree;
   final FenMap? fenMap;
-  final OpeningTree? openingTree;
+  final OpeningGraph? openingTree;
   final CoverageResult? coverage;
   final CoverageService? coverageService;
 
@@ -220,7 +220,7 @@ class CandidateService {
     required List<CandidateMove> treeCandidates,
     required ExplorerResponse? explorer,
     required bool isOurTurn,
-    required OpeningTree? openingTree,
+    required OpeningGraph? openingTree,
     required CoverageResult? coverage,
     required List<String> pathFromRoot,
     int? maxCandidates,
@@ -294,7 +294,7 @@ class CandidateService {
 
   static CandidateMove _candidateFromExplorerMove({
     required ExplorerMove move,
-    required OpeningTree? openingTree,
+    required OpeningGraph? openingTree,
     required CoverageResult? coverage,
     required List<String> pathFromRoot,
   }) {

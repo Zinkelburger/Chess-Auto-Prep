@@ -49,7 +49,7 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
   void _resumeInterruptedAudit() {
     final snap = _auditController.interruptedSnapshot;
     if (snap == null) return;
-    final tree = _controller.openingTree;
+    final tree = _controller.openingGraph;
     if (tree == null) return;
     _openBottomPane(BottomPaneTab.findings);
     unawaited(
@@ -345,7 +345,7 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
     final config = await showCoverageConfigDialog(context);
     if (config == null || !mounted) return;
 
-    final tree = _controller.openingTree;
+    final tree = _controller.openingGraph;
     if (tree == null) {
       showAppSnackBar(
         context,
