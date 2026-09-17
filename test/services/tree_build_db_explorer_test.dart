@@ -3,15 +3,12 @@
 ///
 /// Headless by construction: no eval provider is enabled, Maia is a fake
 /// with an empty policy (so no Dirichlet smoothing), the coverage sweep is
-/// off, and [EngineLifecycle] is parked in `generating` under `testMode` so
-/// the build does not try to spawn engine workers (under `flutter test` the
-/// default target platform is Android, and the FFI Stockfish package it would
-/// pick dies asynchronously into whichever test is running). What remains is
+/// off, and the injected engine factory returns no connection, so the real
+/// lifecycle and pool exercise the unavailable-engine path. What remains is
 /// exactly the frequency-map expansion, the eval enrichment from the cache,
 /// and the run's lifecycle.
 library;
 
-import 'package:chess_auto_prep/app/runtime_settings.dart';
 import 'package:chess_auto_prep/app/engine_runtime.dart';
 import '../support/runtime_settings.dart';
 
@@ -86,24 +83,25 @@ List<BuildTreeNode> _nodesAtPly(BuildTreeNode node, int ply) => [
   for (final c in node.children) ..._nodesAtPly(c, ply),
 ];
 
-RuntimeSettings? _engineFixtureSettings;
-EngineRuntime get engines =>
-    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  late EngineRuntime engines;
   setUp(() {
-    _engineFixtureSettings = null;
-    addTearDown(() => _engineFixtureSettings?.dispose());
+    final settings = testRuntimeSettings();
+    addTearDown(settings.dispose);
+    engines = EngineRuntime(
+      settings: settings.engine,
+      createConnection: () async => null,
+    );
+    addTearDown(engines.dispose);
   });
   TestWidgetsFlutterBinding.ensureInitialized();
   late Directory tmp;
   late String pgnPath;
 
   setUp(() async {
-    // resetForTest clears testMode, so it must come first: with testMode
-    // off, enterGeneration would spawn the real pool.
-
     await engines.lifecycle.enterGeneration(1);
     expect(engines.lifecycle.state, EngineState.generating);
+    expect(engines.pool.workerCount, 0);
     tmp = Directory.systemTemp.createTempSync('db_explorer_test');
     pgnPath = p.join(tmp.path, 'games.pgn');
     File(pgnPath).writeAsStringSync(_standardPgn());

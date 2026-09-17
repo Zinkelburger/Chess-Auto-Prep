@@ -1,3 +1,4 @@
+import '../support/runtime_settings.dart';
 import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/core/app_state.dart';
 import 'package:provider/provider.dart';
@@ -152,7 +153,11 @@ void main() {
     'rendered engine settings labels and inputs contrast with the settings page',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
-      await tester.pumpWidget(
+      final runtimeSettings = testRuntimeSettings();
+      addTearDown(runtimeSettings.dispose);
+      await pumpRuntimeWidget(
+        tester,
+        runtimeSettings,
         ChangeNotifierProvider(
           create: (_) => AppState(),
           child: MaterialApp(

@@ -9,6 +9,7 @@
 /// `pgn_viewer_screen_panes.dart`.
 library;
 
+import 'package:chess_auto_prep/models/pgn_game_entry.dart';
 import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
 
 import 'dart:async';
@@ -35,7 +36,7 @@ import '../core/app_state.dart';
 import '../core/app_history.dart';
 import '../services/scid/scid_writer.dart';
 import '../utils/open_in_file_manager.dart';
-import '../features/documents/controllers/pgn_viewer_controller.dart';
+import '../features/documents/controllers/viewer_document_controller.dart';
 import '../features/documents/repositories/pgn_viewer_handle.dart';
 import '../features/documents/controllers/pgn_pane_router.dart';
 import '../chess_core/pgn/pgn_copy.dart';
@@ -118,8 +119,20 @@ class PgnViewerScreen extends StatefulWidget {
 
 class _PgnViewerScreenState extends State<PgnViewerScreen>
     with _AppBarBuildersMixin, _PaneBuildersMixin {
+  String? get _viewerError =>
+      _document.errorMessage ??
+      _document.editor.errorMessage ??
+      _document.reading.errorMessage ??
+      _document.libraryState.errorMessage ??
+      (_document.filters.error == null
+          ? null
+          : 'Could not filter these games. Try again.') ??
+      (_document.presentation.error == null
+          ? null
+          : 'Could not change the window view. Try again.');
+
   @override
-  late final PgnViewerController _controller;
+  late final ViewerDocumentController _document;
   @override
   late final PgnViewerWidgetController _pgnWidgetController;
 
@@ -132,7 +145,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     book: _referenceReaders[_tabController.index] ?? _lineWidgetController,
     isBookActive: () =>
         _onLineTab || _referenceReaders.containsKey(_tabController.index),
-    onGameBoardMove: _controller.onBoardMove,
+    onGameBoardMove: _document.reading.onBoardMove,
   );
   @override
   late final GameAnalysisController _analysisController;
@@ -149,13 +162,13 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   @override
   bool get _canReturnToFilters =>
       _filterReturnSource != null &&
-      identical(_filterReturnSource, _controller.allGames) &&
+      identical(_filterReturnSource, _document.collection.games) &&
       _tabController.index == PgnWorkspace.game;
 
   @override
   void _returnToFilters() {
     if (!mounted || !_canReturnToFilters) return;
-    _controller.stopAutoPlay();
+    _document.reading.playback.stop();
     _tabController.index = PgnWorkspace.filters;
     setState(() => _filterReturnSource = null);
     _reclaimFocus();
@@ -220,18 +233,18 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     _lineWidgetController = PgnViewerWidgetController();
     _analysisController = widget.lifetime.analysis;
     _analysisController.addListener(_onAnalysisUpdate);
-    _controller = widget.lifetime.controller;
+    _document = widget.lifetime.document;
     widget.lifetime.reclaimFocus = _reclaimFocus;
-    _controller.addListener(_onControllerUpdate);
+    _document.changes.addListener(_onControllerUpdate);
     MyRepertoireSettings.instance.addListener(_onRepertoireDesignationsChanged);
     // Leaving the Book tab hands the board back to the game: the tab you are
     // reading owns the board, so flipping between them is a comparison of the
     // same position rather than two viewers fighting over one board.
     _tabController.addListener(_onSideTabChanged);
     final preferencesReady = _loadViewPreferences();
-    unawaited(_controller.loadRecentFiles());
-    unawaited(_controller.loadCollections());
-    unawaited(_controller.loadSolitaireSettings());
+    unawaited(_document.libraryState.loadRecentFiles());
+    unawaited(_document.libraryState.loadCollections());
+    unawaited(_document.reading.loadSolitaireSettings());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         final appState = context.read<AppState>();
@@ -245,7 +258,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         _consumePendingViewerFile(appState);
         unawaited(
           preferencesReady.then((_) async {
-            if (mounted) await _controller.restoreLastSession();
+            if (mounted) await _document.restoreLastSession();
           }),
         );
       }
@@ -271,10 +284,10 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     final saved = await GameViewPreferences.load();
     if (!mounted || _preferencesChanged) return;
     setState(() => _viewPreferences = saved);
-    _controller.setAutoPlaySpeed(saved.speed);
-    _controller.setAutoNextGame(saved.autoNext);
-    _controller.setAutoSave(saved.autoSave);
-    _controller.setAutoDetectOpenings(saved.autoDetectOpenings);
+    _document.reading.playback.setSpeed(saved.speed);
+    _document.reading.playback.setAutoNextGame(saved.autoNext);
+    _document.editor.setAutoSave(saved.autoSave);
+    _document.setAutoDetectOpenings(saved.autoDetectOpenings);
   }
 
   @override
@@ -285,18 +298,18 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       if (_viewPreferences.engine != value.engine) _engineThreat = null;
       _viewPreferences = value;
     });
-    if (!value.playback) _controller.stopAutoPlay();
-    _controller.setAutoPlaySpeed(value.speed);
-    _controller.setAutoNextGame(value.autoNext);
-    _controller.setAutoSave(value.autoSave);
-    _controller.setAutoDetectOpenings(value.autoDetectOpenings);
+    if (!value.playback) _document.reading.playback.stop();
+    _document.reading.playback.setSpeed(value.speed);
+    _document.reading.playback.setAutoNextGame(value.autoNext);
+    _document.editor.setAutoSave(value.autoSave);
+    _document.setAutoDetectOpenings(value.autoDetectOpenings);
     unawaited(value.save());
   }
 
   void _toggleEngine() {
     if (!mounted ||
-        _controller.filteredGames.isEmpty ||
-        _controller.isSolitaireSetup) {
+        _document.collection.visibleGames.isEmpty ||
+        _document.reading.solitaire.isConfiguring) {
       return;
     }
     final hidden = !_viewPreferences.engine;
@@ -313,18 +326,18 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   Future<void> _checkStudyPath(String? path) async {
     final isStudy = path != null && await _isStudyPath(path);
-    if (mounted && _controller.filePath == path) {
+    if (mounted && _document.filePath == path) {
       setState(() => _viewingStudy = isStudy);
     }
   }
 
   @override
   void _showPanel(int index) {
-    _controller.stopAutoPlay();
+    _document.reading.playback.stop();
     if (!mounted) return;
     if (index == PgnWorkspace.filters && _tabController.index != index) {
-      if (!identical(_filterReturnSource, _controller.allGames)) {
-        _filterOriginFen = normalizeFen(_controller.currentPosition.fen);
+      if (!identical(_filterReturnSource, _document.collection.games)) {
+        _filterOriginFen = normalizeFen(_document.reading.currentPosition.fen);
       }
       _filterReturnSource = null;
     }
@@ -337,7 +350,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   @override
   void _closePanel(int id) {
     if (!mounted) return;
-    _controller.stopAutoPlay();
+    _document.reading.playback.stop();
     _tabController.close(id);
     if (id == PgnWorkspace.filters) _filterReturnSource = null;
     if (_databasePickerTab == id) _databasePickerTab = null;
@@ -362,7 +375,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     _tabController.titles[id] = p.basenameWithoutExtension(path);
     _databasePaths[id] = path;
     _databasePanels.putIfAbsent(id, PgnDatabasePanelController.new);
-    unawaited(_controller.addToRecentFiles(path));
+    unawaited(_document.libraryState.addToRecentFiles(path));
     _showPanel(id);
   }
 
@@ -371,7 +384,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     if (id == PgnWorkspace.filters) return _buildFilterWorkspace();
     if (id == _databasePickerTab) {
       return PgnDatabasePicker(
-        recent: _controller.recentFiles,
+        recent: _document.libraryState.recentFiles,
         onSelected: _openDatabase,
         onCollection: () => _showPanel(PgnWorkspace.collection),
       );
@@ -381,14 +394,14 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         key: ValueKey('database-$id'),
         controller: _databasePanels[id]!,
         path: path,
-        fen: _gamePanePosition?.fen ?? _controller.currentPosition.fen,
+        fen: _gamePanePosition?.fen ?? _document.reading.currentPosition.fen,
         onOpenGame: (game) {
           if (!mounted) return;
           final readerId = _tabController.add(game.label);
           _referenceGames[readerId] = game;
           _referenceReaders[readerId] = PgnViewerWidgetController();
           _referencePositions[readerId] =
-              _gamePanePosition ?? _controller.currentPosition;
+              _gamePanePosition ?? _document.reading.currentPosition;
           _showPanel(readerId);
         },
       );
@@ -404,25 +417,26 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       onPositionChanged: (position) {
         if (!mounted || !_referenceReaders.containsKey(id)) return;
         _referencePositions[id] = position;
-        if (_tabController.index == id) _controller.onPositionChanged(position);
+        if (_tabController.index == id)
+          _document.reading.onPositionChanged(position);
       },
     );
   }
 
   void _onControllerUpdate() {
     if (!mounted) return;
-    if (_studyPathChecked != _controller.filePath) {
-      _studyPathChecked = _controller.filePath;
+    if (_studyPathChecked != _document.filePath) {
+      _studyPathChecked = _document.filePath;
       _viewingStudy = false;
       unawaited(_checkStudyPath(_studyPathChecked));
     }
     // Trophies belong to one game's analysis; the banner and the per-move
     // markers key off its positions, so they must not survive a game switch.
     if (_detectedTrophies.isNotEmpty &&
-        _controller.currentGameIndex != _trophyGameIndex) {
+        _document.collection.selectedIndex != _trophyGameIndex) {
       _detectedTrophies = const [];
     }
-    _tabController.synchronizeTree(_controller.showOpeningTree);
+    _tabController.synchronizeTree(_document.reading.tree.showOpeningTree);
     _maybeUpdateDeviation();
     setState(() {});
   }
@@ -450,7 +464,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   }
 
   VoidCallback _captureNavigationContext() {
-    final restoreCollection = _controller.captureNavigationContext();
+    final restoreCollection = _document.captureNavigationContext();
     final selectedTab = _tabController.index;
     final openTabs = _tabController.openTabs;
     final singleGame = _singleGameFocus;
@@ -473,7 +487,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   }
 
   Future<void> _openFromHandoff(OpenPgnViewer handoff) async {
-    _navigationRestoreEpoch++;
+    final epoch = ++_navigationRestoreEpoch;
     final gameId = handoff.gameId;
     // Arriving with one game named is a different job from opening a
     // collection: the app bar's slice machinery (player presets, add-filter
@@ -489,62 +503,72 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     final sameFileLoaded =
         handoff.sliceFen == null &&
         gameId != null &&
-        handoff.pgnPath == _controller.filePath &&
-        _controller.errorMessage == null &&
-        _controller.allGames.isNotEmpty &&
+        handoff.pgnPath == _document.filePath &&
+        _document.errorMessage == null &&
+        _document.collection.games.isNotEmpty &&
         // ...and the loaded copy is still what is on disk. The review of your
         // recent games writes the scores it found back into the games cache,
         // so a collection read before a run is a collection whose games have
         // no graph — reusing it would draw a blank chart over evals that are
         // sitting in the file.
         await _loadedCopyIsCurrent(handoff.pgnPath);
+    if (!_isCurrentNavigation(epoch)) return;
     if (sameFileLoaded) {
       if (_currentGameIs(gameId)) {
-        _applyHandoffTab(handoff);
+        _applyHandoffTab(handoff, epoch);
         return;
       }
       if (await _goToGameById(gameId)) {
-        if (!mounted) return;
-        _applyHandoffTab(handoff);
+        if (!_isCurrentNavigation(epoch)) return;
+        _applyHandoffTab(handoff, epoch);
         return;
       }
       // Not in the loaded copy (the cache gained games since) — fall through
       // to a full reload.
-      if (!mounted) return;
+      if (!_isCurrentNavigation(epoch)) return;
     }
 
-    await _openFileWithPositionSlice(
+    final opened = await _openFileWithPositionSlice(
       handoff.pgnPath,
       handoff.sliceFen,
+      navigationEpoch: epoch,
       // A single-game handoff must not resurrect an old slice: it can hide
       // the target game and its filtered/total counter reads as noise when
       // all you asked for was one game. Same for a file-position jump —
       // a restored slice would shift the indices it was computed against.
       restoreSavedSlice: gameId == null && handoff.gameIndex == null,
     );
-    if (!mounted ||
-        _controller.errorMessage != null ||
-        _controller.filePath != handoff.pgnPath) {
+    if (!_isCurrentNavigation(epoch) ||
+        !opened ||
+        _document.filePath != handoff.pgnPath) {
       return;
     }
     if (gameId != null) {
       final found = await _goToGameById(gameId);
-      if (!found || !mounted) return;
+      if (!found || !_isCurrentNavigation(epoch)) return;
     } else if (handoff.gameIndex != null &&
-        _controller.filteredGames.isNotEmpty) {
-      _controller.goToGame(
-        handoff.gameIndex!.clamp(0, _controller.filteredGames.length - 1),
+        _document.collection.visibleGames.isNotEmpty) {
+      final selected = await _document.reading.selectGame(
+        handoff.gameIndex!.clamp(
+          0,
+          _document.collection.visibleGames.length - 1,
+        ),
       );
+      if (!selected || !_isCurrentNavigation(epoch)) return;
     }
-    _applyHandoffTab(handoff);
+    _applyHandoffTab(handoff, epoch);
   }
 
   /// Land on the tab that answers the question the handoff asked, and start the
   /// engine only when it was the engine's answer that was wanted.
   ///
   /// Solitaire hides the side-panel tabs entirely; don't fight the mode.
-  void _applyHandoffTab(OpenPgnViewer handoff) {
-    if (_controller.isSolitaireMode) return;
+  bool _isCurrentNavigation(int epoch) =>
+      mounted && epoch == _navigationRestoreEpoch;
+
+  void _applyHandoffTab(OpenPgnViewer handoff, int epoch) {
+    if (!_isCurrentNavigation(epoch)) return;
+    if (_document.reading.solitaire.isActive) return;
     // Recent-game clicks keep the annotated Game reader selected, with the
     // saved graph ready in its own tab. Restoring scores needs no engine pass.
     if (handoff.gameId != null && _analysisController.evals.isNotEmpty) {
@@ -565,8 +589,14 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     if (ply != null) {
       // The PGN widget takes the newly selected game on its next build and
       // parks the cursor at the start; move it after that build, not before.
+      final selectionRevision = _document.collection.selectionRevision;
+      final selectedGame = _document.collection.selectedGame;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _controller.goToPly(ply);
+        if (!_isCurrentNavigation(epoch) ||
+            _document.collection.selectionRevision != selectionRevision ||
+            !identical(_document.collection.selectedGame, selectedGame))
+          return;
+        _document.reading.goToPly(ply);
       });
     }
   }
@@ -577,7 +607,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// unreadable stat is not evidence of a change, and treating it as one would
   /// re-parse the whole games cache on every handoff.
   Future<bool> _loadedCopyIsCurrent(String path) async {
-    final loadedAt = _controller.loadedFileModified;
+    final loadedAt = _document.loadedFileModified;
     if (loadedAt == null) return true;
     final stat = await StorageFactory.instance.fileStat(path);
     if (stat == null) return true;
@@ -593,13 +623,13 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// Identity of the currently displayed game — the games-library
   /// [dedupKeyForHeaders], which is what a single-game handoff names.
   String? _currentGameDedupKey() {
-    final games = _controller.filteredGames;
-    if (games.isEmpty || _controller.currentGameIndex >= games.length) {
+    final games = _document.collection.visibleGames;
+    if (games.isEmpty || _document.collection.selectedIndex >= games.length) {
       return null;
     }
     return dedupKeyForHeaders(
-      games[_controller.currentGameIndex].headers,
-      pgn: games[_controller.currentGameIndex].pgnText,
+      games[_document.collection.selectedIndex].headers,
+      pgn: games[_document.collection.selectedIndex].pgnText,
     );
   }
 
@@ -609,72 +639,77 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     // played five minutes ago sits wherever its batch landed ("Game 301 of
     // 312"). Sorted, the counter agrees with the list you clicked from, and
     // Prev/Next walk back through time instead of through fetch history.
-    _controller.sortNewestFirst();
-    var index = _controller.filteredGames.indexWhere(
+    _document.sortNewestFirst();
+    var index = _document.collection.visibleGames.indexWhere(
       (g) => dedupKeyForHeaders(g.headers, pgn: g.pgnText) == gameId,
     );
     if (index < 0) {
       // A restored slice may hide the target game — widen to the whole file.
       // (resetFilters re-applies the sort, so the order survives.)
-      _controller.resetFilters();
-      index = _controller.filteredGames.indexWhere(
+      _document.resetFilters();
+      index = _document.collection.visibleGames.indexWhere(
         (g) => dedupKeyForHeaders(g.headers, pgn: g.pgnText) == gameId,
       );
     }
     if (index < 0) return false;
-    return _controller.selectGame(index);
+    return _document.reading.selectGame(index);
   }
 
   /// Start the engine review of the current game unless cached `[%eval]`s
   /// already cover it. Mirrors the Analysis tab's manual "Analyze Game"
   /// button, including persistence and trophy detection.
   void _startAutoAnalysisForCurrentGame() {
-    if (_controller.filteredGames.isEmpty) return;
+    if (_document.collection.visibleGames.isEmpty) return;
     _showPanel(_analysisTabIndex);
     if (_analysisController.isAnalyzing) return;
     if (_analysisController.evals.isNotEmpty) return;
     if (!EngineGate.ensureAvailable(context)) return;
     unawaited(
       _analysisController.analyzeGame(
-        _controller.filteredGames[_controller.currentGameIndex].pgnText,
-        onAnnotatedMovetext: _controller.persistMoveComments,
+        _document
+            .collection
+            .visibleGames[_document.collection.selectedIndex]
+            .pgnText,
+        onAnnotatedMovetext: _document.editor.persistMoveComments,
         onComplete: _detectTrophies,
       ),
     );
   }
 
-  Future<void> _openFileWithPositionSlice(
+  Future<bool> _openFileWithPositionSlice(
     String path,
     String? sliceFen, {
     bool restoreSavedSlice = true,
+    int? navigationEpoch,
   }) async {
+    final epoch = navigationEpoch ?? ++_navigationRestoreEpoch;
     // When a position slice is about to be applied it supersedes any restored
     // slice, so a "Restored last slice" notice would be misleading.
-    await _loadFile(
+    final loaded = await _loadFile(
       path,
+      navigationEpoch: epoch,
       notifySliceRestore: sliceFen == null && restoreSavedSlice,
       restoreSavedSlice: restoreSavedSlice,
     );
-    // Bail if the load failed (the old file's games would still be in the
-    // controller and the slice would silently target the wrong collection).
-    if (!mounted ||
-        _controller.errorMessage != null ||
-        _controller.filePath != path ||
-        _controller.allGames.isEmpty ||
-        sliceFen == null) {
-      return;
-    }
-    await _controller.recomputeAndApplyConfig(
+    if (!_isCurrentNavigation(epoch) || !loaded || _document.filePath != path)
+      return false;
+    if (_document.collection.games.isEmpty || sliceFen == null) return true;
+    final source = _document.collection.games;
+    await _document.recomputeAndApplyConfig(
       SliceConfig(positionInput: sliceFen),
     );
-    if (!mounted) return;
-    final count = _controller.filteredGames.length;
+    if (!_isCurrentNavigation(epoch) ||
+        !identical(source, _document.collection.games) ||
+        _document.filters.error != null)
+      return false;
+    final count = _document.collection.visibleGames.length;
     showAppSnackBar(
       context,
       'Showing $count game${count == 1 ? '' : 's'} containing the position',
       actionLabel: 'Show All',
-      onAction: () => _controller.resetFilters(),
+      onAction: () => _document.resetFilters(),
     );
+    return true;
   }
 
   void _onAnalysisUpdate() {
@@ -683,22 +718,22 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   void _onSideTabChanged() {
     if (!mounted) return;
-    _controller.stopAutoPlay();
+    _document.reading.playback.stop();
     final wantTree =
         _tabController.index == PgnWorkspace.tree &&
         !_tabController.databaseTree;
-    if (wantTree != _controller.showOpeningTree) {
-      _controller.toggleOpeningTree();
+    if (wantTree != _document.reading.tree.showOpeningTree) {
+      _document.reading.toggleOpeningTree();
     }
     setState(() {});
     if (_referencePositions[_tabController.index] case final position?) {
-      _controller.onPositionChanged(position);
+      _document.reading.onPositionChanged(position);
       return;
     }
     if (wantTree) return;
     if (_tabController.index == PgnWorkspace.filters &&
         _filterOriginFen != null) {
-      _controller.onPositionChanged(
+      _document.reading.onPositionChanged(
         Chess.fromSetup(Setup.parseFen(expandFen(_filterOriginFen!))),
       );
       return;
@@ -706,18 +741,18 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     if (_tabController.index == _lineTabIndex) {
       // Book has its own cursor. Never leave the hidden Game reader advancing
       // or editing behind it after a tab switch.
-      _controller.stopAutoPlay();
+      _document.reading.playback.stop();
       final needsRebuild = !_lineTabVisited || _editMode;
       _lineTabVisited = true;
       _editMode = false;
       if (needsRebuild) setState(() {});
       if (_bookPanePosition case final position?) {
-        _controller.onPositionChanged(position);
+        _document.reading.onPositionChanged(position);
       }
       return;
     }
     final gamePosition = _gamePanePosition;
-    if (gamePosition != null) _controller.onPositionChanged(gamePosition);
+    if (gamePosition != null) _document.reading.onPositionChanged(gamePosition);
   }
 
   @override
@@ -727,7 +762,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     MyRepertoireSettings.instance.removeListener(
       _onRepertoireDesignationsChanged,
     );
-    _controller.removeListener(_onControllerUpdate);
+    _document.changes.removeListener(_onControllerUpdate);
     widget.lifetime.reclaimFocus = null;
     _analysisController.removeListener(_onAnalysisUpdate);
     _explorer.dispose();
@@ -742,61 +777,76 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   @override
   Future<void> _pickFile() async {
+    final epoch = ++_navigationRestoreEpoch;
     _singleGameFocus = false;
     final file = await FilePicker.pickFile(
       type: FileType.custom,
       allowedExtensions: ['pgn', 'txt'],
-      initialDirectory: _controller.pickFileInitialDirectory(),
+      initialDirectory: _document.libraryState.pickFileInitialDirectory(
+        _document.filePath,
+      ),
     );
-    if (file == null || file.path == null) return;
-    await _loadFile(file.path!);
+    if (!_isCurrentNavigation(epoch) || file == null || file.path == null)
+      return;
+    await _loadFile(file.path!, navigationEpoch: epoch);
   }
 
   @override
   Future<void> _pastePgn() async {
-    if (!await _confirmLeavePgn()) return;
+    final epoch = ++_navigationRestoreEpoch;
+    if (!await _confirmLeavePgn() || !_isCurrentNavigation(epoch)) return;
     _singleGameFocus = false;
     final data = await Clipboard.getData(Clipboard.kTextPlain);
-    if (!mounted) return;
-    await _controller.loadPgnContent(data?.text ?? '');
-    if (!mounted) return;
-    final error = _controller.errorMessage;
-    if (error != null) {
-      showAppSnackBar(
-        context,
-        error,
-        isError: true,
-        duration: const Duration(seconds: 4),
-      );
+    if (!_isCurrentNavigation(epoch)) return;
+    final loaded = await _document.loadPgnContent(data?.text ?? '');
+    if (!_isCurrentNavigation(epoch)) return;
+    if (!loaded) {
+      final error = _document.errorMessage ?? _document.editor.errorMessage;
+      if (error != null) {
+        showAppSnackBar(
+          context,
+          error,
+          isError: true,
+          duration: const Duration(seconds: 4),
+        );
+      }
       return;
     }
     showAppSnackBar(
       context,
-      'Loaded ${_controller.allGames.length} game(s) from clipboard',
+      'Loaded ${_document.collection.games.length} game(s) from clipboard',
       duration: const Duration(seconds: 2),
     );
   }
 
   @override
-  Future<void> _loadFile(
+  Future<bool> _loadFile(
     String path, {
     bool notifySliceRestore = true,
     bool restoreSavedSlice = true,
+    int? navigationEpoch,
   }) async {
-    if (!await _confirmLeavePgn()) return;
-    await _controller.loadFile(path, restoreSavedSlice: restoreSavedSlice);
-    if (!mounted) return;
-    final error = _controller.errorMessage;
-    if (error != null) {
-      showAppSnackBar(
-        context,
-        error,
-        isError: true,
-        duration: const Duration(seconds: 5),
-      );
-      return;
+    final epoch = navigationEpoch ?? ++_navigationRestoreEpoch;
+    if (!await _confirmLeavePgn() || !_isCurrentNavigation(epoch)) return false;
+    final loaded = await _document.loadFile(
+      path,
+      restoreSavedSlice: restoreSavedSlice,
+    );
+    if (!_isCurrentNavigation(epoch)) return false;
+    if (!loaded) {
+      final error = _document.errorMessage ?? _document.editor.errorMessage;
+      if (error != null) {
+        showAppSnackBar(
+          context,
+          error,
+          isError: true,
+          duration: const Duration(seconds: 5),
+        );
+      }
+      return false;
     }
     if (notifySliceRestore) _showPendingSliceRestoreSnackBar();
+    return true;
   }
 
   /// "Close file": drop the collection and land back on the start screen.
@@ -807,8 +857,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// and Analysis have nothing to say about an empty viewer.
   @override
   Future<void> _closeFile() async {
-    if (!await _confirmLeavePgn() || !mounted) return;
-    _controller.closeFile();
+    final epoch = ++_navigationRestoreEpoch;
+    if (!await _confirmLeavePgn() || !_isCurrentNavigation(epoch)) return;
+    _document.closeFile();
     setState(() {
       _editMode = false;
       _singleGameFocus = false;
@@ -822,7 +873,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   Future<String?> _chooseCopyDestination(
     BuildContext context, {
     String? name,
-  }) => chooseViewerCopyDestination(context, _controller, name: name);
+  }) => chooseViewerCopyDestination(context, _document, name: name);
 
   @override
   Future<bool> _savePgn() async {
@@ -830,39 +881,38 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     await showDocumentSaveDialog(
       context,
       title: AppLocalizations.of(context).documentCollectionSaveTitle,
-      session: _controller.saveActions,
+      session: _document.editor,
       chooseCopyDestination: _chooseCopyDestination,
     );
-    return !_controller.saveActions.state.dirty &&
-        !_controller.saveActions.state.uncertain;
+    return !_document.editor.state.dirty && !_document.editor.state.uncertain;
   }
 
   Future<bool> _confirmLeavePgn() async {
     _pgnWidgetController.flushPendingComments();
     bool resolved() =>
-        !_controller.saveActions.state.dirty &&
-        !_controller.saveActions.state.uncertain &&
-        _controller.saveActions.state.retainedDrafts.isEmpty &&
-        !_controller.saveActions.state.busy;
+        !_document.editor.state.dirty &&
+        !_document.editor.state.uncertain &&
+        _document.editor.state.retainedDrafts.isEmpty &&
+        !_document.editor.state.busy;
     if (resolved()) return true;
-    if (_controller.autoSave &&
-        _controller.filePath != null &&
-        !_controller.needsSaveRecovery) {
-      await _controller.flushPendingMetadata();
+    if (_document.editor.autoSave &&
+        _document.filePath != null &&
+        !_document.editor.needsSaveRecovery) {
+      await _document.editor.flushPendingMetadata();
       if (resolved()) return true;
     }
     if (!mounted) return false;
     final choice = await showDialog<String>(
       context: context,
       builder: (dialogContext) => ListenableBuilder(
-        listenable: _controller,
+        listenable: _document.changes,
         builder: (context, _) => AlertDialog(
           title: Text(AppLocalizations.of(context).documentCollectionSaveTitle),
           scrollable: true,
           content: SizedBox(
             width: AppSpacing.formWidth,
             child: DocumentSavePanel(
-              session: _controller.saveActions,
+              session: _document.editor,
               chooseCopyDestination: _chooseCopyDestination,
               focusEditor: () => Navigator.pop(dialogContext),
             ),
@@ -874,7 +924,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
             ),
             if (!resolved())
               TextButton(
-                onPressed: _controller.saveActions.state.busy
+                onPressed: _document.editor.state.busy
                     ? null
                     : () => Navigator.pop(dialogContext, 'discard'),
                 child: Text(AppLocalizations.of(context).closeWithoutSaving),
@@ -891,19 +941,19 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       ),
     );
     if (!mounted || choice == null) return false;
-    if (choice == 'discard') _controller.discardChanges();
+    if (choice == 'discard') _document.editor.discardChanges();
     return true;
   }
 
   void _showPendingSliceRestoreSnackBar() {
-    final info = _controller.pendingSliceRestore;
+    final info = _document.filters.pendingRestore;
     if (info == null || !mounted) return;
-    _controller.clearPendingSliceRestore();
+    _document.filters.clearPendingRestore();
     showAppSnackBar(
       context,
       'Restored last slice (${info.filteredCount}/${info.totalCount} games)',
       actionLabel: 'Show All',
-      onAction: _controller.resetFilters,
+      onAction: _document.resetFilters,
     );
   }
 
@@ -911,12 +961,12 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   void _openSliceDialog() => _showPanel(PgnWorkspace.filters);
 
   Widget _buildFilterWorkspace() {
-    final source = _controller.allGames;
-    final revision = _controller.collectionRevision;
+    final source = _document.collection.games;
+    final revision = _document.collection.contentRevision;
     if (!identical(source, _filterSource) ||
-        _filterRevision != _controller.collectionRevision) {
+        _filterRevision != _document.collection.contentRevision) {
       _filterSource = source;
-      _filterRevision = _controller.collectionRevision;
+      _filterRevision = _document.collection.contentRevision;
       _filterRecords = source
           .map(
             (game) => (
@@ -927,37 +977,38 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
           .toList();
     }
     return PgnGameFilterWorkspace(
-      matcher: _controller.collectionFilter,
+      matcher: _document.collectionFilter,
       key: ObjectKey(source),
-      collectionName: _controller.filePath == null
+      collectionName: _document.filePath == null
           ? 'Pasted games'
-          : p.basename(_controller.filePath!),
+          : p.basename(_document.filePath!),
       allGames: _filterRecords,
-      collectionPlayer: _controller.collectionPlayer,
+      collectionPlayer: _document.collection.collectionPlayer,
       currentFen:
-          _filterOriginFen ?? normalizeFen(_controller.currentPosition.fen),
-      initialConfig: _controller.activeSliceConfig,
-      fenIndex: _controller.fenIndex,
+          _filterOriginFen ??
+          normalizeFen(_document.reading.currentPosition.fen),
+      initialConfig: _document.filters.selection.config,
+      fenIndex: _document.positionIndexController.value,
       onApply: (indices, config) {
         if (!mounted ||
-            !identical(source, _controller.allGames) ||
-            revision != _controller.collectionRevision) {
+            !identical(source, _document.collection.games) ||
+            revision != _document.collection.contentRevision) {
           return;
         }
         _filterReturnSource = null;
-        _controller.applySlice(indices, config);
+        _document.applySlice(indices, config);
         _showPanel(PgnWorkspace.game);
       },
       onOpenGame: (indices, config, gameIndex) {
         if (!mounted ||
-            !identical(source, _controller.allGames) ||
-            revision != _controller.collectionRevision) {
+            !identical(source, _document.collection.games) ||
+            revision != _document.collection.contentRevision) {
           return;
         }
         _filterReturnSource = source;
-        _controller.applySlice(indices, config);
-        _controller.goToGame(
-          _controller.filteredGames.indexOf(source[gameIndex]),
+        _document.applySlice(indices, config);
+        _document.reading.goToGame(
+          _document.collection.visibleGames.indexOf(source[gameIndex]),
         );
         _showPanel(PgnWorkspace.game);
       },
@@ -983,14 +1034,14 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   String? _deviationKey;
 
   void _maybeUpdateDeviation() {
-    final games = _controller.filteredGames;
-    final index = _controller.currentGameIndex;
+    final games = _document.collection.visibleGames;
+    final index = _document.collection.selectedIndex;
     // Keyed by game identity, not index: applying or clearing a slice resets
     // the index to 0 with a different game there, and an index-based key
     // would keep the previous game's banner.
     final key = games.isEmpty || index >= games.length
         ? null
-        : '${_controller.filePath}'
+        : '${_document.filePath}'
               '#${dedupKeyForHeaders(games[index].headers, pgn: games[index].pgnText)}';
     if (key == _deviationKey) return;
     _deviationKey = key;
@@ -1011,9 +1062,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   }
 
   Future<void> _computeDeviation(String key) async {
-    final games = _controller.filteredGames;
+    final games = _document.collection.visibleGames;
     if (games.isEmpty) return;
-    final entry = games[_controller.currentGameIndex];
+    final entry = games[_document.collection.selectedIndex];
     final meWhite = _myColorIn(entry.headers);
     if (meWhite == null) return;
     final report = await GameDeviationService.instance.analyzeGame(
@@ -1072,8 +1123,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   @override
   List<String> _currentGameSans(PgnGameEntry entry) {
-    final key =
-        '${_controller.filePath}#${entry.label}#${entry.pgnText.length}';
+    final key = '${_document.filePath}#${entry.label}#${entry.pgnText.length}';
     if (key != _lineSansKey) {
       _lineSansKey = key;
       _lineSans = mainlineSansOf(entry.pgnText);
@@ -1084,15 +1134,15 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   @override
   void _onGamePosition(Position position) {
     if (!mounted) return;
-    _controller.rememberReadingPosition();
+    _document.reading.rememberReadingPosition();
     _gamePanePosition = position;
     // TabBarView keeps the Game child alive while Book is visible. Engine or
     // async widget updates from that hidden child must not steal the board.
     if (!_onLineTab &&
         _tabController.index != PgnWorkspace.filters &&
         !_referenceReaders.containsKey(_tabController.index) &&
-        !_controller.showOpeningTree) {
-      _controller.onPositionChanged(position);
+        !_document.reading.tree.showOpeningTree) {
+      _document.reading.onPositionChanged(position);
     }
   }
 
@@ -1107,7 +1157,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// Show the book line beside the game: the Line tab, not a dialog.
   @override
   void _showLineTab() {
-    if (_controller.isSolitaireMode || !_lineTabVisible) return;
+    if (_document.reading.solitaire.isActive || !_lineTabVisible) return;
     if (!_lineTabVisited) setState(() => _lineTabVisited = true);
     _tabController.animateTo(_lineTabIndex);
   }
@@ -1124,7 +1174,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// trail remembers the game you came from.
   @override
   Future<void> _openExplorerGame(ExplorerGame game) async {
-    final fen = _controller.currentPosition.fen;
+    final fen = _document.reading.currentPosition.fen;
     final opened = await _gameOpener.open(game, fen: fen);
     if (!mounted) return;
     if (opened == null) {
@@ -1151,7 +1201,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     if (!mounted) return;
     _bookPanePosition = position;
     if (_tabController.index != _lineTabIndex) return;
-    _controller.onPositionChanged(position);
+    _document.reading.onPositionChanged(position);
   }
 
   /// Runs after full-game analysis: every solitaire guess the user tried and
@@ -1163,16 +1213,17 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   @override
   Future<void> _detectTrophies() async {
     final pool = context.read<StockfishPool>();
-    final guesses = _controller.solitaire.guessLog;
-    if (guesses.isEmpty || _controller.filteredGames.isEmpty) return;
+    final guesses = _document.reading.solitaire.controller.guessLog;
+    if (guesses.isEmpty || _document.collection.visibleGames.isEmpty) return;
 
-    final game = _controller.filteredGames[_controller.currentGameIndex];
+    final game =
+        _document.collection.visibleGames[_document.collection.selectedIndex];
     try {
       final found = await detectSolitaireTrophies(
         pool: pool,
         guesses: guesses,
         evals: _analysisController.evals,
-        userIsWhite: _controller.solitaire.userIsWhite,
+        userIsWhite: _document.reading.solitaire.controller.userIsWhite,
         depth: _analysisController.depth,
         gameLabel: game.label,
         headers: game.headers,
@@ -1185,9 +1236,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       if (!mounted) return;
       setState(() {
         _detectedTrophies = found;
-        _trophyGameIndex = _controller.currentGameIndex;
+        _trophyGameIndex = _document.collection.selectedIndex;
       });
-      _controller.noteTrophiesEarned(found.length);
+      _document.reading.solitaire.noteTrophiesEarned(found.length);
       showAppSnackBar(
         context,
         found.length == 1
@@ -1208,7 +1259,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         context: context,
         builder: (_) => SolitaireTrophyCabinet(onOpenGame: _openTrophyPosition),
       ).then((_) {
-        unawaited(_controller.loadSolitaireSettings());
+        unawaited(_document.reading.loadSolitaireSettings());
         _reclaimFocus();
       }),
     );
@@ -1220,10 +1271,13 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// which the recent-files menu is the way back from.
   Future<void> _openTrophyPosition(SolitaireTrophy trophy) async {
     _singleGameFocus = false;
-    await _controller.loadPgnContent(trophy.pgn, initialFen: trophy.fen);
+    final loaded = await _document.loadPgnContent(
+      trophy.pgn,
+      initialFen: trophy.fen,
+    );
     if (!mounted) return;
-    final error = _controller.errorMessage;
-    if (error != null) {
+    final error = _document.errorMessage ?? _document.editor.errorMessage;
+    if (!loaded && error != null) {
       showAppSnackBar(
         context,
         error,
@@ -1237,12 +1291,12 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// far would be thrown away — or close the setup strip.
   @override
   Future<void> _leaveSolitaire() async {
-    if (!_controller.isSolitaireMode) {
-      _controller.cancelSolitaireSetup();
+    if (!_document.reading.solitaire.isActive) {
+      _document.reading.solitaire.cancelSetup();
       _reclaimFocus();
       return;
     }
-    if (_controller.solitaire.hasProgress) {
+    if (_document.reading.solitaire.controller.hasProgress) {
       final leave = await confirmAction(
         context,
         title: 'Leave solitaire?',
@@ -1256,7 +1310,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         return;
       }
     }
-    _controller.stopSolitaire();
+    _document.reading.solitaire.stop();
     _reclaimFocus();
   }
 
@@ -1264,7 +1318,8 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// half done.
   @override
   Future<void> _guardingSolitaireProgress(VoidCallback action) async {
-    if (_controller.isSolitaireMode && _controller.solitaire.hasProgress) {
+    if (_document.reading.solitaire.isActive &&
+        _document.reading.solitaire.controller.hasProgress) {
       final go = await confirmAction(
         context,
         title: 'Switch game?',
@@ -1287,7 +1342,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// run's completion, or right now when cached evals already cover the game.
   @override
   void _analyseSolitaireGame() {
-    _controller.stopSolitaire();
+    _document.reading.solitaire.stop();
     final cached =
         _analysisController.evals.isNotEmpty &&
         !_analysisController.isAnalyzing;
@@ -1297,10 +1352,12 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   @override
   Future<void> _copyCurrentGamePgn({bool mainlineOnly = false}) async {
-    if (_controller.filteredGames.isEmpty) return;
+    if (_document.collection.visibleGames.isEmpty) return;
     final pgnText =
         (_referenceGames[_tabController.index] ??
-                _controller.filteredGames[_controller.currentGameIndex])
+                _document.collection.visibleGames[_document
+                    .collection
+                    .selectedIndex])
             .pgnText;
     await Clipboard.setData(
       ClipboardData(
@@ -1314,9 +1371,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   @override
   Future<void> _copyCurrentFen() async {
-    if (_controller.filteredGames.isEmpty) return;
+    if (_document.collection.visibleGames.isEmpty) return;
     await Clipboard.setData(
-      ClipboardData(text: _controller.currentPosition.fen),
+      ClipboardData(text: _document.reading.currentPosition.fen),
     );
     if (!mounted) return;
     showAppSnackBar(context, AppMessages.fenCopied);
@@ -1329,20 +1386,20 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       context,
       games: _onReferenceTab
           ? [_referenceGames[_tabController.index]!]
-          : _controller.filteredGames,
-      currentIndex: _onReferenceTab ? 0 : _controller.currentGameIndex,
+          : _document.collection.visibleGames,
+      currentIndex: _onReferenceTab ? 0 : _document.collection.selectedIndex,
     );
     _reclaimFocus();
   }
 
   @override
   Future<void> _exportSlice() async {
-    if (_controller.filteredGames.isEmpty) return;
+    if (_document.collection.visibleGames.isEmpty) return;
     _pgnWidgetController.flushPendingComments();
     final session = DocumentSaveSession.draft(
-      _controller.collectionRepository,
+      _document.collectionRepository,
       path: '',
-      content: _controller.buildExportContent(),
+      content: _document.buildExportContent(),
     );
     try {
       await showDocumentSaveDialog(
@@ -1351,7 +1408,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         session: session,
         chooseCopyDestination: (context) => _chooseCopyDestination(
           context,
-          name: _controller.defaultExportFileName() ?? 'games.pgn',
+          name: _document.defaultExportFileName() ?? 'games.pgn',
         ),
       );
       final destination = session.state.baseline?.path;
@@ -1379,14 +1436,14 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// this format existed — cannot read it, which the menu hint says.
   @override
   Future<void> _exportSliceAsScid() async {
-    final games = _controller.filteredGames;
+    final games = _document.collection.visibleGames;
     if (games.isEmpty) return;
 
     final dir = await FilePicker.getDirectoryPath(
       dialogTitle: 'Where should the Scid database go?',
-      initialDirectory: _controller.filePath == null
+      initialDirectory: _document.filePath == null
           ? null
-          : p.dirname(_controller.filePath!),
+          : p.dirname(_document.filePath!),
     );
     if (dir == null) {
       _reclaimFocus();
@@ -1394,8 +1451,10 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     }
     if (!mounted) return;
 
-    final suggested = (_controller.defaultExportFileName() ?? 'games')
-        .replaceAll(RegExp(r'\.pgn$'), '');
+    final suggested = (_document.defaultExportFileName() ?? 'games').replaceAll(
+      RegExp(r'\.pgn$'),
+      '',
+    );
     final name = await showNameEntryDialog(
       context,
       title: 'Name the database',
@@ -1528,10 +1587,10 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// autosave rewrites the whole file, which a games cache can't tolerate.)
   @override
   Future<void> _editInStudy() async {
-    final games = _controller.filteredGames;
+    final games = _document.collection.visibleGames;
     if (games.isEmpty) return;
-    final path = _controller.filePath;
-    final game = games[_controller.currentGameIndex];
+    final path = _document.filePath;
+    final game = games[_document.collection.selectedIndex];
 
     final played = _pgnWidgetController.mainLineIndex;
     final sanLine = played <= 0
@@ -1539,7 +1598,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         : _pgnWidgetController.mainLineMoves.take(played).toList();
 
     if (path != null && await _isStudyPath(path)) {
-      final indexInFile = _controller.allGames.indexOf(game);
+      final indexInFile = _document.collection.games.indexOf(game);
       if (!mounted) return;
       context.read<AppState>().switchToStudyEdit(
         path: path,
@@ -1575,23 +1634,35 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       return;
     }
     if (_onReferenceTab) return;
-    if (_controller.showOpeningTree) {
+    if (_document.reading.tree.showOpeningTree) {
       await openTreePositionGameSearch(
         context: context,
-        controller: _controller,
+        games: [
+          for (final i in _document.reading.tree.gamesAtTreePosition())
+            _document.collection.visibleGames[i],
+        ],
+        currentIndex: _document.reading.tree.gamesAtTreePosition().indexOf(
+          _document.collection.selectedIndex,
+        ),
+        onSelected: (game) {
+          if (!mounted) return;
+          final index = _document.collection.visibleGames.indexOf(game);
+          if (index >= 0) _document.reading.loadGameFromTree(index);
+        },
       );
       _reclaimFocus();
       return;
     }
-    if (_controller.filteredGames.isEmpty) return;
+    if (_document.collection.visibleGames.isEmpty) return;
     final selected = await showGameSearchDialog(
       context: context,
       games: [
-        for (final g in _controller.filteredGames) GameNavItem.fromEntry(g),
+        for (final g in _document.collection.visibleGames)
+          GameNavItem.fromEntry(g),
       ],
-      currentIndex: _controller.currentGameIndex,
+      currentIndex: _document.collection.selectedIndex,
     );
-    if (selected != null) _controller.goToGame(selected);
+    if (selected != null) _document.reading.goToGame(selected);
     _reclaimFocus();
   }
 
@@ -1603,7 +1674,8 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   @override
   bool get _onLineTab =>
-      !_controller.isSolitaireMode && _tabController.index == _lineTabIndex;
+      !_document.reading.solitaire.isActive &&
+      _tabController.index == _lineTabIndex;
 
   /// The one movetext surface the user can currently see. Keep active-pane
   /// dispatch centralized here so a new command cannot accidentally mutate
@@ -1614,10 +1686,10 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   @override
   void _handleBoardMove(String san) {
     if (_tabController.index == PgnWorkspace.filters) {
-      final next = playSanOrNullMove(_controller.currentPosition, san);
+      final next = playSanOrNullMove(_document.reading.currentPosition, san);
       if (next != null) {
         _filterOriginFen = next.fen;
-        _controller.onPositionChanged(next);
+        _document.reading.onPositionChanged(next);
       }
       return;
     }
@@ -1629,7 +1701,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// that would disturb a puzzle. Keep descriptions in sync with the button
   /// tooltips that advertise them.
   List<KeyBinding> get _keyBindings => [
-    if (!_controller.isSolitaireSetup)
+    if (!_document.reading.solitaire.isConfiguring)
       ...KeyBinding.forShortcutIf(
         AppShortcut.focusVariation,
         'Focus current variation',
@@ -1642,7 +1714,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     // widget caps mainline navigation at the frontier); R reveals, and the
     // autoplay/tab-switch/engine/amend keys are swallowed so they can't
     // disturb the puzzle.
-    if (_controller.isSolitaireMode) ...[
+    if (_document.reading.solitaire.isActive) ...[
       // preempts: solitaire deliberately shadows the normal meaning of these
       // keys — R stops being "return to mainline", and the four below stop
       // doing anything at all. Saying so here is what keeps the dead-binding
@@ -1651,14 +1723,15 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         AppShortcut.revealMove,
         'Reveal current move',
         () {
-          if (_controller.solitaire.canReveal) _controller.revealCurrentMove();
+          if (_document.reading.solitaire.controller.canReveal)
+            _document.reading.solitaire.revealCurrentMove();
         },
         preempts: true,
       ),
       ...KeyBinding.forShortcut(
         AppShortcut.hintMove,
         'Hint: highlight the piece that moves',
-        _controller.hintCurrentMove,
+        _document.reading.solitaire.hintCurrentMove,
       ),
       for (final shortcut in [
         AppShortcut.autoPlay,
@@ -1679,13 +1752,13 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     ...KeyBinding.forShortcut(
       AppShortcut.backOneMove,
       'Back one move',
-      () => _paneRouter.goBack(_controller.navigateBack),
+      () => _paneRouter.goBack(_document.reading.navigateBack),
       repeats: true,
     ),
     ...KeyBinding.forShortcut(
       AppShortcut.forwardOneMove,
       'Forward one move',
-      () => _paneRouter.goForward(_controller.navigateForward),
+      () => _paneRouter.goForward(_document.reading.navigateForward),
       repeats: true,
     ),
     // Home/End and PageUp/PageDown both jump to the ends of the line: the
@@ -1694,13 +1767,13 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     ...KeyBinding.forShortcut(
       AppShortcut.goToStart,
       'Go to start of line',
-      () => _paneRouter.goToStart(_controller.navigateToStart),
+      () => _paneRouter.goToStart(_document.reading.navigateToStart),
     ),
 
     ...KeyBinding.forShortcut(
       AppShortcut.goToEnd,
       'Go to end of line',
-      () => _paneRouter.goToEnd(_controller.navigateToEnd),
+      () => _paneRouter.goToEnd(_document.reading.navigateToEnd),
     ),
 
     // In the PGN reader, the four arrow keys form one spatial model: left /
@@ -1708,21 +1781,21 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     // aliases made the simple model harder to learn, so this screen does not
     // inherit the app-wide P/S alternatives.
     ...KeyBinding.forShortcut(AppShortcut.nextItem, 'Next game', () {
-      if (!_onReferenceTab) _controller.nextGame();
+      if (!_onReferenceTab) _document.reading.nextGame();
     }, repeats: true),
     ...KeyBinding.forShortcut(AppShortcut.previousItem, 'Previous game', () {
-      if (!_onReferenceTab) _controller.prevGame();
+      if (!_onReferenceTab) _document.reading.prevGame();
     }, repeats: true),
     if (!_onLineTab && !_onReferenceTab)
       ...KeyBinding.forShortcut(
         AppShortcut.fullScreen,
         'Toggle fullscreen',
-        _controller.toggleFullScreen,
+        _document.presentation.toggleFullScreen,
       ),
     ...KeyBinding.forShortcut(
       AppShortcut.flipBoard,
       'Flip board',
-      _controller.toggleBoardFlipped,
+      _document.presentation.toggleBoardFlipped,
     ),
     ...KeyBinding.forShortcut(AppShortcut.pastePgn, 'Paste PGN', _pastePgn),
     ...KeyBinding.forShortcut(
@@ -1734,12 +1807,14 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       ...KeyBinding.forShortcut(
         AppShortcut.autoPlay,
         'Toggle auto-play',
-        _controller.toggleAutoPlay,
+        _document.reading.toggleAutoPlay,
       ),
       ...KeyBinding.forShortcut(
         AppShortcut.autoNextGame,
         'Toggle auto next game',
-        () => _controller.setAutoNextGame(!_controller.autoNextGame),
+        () => _document.reading.playback.setAutoNextGame(
+          !_document.reading.playback.autoNextGame,
+        ),
       ),
       ...KeyBinding.forShortcut(
         AppShortcut.amendGame,
@@ -1765,12 +1840,12 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       GameNumberField.focusActive,
     ),
     // The setup strip: Enter starts, Escape (below) closes it.
-    if (_controller.isSolitaireSetup)
+    if (_document.reading.solitaire.isConfiguring)
       ...KeyBinding.forShortcutIf(
         AppShortcut.startSolitaire,
         'Start solitaire',
         () {
-          _controller.beginSolitaire();
+          _document.reading.solitaire.begin();
           return true;
         },
       ),
@@ -1789,12 +1864,13 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
             return;
           }
         }
-        if (_controller.isSolitaireMode || _controller.isSolitaireSetup) {
+        if (_document.reading.solitaire.isActive ||
+            _document.reading.solitaire.isConfiguring) {
           unawaited(_leaveSolitaire());
         } else if (_editMode) {
           _toggleEditMode();
-        } else if (_controller.isFullScreen) {
-          unawaited(_controller.exitFullScreen());
+        } else if (_document.presentation.isFullScreen) {
+          unawaited(_document.presentation.exitFullScreen());
         } else {
           _activeMovetextController.clearEphemeralMoves();
         }
@@ -1828,15 +1904,16 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// some other binding.
   @override
   bool _toggleSolitaireMode() {
-    if (_controller.showOpeningTree || _onReferenceTab) return true;
-    if (_controller.isSolitaireMode) {
+    if (_document.reading.tree.showOpeningTree || _onReferenceTab) return true;
+    if (_document.reading.solitaire.isActive) {
       unawaited(_leaveSolitaire());
     } else {
-      _controller.toggleSolitaire();
+      _document.reading.solitaire.toggle();
       // The setup strip and the game itself live in the Game tab; opening
       // setup from Analysis or Line would otherwise light the icon and show
       // nothing.
-      if (_controller.isSolitaireSetup) _tabController.animateTo(_kGameTab);
+      if (_document.reading.solitaire.isConfiguring)
+        _tabController.animateTo(_kGameTab);
     }
     return true;
   }
@@ -1857,7 +1934,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       child: GestureDetector(
         behavior: HitTestBehavior.translucent,
         onTap: _reclaimFocus,
-        child: _controller.isFullScreen
+        child: _document.presentation.isFullScreen
             ? _buildFullScreenView(theme)
             : Scaffold(
                 appBar: _buildAppBar(theme),
@@ -1868,7 +1945,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
                       primary: _buildBoardPane(),
                       secondary: _buildSidePanel(),
                     ),
-                    if (_controller.isPreparingCollection)
+                    if (_document.isPreparingCollection)
                       const Positioned(
                         top: 0,
                         left: 0,
@@ -1879,7 +1956,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
                           child: LinearProgressIndicator(minHeight: 2),
                         ),
                       ),
-                    if (_controller.isLoading)
+                    if (_document.isLoading)
                       Positioned.fill(
                         child: ColoredBox(
                           color: AppColors.scrim,
