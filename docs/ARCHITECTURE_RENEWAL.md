@@ -1717,6 +1717,64 @@ restoration, Builder persistence/undo/recovery, other feature migrations and
 non-Linux/release gates remain open. Milestones 1/2 and 3 remain partial;
 milestones 4–7 are unfinished.
 
+### Viewer collection loading and library boundary checkpoint (2026-09-17)
+
+`features/documents/controllers/viewer_collection_load_controller.dart` now owns
+whole-collection request revisions and typed read/decode outcomes. File opening
+uses the injected collection repository's observed snapshot and modification
+metadata. Text opening uses the same request lifetime. Missing, unreadable, empty,
+comment-only and failed decoding are distinct results; superseded work returns no
+publishable result. Closing, navigation restoration, recovery adoption and disposal
+invalidate pending reads, decoding and metadata. Empty or failed newer requests
+also revoke older successful work. The pure owner is transitively checked for
+Flutter/native dependencies.
+
+`PgnCollectionDecoder` is injected at the app boundary. Its isolate adapter
+returns fresh game entries and the preserved banner using the canonical pure
+`chess_core/pgn/pgn_collection.dart` codec. Recovery preparation uses that same
+injected decoder. Existing callers now import the moved codec directly, without
+forwarding shims. Membership of the decoded collection is immutable; the legacy
+host takes ownership of mutable game entries for editing. This does not yet make
+all legacy collection state private or immutable. Invalidating a request discards
+its result; the already-running worker may finish, pending wider job supervision.
+
+`PgnLibraryRepository` now supplies recent-file existence, browse-parent paths
+and the default collection directory through a storage adapter selected at app
+startup. The legacy Viewer no longer imports `StorageFactory` or the default-PGN
+service. The remaining unused `exportSliceToPath` direct-write bypass is retired;
+the production export screen still uses the shared save/copy protocol.
+
+Two new regressions reproduced manual edits being displaced when a pending file
+read or pasted-text decode completed. Both entrypoints now recheck replacement
+protection immediately before adoption, retaining the current draft and showing
+the existing unsaved-changes error. A pasted decoder failure releases loading
+without replacing the current document or leaking an unhandled future.
+
+The codec extraction also exposed a banner-boundary mismatch: the splitter
+accepted indented/CRLF headers and headerless movetext, while banner extraction
+lost preceding comments in both cases. Two failing regressions now pass after
+banner scanning was aligned with the splitter's leading-comment rules. Native
+copy/export coverage now pastes a banner before an indented header.
+
+Validation: the 151-case focused unit/widget batch passes, including nine pure
+loader cases, both reproduced late-manual-edit races and failed pasted decoding.
+All 17 selected Linux native cases pass (12 Viewer loading/annotation cases,
+two restart/recovery cases, one exclusive copy/export case, two 20,000-ply Viewer
+journeys). After the banner correction, all 66 affected parsing, loading, save,
+recovery and session cases pass; the updated native copy/export case is rechecked
+separately and passes. Analyze/lint passes with nine existing informational
+notices and all 18 architecture-checker cases. The headless production app
+reopened the native saved copy and navigated to e4; the inspected
+[screenshot](images/renewal-viewer-collection-load.png) shows the matching board,
+selection and retained note. Recovery banners are from the disposable profile.
+The preview was stopped before final checks.
+Initial unused-import/override warnings from retiring legacy APIs and a removed
+import still needed by the unused export method were corrected. No selected
+cases are skipped. Full-suite, engine and other-platform gates are not claimed.
+Remaining: collection/filter/widget ownership, scoped presentation, complete
+session/undo parity, Builder storage/recovery, later feature migrations and
+non-Linux/release gates. Milestones 1/2 and 3 remain partial; 4–7 are unfinished.
+
 ### Initial parity and ownership inventory (milestone 0, partial)
 
 The starting tree has 885 files under `lib/` and 674 under `test/`; these counts

@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 
+import '../features/documents/repositories/pgn_library_repository.dart';
+import '../features/documents/repositories/pgn_collection_decoder.dart';
+
 import '../features/documents/repositories/viewer_preferences_repository.dart';
 import 'package:flutter/widgets.dart';
 import 'package:path/path.dart' as p;
@@ -24,11 +27,15 @@ import '../widgets/pgn_viewer_widget.dart';
 class PgnViewerLifetime {
   PgnViewerLifetime({
     required PgnCollectionRepository repository,
+    required PgnCollectionDecoder collectionDecoder,
+    required PgnLibraryRepository library,
     required ViewerPreferencesRepository preferences,
     required WorkspaceRecoveryStore<PgnWorkspaceSnapshot> store,
   }) {
     controller = PgnViewerController(
       collectionRepository: repository,
+      collectionDecoder: collectionDecoder,
+      library: library,
       preferences: preferences,
       pgnWidgetController: reader,
       analysisController: analysis,

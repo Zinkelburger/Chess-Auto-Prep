@@ -11,7 +11,8 @@ library;
 
 import 'dart:io';
 
-import 'package:chess_auto_prep/core/pgn/pgn_collection_helpers.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_collection.dart';
+
 import 'package:chess_auto_prep/features/engine_tournament/models/adjudication_rules.dart';
 import 'package:chess_auto_prep/features/engine_tournament/models/engine_spec.dart';
 import 'package:chess_auto_prep/features/engine_tournament/models/stored_tournament.dart';

@@ -25,7 +25,6 @@ mixin _SliceOps on ChangeNotifier {
   bool get showOpeningTree;
   Future<void> loadCurrentGame();
   void applySortMode();
-  String buildExportContent();
   void _rememberCurrentPlace();
 
   List<int>? _activeSliceIndices;
@@ -208,18 +207,6 @@ mixin _SliceOps on ChangeNotifier {
     await persistViewerPreference(
       () => preferences.saveSlice(path, const SliceConfig.empty()),
     );
-  }
-
-  Future<String?> exportSliceToPath(String outPath) async {
-    if (filteredGames.isEmpty || filePath == null) return null;
-    final savePath = p.extension(outPath) == '.pgn' ? outPath : '$outPath.pgn';
-    try {
-      await StorageFactory.instance.writeFile(savePath, buildExportContent());
-      return savePath;
-    } catch (e) {
-      debugPrint('Export failed: $e');
-      return null;
-    }
   }
 }
 

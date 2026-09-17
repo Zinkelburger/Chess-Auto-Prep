@@ -1,5 +1,11 @@
 import 'dart:io';
 
+import '../features/documents/repositories/pgn_library_repository.dart';
+import '../infrastructure/documents/storage_pgn_library_repository.dart';
+import '../services/default_pgn_service.dart';
+import '../features/documents/repositories/pgn_collection_decoder.dart';
+import '../infrastructure/documents/isolate_pgn_collection_decoder.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
 import '../features/documents/repositories/viewer_preferences_repository.dart';
 import '../infrastructure/documents/shared_preferences_viewer_repository.dart';
@@ -94,3 +100,12 @@ PgnCollectionRepository createPgnCollectionRepository({
 
 ViewerPreferencesRepository createViewerPreferencesRepository() =>
     SharedPreferencesViewerRepository(SharedPreferences.getInstance);
+
+PgnCollectionDecoder createPgnCollectionDecoder() =>
+    const IsolatePgnCollectionDecoder();
+
+PgnLibraryRepository createPgnLibraryRepository() =>
+    StoragePgnLibraryRepository(
+      StorageFactory.instance,
+      directory: () => DefaultPgnService.collectionsPath,
+    );

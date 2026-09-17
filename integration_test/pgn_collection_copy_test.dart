@@ -40,7 +40,7 @@ void main() {
       await Clipboard.setData(
         const ClipboardData(
           text:
-              '; Pasted banner\n\n[Event "Pasted"]\n[White "Alice"]\n[Black "Bob"]\n\n1. e4 {Pasted note} e5 *\n',
+              '; Pasted banner\r\n\r\n  [Event "Pasted"]\n[White "Alice"]\n[Black "Bob"]\n\n1. e4 {Pasted note} e5 *\n',
         ),
       );
       await tester.tap(find.text('Actions').last);

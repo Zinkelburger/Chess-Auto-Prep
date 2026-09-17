@@ -1,7 +1,8 @@
-import 'package:chess_auto_prep/models/game_outcome.dart';
 import 'dart:io';
 
-import 'package:chess_auto_prep/core/pgn/pgn_collection_helpers.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_collection.dart';
+import 'package:chess_auto_prep/models/game_outcome.dart';
+
 import 'package:chess_auto_prep/features/engine_tournament/models/engine_spec.dart';
 import 'package:chess_auto_prep/features/engine_tournament/models/stored_tournament.dart';
 import 'package:chess_auto_prep/features/engine_tournament/models/time_control.dart';

@@ -82,7 +82,10 @@ Viewer reading checkpoints now have a pure ordered session owner and injected
 preferences repository, with acknowledged-write deduplication, explicit failure/retry
 and stale recent-file read protection. Existing preference keys and game identities
 are preserved. This does not complete variation cursor, panel or whole-workspace
-restoration. Legacy collection controller/widget ownership, remaining Builder storage/
+restoration. Collection read/decode requests now have a pure feature owner with
+stale-result rejection and an injected isolate decoder; read-only library lookups
+are also injected. Adoption rechecks manual edits made during file reads or paste
+parsing. Legacy collection presentation/filter/widget ownership, remaining Builder storage/
 session ownership and draft recovery, incremental editor indexing, undo receipts, variation-cursor/filter/panel
 restoration and complete large-document performance evidence remain pending.
 Study now has independent cursor/metadata projections and scoped subscriptions;

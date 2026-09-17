@@ -4,7 +4,7 @@
 
 - Migrated features use `lib/features/<name>/{models,controllers,repositories,widgets}`.
   Repertoire catalog code lives in `features/repertoires/`; public PGN document
-  contracts and the Viewer game owner live in `features/documents/`; Study ownership lives in
+  contracts and the Viewer game, collection-load and session owners live in `features/documents/`; Study ownership lives in
   `features/studies/`; pure PGN text/replay utilities live in `chess_core/pgn/`;
   stored engine verdicts and annotation transforms live in `chess_core/analysis/`;
   typed settings contracts and state live in `features/settings/`; the older singular

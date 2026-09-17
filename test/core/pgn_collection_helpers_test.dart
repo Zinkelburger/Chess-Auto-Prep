@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/chess_core/pgn/pgn_collection.dart';
 import 'package:chess_auto_prep/chess_core/pgn/study_metadata.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chess_auto_prep/core/pgn/pgn_collection_helpers.dart';
@@ -112,6 +113,22 @@ void main() {
         "; Alexander Alekhine's Best Games\n"
         '; Compiled by KingG on chessgames.com',
       );
+    });
+
+    test('retains a banner before indented CRLF headers', () {
+      const content =
+          '\uFEFF; Reader banner\r\n% preserved escape\r\n\r\n  [Event "Indented"]\r\n\r\n1. e4 *';
+      expect(parseMultiGamePgn(content), hasLength(1));
+      expect(
+        pgnCollectionPreamble(content),
+        '; Reader banner\r\n% preserved escape',
+      );
+    });
+
+    test('retains leading comments that the headerless splitter omits', () {
+      const content = '; Reader banner\n\n1. e4 e5 *';
+      expect(parseMultiGamePgn(content), hasLength(1));
+      expect(pgnCollectionPreamble(content), '; Reader banner');
     });
 
     test('a file that opens on a game has no preamble', () {

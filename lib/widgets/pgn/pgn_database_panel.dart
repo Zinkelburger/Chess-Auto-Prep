@@ -1,7 +1,8 @@
 import 'dart:async';
+
+import 'package:chess_auto_prep/chess_core/pgn/pgn_collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import '../../core/pgn/pgn_collection_helpers.dart';
 import '../../models/pgn_game_entry.dart';
 import 'package:chess_auto_prep/chess_core/pgn/pgn_position_replay.dart';
 import '../../services/storage/storage_factory.dart';

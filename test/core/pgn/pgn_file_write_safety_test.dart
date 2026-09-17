@@ -23,6 +23,9 @@ library;
 
 import 'dart:async';
 
+import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_library_repository.dart';
+import 'package:chess_auto_prep/infrastructure/documents/isolate_pgn_collection_decoder.dart';
+
 import 'package:chess_auto_prep/infrastructure/documents/shared_preferences_viewer_repository.dart';
 
 import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_collection_repository.dart';
@@ -179,6 +182,11 @@ List<String> _allComments(PgnGame<PgnNodeData> game) {
 Future<PgnViewerController> _openTheFile(_MemoryStorage storage) async {
   storage.writeBehindOurBack(_path, _fileText());
   final controller = PgnViewerController(
+    collectionDecoder: const IsolatePgnCollectionDecoder(),
+    library: StoragePgnLibraryRepository(
+      StorageFactory.instance,
+      directory: () async => '/collections',
+    ),
     preferences: SharedPreferencesViewerRepository(
       SharedPreferences.getInstance,
     ),
@@ -423,6 +431,11 @@ void main() {
     await c.flushPendingMetadata();
 
     final reopened = PgnViewerController(
+      collectionDecoder: const IsolatePgnCollectionDecoder(),
+      library: StoragePgnLibraryRepository(
+        StorageFactory.instance,
+        directory: () async => '/collections',
+      ),
       preferences: SharedPreferencesViewerRepository(
         SharedPreferences.getInstance,
       ),

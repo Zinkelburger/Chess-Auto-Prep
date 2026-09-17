@@ -1491,7 +1491,19 @@ PGN collection edits now belong to
 forwards commands and observes this one edit owner; the metadata mixin is retired.
 `PgnCollectionRepository` is injected at construction, with production setup in
 `app/app_dependencies.dart` and its storage/native adapter under
-`infrastructure/documents/`. Read/session/filter migration remains separate.
+`infrastructure/documents/`. `ViewerCollectionLoadController` owns read/decode
+request revisions through the injected collection repository and
+`PgnCollectionDecoder`; the production isolate adapter calls the pure
+`chess_core/pgn/pgn_collection.dart` codec. Leading banners survive indented/CRLF
+headers and headerless movetext in copies and recovery. File, paste, close, navigation and
+recovery replacement share request invalidation. Late read/decode/metadata
+successes and failures cannot publish to a newer collection. The host rechecks
+manual-draft protection immediately before adopting a completed load.
+`PgnLibraryRepository` supplies recent-file existence, browse parents and the
+collection directory; direct Viewer `StorageFactory` access is retired. Startup
+selects its storage adapter and the directory supplier. The unused slice-export
+write bypass is removed; production export retains the shared exclusive-copy
+interaction. Filtering and full collection presentation ownership remain legacy.
 
 The editor owns rating/comment changes, screen-only solitaire substitutions,
 per-game persisted baselines, the autosave timer and serialized writes. It captures
@@ -1531,8 +1543,8 @@ Pure mainline lexing and Study-header rewriting now live in
 
 ```
 PgnViewerScreen._pickFile → `FilePicker.pickFile` (Linux: **XDG Desktop Portal only** in `file_picker` ≥10.3 — D-Bus `org.freedesktop.portal.FileChooser`; no zenity/kdialog fallback) → PgnViewerController.loadFile(path)
-  → StorageService.fileExists plus PgnCollectionRepository.open (native Linux snapshot captures content and file revision; other hosts use the legacy adapter)
-  → compute(parseMultiGamePgn) → lightweight headers/raw text in allGames / filteredGames; only the selected game is parsed into the reader
+  → ViewerCollectionLoadController → PgnCollectionRepository.open (native Linux snapshot captures content and file revision; other hosts use the legacy adapter)
+  → injected PgnCollectionDecoder → IsolatePgnCollectionDecoder → chess-core parseMultiGamePgn; lightweight headers/raw text in allGames / filteredGames; only the selected game is parsed into the reader
   → on failure: controller.errorMessage + debugPrint; screen shows SnackBar + inline error in empty state
   → on success: recent-files prefs, missing ECO/Opening tags, optional saved slice and reading-session restore, loadCurrentGame
   → viewer startup reopens the last file, filters, sort order, game and mainline move; explicit file/game handoffs take precedence. Closing the collection clears auto-reopen, keeping its per-file bookmark. `features/documents/models/viewer_session.dart` validates game identity before restoring a cursor, including when a file was reordered. The pure `ViewerSessionController` serializes checkpoints and only deduplicates acknowledged saves; failed writes remain retryable. `ViewerPreferencesRepository` is injected at app startup, with `SharedPreferencesViewerRepository` retaining the existing bookmark, recent-file, filter and opening-preference keys. Failed platform acknowledgements are surfaced, and reads refresh the plugin cache. App shutdown awaits its final reading checkpoint.

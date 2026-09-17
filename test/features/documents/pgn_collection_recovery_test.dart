@@ -1,6 +1,7 @@
 import 'dart:async';
+
+import 'package:chess_auto_prep/chess_core/pgn/pgn_collection.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chess_auto_prep/core/pgn/pgn_collection_helpers.dart';
 import 'package:chess_auto_prep/features/documents/controllers/pgn_collection_editor.dart';
 import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
 import 'package:chess_auto_prep/features/documents/models/pgn_workspace_snapshot.dart';

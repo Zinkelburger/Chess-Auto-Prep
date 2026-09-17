@@ -1,5 +1,8 @@
 import 'dart:io';
 
+import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_library_repository.dart';
+import 'package:chess_auto_prep/infrastructure/documents/isolate_pgn_collection_decoder.dart';
+
 import 'package:chess_auto_prep/infrastructure/documents/shared_preferences_viewer_repository.dart';
 import 'package:chess_auto_prep/app/pgn_viewer_lifetime.dart';
 import 'package:chess_auto_prep/features/documents/models/pgn_workspace_snapshot.dart';
@@ -56,6 +59,11 @@ void main() {
       directory.deleteSync(recursive: true);
     });
     lifetime = PgnViewerLifetime(
+      collectionDecoder: const IsolatePgnCollectionDecoder(),
+      library: StoragePgnLibraryRepository(
+        StorageFactory.instance,
+        directory: () async => '/collections',
+      ),
       preferences: SharedPreferencesViewerRepository(
         SharedPreferences.getInstance,
       ),

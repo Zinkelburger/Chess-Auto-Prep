@@ -1,5 +1,10 @@
 import 'dart:async';
 
+import '../features/documents/repositories/pgn_library_repository.dart';
+import '../features/documents/controllers/viewer_collection_load_controller.dart';
+import '../features/documents/models/viewer_collection_load.dart';
+import '../features/documents/repositories/pgn_collection_decoder.dart';
+
 import 'package:chess_auto_prep/chess_core/pgn/study_metadata.dart';
 
 import 'package:dartchess/dartchess.dart';
@@ -21,7 +26,6 @@ import '../models/opening_tree.dart';
 import '../models/pgn_filter_models.dart';
 import '../models/pgn_game_entry.dart';
 export '../models/pgn_game_entry.dart';
-import '../services/default_pgn_service.dart';
 import '../features/documents/controllers/pgn_collection_editor.dart';
 import '../features/documents/repositories/pgn_collection_repository.dart';
 import '../features/documents/models/pgn_document.dart';
@@ -29,7 +33,6 @@ import '../features/documents/models/pgn_workspace_snapshot.dart';
 import '../features/documents/repositories/document_save_actions.dart';
 import '../services/game_analysis_controller.dart';
 import '../services/opening_book_service.dart';
-import '../services/storage/storage_factory.dart';
 import 'game_sorting.dart';
 import 'pgn/pgn_viewer_handle.dart';
 import 'pgn/solitaire_controller.dart';
@@ -108,6 +111,8 @@ class PgnViewerController extends ChangeNotifier
     with SafeChangeNotifier, _SliceOps, _WindowOps {
   PgnViewerController({
     required this.collectionRepository,
+    required this.collectionDecoder,
+    required this.library,
     required this.preferences,
     required this.pgnWidgetController,
     required this.analysisController,
@@ -144,6 +149,12 @@ class PgnViewerController extends ChangeNotifier
   }
 
   final PgnCollectionRepository collectionRepository;
+  final PgnCollectionDecoder collectionDecoder;
+  final PgnLibraryRepository library;
+  late final _collectionLoads = ViewerCollectionLoadController(
+    repository: collectionRepository,
+    decoder: collectionDecoder,
+  );
   @override
   final ViewerPreferencesRepository preferences;
   late final PgnCollectionEditor _editor;
@@ -153,13 +164,14 @@ class PgnViewerController extends ChangeNotifier
     String? path, {
     int? expectedGames,
   }) async {
-    final entries = await compute(parseMultiGamePgn, content);
+    final decoded = await collectionDecoder.decode(content);
+    final entries = List<PgnGameEntry>.of(decoded.games);
     if ((entries.isEmpty && expectedGames != 0) ||
         (expectedGames != null && entries.length != expectedGames)) {
       throw const FormatException('No valid games in the document');
     }
     return () {
-      _loadEpoch++;
+      _collectionLoads.invalidate();
       _gameLoadEpoch++;
       _sliceEpoch++;
       isLoading = false;
@@ -173,7 +185,7 @@ class PgnViewerController extends ChangeNotifier
           entries,
           current: perspective,
         ),
-        preamble: pgnCollectionPreamble(content),
+        preamble: decoded.preamble,
         flushOutgoing: false,
       );
       if (expectedGames == null) unawaited(loadCurrentGame());
@@ -416,7 +428,7 @@ class PgnViewerController extends ChangeNotifier
     try {
       final path = await _sessions.lastFile();
       if (!_isCurrentLoad(0) || path == null) return;
-      if (!await StorageFactory.instance.fileExists(path)) return;
+      if (!await library.exists(path)) return;
       if (!_isCurrentLoad(0)) return;
       await loadFile(path);
     } catch (_) {
@@ -431,11 +443,11 @@ class PgnViewerController extends ChangeNotifier
   /// Separate generations for whole-collection IO and the selected game's
   /// cached analysis. A slice epoch cannot protect these: file reads and game
   /// parses may overlap without any slice operation at all.
-  int _loadEpoch = 0;
+  int get _loadEpoch => _collectionLoads.revision;
   int _gameLoadEpoch = 0;
 
   bool _isCurrentLoad(int epoch) =>
-      !isDisposed && isActive() && epoch == _loadEpoch;
+      !isDisposed && isActive() && _collectionLoads.isCurrent(epoch);
 
   /// Text above the first game in the loaded file — a `;`/`%` banner, which
   /// is not a game and so is not in [allGames]. Held here because a write
@@ -590,7 +602,7 @@ class PgnViewerController extends ChangeNotifier
   @override
   void dispose() {
     unawaited(saveSession());
-    _loadEpoch++;
+    _collectionLoads.dispose();
     _openingEpoch++;
     _fenIndex.cancel();
     _autoPlay.dispose();
@@ -609,9 +621,8 @@ class PgnViewerController extends ChangeNotifier
     try {
       final files = await preferences.loadRecentFiles();
       final existing = <String>[];
-      final storage = StorageFactory.instance;
       for (final f in files) {
-        if (await storage.fileExists(f)) existing.add(f);
+        if (await library.exists(f)) existing.add(f);
       }
       if (isDisposed || !isActive() || epoch != _recentEpoch) return;
       recentFiles = existing;
@@ -624,10 +635,16 @@ class PgnViewerController extends ChangeNotifier
   }
 
   Future<void> loadCollections() async {
-    final dir = await DefaultPgnService.collectionsPath;
-    if (isDisposed || !isActive()) return;
-    collectionsDir = dir;
-    notifyListeners();
+    try {
+      final dir = await library.collectionsDirectory();
+      if (isDisposed || !isActive()) return;
+      collectionsDir = dir;
+      notifyListeners();
+    } catch (_) {
+      if (isDisposed || !isActive()) return;
+      errorMessage = 'Could not locate the PGN library.';
+      notifyListeners();
+    }
   }
 
   Future<void> addToRecentFiles(String path) async {
@@ -642,12 +659,11 @@ class PgnViewerController extends ChangeNotifier
   }
 
   String? pickFileInitialDirectory() {
-    final storage = StorageFactory.instance;
     if (filePath != null) {
-      return storage.parentPath(filePath!);
+      return library.parentDirectory(filePath!);
     }
     if (recentFiles.isNotEmpty) {
-      return storage.parentPath(recentFiles.first);
+      return library.parentDirectory(recentFiles.first);
     }
     return collectionsDir;
   }
@@ -706,7 +722,8 @@ class PgnViewerController extends ChangeNotifier
   Future<void> loadFile(String path, {bool restoreSavedSlice = true}) async {
     if (!canReplaceCollection()) return;
     unawaited(saveSession());
-    final loadEpoch = ++_loadEpoch;
+    final loading = _collectionLoads.loadFile(path);
+    final loadEpoch = _loadEpoch;
     isPreparingCollection = false;
     _restoringSession = false;
     // A collection request also makes any cached-analysis parse for the old
@@ -715,58 +732,30 @@ class PgnViewerController extends ChangeNotifier
     errorMessage = null;
     pendingSliceRestore = null;
     _sliceEpoch++;
-    final storage = StorageFactory.instance;
     final fileName = p.basename(path);
 
+    isLoading = true;
+    notifyListeners();
     try {
-      final exists = await storage.fileExists(path);
-      if (!_isCurrentLoad(loadEpoch)) return;
-      if (!exists) {
-        errorMessage = 'File not found: $fileName';
-        // The epoch bump above told any in-flight slice op that this load owns
-        // isLoading now, so release it even though this path never set it.
+      final result = await loading;
+      if (!_isCurrentLoad(loadEpoch) || result == null) return;
+      if (result is ViewerCollectionLoadFailed) {
         isLoading = false;
-        debugPrint('PgnViewerController.loadFile: file does not exist: $path');
+        errorMessage = _collectionFailureMessage(result, fileName: fileName);
         notifyListeners();
         return;
       }
-
-      isLoading = true;
-      notifyListeners();
-
-      final opened = await collectionRepository.open(path);
-      final content = opened is PgnOpened ? opened.snapshot.content : null;
-      if (!_isCurrentLoad(loadEpoch)) return;
-
-      if (content == null) {
-        isLoading = false;
-        errorMessage = 'Could not read $fileName';
-        debugPrint('PgnViewerController.loadFile: read failed: $path');
-        notifyListeners();
+      // Manual edits or a recovery action may have started during the read.
+      // The initial permission to replace is not valid for that newer state.
+      if (!canReplaceCollection()) {
+        if (_isCurrentLoad(loadEpoch)) {
+          isLoading = false;
+          notifyListeners();
+        }
         return;
       }
-
-      if (content.trim().isEmpty) {
-        isLoading = false;
-        errorMessage = 'File is empty: $fileName';
-        debugPrint('PgnViewerController.loadFile: empty file: $path');
-        notifyListeners();
-        return;
-      }
-
-      final entries = await compute(parseMultiGamePgn, content);
-      if (!_isCurrentLoad(loadEpoch)) return;
-
-      if (entries.isEmpty) {
-        isLoading = false;
-        errorMessage = 'No valid PGN games in $fileName';
-        debugPrint('PgnViewerController.loadFile: no games parsed: $path');
-        notifyListeners();
-        return;
-      }
-
-      final modified = await storage.fileStat(path);
-      if (!_isCurrentLoad(loadEpoch)) return;
+      final loaded = result as ViewerCollectionLoaded;
+      final entries = List<PgnGameEntry>.of(loaded.document.games);
 
       _sliceEpoch++;
       _restoringSession = true;
@@ -777,10 +766,10 @@ class PgnViewerController extends ChangeNotifier
           entries,
           current: perspective,
         ),
-        preamble: pgnCollectionPreamble(content),
-        baseline: (opened as PgnOpened).snapshot,
+        preamble: loaded.document.preamble,
+        baseline: loaded.snapshot,
       );
-      loadedFileModified = modified?.modified;
+      loadedFileModified = loaded.modified;
       notifyListeners();
 
       await addToRecentFiles(path);
@@ -848,6 +837,28 @@ class PgnViewerController extends ChangeNotifier
     }
   }
 
+  String _collectionFailureMessage(
+    ViewerCollectionLoadFailed result, {
+    String? fileName,
+  }) {
+    return switch (result.failure) {
+      ViewerCollectionLoadFailure.missing => 'File not found: $fileName',
+      ViewerCollectionLoadFailure.unreadable => 'Could not read $fileName',
+      ViewerCollectionLoadFailure.empty =>
+        fileName == null
+            ? 'Clipboard is empty — copy some PGN first'
+            : 'File is empty: $fileName',
+      ViewerCollectionLoadFailure.noGames =>
+        fileName == null
+            ? 'No valid PGN games found in the pasted text'
+            : 'No valid PGN games in $fileName',
+      ViewerCollectionLoadFailure.decoding =>
+        fileName == null
+            ? 'Could not parse the pasted PGN'
+            : 'Could not parse $fileName',
+    };
+  }
+
   /// Load PGN games directly from raw text (e.g. pasted from the clipboard).
   /// Held in memory only — there is no backing file, so rating/comment edits
   /// are not persisted to disk.
@@ -859,35 +870,33 @@ class PgnViewerController extends ChangeNotifier
   Future<void> loadPgnContent(String content, {String? initialFen}) async {
     if (!canReplaceCollection()) return;
     unawaited(saveSession());
-    final loadEpoch = ++_loadEpoch;
+    final loading = _collectionLoads.loadText(content);
+    final loadEpoch = _loadEpoch;
     isPreparingCollection = false;
     _restoringSession = false;
     _gameLoadEpoch++;
     errorMessage = null;
     pendingSliceRestore = null;
     _sliceEpoch++;
-    final trimmed = content.trim();
-    if (trimmed.isEmpty) {
-      errorMessage = 'Clipboard is empty — copy some PGN first';
-      // The epoch bump above told any in-flight slice op that this load owns
-      // isLoading now, so release it even though this path never set it.
-      isLoading = false;
-      notifyListeners();
-      return;
-    }
-
     isLoading = true;
     notifyListeners();
-
-    final entries = await compute(parseMultiGamePgn, trimmed);
-    if (!_isCurrentLoad(loadEpoch)) return;
-
-    if (entries.isEmpty) {
+    final result = await loading;
+    if (!_isCurrentLoad(loadEpoch) || result == null) return;
+    if (result is ViewerCollectionLoadFailed) {
       isLoading = false;
-      errorMessage = 'No valid PGN games found in the pasted text';
+      errorMessage = _collectionFailureMessage(result);
       notifyListeners();
       return;
     }
+    if (!canReplaceCollection()) {
+      if (_isCurrentLoad(loadEpoch)) {
+        isLoading = false;
+        notifyListeners();
+      }
+      return;
+    }
+    final loaded = result as ViewerCollectionLoaded;
+    final entries = List<PgnGameEntry>.of(loaded.document.games);
 
     isLoading = false;
     _sliceEpoch++;
@@ -896,7 +905,7 @@ class PgnViewerController extends ChangeNotifier
       path: null,
       entries: entries,
       newPerspective: Perspective.forCollection(entries, current: perspective),
-      preamble: pgnCollectionPreamble(content),
+      preamble: loaded.document.preamble,
     );
     pgnInitialFen = initialFen;
     notifyListeners();
@@ -941,7 +950,7 @@ class PgnViewerController extends ChangeNotifier
     final initialFen = pgnInitialFen;
     return () async {
       if (!isActive() || !canReplaceCollection()) return false;
-      final loadEpoch = ++_loadEpoch;
+      final loadEpoch = _collectionLoads.invalidate();
       isPreparingCollection = false;
       _sliceEpoch++;
       _gameLoadEpoch++;
@@ -1000,7 +1009,7 @@ class PgnViewerController extends ChangeNotifier
     _restoringSession = false;
     // Bumped first: an in-flight load or slice recompute would otherwise land
     // its results — and its isLoading release — on the cleared state.
-    _loadEpoch++;
+    _collectionLoads.invalidate();
     isPreparingCollection = false;
     _gameLoadEpoch++;
     _sliceEpoch++;
@@ -1450,7 +1459,6 @@ class PgnViewerController extends ChangeNotifier
     return '${p.basenameWithoutExtension(filePath!)}_slice.pgn';
   }
 
-  @override
   String buildExportContent() {
     return '${filteredGames.map((g) => g.pgnText).join('\n\n')}\n';
   }

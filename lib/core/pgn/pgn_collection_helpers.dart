@@ -1,80 +1,15 @@
-/// Top-level helpers for whole-PGN-collection work (parsing, slicing,
+/// Top-level helpers for whole-PGN-collection work (slicing,
 /// metadata rewriting, protagonist detection) used by
 /// `pgn_viewer_controller.dart`, which re-exports this library so existing
 /// importers keep working.
 library;
 
+import '../../chess_core/pgn/pgn_collection.dart';
 import '../../models/pgn_filter_models.dart';
 import '../../models/pgn_game_entry.dart';
 import '../../services/games_library/game_filter.dart' show dedupKeyForHeaders;
 import '../../chess_core/pgn/pgn_text.dart' as pgn;
 import '../../services/pgn_slice_filter.dart' as pgn;
-
-// ---------------------------------------------------------------------------
-// Top-level helpers used inside Isolate.run closures.
-// Must NOT be class statics — Dart captures the enclosing class context
-// when referencing static members from a closure, which pulls unsendable
-// State/Widget objects into the isolate message.
-// ---------------------------------------------------------------------------
-
-List<PgnGameEntry> parseMultiGamePgn(String content) {
-  final entries = <PgnGameEntry>[];
-  for (final chunk in pgn.splitPgnIntoGames(content)) {
-    _addChunk(entries, chunk);
-  }
-  return entries;
-}
-
-/// Offset of the next `[Event ` that begins a line strictly after [from]
-/// (so the chunk starting at [from] is never empty), or null.
-int? _nextChunkBoundary(String content, int from) {
-  var search = from + 1;
-  while (true) {
-    final idx = content.indexOf('[Event ', search);
-    if (idx < 0) return null;
-    if (idx > 0 && content.codeUnitAt(idx - 1) == 0x0A) return idx;
-    search = idx + 1;
-  }
-}
-
-void _addChunk(List<PgnGameEntry> entries, String chunk) {
-  final trimmed = chunk.trim();
-  if (trimmed.isEmpty) return;
-  // A comment-only chunk (e.g. a `;`-comment banner before the first
-  // `[Event` header, as in chessgames.com collection downloads) is not a
-  // game; without this it would surface as a blank extra game.
-  if (_isCommentOnly(trimmed)) return;
-  final headers = pgn.extractHeaders(trimmed);
-  final rating = int.tryParse(headers['StudyRating'] ?? '') ?? 0;
-  entries.add(
-    PgnGameEntry(
-      headers: headers,
-      pgnText: trimmed,
-      studyRating: rating.clamp(0, 5),
-      studySummary: headers['StudySummary'] ?? '',
-    ),
-  );
-}
-
-/// The text above the first game that [parseMultiGamePgn] does not hand back
-/// as a game: a `;` or `%` banner, the shape chessgames.com collection
-/// downloads arrive in.
-///
-/// It has to be kept somewhere, because the only copy of a collection the app
-/// holds is its list of games, and `doPersistMetadata` rewrites the whole file
-/// from that list. A star, a comment edit or an engine review therefore wrote
-/// the file back *without* the banner — text the reader wrote, deleted by an
-/// edit that had nothing to do with it. Returned trimmed, empty when there is
-/// none.
-String pgnCollectionPreamble(String content) {
-  final head = content.substring(
-    0,
-    _nextChunkBoundary(content, 0) ?? content.length,
-  );
-  final trimmed = head.trim();
-  if (trimmed.isEmpty || !_isCommentOnly(trimmed)) return '';
-  return trimmed;
-}
 
 /// The file as it now stands on disk, with only the games *we* changed
 /// substituted into it — the write to use when the file moved under us.
@@ -146,21 +81,6 @@ String? mergeEditedGamesIntoDiskCopy({
   final preamble = pgnCollectionPreamble(diskContent);
   final body = [for (final c in chunks) c.trim()].join('\n\n');
   return preamble.isEmpty ? '$body\n' : '$preamble\n\n$body\n';
-}
-
-/// Whether every line of [text] is blank or a top-level comment line.  Stops
-/// at the first line that is neither, so a real game is settled by its
-/// first header rather than a scan of all its lines.
-bool _isCommentOnly(String text) {
-  var lineStart = 0;
-  while (lineStart <= text.length) {
-    var lineEnd = text.indexOf('\n', lineStart);
-    if (lineEnd < 0) lineEnd = text.length;
-    final line = text.substring(lineStart, lineEnd).trim();
-    if (line.isNotEmpty && !pgn.isPgnCommentLine(line)) return false;
-    lineStart = lineEnd + 1;
-  }
-  return true;
 }
 
 Future<List<int>> applySliceConfig(

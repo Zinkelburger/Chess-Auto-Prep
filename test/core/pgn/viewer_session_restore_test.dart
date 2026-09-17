@@ -1,6 +1,10 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_library_repository.dart';
+import 'package:chess_auto_prep/infrastructure/documents/isolate_pgn_collection_decoder.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_collection.dart';
+
 import 'package:chess_auto_prep/features/documents/models/viewer_session.dart';
 import 'package:chess_auto_prep/features/documents/repositories/viewer_preferences_repository.dart';
 import 'package:chess_auto_prep/infrastructure/documents/shared_preferences_viewer_repository.dart';
@@ -80,6 +84,11 @@ void main() {
     ViewerPreferencesRepository? preferences,
   ]) {
     final controller = PgnViewerController(
+      collectionDecoder: const IsolatePgnCollectionDecoder(),
+      library: StoragePgnLibraryRepository(
+        StorageFactory.instance,
+        directory: () async => '/collections',
+      ),
       preferences:
           preferences ??
           SharedPreferencesViewerRepository(SharedPreferences.getInstance),

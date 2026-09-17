@@ -1,5 +1,11 @@
 import 'dart:async';
 
+import 'package:chess_auto_prep/features/documents/repositories/pgn_collection_decoder.dart';
+import 'package:chess_auto_prep/features/documents/models/viewer_collection_load.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_collection.dart';
+import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_library_repository.dart';
+import 'package:chess_auto_prep/infrastructure/documents/isolate_pgn_collection_decoder.dart';
+
 import 'package:chess_auto_prep/infrastructure/documents/shared_preferences_viewer_repository.dart';
 import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_collection_repository.dart';
 
@@ -43,6 +49,11 @@ class _FakeAnalysisController extends GameAnalysisController {
 class _GatedOpeningController extends PgnViewerController {
   _GatedOpeningController()
     : super(
+        collectionDecoder: const IsolatePgnCollectionDecoder(),
+        library: StoragePgnLibraryRepository(
+          StorageFactory.instance,
+          directory: () async => '/collections',
+        ),
         preferences: SharedPreferencesViewerRepository(
           SharedPreferences.getInstance,
         ),
@@ -70,10 +81,23 @@ PgnGameEntry _game({String white = 'A', String black = 'B'}) {
   );
 }
 
-PgnViewerController _makeController() {
+class _ControlledDecoder implements PgnCollectionDecoder {
+  final pending = Completer<DecodedPgnCollection>();
+  @override
+  Future<DecodedPgnCollection> decode(String content) => pending.future;
+}
+
+PgnViewerController _makeController({
+  PgnCollectionDecoder decoder = const IsolatePgnCollectionDecoder(),
+}) {
   // A detached widget controller behaves as a no-op stub (its methods guard on
   // a null attached state), so it is safe to use without mounting a widget.
   return PgnViewerController(
+    collectionDecoder: decoder,
+    library: StoragePgnLibraryRepository(
+      StorageFactory.instance,
+      directory: () async => '/collections',
+    ),
     preferences: SharedPreferencesViewerRepository(
       SharedPreferences.getInstance,
     ),
@@ -203,6 +227,58 @@ void main() {
   );
 
   group('load ordering', () {
+    for (final pasted in [false, true]) {
+      test(
+        'manual edits made during ${pasted ? 'paste decoding' : 'file loading'} keep the current document',
+        () async {
+          final storage = _GatedStorage();
+          StorageFactory.instanceForTest = storage;
+          final decoder = _ControlledDecoder();
+          final c = _makeController(decoder: decoder);
+          addTearDown(c.dispose);
+          c.setAutoSave(false);
+          final game = _game();
+          _seed(c, [game]);
+          c.filePath = '/tmp/current.pgn';
+          c.rememberPersistedGame(game);
+          const incoming = '[Event "Replacement"]\n\n1. d4 d5 *';
+          final loading = pasted
+              ? c.loadPgnContent(incoming)
+              : c.loadFile('/tmp/new.pgn');
+          await Future<void>.delayed(Duration.zero);
+          c.persistMoveCommentsFor(game, '1. e4 { Keep my draft } e5 *');
+          if (!pasted) storage.reads['/tmp/new.pgn']!.complete(incoming);
+          decoder.pending.complete(
+            DecodedPgnCollection(parseMultiGamePgn(incoming), ''),
+          );
+          await loading;
+          expect(c.allGames.single, same(game));
+          expect(c.filePath, '/tmp/current.pgn');
+          expect(game.pgnText, contains('Keep my draft'));
+          expect(c.hasUnsavedChanges, isTrue);
+          expect(c.isLoading, isFalse);
+          expect(c.errorMessage, contains('Unsaved changes'));
+        },
+      );
+    }
+
+    test(
+      'failed pasted decoding preserves the current document and releases loading',
+      () async {
+        final decoder = _ControlledDecoder();
+        final c = _makeController(decoder: decoder);
+        addTearDown(c.dispose);
+        final game = _game();
+        _seed(c, [game]);
+        final loading = c.loadPgnContent('unreadable input');
+        decoder.pending.completeError(const FormatException('bad document'));
+        await loading;
+        expect(c.allGames.single, same(game));
+        expect(c.isLoading, isFalse);
+        expect(c.errorMessage, 'Could not parse the pasted PGN');
+      },
+    );
+
     test('a slower file read cannot replace the newest selection', () async {
       final storage = _GatedStorage();
       StorageFactory.instanceForTest = storage;
