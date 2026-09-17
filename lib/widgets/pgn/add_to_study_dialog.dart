@@ -3,11 +3,11 @@
 library;
 
 import 'dart:async';
+import '../../l10n/generated/app_localizations.dart';
 
 import 'package:flutter/material.dart';
 
 import '../../features/repertoires/models/repertoire_metadata.dart';
-import '../../services/storage/storage_factory.dart';
 import '../../theme/app_colors.dart';
 import '../../design_system/components/name_entry_dialog.dart';
 import '../study/study_name_dialog.dart' show sanitizeStudyName;
@@ -31,6 +31,7 @@ class AddToStudyResult {
 }
 
 class AddToStudyDialog extends StatefulWidget {
+  final Future<List<RepertoireMetadata>> Function() loadStudies;
   final String initialChapterName;
   final String title;
   final String? selectionSummary;
@@ -42,6 +43,7 @@ class AddToStudyDialog extends StatefulWidget {
   const AddToStudyDialog({
     super.key,
     required this.initialChapterName,
+    required this.loadStudies,
     this.title = 'Add line to study',
     this.selectionSummary,
     this.preferredPath,
@@ -57,6 +59,7 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
 
   List<RepertoireMetadata>? _studies; // null while loading
   String _query = '';
+  bool _loadFailed = false;
 
   @override
   void initState() {
@@ -66,8 +69,16 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
   }
 
   Future<void> _loadStudies() async {
-    final studies = await StorageFactory.instance.listStudyFiles();
-    if (mounted) setState(() => _studies = studies);
+    try {
+      final studies = await widget.loadStudies();
+      if (mounted)
+        setState(() {
+          _studies = List.unmodifiable(studies);
+          _loadFailed = false;
+        });
+    } catch (_) {
+      if (mounted) setState(() => _loadFailed = true);
+    }
   }
 
   @override
@@ -156,6 +167,12 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (_loadFailed)
+              TextButton.icon(
+                onPressed: _loadStudies,
+                icon: const Icon(Icons.refresh),
+                label: Text(AppLocalizations.of(context).studyListRetry),
+              ),
             if (widget.selectionSummary != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),

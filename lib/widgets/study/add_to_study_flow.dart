@@ -11,7 +11,6 @@ import 'package:provider/provider.dart';
 
 import '../../core/app_state.dart';
 import '../../features/studies/controllers/study_controller.dart';
-import '../../services/storage/storage_factory.dart';
 import '../../utils/app_messages.dart';
 import '../pgn/add_to_study_dialog.dart';
 
@@ -37,6 +36,7 @@ Future<void> runAddToStudyFlow(
   final result = await showDialog<AddToStudyResult>(
     context: context,
     builder: (_) => AddToStudyDialog(
+      loadStudies: context.read<StudyController>().listStudies,
       initialChapterName: suggestedChapterName,
       title: pickerTitle,
       preferredPath: preferredPath,
@@ -51,8 +51,13 @@ Future<void> runAddToStudyFlow(
     if (pgn == null || !context.mounted) return;
     final path =
         result.existingPath ??
-        await StorageFactory.instance.studyFilePath(result.newStudyName!);
-    await study.addChapterToStudyFile(path, result.chapterName, pgn);
+        await study.copyDestination(result.newStudyName!);
+    await study.addChapterToStudyFile(
+      path,
+      result.chapterName,
+      pgn,
+      createOnly: result.newStudyName != null,
+    );
     if (!context.mounted) return;
     if (openAfterAdding) {
       appState.handOff(

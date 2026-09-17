@@ -1059,6 +1059,240 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Untitled PGN'**
   String get untitledPgnWorkspace;
+
+  /// Study import progress, results and recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Import: {name}'**
+  String studyImportJob(String name);
+
+  /// Study import progress, results and recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Starting…'**
+  String get studyImportStarting;
+
+  /// Study import progress, results and recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Cancelling…'**
+  String get studyImportCancelling;
+
+  /// Study import progress, results and recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Fetching game {game}/{total}'**
+  String studyImportFetching(int game, int total);
+
+  /// Study import progress, results and recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Game {game}/{total} · next in {seconds}s'**
+  String studyImportWaiting(int game, int seconds, int total);
+
+  /// Study import progress, results and recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Rate-limited — retrying game {game}/{total} in {seconds}s'**
+  String studyImportRetrying(int game, int seconds, int total);
+
+  /// Study import progress, results and recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded {count}'**
+  String studyImportDownloaded(int count);
+
+  /// Study import progress, results and recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Skipped game {id}'**
+  String studyImportSkipped(String id);
+
+  /// Study import progress, results and recovery
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 chapter} other{{count} chapters}}'**
+  String studyImportChapters(int count);
+
+  /// Study import progress, results and recovery
+  ///
+  /// In en, this message translates to:
+  /// **'The study importer is closed.'**
+  String get studyImportClosed;
+
+  /// Study import progress, results and recovery
+  ///
+  /// In en, this message translates to:
+  /// **'A collection download is already running.'**
+  String get studyImportAlreadyRunning;
+
+  /// Study import progress, results and recovery
+  ///
+  /// In en, this message translates to:
+  /// **'No games found in that collection.'**
+  String get studyImportEmpty;
+
+  /// Study import progress, results and recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Collection game IDs must be numeric.'**
+  String get studyImportInvalidIds;
+
+  /// Study import progress, results and recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Could not start the collection download. Try again.'**
+  String get studyImportStartupFailed;
+
+  /// Study import progress, results and recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Collection download stopped. Downloaded games remain cached.'**
+  String get studyImportDownloadFailed;
+
+  /// Study import progress, results and recovery
+  ///
+  /// In en, this message translates to:
+  /// **'chessgames.com is refusing requests. Downloaded games are cached — start the same collection again later to resume.'**
+  String get studyImportThrottled;
+
+  /// Study import progress, results and recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded games could not be saved. Review the downloaded content or try again later.'**
+  String get studyImportPublicationFailed;
+
+  /// Study import progress, results and recovery
+  ///
+  /// In en, this message translates to:
+  /// **'The study save could not be confirmed. Review the destination before retrying.'**
+  String get studyImportPublicationUncertain;
+
+  /// Study import progress, results and recovery
+  ///
+  /// In en, this message translates to:
+  /// **'No free study name was found after 100 attempts. Choose another destination for the downloaded games.'**
+  String get studyImportNameCollisions;
+
+  /// Study import progress, results and recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Importing {done}/{total}'**
+  String studyImportProgress(int done, int total);
+
+  /// Study import progress, results and recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Stop the download (keeps what has arrived)'**
+  String get studyImportStop;
+
+  /// Study import progress, results and recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Review downloaded study'**
+  String get studyImportReview;
+
+  /// Study import progress, results and recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading {count} games (~{minutes} min). chessgames.com is slow on purpose — keep working, it runs in the background.'**
+  String studyImportBackground(int count, int minutes);
+
+  /// Study import progress, results and recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Imported {count} games into “{name}” ({failed} unavailable).'**
+  String studyImportComplete(int count, int failed, String name);
+
+  /// Study import progress, results and recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Stopped the download. Saved {count} chapters into “{name}”.'**
+  String studyImportStopped(int count, String name);
+
+  /// Study import progress, results and recovery
+  ///
+  /// In en, this message translates to:
+  /// **'No study was saved ({failed} games unavailable).'**
+  String studyImportNoContent(int failed);
+
+  /// Study import progress, results and recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Open'**
+  String get studyImportOpen;
+
+  /// Study import progress, results and recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Lichess did not respond (rate-limited or offline). Try again shortly.'**
+  String get studyImportLichessOffline;
+
+  /// Study import progress, results and recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Study not found. If it is private or unlisted, log into Lichess first (Settings → Accounts), then try again.'**
+  String get studyImportLichessLogin;
+
+  /// Study import progress, results and recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Study not found. If it is private, log out and back in to grant study access.'**
+  String get studyImportLichessScope;
+
+  /// Study import progress, results and recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Lichess rejected the request. Log out and back in under Settings → Accounts, then try again.'**
+  String get studyImportLichessRejected;
+
+  /// Study import progress, results and recovery
+  ///
+  /// In en, this message translates to:
+  /// **'No public studies found for “{name}”.'**
+  String studyImportLichessUserMissing(String name);
+
+  /// Study import progress, results and recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Lichess returned HTTP {status}.'**
+  String studyImportLichessHttp(int status);
+
+  /// Study import progress, results and recovery
+  ///
+  /// In en, this message translates to:
+  /// **'That study is empty — nothing to import.'**
+  String get studyImportLichessEmpty;
+
+  /// Pending failed publication must be resolved before another collection starts
+  ///
+  /// In en, this message translates to:
+  /// **'Review the previous downloaded study before starting another import.'**
+  String get studyImportUnresolved;
+
+  /// Study handoff read failed
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open that study. Your current study is unchanged.'**
+  String get studyOpenFailed;
+
+  /// Compact snackbar action that opens imported document recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Review'**
+  String get studyImportReviewAction;
+
+  /// Study source PGN read failure
+  ///
+  /// In en, this message translates to:
+  /// **'Could not import that PGN. Your study is unchanged.'**
+  String get studyImportPgnFailed;
+
+  /// Retry a failed study library read
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load studies. Retry'**
+  String get studyListRetry;
 }
 
 class _AppLocalizationsDelegate

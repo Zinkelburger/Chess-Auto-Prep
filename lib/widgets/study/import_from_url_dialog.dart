@@ -8,15 +8,20 @@
 /// download and goes to [StudyImportController].
 library;
 
+import '../../l10n/generated/app_localizations.dart';
+import '../../l10n/study_import_labels.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../services/lichess_auth_service.dart';
-import '../../services/study_import/chessgames_collection_client.dart';
-import '../../services/study_import/import_source.dart';
-import '../../services/study_import/lichess_study_client.dart';
-import '../../services/study_import/study_import_controller.dart';
-import '../../services/study_import/study_import_exception.dart';
+import '../../infrastructure/studies/chessgames_collection_client.dart'
+    show parsePastedGameIds;
+import '../../features/studies/repositories/study_import_repository.dart';
+import 'package:provider/provider.dart';
+import '../../features/studies/models/import_source.dart';
+import '../../features/studies/controllers/study_import_controller.dart';
+import '../../features/studies/models/study_import_exception.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../labeled_toggle.dart';
@@ -56,7 +61,13 @@ class CollectionPlan extends StudyImportPlan {
 }
 
 class ImportFromUrlDialog extends StatefulWidget {
-  const ImportFromUrlDialog({super.key, required this.canAppend});
+  const ImportFromUrlDialog({
+    super.key,
+    required this.canAppend,
+    required this.repository,
+  });
+
+  final StudyImportRepository repository;
 
   /// Whether there is an open study to append to.
   final bool canAppend;
@@ -68,7 +79,10 @@ class ImportFromUrlDialog extends StatefulWidget {
   }) {
     return showDialog<StudyImportPlan>(
       context: context,
-      builder: (_) => ImportFromUrlDialog(canAppend: canAppend),
+      builder: (_) => ImportFromUrlDialog(
+        canAppend: canAppend,
+        repository: context.read<StudyImportController>().repository,
+      ),
     );
   }
 
@@ -77,6 +91,7 @@ class ImportFromUrlDialog extends StatefulWidget {
 }
 
 class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
+  late final StudyImportSource _network = widget.repository.openSource();
   final TextEditingController _urlController = TextEditingController();
   final TextEditingController _delayController = TextEditingController(
     text: '${StudyImportController.defaultDelay.inSeconds}',
@@ -89,6 +104,7 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
 
   @override
   void dispose() {
+    _network.close();
     _urlController.dispose();
     _delayController.dispose();
     super.dispose();
@@ -139,14 +155,20 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
       if (mounted) {
         setState(() {
           _busy = false;
-          _error = e.message;
+          _error = studySourceFailureLabel(AppLocalizations.of(context), e);
         });
       }
+    } catch (_) {
+      if (mounted)
+        setState(() {
+          _busy = false;
+          _error = AppLocalizations.of(context).studyImportDownloadFailed;
+        });
     }
   }
 
   Future<StudyImportPlan?> _resolveLichess(ImportSource source) async {
-    final study = await fetchLichessStudy(source);
+    final study = await _network.fetchLichess(source);
     return LichessStudyPlan(
       pgn: study.pgn,
       name: study.name,
@@ -157,11 +179,9 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
   Future<StudyImportPlan?> _resolveCollection(
     ChessgamesCollectionSource source,
   ) async {
-    final html = await fetchCollectionHtml(source.cid);
-    var ids = html == null ? <String>[] : extractCollectionGameIds(html);
-    var name =
-        (html == null ? null : extractCollectionTitle(html)) ??
-        'Collection ${source.cid}';
+    final collection = await _network.fetchCollection(source.cid);
+    var ids = collection.gameIds;
+    final name = collection.name;
 
     // No ids means the AWS WAF served a challenge page instead of the
     // collection. The PGN endpoint itself is usually still reachable, so ask

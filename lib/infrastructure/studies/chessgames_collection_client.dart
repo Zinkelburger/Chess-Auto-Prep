@@ -20,7 +20,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
-import '../chess_api_urls.dart';
+import '../../services/chess_api_urls.dart';
 
 /// Sent on every chessgames.com request. The API 403s obvious bots, and the
 /// `Referer`/`Origin` pair is what the site's own front-end sends.

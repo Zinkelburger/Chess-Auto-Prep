@@ -20,7 +20,8 @@
     "lib/features/eval_tree/widgets/eval_tree_tab.dart",
     "lib/models/board_display_settings.dart",
     "lib/models/bulk_analysis_settings.dart",
-    "lib/models/engine_settings.dart"
+    "lib/models/engine_settings.dart",
+    "lib/services/study_import/"
   ],
   "symbols": [
     "PgnBatchWriter",

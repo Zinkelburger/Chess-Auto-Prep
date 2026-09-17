@@ -173,6 +173,8 @@ class StudyController extends ChangeNotifier
   int _editRevision = 0;
   Future<bool> _saveTail = Future.value(true);
   bool get dirty => _dirty;
+  Object get navigationRevision =>
+      (_docGeneration, _editRevision, _chapterIndex);
 
   /// Cheap equality for an approval to close; no whole-tree serialization.
   Object get closeRevision => (
@@ -400,22 +402,24 @@ class StudyController extends ChangeNotifier
   Future<void> addChapterToStudyFile(
     String path,
     String chapterName,
-    String pgn,
-  ) async {
+    String pgn, {
+    bool createOnly = false,
+  }) async {
     await addChaptersToStudyFile(path, [
       StudyChapter.fromGameText(pgn, name: chapterName),
-    ]);
+    ], createOnly: createOnly);
   }
 
   /// Append a selection in one write, preserving the open study's unsaved edits.
   /// Returns the first new chapter's index, even when chapter names repeat.
   Future<int> addChaptersToStudyFile(
     String path,
-    List<StudyChapter> chapters,
-  ) async {
+    List<StudyChapter> chapters, {
+    bool createOnly = false,
+  }) async {
     if (chapters.isEmpty) throw ArgumentError('Choose at least one game');
     final int firstIndex;
-    if (_doc.filePath == path) {
+    if (_doc.filePath == path && !createOnly) {
       firstIndex = _doc.chapters.length;
       _doc.chapters.addAll([
         for (final chapter in chapters)
@@ -429,7 +433,9 @@ class StudyController extends ChangeNotifier
       _markDirty();
       if (!await flushSave()) throw StateError(saveError ?? 'Study not saved');
     } else {
-      final opened = await _documents.open(path);
+      final opened = createOnly
+          ? const PgnMissing()
+          : await _documents.open(path);
       if (opened is PgnReadFailed) throw opened.error;
       final existing = opened is PgnOpened ? opened.snapshot.content : '';
       firstIndex = countPgnGames(existing);
@@ -451,29 +457,30 @@ class StudyController extends ChangeNotifier
     return firstIndex;
   }
 
-  Future<void> openStudy(String path) async {
-    if (_reloading || _relocating || isDisposed) return;
+  Future<bool> openStudy(String path) async {
+    if (_reloading || _relocating || isDisposed) return false;
     final generation = ++_docGeneration;
-    if (!await flushSave()) return;
+    if (!await flushSave()) return false;
     final opened = await _documents.open(path);
-    if (generation != _docGeneration || isDisposed) return;
+    if (generation != _docGeneration || isDisposed) return false;
     if (opened is! PgnOpened) throw StateError('Could not open study: $opened');
     final loaded = await _decode(
       opened.snapshot.content,
       p.basenameWithoutExtension(path),
       opened.snapshot.path,
     );
-    if (generation != _docGeneration || isDisposed) return;
+    if (generation != _docGeneration || isDisposed) return false;
     // Editing remains possible during read/decode. Persist those newer edits
     // before replacing their document, and stop if that save cannot be proved.
     if (!await flushSave() ||
         isDisposed ||
         generation != _docGeneration ||
         _dirty) {
-      return;
+      return false;
     }
     _adoptDocument(_freshIds(loaded), snapshot: opened.snapshot);
     notifyListeners();
+    return true;
   }
 
   /// Rename the current study — moves its file to `<newName>.pgn`.  Only
@@ -828,6 +835,19 @@ class StudyController extends ChangeNotifier
   /// are preserved.  Returns the number of chapters added (0 when [pgn] holds
   /// no parseable games), selecting the first new chapter and persisting
   /// immediately.
+  /// Capture the destination before native I/O so a late import cannot attach
+  /// chapters to a different study opened while its source was being read.
+  Future<int> importFile(String path) async {
+    final document = _doc;
+    final opened = await _documents.open(path);
+    if (isDisposed || !identical(document, _doc)) return 0;
+    if (opened is! PgnOpened)
+      throw StateError('Could not read the imported PGN');
+    return importChapters(opened.snapshot.content);
+  }
+
+  Future<List<RepertoireMetadata>> listStudies() => _library.list();
+
   Future<int> importChapters(
     String pgn, {
     String? name,

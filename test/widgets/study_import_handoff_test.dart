@@ -1,0 +1,260 @@
+@Timeout(Duration(seconds: 45))
+library;
+
+import 'package:chess_auto_prep/features/studies/models/study_document.dart';
+import 'package:chess_auto_prep/features/studies/widgets/study_import_close_guard.dart';
+import 'package:chess_auto_prep/features/documents/widgets/document_close_scope.dart';
+import 'package:chess_auto_prep/features/documents/controllers/document_close_coordinator.dart';
+import 'dart:async';
+import 'package:chess_auto_prep/app/study_import_jobs.dart';
+import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
+import 'package:chess_auto_prep/core/app_state.dart';
+import 'package:chess_auto_prep/design_system/theme/app_theme.dart';
+import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
+import 'package:chess_auto_prep/features/documents/widgets/document_save_panel.dart';
+import 'package:chess_auto_prep/features/studies/controllers/study_controller.dart';
+import 'package:chess_auto_prep/features/studies/controllers/study_import_controller.dart';
+import 'package:chess_auto_prep/features/studies/models/study_import_state.dart';
+import 'package:chess_auto_prep/features/studies/repositories/study_import_repository.dart';
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
+import 'package:chess_auto_prep/l10n/generated/app_localizations_en.dart';
+import 'package:chess_auto_prep/screens/study_screen.dart';
+import 'package:chess_auto_prep/services/jobs/repertoire_job.dart';
+import 'package:chess_auto_prep/widgets/app_overflow_menu.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../support/runtime_settings.dart';
+import '../support/scripted_document_store.dart';
+import '../support/study_fixture.dart';
+
+const _game = '[Event "Source"]\n\n1. e4 e5 *';
+
+class _Imports implements StudyImportRepository {
+  _Imports(this.publication);
+  final StudyImportPublication publication;
+  @override
+  Future<StudyImportPublication> publish(String name, String pgn) async =>
+      publication;
+  @override
+  Future<String?> readCachedGame(String id) async => _game;
+  @override
+  Future<void> cacheGame(String id, String pgn) async {}
+  @override
+  StudyImportSource openSource() => _Source();
+}
+
+class _Source implements StudyImportSource {
+  @override
+  void close() {}
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+  Future<
+    ({
+      StudyController study,
+      StudyImportController importer,
+      AppState app,
+      Store store,
+      DocumentCloseCoordinator close,
+    })
+  >
+  host(WidgetTester tester, {bool dark = true, double scale = 1}) async {
+    tester.view.physicalSize = const Size(1600, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final store = Store()
+      ..current = snapshot(_game, path: '/studies/Source.pgn');
+    final study = StudyController(
+      library: MemoryStudyLibrary(),
+      documents: store,
+      decode: (content, name, path) async =>
+          StudyDocument.fromPgn(content, name: name, filePath: path),
+      autoSaveDelay: const Duration(hours: 1),
+    );
+    await study.openStudy('/studies/Source.pgn');
+    final importer = StudyImportController(
+      documents: store,
+      repository: _Imports(
+        StudyImportPublication(
+          path: '/studies/Downloaded.pgn',
+          content: _game,
+          outcome: PgnWriteUncertain(
+            error: StateError('ack lost'),
+            before: null,
+            observed: null,
+          ),
+        ),
+      ),
+      jobs: RepertoireStudyImportJobs(
+        JobManager.instance,
+        AppLocalizationsEn.new,
+      ),
+    );
+    final app = AppState()..setMode(AppMode.study);
+    final settings = testRuntimeSettings();
+    final close = DocumentCloseCoordinator();
+    addTearDown(close.dispose);
+    addTearDown(() {
+      importer.dispose();
+      study.dispose();
+      app.dispose();
+      settings.dispose();
+    });
+    await pumpRuntimeWidget(
+      tester,
+      settings,
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<StudyController>.value(value: study),
+          ChangeNotifierProvider<StudyImportController>.value(value: importer),
+          ChangeNotifierProvider<AppState>.value(value: app),
+        ],
+        child: MaterialApp(
+          theme: dark ? AppTheme.dark() : AppTheme.light(),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: TextScaler.linear(scale)),
+            child: child!,
+          ),
+          home: DocumentCloseScope(
+            coordinator: close,
+            child: StudyImportCloseGuard(
+              importer: importer,
+              chooseCopyDestination: (_) async => '/chosen.pgn',
+              child: const StudyScreen(),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    return (
+      study: study,
+      importer: importer,
+      app: app,
+      store: store,
+      close: close,
+    );
+  }
+
+  for (final label in ['Train this chapter', 'Browse in PGN viewer']) {
+    testWidgets('$label refuses a failed save', (tester) async {
+      final f = await host(tester);
+      f.store.onSave = (_, _) async => PgnWriteFailed(StateError('disk full'));
+      f.study.setComment(TreePath.empty, 'Unsaved important note');
+      final menu = tester.widget<AppOverflowMenu>(
+        find.byType(AppOverflowMenu).first,
+      );
+      menu.entries.singleWhere((e) => e.label == label).onRun();
+      await tester.pumpAndSettle();
+      expect(f.store.saves, hasLength(1));
+      expect(f.app.currentMode, AppMode.study);
+      expect(f.study.state.dirty, isTrue);
+      expect(f.study.doc.toPgn(), contains('Unsaved important note'));
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+    testWidgets('$label ignores a save completed after the chapter changed', (
+      tester,
+    ) async {
+      final f = await host(tester);
+      f.study.addChapter('Other');
+      f.study.selectChapter(0);
+      final gate = Completer<PgnWriteResult>();
+      f.store.onSave = (_, _) => gate.future;
+      final menu = tester.widget<AppOverflowMenu>(
+        find.byType(AppOverflowMenu).first,
+      );
+      menu.entries.singleWhere((e) => e.label == label).onRun();
+      await tester.pump();
+      f.study.selectChapter(1);
+      gate.complete(
+        PgnSaved(
+          before: f.store.current,
+          after: snapshot(
+            f.study.doc.toPgn(),
+            path: '/studies/Source.pgn',
+            revision: '2',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(f.app.currentMode, AppMode.study);
+      expect(f.study.chapterIndex, 1);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
+  testWidgets('native close requires a decision for unresolved import bytes', (
+    tester,
+  ) async {
+    final f = await host(tester);
+    final run = f.importer.startCollectionDownload(
+      gameIds: ['1'],
+      studyName: 'Downloaded',
+    );
+    await tester.pumpAndSettle();
+    await run; 
+    final closing = f.close.prepareClose();
+    await tester.pumpAndSettle();
+    expect(find.byType(DocumentSavePanel), findsOneWidget);
+    expect(f.importer.publicationRecovery!.state.uncertain, isTrue);
+    await tester.tap(find.text('Keep app open')); 
+    await tester.pumpAndSettle();
+    expect((await closing).disposition, DocumentCloseDisposition.cancelled);
+    expect(f.importer.needsPublicationReview, isTrue);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('temporary existing screen scale audit before importing', (tester) async {
+    await host(tester, scale: 1.5);
+    expect(tester.takeException(), isNull, reason: 'Before any import runs or new control appears');
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  for (final dark in [false, true]) {
+    testWidgets(
+      'uncertain import exposes destination and copy recovery, dark=$dark',
+      (tester) async {
+        final f = await host(tester, dark: dark);
+        final run = f.importer.startCollectionDownload(
+          gameIds: ['1'],
+          studyName: 'Downloaded',
+        );
+        await tester.pumpAndSettle();
+        expect((await run).failure, StudyImportFailure.uncertainPublication);
+        await tester.tap(find.text('Review downloaded study').last);
+        await tester.pumpAndSettle();
+        expect(find.byType(DocumentSavePanel), findsOneWidget);
+        expect(find.text('/studies/Downloaded.pgn'), findsOneWidget);
+        final save = tester.widget<FilledButton>(
+          find.byKey(const ValueKey('document-save')),
+        );
+        expect(
+          save.onPressed,
+          isNull,
+          reason: 'uncertain writes cannot be retried blindly',
+        );
+        expect(
+          find.byKey(const ValueKey('document-save-copy')),
+          findsOneWidget,
+        );
+        expect(f.importer.publicationRecovery!.state.content, _game);
+        expect(
+          f.importer.publicationRecovery!.state.outcome,
+          same(f.importer.lastResult!.publication!.outcome),
+        );
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+}

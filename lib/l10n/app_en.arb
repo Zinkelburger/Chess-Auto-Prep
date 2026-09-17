@@ -760,5 +760,261 @@
   "untitledPgnWorkspace": "Untitled PGN",
   "@untitledPgnWorkspace": {
     "description": "Workspace recovery display name"
+  },
+  "studyImportJob": "Import: {name}",
+  "@studyImportJob": {
+    "description": "Study import progress, results and recovery",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "studyImportStarting": "Starting…",
+  "@studyImportStarting": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportCancelling": "Cancelling…",
+  "@studyImportCancelling": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportFetching": "Fetching game {game}/{total}",
+  "@studyImportFetching": {
+    "description": "Study import progress, results and recovery",
+    "placeholders": {
+      "game": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "studyImportWaiting": "Game {game}/{total} · next in {seconds}s",
+  "@studyImportWaiting": {
+    "description": "Study import progress, results and recovery",
+    "placeholders": {
+      "game": {
+        "type": "int"
+      },
+      "seconds": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "studyImportRetrying": "Rate-limited — retrying game {game}/{total} in {seconds}s",
+  "@studyImportRetrying": {
+    "description": "Study import progress, results and recovery",
+    "placeholders": {
+      "game": {
+        "type": "int"
+      },
+      "seconds": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "studyImportDownloaded": "Downloaded {count}",
+  "@studyImportDownloaded": {
+    "description": "Study import progress, results and recovery",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "studyImportSkipped": "Skipped game {id}",
+  "@studyImportSkipped": {
+    "description": "Study import progress, results and recovery",
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "studyImportChapters": "{count, plural, =1{1 chapter} other{{count} chapters}}",
+  "@studyImportChapters": {
+    "description": "Study import progress, results and recovery",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "studyImportClosed": "The study importer is closed.",
+  "@studyImportClosed": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportAlreadyRunning": "A collection download is already running.",
+  "@studyImportAlreadyRunning": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportEmpty": "No games found in that collection.",
+  "@studyImportEmpty": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportInvalidIds": "Collection game IDs must be numeric.",
+  "@studyImportInvalidIds": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportStartupFailed": "Could not start the collection download. Try again.",
+  "@studyImportStartupFailed": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportDownloadFailed": "Collection download stopped. Downloaded games remain cached.",
+  "@studyImportDownloadFailed": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportThrottled": "chessgames.com is refusing requests. Downloaded games are cached — start the same collection again later to resume.",
+  "@studyImportThrottled": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportPublicationFailed": "Downloaded games could not be saved. Review the downloaded content or try again later.",
+  "@studyImportPublicationFailed": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportPublicationUncertain": "The study save could not be confirmed. Review the destination before retrying.",
+  "@studyImportPublicationUncertain": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportNameCollisions": "No free study name was found after 100 attempts. Choose another destination for the downloaded games.",
+  "@studyImportNameCollisions": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportProgress": "Importing {done}/{total}",
+  "@studyImportProgress": {
+    "description": "Study import progress, results and recovery",
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "studyImportStop": "Stop the download (keeps what has arrived)",
+  "@studyImportStop": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportReview": "Review downloaded study",
+  "@studyImportReview": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportBackground": "Downloading {count} games (~{minutes} min). chessgames.com is slow on purpose — keep working, it runs in the background.",
+  "@studyImportBackground": {
+    "description": "Study import progress, results and recovery",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "studyImportComplete": "Imported {count} games into “{name}” ({failed} unavailable).",
+  "@studyImportComplete": {
+    "description": "Study import progress, results and recovery",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "failed": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "studyImportStopped": "Stopped the download. Saved {count} chapters into “{name}”.",
+  "@studyImportStopped": {
+    "description": "Study import progress, results and recovery",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "studyImportNoContent": "No study was saved ({failed} games unavailable).",
+  "@studyImportNoContent": {
+    "description": "Study import progress, results and recovery",
+    "placeholders": {
+      "failed": {
+        "type": "int"
+      }
+    }
+  },
+  "studyImportOpen": "Open",
+  "@studyImportOpen": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportLichessOffline": "Lichess did not respond (rate-limited or offline). Try again shortly.",
+  "@studyImportLichessOffline": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportLichessLogin": "Study not found. If it is private or unlisted, log into Lichess first (Settings → Accounts), then try again.",
+  "@studyImportLichessLogin": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportLichessScope": "Study not found. If it is private, log out and back in to grant study access.",
+  "@studyImportLichessScope": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportLichessRejected": "Lichess rejected the request. Log out and back in under Settings → Accounts, then try again.",
+  "@studyImportLichessRejected": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportLichessUserMissing": "No public studies found for “{name}”.",
+  "@studyImportLichessUserMissing": {
+    "description": "Study import progress, results and recovery",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "studyImportLichessHttp": "Lichess returned HTTP {status}.",
+  "@studyImportLichessHttp": {
+    "description": "Study import progress, results and recovery",
+    "placeholders": {
+      "status": {
+        "type": "int"
+      }
+    }
+  },
+  "studyImportLichessEmpty": "That study is empty — nothing to import.",
+  "@studyImportLichessEmpty": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportUnresolved": "Review the previous downloaded study before starting another import.",
+  "@studyImportUnresolved": {
+    "description": "Pending failed publication must be resolved before another collection starts"
+  },
+  "studyOpenFailed": "Could not open that study. Your current study is unchanged.",
+  "@studyOpenFailed": {
+    "description": "Study handoff read failed"
+  },
+  "studyImportReviewAction": "Review",
+  "@studyImportReviewAction": {
+    "description": "Compact snackbar action that opens imported document recovery"
+  },
+  "studyImportPgnFailed": "Could not import that PGN. Your study is unchanged.",
+  "@studyImportPgnFailed": {
+    "description": "Study source PGN read failure"
+  },
+  "studyListRetry": "Could not load studies. Retry",
+  "@studyListRetry": {
+    "description": "Retry a failed study library read"
   }
 }

@@ -600,4 +600,170 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get untitledPgnWorkspace => 'Untitled PGN';
+
+  @override
+  String studyImportJob(String name) {
+    return 'Import: $name';
+  }
+
+  @override
+  String get studyImportStarting => 'Starting…';
+
+  @override
+  String get studyImportCancelling => 'Cancelling…';
+
+  @override
+  String studyImportFetching(int game, int total) {
+    return 'Fetching game $game/$total';
+  }
+
+  @override
+  String studyImportWaiting(int game, int seconds, int total) {
+    return 'Game $game/$total · next in ${seconds}s';
+  }
+
+  @override
+  String studyImportRetrying(int game, int seconds, int total) {
+    return 'Rate-limited — retrying game $game/$total in ${seconds}s';
+  }
+
+  @override
+  String studyImportDownloaded(int count) {
+    return 'Downloaded $count';
+  }
+
+  @override
+  String studyImportSkipped(String id) {
+    return 'Skipped game $id';
+  }
+
+  @override
+  String studyImportChapters(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count chapters',
+      one: '1 chapter',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get studyImportClosed => 'The study importer is closed.';
+
+  @override
+  String get studyImportAlreadyRunning =>
+      'A collection download is already running.';
+
+  @override
+  String get studyImportEmpty => 'No games found in that collection.';
+
+  @override
+  String get studyImportInvalidIds => 'Collection game IDs must be numeric.';
+
+  @override
+  String get studyImportStartupFailed =>
+      'Could not start the collection download. Try again.';
+
+  @override
+  String get studyImportDownloadFailed =>
+      'Collection download stopped. Downloaded games remain cached.';
+
+  @override
+  String get studyImportThrottled =>
+      'chessgames.com is refusing requests. Downloaded games are cached — start the same collection again later to resume.';
+
+  @override
+  String get studyImportPublicationFailed =>
+      'Downloaded games could not be saved. Review the downloaded content or try again later.';
+
+  @override
+  String get studyImportPublicationUncertain =>
+      'The study save could not be confirmed. Review the destination before retrying.';
+
+  @override
+  String get studyImportNameCollisions =>
+      'No free study name was found after 100 attempts. Choose another destination for the downloaded games.';
+
+  @override
+  String studyImportProgress(int done, int total) {
+    return 'Importing $done/$total';
+  }
+
+  @override
+  String get studyImportStop => 'Stop the download (keeps what has arrived)';
+
+  @override
+  String get studyImportReview => 'Review downloaded study';
+
+  @override
+  String studyImportBackground(int count, int minutes) {
+    return 'Downloading $count games (~$minutes min). chessgames.com is slow on purpose — keep working, it runs in the background.';
+  }
+
+  @override
+  String studyImportComplete(int count, int failed, String name) {
+    return 'Imported $count games into “$name” ($failed unavailable).';
+  }
+
+  @override
+  String studyImportStopped(int count, String name) {
+    return 'Stopped the download. Saved $count chapters into “$name”.';
+  }
+
+  @override
+  String studyImportNoContent(int failed) {
+    return 'No study was saved ($failed games unavailable).';
+  }
+
+  @override
+  String get studyImportOpen => 'Open';
+
+  @override
+  String get studyImportLichessOffline =>
+      'Lichess did not respond (rate-limited or offline). Try again shortly.';
+
+  @override
+  String get studyImportLichessLogin =>
+      'Study not found. If it is private or unlisted, log into Lichess first (Settings → Accounts), then try again.';
+
+  @override
+  String get studyImportLichessScope =>
+      'Study not found. If it is private, log out and back in to grant study access.';
+
+  @override
+  String get studyImportLichessRejected =>
+      'Lichess rejected the request. Log out and back in under Settings → Accounts, then try again.';
+
+  @override
+  String studyImportLichessUserMissing(String name) {
+    return 'No public studies found for “$name”.';
+  }
+
+  @override
+  String studyImportLichessHttp(int status) {
+    return 'Lichess returned HTTP $status.';
+  }
+
+  @override
+  String get studyImportLichessEmpty =>
+      'That study is empty — nothing to import.';
+
+  @override
+  String get studyImportUnresolved =>
+      'Review the previous downloaded study before starting another import.';
+
+  @override
+  String get studyOpenFailed =>
+      'Could not open that study. Your current study is unchanged.';
+
+  @override
+  String get studyImportReviewAction => 'Review';
+
+  @override
+  String get studyImportPgnFailed =>
+      'Could not import that PGN. Your study is unchanged.';
+
+  @override
+  String get studyListRetry => 'Could not load studies. Retry';
 }
