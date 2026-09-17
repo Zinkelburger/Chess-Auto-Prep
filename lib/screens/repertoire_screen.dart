@@ -2,6 +2,10 @@
 /// Shows repertoire positions with board + PGN + context tabs layout.
 library;
 
+import 'package:chess_auto_prep/features/audit/services/repertoire_audit_service.dart';
+import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
+import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
+
 import '../features/generation/services/generation_artifacts.dart';
 
 import '../features/repertoires/repositories/repertoire_document_repository.dart';
@@ -134,12 +138,18 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   AppState? _appState;
   late final GenerationSessionController _generationController =
       GenerationSessionController(
+        enginePool: context.read<StockfishPool>(),
+        engineLifecycle: context.read<EngineLifecycle>(),
         publication: context.read<GenerationPublicationFactory>()(),
         artifacts: context.read<GenerationArtifacts>(),
       );
   final GlobalKey<RepertoireGenerationTabState> _generationTabKey =
       GlobalKey<RepertoireGenerationTabState>();
-  final AuditSessionController _auditController = AuditSessionController();
+  late final AuditSessionController _auditController = AuditSessionController(
+    service: RepertoireAuditService(pool: context.read<StockfishPool>()),
+    prepareEngine: () => context.read<EngineLifecycle>().enterGeneration(1),
+    releaseEngine: () => context.read<EngineLifecycle>().exitGeneration(),
+  );
 
   /// Open/closed state of the bottom pane. Owned here rather than reached
   /// into through a GlobalKey, so opening a tab is a call that always lands.

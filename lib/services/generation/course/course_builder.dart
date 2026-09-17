@@ -68,6 +68,7 @@ class CourseBuild {
 /// and a cached reference would quietly serve the previous run's data.
 class CourseBuilder {
   CourseBuilder({
+    required this.pool,
     required this.enrichment,
     required this.gameDatabase,
     required this.masterDbFor,
@@ -77,6 +78,7 @@ class CourseBuilder {
   /// Runs the four optional passes and keeps their counts; shared with the
   /// owner, which reports those counts in the run summary.
   final EnrichmentRunner enrichment;
+  final StockfishPool pool;
 
   /// The build's own game database, when it loaded one. Reassigned per run.
   final PgnFreqMap? Function() gameDatabase;
@@ -152,7 +154,7 @@ class CourseBuilder {
         'Phase 3.5: Showing how losing replies are punished '
         '($done of $total)...',
     prepare: () {
-      final prober = RefutationProber(config: config);
+      final prober = RefutationProber(pool: pool, config: config);
       if (prober.targets(lines).isEmpty) return null;
       return ({required isCancelled, required onProgress}) =>
           prober.probe(lines, isCancelled: isCancelled, onProgress: onProgress);
@@ -172,6 +174,7 @@ class CourseBuilder {
         '($done of $total positions)...',
     prepare: () {
       final prober = RefutationProber(
+        pool: pool,
         config: config,
         freqMap: gameDatabase(),
         masterBook: masterDbFor(config)?.bookMoves,
@@ -208,7 +211,7 @@ class CourseBuilder {
         ({required isCancelled, required onProgress}) => computeEngineTails(
           lines: lines,
           config: config,
-          pool: StockfishPool.instance,
+          pool: pool,
           isCancelled: isCancelled,
           onProgress: onProgress,
         ),
@@ -230,6 +233,7 @@ class CourseBuilder {
       final db = masterDbFor(config);
       if (db == null) return null;
       final prober = MasterImprovementProber(
+        pool: pool,
         config: config,
         book: db.bookMoves,
         gameById: db.game,

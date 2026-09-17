@@ -32,11 +32,19 @@ class EngineSearchCancellation {
 /// its allocation is fixed until bestmove or process retirement. Lowering the
 /// setting affects new admissions; existing searches finish at their allocation.
 class EngineSearchBudget {
-  static final instance = EngineSearchBudget(capacity: () => 1);
   EngineSearchBudget({required this.capacity});
 
   /// Total threads the app may spend on searches right now.
-  int Function() capacity;
+  final int Function() capacity;
+  bool _disposed = false;
+
+  void dispose() {
+    _disposed = true;
+    while (_waiting.isNotEmpty) {
+      _waiting.removeFirst().result.completeError(EngineSearchCancelled());
+    }
+  }
+
   final Queue<_WaitingSearch> _waiting = Queue();
   int _used = 0;
 
@@ -50,7 +58,8 @@ class EngineSearchBudget {
     int requested,
     EngineSearchCancellation cancellation,
   ) {
-    if (cancellation.isCancelled) return Future.error(EngineSearchCancelled());
+    if (_disposed || cancellation.isCancelled)
+      return Future.error(EngineSearchCancelled());
     final waiting = _WaitingSearch(math.max(1, requested), cancellation);
     _waiting.add(waiting);
     unawaited(
@@ -66,6 +75,7 @@ class EngineSearchBudget {
   }
 
   void _drain() {
+    if (_disposed) return;
     while (_waiting.isNotEmpty) {
       final waiting = _waiting.first;
       if (waiting.cancellation.isCancelled) {

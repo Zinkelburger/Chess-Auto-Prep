@@ -4,6 +4,8 @@
 /// superseding request leaves behind in the public notifiers.
 library;
 
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+
 import '../support/runtime_settings.dart';
 import 'package:chess_auto_prep/app/runtime_settings.dart';
 
@@ -26,11 +28,11 @@ const _whiteMatesIn1 = '6k1/5ppp/8/8/8/8/5PPP/1R4K1 w - - 0 1';
 const _blackMatesIn1 = '1r4k1/5ppp/8/8/8/8/5PPP/6K1 b - - 0 1';
 
 late RuntimeSettings runtimeSettings;
+EngineRuntime get engines => testEngines(runtimeSettings);
 void main() {
   setUp(() async {
     runtimeSettings = testRuntimeSettings();
     await runtimeSettings.load();
-    runtimeSettings.bindLegacyEngines();
     addTearDown(runtimeSettings.dispose);
   });
   late ScriptedEngine engine;
@@ -70,6 +72,7 @@ void main() {
     await runtimeSettings.engine.edit({'engine_settings.cores': 1});
     engine = ScriptedEngine();
     boardEngine = BoardEngine(
+      budget: engines.budget,
       settings: () => runtimeSettings.engine.committed,
       createConnection: () async => engine,
     );

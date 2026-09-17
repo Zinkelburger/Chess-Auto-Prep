@@ -1,3 +1,6 @@
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../../support/runtime_settings.dart';
 import '../../support/generation_artifacts_fixture.dart';
 import '../../support/generation_publication_fixture.dart';
 import 'dart:async';
@@ -11,12 +14,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   setUp(() => SharedPreferences.setMockInitialValues({}));
   testWidgets(
     'settings stay in the overlay and apply to both generation actions',
     (tester) async {
       final gen = GenerationSessionController(
+        enginePool: engines.pool,
+        engineLifecycle: engines.lifecycle,
         artifacts: generationArtifactsFixture(),
         publication: generationPublicationFixture(),
       );
@@ -25,7 +37,9 @@ void main() {
       final coverageCalls = <(int, double)>[];
       String? played;
       var booksOpened = 0;
-      await tester.pumpWidget(
+      await pumpRuntimeWidget(
+        tester,
+        _engineFixtureSettings ??= testRuntimeSettings(),
         MaterialApp(
           home: Scaffold(
             body: SizedBox(
@@ -130,6 +144,8 @@ void main() {
     tester,
   ) async {
     final gen = GenerationSessionController(
+      enginePool: engines.pool,
+      engineLifecycle: engines.lifecycle,
       artifacts: generationArtifactsFixture(),
       publication: generationPublicationFixture(),
     );
@@ -157,13 +173,21 @@ void main() {
         ),
       ),
     );
-    await tester.pumpWidget(pane(kStandardStartFen));
+    await pumpRuntimeWidget(
+      tester,
+      _engineFixtureSettings ??= testRuntimeSettings(),
+      pane(kStandardStartFen),
+    );
     await tester.tap(find.byKey(const ValueKey('evaluation-source')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('ChessDB'));
     await tester.pump();
     final next = playUciMove(kStandardStartFen, 'e2e4')!;
-    await tester.pumpWidget(pane(next));
+    await pumpRuntimeWidget(
+      tester,
+      _engineFixtureSettings ??= testRuntimeSettings(),
+      pane(next),
+    );
     pending[kStandardStartFen]!.complete(
       const DbMoveList(
         source: DbMoveSource.chessDbApi,
@@ -185,6 +209,8 @@ void main() {
     tester,
   ) async {
     final gen = GenerationSessionController(
+      enginePool: engines.pool,
+      engineLifecycle: engines.lifecycle,
       artifacts: generationArtifactsFixture(),
       publication: generationPublicationFixture(),
     );
@@ -193,7 +219,9 @@ void main() {
     var chessDb = true;
     var generated = 0;
     late StateSetter update;
-    await tester.pumpWidget(
+    await pumpRuntimeWidget(
+      tester,
+      _engineFixtureSettings ??= testRuntimeSettings(),
       MaterialApp(
         home: Scaffold(
           body: StatefulBuilder(

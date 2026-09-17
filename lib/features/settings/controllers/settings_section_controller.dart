@@ -11,7 +11,7 @@ class SettingsSectionController<C extends SectionConfiguration<C>> {
   final SettingsSectionStorage<C> _storage;
   final _changes = StreamController<SettingsState<C>>.broadcast(sync: true);
   SettingsState<C> _state = const SettingsState();
-  Future<void> _tail = Future.value();
+  Future<void>? _tail;
   Future<void>? _loading;
   SettingsPatch<C>? _failedEdit;
   Object? _failedError;
@@ -45,8 +45,18 @@ class SettingsSectionController<C extends SectionConfiguration<C>> {
     if (_disposed) {
       return Future.error(StateError('Settings owner is disposed'));
     }
-    final run = _tail.then((_) => action());
-    _tail = run.then<void>((_) {}, onError: (Object _, StackTrace _) {});
+    final previous = _tail;
+    final settled = Completer<void>();
+    _tail = settled.future;
+    final run = previous == null
+        ? Future<void>.sync(action)
+        : previous.then((_) => action());
+    unawaited(
+      run.then<void>(
+        (_) => settled.complete(),
+        onError: (Object _, StackTrace _) => settled.complete(),
+      ),
+    );
     return run;
   }
 
@@ -176,6 +186,6 @@ class SettingsSectionController<C extends SectionConfiguration<C>> {
 
   void dispose() {
     _disposed = true;
-    unawaited(_tail.then((_) => _changes.close()));
+    unawaited((_tail ?? Future<void>.value()).then((_) => _changes.close()));
   }
 }

@@ -11,7 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 RuntimeSettings? _runtimeSettings;
 RuntimeSettings get runtimeSettings =>
-    _runtimeSettings ??= testRuntimeSettings()..bindLegacyEngines();
+    _runtimeSettings ??= testRuntimeSettings();
 void main() {
   setUp(() {
     _runtimeSettings = null;

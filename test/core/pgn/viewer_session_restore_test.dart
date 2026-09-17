@@ -1,3 +1,6 @@
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../../support/runtime_settings.dart';
 import '../../support/fake_desktop_fullscreen_port.dart';
 import 'dart:async';
 import 'dart:io';
@@ -33,6 +36,7 @@ class _Handle implements PgnViewerHandle {
 }
 
 class _Analysis extends GameAnalysisController {
+  _Analysis() : super(pool: engines.pool, lifecycle: engines.lifecycle);
   @override
   Future<bool> tryLoadFromPgn(String pgnText) async => false;
   @override
@@ -77,7 +81,14 @@ class _DelayedRecentPreferences extends SharedPreferencesViewerRepository {
   Future<List<String>> loadRecentFiles() => pending.future;
 }
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
   late Directory dir;
   late String path;

@@ -1,6 +1,5 @@
 import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
-import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
 import 'package:chess_auto_prep/widgets/chess_board_widget.dart';
 import 'package:chess_auto_prep/widgets/engine/inline_engine_bar.dart';
 import 'package:chess_auto_prep/widgets/interactive_pgn_editor.dart';
@@ -22,11 +21,9 @@ import '../support/study_fixture.dart';
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
-    EngineLifecycle.instance.resetForTest();
-    EngineLifecycle.testMode = true;
+
     useScriptedBoardEngine();
   });
-  tearDown(() => EngineLifecycle.instance.resetForTest());
 
   testWidgets(
     'chapter manager follows external metadata without reacting to notes',

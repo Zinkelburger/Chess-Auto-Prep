@@ -16,6 +16,8 @@ import '../../models/analysis/discovery_result.dart';
 import '../../features/settings/models/engine_configuration.dart';
 import '../../utils/system_info.dart';
 import 'engine_connection.dart';
+import 'engine_serial_queue.dart';
+import 'engine_search_budget.dart';
 import 'engine_interrupt.dart';
 import 'eval_worker.dart';
 import 'stockfish_connection_factory.dart';
@@ -25,27 +27,20 @@ export 'eval_worker.dart' show EvalResult, EvalWorker;
 export '../../models/analysis/discovery_result.dart';
 
 class StockfishPool {
-  /// Application-wide shared instance.
-  static final StockfishPool instance = StockfishPool._();
-
-  /// Create an independent instance (unit tests only).
-  @visibleForTesting
-  StockfishPool.fresh({
+  StockfishPool({
+    required EngineConfiguration Function() settings,
+    required EngineSearchBudget budget,
     Future<EngineConnection?> Function()? createConnection,
-    EngineConfiguration Function()? settings,
-  }) : _settings = settings ?? EngineConfiguration.new,
+  }) : _settings = settings,
+       _budget = budget,
        _createConnection =
            createConnection ?? StockfishConnectionFactory.create;
 
-  StockfishPool._()
-    : _settings = EngineConfiguration.new,
-      _createConnection = StockfishConnectionFactory.create;
-
-  EngineConfiguration Function() _settings;
-  void bindSettings(EngineConfiguration Function() settings) =>
-      _settings = settings;
+  final EngineSearchBudget _budget;
+  final EngineConfiguration Function() _settings;
   EngineConfiguration? _runSettings;
   EngineConfiguration get effectiveSettings => _runSettings ?? _settings();
+  bool _disposed = false;
 
   static const _workerStartupTimeout = Duration(seconds: 15);
   static const _defaultAcquireTimeout = Duration(seconds: 60);
@@ -55,7 +50,7 @@ class StockfishPool {
 
   /// Serializes [ensureWorkers] calls; never fails, so one failed
   /// provisioning cannot poison the next.
-  Future<void> _provisioning = Future.value();
+  final _provisioning = EngineSerialQueue();
 
   /// Bumped by [_disposeAllWorkers] so in-flight spawns discard their result.
   int _generation = 0;
@@ -104,16 +99,12 @@ class StockfishPool {
     int? threadsPerWorker,
     EngineConfiguration captured,
   ) {
+    if (_disposed) return Future.error(StateError("Engine pool disposed"));
     final generation = _generation;
-    final pending = _provisioning.then((_) async {
+    return _provisioning.run(() async {
       if (generation != _generation) return;
       await _ensureWorkers(count, threadsPerWorker, generation, captured);
     });
-    _provisioning = pending.then<void>(
-      (_) {},
-      onError: (Object _, StackTrace _) {},
-    );
-    return pending;
   }
 
   Future<void> _ensureWorkers(
@@ -236,7 +227,7 @@ class StockfishPool {
         engine.dispose();
         return null;
       }
-      worker = EvalWorker(engine);
+      worker = EvalWorker(engine, budget: _budget);
       _starting.add(worker);
       await worker
           .init(hashMb: captured.hashMb, threads: _threadsPerWorker)
@@ -434,9 +425,15 @@ class StockfishPool {
 
   /// Stop every search and kill every Stockfish process. The pool can be
   /// provisioned again afterwards with [ensureWorkers].
-  void dispose() {
+  void releaseWorkers() {
     stopAll();
     _disposeAllWorkers();
+  }
+
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    releaseWorkers();
   }
 
   void _watchWorker(EvalWorker worker) {
@@ -453,7 +450,7 @@ class StockfishPool {
     if (kDebugMode) {
       log.e('[Pool] Worker died; respawning');
     }
-    if (_workers.length >= _targetCount) return;
+    if (_disposed || _workers.length >= _targetCount) return;
     await _provision(_targetCount, _threadsPerWorker, effectiveSettings);
   }
 

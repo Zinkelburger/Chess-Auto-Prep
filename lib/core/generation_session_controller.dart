@@ -72,14 +72,16 @@ class GenerationSessionController extends ChangeNotifier
   GenerationSessionController({
     required GenerationPublicationController publication,
     required GenerationArtifacts artifacts,
-    StockfishPool? enginePool,
-    EngineLifecycle? engineLifecycle,
+    required StockfishPool enginePool,
+    required EngineLifecycle engineLifecycle,
     TreeBuildService? treeBuilder,
   }) : _publication = publication,
        _artifacts = artifacts,
-       _enginePool = enginePool ?? StockfishPool.instance,
-       _engineLifecycle = engineLifecycle ?? EngineLifecycle.instance,
-       buildService = treeBuilder ?? TreeBuildService();
+       _enginePool = enginePool,
+       _engineLifecycle = engineLifecycle,
+       buildService =
+           treeBuilder ??
+           TreeBuildService(pool: enginePool, lifecycle: engineLifecycle);
 
   static const String _logName = 'GenerationSession';
 
@@ -117,6 +119,7 @@ class GenerationSessionController extends ChangeNotifier
 
   /// Mid-run export of lines found so far, without ending the build.
   late final SnapshotExporter snapshots = SnapshotExporter(
+    pool: _enginePool,
     notify: notifyListeners,
     isGenerating: () => _isGenerating,
     isPaused: () => _isPaused,
@@ -140,6 +143,7 @@ class GenerationSessionController extends ChangeNotifier
   /// Turns the extracted lines into the course document — the enrichment
   /// passes, the model games, the naming and the composition.
   late final CourseBuilder _courseBuilder = CourseBuilder(
+    pool: _enginePool,
     enrichment: _enrichment,
     gameDatabase: () => buildService.lastGameDatabase,
     masterDbFor: _masterDbFor,
@@ -762,7 +766,7 @@ class GenerationSessionController extends ChangeNotifier
     );
     try {
       await _ensureEnginePool();
-      final verifier = RepertoireVerifier(config: config);
+      final verifier = RepertoireVerifier(pool: _enginePool, config: config);
       final report = await verifier.verify(
         tree,
         fenMap: analysis.fenMap,

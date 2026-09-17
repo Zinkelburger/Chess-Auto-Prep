@@ -418,7 +418,7 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
     ...KeyBinding.forShortcut(
       AppShortcut.toggleEngine,
       'Toggle engine',
-      InlineEngineBar.toggleEngine,
+      () => InlineEngineBar.toggleEngine(context),
     ),
     // The app-wide Escape contract: leave what you are in. Here the only thing
     // you can be "in" is a tab other than the first, so Escape backs out to it

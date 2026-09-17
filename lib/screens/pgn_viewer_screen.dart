@@ -9,6 +9,8 @@
 /// `pgn_viewer_screen_panes.dart`.
 library;
 
+import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
+
 import 'dart:async';
 
 import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
@@ -304,8 +306,8 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     _showPanel(PgnWorkspace.game);
     // Revealing an already enabled engine must not turn it off. Subsequent
     // presses toggle analysis while leaving the panel in place.
-    if (!hidden || !InlineEngineBar.isEngineEnabled) {
-      InlineEngineBar.toggleEngine();
+    if (!hidden || !InlineEngineBar.isEngineEnabled(context)) {
+      InlineEngineBar.toggleEngine(context);
     }
   }
 
@@ -1166,6 +1168,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     final game = _controller.filteredGames[_controller.currentGameIndex];
     try {
       final found = await detectSolitaireTrophies(
+        pool: context.read<StockfishPool>(),
         guesses: guesses,
         evals: _analysisController.evals,
         userIsWhite: _controller.solitaire.userIsWhite,

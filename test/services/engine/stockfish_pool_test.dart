@@ -1,6 +1,11 @@
 /// Unit tests for [StockfishPool] crash recovery and cancel-abort.
 library;
 
+import 'package:chess_auto_prep/features/settings/models/engine_configuration.dart';
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../../support/runtime_settings.dart';
+
 import 'dart:async';
 
 import 'package:chess_auto_prep/services/engine/engine_connection.dart';
@@ -73,11 +78,19 @@ class _FakeConnection implements EngineConnection {
   }
 }
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   test('worker slot shares startup and releases a late connection', () async {
     final created = Completer<EngineConnection?>();
     var calls = 0;
     final slot = EngineWorkerSlot(
+      budget: engines.budget,
       createConnection: () {
         calls++;
         return created.future;
@@ -99,6 +112,7 @@ void main() {
     final healthy = _FakeConnection();
     var calls = 0;
     final slot = EngineWorkerSlot(
+      budget: engines.budget,
       createConnection: () async => calls++ == 0 ? failed : healthy,
     );
     await expectLater(slot.ensure(threads: 1), throwsStateError);
@@ -114,7 +128,9 @@ void main() {
       final gate = Completer<void>();
       final conn = _FakeConnection()..readyGate = gate;
       var calls = 0;
-      final pool = StockfishPool.fresh(
+      final pool = StockfishPool(
+        settings: EngineConfiguration.new,
+        budget: engines.budget,
         createConnection: () async {
           calls++;
           return conn;
@@ -139,6 +155,7 @@ void main() {
       final conn = _FakeConnection();
       var calls = 0;
       final slot = EngineWorkerSlot(
+        budget: engines.budget,
         createConnection: () {
           if (calls++ == 0) throw StateError('Creation failed');
           return Future.value(conn);
@@ -152,7 +169,11 @@ void main() {
 
   test('pool applies a reduced thread setting to existing workers', () async {
     final connection = _FakeConnection();
-    final pool = StockfishPool.fresh(createConnection: () async => connection);
+    final pool = StockfishPool(
+      settings: EngineConfiguration.new,
+      budget: engines.budget,
+      createConnection: () async => connection,
+    );
     await pool.ensureWorkers(1, 2);
     await pool.ensureWorkers(1, 1);
     expect(
@@ -167,11 +188,14 @@ void main() {
   test(
     'broken stop pipes retire every worker without mutating iteration',
     () async {
-      final pool = StockfishPool.fresh();
+      final pool = StockfishPool(
+        settings: EngineConfiguration.new,
+        budget: engines.budget,
+      );
       final evaluations = <Future<void>>[];
       for (var i = 0; i < 2; i++) {
         final connection = _FakeConnection()..failStop = true;
-        final worker = EvalWorker(connection);
+        final worker = EvalWorker(connection, budget: engines.budget);
         await worker.init();
         pool.addWorkerForTest(worker);
         evaluations.add(
@@ -187,7 +211,7 @@ void main() {
 
   test('broken stop pipe does not abort disposal', () async {
     final conn = _FakeConnection()..failStop = true;
-    final worker = EvalWorker(conn);
+    final worker = EvalWorker(conn, budget: engines.budget);
     await worker.init();
     worker.dispose();
     expect(conn.disposed, isTrue);
@@ -196,7 +220,11 @@ void main() {
 
   test('pool startup failure disposes its process', () async {
     final conn = _FakeConnection()..failReady = true;
-    final pool = StockfishPool.fresh(createConnection: () async => conn);
+    final pool = StockfishPool(
+      settings: EngineConfiguration.new,
+      budget: engines.budget,
+      createConnection: () async => conn,
+    );
     await pool.ensureWorkers(1);
     expect(pool.workerCount, 0);
     expect(conn.disposed, isTrue);
@@ -205,7 +233,7 @@ void main() {
 
   test('overlapping discoveries do not overwrite the newer awaiter', () async {
     final conn = _FakeConnection()..autoAnswerCp = 12;
-    final worker = EvalWorker(conn);
+    final worker = EvalWorker(conn, budget: engines.budget);
     await worker.init();
     const fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
     final old = worker.runDiscovery(fen, 8, 1, true);
@@ -234,8 +262,11 @@ void main() {
 
   test('stopAll aborts an in-flight evaluateFen', () async {
     final conn = _FakeConnection();
-    final pool = StockfishPool.fresh();
-    final worker = EvalWorker(conn);
+    final pool = StockfishPool(
+      settings: EngineConfiguration.new,
+      budget: engines.budget,
+    );
+    final worker = EvalWorker(conn, budget: engines.budget);
     await worker.init(hashMb: 16, threads: 1);
     pool.addWorkerForTest(worker);
 
@@ -255,8 +286,11 @@ void main() {
     'forEachParallel UCI-stops the in-flight item when stopWhen flips',
     () async {
       final conn = _FakeConnection();
-      final pool = StockfishPool.fresh();
-      final worker = EvalWorker(conn);
+      final pool = StockfishPool(
+        settings: EngineConfiguration.new,
+        budget: engines.budget,
+      );
+      final worker = EvalWorker(conn, budget: engines.budget);
       await worker.init(hashMb: 16, threads: 1);
       pool.addWorkerForTest(worker);
 
@@ -281,8 +315,11 @@ void main() {
 
   test('dead worker is dropped and a waiter is not stuck forever', () async {
     final conn = _FakeConnection();
-    final pool = StockfishPool.fresh();
-    final worker = EvalWorker(conn);
+    final pool = StockfishPool(
+      settings: EngineConfiguration.new,
+      budget: engines.budget,
+    );
+    final worker = EvalWorker(conn, budget: engines.budget);
     await worker.init(hashMb: 16, threads: 1);
     pool.addWorkerForTest(worker);
 
@@ -304,12 +341,15 @@ void main() {
 
   group('evaluateMany', () {
     test('runs on worker lanes and returns results in input order', () async {
-      final pool = StockfishPool.fresh();
+      final pool = StockfishPool(
+        settings: EngineConfiguration.new,
+        budget: engines.budget,
+      );
       final conns = <_FakeConnection>[];
       for (var i = 0; i < 2; i++) {
         final conn = _FakeConnection()..autoAnswerCp = 10 + i;
         conns.add(conn);
-        final worker = EvalWorker(conn);
+        final worker = EvalWorker(conn, budget: engines.budget);
         await worker.init(hashMb: 16, threads: 1);
         pool.addWorkerForTest(worker);
       }
@@ -335,7 +375,10 @@ void main() {
     });
 
     test('an empty batch is an empty result', () async {
-      final pool = StockfishPool.fresh();
+      final pool = StockfishPool(
+        settings: EngineConfiguration.new,
+        budget: engines.budget,
+      );
       expect(await pool.evaluateMany(const [], 8), isEmpty);
     });
   });
@@ -343,7 +386,7 @@ void main() {
   group('runDiscovery searchMoves', () {
     test('restricts the search to the given root moves', () async {
       final conn = _FakeConnection()..autoAnswerCp = 5;
-      final worker = EvalWorker(conn);
+      final worker = EvalWorker(conn, budget: engines.budget);
       await worker.init(hashMb: 16, threads: 1);
 
       await worker.runDiscovery(
@@ -360,7 +403,7 @@ void main() {
 
     test('without searchMoves the plain go is sent', () async {
       final conn = _FakeConnection()..autoAnswerCp = 5;
-      final worker = EvalWorker(conn);
+      final worker = EvalWorker(conn, budget: engines.budget);
       await worker.init(hashMb: 16, threads: 1);
       await worker.runDiscovery(
         'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
@@ -391,9 +434,12 @@ void main() {
 
   group('concurrencyLimit', () {
     Future<StockfishPool> poolWith(int workers) async {
-      final pool = StockfishPool.fresh();
+      final pool = StockfishPool(
+        settings: EngineConfiguration.new,
+        budget: engines.budget,
+      );
       for (var i = 0; i < workers; i++) {
-        final worker = EvalWorker(_FakeConnection());
+        final worker = EvalWorker(_FakeConnection(), budget: engines.budget);
         await worker.init(hashMb: 16, threads: 1);
         pool.addWorkerForTest(worker);
       }

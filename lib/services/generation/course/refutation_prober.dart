@@ -72,10 +72,10 @@ typedef AlternativeMap = Map<String, RefutedAlternative>;
 class RefutationProber {
   RefutationProber({
     required this.config,
-    StockfishPool? pool,
+    required StockfishPool pool,
     this.freqMap,
     this.masterBook,
-  }) : pool = pool ?? StockfishPool.instance;
+  }) : pool = pool;
 
   final TreeBuildConfig config;
   final StockfishPool pool;

@@ -1,3 +1,6 @@
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../support/runtime_settings.dart';
 import '../support/fake_desktop_fullscreen_port.dart';
 import 'dart:io';
 
@@ -21,7 +24,6 @@ import 'package:chess_auto_prep/core/app_state.dart';
 import 'package:chess_auto_prep/core/app_history.dart';
 import 'package:chess_auto_prep/widgets/pgn_viewer_widget.dart';
 import 'package:chess_auto_prep/screens/pgn_viewer_screen.dart';
-import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_opening_label.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_annotation_panel.dart';
 import 'package:chess_auto_prep/widgets/slice/header_filters.dart';
@@ -49,13 +51,19 @@ Future<void> _settleReader(WidgetTester tester) async {
   fail('The reader did not settle after file and filter work.');
 }
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
   late PgnViewerLifetime lifetime;
   setUp(() {
     SharedPreferences.setMockInitialValues({});
-    EngineLifecycle.instance.resetForTest();
-    EngineLifecycle.testMode = true;
+
     useScriptedBoardEngine();
     const windowChannel = MethodChannel('window_manager');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -88,6 +96,8 @@ void main() {
       directory.deleteSync(recursive: true);
     });
     lifetime = PgnViewerLifetime(
+      pool: engines.pool,
+      lifecycle: engines.lifecycle,
       window: FakeDesktopFullscreenPort(),
       collectionDecoder: const IsolatePgnCollectionDecoder(),
       collectionFilter: const IsolatePgnCollectionFilter(),
@@ -103,7 +113,6 @@ void main() {
     );
     addTearDown(lifetime.shutdown);
   });
-  tearDown(() => EngineLifecycle.instance.resetForTest());
 
   testWidgets(
     'Back restores the live reading cursor after another viewer visit',
@@ -115,7 +124,9 @@ void main() {
       addTearDown(app.dispose);
       addTearDown(history.dispose);
       app.pushMode(AppMode.pgnViewer, historyLabel: 'Game viewer');
-      await tester.pumpWidget(
+      await pumpRuntimeWidget(
+        tester,
+        _engineFixtureSettings ??= testRuntimeSettings(),
         MultiProvider(
           providers: [
             ChangeNotifierProvider.value(value: app),
@@ -165,7 +176,11 @@ void main() {
       expect(reader.currentFen, previousFen);
       expect(history.length, 2);
       expect(tester.takeException(), isNull);
-      await tester.pumpWidget(const SizedBox.shrink());
+      await pumpRuntimeWidget(
+        tester,
+        _engineFixtureSettings ??= testRuntimeSettings(),
+        const SizedBox.shrink(),
+      );
       await tester.runAsync(lifetime.shutdown);
       await _settleReader(tester);
     },
@@ -178,7 +193,9 @@ void main() {
       addTearDown(() => tester.binding.setSurfaceSize(null));
       final app = AppState()..setMode(AppMode.pgnViewer);
       addTearDown(app.dispose);
-      await tester.pumpWidget(
+      await pumpRuntimeWidget(
+        tester,
+        _engineFixtureSettings ??= testRuntimeSettings(),
         ChangeNotifierProvider.value(
           value: app,
           child: MaterialApp(
@@ -314,7 +331,11 @@ void main() {
       await _settleReader(tester);
       expect(find.byType(PgnAnnotationPanel), findsNothing);
       expect(tester.takeException(), isNull);
-      await tester.pumpWidget(const SizedBox.shrink());
+      await pumpRuntimeWidget(
+        tester,
+        _engineFixtureSettings ??= testRuntimeSettings(),
+        const SizedBox.shrink(),
+      );
       await tester.runAsync(lifetime.shutdown);
       // Let cancellation finish if the background FEN-index isolate was still
       // spawning when the reader was disposed.
@@ -333,7 +354,9 @@ void main() {
       final coordinator = DocumentCloseCoordinator();
       addTearDown(app.dispose);
       addTearDown(coordinator.dispose);
-      await tester.pumpWidget(
+      await pumpRuntimeWidget(
+        tester,
+        _engineFixtureSettings ??= testRuntimeSettings(),
         ChangeNotifierProvider.value(
           value: app,
           child: DocumentCloseScope(
@@ -390,7 +413,11 @@ void main() {
       await tester.tap(find.text('Cancel'));
       await _settleReader(tester);
       expect((await retry).disposition, DocumentCloseDisposition.cancelled);
-      await tester.pumpWidget(const SizedBox.shrink());
+      await pumpRuntimeWidget(
+        tester,
+        _engineFixtureSettings ??= testRuntimeSettings(),
+        const SizedBox.shrink(),
+      );
       await tester.runAsync(lifetime.shutdown);
       await _settleReader(tester);
     },

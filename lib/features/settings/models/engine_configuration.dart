@@ -7,6 +7,10 @@ class EngineConfiguration extends ImmutableSection<EngineConfiguration> {
     Map<String, Object?> input = const {},
     this.maxCores = 1024,
   ]) : super({
+         'engine_lifecycle.toggle_on':
+             input['engine_lifecycle.toggle_on'] is bool
+             ? input['engine_lifecycle.toggle_on'] as bool
+             : true,
          'engine_settings.cores':
              (input['engine_settings.cores'] is int
                      ? input['engine_settings.cores'] as int
@@ -101,6 +105,7 @@ class EngineConfiguration extends ImmutableSection<EngineConfiguration> {
              ? input['engine_settings.muted_columns'] as String
              : '',
        });
+  bool get enabled => values['engine_lifecycle.toggle_on'] as bool;
   final int maxCores;
   @override
   EngineConfiguration withValues(Map<String, Object> values) =>

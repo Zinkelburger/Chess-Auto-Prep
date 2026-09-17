@@ -2,6 +2,8 @@
 /// the engine pass with work left, and play carries on.
 library;
 
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+
 import '../../support/runtime_settings.dart';
 import 'package:chess_auto_prep/app/runtime_settings.dart';
 
@@ -112,6 +114,8 @@ class _OneGameLibrary extends GamesLibraryService {
 
 /// Records the engine-pass calls without touching the network or an engine.
 class _RecordingCoordinator extends TacticsImportCoordinator {
+  _RecordingCoordinator()
+    : super(pool: engines.pool, lifecycle: engines.lifecycle);
   final imports = <TacticsImportParams>[];
 
   /// Whether each call was handed already-downloaded games (rather than being
@@ -144,6 +148,8 @@ class _RecordingCoordinator extends TacticsImportCoordinator {
 /// wind-down. Refuses a second concurrent pass the way the real coordinator
 /// does (it still holds the engine pool).
 class _BlockingCoordinator extends TacticsImportCoordinator {
+  _BlockingCoordinator()
+    : super(pool: engines.pool, lifecycle: engines.lifecycle);
   int imports = 0;
   int cancels = 0;
 
@@ -192,11 +198,11 @@ Future<void> pumpUntil(bool Function() done, {int times = 500}) async {
 }
 
 late RuntimeSettings runtimeSettings;
+EngineRuntime get engines => testEngines(runtimeSettings);
 void main() {
   setUp(() async {
     runtimeSettings = testRuntimeSettings();
     await runtimeSettings.load();
-    runtimeSettings.bindLegacyEngines();
     addTearDown(runtimeSettings.dispose);
   });
   TestWidgetsFlutterBinding.ensureInitialized();

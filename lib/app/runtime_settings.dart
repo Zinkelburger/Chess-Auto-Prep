@@ -5,9 +5,6 @@ import '../features/settings/models/engine_configuration.dart';
 import '../features/settings/models/bulk_analysis_configuration.dart';
 import '../features/settings/models/board_display_configuration.dart';
 import '../infrastructure/settings/preferences_section_storage.dart';
-import '../services/engine/board_engine.dart';
-import '../services/engine/stockfish_pool.dart';
-import '../services/engine/engine_search_budget.dart';
 
 class RuntimeSettings {
   RuntimeSettings({
@@ -67,13 +64,10 @@ class RuntimeSettings {
       display.ensureLoaded(),
     ].map((load) => load.catchError((Object _) {})),
   );
-  void bindLegacyEngines() {
-    BoardEngine.instance.bindSettings(() => engine.committed);
-    StockfishPool.instance.bindSettings(() => engine.committed);
-    EngineSearchBudget.instance.capacity = () => engine.committed.cores;
-  }
-
+  bool _disposed = false;
   void dispose() {
+    if (_disposed) return;
+    _disposed = true;
     engine.dispose();
     bulk.dispose();
     display.dispose();

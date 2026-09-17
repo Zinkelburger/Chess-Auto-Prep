@@ -1,3 +1,6 @@
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../../support/runtime_settings.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -54,11 +57,16 @@ BuildTree _tree({bool complete = true}) {
       parent: root,
     )..engineEvalCp = -20,
   );
-  return BuildTree(root: root, totalNodes: 2, maxPlyReached: 1, buildComplete: complete)
-    ..computeMetadata();
+  return BuildTree(
+    root: root,
+    totalNodes: 2,
+    maxPlyReached: 1,
+    buildComplete: complete,
+  )..computeMetadata();
 }
 
 class _GatedBuild extends TreeBuildService {
+  _GatedBuild() : super(pool: engines.pool, lifecycle: engines.lifecycle);
   final tree = _tree(complete: false);
   final entered = Completer<void>();
   final finish = Completer<void>();
@@ -100,7 +108,14 @@ const _config = TreeBuildConfig(
   engineTailPlies: 0,
 );
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
   late Directory directory;
   late String path;
@@ -120,7 +135,7 @@ void main() {
       ),
       artifacts: artifacts,
       engineLifecycle: _Lifecycle(),
-      enginePool: pool,
+      enginePool: pool ?? engines.pool,
       treeBuilder: build,
     );
     controllers.add(value);

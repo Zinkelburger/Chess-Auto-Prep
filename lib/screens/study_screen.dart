@@ -170,7 +170,7 @@ class _StudyScreenState extends State<StudyScreen> {
     ...KeyBinding.forShortcut(
       AppShortcut.toggleEngine,
       'Toggle engine',
-      InlineEngineBar.toggleEngine,
+      () => InlineEngineBar.toggleEngine(context),
     ),
     ...KeyBinding.forShortcut(
       AppShortcut.flipBoard,

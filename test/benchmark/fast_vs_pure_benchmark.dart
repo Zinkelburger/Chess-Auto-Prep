@@ -4,6 +4,8 @@
 /// No `_test` suffix: ordinary CI must not launch this experiment.
 library;
 
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+
 import '../support/runtime_settings.dart';
 import 'package:chess_auto_prep/app/runtime_settings.dart';
 
@@ -12,7 +14,6 @@ import 'dart:io';
 
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/models/build_tree_node.dart';
-import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
 import 'package:chess_auto_prep/services/generation/eca_calculator.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';
 import 'package:chess_auto_prep/services/generation/repertoire_selector.dart';
@@ -48,11 +49,11 @@ class _Paths extends PathProviderPlatform with MockPlatformInterfaceMixin {
 }
 
 late RuntimeSettings runtimeSettings;
+EngineRuntime get engines => testEngines(runtimeSettings);
 void main() {
   setUp(() async {
     runtimeSettings = testRuntimeSettings();
     await runtimeSettings.load();
-    runtimeSettings.bindLegacyEngines();
     addTearDown(runtimeSettings.dispose);
   });
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -111,9 +112,12 @@ void main() {
       await maia.initialize();
       expect((await maia.evaluate(fen, 2200)).policy, isNotEmpty);
       runtimeSettings.engine.cores = _workers;
-      await StockfishPool.instance.prepareForTreeBuild(_workers);
+      await engines.pool.prepareForTreeBuild(_workers);
       startup.stop();
-      final service = TreeBuildService();
+      final service = TreeBuildService(
+        pool: engines.pool,
+        lifecycle: engines.lifecycle,
+      );
       final wall = Stopwatch()..start();
       var lastReport = 0;
       final tree = await service.build(
@@ -157,8 +161,8 @@ void main() {
       visit(tree.root, '');
       final stats = {
         'algorithm': _algo,
-        'workers': StockfishPool.instance.concurrencyLimit,
-        'threads_per_worker': StockfishPool.instance.threadsPerWorker,
+        'workers': engines.pool.concurrencyLimit,
+        'threads_per_worker': engines.pool.threadsPerWorker,
         'start_fen': fen,
         'config': tree.configSnapshot,
         'budget_seconds': _seconds,
@@ -186,7 +190,7 @@ void main() {
           ..remove('config'))}',
       );
     } finally {
-      StockfishPool.instance.dispose();
+      engines.pool.dispose();
       MaiaFactory.instance?.dispose();
       debugDefaultTargetPlatformOverride = null;
     }

@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/app/engine_runtime.dart';
 import '../../support/runtime_settings.dart';
 import 'package:chess_auto_prep/app/runtime_settings.dart';
 import 'dart:async';
@@ -56,11 +57,11 @@ int ticks(int pid) {
 }
 
 late RuntimeSettings runtimeSettings;
+EngineRuntime get engines => testEngines(runtimeSettings);
 void main() {
   setUp(() async {
     runtimeSettings = testRuntimeSettings();
     await runtimeSettings.load();
-    runtimeSettings.bindLegacyEngines();
     addTearDown(runtimeSettings.dispose);
   });
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -73,6 +74,7 @@ void main() {
       await runtimeSettings.engine.edit({'engine_settings.hash_mb': 16});
       final connections = <Native>[];
       final board = BoardEngine(
+        budget: engines.budget,
         settings: () => runtimeSettings.engine.committed,
         createConnection: () async {
           final c = Native(await Process.start(executable!, []));

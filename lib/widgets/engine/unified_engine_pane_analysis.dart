@@ -23,7 +23,7 @@ mixin _EnginePaneAnalysis on _UnifiedEnginePaneStateBase {
   void _onLifecycleChanged() {
     if (!mounted) return;
     _syncBoardEngine();
-    final state = EngineLifecycle.instance.state;
+    final state = _lifecycle.state;
     final prev = _lastLifecycleState;
     _lastLifecycleState = state;
 
@@ -64,7 +64,7 @@ mixin _EnginePaneAnalysis on _UnifiedEnginePaneStateBase {
       log.i('[Engine] ── _runAnalysis() for $shortFen ──');
     }
 
-    EngineLifecycle.instance.onPositionChanged(widget.fen);
+    _lifecycle.onPositionChanged(widget.fen);
     _trySaveCurrentToCache();
     _initialAnalysisStarted = false;
     unawaited(_startInitialAnalysis());
@@ -300,7 +300,7 @@ mixin _EnginePaneAnalysis on _UnifiedEnginePaneStateBase {
       if (!mounted) return;
       final ps = _analysis.poolStatus.value;
       if (ps.isComplete) {
-        EngineLifecycle.instance.onAnalysisComplete();
+        _lifecycle.onAnalysisComplete();
         _perfLog(
           'Evaluation COMPLETE — ${_analysis.results.value.length} evals',
         );

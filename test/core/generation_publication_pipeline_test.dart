@@ -1,3 +1,6 @@
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../support/runtime_settings.dart';
 import '../support/generation_artifacts_fixture.dart';
 import 'dart:io';
 
@@ -51,7 +54,14 @@ BuildTree _completedTree() {
   return BuildTree(root: root, maxPlyReached: 1)..computeMetadata();
 }
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
   for (final outcome in ['success', 'conflict', 'refresh failure']) {
     final conflict = outcome == 'conflict';
@@ -75,6 +85,7 @@ void main() {
         };
       }
       final controller = GenerationSessionController(
+        enginePool: engines.pool,
         publication: GenerationPublicationController(
           documents: documents,
           drafts: StorageGenerationDraftRepository(

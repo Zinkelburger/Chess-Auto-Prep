@@ -74,8 +74,8 @@ class VerificationReport {
 class RepertoireVerifier {
   final TreeBuildConfig config;
   final StockfishPool pool;
-  RepertoireVerifier({required this.config, StockfishPool? pool})
-    : pool = pool ?? StockfishPool.instance;
+  RepertoireVerifier({required this.config, required StockfishPool pool})
+    : pool = pool;
 
   Future<VerificationReport> verify(
     BuildTree tree, {

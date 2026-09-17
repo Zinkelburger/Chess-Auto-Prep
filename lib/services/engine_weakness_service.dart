@@ -32,7 +32,8 @@ class EngineWeaknessException implements Exception {
 }
 
 class EngineWeaknessService {
-  final StockfishPool _pool = StockfishPool.instance;
+  EngineWeaknessService({required StockfishPool pool}) : _pool = pool;
+  final StockfishPool _pool;
   bool _cancelled = false;
 
   int get workerCount => _pool.workerCount;

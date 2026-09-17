@@ -1,3 +1,6 @@
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../support/runtime_settings.dart';
 import 'package:chess_auto_prep/features/documents/models/viewer_collection_load.dart';
 import '../support/fake_desktop_fullscreen_port.dart';
 import 'package:chess_auto_prep/features/documents/models/viewer_perspective.dart';
@@ -22,6 +25,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _Analysis extends GameAnalysisController {
+  _Analysis() : super(pool: engines.pool, lifecycle: engines.lifecycle);
   @override
   Future<bool> tryLoadFromPgn(String pgnText) async => false;
 
@@ -63,7 +67,14 @@ class _IndexedStorage extends _MemoryStorage {
   }
 }
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late PgnViewerController controller;

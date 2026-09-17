@@ -34,6 +34,8 @@ const int _kDefaultElo = 2200;
 
 class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
   GameAnalysisController({
+    required this.pool,
+    required this.lifecycle,
     Future<CachedGameAnalysis?> Function(String pgnText)? cachedAnalysisLoader,
     int Function()? bulkDepth,
   }) : _bulkDepth = bulkDepth ?? (() => BulkAnalysisConfiguration.defaultDepth),
@@ -41,6 +43,8 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
            cachedAnalysisLoader ??
            ((pgnText) => compute(parseCachedEvals, pgnText));
 
+  final StockfishPool pool;
+  final EngineLifecycle lifecycle;
   final int Function() _bulkDepth;
 
   final Future<CachedGameAnalysis?> Function(String pgnText)
@@ -132,7 +136,7 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
     if (_isAnalyzing) return;
     final missing = movesMissingBestLine;
     if (missing.isEmpty) return;
-    if (EngineLifecycle.instance.state == EngineState.generating) return;
+    if (lifecycle.state == EngineState.generating) return;
     final generation = _generation;
 
     // The depth the graph was drawn at, so the lines agree with the scores
@@ -145,7 +149,6 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
 
     final List<EvalResult> results;
     try {
-      final pool = StockfishPool.instance;
       await pool.ensureWorkers();
       if (pool.workerCount == 0) return;
       results = await pool.evaluateMany([
@@ -217,7 +220,6 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
       notifyListeners();
       if (mainline.isEmpty) return;
 
-      final pool = StockfishPool.instance;
       await pool.ensureWorkers();
       if (!runIsCurrent()) return;
       final workerCount = pool.workerCount;
@@ -486,7 +488,7 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
     _generation++;
     _isCancelled = true;
     _isAnalyzing = false;
-    StockfishPool.instance.stopAll();
+    pool.stopAll();
     notifyListeners();
   }
 

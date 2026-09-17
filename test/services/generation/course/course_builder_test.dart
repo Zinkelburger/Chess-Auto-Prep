@@ -8,6 +8,10 @@
 /// value the builder returns.
 library;
 
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../../../support/runtime_settings.dart';
+
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/services/generation/course/course_builder.dart';
 import 'package:chess_auto_prep/services/generation/course/enrichment_runner.dart';
@@ -68,12 +72,20 @@ const _unrelatedGame = PgnGameRecord(
 PgnFreqMap _databaseHolding(PgnGameRecord game) =>
     PgnFreqMap()..games.offer(game);
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late StandardTree fixture;
 
   CourseBuilder makeBuilder({PgnFreqMap? database}) => CourseBuilder(
+    pool: engines.pool,
     enrichment: EnrichmentRunner(
       config: () => null,
       isCancelled: () => false,

@@ -41,7 +41,7 @@ mixin _EngineWeaknessMixin on _AnalysisScreenStateBase {
     if (!mounted || _currentPlayer != player) return;
 
     _evalService?.dispose();
-    final service = EngineWeaknessService();
+    final service = EngineWeaknessService(pool: context.read<StockfishPool>());
     _evalService = service;
 
     setState(() {

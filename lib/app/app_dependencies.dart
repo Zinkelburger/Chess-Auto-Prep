@@ -1,3 +1,9 @@
+import 'engine_runtime.dart';
+import '../services/engine/board_engine.dart';
+import '../services/engine/engine_lifecycle.dart';
+import '../services/engine/engine_search_budget.dart';
+import '../services/engine/generation_lease.dart';
+import '../services/engine/stockfish_pool.dart';
 import 'dart:async';
 import 'runtime_settings.dart';
 import '../features/settings/controllers/engine_settings.dart';
@@ -53,6 +59,7 @@ class AppDependencies extends StatefulWidget {
     this.storedGames,
     this.trainingSettings,
     this.runtimeSettings,
+    this.engineRuntime,
   });
 
   final Widget child;
@@ -62,6 +69,7 @@ class AppDependencies extends StatefulWidget {
   final StoredGameRepository? storedGames;
   final TrainingSettingsRepository? trainingSettings;
   final RuntimeSettings? runtimeSettings;
+  final EngineRuntime? engineRuntime;
 
   @override
   State<AppDependencies> createState() => _AppDependenciesState();
@@ -69,11 +77,17 @@ class AppDependencies extends StatefulWidget {
 
 class _AppDependenciesState extends State<AppDependencies> {
   late final _runtime = widget.runtimeSettings ?? RuntimeSettings.preferences();
+  late final _engines =
+      widget.engineRuntime ?? EngineRuntime(settings: _runtime.engine);
   @override
   void initState() {
     super.initState();
-    _runtime.bindLegacyEngines();
     unawaited(_runtime.load());
+    if (widget.engineRuntime == null) {
+      unawaited(
+        _engines.lifecycle.loadPersistedState().catchError((Object _) {}),
+      );
+    }
   }
 
   late final _trainingSettings = createTrainingSettings();
@@ -81,7 +95,8 @@ class _AppDependenciesState extends State<AppDependencies> {
   @override
   void dispose() {
     _trainingSettings.dispose();
-    if (widget.runtimeSettings == null) _runtime.dispose();
+    _engines.dispose();
+    _runtime.dispose();
     super.dispose();
   }
 
@@ -111,6 +126,17 @@ class _AppDependenciesState extends State<AppDependencies> {
         value: widget.trainingSettings ?? _trainingSettings,
         child: legacy_provider.MultiProvider(
           providers: [
+            legacy_provider.Provider<BoardEngine>.value(value: _engines.board),
+            legacy_provider.Provider<StockfishPool>.value(value: _engines.pool),
+            legacy_provider.Provider<EngineSearchBudget>.value(
+              value: _engines.budget,
+            ),
+            legacy_provider.ChangeNotifierProvider<EngineLifecycle>.value(
+              value: _engines.lifecycle,
+            ),
+            legacy_provider.Provider<GenerationLease>.value(
+              value: _engines.lease,
+            ),
             legacy_provider.ChangeNotifierProvider<EngineSettings>.value(
               value: _runtime.engine,
             ),

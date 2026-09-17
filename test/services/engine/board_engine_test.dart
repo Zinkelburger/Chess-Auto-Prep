@@ -1,3 +1,5 @@
+import 'package:chess_auto_prep/features/settings/models/engine_configuration.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
 import '../../support/runtime_settings.dart';
 import 'package:chess_auto_prep/app/runtime_settings.dart';
 import 'dart:async';
@@ -57,11 +59,11 @@ Future<void> flush() async {
 }
 
 late RuntimeSettings runtimeSettings;
+EngineRuntime get engines => testEngines(runtimeSettings);
 void main() {
   setUp(() async {
     runtimeSettings = testRuntimeSettings();
     await runtimeSettings.load();
-    runtimeSettings.bindLegacyEngines();
     addTearDown(runtimeSettings.dispose);
   });
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -78,6 +80,7 @@ void main() {
     await runtimeSettings.engine.edit({'engine_settings.hash_mb': 128});
     engines = [];
     board = BoardEngine(
+      budget: testEngines(runtimeSettings).budget,
       settings: () => runtimeSettings.engine.committed,
       createConnection: () async {
         final engine = _Engine();
@@ -123,6 +126,7 @@ void main() {
   test('stop timeout replaces process for the next search', () async {
     board.dispose();
     board = BoardEngine(
+      budget: testEngines(runtimeSettings).budget,
       settings: () => runtimeSettings.engine.committed,
       protocolTimeout: const Duration(milliseconds: 100),
       createConnection: () async {
@@ -165,7 +169,10 @@ void main() {
       final bulkConnection = _Engine();
       final bulkWorker = EvalWorker(bulkConnection, budget: budget);
       await bulkWorker.init();
-      final pool = StockfishPool.fresh()..addWorkerForTest(bulkWorker);
+      final pool = StockfishPool(
+        settings: EngineConfiguration.new,
+        budget: testEngines(runtimeSettings).budget,
+      )..addWorkerForTest(bulkWorker);
       addTearDown(pool.dispose);
       final active = search(a);
       await flush();
@@ -402,6 +409,7 @@ void main() {
       board.dispose();
       final created = Completer<EngineConnection?>();
       board = BoardEngine(
+        budget: testEngines(runtimeSettings).budget,
         settings: () => runtimeSettings.engine.committed,
         createConnection: () => created.future,
       );

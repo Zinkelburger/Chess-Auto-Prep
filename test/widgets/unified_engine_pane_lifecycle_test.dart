@@ -1,10 +1,10 @@
+import 'package:chess_auto_prep/app/engine_runtime.dart';
 import '../support/runtime_settings.dart';
 import 'package:chess_auto_prep/app/runtime_settings.dart';
 import 'dart:async';
 
 import 'package:chess_auto_prep/features/settings/controllers/engine_settings.dart';
 import 'package:chess_auto_prep/services/analysis_service.dart';
-import 'package:chess_auto_prep/services/engine/board_engine.dart';
 import 'package:chess_auto_prep/services/engine/engine_connection.dart';
 import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
 import 'package:chess_auto_prep/services/engine/stockfish_connection_factory.dart';
@@ -56,21 +56,24 @@ Future<void> pumpFrames(WidgetTester tester) async {
 }
 
 RuntimeSettings? _runtimeSettings;
-RuntimeSettings get runtimeSettings =>
-    _runtimeSettings ??= testRuntimeSettings()..bindLegacyEngines();
+RuntimeSettings get runtimeSettings => _runtimeSettings ??= testRuntimeSettings(
+  values: {
+    'engine_settings.show_maia': false,
+    'engine_settings.show_stockfish': true,
+  },
+);
+EngineRuntime get engines => testEngines(runtimeSettings);
+EngineLifecycle get lifecycle => engines.lifecycle;
 void main() {
   setUp(() {
     _runtimeSettings = null;
     addTearDown(() => _runtimeSettings?.dispose());
   });
   late List<_Connection> connections;
-  final lifecycle = EngineLifecycle.instance;
+
   setUp(() {
     SharedPreferences.setMockInitialValues({});
-    lifecycle.resetForTest();
-    EngineLifecycle.testMode = true;
-    runtimeSettings.engine.showMaia = false;
-    runtimeSettings.engine.showStockfish = true;
+
     connections = [];
     StockfishConnectionFactory.createForTest = () async {
       final connection = _Connection();
@@ -79,7 +82,6 @@ void main() {
     };
   });
   tearDown(() {
-    lifecycle.resetForTest();
     StockfishConnectionFactory.createForTest = null;
   });
 
@@ -133,8 +135,8 @@ void main() {
   testWidgets('replacing an injected service detaches the old session', (
     tester,
   ) async {
-    final first = AnalysisService();
-    final second = AnalysisService();
+    final first = AnalysisService(engine: engines.board);
+    final second = AnalysisService(engine: engines.board);
     addTearDown(first.dispose);
     addTearDown(second.dispose);
     await pumpRuntimeWidget(tester, runtimeSettings, pane(analysis: first));
@@ -157,8 +159,8 @@ void main() {
   testWidgets(
     'inactive actual pane cannot cancel another session on settings changes',
     (tester) async {
-      final active = AnalysisService();
-      final inactive = AnalysisService();
+      final active = AnalysisService(engine: engines.board);
+      final inactive = AnalysisService(engine: engines.board);
       addTearDown(active.dispose);
       addTearDown(inactive.dispose);
       await active.prepare();
@@ -182,7 +184,7 @@ void main() {
       expect((await discovery).lines.single.scoreCp, 25);
       await pumpRuntimeWidget(tester, runtimeSettings, const SizedBox());
       await tester.pump();
-      expect(BoardEngine.instance.workerCount, 1);
+      expect(engines.board.workerCount, 1);
       expect(tester.takeException(), isNull);
     },
   );

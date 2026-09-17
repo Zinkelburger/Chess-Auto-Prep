@@ -12,28 +12,26 @@ import 'eval_worker.dart';
 /// hash and network; only leaving all boards or suspending releases the process.
 /// The latest search owns the worker. An old pane cannot stop a newer pane.
 class BoardEngine {
-  static final instance = BoardEngine();
-
   BoardEngine({
     Future<EngineConnection?> Function()? createConnection,
-    EngineSearchBudget? budget,
-    EngineConfiguration Function()? settings,
+    required EngineSearchBudget budget,
+    required EngineConfiguration Function() settings,
     Duration protocolTimeout = const Duration(seconds: 10),
-  }) : _settings = settings ?? EngineConfiguration.new,
+  }) : _settings = settings,
        _slot = EngineWorkerSlot(
          createConnection: createConnection,
          budget: budget,
          protocolTimeout: protocolTimeout,
        );
 
-  BoardEngineSession createSession() => BoardEngineSession._(this);
+  BoardEngineSession createSession() {
+    if (_disposed) throw StateError("Board engine disposed");
+    return BoardEngineSession._(this);
+  }
 
   final EngineWorkerSlot _slot;
-  EngineConfiguration Function() _settings;
-
-  /// Composition injects the application owner; searches capture it before queuing.
-  void bindSettings(EngineConfiguration Function() settings) =>
-      _settings = settings;
+  final EngineConfiguration Function() _settings;
+  bool _disposed = false;
   EngineConfiguration? _effectiveSettings;
   EngineConfiguration get effectiveSettings =>
       _effectiveSettings ?? _settings();
@@ -74,6 +72,7 @@ class BoardEngine {
 
   /// Prepare the real configuration before the first toggle, without searching.
   Future<void> _prepare(BoardEngineSession client) async {
+    if (_disposed) throw StateError("Board engine disposed");
     _clients.add(client);
     if (_suspended) return;
     await _ensure();
@@ -104,7 +103,7 @@ class BoardEngine {
     _progress.clear();
     _slot.stop();
     return _enqueue(() async {
-      bool current() => request == _request && !_suspended;
+      bool current() => request == _request && !_suspended && !_disposed;
       if (!current()) return null;
       try {
         // Retry one retired process. The worker owns drain/CPU admission for
@@ -237,6 +236,7 @@ class BoardEngine {
   }
 
   Future<void> resume() {
+    if (_disposed) return Future.value();
     _suspended = false;
     final lifetime = _lifetime;
     return _enqueue(() async {
@@ -247,7 +247,9 @@ class BoardEngine {
   }
 
   void dispose() {
-    _suspended = false;
+    if (_disposed) return;
+    _disposed = true;
+    _suspended = true;
     _clients.clear();
     _release();
     _queue = EngineSerialQueue();

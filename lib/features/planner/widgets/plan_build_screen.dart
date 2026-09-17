@@ -13,6 +13,10 @@
 /// by decision, rather than a dump of every line they ever played.
 library;
 
+import 'package:provider/provider.dart';
+import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
+import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
+
 import 'dart:async';
 
 import 'package:dartchess/dartchess.dart';
@@ -102,7 +106,11 @@ class PlanBuildScreen extends StatefulWidget {
 
 class _PlanBuildScreenState extends State<PlanBuildScreen> {
   late final PlanDataSource _source =
-      widget.dataSource ?? DefaultPlanDataSource();
+      widget.dataSource ??
+      DefaultPlanDataSource(
+        pool: context.read<StockfishPool>(),
+        lifecycle: context.read<EngineLifecycle>(),
+      );
   late final AnalysisGamesService _games =
       widget.gamesService ?? AnalysisGamesService();
   late final PlanController _plan = PlanController(
@@ -546,7 +554,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
             ...KeyBinding.forShortcut(
               AppShortcut.toggleEngine,
               'Toggle engine',
-              InlineEngineBar.toggleEngine,
+              () => InlineEngineBar.toggleEngine(context),
             ),
           ],
           event,

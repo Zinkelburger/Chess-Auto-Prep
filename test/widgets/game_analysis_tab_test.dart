@@ -1,5 +1,9 @@
 library;
 
+import '../support/runtime_settings.dart';
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -12,7 +16,14 @@ import 'package:chess_auto_prep/widgets/board/board_square_painter.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:chess_auto_prep/widgets/pgn_viewer_widget.dart';
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
 
   const analyzed =
@@ -28,7 +39,10 @@ void main() {
   ) async {
     await tester.binding.setSurfaceSize(const Size(1400, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    final analysis = GameAnalysisController();
+    final analysis = GameAnalysisController(
+      pool: engines.pool,
+      lifecycle: engines.lifecycle,
+    );
     addTearDown(analysis.dispose);
     expect(
       await tester.runAsync(() => analysis.tryLoadFromPgn(analyzed)),
@@ -36,7 +50,9 @@ void main() {
     );
     final controller = PgnViewerWidgetController();
     Position position = Chess.initial;
-    await tester.pumpWidget(
+    await pumpRuntimeWidget(
+      tester,
+      _engineFixtureSettings ??= testRuntimeSettings(),
       MaterialApp(
         home: Scaffold(
           body: StatefulBuilder(
@@ -132,14 +148,19 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(900, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
-    final analysis = GameAnalysisController();
+    final analysis = GameAnalysisController(
+      pool: engines.pool,
+      lifecycle: engines.lifecycle,
+    );
     addTearDown(analysis.dispose);
     final loaded = await tester.runAsync(
       () => analysis.tryLoadFromPgn(analyzed),
     );
     expect(loaded, isTrue);
 
-    await tester.pumpWidget(
+    await pumpRuntimeWidget(
+      tester,
+      _engineFixtureSettings ??= testRuntimeSettings(),
       MaterialApp(
         home: Scaffold(
           body: GameAnalysisTab(

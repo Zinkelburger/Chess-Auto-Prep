@@ -4,6 +4,8 @@
 /// blocks — those are behind the gear.
 library;
 
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+
 import '../../support/runtime_settings.dart';
 import 'package:chess_auto_prep/app/runtime_settings.dart';
 
@@ -44,6 +46,7 @@ class _IdleLibrary extends GamesLibraryService {
 }
 
 class _StubCoordinator extends TacticsImportCoordinator {
+  _StubCoordinator() : super(pool: engines.pool, lifecycle: engines.lifecycle);
   bool pauseRequested = false;
 
   @override
@@ -83,7 +86,8 @@ class _PausedRunner extends HomeReviewRunner {
 
 RuntimeSettings? _runtimeSettings;
 RuntimeSettings get runtimeSettings =>
-    _runtimeSettings ??= testRuntimeSettings()..bindLegacyEngines();
+    _runtimeSettings ??= testRuntimeSettings();
+EngineRuntime get engines => testEngines(runtimeSettings);
 void main() {
   setUp(() {
     _runtimeSettings = null;

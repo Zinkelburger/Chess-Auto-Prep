@@ -24,9 +24,9 @@ export '../utils/ease_utils.dart' show scoreToQ, kEaseAlpha, kEaseBeta;
 export 'engine/eval_worker.dart' show EvalResult;
 
 class AnalysisService {
-  AnalysisService({BoardEngine? engine})
-    : _engine = engine ?? BoardEngine.instance,
-      _session = (engine ?? BoardEngine.instance).createSession();
+  AnalysisService({required BoardEngine engine})
+    : _engine = engine,
+      _session = engine.createSession();
 
   final BoardEngine _engine;
   final BoardEngineSession _session;

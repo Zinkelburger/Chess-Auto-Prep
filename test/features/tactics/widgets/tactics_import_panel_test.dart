@@ -1,6 +1,8 @@
 /// The Play block: what is playable, and the button that plays it.
 library;
 
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+
 import '../../../support/runtime_settings.dart';
 import 'package:chess_auto_prep/app/runtime_settings.dart';
 
@@ -46,7 +48,8 @@ TacticsPosition _position({required String id, String mistakeType = '??'}) {
 
 RuntimeSettings? _runtimeSettings;
 RuntimeSettings get runtimeSettings =>
-    _runtimeSettings ??= testRuntimeSettings()..bindLegacyEngines();
+    _runtimeSettings ??= testRuntimeSettings();
+EngineRuntime get engines => testEngines(runtimeSettings);
 void main() {
   setUp(() {
     _runtimeSettings = null;
@@ -279,7 +282,10 @@ void main() {
       lichessUsername: () => null,
       chesscomUsername: () => null,
     );
-    final coordinator = TacticsImportCoordinator();
+    final coordinator = TacticsImportCoordinator(
+      pool: engines.pool,
+      lifecycle: engines.lifecycle,
+    );
     final runner = HomeReviewRunner(
       bulkSettings: runtimeSettings.bulk,
       engine: runtimeSettings.engine,

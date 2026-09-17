@@ -58,8 +58,8 @@ class EvalCacheStats {
 }
 
 class EnginePositionProbe {
-  EnginePositionProbe({StockfishPool? pool, EvalCache? evalCache})
-    : _pool = pool ?? StockfishPool.instance,
+  EnginePositionProbe({required StockfishPool pool, EvalCache? evalCache})
+    : _pool = pool,
       _evalCache = evalCache ?? EvalCache.instance;
 
   final StockfishPool _pool;

@@ -1,3 +1,6 @@
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../support/runtime_settings.dart';
 import '../support/generation_artifacts_fixture.dart';
 import '../support/generation_publication_fixture.dart';
 // The expectimax database on GenerationSessionController: loading what a
@@ -49,6 +52,8 @@ BuildTree _tree(String rootFen, {String childFen = _afterE4}) {
 class _CapturingGeneration extends GenerationSessionController {
   _CapturingGeneration(MemoryGenerationArtifacts storage)
     : super(
+        enginePool: engines.pool,
+        engineLifecycle: engines.lifecycle,
         artifacts: GenerationArtifacts(storage),
         publication: generationPublicationFixture(),
       );
@@ -60,7 +65,13 @@ class _CapturingGeneration extends GenerationSessionController {
 }
 
 class _PvLifecycle extends EngineLifecycle {
-  _PvLifecycle() : super.fresh();
+  _PvLifecycle()
+    : super(
+        pool: engines.pool,
+        board: engines.board,
+        loadEnabled: () async => true,
+        saveEnabled: (_) async {},
+      );
   final entered = Completer<void>();
   Completer<void>? gate;
   @override
@@ -82,7 +93,14 @@ const _pvTarget = ExpectimaxProbeTarget(
   playAsWhite: true,
 );
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late MemoryGenerationArtifacts storage;
@@ -173,6 +191,8 @@ void main() {
         _tree(_afterE4C5, childFen: 'probe-child'),
       ]);
       final controller = GenerationSessionController(
+        enginePool: engines.pool,
+        engineLifecycle: engines.lifecycle,
         artifacts: GenerationArtifacts(storage),
         publication: generationPublicationFixture(),
       );
@@ -195,6 +215,8 @@ void main() {
         _tree(_afterE4, childFen: 'other-child'),
       ]);
       final controller = GenerationSessionController(
+        enginePool: engines.pool,
+        engineLifecycle: engines.lifecycle,
         artifacts: GenerationArtifacts(storage),
         publication: generationPublicationFixture(),
       );
@@ -208,6 +230,8 @@ void main() {
 
     test('a repertoire with nothing saved ends with no tree', () async {
       final controller = GenerationSessionController(
+        enginePool: engines.pool,
+        engineLifecycle: engines.lifecycle,
         artifacts: GenerationArtifacts(storage),
         publication: generationPublicationFixture(),
       );
@@ -225,6 +249,8 @@ void main() {
         _tree(_afterE4C5, childFen: 'probe-child'),
       ]);
       final controller = GenerationSessionController(
+        enginePool: engines.pool,
+        engineLifecycle: engines.lifecycle,
         artifacts: GenerationArtifacts(storage),
         publication: generationPublicationFixture(),
       );
@@ -297,6 +323,8 @@ void main() {
     );
     test('refuses moves it cannot play from the start', () async {
       final controller = GenerationSessionController(
+        enginePool: engines.pool,
+        engineLifecycle: engines.lifecycle,
         artifacts: GenerationArtifacts(storage),
         publication: generationPublicationFixture(),
       );

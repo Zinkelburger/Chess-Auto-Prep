@@ -7,6 +7,8 @@
 /// and what happens when searches fail or the caller cancels.
 library;
 
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+
 import '../support/runtime_settings.dart';
 import 'package:chess_auto_prep/app/runtime_settings.dart';
 
@@ -55,11 +57,11 @@ Future<OpeningTree> _build(List<String> games, {bool asWhite = true}) =>
     );
 
 late RuntimeSettings runtimeSettings;
+EngineRuntime get engines => testEngines(runtimeSettings);
 void main() {
   setUp(() async {
     runtimeSettings = testRuntimeSettings();
     await runtimeSettings.load();
-    runtimeSettings.bindLegacyEngines();
     addTearDown(runtimeSettings.dispose);
   });
   late ScriptedEngine engine;
@@ -85,14 +87,18 @@ void main() {
     // nothing to spawn, so no real Stockfish is started.
     await runtimeSettings.engine.edit({'engine_settings.cores': 1});
     engine = ScriptedEngine();
-    worker = await installScriptedWorker(engine);
-    service = EngineWeaknessService();
+    worker = await installScriptedWorker(
+      engine,
+      pool: engines.pool,
+      budget: engines.budget,
+    );
+    service = EngineWeaknessService(pool: engines.pool);
     whiteTree = await _build(_whiteGames);
   });
 
   tearDown(() {
     service.dispose();
-    resetPool();
+    resetPool(engines.pool);
   });
 
   group('which positions qualify', () {

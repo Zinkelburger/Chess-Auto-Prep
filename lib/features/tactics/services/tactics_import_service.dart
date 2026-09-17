@@ -93,7 +93,7 @@ class _RunListeners {
 typedef _GameTask = ({String gameText, String gameId});
 
 class TacticsImportService {
-  TacticsImportService({TacticsDatabase? database})
+  TacticsImportService({TacticsDatabase? database, required this.pool})
     : _database = database ?? TacticsDatabase();
 
   final TacticsDatabase _database;
@@ -104,7 +104,7 @@ class TacticsImportService {
   /// searches are skipped, what the annotated movetext says) is otherwise
   /// only reachable by starting real Stockfish processes.
   @visibleForTesting
-  StockfishPool pool = StockfishPool.instance;
+  final StockfishPool pool;
 
   /// Downloads games for [importGamesFromLichess] / [importGamesFromChessCom].
   final TacticsGameFetcher fetcher = const TacticsGameFetcher();

@@ -1,3 +1,11 @@
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
+import 'package:chess_auto_prep/services/engine/board_engine.dart';
+import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
+import 'package:chess_auto_prep/services/engine/engine_search_budget.dart';
+import 'package:chess_auto_prep/services/engine/generation_lease.dart';
+import 'package:chess_auto_prep/services/engine/stockfish_connection_factory.dart';
+import 'scripted_engine.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -59,6 +67,13 @@ Future<void> pumpRuntimeWidget(
   await tester.pumpWidget(
     MultiProvider(
       providers: [
+        Provider<StockfishPool>.value(value: testEngines(settings).pool),
+        Provider<BoardEngine>.value(value: testEngines(settings).board),
+        Provider<EngineSearchBudget>.value(value: testEngines(settings).budget),
+        Provider<GenerationLease>.value(value: testEngines(settings).lease),
+        ChangeNotifierProvider<EngineLifecycle>.value(
+          value: testEngines(settings).lifecycle,
+        ),
         ChangeNotifierProvider<EngineSettings>.value(value: settings.engine),
         ChangeNotifierProvider<BulkAnalysisSettings>.value(
           value: settings.bulk,
@@ -70,4 +85,18 @@ Future<void> pumpRuntimeWidget(
       child: DisplaySettingsScope(settings: settings.display, child: child),
     ),
   );
+}
+
+final _engineRuntimes = Expando<EngineRuntime>();
+EngineRuntime testEngines(RuntimeSettings settings) =>
+    _engineRuntimes[settings] ??= _createEngines(settings);
+EngineRuntime _createEngines(RuntimeSettings settings) {
+  final runtime = EngineRuntime(
+    settings: settings.engine,
+    createConnection:
+        StockfishConnectionFactory.createForTest ??
+        (() async => ScriptedEngine()),
+  );
+  addTearDown(runtime.dispose);
+  return runtime;
 }

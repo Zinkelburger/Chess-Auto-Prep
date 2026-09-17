@@ -4,6 +4,10 @@
 /// run end to end with every engine source off.
 library;
 
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../../support/runtime_settings.dart';
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -14,7 +18,6 @@ import 'package:chess_auto_prep/features/audit/services/audit_config.dart';
 import 'package:chess_auto_prep/features/audit/services/audit_persistence.dart';
 import 'package:chess_auto_prep/features/audit/services/repertoire_audit_service.dart';
 import 'package:chess_auto_prep/models/opening_tree.dart';
-import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
 import 'package:chess_auto_prep/services/jobs/repertoire_job.dart';
 import 'package:chess_auto_prep/services/opening_tree_builder.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
@@ -56,6 +59,7 @@ class _MemoryStorage implements StorageService {
 }
 
 class _GatedAudit extends RepertoireAuditService {
+  _GatedAudit() : super(pool: engines.pool);
   final completions = <Completer<AuditResult>>[];
   final starts = <String?>[];
   @override
@@ -113,7 +117,14 @@ AuditResult _result(List<AuditFinding> findings, {int nodes = 3}) =>
 /// Let unawaited persistence writes land.
 Future<void> settle() => Future<void>.delayed(Duration.zero);
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late _MemoryStorage storage;
@@ -122,10 +133,14 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
-    EngineLifecycle.testMode = true;
+
     storage = _MemoryStorage();
     StorageFactory.instanceForTest = storage;
-    controller = AuditSessionController();
+    controller = AuditSessionController(
+      service: RepertoireAuditService(pool: engines.pool),
+      prepareEngine: () => engines.lifecycle.enterGeneration(1),
+      releaseEngine: engines.lifecycle.exitGeneration,
+    );
   });
 
   tearDown(() {
@@ -134,7 +149,6 @@ void main() {
       jobs.removeJob(job);
     }
     StorageFactory.instanceForTest = null;
-    EngineLifecycle.testMode = false;
   });
 
   AuditSnapshot snapshotAt(String path) => AuditSnapshot.fromJson(
@@ -521,7 +535,11 @@ void main() {
       () async {
         final service = _GatedAudit();
         controller.dispose();
-        controller = AuditSessionController(service: service);
+        controller = AuditSessionController(
+          prepareEngine: () => engines.lifecycle.enterGeneration(1),
+          releaseEngine: engines.lifecycle.exitGeneration,
+          service: service,
+        );
         final run = launch(_a);
         await settle();
         controller.cancel(_a);
@@ -541,7 +559,11 @@ void main() {
       () async {
         final service = _GatedAudit();
         controller.dispose();
-        controller = AuditSessionController(service: service);
+        controller = AuditSessionController(
+          prepareEngine: () => engines.lifecycle.enterGeneration(1),
+          releaseEngine: engines.lifecycle.exitGeneration,
+          service: service,
+        );
         final first = launch(_a);
         await settle();
         controller.onRepertoireSwitching(_a);
@@ -568,6 +590,7 @@ void main() {
         var releases = 0;
         controller.dispose();
         controller = AuditSessionController(
+          service: RepertoireAuditService(pool: engines.pool),
           prepareEngine: () async => throw StateError('Engine unavailable'),
           releaseEngine: () async {
             releases++;
@@ -588,7 +611,11 @@ void main() {
     test('resume retains its original subtree', () async {
       final service = _GatedAudit();
       controller.dispose();
-      controller = AuditSessionController(service: service);
+      controller = AuditSessionController(
+        prepareEngine: () => engines.lifecycle.enterGeneration(1),
+        releaseEngine: engines.lifecycle.exitGeneration,
+        service: service,
+      );
       final snapshot = AuditSnapshot(
         result: _result([]),
         config: _quiet,

@@ -1,17 +1,17 @@
+import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
 import '../support/runtime_settings.dart';
 import 'package:chess_auto_prep/app/runtime_settings.dart';
 import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'dart:async';
 import 'package:chess_auto_prep/core/app_state.dart';
 import 'package:provider/provider.dart';
-import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
 import 'dart:ui' show PointerDeviceKind;
 
 import 'package:dartchess/dartchess.dart';
 import 'package:chess_auto_prep/widgets/chess_board_widget.dart';
 
 import 'package:chess_auto_prep/services/engine/engine_connection.dart';
-import 'package:chess_auto_prep/services/engine/board_engine.dart';
 import 'package:chess_auto_prep/services/engine/stockfish_connection_factory.dart';
 import 'package:chess_auto_prep/widgets/engine/inline_engine_bar.dart';
 import 'package:flutter/material.dart';
@@ -66,7 +66,8 @@ class _Connection implements EngineConnection {
 
 RuntimeSettings? _runtimeSettings;
 RuntimeSettings get runtimeSettings =>
-    _runtimeSettings ??= testRuntimeSettings()..bindLegacyEngines();
+    _runtimeSettings ??= testRuntimeSettings();
+EngineRuntime get engines => testEngines(runtimeSettings);
 void main() {
   setUp(() {
     _runtimeSettings = null;
@@ -75,14 +76,12 @@ void main() {
   const fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
   setUp(() {
     SharedPreferences.setMockInitialValues({});
-    EngineLifecycle.instance.resetForTest();
-    EngineLifecycle.testMode = true;
+
     StockfishConnectionFactory.createForTest = () async => _Connection();
   });
   tearDown(() {
-    BoardEngine.instance.dispose();
+    engines.board.dispose();
     StockfishConnectionFactory.createForTest = null;
-    EngineLifecycle.instance.resetForTest();
   });
 
   Widget harness({required bool active}) => MaterialApp(
@@ -142,10 +141,14 @@ void main() {
       final connection = connections.single;
       expect(connection.commands.where((c) => c.startsWith('go ')), isEmpty);
       for (var i = 0; i < 3; i++) {
-        InlineEngineBar.toggleEngine();
+        InlineEngineBar.toggleEngine(
+          tester.element(find.byType(InlineEngineBar).first),
+        );
         await tester.pumpAndSettle();
         expect(find.text('e4'), findsOneWidget);
-        InlineEngineBar.toggleEngine();
+        InlineEngineBar.toggleEngine(
+          tester.element(find.byType(InlineEngineBar).first),
+        );
         await tester.pumpAndSettle();
         expect(connection.disposed, isFalse);
       }
@@ -202,7 +205,9 @@ void main() {
 
     await pumpRuntimeWidget(tester, runtimeSettings, viewer(fen));
     final disabledTop = pgnTop();
-    InlineEngineBar.toggleEngine();
+    InlineEngineBar.toggleEngine(
+      tester.element(find.byType(InlineEngineBar).first),
+    );
     await tester.pump();
     final enabledTop = pgnTop();
     expect(enabledTop, greaterThan(disabledTop));
@@ -259,10 +264,10 @@ void main() {
     expect(find.text('No legal moves.'), findsOneWidget);
     expect(pgnTop(), enabledTop);
 
-    // Explicit line-count and accessibility changes can resize the panel.
+    // Committed line count applies to the next search, preserving this result.
     settings.multiPv = 1;
     await tester.pump();
-    expect(pgnTop(), lessThan(enabledTop));
+    expect(pgnTop(), enabledTop);
     connection.output.add('bestmove (none)');
     await tester.pumpAndSettle();
     await pumpRuntimeWidget(tester, runtimeSettings, viewer(fen, textScale: 2));
@@ -274,7 +279,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(pgnTop(), scaledTop);
     expect(tester.takeException(), isNull);
-    InlineEngineBar.toggleEngine();
+    InlineEngineBar.toggleEngine(
+      tester.element(find.byType(InlineEngineBar).first),
+    );
     await tester.pumpAndSettle();
     expect(pgnTop(), lessThan(scaledTop));
     await pumpRuntimeWidget(tester, runtimeSettings, const SizedBox());
@@ -307,7 +314,9 @@ void main() {
         ),
       ),
     );
-    InlineEngineBar.toggleEngine();
+    InlineEngineBar.toggleEngine(
+      tester.element(find.byType(InlineEngineBar).first),
+    );
     await tester.pump();
     connection.output.add(
       'info depth 15 multipv 1 score cp 20 nodes 100 pv '
@@ -344,7 +353,9 @@ void main() {
       ),
     );
     await pumpRuntimeWidget(tester, runtimeSettings, previewHarness(true));
-    InlineEngineBar.toggleEngine();
+    InlineEngineBar.toggleEngine(
+      tester.element(find.byType(InlineEngineBar).first),
+    );
     await tester.pumpAndSettle();
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await mouse.addPointer(location: const Offset(799, 599));
@@ -382,7 +393,9 @@ void main() {
       return connection;
     };
     await pumpRuntimeWidget(tester, runtimeSettings, harness(active: false));
-    InlineEngineBar.toggleEngine();
+    InlineEngineBar.toggleEngine(
+      tester.element(find.byType(InlineEngineBar).first),
+    );
     await tester.pump();
     expect(connections, isEmpty);
     await pumpRuntimeWidget(tester, runtimeSettings, harness(active: true));
@@ -420,7 +433,9 @@ void main() {
           ),
         ),
       );
-      InlineEngineBar.toggleEngine();
+      InlineEngineBar.toggleEngine(
+        tester.element(find.byType(InlineEngineBar).first),
+      );
       await tester.pumpAndSettle();
       expect(connection.commands, contains('position fen $fen'));
       await tester.tap(find.byTooltip('Show threat'));
@@ -467,7 +482,7 @@ void main() {
       settings.cores = before;
       await tester.pumpAndSettle();
       expect(tester.widget<NumberStepper>(cores).value, before);
-      expect(InlineEngineBar.isEngineEnabled, isFalse);
+      expect(engines.lifecycle.state, EngineState.off);
       await pumpRuntimeWidget(tester, runtimeSettings, const SizedBox());
     },
   );
@@ -477,7 +492,9 @@ void main() {
   ) async {
     StockfishConnectionFactory.createForTest = () async => _Connection();
     await pumpRuntimeWidget(tester, runtimeSettings, harness(active: true));
-    InlineEngineBar.toggleEngine();
+    InlineEngineBar.toggleEngine(
+      tester.element(find.byType(InlineEngineBar).first),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Show threat'));
     await tester.pumpAndSettle();
@@ -517,7 +534,9 @@ void main() {
     final created = Completer<EngineConnection?>();
     StockfishConnectionFactory.createForTest = () => created.future;
     await pumpRuntimeWidget(tester, runtimeSettings, harness(active: true));
-    InlineEngineBar.toggleEngine();
+    InlineEngineBar.toggleEngine(
+      tester.element(find.byType(InlineEngineBar).first),
+    );
     await tester.pump();
     await pumpRuntimeWidget(tester, runtimeSettings, const SizedBox());
     final connection = _Connection();

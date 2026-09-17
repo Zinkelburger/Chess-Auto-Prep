@@ -1,3 +1,5 @@
+import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
+import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -30,6 +32,8 @@ class PgnViewerLifetime {
   PgnViewerLifetime({
     required DesktopFullscreenPort window,
     int Function()? bulkDepth,
+    required StockfishPool pool,
+    required EngineLifecycle lifecycle,
     required PgnCollectionRepository repository,
     required PgnCollectionDecoder collectionDecoder,
     required PgnCollectionFilter collectionFilter,
@@ -37,7 +41,11 @@ class PgnViewerLifetime {
     required ViewerPreferencesRepository preferences,
     required WorkspaceRecoveryStore<PgnWorkspaceSnapshot> store,
   }) {
-    analysis = GameAnalysisController(bulkDepth: bulkDepth);
+    analysis = GameAnalysisController(
+      bulkDepth: bulkDepth,
+      pool: pool,
+      lifecycle: lifecycle,
+    );
     controller = PgnViewerController(
       window: window,
       collectionRepository: repository,

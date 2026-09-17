@@ -1,3 +1,5 @@
+import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
+import 'app/engine_runtime.dart';
 import 'app/runtime_settings.dart';
 import 'features/generation/services/generation_artifacts.dart';
 import 'app/generation_dependencies.dart';
@@ -66,8 +68,11 @@ void main() {
 
         try {
           final runtime = RuntimeSettings.preferences();
-          await _initializeApp(runtime);
-          runApp(ChessAutoPrepApp(runtimeSettings: runtime));
+          final engines = EngineRuntime(settings: runtime.engine);
+          await _initializeApp(runtime, engines);
+          runApp(
+            ChessAutoPrepApp(runtimeSettings: runtime, engineRuntime: engines),
+          );
         } catch (error, stackTrace) {
           debugPrint('Startup failed: $error\n$stackTrace');
           runApp(StartupErrorApp(error: error, stackTrace: stackTrace));
@@ -80,7 +85,10 @@ void main() {
   );
 }
 
-Future<void> _initializeApp(RuntimeSettings runtime) async {
+Future<void> _initializeApp(
+  RuntimeSettings runtime,
+  EngineRuntime engines,
+) async {
   // Required before runApp (configures the native window).
   await windowManager.ensureInitialized();
 
@@ -101,7 +109,7 @@ Future<void> _initializeApp(RuntimeSettings runtime) async {
         .catchError((Object _) {}),
     runtime.load(),
     EvalDatabaseSettings.instance.load(),
-    EngineLifecycle.instance.loadPersistedState(),
+    engines.lifecycle.loadPersistedState().catchError((Object _) {}),
     _resolveOptionalModes(),
   ]);
 
@@ -191,6 +199,7 @@ class ChessAutoPrepApp extends StatelessWidget {
     super.key,
     this.settings,
     this.runtimeSettings,
+    this.engineRuntime,
     this.closePort,
     this.studyRecoveryStore,
     this.pgnRecoveryStore,
@@ -199,6 +208,7 @@ class ChessAutoPrepApp extends StatelessWidget {
   final RepertoireDocumentRepository? repertoireDocuments;
   final AppSettingsRepository? settings;
   final RuntimeSettings? runtimeSettings;
+  final EngineRuntime? engineRuntime;
   final DesktopClosePort? closePort;
   final WorkspaceRecoveryStore<StudyWorkspaceSnapshot>? studyRecoveryStore;
   final WorkspaceRecoveryStore<PgnWorkspaceSnapshot>? pgnRecoveryStore;
@@ -209,6 +219,7 @@ class ChessAutoPrepApp extends StatelessWidget {
     return AppDependencies(
       settings: settings,
       runtimeSettings: runtimeSettings,
+      engineRuntime: engineRuntime,
       documentStore: documents,
       child: MultiProvider(
         providers: [
@@ -230,6 +241,8 @@ class ChessAutoPrepApp extends StatelessWidget {
           ),
           Provider<PgnViewerLifetime>(
             create: (ctx) => PgnViewerLifetime(
+              pool: ctx.read<StockfishPool>(),
+              lifecycle: ctx.read<EngineLifecycle>(),
               bulkDepth: () => ctx.read<BulkAnalysisSettings>().depth,
               window: createViewerWindowPort(),
               preferences: createViewerPreferencesRepository(),
@@ -260,9 +273,6 @@ class ChessAutoPrepApp extends StatelessWidget {
           // (`.instance`) that must not be disposed by the provider.
           ChangeNotifierProvider<EvalDatabaseSettings>.value(
             value: EvalDatabaseSettings.instance,
-          ),
-          ChangeNotifierProvider<EngineLifecycle>.value(
-            value: EngineLifecycle.instance,
           ),
           ChangeNotifierProvider<MasterGamesService>.value(
             value: MasterGamesService.instance,

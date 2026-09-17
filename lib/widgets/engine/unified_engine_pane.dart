@@ -1,6 +1,8 @@
 /// Unified Engine Pane - Single table combining Stockfish, Maia, and Probability
 library;
 
+import 'package:chess_auto_prep/services/engine/board_engine.dart';
+
 import 'package:provider/provider.dart';
 
 import 'dart:async';
@@ -106,6 +108,7 @@ const int _maxCacheSize = 50;
 abstract class _UnifiedEnginePaneStateBase extends State<UnifiedEnginePane> {
   final Map<String, _PositionSnapshot> _analysisCache = {};
   late final EngineSettings _settings = context.read<EngineSettings>();
+  late final _lifecycle = context.read<EngineLifecycle>();
   late bool _ownsAnalysis;
   late AnalysisService _analysis;
   final ProbabilityService _probabilityService = ProbabilityService.instance;
@@ -136,11 +139,11 @@ abstract class _UnifiedEnginePaneStateBase extends State<UnifiedEnginePane> {
 
   bool get _isActive =>
       _surfaceActive &&
-      EngineLifecycle.instance.state != EngineState.off &&
-      !EngineGate.isLocked;
+      _lifecycle.state != EngineState.off &&
+      !EngineGate.isLocked(context);
 
   void _syncBoardEngine() {
-    if (_surfaceActive && !EngineGate.isLocked) {
+    if (_surfaceActive && !EngineGate.isLocked(context)) {
       unawaited(
         _analysis.prepare().catchError((Object error) {
           if (kDebugMode) log.e('[Engine] Preparation failed: $error');
@@ -152,7 +155,7 @@ abstract class _UnifiedEnginePaneStateBase extends State<UnifiedEnginePane> {
     }
   }
 
-  bool get _engineEnabled => EngineLifecycle.instance.state != EngineState.off;
+  bool get _engineEnabled => _lifecycle.state != EngineState.off;
 }
 
 class _UnifiedEnginePaneState extends _UnifiedEnginePaneStateBase
@@ -162,13 +165,14 @@ class _UnifiedEnginePaneState extends _UnifiedEnginePaneStateBase
     super.initState();
     // Capture ownership at mount; the host retains an injected service.
     _ownsAnalysis = widget.analysis == null;
-    _analysis = widget.analysis ?? AnalysisService();
+    _analysis =
+        widget.analysis ?? AnalysisService(engine: context.read<BoardEngine>());
     _analysisConfigRevision = _settings.analysisConfigRevision;
     // Manual listener: analysisConfigRevision changes trigger re-analysis, not just rebuild.
     _settings.addListener(_onSettingsChanged);
     _analysis.poolStatus.addListener(_onPoolStatusChanged);
-    EngineLifecycle.instance.addListener(_onLifecycleChanged);
-    _lastLifecycleState = EngineLifecycle.instance.state;
+    _lifecycle.addListener(_onLifecycleChanged);
+    _lastLifecycleState = _lifecycle.state;
 
     if (_isActive) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -197,7 +201,9 @@ class _UnifiedEnginePaneState extends _UnifiedEnginePaneStateBase
       _analysis.detach();
       if (_ownsAnalysis) _analysis.dispose();
       _ownsAnalysis = widget.analysis == null;
-      _analysis = widget.analysis ?? AnalysisService();
+      _analysis =
+          widget.analysis ??
+          AnalysisService(engine: context.read<BoardEngine>());
       _analysis.poolStatus.addListener(_onPoolStatusChanged);
       _analysisCache.clear();
       _currentAnalysisFen = null;
@@ -218,7 +224,7 @@ class _UnifiedEnginePaneState extends _UnifiedEnginePaneStateBase
   void dispose() {
     _settings.removeListener(_onSettingsChanged);
     _analysis.poolStatus.removeListener(_onPoolStatusChanged);
-    EngineLifecycle.instance.removeListener(_onLifecycleChanged);
+    _lifecycle.removeListener(_onLifecycleChanged);
     _analysis.detach();
     if (_ownsAnalysis) _analysis.dispose();
     super.dispose();
@@ -236,7 +242,7 @@ class _UnifiedEnginePaneState extends _UnifiedEnginePaneStateBase
             _buildSettingsBar(),
             const Divider(height: 1),
           ],
-          if (EngineGate.isLocked)
+          if (EngineGate.isLocked(context))
             const Expanded(child: EngineBusyNotice())
           else if (_engineEnabled) ...[
             Expanded(child: _buildUnifiedMoveTable()),
@@ -263,7 +269,7 @@ class _UnifiedEnginePaneState extends _UnifiedEnginePaneStateBase
       child: Row(
         children: [
           Expanded(
-            child: _engineEnabled && !EngineGate.isLocked
+            child: _engineEnabled && !EngineGate.isLocked(context)
                 ? ListenableBuilder(
                     listenable: _analysis.poolStatus,
                     builder: (context, _) {

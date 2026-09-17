@@ -12,6 +12,10 @@
 @TestOn('vm')
 library;
 
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../../../support/runtime_settings.dart';
+
 import 'dart:io';
 
 import 'package:chess_auto_prep/features/tactics/services/tactics_database.dart';
@@ -45,7 +49,14 @@ class _FakePathProvider extends PathProviderPlatform
 
 const int kDepth = 8;
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late Directory tempDir;
@@ -63,7 +74,7 @@ void main() {
   Future<TacticsImportService> newService() async {
     final database = TacticsDatabase();
     await database.loadPositions();
-    return TacticsImportService(database: database)..pool = pool;
+    return TacticsImportService(pool: pool, database: database);
   }
 
   setUpAll(() async {

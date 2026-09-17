@@ -10,6 +10,10 @@
 @TestOn('vm')
 library;
 
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../../../support/runtime_settings.dart';
+
 import 'dart:io';
 
 import 'package:chess_auto_prep/features/games/services/games_window.dart';
@@ -43,6 +47,7 @@ class _FakePathProvider extends PathProviderPlatform
 }
 
 class _RecordingImport extends TacticsImportService {
+  _RecordingImport() : super(pool: engines.pool);
   int? requestedDepth;
 
   @override
@@ -87,7 +92,14 @@ const _reviewed = TacticsImportParams(
   maxGames: 1,
 );
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late Directory tempDir;
@@ -109,6 +121,8 @@ void main() {
   /// A coordinator on its own database and its own copy of the games window,
   /// so nothing here touches app-wide singletons the other tests share.
   TacticsImportCoordinator makeCoordinator() => TacticsImportCoordinator(
+    pool: engines.pool,
+    lifecycle: engines.lifecycle,
     database: TacticsDatabase(),
     windowSettings: GamesWindowSettings.forTest(),
   );

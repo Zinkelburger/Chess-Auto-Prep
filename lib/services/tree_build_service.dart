@@ -43,7 +43,13 @@ import 'tree_build_types.dart';
 export 'tree_build_types.dart' show BuildCancelledException;
 
 class TreeBuildService {
-  final StockfishPool _pool = StockfishPool.instance;
+  TreeBuildService({
+    required StockfishPool pool,
+    required EngineLifecycle lifecycle,
+  }) : _pool = pool,
+       _lifecycle = lifecycle;
+  final StockfishPool _pool;
+  final EngineLifecycle _lifecycle;
   final TreeEvalResolver _evalResolver = TreeEvalResolver();
 
   static const int _frontierMinPlySentinel = 1 << 30;
@@ -255,8 +261,7 @@ class TreeBuildService {
 
     try {
       await Future.wait([
-        if (config.usesStockfish &&
-            EngineLifecycle.instance.state != EngineState.generating)
+        if (config.usesStockfish && _lifecycle.state != EngineState.generating)
           _pool.prepareForTreeBuild(config.resolvedEngineThreads)
         else
           Future.value(),
@@ -422,7 +427,7 @@ class TreeBuildService {
         await _evalResolver.initProviders(config);
 
         if ((config.usesStockfish || config.needsStockfish) &&
-            EngineLifecycle.instance.state != EngineState.generating) {
+            _lifecycle.state != EngineState.generating) {
           await _pool.prepareForTreeBuild(config.resolvedEngineThreads);
         }
 
