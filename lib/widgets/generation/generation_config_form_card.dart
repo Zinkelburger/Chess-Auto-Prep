@@ -502,7 +502,7 @@ mixin _GenerationConfigCard
   String _summaryText() {
     final elo = int.tryParse(_maiaEloCtrl.text.trim()) ?? 2200;
     final ply = int.tryParse(_maxPlyCtrl.text.trim()) ?? 20;
-    final depth = BulkAnalysisSettings.instance.depth;
+    final depth = context.read<BulkAnalysisSettings>().depth;
     final budget = int.tryParse(_timeBudgetCtrl.text.trim()) ?? 0;
     if (_buildMode == BuildMode.chessDbBook) {
       final tail = int.tryParse(_bookTailMaxPlyCtrl.text.trim()) ?? 40;

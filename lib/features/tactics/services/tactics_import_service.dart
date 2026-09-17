@@ -8,7 +8,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../../constants/engine_defaults.dart';
-import '../../../models/engine_settings.dart';
 import '../../../services/engine/stockfish_pool.dart';
 import '../../../services/game_store/game_store.dart';
 import '../../../services/game_store/game_store_service.dart';
@@ -480,7 +479,7 @@ class TacticsImportService {
 
   /// Bring the shared pool up to [maxCores] single-threaded workers.
   Future<void> _preparePool(int? maxCores) async {
-    await pool.ensureWorkers(maxCores ?? EngineSettings.instance.cores);
+    await pool.ensureWorkers(maxCores);
     if (pool.workerCount == 0) {
       throw Exception(
         'Tactics analysis requires Stockfish, which is not available '

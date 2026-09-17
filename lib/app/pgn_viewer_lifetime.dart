@@ -29,6 +29,7 @@ import '../widgets/pgn_viewer_widget.dart';
 class PgnViewerLifetime {
   PgnViewerLifetime({
     required DesktopFullscreenPort window,
+    int Function()? bulkDepth,
     required PgnCollectionRepository repository,
     required PgnCollectionDecoder collectionDecoder,
     required PgnCollectionFilter collectionFilter,
@@ -36,6 +37,7 @@ class PgnViewerLifetime {
     required ViewerPreferencesRepository preferences,
     required WorkspaceRecoveryStore<PgnWorkspaceSnapshot> store,
   }) {
+    analysis = GameAnalysisController(bulkDepth: bulkDepth);
     controller = PgnViewerController(
       window: window,
       collectionRepository: repository,
@@ -67,7 +69,7 @@ class PgnViewerLifetime {
     );
   }
   final reader = PgnViewerWidgetController();
-  final analysis = GameAnalysisController();
+  late final GameAnalysisController analysis;
   late final PgnViewerController controller;
   late final WorkspaceRecoveryController<PgnWorkspaceSnapshot> recovery;
   VoidCallback? reclaimFocus;

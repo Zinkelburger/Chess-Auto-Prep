@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:math' as math;
 
-import '../../models/engine_settings.dart';
+import '../../utils/system_info.dart';
 import 'engine_interrupt.dart';
 
 /// Cancellation is control flow, not an engine failure.
@@ -32,13 +32,11 @@ class EngineSearchCancellation {
 /// its allocation is fixed until bestmove or process retirement. Lowering the
 /// setting affects new admissions; existing searches finish at their allocation.
 class EngineSearchBudget {
-  static final instance = EngineSearchBudget(
-    capacity: () => EngineSettings.instance.cores,
-  );
+  static final instance = EngineSearchBudget(capacity: () => 1);
   EngineSearchBudget({required this.capacity});
 
   /// Total threads the app may spend on searches right now.
-  final int Function() capacity;
+  int Function() capacity;
   final Queue<_WaitingSearch> _waiting = Queue();
   int _used = 0;
 
@@ -74,7 +72,7 @@ class EngineSearchBudget {
         _waiting.removeFirst().result.completeError(EngineSearchCancelled());
         continue;
       }
-      final limit = capacity().clamp(1, EngineSettings.systemCores);
+      final limit = capacity().clamp(1, getLogicalCores());
       final available = limit - _used;
       if (available <= 0) return;
       _waiting.removeFirst();

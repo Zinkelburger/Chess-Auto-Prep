@@ -7,9 +7,10 @@
 /// margin) and hands both in.
 library;
 
+import 'package:chess_auto_prep/features/settings/models/board_display_configuration.dart';
+
 import 'package:flutter/material.dart';
 
-import '../../models/board_display_settings.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 

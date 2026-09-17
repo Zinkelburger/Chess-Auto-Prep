@@ -4,13 +4,15 @@
 /// and never runs anything.
 library;
 
+import 'package:provider/provider.dart';
+
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 
 import '../core/generation_session_controller.dart';
 import '../features/repertoires/controllers/repertoire_controller.dart';
 import '../models/build_tree_node.dart';
-import '../models/engine_settings.dart';
+import '../features/settings/controllers/engine_settings.dart';
 import '../services/analysis_service.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../services/coherence_service.dart';
@@ -59,7 +61,7 @@ class RepertoireAnalysisDock extends StatefulWidget {
 }
 
 class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
-  final EngineSettings _settings = EngineSettings.instance;
+  late final EngineSettings _settings = context.read<EngineSettings>();
   final AnalysisService _analysis = AnalysisService();
 
   @override
@@ -262,7 +264,7 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
               try {
                 await widget.controller.setRootPosition();
                 if (!mounted) return;
-                EngineSettings.instance.probabilityStartMoves =
+                context.read<EngineSettings>().probabilityStartMoves =
                     widget.controller.rootMoves;
               } catch (error) {
                 if (!mounted) return;

@@ -19,8 +19,8 @@ import '../pgn_sources_controller.dart';
 import '../pgn_sources_panel.dart';
 import 'advanced_settings_dialog.dart';
 import '../app_settings_button.dart';
-import '../../models/engine_settings.dart';
-import '../../models/bulk_analysis_settings.dart';
+import '../../features/settings/controllers/engine_settings.dart';
+import '../../features/settings/controllers/bulk_analysis_settings.dart';
 import 'eval_sources_controller.dart';
 import 'eval_sources_section.dart';
 import 'skeleton_plan_card.dart';
@@ -66,10 +66,12 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
         _GenerationConfigIo,
         _GenerationConfigCard,
         _GenerationConfigAdvanced {
+  late final _bulkSettings = context.read<BulkAnalysisSettings>();
+
   @override
   void initState() {
     super.initState();
-    BulkAnalysisSettings.instance.addListener(_refreshEngineSettings);
+    _bulkSettings.addListener(_refreshEngineSettings);
     if (widget.initialConfig != null) {
       _applyInitialConfig(widget.initialConfig!);
     }
@@ -90,7 +92,7 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
 
   @override
   void dispose() {
-    BulkAnalysisSettings.instance.removeListener(_refreshEngineSettings);
+    _bulkSettings.removeListener(_refreshEngineSettings);
     super.dispose();
   }
 

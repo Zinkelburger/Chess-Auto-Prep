@@ -7,7 +7,9 @@
 /// and what happens when searches fail or the caller cancels.
 library;
 
-import 'package:chess_auto_prep/models/engine_settings.dart';
+import '../support/runtime_settings.dart';
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+
 import 'package:chess_auto_prep/models/engine_weakness_result.dart';
 import 'package:chess_auto_prep/models/opening_tree.dart';
 import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
@@ -52,7 +54,14 @@ Future<OpeningTree> _build(List<String> games, {bool asWhite = true}) =>
       maxDepth: 12,
     );
 
+late RuntimeSettings runtimeSettings;
 void main() {
+  setUp(() async {
+    runtimeSettings = testRuntimeSettings();
+    await runtimeSettings.load();
+    runtimeSettings.bindLegacyEngines();
+    addTearDown(runtimeSettings.dispose);
+  });
   late ScriptedEngine engine;
   late EvalWorker worker;
   late EngineWeaknessService service;
@@ -74,7 +83,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     // One worker asked for, one worker injected: `ensureWorkers()` then has
     // nothing to spawn, so no real Stockfish is started.
-    EngineSettings.instance.cores = 1;
+    await runtimeSettings.engine.edit({'engine_settings.cores': 1});
     engine = ScriptedEngine();
     worker = await installScriptedWorker(engine);
     service = EngineWeaknessService();
@@ -292,7 +301,7 @@ void main() {
         onWorkersReady: (workers, hashMb) => ready.add('$workers/$hashMb'),
       );
 
-      expect(ready, ['1/${EngineSettings.instance.hashMb}']);
+      expect(ready, ['1/${runtimeSettings.engine.hashMb}']);
       expect(service.workerCount, 1);
     });
   });

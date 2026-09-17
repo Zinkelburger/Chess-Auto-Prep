@@ -149,8 +149,8 @@ mixin _GenerationConfigIo
     required String startFen,
     required bool playAsWhite,
   }) {
-    final evalDepth = BulkAnalysisSettings.instance.depth;
-    final engineThreads = EngineSettings.instance.cores;
+    final evalDepth = context.read<BulkAnalysisSettings>().depth;
+    final engineThreads = context.read<EngineSettings>().cores;
 
     final seed =
         _seedConfig ??

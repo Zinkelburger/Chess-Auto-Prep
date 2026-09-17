@@ -2,6 +2,9 @@
 /// the engine pass with work left, and play carries on.
 library;
 
+import '../../support/runtime_settings.dart';
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -11,7 +14,7 @@ import 'package:chess_auto_prep/features/games/services/games_window.dart';
 import 'package:chess_auto_prep/services/games_library/game_filter.dart';
 import 'package:chess_auto_prep/services/games_library/game_review_store.dart';
 import 'package:chess_auto_prep/services/games_library/games_library_service.dart';
-import 'package:chess_auto_prep/models/bulk_analysis_settings.dart';
+import 'package:chess_auto_prep/features/settings/controllers/bulk_analysis_settings.dart';
 import 'package:chess_auto_prep/features/tactics/services/tactics_import_coordinator.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -188,7 +191,14 @@ Future<void> pumpUntil(bool Function() done, {int times = 500}) async {
   }
 }
 
+late RuntimeSettings runtimeSettings;
 void main() {
+  setUp(() async {
+    runtimeSettings = testRuntimeSettings();
+    await runtimeSettings.load();
+    runtimeSettings.bindLegacyEngines();
+    addTearDown(runtimeSettings.dispose);
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
 
   ({
@@ -208,12 +218,13 @@ void main() {
     final coordinator = _RecordingCoordinator();
     return (
       runner: HomeReviewRunner(
+        engine: runtimeSettings.engine,
         games: games,
         importCoordinator: coordinator,
         lichessUsername: () => lichess,
         chesscomUsername: () => chesscom,
         windowSettings: GamesWindowSettings.forTest(),
-        bulkSettings: BulkAnalysisSettings.forTest(),
+        bulkSettings: runtimeSettings.bulk,
       ),
       games: games,
       coordinator: coordinator,
@@ -360,12 +371,13 @@ void main() {
     );
     final coordinator = _RecordingCoordinator();
     final runner = HomeReviewRunner(
+      engine: runtimeSettings.engine,
       games: games,
       importCoordinator: coordinator,
       lichessUsername: () => 'me',
       chesscomUsername: () => null,
       windowSettings: GamesWindowSettings.forTest(),
-      bulkSettings: BulkAnalysisSettings.forTest(),
+      bulkSettings: runtimeSettings.bulk,
     );
     addTearDown(games.dispose);
     addTearDown(runner.dispose);
@@ -385,12 +397,13 @@ void main() {
     );
     final coordinator = _RecordingCoordinator();
     final runner = HomeReviewRunner(
+      engine: runtimeSettings.engine,
       games: games,
       importCoordinator: coordinator,
       lichessUsername: () => 'me',
       chesscomUsername: () => null,
       windowSettings: GamesWindowSettings.forTest(),
-      bulkSettings: BulkAnalysisSettings.forTest(),
+      bulkSettings: runtimeSettings.bulk,
     );
     addTearDown(games.dispose);
     addTearDown(runner.dispose);
@@ -421,12 +434,13 @@ void main() {
     );
     final coordinator = _RecordingCoordinator();
     final runner = HomeReviewRunner(
+      engine: runtimeSettings.engine,
       games: games,
       importCoordinator: coordinator,
       lichessUsername: () => 'me',
       chesscomUsername: () => null,
       windowSettings: GamesWindowSettings.forTest(),
-      bulkSettings: BulkAnalysisSettings.forTest(),
+      bulkSettings: runtimeSettings.bulk,
     );
     addTearDown(games.dispose);
     addTearDown(runner.dispose);
@@ -454,12 +468,13 @@ void main() {
     );
     final coordinator = _RecordingCoordinator();
     final runner = HomeReviewRunner(
+      engine: runtimeSettings.engine,
       games: games,
       importCoordinator: coordinator,
       lichessUsername: () => 'me',
       chesscomUsername: () => null,
       windowSettings: GamesWindowSettings.forTest(),
-      bulkSettings: BulkAnalysisSettings.forTest(),
+      bulkSettings: runtimeSettings.bulk,
     );
     addTearDown(games.dispose);
     addTearDown(runner.dispose);
@@ -492,12 +507,13 @@ void main() {
     );
     final coordinator = _BlockingCoordinator();
     final runner = HomeReviewRunner(
+      engine: runtimeSettings.engine,
       games: games,
       importCoordinator: coordinator,
       lichessUsername: () => 'me',
       chesscomUsername: () => null,
       windowSettings: GamesWindowSettings.forTest(),
-      bulkSettings: BulkAnalysisSettings.forTest(),
+      bulkSettings: runtimeSettings.bulk,
     );
     addTearDown(games.dispose);
     addTearDown(runner.dispose);
@@ -537,12 +553,13 @@ void main() {
     );
     final coordinator = _BlockingCoordinator();
     final runner = HomeReviewRunner(
+      engine: runtimeSettings.engine,
       games: games,
       importCoordinator: coordinator,
       lichessUsername: () => 'me',
       chesscomUsername: () => null,
       windowSettings: GamesWindowSettings.forTest(),
-      bulkSettings: BulkAnalysisSettings.forTest(),
+      bulkSettings: runtimeSettings.bulk,
     );
     addTearDown(games.dispose);
     addTearDown(runner.dispose);
@@ -588,12 +605,13 @@ void main() {
       windowSettings: GamesWindowSettings.forTest(),
     );
     final runner = HomeReviewRunner(
+      engine: runtimeSettings.engine,
       games: games,
       importCoordinator: _RecordingCoordinator(),
       lichessUsername: () => 'me',
       chesscomUsername: () => null,
       windowSettings: GamesWindowSettings.forTest(),
-      bulkSettings: BulkAnalysisSettings.forTest(),
+      bulkSettings: runtimeSettings.bulk,
     );
     addTearDown(games.dispose);
     addTearDown(runner.dispose);
@@ -619,12 +637,13 @@ void main() {
         windowSettings: GamesWindowSettings.forTest(),
       );
       final runner = HomeReviewRunner(
+        engine: runtimeSettings.engine,
         games: games,
         importCoordinator: _RecordingCoordinator(),
         lichessUsername: () => 'me',
         chesscomUsername: () => null,
         windowSettings: GamesWindowSettings.forTest(),
-        bulkSettings: BulkAnalysisSettings.forTest(),
+        bulkSettings: runtimeSettings.bulk,
       );
       addTearDown(games.dispose);
       addTearDown(runner.dispose);

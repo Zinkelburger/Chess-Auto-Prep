@@ -1,8 +1,10 @@
+import '../../features/settings/widgets/settings_section_status.dart';
+import 'package:provider/provider.dart';
 import 'package:flutter/material.dart';
 
 import '../../constants/engine_defaults.dart';
-import '../../models/bulk_analysis_settings.dart';
-import '../../models/engine_settings.dart';
+import '../../features/settings/controllers/bulk_analysis_settings.dart';
+import '../../features/settings/controllers/engine_settings.dart';
 import '../../theme/app_text_styles.dart';
 import '../common/number_stepper.dart';
 import '../engine/engine_resource_controls.dart';
@@ -19,24 +21,33 @@ class StockfishSettingsBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final settings = EngineSettings.instance;
-    final bulk = BulkAnalysisSettings.instance;
+    final settings = context.read<EngineSettings>();
+    final bulk = context.read<BulkAnalysisSettings>();
     return ListenableBuilder(
       listenable: Listenable.merge([settings, bulk]),
       builder: (context, _) => Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          SettingsSectionStatus(
+            owner: settings,
+            policy: 'Saved engine changes apply to the next search or job.',
+          ),
+          if (showBulkDepth)
+            SettingsSectionStatus(
+              owner: bulk,
+              policy: 'Game analysis depth applies to the next job.',
+            ),
           EngineResourceControls(
-            cores: settings.cores,
-            hashMb: settings.hashMb,
+            cores: settings.editing.cores,
+            hashMb: settings.editing.hashMb,
             onCoresChanged: (v) => settings.cores = v,
             onHashChanged: (v) => settings.hashMb = v,
           ),
           _row(
             'Board analysis depth',
             'engine-board-depth',
-            settings.depth,
+            settings.editing.depth,
             kMinDepth,
             kMaxDepth,
             (v) => settings.depth = v,
@@ -45,15 +56,15 @@ class StockfishSettingsBody extends StatelessWidget {
             _row(
               'Game analysis depth',
               'engine-bulk-depth',
-              bulk.depth,
+              bulk.editing.depth,
               BulkAnalysisSettings.minDepth,
               BulkAnalysisSettings.maxDepth,
-              bulk.setDepth,
+              (value) => bulk.setDepth(value).catchError((Object _) {}),
             ),
           _row(
             'Suggested lines',
             'engine-lines',
-            settings.multiPv,
+            settings.editing.multiPv,
             kMinMultiPv,
             kMaxMultiPv,
             (v) => settings.multiPv = v,

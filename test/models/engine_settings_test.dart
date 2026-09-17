@@ -1,141 +1,62 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:chess_auto_prep/models/engine_settings.dart';
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/features/settings/controllers/engine_settings.dart';
+import 'package:chess_auto_prep/features/settings/models/engine_configuration.dart';
 import 'package:chess_auto_prep/constants/engine_defaults.dart';
 
 void main() {
-  late EngineSettings settings;
-
-  setUp(() {
-    SharedPreferences.setMockInitialValues({});
-    settings = EngineSettings.instance;
-    settings.resetToDefaults();
-  });
-
-  group('EngineSettings defaults', () {
-    test('new and reset settings use one core and the default hash', () {
-      final fresh = EngineSettings.fresh();
-      addTearDown(fresh.dispose);
-      expect(fresh.cores, 1);
-      expect(fresh.hashMb, kDefaultHashMb);
-      expect(settings.cores, 1);
-      expect(settings.hashMb, kDefaultHashMb);
-    });
-
-    test('hashMb clamps to its range instead of rejecting', () {
-      settings.hashMb = 4;
-      expect(settings.hashMb, kMinHashMb);
-      settings.hashMb = 1 << 20;
-      expect(settings.hashMb, kMaxHashMb);
-      settings.hashMb = 512;
-      expect(settings.hashMb, 512);
-    });
-
-    test('depth defaults to kDefaultDepth', () {
-      expect(settings.depth, kDefaultDepth);
-    });
-
-    test('multiPv defaults to kDefaultMultiPv', () {
-      expect(settings.multiPv, kDefaultMultiPv);
-    });
-
-    test('maxAnalysisMoves defaults to kDefaultMaxAnalysisMoves', () {
-      expect(settings.maxAnalysisMoves, kDefaultMaxAnalysisMoves);
-    });
-  });
-
-  group('EngineSettings setters', () {
-    test('depth rejects out-of-range values', () {
-      settings.depth = 10;
-      expect(settings.depth, 10);
-
-      settings.depth = 200;
-      expect(settings.depth, 10);
-
-      settings.depth = 0;
-      expect(settings.depth, 10);
-    });
-
-    test('multiPv rejects out-of-range values', () {
-      settings.multiPv = 3;
-      expect(settings.multiPv, 3);
-
-      settings.multiPv = 0;
-      expect(settings.multiPv, 3);
-
-      settings.multiPv = 100;
-      expect(settings.multiPv, 3);
-    });
-
-    test('maxAnalysisMoves rejects out-of-range values', () {
-      settings.maxAnalysisMoves = 8;
-      expect(settings.maxAnalysisMoves, 8);
-
-      settings.maxAnalysisMoves = 0;
-      expect(settings.maxAnalysisMoves, 8);
-
-      settings.maxAnalysisMoves = 1000;
-      expect(settings.maxAnalysisMoves, 8);
-    });
-
-    test('setting same value does not notify', () {
-      var notifications = 0;
-      settings.addListener(() => notifications++);
-
-      final currentDepth = settings.depth;
-      settings.depth = currentDepth;
-      expect(notifications, 0);
-    });
-
-    test('setting new valid value notifies listeners', () {
-      var notifications = 0;
-      settings.addListener(() => notifications++);
-
-      settings.depth = settings.depth + 5;
-      expect(notifications, 1);
-    });
-  });
-
-  group('EngineSettings persistence', () {
-    test('loadFromPrefs restores saved values', () async {
-      SharedPreferences.setMockInitialValues({
-        'engine_settings.depth': 25,
-        'engine_settings.multi_pv': 5,
-        'engine_settings.cores': EngineSettings.systemCores,
-        'engine_settings.hash_mb': 256,
-      });
-
-      await settings.loadFromPrefs();
-
-      expect(settings.depth, 25);
-      expect(settings.multiPv, 5);
-      expect(settings.cores, EngineSettings.systemCores);
-      expect(settings.hashMb, 256);
-    });
-
-    test(
-      'loadFromPrefs keeps the larger of the old workers/threads pair',
-      () async {
-        SharedPreferences.setMockInitialValues({
-          'engine_settings.workers': 1,
-          'engine_settings.inline_threads': EngineSettings.systemCores,
-        });
-
-        await settings.loadFromPrefs();
-
-        expect(settings.cores, EngineSettings.systemCores);
-      },
+  TestWidgetsFlutterBinding.ensureInitialized();
+  test('defaults and invalid legacy values are immutable and valid', () {
+    final defaults = EngineConfiguration();
+    expect(defaults.cores, 1);
+    expect(defaults.hashMb, kDefaultHashMb);
+    expect(defaults.depth, kDefaultDepth);
+    expect(defaults.multiPv, kDefaultMultiPv);
+    expect(defaults.maxAnalysisMoves, kDefaultMaxAnalysisMoves);
+    final legacy = EngineConfiguration({
+      'engine_settings.cores': 999,
+      'engine_settings.hash_mb': 4,
+      'engine_settings.depth': 0,
+      'engine_settings.multi_pv': 100,
+      'engine_settings.explorer_database': 'broken',
+      'engine_settings.explorer_speeds': '',
+      'engine_settings.show_stockfish': 'invalid',
+    }, 4);
+    expect(legacy.cores, 4);
+    expect(legacy.hashMb, kMinHashMb);
+    expect(legacy.depth, kMinDepth);
+    expect(legacy.multiPv, kMaxMultiPv);
+    expect(legacy.explorerDatabase, 'lichess');
+    expect(legacy.explorerSpeeds, kDefaultExplorerSpeeds);
+    expect(legacy.showStockfish, isTrue);
+    expect(
+      () => legacy.values['engine_settings.depth'] = 40,
+      throwsUnsupportedError,
     );
-
-    test('loadFromPrefs uses defaults for missing keys', () async {
-      SharedPreferences.setMockInitialValues({});
-
-      await settings.loadFromPrefs();
-
-      expect(settings.depth, kDefaultDepth);
-      expect(settings.multiPv, kDefaultMultiPv);
-      expect(settings.cores, 1);
-      expect(settings.hashMb, kDefaultHashMb);
+    expect(
+      () => legacy.mutedAnalysisColumns.add('eval'),
+      throwsUnsupportedError,
+    );
+  });
+  test('legacy core migration and section edits survive restart', () async {
+    SharedPreferences.setMockInitialValues({
+      'engine_settings.workers': 1,
+      'engine_settings.inline_threads': EngineSettings.systemCores,
+      'engine_settings.depth': 25,
+      'engine_settings.multi_pv': 5,
     });
+    final settings = RuntimeSettings.preferences();
+    addTearDown(settings.dispose);
+    await settings.load();
+    expect(settings.engine.cores, EngineSettings.systemCores);
+    expect(settings.engine.depth, 25);
+    await settings.engine.edit({'engine_settings.hash_mb': 256});
+    final restarted = RuntimeSettings.preferences();
+    addTearDown(restarted.dispose);
+    await restarted.load();
+    expect(restarted.engine.hashMb, 256);
+    expect(restarted.engine.depth, 25);
+    expect(restarted.engine.multiPv, 5);
   });
 }

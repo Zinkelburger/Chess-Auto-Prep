@@ -24,7 +24,7 @@ import '../core/generation_session_controller.dart';
 import '../core/generation_session_types.dart';
 import '../features/audit/controllers/audit_session_controller.dart';
 import '../features/coverage/controllers/coverage_controller.dart';
-import '../models/engine_settings.dart';
+import '../features/settings/controllers/engine_settings.dart';
 import '../models/repertoire_line.dart';
 import '../features/repertoires/models/repertoire_metadata.dart';
 import '../services/repertoire_file_editor.dart';
@@ -638,7 +638,8 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
           _coverageController.clear();
           // A tour from the previous repertoire's traps makes no sense here.
           _trapSession.endTourForRepertoireSwitch();
-          EngineSettings.instance.probabilityStartMoves = _controller.rootMoves;
+          context.read<EngineSettings>().probabilityStartMoves =
+              _controller.rootMoves;
           unawaited(_trapSession.loadFromFile(currentId));
           newRepertoireId = currentId;
         }

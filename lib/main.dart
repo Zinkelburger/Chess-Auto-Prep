@@ -1,3 +1,4 @@
+import 'app/runtime_settings.dart';
 import 'app/repertoire_dependencies.dart';
 import 'features/repertoires/repositories/repertoire_document_repository.dart';
 import 'features/repertoires/repositories/repertoire_decoder.dart';
@@ -32,9 +33,7 @@ import 'features/documents/controllers/workspace_recovery_controller.dart';
 import 'features/documents/repositories/workspace_recovery_store.dart';
 import 'features/bughouse/services/bughouse_bundle.dart';
 import 'debug/agent_driver.dart';
-import 'models/board_display_settings.dart';
-import 'models/engine_settings.dart';
-import 'models/bulk_analysis_settings.dart';
+import 'features/settings/controllers/bulk_analysis_settings.dart';
 import 'models/eval_database_settings.dart';
 import 'screens/main_screen.dart';
 import 'theme/app_colors.dart';
@@ -63,8 +62,9 @@ void main() {
         };
 
         try {
-          await _initializeApp();
-          runApp(const ChessAutoPrepApp());
+          final runtime = RuntimeSettings.preferences();
+          await _initializeApp(runtime);
+          runApp(ChessAutoPrepApp(runtimeSettings: runtime));
         } catch (error, stackTrace) {
           debugPrint('Startup failed: $error\n$stackTrace');
           runApp(StartupErrorApp(error: error, stackTrace: stackTrace));
@@ -77,7 +77,7 @@ void main() {
   );
 }
 
-Future<void> _initializeApp() async {
+Future<void> _initializeApp(RuntimeSettings runtime) async {
   // Required before runApp (configures the native window).
   await windowManager.ensureInitialized();
 
@@ -96,10 +96,8 @@ Future<void> _initializeApp() async {
     SharedPreferencesAppSettingsRepository.instance.appearance
         .ensureLoaded()
         .catchError((Object _) {}),
-    EngineSettings.instance.loadFromPrefs(),
-    BulkAnalysisSettings.instance.ensureLoaded(),
+    runtime.load(),
     EvalDatabaseSettings.instance.load(),
-    BoardDisplaySettings.instance.load(),
     EngineLifecycle.instance.loadPersistedState(),
     _resolveOptionalModes(),
   ]);
@@ -189,6 +187,7 @@ class ChessAutoPrepApp extends StatelessWidget {
   const ChessAutoPrepApp({
     super.key,
     this.settings,
+    this.runtimeSettings,
     this.closePort,
     this.studyRecoveryStore,
     this.pgnRecoveryStore,
@@ -196,6 +195,7 @@ class ChessAutoPrepApp extends StatelessWidget {
   });
   final RepertoireDocumentRepository? repertoireDocuments;
   final AppSettingsRepository? settings;
+  final RuntimeSettings? runtimeSettings;
   final DesktopClosePort? closePort;
   final WorkspaceRecoveryStore<StudyWorkspaceSnapshot>? studyRecoveryStore;
   final WorkspaceRecoveryStore<PgnWorkspaceSnapshot>? pgnRecoveryStore;
@@ -205,6 +205,7 @@ class ChessAutoPrepApp extends StatelessWidget {
     final documents = createPlatformDocumentStore();
     return AppDependencies(
       settings: settings,
+      runtimeSettings: runtimeSettings,
       documentStore: documents,
       child: MultiProvider(
         providers: [
@@ -219,6 +220,7 @@ class ChessAutoPrepApp extends StatelessWidget {
           ),
           Provider<PgnViewerLifetime>(
             create: (ctx) => PgnViewerLifetime(
+              bulkDepth: () => ctx.read<BulkAnalysisSettings>().depth,
               window: createViewerWindowPort(),
               preferences: createViewerPreferencesRepository(),
               collectionDecoder: createPgnCollectionDecoder(),
@@ -246,9 +248,6 @@ class ChessAutoPrepApp extends StatelessWidget {
           // depend on them via context (instead of global `.instance` access) and
           // inject fakes in tests. `.value` because these are process singletons
           // (`.instance`) that must not be disposed by the provider.
-          ChangeNotifierProvider<EngineSettings>.value(
-            value: EngineSettings.instance,
-          ),
           ChangeNotifierProvider<EvalDatabaseSettings>.value(
             value: EvalDatabaseSettings.instance,
           ),
@@ -278,54 +277,51 @@ class ChessAutoPrepApp extends StatelessWidget {
         ],
         // Boards and move lists read the Display preferences through this scope
         // so a change in Settings repaints them in place.
-        child: DisplaySettingsScope(
-          settings: BoardDisplaySettings.instance,
-          child: DesktopApplication(
-            closePort: closePort,
-            // Keep the semantics tree empty unless explicitly enabled —
-            // GNOME's accessibility bus can enable Flutter's semantics tree
-            // and then assert every frame on our recognizer-per-span movetext
-            // (flutter/flutter#169214). Pass --dart-define=ENABLE_SEMANTICS=true
-            // to re-enable when testing a Flutter pin that includes the fix.
-            builder: (context, child) {
-              final wrapped = EscapeToPopScope(child: child!);
-              const enableSemantics = bool.fromEnvironment('ENABLE_SEMANTICS');
-              if (enableSemantics) return wrapped;
-              return ExcludeSemantics(child: wrapped);
-            },
-            home: Builder(
-              builder: (context) => AppUpdateHost(
-                child: StudyCloseGuard(
-                  study: context.read<StudyController>(),
-                  child: WorkspaceRecoveryHost<StudyWorkspaceSnapshot>(
-                    id: 'study',
+        child: DesktopApplication(
+          closePort: closePort,
+          // Keep the semantics tree empty unless explicitly enabled —
+          // GNOME's accessibility bus can enable Flutter's semantics tree
+          // and then assert every frame on our recognizer-per-span movetext
+          // (flutter/flutter#169214). Pass --dart-define=ENABLE_SEMANTICS=true
+          // to re-enable when testing a Flutter pin that includes the fix.
+          builder: (context, child) {
+            final wrapped = EscapeToPopScope(child: child!);
+            const enableSemantics = bool.fromEnvironment('ENABLE_SEMANTICS');
+            if (enableSemantics) return wrapped;
+            return ExcludeSemantics(child: wrapped);
+          },
+          home: Builder(
+            builder: (context) => AppUpdateHost(
+              child: StudyCloseGuard(
+                study: context.read<StudyController>(),
+                child: WorkspaceRecoveryHost<StudyWorkspaceSnapshot>(
+                  id: 'study',
+                  workspaceName: AppLocalizations.of(
+                    context,
+                  ).studyWorkspaceName,
+                  title: (snapshot) => snapshot.name,
+                  path: (snapshot) => snapshot.path,
+                  recovery: context
+                      .read<
+                        WorkspaceRecoveryController<StudyWorkspaceSnapshot>
+                      >(),
+                  onRestored: () =>
+                      context.read<AppState>().setMode(AppMode.study),
+                  child: WorkspaceRecoveryHost<PgnWorkspaceSnapshot>(
+                    id: 'pgn',
                     workspaceName: AppLocalizations.of(
                       context,
-                    ).studyWorkspaceName,
-                    title: (snapshot) => snapshot.name,
+                    ).pgnWorkspaceName,
+                    title: (snapshot) => snapshot.path.isEmpty
+                        ? AppLocalizations.of(context).untitledPgnWorkspace
+                        : p.basename(snapshot.path),
                     path: (snapshot) => snapshot.path,
-                    recovery: context
-                        .read<
-                          WorkspaceRecoveryController<StudyWorkspaceSnapshot>
-                        >(),
+                    recovery: context.read<PgnViewerLifetime>().recovery,
                     onRestored: () =>
-                        context.read<AppState>().setMode(AppMode.study),
-                    child: WorkspaceRecoveryHost<PgnWorkspaceSnapshot>(
-                      id: 'pgn',
-                      workspaceName: AppLocalizations.of(
-                        context,
-                      ).pgnWorkspaceName,
-                      title: (snapshot) => snapshot.path.isEmpty
-                          ? AppLocalizations.of(context).untitledPgnWorkspace
-                          : p.basename(snapshot.path),
-                      path: (snapshot) => snapshot.path,
-                      recovery: context.read<PgnViewerLifetime>().recovery,
-                      onRestored: () =>
-                          context.read<AppState>().setMode(AppMode.pgnViewer),
-                      child: PgnViewerCloseHost(
-                        lifetime: context.read<PgnViewerLifetime>(),
-                        child: const MainScreen(),
-                      ),
+                        context.read<AppState>().setMode(AppMode.pgnViewer),
+                    child: PgnViewerCloseHost(
+                      lifetime: context.read<PgnViewerLifetime>(),
+                      child: const MainScreen(),
                     ),
                   ),
                 ),

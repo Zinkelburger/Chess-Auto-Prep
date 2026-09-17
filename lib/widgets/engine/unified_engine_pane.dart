@@ -1,12 +1,14 @@
 /// Unified Engine Pane - Single table combining Stockfish, Maia, and Probability
 library;
 
+import 'package:provider/provider.dart';
+
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import '../../models/engine_settings.dart';
+import '../../features/settings/controllers/engine_settings.dart';
 import '../../models/merged_move.dart';
 import '../../theme/app_text_styles.dart';
 import 'engine_move_row.dart';
@@ -103,7 +105,7 @@ const int _maxCacheSize = 50;
 
 abstract class _UnifiedEnginePaneStateBase extends State<UnifiedEnginePane> {
   final Map<String, _PositionSnapshot> _analysisCache = {};
-  final EngineSettings _settings = EngineSettings.instance;
+  late final EngineSettings _settings = context.read<EngineSettings>();
   late bool _ownsAnalysis;
   late AnalysisService _analysis;
   final ProbabilityService _probabilityService = ProbabilityService.instance;

@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import '../../models/analysis/discovery_result.dart';
-import '../../models/engine_settings.dart';
+import '../../features/settings/models/engine_configuration.dart';
 import 'engine_connection.dart';
 import 'engine_search_budget.dart';
 import 'engine_serial_queue.dart';
@@ -17,8 +17,10 @@ class BoardEngine {
   BoardEngine({
     Future<EngineConnection?> Function()? createConnection,
     EngineSearchBudget? budget,
+    EngineConfiguration Function()? settings,
     Duration protocolTimeout = const Duration(seconds: 10),
-  }) : _slot = EngineWorkerSlot(
+  }) : _settings = settings ?? EngineConfiguration.new,
+       _slot = EngineWorkerSlot(
          createConnection: createConnection,
          budget: budget,
          protocolTimeout: protocolTimeout,
@@ -27,6 +29,14 @@ class BoardEngine {
   BoardEngineSession createSession() => BoardEngineSession._(this);
 
   final EngineWorkerSlot _slot;
+  EngineConfiguration Function() _settings;
+
+  /// Composition injects the application owner; searches capture it before queuing.
+  void bindSettings(EngineConfiguration Function() settings) =>
+      _settings = settings;
+  EngineConfiguration? _effectiveSettings;
+  EngineConfiguration get effectiveSettings =>
+      _effectiveSettings ?? _settings();
 
   /// Sessions currently attached (prepared and not yet detached).
   final Set<BoardEngineSession> _clients = {};
@@ -52,10 +62,15 @@ class BoardEngine {
 
   Future<T> _enqueue<T>(Future<T> Function() action) => _queue.run(action);
 
-  Future<EvalWorker?> _ensure() => _slot.ensure(
-    threads: EngineSettings.instance.cores,
-    hashMb: EngineSettings.instance.hashMb,
-  );
+  Future<EvalWorker?> _ensure([EngineConfiguration? captured]) async {
+    final config = captured ?? _settings();
+    final worker = await _slot.ensure(
+      threads: config.cores,
+      hashMb: config.hashMb,
+    );
+    if (worker != null) _effectiveSettings = config;
+    return worker;
+  }
 
   /// Prepare the real configuration before the first toggle, without searching.
   Future<void> _prepare(BoardEngineSession client) async {
@@ -77,9 +92,11 @@ class BoardEngine {
   /// serialized, including the final bestmove acknowledgement after a stop.
   Future<T?> _run<T>(
     BoardEngineSession owner,
-    Future<T> Function(EvalWorker) search,
-  ) {
+    Future<T> Function(EvalWorker) search, {
+    EngineConfiguration? configuration,
+  }) {
     if (!_clients.contains(owner)) return Future.value();
+    final captured = configuration ?? owner._configuration ?? _settings();
     final request = ++_request;
     _searchClients
       ..clear()
@@ -93,7 +110,7 @@ class BoardEngine {
         // Retry one retired process. The worker owns drain/CPU admission for
         // every search, so neither UI nor pool callers can skip that contract.
         for (var attempt = 0; ; attempt++) {
-          final worker = await _ensure();
+          final worker = await _ensure(captured);
           if (!current()) return null;
           if (worker == null) throw StateError('Engine unavailable');
           try {
@@ -122,19 +139,20 @@ class BoardEngine {
     void Function(DiscoveryResult)? onProgress,
   }) {
     if (!_clients.contains(owner) || _suspended) return Future.value();
+    final captured = owner._configuration = _settings();
     final key = (
       fen: fen,
       depth: depth,
       multiPv: multiPv,
       whiteToMove: whiteToMove,
-      cores: EngineSettings.instance.cores,
-      hashMb: EngineSettings.instance.hashMb,
+      cores: captured.cores,
+      hashMb: captured.hashMb,
     );
     final discovery =
         _discovery == null ||
             _discoveryKey != key ||
             _discoveryRequest != _request
-        ? _startDiscovery(owner, key)
+        ? _startDiscovery(owner, key, captured)
         : _discovery!;
     _searchClients.add(owner);
     if (onProgress != null) {
@@ -152,6 +170,7 @@ class BoardEngine {
   Future<DiscoveryResult?> _startDiscovery(
     BoardEngineSession owner,
     _DiscoveryKey key,
+    EngineConfiguration captured,
   ) {
     _latestProgress = null;
     final pending = _discovery = _run(
@@ -168,6 +187,7 @@ class BoardEngine {
           }
         },
       ),
+      configuration: captured,
     );
     // A failed search must not become a cached failure for this position.
     unawaited(
@@ -249,6 +269,7 @@ typedef _DiscoveryKey = ({
 class BoardEngineSession {
   BoardEngineSession._(this._engine);
   final BoardEngine _engine;
+  EngineConfiguration? _configuration;
   bool _disposed = false;
 
   Future<void> prepare() {

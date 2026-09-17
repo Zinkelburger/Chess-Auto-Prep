@@ -4,12 +4,14 @@
 /// No `_test` suffix: ordinary CI must not launch this experiment.
 library;
 
+import '../support/runtime_settings.dart';
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/models/build_tree_node.dart';
-import 'package:chess_auto_prep/models/engine_settings.dart';
 import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
 import 'package:chess_auto_prep/services/generation/eca_calculator.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';
@@ -45,7 +47,14 @@ class _Paths extends PathProviderPlatform with MockPlatformInterfaceMixin {
   Future<String?> getApplicationSupportPath() async => p.join(root, 'support');
 }
 
+late RuntimeSettings runtimeSettings;
 void main() {
+  setUp(() async {
+    runtimeSettings = testRuntimeSettings();
+    await runtimeSettings.load();
+    runtimeSettings.bindLegacyEngines();
+    addTearDown(runtimeSettings.dispose);
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
   test('$_algo actual finite-horizon benchmark', () async {
     expect(_out, isNotEmpty);
@@ -101,7 +110,7 @@ void main() {
       final maia = MaiaFactory.instance!;
       await maia.initialize();
       expect((await maia.evaluate(fen, 2200)).policy, isNotEmpty);
-      EngineSettings.instance.cores = _workers;
+      runtimeSettings.engine.cores = _workers;
       await StockfishPool.instance.prepareForTreeBuild(_workers);
       startup.stop();
       final service = TreeBuildService();

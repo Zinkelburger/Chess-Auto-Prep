@@ -1,3 +1,5 @@
+import '../features/settings/controllers/engine_settings.dart';
+import '../features/settings/controllers/bulk_analysis_settings.dart';
 import '../app/pgn_viewer_lifetime.dart';
 import 'dart:async';
 
@@ -355,6 +357,8 @@ class _TacticsModeView extends StatelessWidget {
           create: (ctx) {
             final appState = ctx.read<AppState>();
             return HomeReviewRunner(
+              bulkSettings: ctx.read<BulkAnalysisSettings>(),
+              engine: ctx.read<EngineSettings>(),
               games: ctx.read<RecentGamesController>(),
               importCoordinator: ctx.read<TacticsImportCoordinator>(),
               lichessUsername: () => appState.lichessUsername,

@@ -13,7 +13,6 @@ import 'package:flutter/widgets.dart';
 
 import '../models/analysis/discovery_result.dart';
 import '../models/analysis/move_analysis_result.dart';
-import '../models/engine_settings.dart';
 import '../utils/chess_utils.dart' show playUciMove;
 import '../utils/fen_utils.dart';
 import 'engine/board_engine.dart';
@@ -90,7 +89,7 @@ class AnalysisService {
     totalMoves: totalMoves,
     completedMoves: completedMoves,
     activeWorkers: _engine.workerCount,
-    hashPerWorkerMb: EngineSettings.instance.hashMb,
+    hashPerWorkerMb: _engine.effectiveSettings.hashMb,
     discoveryDepth: discoveryDepth,
     discoveryNodes: discoveryNodes,
     discoveryNps: discoveryNps,

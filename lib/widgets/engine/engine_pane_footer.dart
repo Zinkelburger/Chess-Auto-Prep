@@ -3,7 +3,7 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../../models/engine_settings.dart';
+import '../../features/settings/controllers/engine_settings.dart';
 import '../../services/analysis_service.dart';
 import '../../services/probability_service.dart';
 import '../../theme/app_colors.dart';

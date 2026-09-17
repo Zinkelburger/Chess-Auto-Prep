@@ -13,7 +13,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../models/analysis/discovery_result.dart';
-import '../../models/engine_settings.dart';
+import '../../features/settings/models/engine_configuration.dart';
+import '../../utils/system_info.dart';
 import 'engine_connection.dart';
 import 'engine_interrupt.dart';
 import 'eval_worker.dart';
@@ -29,10 +30,22 @@ class StockfishPool {
 
   /// Create an independent instance (unit tests only).
   @visibleForTesting
-  StockfishPool.fresh({Future<EngineConnection?> Function()? createConnection})
-    : _createConnection = createConnection ?? StockfishConnectionFactory.create;
+  StockfishPool.fresh({
+    Future<EngineConnection?> Function()? createConnection,
+    EngineConfiguration Function()? settings,
+  }) : _settings = settings ?? EngineConfiguration.new,
+       _createConnection =
+           createConnection ?? StockfishConnectionFactory.create;
 
-  StockfishPool._() : _createConnection = StockfishConnectionFactory.create;
+  StockfishPool._()
+    : _settings = EngineConfiguration.new,
+      _createConnection = StockfishConnectionFactory.create;
+
+  EngineConfiguration Function() _settings;
+  void bindSettings(EngineConfiguration Function() settings) =>
+      _settings = settings;
+  EngineConfiguration? _runSettings;
+  EngineConfiguration get effectiveSettings => _runSettings ?? _settings();
 
   static const _workerStartupTimeout = Duration(seconds: 15);
   static const _defaultAcquireTimeout = Duration(seconds: 60);
@@ -83,11 +96,18 @@ class StockfishPool {
   /// [threadsPerWorker] sets Stockfish UCI Threads on each worker (MultiPV
   /// searches benefit strongly from >1 thread).  Existing workers are
   /// reconfigured when [threadsPerWorker] differs from the current value.
-  Future<void> ensureWorkers([int? count, int? threadsPerWorker]) {
+  Future<void> ensureWorkers([int? count, int? threadsPerWorker]) =>
+      _provision(count, threadsPerWorker, _settings());
+
+  Future<void> _provision(
+    int? count,
+    int? threadsPerWorker,
+    EngineConfiguration captured,
+  ) {
     final generation = _generation;
     final pending = _provisioning.then((_) async {
       if (generation != _generation) return;
-      await _ensureWorkers(count, threadsPerWorker, generation);
+      await _ensureWorkers(count, threadsPerWorker, generation, captured);
     });
     _provisioning = pending.then<void>(
       (_) {},
@@ -100,7 +120,9 @@ class StockfishPool {
     int? count,
     int? threadsPerWorker,
     int generation,
+    EngineConfiguration captured,
   ) async {
+    _runSettings = captured;
     if (!StockfishConnectionFactory.isAvailable) return;
 
     if (threadsPerWorker != null && threadsPerWorker > 0) {
@@ -109,13 +131,10 @@ class StockfishPool {
 
     // Zero is a real request — callers that must not start an engine pass it
     // (the tactics import's `maxCores: 0`), so the floor here is 0, not 1.
-    final target = (count ?? EngineSettings.instance.cores).clamp(
-      0,
-      EngineSettings.systemCores,
-    );
+    final target = (count ?? captured.cores).clamp(0, getLogicalCores());
     _targetCount = target;
     while (_workers.length < target) {
-      final worker = await _spawnOne(_workers.length);
+      final worker = await _spawnOne(_workers.length, captured);
       if (worker == null) break;
       if (generation != _generation) {
         worker.dispose();
@@ -129,7 +148,7 @@ class StockfishPool {
     // The memory setting may have moved since a worker was spawned. Idle
     // workers pick it up here; a busy one keeps its table until it is next
     // between searches (a resize mid-search is not allowed by UCI).
-    final hashMb = EngineSettings.instance.hashMb;
+    final hashMb = captured.hashMb;
     await Future.wait([
       for (final w in _free)
         if (w.hashMb != hashMb) w.setHash(hashMb),
@@ -142,7 +161,7 @@ class StockfishPool {
     if (kDebugMode && _workers.isNotEmpty) {
       log.i(
         '[Pool] ${_workers.length} workers ready '
-        '(${EngineSettings.instance.hashMb} MB hash, '
+        '(${captured.hashMb} MB hash, '
         '$_threadsPerWorker thread(s) each)',
       );
     }
@@ -184,9 +203,10 @@ class StockfishPool {
   /// Idempotent and safe to call over an existing pool: extra workers left
   /// by interactive analysis are reconfigured, not killed.
   Future<void> prepareForTreeBuild(int threadBudget) async {
-    final lanes = laneCountFor(threadBudget);
+    final captured = _settings();
+    final lanes = laneCountFor(threadBudget, workers: captured.cores);
     final perWorker = threadsPerLane(threadBudget, lanes);
-    await ensureWorkers(lanes, perWorker);
+    await _provision(lanes, perWorker, captured);
     await reconfigureAllWorkers(perWorker);
   }
 
@@ -194,7 +214,7 @@ class StockfishPool {
   /// worker count, clamped to the budget and to at least one.
   static int laneCountFor(int threadBudget, {int? workers}) {
     final budget = threadBudget < 1 ? 1 : threadBudget;
-    final want = workers ?? EngineSettings.instance.cores;
+    final want = workers ?? threadBudget;
     return want.clamp(1, budget);
   }
 
@@ -206,7 +226,7 @@ class StockfishPool {
     return per < 1 ? 1 : per;
   }
 
-  Future<EvalWorker?> _spawnOne(int index) async {
+  Future<EvalWorker?> _spawnOne(int index, EngineConfiguration captured) async {
     final generation = _generation;
     EvalWorker? worker;
     try {
@@ -219,10 +239,7 @@ class StockfishPool {
       worker = EvalWorker(engine);
       _starting.add(worker);
       await worker
-          .init(
-            hashMb: EngineSettings.instance.hashMb,
-            threads: _threadsPerWorker,
-          )
+          .init(hashMb: captured.hashMb, threads: _threadsPerWorker)
           .timeout(_workerStartupTimeout);
       return worker;
     } catch (e) {
@@ -437,7 +454,7 @@ class StockfishPool {
       log.e('[Pool] Worker died; respawning');
     }
     if (_workers.length >= _targetCount) return;
-    await ensureWorkers(_targetCount);
+    await _provision(_targetCount, _threadsPerWorker, effectiveSettings);
   }
 
   /// Set the provisioned worker count without spawning anything, so a test

@@ -3,12 +3,11 @@
 /// objectively bad according to the engine.
 ///
 /// Uses [StockfishPool] for worker management with a fixed per-worker hash
-/// (see [EngineSettings.instance.hashMb]).
+/// (see [_pool.effectiveSettings.hashMb]).
 library;
 
 import 'package:flutter/foundation.dart';
 
-import '../models/engine_settings.dart';
 import '../models/engine_weakness_result.dart';
 import '../models/opening_tree.dart';
 import '../utils/eval_constants.dart';
@@ -75,7 +74,7 @@ class EngineWeaknessService {
       );
     }
 
-    onWorkersReady?.call(_pool.workerCount, EngineSettings.instance.hashMb);
+    onWorkersReady?.call(_pool.workerCount, _pool.effectiveSettings.hashMb);
 
     final positions = [
       if (whiteTree != null)

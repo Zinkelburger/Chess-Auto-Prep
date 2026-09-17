@@ -16,7 +16,7 @@ import 'package:flutter/foundation.dart';
 
 import '../constants/chess_constants.dart';
 import '../core/pgn/pgn_dummy_mainline.dart';
-import '../models/bulk_analysis_settings.dart';
+import '../features/settings/models/bulk_analysis_configuration.dart';
 import '../utils/chess_utils.dart'
     show uciPvToSan, uciToSan, toStandardUci, isNullMoveSan;
 import '../utils/fen_utils.dart';
@@ -35,9 +35,13 @@ const int _kDefaultElo = 2200;
 class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
   GameAnalysisController({
     Future<CachedGameAnalysis?> Function(String pgnText)? cachedAnalysisLoader,
-  }) : _cachedAnalysisLoader =
+    int Function()? bulkDepth,
+  }) : _bulkDepth = bulkDepth ?? (() => BulkAnalysisConfiguration.defaultDepth),
+       _cachedAnalysisLoader =
            cachedAnalysisLoader ??
            ((pgnText) => compute(parseCachedEvals, pgnText));
+
+  final int Function() _bulkDepth;
 
   final Future<CachedGameAnalysis?> Function(String pgnText)
   _cachedAnalysisLoader;
@@ -61,7 +65,7 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
   /// Stockfish "Depth" setting — full-game analysis has no depth knob of its
   /// own; it follows the one in the Stockfish settings dialog.
   int? _activeDepth;
-  int get depth => _activeDepth ?? BulkAnalysisSettings.instance.depth;
+  int get depth => _activeDepth ?? _bulkDepth();
 
   bool _isCancelled = false;
 
@@ -133,7 +137,7 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
 
     // The depth the graph was drawn at, so the lines agree with the scores
     // beside them; the engine setting when the series does not say.
-    var depth = BulkAnalysisSettings.instance.depth;
+    var depth = _bulkDepth();
     for (final e in missing) {
       final d = e.depth;
       if (d != null && d < depth) depth = d;
@@ -200,7 +204,7 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
     _isCancelled = false;
     notifyListeners();
 
-    final depth = analysisDepth ?? BulkAnalysisSettings.instance.depth;
+    final depth = analysisDepth ?? _bulkDepth();
     _activeDepth = depth;
     bool runIsCurrent() =>
         !isDisposed && !_isCancelled && generation == _generation;

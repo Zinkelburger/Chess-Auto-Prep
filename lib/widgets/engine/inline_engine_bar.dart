@@ -8,13 +8,17 @@
 /// analysis is toggled off. Background jobs use their own on-demand pool.
 library;
 
+import '../../features/settings/models/engine_configuration.dart';
+
+import 'package:provider/provider.dart';
+
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
-import '../../models/engine_settings.dart';
+import '../../features/settings/controllers/engine_settings.dart';
 import '../../services/analysis_service.dart';
 import '../../services/eval_cache.dart';
 import '../../services/engine/engine_lifecycle.dart';
@@ -69,7 +73,7 @@ class InlineEngineBar extends StatefulWidget {
 }
 
 class _InlineEngineBarState extends State<InlineEngineBar> {
-  final EngineSettings _settings = EngineSettings.instance;
+  late final EngineSettings _settings = context.read<EngineSettings>();
 
   static bool get _engineEnabled =>
       EngineLifecycle.instance.state != EngineState.off;
@@ -132,14 +136,8 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   Timer? _progressThrottle;
   DiscoveryResult? _pendingProgress;
 
-  // Settings fields that actually affect the inline search — a re-search runs
-  // only when one of these changes, not on every unrelated EngineSettings
-  // notify (column mutes, Maia toggles, explorer DB, …).
-  int _lastDepth = 0;
-  int _lastMultiPv = 0;
-  int _lastInlineThreads = 0;
-  int _lastHashMb = 0;
-
+  EngineConfiguration? _searchConfiguration;
+  int get _displayLines => _searchConfiguration?.multiPv ?? _settings.multiPv;
   final _session = BoardEngine.instance.createSession();
   bool _wasEnabled = _engineEnabled;
   bool _modeActive = true;
@@ -157,10 +155,6 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     super.initState();
     // Reconfigure the idle worker and restart when search settings change.
     _settings.addListener(_onSettingsChanged);
-    _lastDepth = _settings.depth;
-    _lastMultiPv = _settings.multiPv;
-    _lastInlineThreads = _settings.cores;
-    _lastHashMb = _settings.hashMb;
     EngineLifecycle.instance.addListener(_onEngineGateChanged);
     if (_engineEnabled && _isActive) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _runDiscovery());
@@ -258,27 +252,9 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   }
 
   void _onSettingsChanged() {
-    // Only depth / MultiPV / cores / memory changes affect the inline search;
-    // EngineSettings fires for ~30 unrelated fields and each one used to abort
-    // and restart the in-progress search.
-    final relevant =
-        _settings.depth != _lastDepth ||
-        _settings.multiPv != _lastMultiPv ||
-        _settings.cores != _lastInlineThreads ||
-        _settings.hashMb != _lastHashMb;
     if (!mounted) return;
+    // The next explicit search/position reads committed settings.
     setState(() {});
-    if (!relevant) return;
-    _lastDepth = _settings.depth;
-    _lastMultiPv = _settings.multiPv;
-    _lastInlineThreads = _settings.cores;
-    _lastHashMb = _settings.hashMb;
-
-    _lastAnalyzedFen = null;
-    _prepareEngine();
-    if (_engineEnabled && _isActive) {
-      unawaited(_runDiscovery());
-    }
   }
 
   /// Leading + trailing throttle for streamed search progress: paint the first
@@ -320,6 +296,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     if (_searchFen == _lastAnalyzedFen && _discovery.lines.isNotEmpty) return;
 
     final myGen = ++_generation;
+    final configuration = _searchConfiguration = _settings.committed;
     // Drop any pending throttled progress from the previous search so a stale
     // trailing flush can't paint over the new one.
     _progressThrottle?.cancel();
@@ -340,8 +317,8 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     try {
       final result = await _session.discover(
         fen: fen,
-        depth: _settings.depth,
-        multiPv: _settings.multiPv,
+        depth: configuration.depth,
+        multiPv: configuration.multiPv,
         whiteToMove: whiteToMove,
         onProgress: (intermediate) => _onDiscoveryProgress(intermediate, myGen),
       );
@@ -394,8 +371,8 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
             // PGN below us as streamed lines disappear and arrive.
             ConstrainedBox(
               constraints: BoxConstraints(
-                minHeight: EnginePvRow.lineHeight(context) * _settings.multiPv,
-                maxHeight: (EnginePvRow.lineHeight(context) * _settings.multiPv)
+                minHeight: EnginePvRow.lineHeight(context) * _displayLines,
+                maxHeight: (EnginePvRow.lineHeight(context) * _displayLines)
                     .clamp(240.0, double.infinity),
               ),
               child: SingleChildScrollView(
@@ -598,7 +575,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     final byRank = {for (final line in lines) line.pvNumber: line};
     return Column(
       mainAxisSize: MainAxisSize.min,
-      children: List.generate(_settings.multiPv, (index) {
+      children: List.generate(_displayLines, (index) {
         final line = byRank[index + 1];
         return line == null
             ? SizedBox(height: EnginePvRow.lineHeight(context))

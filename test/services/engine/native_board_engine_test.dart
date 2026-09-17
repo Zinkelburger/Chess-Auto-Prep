@@ -1,10 +1,11 @@
+import '../../support/runtime_settings.dart';
+import 'package:chess_auto_prep/app/runtime_settings.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:chess_auto_prep/services/engine/board_engine.dart';
 import 'package:chess_auto_prep/services/engine/engine_connection.dart';
 import 'package:chess_auto_prep/services/engine/uci_handshake.dart';
-import 'package:chess_auto_prep/models/engine_settings.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -54,17 +55,25 @@ int ticks(int pid) {
   return int.parse(fields[11]) + int.parse(fields[12]);
 }
 
+late RuntimeSettings runtimeSettings;
 void main() {
+  setUp(() async {
+    runtimeSettings = testRuntimeSettings();
+    await runtimeSettings.load();
+    runtimeSettings.bindLegacyEngines();
+    addTearDown(runtimeSettings.dispose);
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
   final executable = Platform.environment['STOCKFISH_EXECUTABLE'];
   test(
     'native process pauses at zero CPU, reuses PID/config, and exits on last detach',
     () async {
       SharedPreferences.setMockInitialValues({});
-      EngineSettings.instance.cores = 2;
-      EngineSettings.instance.hashMb = 16;
+      await runtimeSettings.engine.edit({'engine_settings.cores': 2});
+      await runtimeSettings.engine.edit({'engine_settings.hash_mb': 16});
       final connections = <Native>[];
       final board = BoardEngine(
+        settings: () => runtimeSettings.engine.committed,
         createConnection: () async {
           final c = Native(await Process.start(executable!, []));
           connections.add(c);

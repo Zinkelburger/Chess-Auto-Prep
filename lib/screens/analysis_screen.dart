@@ -1,6 +1,8 @@
 /// Analysis screen – position analysis view.
 library;
 
+import 'package:provider/provider.dart';
+
 ///
 /// Keeps one toolbar above both the embedded player picker and the
 /// three-panel [PositionAnalysisWidget].
@@ -11,7 +13,6 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
 import '../core/app_state.dart';
 import '../features/audit/models/audit_finding.dart';

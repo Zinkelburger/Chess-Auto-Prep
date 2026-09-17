@@ -4,6 +4,9 @@
 /// blocks — those are behind the gear.
 library;
 
+import '../../support/runtime_settings.dart';
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+
 import 'package:chess_auto_prep/core/app_state.dart';
 import 'package:chess_auto_prep/screens/settings_screen.dart';
 import 'package:chess_auto_prep/features/games/controllers/recent_games_controller.dart';
@@ -15,8 +18,6 @@ import 'package:chess_auto_prep/features/games/services/opening_review.dart';
 import 'package:chess_auto_prep/features/games/widgets/analysis_block.dart';
 import 'package:chess_auto_prep/services/games_library/game_filter.dart';
 import 'package:chess_auto_prep/services/games_library/games_library_service.dart';
-import 'package:chess_auto_prep/models/bulk_analysis_settings.dart';
-import 'package:chess_auto_prep/models/engine_settings.dart';
 import 'package:chess_auto_prep/widgets/analysis/stockfish_settings_dialog.dart';
 import 'package:chess_auto_prep/features/tactics/services/tactics_import_coordinator.dart';
 import 'package:flutter/material.dart';
@@ -69,7 +70,8 @@ class _PausedRunner extends HomeReviewRunner {
     required super.lichessUsername,
     required super.chesscomUsername,
     super.windowSettings,
-    super.bulkSettings,
+    required super.bulkSettings,
+    required super.engine,
   });
 
   @override
@@ -79,7 +81,14 @@ class _PausedRunner extends HomeReviewRunner {
   bool get canResume => true;
 }
 
+RuntimeSettings? _runtimeSettings;
+RuntimeSettings get runtimeSettings =>
+    _runtimeSettings ??= testRuntimeSettings()..bindLegacyEngines();
 void main() {
+  setUp(() {
+    _runtimeSettings = null;
+    addTearDown(() => _runtimeSettings?.dispose());
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
 
   ({HomeReviewRunner runner, RecentGamesController games, _StubCoordinator co})
@@ -93,12 +102,13 @@ void main() {
     final co = _StubCoordinator();
     return (
       runner: HomeReviewRunner(
+        engine: runtimeSettings.engine,
         games: games,
         importCoordinator: co,
         lichessUsername: () => lichess,
         chesscomUsername: () => null,
         windowSettings: GamesWindowSettings.forTest(),
-        bulkSettings: BulkAnalysisSettings.forTest(),
+        bulkSettings: runtimeSettings.bulk,
       ),
       games: games,
       co: co,
@@ -118,7 +128,9 @@ void main() {
     int masterGameCount = 0,
     int unreviewed = 3,
     int openingIssues = 4,
-  }) => tester.pumpWidget(
+  }) => pumpRuntimeWidget(
+    tester,
+    runtimeSettings,
     ChangeNotifierProvider(
       create: (_) => AppState(),
       child: MaterialApp(
@@ -248,7 +260,7 @@ void main() {
     final h = build();
     addTearDown(h.games.dispose);
     addTearDown(h.runner.dispose);
-    final engine = EngineSettings.instance;
+    final engine = runtimeSettings.engine;
     final before = engine.cores;
     addTearDown(() => engine.cores = before);
     engine.cores = 1;
@@ -349,12 +361,13 @@ void main() {
     );
     final co = _StubCoordinator();
     final runner = _PausedRunner(
+      engine: runtimeSettings.engine,
       games: games,
       importCoordinator: co,
       lichessUsername: () => 'me',
       chesscomUsername: () => null,
       windowSettings: GamesWindowSettings.forTest(),
-      bulkSettings: BulkAnalysisSettings.forTest(),
+      bulkSettings: runtimeSettings.bulk,
     );
     addTearDown(games.dispose);
     addTearDown(runner.dispose);
