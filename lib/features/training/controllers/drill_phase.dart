@@ -11,11 +11,11 @@
 /// goes to replay when [TrainingSettings.wrongMoveReplay] is on.
 library;
 
-import '../../models/completed_move.dart';
-import '../../utils/chess_utils.dart' show playSanOrNullMove;
-import 'move_display.dart';
-import 'move_validation.dart' as validation;
-import 'training_phase.dart';
+import '../../../models/completed_move.dart';
+import '../../../utils/chess_utils.dart' show playSanOrNullMove;
+import '../models/move_display.dart';
+import '../models/move_validation.dart' as validation;
+import '../models/training_phase.dart';
 import 'training_session_controller.dart';
 
 class DrillPhase {

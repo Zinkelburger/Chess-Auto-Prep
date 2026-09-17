@@ -2,6 +2,10 @@
 /// plus a tactics mode for training studies of custom puzzles.
 library;
 
+import '../app/training_dependencies.dart';
+import '../features/training/models/training_configuration.dart';
+import '../features/training/repositories/training_settings_repository.dart';
+
 import '../features/repertoires/controllers/repertoire_controller.dart';
 import '../features/repertoires/repositories/repertoire_document_repository.dart';
 import '../features/repertoires/repositories/repertoire_decoder.dart';
@@ -24,9 +28,9 @@ import '../core/app_state.dart';
 import '../models/line_status.dart';
 import '../models/repertoire_line.dart';
 import '../features/repertoires/models/repertoire_metadata.dart';
-import '../models/training_settings.dart';
-import '../services/training/training_phase.dart';
-import '../services/training/training_session_controller.dart';
+import '../features/training/models/training_settings.dart';
+import '../features/training/models/training_phase.dart';
+import '../features/training/controllers/training_session_controller.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/app_shortcuts.dart';
@@ -89,7 +93,8 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
   void initState() {
     super.initState();
     _workspaceNavigation.addListener(_resumePendingHandoff);
-    _training = TrainingSessionController(
+    _training = createTrainingSession(
+      configuration: context.read<TrainingSettingsRepository>(),
       session: RepertoireController(
         documents: context.read<RepertoireDocumentRepository>(),
         decoder: context.read<RepertoireDecoder>(),
@@ -305,11 +310,24 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
     ),
     ...KeyBinding.forShortcut(
       AppShortcut.autoAdvance,
-      'Toggle manual advance',
+      'Toggle manual advance for next sitting',
       () {
-        final settings = _training.settings;
-        settings.learnRequiresClick = !settings.learnRequiresClick;
-        settings.saveSoon();
+        final configuration = _training.configuration;
+        final before =
+            configuration.state.draft ?? configuration.state.committed;
+        if (before == null) return;
+        final draft = before.toSettings();
+        draft.learnRequiresClick = !draft.learnRequiresClick;
+        unawaited(
+          configuration
+              .apply(
+                TrainingSettingsPatch.between(
+                  before,
+                  TrainingConfiguration(draft),
+                ),
+              )
+              .catchError((Object _) {}),
+        );
         setState(() {});
       },
     ),
@@ -541,6 +559,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
         isLoading: _training.isLoading,
         loadingStatus: _training.loadingStatus,
         error: _training.error,
+        onRetry: () => unawaited(_training.retryFailure()),
         hasLines: _training.lines.isNotEmpty,
         canStartTraining: false,
         onSelectRepertoire: _selectRepertoire,
@@ -981,12 +1000,8 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
 
   Widget _buildSettingsPanel({VoidCallback? onOpenAppSettings}) {
     return TrainingSettingsPanel(
-      settings: _training.settings,
-      onQueueSettingsChanged: _training.updateDueQueue,
-      onSettingsChanged: () {
-        if (mounted) setState(() {});
-      },
-      onChapterSettingsChanged: _training.onChapterSettingsChanged,
+      configuration: _training.configuration,
+      applyNextSitting: _training.settingsApplyNextSitting,
       trainingMode: _training.trainingMode,
       repetitionMode: _training.repetitionMode,
       onTrainingModeChanged: _training.setTrainingMode,

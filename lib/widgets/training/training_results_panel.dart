@@ -1,12 +1,13 @@
+import '../../features/training/repositories/training_review_repository.dart';
 import '../../utils/app_shortcuts.dart';
 import '../shortcut_tooltip.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/repertoire_line.dart';
 import '../../models/repertoire_review_entry.dart';
-import '../../models/training_settings.dart';
+import '../../features/training/models/training_settings.dart';
 import '../../services/repertoire_review_service.dart';
-import '../../services/training/training_phase.dart';
+import '../../features/training/models/training_phase.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/time_format.dart';
 import 'training_progress_panel.dart';
@@ -28,7 +29,7 @@ class TrainingResultsPanel extends StatefulWidget {
   final int sessionCorrect;
   final int sessionIncorrect;
   final int sessionStreak;
-  final RepertoireReviewService reviewService;
+  final TrainingReviewRepository reviewService;
   final void Function(ReviewRating rating) onRateLine;
   final VoidCallback onNextLine;
 
@@ -400,7 +401,7 @@ class TrainingRatingButtons extends StatelessWidget {
   final RepertoireLine? currentLine;
   final String repertoireId;
   final Map<String, RepertoireReviewEntry> reviewMap;
-  final RepertoireReviewService reviewService;
+  final TrainingReviewRepository reviewService;
   final void Function(ReviewRating rating) onRateLine;
 
   const TrainingRatingButtons({
@@ -471,7 +472,7 @@ class _RatingButton extends StatelessWidget {
   final String label;
   final Color color;
   final RepertoireReviewEntry previewEntry;
-  final RepertoireReviewService reviewService;
+  final TrainingReviewRepository reviewService;
   final void Function(ReviewRating rating) onRateLine;
 
   const _RatingButton({

@@ -8,7 +8,7 @@ library;
 
 import 'package:dartchess/dartchess.dart';
 
-import '../../models/completed_move.dart';
+import '../../../models/completed_move.dart';
 
 /// True when [move], played from [position], is the move [expectedSan] denotes.
 ///

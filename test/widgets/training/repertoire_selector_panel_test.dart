@@ -49,4 +49,24 @@ void main() {
     expect(find.text('Select Repertoire'), findsOneWidget);
     expect(find.text('Add lines in Repertoire Builder'), findsNothing);
   });
+  testWidgets('a failed outcome can be retried without changing source', (
+    tester,
+  ) async {
+    var retries = 0;
+    await tester.pumpWidget(
+      host(
+        RepertoireSelectorPanel(
+          isLoading: false,
+          error: 'Could not save completion',
+          hasLines: true,
+          canStartTraining: false,
+          onSelectRepertoire: () {},
+          onRetry: () => retries++,
+        ),
+      ),
+    );
+    await tester.tap(find.text('Retry'));
+    expect(retries, 1);
+    expect(find.text('Could not save completion'), findsOneWidget);
+  });
 }

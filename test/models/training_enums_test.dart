@@ -1,6 +1,6 @@
 import 'package:chess_auto_prep/models/game_outcome.dart';
 import 'package:chess_auto_prep/models/line_status.dart';
-import 'package:chess_auto_prep/models/training_settings.dart';
+import 'package:chess_auto_prep/features/training/models/training_settings.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
