@@ -575,7 +575,8 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
                 ? null
                 : () => unawaited(_savePgn()),
             icon: const Icon(Icons.save_outlined, size: 18),
-            label: Text(_controller.filePath == null ? 'Save as…' : 'Save'),
+            key: const ValueKey('pgn-save-recovery'),
+            label: Text(AppLocalizations.of(context).documentSaveRecovery),
           ),
         if (_editMode)
           TextButton.icon(

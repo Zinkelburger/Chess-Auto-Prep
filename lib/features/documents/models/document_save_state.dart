@@ -35,6 +35,7 @@ class DocumentSaveState {
     this.readFailure,
     this.uncertainPath,
     this.pendingEdits = false,
+    this.dirtyOverride,
     List<RetainedDocumentDraft> retainedDrafts = const [],
   }) : retainedDrafts = List.unmodifiable(retainedDrafts);
   final String path;
@@ -42,6 +43,10 @@ class DocumentSaveState {
   /// Last serialized editor content; structured editors may have newer edits.
   final String content;
   final bool pendingEdits;
+
+  /// Scoped editors compare per-game baselines instead of whole-document text.
+  /// Their edit owner supplies this without serializing the collection for UI.
+  final bool? dirtyOverride;
   final PgnSnapshot? baseline;
   final DocumentSavePhase phase;
   final PgnWriteResult? outcome;
@@ -52,7 +57,8 @@ class DocumentSaveState {
   bool get busy =>
       phase == DocumentSavePhase.saving || phase == DocumentSavePhase.reloading;
   bool get dirty =>
-      pendingEdits || baseline == null || content != baseline!.content;
+      dirtyOverride ??
+      (pendingEdits || baseline == null || content != baseline!.content);
   bool get uncertain => outcome is PgnWriteUncertain;
   bool get canSave => path.isNotEmpty && !busy && !uncertain && dirty;
 }

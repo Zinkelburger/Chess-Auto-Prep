@@ -969,6 +969,78 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{date} · {time}'**
   String studyRecoveryTimestamp(String date, String time);
+
+  /// PGN document save and recovery control.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a new PGN filename. Existing files are kept.'**
+  String get documentCopyPrompt;
+
+  /// PGN document save and recovery control.
+  ///
+  /// In en, this message translates to:
+  /// **'File name'**
+  String get documentCopyName;
+
+  /// PGN document save and recovery control.
+  ///
+  /// In en, this message translates to:
+  /// **'Folder'**
+  String get documentCopyFolder;
+
+  /// PGN document save and recovery control.
+  ///
+  /// In en, this message translates to:
+  /// **'Browse folders'**
+  String get documentBrowseFolder;
+
+  /// PGN document save and recovery control.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a file name without folders.'**
+  String get documentCopyInvalidName;
+
+  /// PGN document save and recovery control.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter an absolute folder path.'**
+  String get documentCopyInvalidFolder;
+
+  /// PGN document save and recovery control.
+  ///
+  /// In en, this message translates to:
+  /// **'The folder picker could not open. You can enter the folder path.'**
+  String get documentFolderPickerFailed;
+
+  /// PGN document save and recovery control.
+  ///
+  /// In en, this message translates to:
+  /// **'Save and recovery…'**
+  String get documentSaveRecovery;
+
+  /// PGN document save and recovery control.
+  ///
+  /// In en, this message translates to:
+  /// **'Save PGN collection'**
+  String get documentCollectionSaveTitle;
+
+  /// PGN document save and recovery control.
+  ///
+  /// In en, this message translates to:
+  /// **'Export PGN collection'**
+  String get documentExportTitle;
+
+  /// Open a newly exported PGN collection.
+  ///
+  /// In en, this message translates to:
+  /// **'Open'**
+  String get documentOpenExport;
+
+  /// PGN export confirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'Exported {name}'**
+  String documentExported(String name);
 }
 
 class _AppLocalizationsDelegate

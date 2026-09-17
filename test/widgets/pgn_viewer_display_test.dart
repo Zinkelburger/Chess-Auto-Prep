@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_collection_repository.dart';
 import 'dart:io';
@@ -94,6 +95,8 @@ void main() {
             ChangeNotifierProvider.value(value: history),
           ],
           child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: PgnViewerScreen(
               collectionRepository: StoragePgnCollectionRepository(
                 StorageFactory.instance,
@@ -152,6 +155,8 @@ void main() {
         ChangeNotifierProvider.value(
           value: app,
           child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: PgnViewerScreen(
               collectionRepository: StoragePgnCollectionRepository(
                 StorageFactory.instance,
@@ -307,6 +312,8 @@ void main() {
           child: DocumentCloseScope(
             coordinator: coordinator,
             child: MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
               home: PgnViewerScreen(
                 collectionRepository: StoragePgnCollectionRepository(
                   StorageFactory.instance,
@@ -321,6 +328,16 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
       await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
       await _settleReader(tester);
+      // Pasted content has no durable source even before its first annotation.
+      final untouchedClose = coordinator.prepareClose();
+      await tester.pumpAndSettle();
+      expect(find.text('Save PGN collection'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await _settleReader(tester);
+      expect(
+        (await untouchedClose).disposition,
+        DocumentCloseDisposition.cancelled,
+      );
       tester
           .widget<PgnViewerWidget>(find.byType(PgnViewerWidget))
           .onCommentsChanged!('1. d4 {Keep this draft} Nf6 *');
@@ -332,8 +349,8 @@ void main() {
       );
       final close = coordinator.prepareClose();
       await tester.pumpAndSettle();
-      expect(find.text('Save PGN changes?'), findsOneWidget);
-      await tester.tap(find.text('Discard'));
+      expect(find.text('Save PGN collection'), findsOneWidget);
+      await tester.tap(find.text('Close without saving'));
       await _settleReader(tester);
       expect((await close).disposition, DocumentCloseDisposition.cancelled);
       expect(
@@ -343,7 +360,7 @@ void main() {
       // The next close still asks about the retained work.
       final retry = coordinator.prepareClose();
       await tester.pumpAndSettle();
-      expect(find.text('Save PGN changes?'), findsOneWidget);
+      expect(find.text('Save PGN collection'), findsOneWidget);
       await tester.tap(find.text('Cancel'));
       await _settleReader(tester);
       expect((await retry).disposition, DocumentCloseDisposition.cancelled);

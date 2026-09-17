@@ -14,7 +14,13 @@ import '../features/documents/repositories/pgn_collection_repository.dart';
 import '../features/documents/controllers/document_close_coordinator.dart';
 import '../features/documents/widgets/document_close_scope.dart';
 import '../design_system/components/name_entry_dialog.dart';
-import 'dart:convert';
+import '../features/documents/controllers/document_save_session.dart';
+import '../features/documents/models/pgn_document.dart';
+import '../features/documents/widgets/document_save_dialog.dart';
+import '../features/documents/widgets/document_save_panel.dart';
+import '../features/documents/widgets/pgn_copy_destination_dialog.dart';
+import '../l10n/generated/app_localizations.dart';
+import '../design_system/theme/app_spacing.dart';
 import 'package:dartchess/dartchess.dart'
     show Chess, Setup, PgnGame, PgnNodeData, Position;
 import 'package:file_picker/file_picker.dart';
@@ -748,9 +754,12 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   Object get _closeRevision => (
     _controller.filePath,
     _controller.collectionRevision,
-    _controller.hasUnsavedChanges,
+    _controller.saveActions.state.dirty,
     _controller.isSaving,
     _controller.currentGameIndex,
+    _controller.saveActions.state.uncertain,
+    _controller.saveActions.state.inspectionPath,
+    _controller.saveActions.state.retainedDrafts.length,
   );
 
   Future<DocumentCloseApproval?> _prepareWindowClose() async {
@@ -852,79 +861,95 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     _reclaimFocus();
   }
 
+  Future<String?> _chooseCopyDestination(
+    BuildContext context, {
+    String? name,
+  }) async {
+    final directory = _controller.filePath == null
+        ? (await AppPaths.documentsDirectory()).path
+        : p.dirname(_controller.filePath!);
+    if (!context.mounted) return null;
+    return showPgnCopyDestinationDialog(
+      context,
+      initialDirectory: directory,
+      initialName:
+          name ??
+          (_controller.filePath == null
+              ? 'games.pgn'
+              : '${p.basenameWithoutExtension(_controller.filePath!)} copy.pgn'),
+      pickDirectory: (current) =>
+          FilePicker.getDirectoryPath(initialDirectory: current),
+    );
+  }
+
   @override
   Future<bool> _savePgn() async {
     _pgnWidgetController.flushPendingComments();
-    if (_controller.filePath != null) {
-      return _controller.saveChanges();
-    }
-    final games = _controller.allGames;
-    if (games.isEmpty) return false;
-    final snapshot = _controller.snapshotForSave();
-    final content =
-        '${_controller.collectionPreamble}\n\n${snapshot.values.join('\n\n')}\n';
-    try {
-      final uri = await FilePicker.saveFile(
-        dialogTitle: 'Save PGN',
-        fileName: 'games.pgn',
-        type: FileType.custom,
-        allowedExtensions: ['pgn'],
-        bytes: utf8.encode(content),
-      );
-      if (uri == null || !mounted || !identical(games, _controller.allGames)) {
-        return false;
-      }
-      _controller.adoptSavedCopy(uri.toFilePath(), snapshot);
-      return !_controller.hasUnsavedChanges;
-    } catch (e) {
-      if (mounted) {
-        showAppSnackBar(context, 'Could not save PGN: $e', isError: true);
-      }
-      return false;
-    }
+    await showDocumentSaveDialog(
+      context,
+      title: AppLocalizations.of(context).documentCollectionSaveTitle,
+      session: _controller.saveActions,
+      chooseCopyDestination: _chooseCopyDestination,
+    );
+    return !_controller.saveActions.state.dirty &&
+        !_controller.saveActions.state.uncertain;
   }
 
   Future<bool> _confirmLeavePgn({bool forWindowClose = false}) async {
     _pgnWidgetController.flushPendingComments();
-    if (!_controller.hasUnsavedChanges) return true;
-    if (_controller.autoSave && _controller.filePath != null) {
-      final saved = await _controller.saveChanges();
-      if (!saved && forWindowClose) {
-        throw StateError(
-          _controller.errorMessage ?? 'PGN save did not complete',
-        );
-      }
-      return saved;
+    bool resolved() =>
+        !_controller.saveActions.state.dirty &&
+        !_controller.saveActions.state.uncertain &&
+        _controller.saveActions.state.retainedDrafts.isEmpty &&
+        !_controller.saveActions.state.busy;
+    if (resolved()) return true;
+    if (_controller.autoSave &&
+        _controller.filePath != null &&
+        !_controller.needsSaveRecovery) {
+      await _controller.flushPendingMetadata();
+      if (resolved()) return true;
     }
     if (!mounted) return false;
     final choice = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Save PGN changes?'),
-        content: const Text(
-          'This collection has unsaved comments or variations.',
+      builder: (dialogContext) => ListenableBuilder(
+        listenable: _controller,
+        builder: (context, _) => AlertDialog(
+          title: Text(AppLocalizations.of(context).documentCollectionSaveTitle),
+          scrollable: true,
+          content: SizedBox(
+            width: AppSpacing.formWidth,
+            child: DocumentSavePanel(
+              session: _controller.saveActions,
+              chooseCopyDestination: _chooseCopyDestination,
+              focusEditor: () => Navigator.pop(dialogContext),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(AppLocalizations.of(context).cancel),
+            ),
+            if (!resolved())
+              TextButton(
+                onPressed: _controller.saveActions.state.busy
+                    ? null
+                    : () => Navigator.pop(dialogContext, 'discard'),
+                child: Text(AppLocalizations.of(context).closeWithoutSaving),
+              ),
+            if (resolved())
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, 'saved'),
+                child: Text(
+                  AppLocalizations.of(context).closeDocumentInspection,
+                ),
+              ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, 'discard'),
-            child: const Text('Discard'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, 'save'),
-            child: const Text('Save'),
-          ),
-        ],
       ),
     );
     if (!mounted || choice == null) return false;
-    if (choice == 'save') return _savePgn();
-    // Another document can still veto application closure. Keep this draft
-    // available until the app actually exits. File navigation still discards.
-    if (!forWindowClose) _controller.discardChanges();
+    if (choice == 'discard' && !forWindowClose) _controller.discardChanges();
     return true;
   }
 
@@ -1358,39 +1383,38 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   @override
   Future<void> _exportSlice() async {
-    if (_controller.filteredGames.isEmpty) {
-      return;
-    }
-
-    final defaultName = _controller.defaultExportFileName() ?? 'games.pgn';
-
-    final content = _controller.buildExportContent();
-    final outUri = await FilePicker.saveFile(
-      dialogTitle: 'Export ${_controller.filteredGames.length} filtered games',
-      fileName: defaultName,
-      type: FileType.custom,
-      allowedExtensions: ['pgn'],
-      initialDirectory: _controller.filePath == null
-          ? null
-          : p.dirname(_controller.filePath!),
-      bytes: utf8.encode(content),
+    if (_controller.filteredGames.isEmpty) return;
+    _pgnWidgetController.flushPendingComments();
+    final session = DocumentSaveSession.draft(
+      _controller.collectionRepository,
+      path: '',
+      content: _controller.buildExportContent(),
     );
-    if (outUri == null) {
-      _reclaimFocus();
-      return;
+    try {
+      await showDocumentSaveDialog(
+        context,
+        title: AppLocalizations.of(context).documentExportTitle,
+        session: session,
+        chooseCopyDestination: (context) => _chooseCopyDestination(
+          context,
+          name: _controller.defaultExportFileName() ?? 'games.pgn',
+        ),
+      );
+      final destination = session.state.baseline?.path;
+      if (mounted && destination != null) {
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(
+            context,
+          ).documentExported(p.basename(destination)),
+          actionLabel: AppLocalizations.of(context).documentOpenExport,
+          onAction: () => _loadFile(destination),
+        );
+      }
+    } finally {
+      await session.dispose();
     }
-    final outPath = outUri.toFilePath();
-
-    if (!mounted) return;
-    final fileName = p.basename(outPath);
-    showAppSnackBar(
-      context,
-      'Exported ${_controller.filteredGames.length} games to $fileName',
-      duration: const Duration(seconds: 4),
-      actionLabel: 'Open',
-      onAction: () => _loadFile(outPath),
-    );
-    _reclaimFocus();
+    if (mounted) _reclaimFocus();
   }
 
   /// Write the filtered games as a Scid v5 database.

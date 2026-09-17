@@ -677,5 +677,58 @@
         "type": "String"
       }
     }
+  },
+  "documentCopyPrompt": "Choose a new PGN filename. Existing files are kept.",
+  "documentCopyName": "File name",
+  "documentCopyFolder": "Folder",
+  "documentBrowseFolder": "Browse folders",
+  "documentCopyInvalidName": "Enter a file name without folders.",
+  "documentCopyInvalidFolder": "Enter an absolute folder path.",
+  "documentFolderPickerFailed": "The folder picker could not open. You can enter the folder path.",
+  "documentSaveRecovery": "Save and recovery…",
+  "documentCollectionSaveTitle": "Save PGN collection",
+  "documentExportTitle": "Export PGN collection",
+  "@documentCopyPrompt": {
+    "description": "PGN document save and recovery control."
+  },
+  "@documentCopyName": {
+    "description": "PGN document save and recovery control."
+  },
+  "@documentCopyFolder": {
+    "description": "PGN document save and recovery control."
+  },
+  "@documentBrowseFolder": {
+    "description": "PGN document save and recovery control."
+  },
+  "@documentCopyInvalidName": {
+    "description": "PGN document save and recovery control."
+  },
+  "@documentCopyInvalidFolder": {
+    "description": "PGN document save and recovery control."
+  },
+  "@documentFolderPickerFailed": {
+    "description": "PGN document save and recovery control."
+  },
+  "@documentSaveRecovery": {
+    "description": "PGN document save and recovery control."
+  },
+  "@documentCollectionSaveTitle": {
+    "description": "PGN document save and recovery control."
+  },
+  "@documentExportTitle": {
+    "description": "PGN document save and recovery control."
+  },
+  "documentOpenExport": "Open",
+  "@documentOpenExport": {
+    "description": "Open a newly exported PGN collection."
+  },
+  "documentExported": "Exported {name}",
+  "@documentExported": {
+    "description": "PGN export confirmation.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   }
 }

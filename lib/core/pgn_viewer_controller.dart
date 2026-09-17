@@ -23,6 +23,8 @@ export '../models/pgn_game_entry.dart';
 import '../services/default_pgn_service.dart';
 import '../features/documents/controllers/pgn_collection_editor.dart';
 import '../features/documents/repositories/pgn_collection_repository.dart';
+import '../features/documents/models/pgn_document.dart';
+import '../features/documents/repositories/document_save_actions.dart';
 import '../services/game_analysis_controller.dart';
 import '../services/opening_book_service.dart';
 import '../services/storage/storage_factory.dart';
@@ -103,7 +105,7 @@ class Perspective {
 class PgnViewerController extends ChangeNotifier
     with SafeChangeNotifier, _SliceOps, _WindowOps {
   PgnViewerController({
-    required PgnCollectionRepository collectionRepository,
+    required this.collectionRepository,
     required this.pgnWidgetController,
     required this.analysisController,
     this.isActive = _alwaysActive,
@@ -112,6 +114,7 @@ class PgnViewerController extends ChangeNotifier
   }) {
     _editor = PgnCollectionEditor(
       repository: collectionRepository,
+      prepareReplacement: _prepareRecoveryReplacement,
       path: () => filePath,
       games: () => allGames,
       collectionPreamble: () => collectionPreamble,
@@ -123,7 +126,13 @@ class PgnViewerController extends ChangeNotifier
         if (resetIndex) _fenIndex.reset();
         _markCollectionChanged();
       },
-      onSavedCopy: (path) => filePath = path,
+      onSavedCopy: (path) {
+        filePath = path;
+        loadedFileModified = null;
+        _fenIndex.reset();
+        _lastSessionJson = null;
+        unawaited(saveSession());
+      },
       onSaved: (modified) {
         if (isDisposed) return;
         loadedFileModified = modified;
@@ -132,7 +141,40 @@ class PgnViewerController extends ChangeNotifier
     )..addListener(_onEditorChanged);
   }
 
+  final PgnCollectionRepository collectionRepository;
   late final PgnCollectionEditor _editor;
+  DocumentSaveActions get saveActions => _editor;
+  Future<void Function()> _prepareRecoveryReplacement(
+    String content,
+    String? path,
+  ) async {
+    final entries = await compute(parseMultiGamePgn, content);
+    if (entries.isEmpty) {
+      throw const FormatException('No valid games in the document');
+    }
+    return () {
+      _loadEpoch++;
+      _gameLoadEpoch++;
+      _sliceEpoch++;
+      isLoading = false;
+      isPreparingCollection = false;
+      _restoringSession = false;
+      _fenIndex.reset();
+      _adoptCollection(
+        path: path,
+        entries: entries,
+        newPerspective: Perspective.forCollection(
+          entries,
+          current: perspective,
+        ),
+        preamble: pgnCollectionPreamble(content),
+        flushOutgoing: false,
+      );
+      unawaited(loadCurrentGame());
+      notifyListeners();
+    };
+  }
+
   String? _lastEditorError;
   void _onEditorChanged() {
     final next = _editor.errorMessage;
@@ -146,12 +188,12 @@ class PgnViewerController extends ChangeNotifier
   }
 
   bool get autoSave => _editor.autoSave;
-  bool get isSaving => _editor.isSaving;
+  bool get isSaving => _editor.state.busy;
+  bool get needsSaveRecovery => _editor.needsSaveRecovery;
   bool get hasUnsavedChanges => _editor.hasUnsavedChanges;
   void setAutoSave(bool value) => _editor.setAutoSave(value);
   Future<bool> saveChanges() => _editor.saveChanges();
-  void adoptSavedCopy(String path, Map<PgnGameEntry, String> snapshot) =>
-      _editor.adoptSavedCopy(path, snapshot);
+  Future<PgnWriteResult?> saveCopy(String path) => _editor.saveCopy(path);
   bool canReplaceCollection() => _editor.canReplaceCollection();
   void discardChanges() => _editor.discardChanges();
   @override
@@ -560,11 +602,13 @@ class PgnViewerController extends ChangeNotifier
     required List<PgnGameEntry> entries,
     required Perspective newPerspective,
     String preamble = '',
+    PgnSnapshot? baseline,
+    bool flushOutgoing = true,
   }) {
     // Settle the outgoing collection's debts (a pending metadata write, a
     // stale FEN-index stamp) before its path and games are replaced; the
     // flush captures both synchronously.
-    unawaited(flushPendingMetadata());
+    if (flushOutgoing) unawaited(flushPendingMetadata());
     _lastSessionJson = null;
     _openingEpoch++;
     filePath = path;
@@ -574,7 +618,7 @@ class PgnViewerController extends ChangeNotifier
     loadedFileModified = null;
     allGames = entries;
     _markCollectionChanged();
-    _editor.adoptPersistedGames(entries);
+    _editor.adoptPersistedGames(entries, baseline: baseline);
     collectionPreamble = preamble;
     _detectProtagonist(entries);
     filteredGames = List.of(entries);
@@ -626,7 +670,8 @@ class PgnViewerController extends ChangeNotifier
       isLoading = true;
       notifyListeners();
 
-      final content = await storage.readFile(path);
+      final opened = await collectionRepository.open(path);
+      final content = opened is PgnOpened ? opened.snapshot.content : null;
       if (!_isCurrentLoad(loadEpoch)) return;
 
       if (content == null) {
@@ -669,6 +714,7 @@ class PgnViewerController extends ChangeNotifier
           current: perspective,
         ),
         preamble: pgnCollectionPreamble(content),
+        baseline: (opened as PgnOpened).snapshot,
       );
       loadedFileModified = modified?.modified;
       notifyListeners();
@@ -787,6 +833,7 @@ class PgnViewerController extends ChangeNotifier
       path: null,
       entries: entries,
       newPerspective: Perspective.forCollection(entries, current: perspective),
+      preamble: pgnCollectionPreamble(content),
     );
     pgnInitialFen = initialFen;
     notifyListeners();

@@ -1320,8 +1320,13 @@ mtime/index if that collection still owns the receipt. Later edits stay dirty.
 Failures block queued/automatic source writes; already queued snapshots still
 get distinct recovery copies, including the collection banner. An explicit Save
 can retry a definite failure. An uncertain acknowledgement cannot be replayed;
-the retained recovery copy and original require review/reopen. The shared typed
-inspection/reload/copy panel is not yet adopted by Viewer.
+the retained recovery copy and original require review. Viewer now uses the shared
+typed Save and recovery panel for inspection, reload with draft retention, restoring
+a retained draft and exclusive Save As. Reload/restore acknowledge a recovery PGN
+before displacing dirty work; a failed recovery write or a newer edit vetoes adoption.
+Restoring a draft keeps the captured reload revision as its explicit replacement
+baseline. It never silently adopts a newer disk revision. Scoped dirty state uses
+per-game baselines, without serializing the collection on UI notifications.
 
 On Linux, the repository observes the current source, patches only uniquely
 matching original games, and commits through `NativePgnDocumentStore`. Unrelated
@@ -1330,15 +1335,22 @@ and validation conflicts without retry; this does not eliminate the documented
 external-editor race after final validation. This is a scoped game-text merge,
 not a claim to detect every replacement since the collection was first opened.
 Native writes require an absolute path. Other hosts retain the serialized legacy
-storage adapter until their native gates pass. Pasted-collection Save As still
-uses its existing picker flow and remains a migration item.
+storage adapter until their native gates pass. Pasted-collection Save As and PGN
+exports use the same exclusive-create repository contract. The destination form
+only returns a filename and absolute folder; optional native browsing selects a
+folder and does not write. A collision leaves the destination untouched and keeps
+the draft available. Save As adopts the acknowledged copy and reading session;
+exports use a separate save session and leave the viewer's source unchanged.
+Retained-draft selection is currently session-local, although recovery PGN bytes
+are written before displacement. Continuous Viewer checkpoints and restart
+discovery remain pending.
 
 Pure mainline lexing and Study-header rewriting now live in
 `chess_core/pgn/mainline_lexer.dart` and `chess_core/pgn/study_metadata.dart`.
 
 ```
 PgnViewerScreen._pickFile → `FilePicker.pickFile` (Linux: **XDG Desktop Portal only** in `file_picker` ≥10.3 — D-Bus `org.freedesktop.portal.FileChooser`; no zenity/kdialog fallback) → PgnViewerController.loadFile(path)
-  → StorageService.fileExists / readFile (absolute paths as-is; relative → app documents)
+  → StorageService.fileExists plus PgnCollectionRepository.open (native Linux snapshot captures content and file revision; other hosts use the legacy adapter)
   → compute(parseMultiGamePgn) → lightweight headers/raw text in allGames / filteredGames; only the selected game is parsed into the reader
   → on failure: controller.errorMessage + debugPrint; screen shows SnackBar + inline error in empty state
   → on success: recent-files prefs, missing ECO/Opening tags, optional saved slice and reading-session restore, loadCurrentGame

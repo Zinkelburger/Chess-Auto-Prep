@@ -83,6 +83,10 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
   }
 
   bool get _showSaveAction =>
+      _controller.needsSaveRecovery ||
+      (_controller.saveActions.state.outcome != null &&
+          _controller.saveActions.state.outcome is! PgnSaved) ||
+      _controller.saveActions.state.retainedDrafts.isNotEmpty ||
       _controller.filePath == null ||
       !_viewPreferences.autoSave ||
       (_controller.errorMessage != null && _controller.hasUnsavedChanges);
@@ -95,6 +99,12 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
       tooltip: 'Actions',
       openOnHover: true,
       entries: [
+        if (!hasGame && _controller.saveActions.state.retainedDrafts.isNotEmpty)
+          AppMenuEntry(
+            label: AppLocalizations.of(context).documentSaveRecovery,
+            icon: Icons.save_outlined,
+            onRun: () => unawaited(_savePgn()),
+          ),
         if (!hasGame) ...[
           AppMenuEntry(
             label: 'Open PGN file…',
@@ -139,7 +149,7 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
           if (!solitaire && _showSaveAction)
             AppMenuEntry(
               icon: Icons.save_outlined,
-              label: _controller.filePath == null ? 'Save as…' : 'Save PGN',
+              label: AppLocalizations.of(context).documentSaveRecovery,
               enabled: !_controller.isSaving,
               onRun: () => unawaited(_savePgn()),
             ),

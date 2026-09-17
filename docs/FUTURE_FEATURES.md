@@ -45,8 +45,11 @@ chapter/cursor/orientation, with startup review/restore and conflict-safe explic
 saving. Recovery excludes live instances and preserves unreadable records.
 PGN Viewer collection edits now use an injected document-feature owner and native
 Linux scoped game patches, with blocked failed autosaves and preserved recovery
-copies. Its full typed recovery UI, pasted-collection Save As, immutable/private
-game projections and restart recovery remain partial.
+copies. Its shared typed recovery UI now supports inspection, reload with draft
+retention, restoration, exclusive pasted-collection Save As and PGN exports.
+Failed recovery writes block replacement; exports leave the current source intact.
+Private game cores/immutable projections, continuous Viewer checkpoints and
+restart discovery remain pending.
 Other editors' persisted drafts, clean workspace/session restoration, archive
 purging, builder-draft checks and job shutdown coordination are still pending.
 Legacy unjournaled trash adoption, remaining settings/writers, transactional

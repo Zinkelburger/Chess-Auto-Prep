@@ -147,7 +147,10 @@ class DocumentSavePanel extends StatelessWidget {
                         ? null
                         : () async {
                             await session.restoreDraft(index);
-                            if (context.mounted) focusEditor();
+                            if (context.mounted &&
+                                session.state.readFailure == null) {
+                              focusEditor();
+                            }
                           },
                     child: Text(
                       state.retainedDrafts.length == 1

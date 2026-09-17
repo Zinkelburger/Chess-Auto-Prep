@@ -547,4 +547,44 @@ class AppLocalizationsEn extends AppLocalizations {
   String studyRecoveryTimestamp(String date, String time) {
     return '$date · $time';
   }
+
+  @override
+  String get documentCopyPrompt =>
+      'Choose a new PGN filename. Existing files are kept.';
+
+  @override
+  String get documentCopyName => 'File name';
+
+  @override
+  String get documentCopyFolder => 'Folder';
+
+  @override
+  String get documentBrowseFolder => 'Browse folders';
+
+  @override
+  String get documentCopyInvalidName => 'Enter a file name without folders.';
+
+  @override
+  String get documentCopyInvalidFolder => 'Enter an absolute folder path.';
+
+  @override
+  String get documentFolderPickerFailed =>
+      'The folder picker could not open. You can enter the folder path.';
+
+  @override
+  String get documentSaveRecovery => 'Save and recovery…';
+
+  @override
+  String get documentCollectionSaveTitle => 'Save PGN collection';
+
+  @override
+  String get documentExportTitle => 'Export PGN collection';
+
+  @override
+  String get documentOpenExport => 'Open';
+
+  @override
+  String documentExported(String name) {
+    return 'Exported $name';
+  }
 }

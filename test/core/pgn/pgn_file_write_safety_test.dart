@@ -288,9 +288,16 @@ void main() {
       final snapshot = c.snapshotForSave();
       expect(snapshot.values.single, contains('pasted note'));
       expect(snapshot.values.single, contains('[StudyRating "3"]'));
-      await storage.writeFile('/library/new.pgn', snapshot.values.single);
-      c.adoptSavedCopy('/library/new.pgn', snapshot);
+      await c.saveCopy('/library/new.pgn');
       expect(c.hasUnsavedChanges, isFalse);
+      await c.saveSession();
+      expect(
+        (await SharedPreferences.getInstance()).getString(
+          'pgn_viewer.last_file',
+        ),
+        '/library/new.pgn',
+      );
+      expect(c.loadedFileModified, isNull);
       c.persistMoveCommentsFor(c.allGames.first, '1. e4 { later edit } e5 1-0');
       expect(await c.saveChanges(), isTrue);
       expect(storage.files['/library/new.pgn'], contains('later edit'));

@@ -25,6 +25,18 @@ class Repository implements PgnCollectionRepository {
   }
 
   @override
+  Future<PgnOpenResult> open(String path) async =>
+      PgnOpened(snapshot('opened', path: path));
+  @override
+  Future<PgnWriteResult> create(String path, String content) async =>
+      PgnSaved(before: null, after: snapshot(content, path: path));
+  @override
+  Future<PgnWriteResult> save(PgnSnapshot baseline, String content) async =>
+      PgnSaved(
+        before: baseline,
+        after: snapshot(content, path: baseline.path),
+      );
+  @override
   Future<DateTime?> modified(String path) async => DateTime(2026);
 }
 

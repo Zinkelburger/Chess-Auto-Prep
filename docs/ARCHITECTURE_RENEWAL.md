@@ -1,9 +1,17 @@
 # Architecture renewal
 
-**Status: Partial — S0 verified on Linux; first replacement slice and native document store in progress.** Planning baseline: 2026-09-16. This is the canonical
+**Status: Partial — S0 verified on Linux; milestones 1/2 and 3 in progress; milestones 4–7 not started.** Planning baseline: 2026-09-16. This is the canonical
 rewrite plan. [FUTURE_FEATURES.md](FUTURE_FEATURES.md) tracks feature backlog;
 [COMPONENT_MAP.md](COMPONENT_MAP.md) describes implemented behavior. Update
 milestone evidence and selected decisions here as work proceeds.
+
+The new hierarchy is implemented for migrated owners: `app/`, `design_system/`,
+`chess_core/`, `infrastructure/`, and feature-local controllers, models,
+repositories and widgets. Repertoire catalog, shared documents, Study and selected
+settings use these boundaries. Legacy `core/`, `services/`, `screens/` and
+`widgets/` still contain substantial production behavior. Their removal requires
+completing the workflow migrations and parity tests below; the full rewrite is
+not complete.
 
 **Scope and authority.** This document specifies future work; writing it does
 not implement, test or publish that work. Automatic checks use disposable data.
@@ -1008,6 +1016,52 @@ private mutable cores and immutable projections, undo receipts, large-document
 budgets and removal of the remaining viewer slice/window mixins. The old viewer
 still owns library/session reads, navigation and rendering. Milestone 3 remains
 partial, and this does not complete milestones 1/2 or 4–7.
+
+### PGN Viewer recovery and copy checkpoint (2026-09-17)
+
+Following collection ownership `eaf71d32`, the same `PgnCollectionEditor` now
+implements `DocumentSaveActions`. Viewer uses the shared localized save panel
+for inspecting the current file, reloading while retaining a draft, restoring
+retained work, and exclusively creating a copy. There is no second edit owner.
+Structured dirty state compares per-game baselines; UI notifications do not
+serialize the full collection. File opens capture a document-store snapshot.
+
+Reload/restore decode before adoption and acknowledge recovery PGN bytes before
+displacing dirty work. A failed recovery write keeps the live draft. Edits made
+while recovery is being written veto replacement and retain both the acknowledged
+older draft and the newer live work. Restoring retained text is an explicit
+whole-document replacement against the captured current baseline, so another
+external edit produces a conflict rather than a silent rebase. Failed or uncertain
+autosaves do not resume implicitly when opening recovery UI or closing the app.
+
+Save As and PGN export no longer delegate writing to a file picker. A destination
+form returns an absolute folder/name; optional native browsing only selects a
+folder. The injected repository creates exclusively. Collisions preserve the
+existing file and the draft, and late edits remain dirty after a copy receipt.
+Save As adopts its acknowledged file and reading session. Export has its own
+save session, leaves the viewer source unchanged, and retains the Open action.
+
+Validation on Linux:
+
+| Check | Evidence |
+| --- | --- |
+| Analyze/lint | Pass; 13 architecture-checker tests pass and only the nine existing informational notices remain. |
+| Focused regression suite | All 304 tests pass across document/Study sessions and stores, PGN controllers, viewer widgets and app startup. |
+| Final recovery follow-up | All seven recovery tests pass, including retaining an unannotated pasted collection before restoring another draft and refusing displacement after a failed recovery write. |
+| Native desktop integration | All three journeys pass: pasted Save As/export cancellation and collisions; viewer conflict inspection/reload/restore/copy; cross-mode native close with a Study draft. |
+| Headless production preview | Inspected the [recovery panel](images/renewal-pgn-save-recovery.png) and [copy destination](images/renewal-pgn-copy-destination.png) at 1280×720. Verified that a conflicted source remained unchanged and the new copy contained the edited comment and collection banner. |
+
+The first export integration attempt failed to open the hover-driven submenu;
+the corrected mouse-hover journey passes. Untouched pasted PGNs now participate
+in close recovery, and a widget regression proves cancellation retains them.
+Automatic checks used disposable profile data; the preview was stopped afterward.
+
+This remains partial milestone 3 work. Retained-draft choices are session-local;
+the separately written recovery PGNs do not constitute continuous Viewer
+checkpointing or startup discovery. Private game cores/immutable projections,
+undo receipts, complete workspace restoration, large-document budgets and the
+remaining viewer mixin/legacy-reader migrations are still pending. No milestone
+1/2 or 4–7 graduation, Windows/macOS certification or release validation is claimed.
 
 ### Initial parity and ownership inventory (milestone 0, partial)
 

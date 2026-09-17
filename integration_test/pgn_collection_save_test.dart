@@ -100,6 +100,66 @@ void main() {
         }
       }
       expect(retained, isTrue);
+      await tester.tap(find.byKey(const ValueKey('pgn-save-recovery')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Inspect current file'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Changed externally'), findsWidgets);
+      await tester.tap(find.widgetWithText(TextButton, 'Close').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Reload and keep draft'));
+      for (
+        var i = 0;
+        i < 100 && find.text('Restore retained draft').evaluate().isEmpty;
+        i++
+      ) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(find.text('Restore retained draft'), findsOneWidget);
+      await tester.tap(find.text('Restore retained draft'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('pgn-save-recovery')));
+      await tester.pumpAndSettle();
+      Future<void> copyTo(String name) async {
+        await tester.tap(find.byKey(const ValueKey('document-save-copy')));
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const ValueKey('pgn-copy-name')),
+          name,
+        );
+        await tester.tap(find.byKey(const ValueKey('pgn-copy-confirm')));
+        await tester.pumpAndSettle();
+      }
+
+      await copyTo('games.pgn');
+      for (
+        var i = 0;
+        i < 100 &&
+            find
+                .textContaining('That destination already exists')
+                .evaluate()
+                .isEmpty;
+        i++
+      ) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(
+        find.textContaining('That destination already exists'),
+        findsOneWidget,
+      );
+      expect(await file.readAsString(), '; Changed externally\n\n$other\n');
+      await copyTo('Recovered viewer copy.pgn');
+      final copy = File('${root.path}/Recovered viewer copy.pgn');
+      for (var i = 0; i < 100 && !await copy.exists(); i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(
+        await copy.readAsString(),
+        contains('Retain this conflicted edit'),
+      );
+      expect(await file.readAsString(), '; Changed externally\n\n$other\n');
+      await tester.tap(find.widgetWithText(TextButton, 'Close').last);
+      await tester.pumpAndSettle();
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     },

@@ -13,6 +13,50 @@ class StoragePgnCollectionRepository implements PgnCollectionRepository {
   StoragePgnCollectionRepository(this.storage, {this.documents});
   final StorageService storage;
   final PgnDocumentStore? documents;
+  PgnDocumentStore get _store => documents ?? LegacyPgnDocumentStore(storage);
+  void _checkPath(String path) {
+    if (documents != null && !p.isAbsolute(path)) {
+      throw ArgumentError('Native collection paths must be absolute');
+    }
+  }
+
+  @override
+  Future<PgnOpenResult> open(String path) async {
+    try {
+      _checkPath(path);
+      return await _store.open(path);
+    } catch (error) {
+      return PgnReadFailed(error);
+    }
+  }
+
+  @override
+  Future<PgnWriteResult> create(String path, String content) async {
+    try {
+      _checkPath(path);
+    } catch (error) {
+      return PgnWriteFailed(error);
+    }
+    try {
+      return await _store.create(path, content);
+    } catch (error) {
+      return PgnWriteUncertain(error: error, before: null, observed: null);
+    }
+  }
+
+  @override
+  Future<PgnWriteResult> save(PgnSnapshot baseline, String content) async {
+    try {
+      _checkPath(baseline.path);
+    } catch (error) {
+      return PgnWriteFailed(error);
+    }
+    try {
+      return await _store.save(baseline, content);
+    } catch (error) {
+      return PgnWriteUncertain(error: error, before: baseline, observed: null);
+    }
+  }
 
   @override
   Future<PgnWriteResult> patch(

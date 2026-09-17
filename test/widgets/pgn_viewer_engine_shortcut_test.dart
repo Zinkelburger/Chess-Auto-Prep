@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_collection_repository.dart';
 import 'dart:io';
@@ -64,6 +65,8 @@ void main() {
           ChangeNotifierProvider.value(
             value: app,
             child: MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
               home: PgnViewerScreen(
                 collectionRepository: StoragePgnCollectionRepository(
                   StorageFactory.instance,
