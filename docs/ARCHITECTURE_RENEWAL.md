@@ -108,16 +108,18 @@ facade merely to keep its tests green.
 |---|---|---|
 | Completed: Viewer owner cutover (`141b5271` ancestry) | Deleted `PgnViewerController`, forwarding methods and mirrored errors; all consumers use the collection/editor/filter/presentation/tree owners. One session transition contract owns abandonment across the six reviewed paths. | Zero class/API references; no replacement facade; delayed work cannot publish after replacement; open/edit/save/recovery/navigation/close parity through final app wiring. |
 | Completed: Builder history (`09aeb6ed`) | Native append/undo provenance and private opening graph ownership. Deleted decoded-only history authorization, old append APIs and mutable graph exposure. | Native revision/history conflicts, successive/per-move undo, failed mutation retention and all graph consumers use the final projection. Entire Builder remains unfinished until the later closure below. |
-| Now: generation agent | Finish versioned artifact publication and every production reader in one cutover. Delete old artifact writers/path ownership, persistence methods and loader shims. | One publication authority; stale/interrupted output cannot replace current artifacts; readers agree on the selected generation; existing user artifacts remain accessible through production wiring. Legacy files currently survive and decode, but lack an app access/import path; this parity gate is still open. |
+| Completed: generation publication and read-only recovery | Versioned publication and all authoritative readers use the artifact repository; old artifact writers/path ownership, persistence methods and loader shims are deleted. Builder Actions provides legacy tree/probe/trap/partial inspection and original-byte export through that final repository. | Stale/interrupted output cannot replace current artifacts; existing files remain accessible and untouched. Legacy source identity is unproven, so automatic legacy resume/current-analysis adoption remain explicitly unsupported. Other Generation workflows, retained-proposal browsing and platform gates remain open. |
 | Completed: settings/engine (`f1109c5b`) | Typed engine/bulk/board settings and constructor-owned engines. Deleted the three old settings singletons, engine service global access and interim bind APIs; application composition injects BoardEngine, StockfishPool and EngineSearchBudget configuration. | One writer per key, serialized changes/failure/retry/restart, captured job configuration, production caller cutover and resource/scheduling parity. No temporary settings-to-engine binding. |
 | Next: finish existing migrated workflows | Close catalog, Study, Builder, Viewer and Training end to end: remaining host/provider/lifetime bridges, durable Builder recovery, final settings/session ownership, and all applicable UI/parity gates. Keep separate dependency-ordered cutovers where each deletes a complete responsibility. | No remaining temporary owner in each declared-complete workflow. Existing extracted code is reused or simplified; do not restart another extraction cycle. |
 | Then: engine/jobs and remaining domains | Replace each remaining workflow from the capability inventory, including actual worker/process ownership and all writers/readers. Consolidate singular `repertoire/` into its final domain as its remaining responsibilities retire. Adopt design-system controls while deleting each superseded control/theme dependency. | Dependency-ordered cutovers, shared-file parity and safety, native resource cleanup, feature and UI contracts; no second implementation or leftover theme owner for migrated surfaces. |
 | Last: application audit | Verify all features, formats, recovery, platforms, performance and release readiness. | No deferred retirement work, no hidden boundary exclusions, no production fallback; unverified host/release gates stay explicitly open. Publication still requires the user's request. |
 
 The rows identify replacement boundaries, not four new frameworks. Viewer
-ownership retirement is verified; remaining parallel work closes Builder
-workspace/scratch recovery with facade deletion, and production access to legacy
-generation artifacts. Do not count an infrastructure decoder as user-facing
+ownership retirement is verified; active parallel work closes Builder
+workspace/scratch recovery with facade deletion and Study import/publication.
+The generation publication/read-only recovery responsibility is complete as
+specified above; it does not certify the whole Generation feature. Do not count
+an infrastructure decoder alone as user-facing
 migration parity. Each agent must report final runtime wiring, concrete deletions
 and behavior/failure evidence before integration.
 
@@ -4093,10 +4095,11 @@ contexts and restart recovery. This includes the 49-test owner suite and its nav
 certification: the legacy screen/reader widgets, complete design-system gates,
 immutable game contents and unverified platform gates remain separate work.
 
-Legacy artifact decoding has no production caller yet. Legacy tree/trap/probe
-display and partial resume are not restored by the artifact cutover. Original
-files survive, but explicit provenance-reviewed access/import remains a DATA-07
-migration/parity gate; infrastructure decoding alone does not close it.
+The `7032e719` artifact cutover initially had no production legacy reader.
+The recovery follow-up below now supplies Builder Actions inspection/export for
+legacy trees, probes, traps and unfinished output through the final repository.
+Unproven source association still prevents automatic legacy resume or adoption
+as current analysis; read-only recovery is not full legacy workflow parity.
 
 Viewer production diff against integrated `f1109c5b`: 2,539 added and 2,405
 removed lines (net +134), separate from tests and documentation. The 1,609-line
@@ -4163,3 +4166,61 @@ Explorer cache fixture. The 12 skips are still skips; this does not establish
 unrun native/platform or whole-renewal acceptance gates. Production changes remove
 87 net lines from existing settings/lifecycle owners and add no transitional
 owner, facade or compatibility layer.
+
+### Legacy artifact recovery access (follow-up to `7032e719`)
+
+The artifact-authority cutover preserved sidecar files but left `readLegacy`
+without a production caller. This follow-up restores discoverable reading and
+export through Builder → Actions → Recover older analysis. One feature recovery
+controller and dialog consume the final artifact repository; no legacy owner,
+mutable sidecar writer, loader shim or forwarding facade returns. The retirement
+gate also forbids `GenerationArtifactStore` and `ExpectimaxProbeStore` symbols.
+
+The old capabilities were main-tree exploration/training metrics, probe/PV
+lookup, trap browsing and automatic partial resume/discard. Recovery now exposes
+tree/probe branches, saved evaluations/FENs/configuration, trap details and
+unfinished positions. Invalid files/entries fail independently. Native reads
+retain exact original bytes; explicit export uses exclusive native installation
+and preserves existing destinations. Export errors/uncertain acknowledgement are
+visible, technical detail is optional, and active exports keep the view open.
+Originals and selected current generations remain untouched; no export silently
+promotes old results to the current source.
+
+Legacy association cannot be proved from filenames, root FEN or configuration.
+Automatic legacy resume and insertion into current training/probe/trap data are
+therefore explicitly unsupported. Users can inspect/export old work or start a
+fresh build; only verified current-generation partials use the existing resume
+path. Export is the original artifact, not a PGN conversion that would lose
+analysis fields. This completes the production read-only recovery responsibility;
+it does not claim full legacy automatic-resume parity, cross-file atomicity, a
+browser for all retained generation proposals, or non-Linux certification.
+
+Validation: **58 focused tests passed**, spanning the native artifact repository,
+full generation publication/reopen pipeline, legacy recovery, race/lifetime
+controller cases, production Actions/dialog wiring and the complete Builder
+screen/toolbar fixtures. The final typed picker/read-failure correction passed
+all seven affected controller/widget tests. Native cases cover BOM/gzip/malformed
+byte preservation, external edits after capture, per-file/per-probe failures,
+exclusive destination collisions, interrupted staging and uncertain directory
+flush without replay or current-generation changes. Recovery widget journeys
+also pass at 640×480 and 800×600 with 200% text; failures have localized primary
+copy and optional diagnostics, and uncertain destinations are directly selectable.
+
+The headless Linux production app was inspected using only a disposable profile:
+[unfinished-build recovery](images/renewal-legacy-analysis-recovery.png),
+[isolated malformed-file failure](images/renewal-legacy-analysis-error.png), and
+saved probes reopened after a runtime restart. The preview was stopped before
+final checks. These checks do not certify Windows/macOS, native file-picker UI on
+other hosts, or large-artifact performance.
+
+Initial validation failures were corrected: localization import/nullability
+errors, one widget fixture timeout from asynchronous temporary-directory creation
+under the fake clock (its own runner was stopped; the second case was cancelled),
+and scaled-test scroll targeting. Compact recovery now has one scroll owner.
+Those interrupted/failed runs are not passing-suite evidence. The earlier full
+application suite at `0ee44d03` remains separate evidence; this follow-up uses
+focused regression checks rather than claiming a new full-suite run.
+
+Final `scripts/ci.sh analyze lint` passed with 63 existing informational findings,
+zero warnings/errors, no new boundary debt and the retirement gate passing. All
+96 local documentation links resolve; whitespace checks pass.

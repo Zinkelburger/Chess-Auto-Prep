@@ -10,6 +10,7 @@ import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
 import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
 
 import '../features/generation/services/generation_artifacts.dart';
+import '../app/generation_dependencies.dart' show showLegacyAnalysisRecovery;
 
 import '../app/legacy_theme_boundary.dart';
 import '../features/generation/controllers/generation_publication_controller.dart';
@@ -1272,6 +1273,13 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
         onOpenAudit: _openAuditDialog,
         onImportPgn: _importPgn,
         onReload: _reloadRepertoire,
+        onRecoverAnalysis: () => unawaited(
+          showLegacyAnalysisRecovery(
+            context,
+            path: repertoire.filePath,
+            artifacts: context.read<GenerationArtifacts>(),
+          ),
+        ),
         onGenerationSettings: () =>
             showPositionGenerationSettings(context, _generationController),
         trapNavigation: _buildTrapNavigation(),

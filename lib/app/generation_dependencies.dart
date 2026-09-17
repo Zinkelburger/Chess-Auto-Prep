@@ -1,3 +1,9 @@
+import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:path/path.dart' as p;
+
+import '../features/generation/widgets/legacy_analysis_dialog.dart';
+import '../l10n/generated/app_localizations.dart';
 import '../features/generation/services/generation_artifacts.dart';
 import '../infrastructure/generation/storage_generation_artifact_repository.dart';
 import '../features/documents/repositories/pgn_document_store.dart';
@@ -27,3 +33,28 @@ GenerationArtifacts createGenerationArtifacts({
     ),
   );
 }
+
+/// Captures a chapter path for a read-only dialog; navigation cannot redirect
+/// an open recovery view or its eventual export to a different chapter.
+Future<void> showLegacyAnalysisRecovery(
+  BuildContext context, {
+  required String path,
+  required GenerationArtifacts artifacts,
+}) => showDialog<void>(
+  context: context,
+  builder: (context) => LegacyAnalysisDialog(
+    path: path,
+    artifacts: artifacts,
+    chooseExportDestination: (kind) async {
+      final directory = await FilePicker.getDirectoryPath(
+        dialogTitle: AppLocalizations.of(context).legacyAnalysisExportDirectory,
+      );
+      if (directory == null) return null;
+      return p.join(
+        directory,
+        '${p.basenameWithoutExtension(path)}-recovered-${kind.name}-'
+        '${DateTime.now().microsecondsSinceEpoch}.json',
+      );
+    },
+  ),
+);
