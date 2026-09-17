@@ -20,6 +20,13 @@ class BoundariesTest(unittest.TestCase):
                 self.assertTrue(violations(path, f"import '{uri}';"))
         self.assertTrue(violations(path, 'final store = StorageFactory.instance;'))
 
+    def test_studies_and_chess_core_boundaries(self):
+        for uri in ('../../../services/storage/storage_factory.dart', '../widgets/editor.dart', '../../../infrastructure/store.dart'):
+            self.assertTrue(violations('lib/features/studies/controllers/editor.dart', f"import '{uri}';"))
+        for uri in ('dart:io', 'package:flutter/widgets.dart', '../../services/parser.dart'):
+            self.assertTrue(violations('lib/chess_core/pgn/text.dart', f"import '{uri}';"))
+        self.assertFalse(violations('lib/features/studies/controllers/editor.dart', "import '../../documents/controllers/document_save_session.dart';"))
+
     def test_settings_cannot_access_preferences_directly(self):
         self.assertTrue(violations('lib/features/settings/repositories/settings.dart', "import 'package:shared_preferences/shared_preferences.dart';"))
 

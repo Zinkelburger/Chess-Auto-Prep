@@ -4,7 +4,7 @@ import '../../../design_system/components/save_status.dart';
 import '../../../design_system/theme/app_spacing.dart';
 import '../../../design_system/theme/app_typography.dart';
 import '../../../l10n/generated/app_localizations.dart';
-import '../controllers/document_save_session.dart';
+import '../repositories/document_save_actions.dart';
 import '../models/document_save_state.dart';
 import '../models/pgn_document.dart';
 
@@ -17,7 +17,7 @@ class DocumentSavePanel extends StatelessWidget {
     required this.chooseCopyDestination,
     required this.focusEditor,
   });
-  final DocumentSaveSession session;
+  final DocumentSaveActions session;
   final Future<String?> Function(BuildContext) chooseCopyDestination;
   final VoidCallback focusEditor;
 
@@ -145,9 +145,9 @@ class DocumentSavePanel extends StatelessWidget {
                   TextButton(
                     onPressed: state.busy
                         ? null
-                        : () {
-                            session.restoreDraft(index);
-                            focusEditor();
+                        : () async {
+                            await session.restoreDraft(index);
+                            if (context.mounted) focusEditor();
                           },
                     child: Text(
                       state.retainedDrafts.length == 1

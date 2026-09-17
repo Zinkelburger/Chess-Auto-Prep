@@ -13,7 +13,7 @@ import 'local_reference_pane.dart';
 import 'reference_game_dialog.dart';
 import '../../../services/explorer_game_opener.dart';
 import '../../../models/pgn_game_entry.dart';
-import '../../../services/pgn_parsing_service.dart';
+import '../../../chess_core/pgn/pgn_text.dart';
 import '../../../utils/app_messages.dart';
 import '../../../models/opening_tree.dart';
 import '../../../models/repertoire_line.dart';

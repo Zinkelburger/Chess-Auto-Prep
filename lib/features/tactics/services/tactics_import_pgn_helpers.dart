@@ -6,7 +6,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../../services/game_identity.dart' show platformGameUrl;
-import '../../../services/pgn_parsing_service.dart' show extractHeaders;
+import '../../../chess_core/pgn/pgn_text.dart' show extractHeaders;
 import '../../../utils/log.dart';
 
 /// GameId prefix for games fetched from Lichess.

@@ -18,7 +18,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/models/opening_tree.dart';
-import 'package:chess_auto_prep/services/pgn_parsing_service.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_text.dart';
 import 'package:chess_auto_prep/services/pgn_position_replay.dart';
 import 'package:chess_auto_prep/services/pgn_slice_filter.dart';
 import 'package:chess_auto_prep/services/pgn_tree_core.dart';

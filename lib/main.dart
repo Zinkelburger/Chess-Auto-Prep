@@ -4,6 +4,7 @@ import 'infrastructure/settings/shared_preferences_app_settings_repository.dart'
 import 'dart:async';
 
 import 'app/app_dependencies.dart';
+import 'app/study_dependencies.dart';
 import 'app/themed_application.dart';
 import 'features/settings/repositories/app_settings_repository.dart';
 
@@ -14,7 +15,7 @@ import 'package:window_manager/window_manager.dart';
 import 'features/updates/widgets/app_updates.dart';
 import 'core/app_history.dart';
 import 'core/app_state.dart';
-import 'core/study_controller.dart';
+import 'features/studies/controllers/study_controller.dart';
 import 'features/bughouse/services/bughouse_bundle.dart';
 import 'debug/agent_driver.dart';
 import 'models/board_display_settings.dart';
@@ -176,9 +177,10 @@ class ChessAutoPrepApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final documents = createPlatformDocumentStore();
     return AppDependencies(
       settings: settings,
-      documentStore: createPlatformDocumentStore(),
+      documentStore: documents,
       child: MultiProvider(
         providers: [
           ChangeNotifierProvider(
@@ -214,7 +216,7 @@ class ChessAutoPrepApp extends StatelessWidget {
           // ("Add line to study" in the PGN viewer) through the same document
           // the study screen edits.
           ChangeNotifierProvider<StudyController>(
-            create: (_) => StudyController(),
+            create: (_) => createStudyController(documents: documents),
           ),
         ],
         // Boards and move lists read the Display preferences through this scope

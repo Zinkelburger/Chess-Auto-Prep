@@ -11,13 +11,14 @@ DIRECTIVE = re.compile(r"^\s*(?:import|export)\s+['\"]([^'\"]+)['\"]", re.M)
 
 def violations(relative: str, source: str) -> list[str]:
     path = Path(relative)
-    feature = relative.startswith(('lib/features/repertoires/', 'lib/features/documents/', 'lib/features/settings/'))
+    feature = relative.startswith(('lib/features/repertoires/', 'lib/features/documents/', 'lib/features/settings/', 'lib/features/studies/'))
+    chess = relative.startswith('lib/chess_core/')
     infrastructure = relative.startswith('lib/infrastructure/')
     design = relative.startswith('lib/design_system/')
     catalog = relative.startswith('widgetbook/')
-    if not (feature or infrastructure or design or catalog):
+    if not (feature or infrastructure or design or catalog or chess):
         return []
-    pure = feature and any(part in ('models', 'repositories') for part in path.parts[3:-1])
+    pure = chess or feature and any(part in ('models', 'repositories') for part in path.parts[3:-1])
     controller = feature and 'controllers' in path.parts[3:-1]
     errors = []
     for uri in DIRECTIVE.findall(source):
@@ -31,7 +32,7 @@ def violations(relative: str, source: str) -> list[str]:
         forbidden = (
             design and (uri.startswith(('dart:io', 'dart:ffi', 'package:provider/', 'package:flutter_riverpod/', 'package:widgetbook/')) or (local and not local.startswith('lib/design_system/')))
             or catalog and (uri.startswith(('dart:io', 'dart:ffi')) or local.startswith(('lib/infrastructure/', 'lib/app/', 'lib/services/storage/')))
-            or relative.startswith(('lib/features/repertoires/widgets/', 'lib/features/documents/widgets/', 'lib/features/settings/widgets/')) and local.startswith('lib/theme/')
+            or relative.startswith(('lib/features/repertoires/widgets/', 'lib/features/documents/widgets/', 'lib/features/settings/widgets/', 'lib/features/studies/widgets/')) and local.startswith('lib/theme/')
             or pure and (uri.startswith(('dart:io', 'dart:isolate', 'dart:ffi', 'package:flutter', 'package:riverpod')) or local.startswith(('lib/services/', 'lib/infrastructure/', 'lib/app/')))
             or feature and (uri.startswith(('dart:io', 'dart:ffi', 'package:document_file_io/', 'package:shared_preferences/')) or local.startswith(('lib/infrastructure/', 'lib/app/', 'lib/services/storage/')))
             or controller and ('/widgets/' in local or '/screens/' in local or local.startswith('lib/services/'))
@@ -40,7 +41,7 @@ def violations(relative: str, source: str) -> list[str]:
         )
         if forbidden:
             errors.append(f'{relative}: forbidden dependency {uri}')
-    if (design and not relative.startswith('lib/design_system/theme/') or relative.startswith(('lib/features/repertoires/widgets/', 'lib/features/documents/widgets/', 'lib/features/settings/widgets/'))) and re.search(r'\b(?:AppColors|AppTextStyles|AppPalette)\b|\bColors\.|\bColor(?:\.fromARGB|\.fromRGBO)?\s*\(|\bfontSize\s*:', source):
+    if (design and not relative.startswith('lib/design_system/theme/') or relative.startswith(('lib/features/repertoires/widgets/', 'lib/features/documents/widgets/', 'lib/features/settings/widgets/', 'lib/features/studies/widgets/'))) and re.search(r'\b(?:AppColors|AppTextStyles|AppPalette)\b|\bColors\.|\bColor(?:\.fromARGB|\.fromRGBO)?\s*\(|\bfontSize\s*:', source):
         errors.append(f'{relative}: widget bypasses active theme/typography')
     if (feature or catalog) and re.search(r'\b\w+\.instance\b', source):
         errors.append(f'{relative}: global singleton access bypasses injection')
@@ -49,7 +50,7 @@ def violations(relative: str, source: str) -> list[str]:
 
 def main() -> int:
     errors = []
-    for folder in ('lib/features/repertoires', 'lib/features/documents', 'lib/features/settings', 'lib/infrastructure', 'lib/design_system', 'widgetbook'):
+    for folder in ('lib/features/repertoires', 'lib/features/documents', 'lib/features/settings', 'lib/features/studies', 'lib/chess_core', 'lib/infrastructure', 'lib/design_system', 'widgetbook'):
         for path in (ROOT / folder).rglob('*.dart'):
             errors.extend(violations(path.relative_to(ROOT).as_posix(), path.read_text()))
     legacy = json.loads((ROOT / 'scripts/legacy_theme_consumers.json').read_text())
@@ -68,7 +69,7 @@ def main() -> int:
         print(error, file=sys.stderr)
     if errors:
         return 1
-    print('Renewal architecture boundaries: OK (catalog, documents, settings, infrastructure and design system)')
+    print('Renewal architecture boundaries: OK (catalog, documents, studies, settings, chess core, infrastructure and design system)')
     return 0
 
 

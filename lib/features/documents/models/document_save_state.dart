@@ -34,10 +34,14 @@ class DocumentSaveState {
     this.outcome,
     this.readFailure,
     this.uncertainPath,
+    this.pendingEdits = false,
     List<RetainedDocumentDraft> retainedDrafts = const [],
   }) : retainedDrafts = List.unmodifiable(retainedDrafts);
   final String path;
+
+  /// Last serialized editor content; structured editors may have newer edits.
   final String content;
+  final bool pendingEdits;
   final PgnSnapshot? baseline;
   final DocumentSavePhase phase;
   final PgnWriteResult? outcome;
@@ -47,7 +51,8 @@ class DocumentSaveState {
   final List<RetainedDocumentDraft> retainedDrafts;
   bool get busy =>
       phase == DocumentSavePhase.saving || phase == DocumentSavePhase.reloading;
-  bool get dirty => baseline == null || content != baseline!.content;
+  bool get dirty =>
+      pendingEdits || baseline == null || content != baseline!.content;
   bool get uncertain => outcome is PgnWriteUncertain;
-  bool get canSave => !busy && !uncertain && dirty;
+  bool get canSave => path.isNotEmpty && !busy && !uncertain && dirty;
 }

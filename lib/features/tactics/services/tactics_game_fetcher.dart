@@ -9,7 +9,7 @@ import 'package:http/http.dart' as http;
 
 import '../../../services/chess_api_urls.dart';
 import '../../../services/lichess_api_client.dart';
-import '../../../services/pgn_parsing_service.dart' show splitPgnIntoGames;
+import '../../../chess_core/pgn/pgn_text.dart' show splitPgnIntoGames;
 import '../../../utils/log.dart';
 import 'tactics_import_pgn_helpers.dart' show isGameBefore;
 

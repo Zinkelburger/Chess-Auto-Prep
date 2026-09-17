@@ -8,7 +8,7 @@
 library;
 
 import 'package:chess_auto_prep/core/repertoire_loader.dart';
-import 'package:chess_auto_prep/services/pgn_parsing_service.dart' as pgn;
+import 'package:chess_auto_prep/chess_core/pgn/pgn_text.dart' as pgn;
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/services/storage/storage_service.dart';
 import 'package:flutter_test/flutter_test.dart';

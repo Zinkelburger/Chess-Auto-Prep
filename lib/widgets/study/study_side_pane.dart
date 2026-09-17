@@ -6,7 +6,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../core/study_controller.dart';
+import '../../features/studies/controllers/study_controller.dart';
 import '../../utils/app_messages.dart';
 import '../engine/inline_engine_bar.dart';
 import '../interactive_pgn_editor.dart';

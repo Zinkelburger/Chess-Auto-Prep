@@ -10,7 +10,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:chess_auto_prep/services/pgn_parsing_service.dart'
+import 'package:chess_auto_prep/chess_core/pgn/pgn_text.dart'
     show extractHeaders, splitPgnIntoGames;
 import 'package:chess_auto_prep/services/study_import/import_source.dart';
 import 'package:chess_auto_prep/services/study_import/lichess_study_client.dart';

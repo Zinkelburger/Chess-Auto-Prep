@@ -7,7 +7,7 @@ library;
 import '../../models/pgn_filter_models.dart';
 import '../../models/pgn_game_entry.dart';
 import '../../services/games_library/game_filter.dart' show dedupKeyForHeaders;
-import '../../services/pgn_parsing_service.dart' as pgn;
+import '../../chess_core/pgn/pgn_text.dart' as pgn;
 import '../../services/pgn_slice_filter.dart' as pgn;
 
 // ---------------------------------------------------------------------------

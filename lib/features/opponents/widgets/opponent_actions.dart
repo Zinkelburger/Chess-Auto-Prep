@@ -16,7 +16,7 @@ import '../../../core/app_state.dart';
 import '../../../models/analysis_player_info.dart';
 import '../../../services/analysis_games_service.dart';
 import '../../../services/opponent_list.dart';
-import '../../../services/pgn_parsing_service.dart';
+import '../../../chess_core/pgn/pgn_text.dart';
 import '../../../services/game_identity.dart';
 import '../../../services/storage/storage_factory.dart';
 import '../../../utils/app_messages.dart';

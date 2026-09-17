@@ -14,7 +14,7 @@ import '../core/app_state.dart';
 import '../features/repertoire/controllers/repertoire_outline_controller.dart';
 import '../features/repertoire/widgets/repertoire_outline_panel.dart';
 import '../features/repertoires/models/repertoire_metadata.dart';
-import '../services/pgn_parsing_service.dart' as pgn;
+import '../chess_core/pgn/pgn_text.dart' as pgn;
 import '../services/storage/storage_factory.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';

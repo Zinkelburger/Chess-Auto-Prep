@@ -3,11 +3,12 @@ import 'dart:async';
 import '../models/document_save_state.dart';
 import '../models/pgn_document.dart';
 import '../repositories/pgn_document_store.dart';
+import '../repositories/document_save_actions.dart';
 
 /// A document's save owner, independent of widgets, providers and filesystem.
 /// Edits remain allowed during I/O; the receipt advances only the submitted
 /// baseline, and later edits remain dirty. No failed operation is replayed.
-class DocumentSaveSession {
+class DocumentSaveSession implements DocumentSaveActions {
   DocumentSaveSession.opened(this._store, PgnSnapshot snapshot)
     : _state = DocumentSaveState(
         path: snapshot.path,
@@ -29,7 +30,9 @@ class DocumentSaveSession {
   final _changes = StreamController<DocumentSaveState>.broadcast(sync: true);
   DocumentSaveState _state;
   bool _disposed = false;
+  @override
   DocumentSaveState get state => _state;
+  @override
   Stream<DocumentSaveState> get changes => _changes.stream;
 
   void _publish(DocumentSaveState next) {
@@ -59,6 +62,7 @@ class DocumentSaveSession {
 
   /// Dismiss presentation only. The captured revision and an uncertain write
   /// remain intact, so dismissal cannot authorize replacement or retry.
+  @override
   void keepEditing() {
     if (_disposed || state.busy) return;
     _publish(
@@ -78,6 +82,7 @@ class DocumentSaveSession {
     );
   }
 
+  @override
   Future<PgnWriteResult?> save() async {
     if (_disposed || !state.canSave) return null;
     return _write(state.path, copy: false);
@@ -85,6 +90,7 @@ class DocumentSaveSession {
 
   /// A successful copy becomes this session's document. The original is never
   /// replaced. Failed/colliding copies retain the original path and baseline.
+  @override
   Future<PgnWriteResult?> saveCopy(String destination) async {
     if (_disposed || state.busy) return null;
     return _write(destination, copy: true);
@@ -160,6 +166,7 @@ class DocumentSaveSession {
   }
 
   /// Read-only inspection never adopts a newer revision or clears dirty state.
+  @override
   Future<PgnOpenResult> inspectCurrent() async {
     try {
       return await _store.open(state.inspectionPath);
@@ -170,6 +177,7 @@ class DocumentSaveSession {
 
   /// Explicit reload always reads again; a prior conflict snapshot may already
   /// be stale. Preserve the latest draft (including edits during the read).
+  @override
   Future<void> reloadPreservingDraft() async {
     if (_disposed || state.busy) return;
     final previous = state;
@@ -186,25 +194,7 @@ class DocumentSaveSession {
     );
     final result = await inspectCurrent();
     if (result is PgnOpened) {
-      final retained = [...state.retainedDrafts];
-      if (state.dirty || state.uncertain) {
-        retained.add(
-          RetainedDocumentDraft(
-            path: state.path,
-            content: state.content,
-            baseline: state.baseline,
-          ),
-        );
-      }
-      _publish(
-        DocumentSaveState(
-          path: result.snapshot.path,
-          content: result.snapshot.content,
-          baseline: result.snapshot,
-          phase: DocumentSavePhase.clean,
-          retainedDrafts: retained,
-        ),
-      );
+      adoptReload(result.snapshot);
     } else {
       _publish(
         DocumentSaveState(
@@ -225,9 +215,56 @@ class DocumentSaveSession {
     }
   }
 
+  /// Apply an explicitly requested, already-read/decoded snapshot. Callers
+  /// capture any newer draft with edit() immediately before this synchronous
+  /// adoption; no baseline is accepted as a side effect of inspection.
+  void adoptReload(PgnSnapshot snapshot) {
+    if (_disposed) return;
+    final retained = [...state.retainedDrafts];
+    if (state.dirty || state.uncertain) {
+      retained.add(
+        RetainedDocumentDraft(
+          path: state.path,
+          content: state.content,
+          baseline: state.baseline,
+        ),
+      );
+    }
+    _publish(
+      DocumentSaveState(
+        path: snapshot.path,
+        content: snapshot.content,
+        baseline: snapshot,
+        phase: DocumentSavePhase.clean,
+        retainedDrafts: retained,
+      ),
+    );
+  }
+
+  /// A namespace move preserves the captured content/identity. The adapter,
+  /// not a reread of arbitrary latest bytes, supplies the relocated baseline.
+  void relocate(PgnSnapshot baseline) {
+    if (_disposed || state.busy || state.uncertain) return;
+    _publish(
+      DocumentSaveState(
+        path: baseline.path,
+        content: state.content,
+        baseline: baseline,
+        phase: state.content == baseline.content
+            ? DocumentSavePhase.clean
+            : DocumentSavePhase.dirty,
+        retainedDrafts: state.retainedDrafts,
+      ),
+    );
+  }
+
   /// Restores text as an unsaved draft against the currently loaded revision.
   /// Restoring itself never writes; any subsequent save still validates it.
-  void restoreDraft(int index) {
+  @override
+  Future<void> restoreDraft(int index) async => restoreCapturedDraft(index);
+
+  /// Synchronous exchange after a structured editor finishes decoding.
+  void restoreCapturedDraft(int index) {
     if (_disposed || state.busy) return;
     final retained = [...state.retainedDrafts];
     final draft = retained.removeAt(index);

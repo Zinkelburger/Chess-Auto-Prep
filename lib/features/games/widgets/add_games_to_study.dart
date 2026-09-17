@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../../core/study_controller.dart';
+import '../../studies/controllers/study_controller.dart';
 import '../../../models/pgn_game_entry.dart';
-import '../../../models/study_document.dart';
+import '../../studies/models/study_document.dart';
 import '../../../services/storage/storage_factory.dart';
 import '../../../utils/app_messages.dart';
 import '../../../widgets/pgn/add_to_study_dialog.dart';

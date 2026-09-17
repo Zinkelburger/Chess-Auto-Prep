@@ -29,7 +29,7 @@ library;
 
 import 'package:path/path.dart' as p;
 
-import '../../../services/pgn_parsing_service.dart' as pgn;
+import '../../../chess_core/pgn/pgn_text.dart' as pgn;
 import '../../../services/repertoire_review_service.dart';
 import '../../../services/repertoire_service.dart';
 import '../../../services/storage/storage_factory.dart';

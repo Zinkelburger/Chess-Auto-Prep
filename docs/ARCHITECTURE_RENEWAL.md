@@ -819,6 +819,44 @@ Remaining: migration of the bounded legacy interiors, OS/native accessibility
 and platform checks, physical-display/owner review, performance and the other
 first-slice gates. No change to the full renewal scope or milestone graduation.
 
+### Study document adoption checkpoint (2026-09-16)
+
+Milestone 3 is partial. Study's model/controller now have one canonical owner
+under `features/studies/`; pure PGN text helpers moved to `chess_core/pgn/` with
+imports retargeted, no compatibility re-export files. Tests mirror Study ownership.
+App startup injects the document store and library repository; lint enforces the
+new pure-model/controller/infrastructure boundaries. Legacy Study board/layout
+widgets remain in their existing locations until their UI workflow migrates.
+
+Study now uses the shared `DocumentSaveSession` via `DocumentSaveActions` and
+exposes its real production recovery dialog. Linux app composition uses native
+identity/byte revisions. Other hosts use a named content-only legacy adapter;
+it cannot prove identity or native durability. Captured write receipts retain
+later edits; failed/uncertain writes stop implicit autosave/navigation retries.
+Slow open/reload/decode operations retain intervening edits. Reload and restored
+drafts do not silently rebase stale content. Copies create exclusively and become
+the active study; export has its own save owner and preserves source state.
+The file picker selects an export folder only, and no longer writes PGN bytes.
+
+Evidence (Linux, this checkpoint):
+
+| ID | Scope/check | Result | Remaining limit |
+|---|---|---|---|
+| ARCH-01 | `scripts/ci.sh analyze lint`; 13 dependency regressions; canonical imports and Study tests moved with their owner | Pass; 9 existing informational analyzer findings | Other workflows still use legacy ownership |
+| DATA-02, DATA-04, DATA-05, STATE-02, TEST-01 | 381 focused tests: `test/features/studies/`, `test/features/documents/`, `test/infrastructure/documents/`, Study import/selection, PGN parsing/slicing and storage-integrity regressions | Pass; native same-byte replacement, uncertainty reconciliation, queued autosave failure, slow open/reload edits, copy collisions and late-copy edits covered | No power-loss simulation; content-only non-Linux bridge is not a native guarantee |
+| UI-01, TEST-01 | `integration_test/study_save_recovery_test.dart` boots the actual app, enters a move, conflicts with native replacement, reloads/retains/restores, saves an exclusive copy and verifies both files; `integration_test/app_test.dart` | Pass: 1 Study journey and 7 boot/navigation tests | Full release suite and all modes not claimed |
+| UI-01 | Headless production app with disposable profile; inspect [conflict](images/renewal-study-conflict.png) and [retained draft](images/renewal-study-retained.png) screenshots | Pass at 1280×720; duplicate legacy error toast retired | Remaining Study screen theme/localization/accessibility not certified |
+
+Initial native journey failed because its shared test helper searched for the
+retired popup-menu type; it now selects the production `MenuItemButton`, and
+the journey passes. Initial analysis caught migration wiring/import/ARB metadata
+issues, corrected before the final checks. No release publication requested.
+
+Remaining: Study's legacy namespace/reference transactions; persistent drafts and
+close guards; document-level undo receipts; the other PGN editors; resizable/shared
+workspace composition; complete Study localization/theme/accessibility; large-
+document budgets and non-Linux native gates. The full renewal remains active.
+
 ### Initial parity and ownership inventory (milestone 0, partial)
 
 The starting tree has 885 files under `lib/` and 674 under `test/`; these counts
@@ -2051,8 +2089,8 @@ a process does not simulate lost hardware caches.
 
 S0 is **complete for the scoped Linux cases** and milestone 0 has a
 **partial inventory** above.
-Milestone 1/2 is **Partial** (implementation checkpoints above); milestones
-3–7 are **Not started**. Each row yields a reviewable result; later
+Milestone 1/2 is **Partial** (implementation checkpoints above); milestone 3 is **Partial** (Study adoption checkpoint above); milestones
+4–7 are **Not started**. Each row yields a reviewable result; later
 rows depend on the contracts established earlier, not on an unbounded framework
 build. Reorder later feature slices after the dependency inventory, with a
 recorded reason. No current mode is silently dropped.

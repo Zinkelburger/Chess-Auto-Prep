@@ -432,4 +432,37 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get appearanceSystemHelp =>
       'System follows your desktop’s light or dark appearance.';
+
+  @override
+  String get studySaveRecovery => 'Save and recovery…';
+
+  @override
+  String get studyCopyName => 'Copy name';
+
+  @override
+  String get studyCopyPrompt =>
+      'The copy will open as your current study. The original file is kept.';
+
+  @override
+  String studyCopyInitial(String name) {
+    return '$name copy';
+  }
+
+  @override
+  String studySaveDialogTitle(String name) {
+    return 'Save $name';
+  }
+
+  @override
+  String get studyExportTitle => 'Export study PGN';
+
+  @override
+  String get studyExportDirectory => 'Choose export folder';
+
+  @override
+  String get studyExportName => 'File name';
+
+  @override
+  String get studyInvalidName =>
+      'Enter a file name without path separators or reserved characters.';
 }

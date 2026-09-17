@@ -10,7 +10,7 @@ import 'package:chess_auto_prep/core/pgn/viewer_session_store.dart';
 import 'package:chess_auto_prep/models/pgn_filter_models.dart';
 import 'package:chess_auto_prep/features/games/models/game_view_preferences.dart';
 import 'package:chess_auto_prep/services/game_analysis_controller.dart';
-import 'package:chess_auto_prep/services/pgn_parsing_service.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_text.dart';
 import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 

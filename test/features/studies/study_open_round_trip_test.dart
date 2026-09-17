@@ -2,9 +2,10 @@
 /// on the way back; nothing the file said may be lost in that hop.
 library;
 
+import '../../support/study_fixture.dart';
+
 import 'dart:io';
 
-import 'package:chess_auto_prep/core/study_controller.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
@@ -61,7 +62,7 @@ void main() {
   });
 
   test('openStudy keeps chapter names, orientation, intro and tags', () async {
-    final study = StudyController();
+    final study = studyWithStorage(StorageFactory.instance);
     await study.openStudy(path);
 
     expect(study.doc.chapters.map((c) => c.name), ['For Black', 'For White']);

@@ -15,7 +15,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/services/generation/export/move_annotation.dart';
 import 'package:chess_auto_prep/services/pgn_mainline_lexer.dart';
-import 'package:chess_auto_prep/services/pgn_parsing_service.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_text.dart';
 import 'package:chess_auto_prep/utils/chess_utils.dart' show isNullMoveSan;
 import 'package:chess_auto_prep/utils/ease_utils.dart'
     show expectedCpFromWinProb;

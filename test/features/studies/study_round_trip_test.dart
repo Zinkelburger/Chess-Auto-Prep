@@ -15,7 +15,7 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:chess_auto_prep/models/study_document.dart';
+import 'package:chess_auto_prep/features/studies/models/study_document.dart';
 
 const _headers =
     '[Event "Chapter one"]\n'

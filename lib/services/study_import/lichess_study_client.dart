@@ -13,7 +13,8 @@ import 'dart:convert';
 import '../chess_api_urls.dart';
 import '../lichess_api_client.dart';
 import '../lichess_auth_service.dart';
-import '../pgn_parsing_service.dart' show splitPgnIntoGames, extractHeaders;
+import '../../chess_core/pgn/pgn_text.dart'
+    show splitPgnIntoGames, extractHeaders;
 import 'chapter_naming.dart';
 import 'import_source.dart';
 import 'study_import_exception.dart';

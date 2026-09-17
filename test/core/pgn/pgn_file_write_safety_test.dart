@@ -30,7 +30,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:chess_auto_prep/core/pgn_viewer_controller.dart';
 import 'package:chess_auto_prep/services/game_analysis_controller.dart';
 import 'package:chess_auto_prep/services/game_eval_annotations.dart';
-import 'package:chess_auto_prep/services/pgn_parsing_service.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_text.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/services/storage/storage_service.dart';
 import 'package:chess_auto_prep/widgets/pgn_viewer_widget.dart';

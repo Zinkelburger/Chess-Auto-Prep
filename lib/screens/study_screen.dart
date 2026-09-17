@@ -3,7 +3,6 @@
 library;
 
 import 'dart:async';
-import 'dart:convert' show utf8;
 
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:file_picker/file_picker.dart';
@@ -14,7 +13,11 @@ import 'package:provider/provider.dart';
 
 import '../constants/ui_breakpoints.dart';
 import '../core/app_state.dart';
-import '../core/study_controller.dart';
+import '../features/studies/controllers/study_controller.dart';
+import '../features/studies/widgets/study_save_button.dart';
+import '../features/documents/widgets/document_save_dialog.dart';
+import '../design_system/components/name_entry_dialog.dart';
+import '../l10n/generated/app_localizations.dart';
 import '../models/move_tree.dart' show TreePath;
 import '../services/repertoire_line_ids.dart';
 import '../services/repertoire_service.dart';
@@ -71,7 +74,6 @@ class _StudyScreenState extends State<StudyScreen> {
   /// the screen existed is not re-announced.
   final StudyImportController _import = StudyImportController.instance;
   late int _seenImportGeneration;
-  String? _reportedSaveError;
 
   @override
   void initState() {
@@ -144,15 +146,8 @@ class _StudyScreenState extends State<StudyScreen> {
   void _onStudyChanged() {
     if (!mounted) return;
     setState(() {});
-    final error = _study.saveError;
-    if (error == null) {
-      _reportedSaveError = null;
-    } else if (error != _reportedSaveError) {
-      _reportedSaveError = error;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) showAppSnackBar(context, error, isError: true);
-      });
-    }
+    // Save failures stay visible in the toolbar and recovery panel. A long
+    // transient toast would obscure the board and duplicate that interaction.
   }
 
   // ── Keyboard ─────────────────────────────────────────────────────────
@@ -388,19 +383,51 @@ class _StudyScreenState extends State<StudyScreen> {
     if (mounted) showAppSnackBar(context, 'Study PGN copied to clipboard.');
   }
 
-  /// Write the study out as a PGN file of the user's choosing — the Lichess
-  /// "Download" — leaving the study's own file where it is.
+  /// Export is an exclusive typed write; a picker never writes bytes itself.
+  /// Its independent save session leaves the source document and draft intact.
   Future<void> _saveStudyAs() async {
-    await _study.flushSave();
-    final outUri = await FilePicker.saveFile(
-      dialogTitle: 'Save study PGN',
-      fileName: '${_study.doc.name}.pgn',
-      type: FileType.custom,
-      allowedExtensions: ['pgn'],
-      bytes: utf8.encode(_study.doc.toPgn()),
+    final destination = await _chooseExportDestination(context);
+    if (!mounted || destination == null) return;
+    final session = _study.exportSession(destination);
+    unawaited(session.save());
+    try {
+      await showDocumentSaveDialog(
+        context,
+        title: AppLocalizations.of(context).studyExportTitle,
+        session: session,
+        chooseCopyDestination: _chooseExportDestination,
+      );
+    } finally {
+      await session.dispose();
+    }
+  }
+
+  Future<String?> _chooseExportDestination(BuildContext context) async {
+    final l10n = AppLocalizations.of(context);
+    final directory = await FilePicker.getDirectoryPath(
+      dialogTitle: l10n.studyExportDirectory,
     );
-    if (outUri == null || !mounted) return;
-    showAppSnackBar(context, 'Saved ${p.basename(outUri.toFilePath())}.');
+    if (directory == null || !context.mounted) return null;
+    final name = await showNameEntryDialog(
+      context,
+      title: l10n.studyExportTitle,
+      fieldLabel: l10n.studyExportName,
+      initialValue: '${_study.doc.name}.pgn',
+      allowUnchanged: true,
+      confirmLabel: l10n.saveCopy,
+      cancelLabel: l10n.cancel,
+      validate: (value) =>
+          value == '.' ||
+              value == '..' ||
+              RegExp(r'[<>:"/\\|?*\x00-\x1f]').hasMatch(value)
+          ? l10n.studyInvalidName
+          : null,
+    );
+    if (name == null) return null;
+    return p.join(
+      directory,
+      name.toLowerCase().endsWith('.pgn') ? name : '$name.pgn',
+    );
   }
 
   Future<void> _deleteCurrentStudy() async {
@@ -692,7 +719,8 @@ class _StudyScreenState extends State<StudyScreen> {
                 Flexible(
                   child: PgnSaveStatus(
                     filePath: _study.doc.filePath,
-                    autoSave: true,
+                    autoSave: _study.autoSaveEnabled,
+                    saving: _study.state.busy,
                     dirty: _study.dirty,
                     error: _study.saveError,
                   ),
@@ -701,6 +729,7 @@ class _StudyScreenState extends State<StudyScreen> {
             ],
           ),
           actions: [
+            StudySaveButton(study: _study),
             // Only visible while a collection download is running.
             const StudyImportStatusChip(),
             AppOverflowMenu(

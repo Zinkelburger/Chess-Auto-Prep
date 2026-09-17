@@ -76,7 +76,7 @@ void main() {
       await reload;
       expect(session.state.content, 'second external');
       expect(session.state.retainedDrafts.single.content, 'latest draft');
-      session.restoreDraft(0);
+      await session.restoreDraft(0);
       expect(session.state.content, 'latest draft');
       expect(session.state.baseline!.revision.nativeIdentity, '3');
       expect(store.saves, hasLength(1));
@@ -210,7 +210,7 @@ void main() {
       'second',
     ]);
     session.edit('third');
-    session.restoreDraft(0);
+    await session.restoreDraft(0);
     expect(session.state.content, 'first');
     expect(session.state.retainedDrafts.map((d) => d.content), [
       'second',

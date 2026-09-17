@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import '../../repertoires/models/repertoire_metadata.dart';
-import '../../../models/study_document.dart';
+import '../../studies/models/study_document.dart';
 import '../../../services/storage/storage_factory.dart';
 import '../../../theme/app_text_styles.dart';
 import '../models/person_record.dart';

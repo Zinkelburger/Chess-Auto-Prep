@@ -1,6 +1,6 @@
+import '../../support/study_fixture.dart';
 import 'dart:io';
-import 'package:chess_auto_prep/core/study_controller.dart';
-import 'package:chess_auto_prep/models/study_document.dart';
+import 'package:chess_auto_prep/features/studies/models/study_document.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
@@ -38,7 +38,7 @@ void main() {
   test(
     'batch append preserves existing chapters, comments, branches, and repeated names',
     () async {
-      final controller = StudyController();
+      final controller = studyWithStorage(StorageFactory.instance);
       final path = await StorageFactory.instance.studyFilePath('Selected');
       expect(await controller.addChaptersToStudyFile(path, [game]), 0);
       expect(await controller.addChaptersToStudyFile(path, [game, game]), 1);
@@ -55,7 +55,7 @@ void main() {
   test(
     'adding to open study retains unsaved edits and current chapter',
     () async {
-      final controller = StudyController();
+      final controller = studyWithStorage(StorageFactory.instance);
       await controller.newStudy('Open');
       controller.playSan('d4');
       final before = controller.chapter;

@@ -12,7 +12,7 @@
 /// Every helper is isolate-safe (no instance state captured).
 library;
 
-export '../models/pgn_filter_models.dart';
+export '../../models/pgn_filter_models.dart';
 
 // ── Regex constants ──────────────────────────────────────────────────────────
 

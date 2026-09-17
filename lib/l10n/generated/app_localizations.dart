@@ -789,6 +789,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'System follows your desktop’s light or dark appearance.'**
   String get appearanceSystemHelp;
+
+  /// Study save and recovery interaction: studySaveRecovery
+  ///
+  /// In en, this message translates to:
+  /// **'Save and recovery…'**
+  String get studySaveRecovery;
+
+  /// Study save and recovery interaction: studyCopyName
+  ///
+  /// In en, this message translates to:
+  /// **'Copy name'**
+  String get studyCopyName;
+
+  /// Study save and recovery interaction: studyCopyPrompt
+  ///
+  /// In en, this message translates to:
+  /// **'The copy will open as your current study. The original file is kept.'**
+  String get studyCopyPrompt;
+
+  /// No description provided for @studyCopyInitial.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} copy'**
+  String studyCopyInitial(String name);
+
+  /// No description provided for @studySaveDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Save {name}'**
+  String studySaveDialogTitle(String name);
+
+  /// Study save and recovery interaction: studyExportTitle
+  ///
+  /// In en, this message translates to:
+  /// **'Export study PGN'**
+  String get studyExportTitle;
+
+  /// Study save and recovery interaction: studyExportDirectory
+  ///
+  /// In en, this message translates to:
+  /// **'Choose export folder'**
+  String get studyExportDirectory;
+
+  /// Study save and recovery interaction: studyExportName
+  ///
+  /// In en, this message translates to:
+  /// **'File name'**
+  String get studyExportName;
+
+  /// Study save and recovery interaction: studyInvalidName
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a file name without path separators or reserved characters.'**
+  String get studyInvalidName;
 }
 
 class _AppLocalizationsDelegate

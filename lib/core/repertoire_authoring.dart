@@ -10,7 +10,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart' show listEquals;
 
 import '../models/repertoire_line.dart';
-import '../services/pgn_parsing_service.dart' as pgn;
+import '../chess_core/pgn/pgn_text.dart' as pgn;
 import '../services/repertoire_line_ids.dart';
 import '../services/repertoire_pgn_text.dart';
 import '../services/repertoire_service.dart';

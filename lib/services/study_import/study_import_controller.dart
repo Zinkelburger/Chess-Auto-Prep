@@ -32,7 +32,7 @@ import 'package:path/path.dart' as p;
 import '../../utils/log.dart';
 import '../../utils/safe_change_notifier.dart';
 import '../jobs/repertoire_job.dart';
-import '../pgn_parsing_service.dart' show extractHeaders;
+import '../../chess_core/pgn/pgn_text.dart' show extractHeaders;
 import '../storage/app_paths.dart';
 import '../storage/storage_factory.dart';
 import '../storage/study_naming.dart';

@@ -6,7 +6,7 @@ library;
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
 
-import '../../models/study_document.dart';
+import '../../features/studies/models/study_document.dart';
 import '../../theme/app_text_styles.dart';
 
 /// The edited fields.  [headers] is the complete replacement tag set.

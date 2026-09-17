@@ -4,7 +4,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../core/study_controller.dart';
+import '../../features/studies/controllers/study_controller.dart';
 import '../../models/board_annotation.dart';
 import '../../utils/board_shape_comments.dart';
 import '../chess_board_widget.dart';

@@ -18,7 +18,7 @@ library;
 import 'dart:io';
 
 import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
-import 'package:chess_auto_prep/services/pgn_parsing_service.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_text.dart';
 import 'package:chess_auto_prep/features/tactics/services/tactics_database.dart';
 import 'package:chess_auto_prep/features/tactics/services/tactics_import_service.dart';
 import 'package:flutter/foundation.dart';

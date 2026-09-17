@@ -536,5 +536,49 @@
   "appearanceSystemHelp": "System follows your desktop’s light or dark appearance.",
   "@appearanceSystemHelp": {
     "description": "Appearance settings: appearanceSystemHelp"
+  },
+  "studySaveRecovery": "Save and recovery…",
+  "studyCopyName": "Copy name",
+  "studyCopyPrompt": "The copy will open as your current study. The original file is kept.",
+  "studyCopyInitial": "{name} copy",
+  "@studyCopyInitial": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "studySaveDialogTitle": "Save {name}",
+  "@studySaveDialogTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "studyExportTitle": "Export study PGN",
+  "studyExportDirectory": "Choose export folder",
+  "studyExportName": "File name",
+  "studyInvalidName": "Enter a file name without path separators or reserved characters.",
+  "@studySaveRecovery": {
+    "description": "Study save and recovery interaction: studySaveRecovery"
+  },
+  "@studyCopyName": {
+    "description": "Study save and recovery interaction: studyCopyName"
+  },
+  "@studyCopyPrompt": {
+    "description": "Study save and recovery interaction: studyCopyPrompt"
+  },
+  "@studyExportTitle": {
+    "description": "Study save and recovery interaction: studyExportTitle"
+  },
+  "@studyExportDirectory": {
+    "description": "Study save and recovery interaction: studyExportDirectory"
+  },
+  "@studyExportName": {
+    "description": "Study save and recovery interaction: studyExportName"
+  },
+  "@studyInvalidName": {
+    "description": "Study save and recovery interaction: studyInvalidName"
   }
 }

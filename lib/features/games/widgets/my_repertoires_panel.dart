@@ -7,7 +7,7 @@ import '../../settings/models/settings_state.dart';
 import 'package:flutter/material.dart';
 
 import '../../repertoires/models/repertoire_metadata.dart';
-import '../../../services/pgn_parsing_service.dart' as pgn;
+import '../../../chess_core/pgn/pgn_text.dart' as pgn;
 import '../../../services/repertoire_creation.dart';
 import '../../../services/storage/storage_factory.dart';
 import '../../../theme/app_colors.dart';

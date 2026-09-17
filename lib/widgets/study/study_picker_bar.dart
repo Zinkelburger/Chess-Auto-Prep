@@ -7,7 +7,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../core/study_controller.dart';
+import '../../features/studies/controllers/study_controller.dart';
 import '../../utils/app_messages.dart';
 import 'study_name_dialog.dart' show sanitizeStudyName;
 

@@ -15,7 +15,7 @@ import 'package:dartchess/dartchess.dart'
     show Chess, PgnNode, PgnNodeData, Position, Side;
 
 import '../../../models/repertoire_line.dart';
-import '../../../services/pgn_parsing_service.dart' as pgn;
+import '../../../chess_core/pgn/pgn_text.dart' as pgn;
 import '../../../services/repertoire_service.dart';
 import '../../../utils/chess_utils.dart' show moveToStandardUci;
 import 'book_move_keys.dart';

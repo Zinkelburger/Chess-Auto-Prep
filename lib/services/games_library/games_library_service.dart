@@ -23,7 +23,8 @@ import '../game_store/game_store.dart';
 import '../game_store/game_store_service.dart';
 import '../lichess_api_client.dart';
 import '../pgn_document_patch.dart';
-import '../pgn_parsing_service.dart' show splitPgnIntoGames, extractHeaders;
+import '../../chess_core/pgn/pgn_text.dart'
+    show splitPgnIntoGames, extractHeaders;
 import '../storage/app_paths.dart';
 import 'game_filter.dart';
 

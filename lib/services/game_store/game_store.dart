@@ -29,7 +29,8 @@ import '../games_library/game_filter.dart' show GameSpeed, classifySpeed;
 import '../generation/pgn_lexer.dart'
     show isResultToken, tokenToSan, tokenizeMovetext;
 import '../master_games/position_key.dart';
-import '../pgn_parsing_service.dart' show extractHeaders, splitPgnIntoGames;
+import '../../chess_core/pgn/pgn_text.dart'
+    show extractHeaders, splitPgnIntoGames;
 import '../storage/app_paths.dart';
 import '../storage/schema_guard.dart';
 import '../game_identity.dart';

@@ -14,7 +14,7 @@ import 'package:path/path.dart' as p;
 import '../core/board_preview_controller.dart';
 import '../models/pgn_filter_models.dart';
 import '../models/pgn_source.dart';
-import '../services/pgn_parsing_service.dart' as pgn;
+import '../chess_core/pgn/pgn_text.dart' as pgn;
 import '../services/storage/storage_factory.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';

@@ -16,7 +16,7 @@ import '../../../services/games_library/game_filter.dart'
     show dedupKeyForHeaders;
 import '../../../services/games_library/game_review_store.dart';
 import '../../../services/maia/maia_factory.dart';
-import '../../../services/pgn_parsing_service.dart';
+import '../../../chess_core/pgn/pgn_text.dart';
 import '../../../utils/chesscom_lichess_elo.dart';
 import '../../../utils/log.dart';
 import '../models/tactics_position.dart';

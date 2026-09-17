@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../services/pgn_mainline_lexer.dart' as pgn;
-import '../../../services/pgn_parsing_service.dart' as pgn;
+import '../../../chess_core/pgn/pgn_text.dart' as pgn;
 import '../../../design_system/theme/app_typography.dart';
 import '../../../design_system/theme/app_spacing.dart';
 import '../../../utils/app_messages.dart';

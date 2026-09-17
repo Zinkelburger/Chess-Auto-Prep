@@ -24,7 +24,7 @@ import '../services/pgn_document_patch.dart';
 import '../services/game_analysis_controller.dart';
 import '../services/opening_book_service.dart';
 import '../services/pgn_mainline_lexer.dart' show movetextStart;
-import '../services/pgn_parsing_service.dart' show extractHeaders;
+import '../chess_core/pgn/pgn_text.dart' show extractHeaders;
 import '../services/storage/storage_factory.dart';
 import 'game_sorting.dart';
 import 'pgn/pgn_viewer_handle.dart';

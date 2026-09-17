@@ -4,7 +4,7 @@
 /// orientation.
 library;
 
-import 'package:chess_auto_prep/models/study_document.dart';
+import 'package:chess_auto_prep/features/studies/models/study_document.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 

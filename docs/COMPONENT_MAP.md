@@ -641,6 +641,41 @@ Every mode screen uses `Scaffold` + `AppBar` with consistent conventions:
 - **Action padding** is `right: 8` for all toolbar action widgets.
 - **Shared constants** live in `constants/ui_breakpoints.dart`.
 
+### Study document ownership
+
+`features/studies/controllers/study_controller.dart` owns the chapter trees,
+cursor, edits and save coordination; `features/studies/models/study_document.dart`
+owns the annotated multi-game PGN round trip. `app/study_dependencies.dart` injects
+`PgnDocumentStore` and `StudyLibraryRepository`. The controller has no storage
+singleton or filesystem import. Linux uses the native identity/byte revision
+store; other hosts retain the explicitly content-only compatibility adapter.
+`chess_core/pgn/pgn_text.dart` is the canonical pure-Dart split/count/header/text
+module. Study tests mirror the feature under `test/features/studies/`.
+
+The Study toolbar's **Save and recovery…** opens the production shared
+`DocumentSavePanel` through `DocumentSaveActions`. Move edits mark a revision;
+PGN serialization occurs when a save/recovery command captures the draft,
+not on every move. A slow write advances only its submitted baseline, retaining
+later edits as dirty. Failed saves suspend autosave, including queued debounce
+requests; dismissing their presentation, changing modes or disposing the editor
+cannot replay them. A confirmed explicit retry/copy or reload reconciles state.
+Reload decodes before adoption and retains the latest intervening draft. Restoring
+that draft exchanges it with any newer dirty draft without writing either.
+These retained drafts are in memory; restart restoration/close guards are pending.
+
+Successful **Save a copy…** creates an exclusive new study and opens it. **Save
+study PGN as…** exports a captured snapshot through its own typed save session,
+leaving the source open and dirty as appropriate. Export asks for a folder and
+filename; an existing destination is a collision, never an implicit overwrite.
+Failed saves also attempt an exclusive `Recovered …` PGN in the study library.
+The retained in-memory draft remains authoritative if recovery-copy creation fails.
+
+`LegacyStudyLibraryRepository` bridges existing library listing, path naming,
+rename and quarantine deletion. Relocation retains the pre-move content/identity;
+it cannot silently adopt an external edit as the next write baseline. Those
+namespace operations still require the document-workspace journal/reference
+migration; this bridge does not certify their full renewal exit gates.
+
 ### Repertoire builder workspace
 
 The wide workspace keeps chapters on the left, the board in the center, and
@@ -1782,7 +1817,7 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 |------|---------|
 | `repertoire_service.dart` | Load/save repertoire, parse lines, append moves; in-place line edits and deletion locate games via `_findGameIndexByLineId` and rewrite via `_reassembleDocument` (atomic `_writeAtomically`); `deleteLine(filePath, lineId)` removes a game from disk |
 | `repertoire_review_service.dart` | Review scheduling |
-| `pgn_parsing_service.dart` | Multi-game split/count (`splitPgnIntoGames`, `countPgnGames`); `[Event]`-delimited chunks, including back-to-back games without blank lines (tree_builder exports); `buildFenIndex` builds an inverted FEN→game-indices map in an isolate for O(1) position lookups (mainline **and RAVs**); `computeSliceMatches` is the shared entry point for position+header+sequence filtering (fast path with FEN index, slow path without); `serializeFenIndex`/`deserializeFenIndex` persist the index as a FENIDX3-format companion `.fenidx` file (header stores game count, PGN file size, and mtime for staleness detection; older blobs rebuild); `parseTargetFen` / `gamePassesThroughFen` / `buildFenIndex` / `mainlineSansAfterFen` replay ChessBase/Chessable **null moves** (`--` / `Z0`) as a turn pass so later same-side SAN stays on the index; `promoteNullMoveDummyMainline` runs before replay so Chessable intro chapters index the lesson moves; `gameMatchesSequence` ignores those tokens; `mainlineSansAfterFen` returns remaining SAN after a FEN along the line that found it (used by the opening-tree games list PV) |
+| `chess_core/pgn/pgn_text.dart`, `services/pgn_position_replay.dart`, `services/pgn_slice_filter.dart` | Multi-game split/count (`splitPgnIntoGames`, `countPgnGames`); `[Event]`-delimited chunks, including back-to-back games without blank lines (tree_builder exports); `buildFenIndex` builds an inverted FEN→game-indices map in an isolate for O(1) position lookups (mainline **and RAVs**); `computeSliceMatches` is the shared entry point for position+header+sequence filtering (fast path with FEN index, slow path without); `serializeFenIndex`/`deserializeFenIndex` persist the index as a FENIDX3-format companion `.fenidx` file (header stores game count, PGN file size, and mtime for staleness detection; older blobs rebuild); `parseTargetFen` / `gamePassesThroughFen` / `buildFenIndex` / `mainlineSansAfterFen` replay ChessBase/Chessable **null moves** (`--` / `Z0`) as a turn pass so later same-side SAN stays on the index; `promoteNullMoveDummyMainline` runs before replay so Chessable intro chapters index the lesson moves; `gameMatchesSequence` ignores those tokens; `mainlineSansAfterFen` returns remaining SAN after a FEN along the line that found it (used by the opening-tree games list PV) |
 | `opening_tree_builder.dart` | Build opening tree from PGN via `walkMainlineIntoTree`; `*` / empty Result → `userResult: null` and `includeVariations: true` (course sidelines become tree siblings); scored games stay mainline-only; `--`/`Z0` pass without a tree node |
 | `pgn_tree_core.dart` | Shared PGN attribution + walk used by `OpeningTreeBuilder` and `UnifiedAnalysisBuilder`; `includeVariations` counts each RAV as a line so sibling frequencies still sum to 100% |
 | `default_pgn_service.dart` | Bundled default PGN extraction (`rootBundle.load` + `decodeTextBytes` for Latin-1/Windows-1252 names in legacy PGNs) |

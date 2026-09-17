@@ -13,7 +13,7 @@ import '../features/repertoires/models/repertoire_creation.dart';
 import 'dart:io';
 
 import '../features/repertoire/services/chapter_splitter.dart';
-import 'pgn_parsing_service.dart' as pgn;
+import '../chess_core/pgn/pgn_text.dart' as pgn;
 import 'repertoire_line_expansion.dart';
 import 'storage/storage_factory.dart';
 import 'storage/storage_service.dart';

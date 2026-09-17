@@ -20,7 +20,7 @@ import '../../../services/eval/db_move_list.dart';
 import '../../../services/eval_cache.dart';
 import '../../../services/maia/maia_factory.dart';
 import '../../../services/opening_tree_builder.dart';
-import '../../../services/pgn_parsing_service.dart' as pgn;
+import '../../../chess_core/pgn/pgn_text.dart' as pgn;
 import '../../../services/run_control.dart';
 import '../../../utils/chess_utils.dart' as chess_utils;
 import '../../../utils/fen_utils.dart';

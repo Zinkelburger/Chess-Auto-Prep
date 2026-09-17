@@ -26,11 +26,11 @@ library;
 
 import 'package:dartchess/dartchess.dart' show Side;
 
-import '../constants/chess_constants.dart';
-import '../services/pgn_parsing_service.dart'
+import '../../../constants/chess_constants.dart';
+import '../../../chess_core/pgn/pgn_text.dart'
     show extractHeaders, splitPgnIntoGames, stripBom;
-import '../utils/fen_utils.dart' show isWhiteToMove;
-import 'move_tree.dart';
+import '../../../utils/fen_utils.dart' show isWhiteToMove;
+import '../../../models/move_tree.dart';
 
 class StudyChapter {
   String name;

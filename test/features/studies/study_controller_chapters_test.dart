@@ -3,14 +3,16 @@
 /// only, and the chapter tools edit what they say they edit.
 library;
 
-import 'package:chess_auto_prep/core/study_controller.dart';
+import '../../support/study_fixture.dart';
+
+import 'package:chess_auto_prep/features/studies/controllers/study_controller.dart';
 import 'package:chess_auto_prep/models/move_tree.dart';
-import 'package:chess_auto_prep/models/study_document.dart';
+import 'package:chess_auto_prep/features/studies/models/study_document.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 
 StudyController _study() {
-  final c = StudyController();
+  final c = memoryStudy();
   c.doc.chapters
     ..clear()
     ..addAll([

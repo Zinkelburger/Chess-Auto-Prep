@@ -1,3 +1,4 @@
+import '../../support/study_fixture.dart';
 import 'dart:io';
 import 'dart:async';
 import 'dart:isolate';
@@ -25,7 +26,6 @@ import 'package:chess_auto_prep/models/repertoire_review_history_entry.dart';
 import 'package:chess_auto_prep/services/repertoire_review_service.dart';
 import 'package:chess_auto_prep/services/games_library/game_filter.dart';
 import 'package:chess_auto_prep/utils/safe_file_name.dart';
-import 'package:chess_auto_prep/core/study_controller.dart';
 import 'package:chess_auto_prep/features/tactics/services/tactics_import_service.dart';
 
 class Paths extends PathProviderPlatform with MockPlatformInterfaceMixin {
@@ -409,7 +409,7 @@ void main() {
   test(
     'Regression: study navigation stops when unsaved edits conflict',
     () async {
-      final c = StudyController();
+      final c = studyWithStorage(StorageFactory.instance);
       await c.newStudy('First');
       final first = File(c.doc.filePath!);
       c.addChapter('unsaved irreplaceable chapter');

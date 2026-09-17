@@ -1,10 +1,11 @@
+import '../../support/study_fixture.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:chess_auto_prep/core/study_controller.dart';
-import 'package:chess_auto_prep/models/study_document.dart';
+import 'package:chess_auto_prep/features/studies/controllers/study_controller.dart';
+import 'package:chess_auto_prep/features/studies/models/study_document.dart';
 
 StudyController _studyWith(List<String> names) {
-  final c = StudyController();
+  final c = memoryStudy();
   // Replace the fresh document's single chapter with the named set.
   c.doc.chapters
     ..clear()

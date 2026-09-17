@@ -35,7 +35,10 @@ uses the shared status control and preserves input on a naming collision.
 Persisted Dark/Light/System appearance now drives the app theme, with explicit
 failure/retry feedback and retained navigation/drafts. Shared menu/breadcrumb and
 chapter-picker colors adapt; fixed dark legacy interiors remain bounded until
-migration. Legacy editor adoption, persisted drafts and close guards are still pending.
+migration. Study now adopts the shared typed save protocol, injected storage,
+native Linux revisions, exclusive copies/exports and retained reload/restore drafts;
+its controller/model and pure PGN text helpers have canonical feature/chess-core
+paths. Other legacy editors, persisted drafts and close guards are still pending.
 Legacy unjournaled trash adoption, remaining settings/writers, transactional
 splitting of existing chapters, remaining localization, legacy appearance migration/accessibility and full slice
 gates remain unfinished. The staged rewrite, shared PGN mutation API, UI design

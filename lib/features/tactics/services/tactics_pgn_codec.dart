@@ -33,7 +33,7 @@ import '../../../utils/chess_utils.dart' show isNullMoveSan, playSanOrNullMove;
 import '../models/tactics_note.dart';
 import '../models/tactics_position.dart';
 import '../models/tactics_session_settings.dart';
-import '../../../services/pgn_parsing_service.dart'
+import '../../../chess_core/pgn/pgn_text.dart'
     show splitPgnIntoGames, extractHeaders, stripBom;
 import '../../../utils/pgn_utils.dart';
 import 'tactics_engine.dart';

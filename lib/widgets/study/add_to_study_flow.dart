@@ -10,7 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_state.dart';
-import '../../core/study_controller.dart';
+import '../../features/studies/controllers/study_controller.dart';
 import '../../services/storage/storage_factory.dart';
 import '../../utils/app_messages.dart';
 import '../pgn/add_to_study_dialog.dart';

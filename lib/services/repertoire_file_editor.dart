@@ -19,7 +19,7 @@ import '../models/repertoire_review_entry.dart' show RepertoireReviewEntry;
 import '../utils/atomic_file.dart';
 import '../utils/file_text_reader.dart';
 import 'pgn_mainline_lexer.dart' as pgn;
-import 'pgn_parsing_service.dart' as pgn;
+import '../chess_core/pgn/pgn_text.dart' as pgn;
 import 'repertoire_line_ids.dart';
 import 'repertoire_pgn_text.dart';
 

@@ -13,7 +13,7 @@ import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
 import '../core/app_state.dart';
-import '../core/study_controller.dart';
+import '../features/studies/controllers/study_controller.dart';
 import '../core/repertoire_controller.dart';
 import '../core/generation_session_controller.dart';
 import '../core/generation_session_types.dart';

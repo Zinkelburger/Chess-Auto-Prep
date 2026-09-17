@@ -21,7 +21,7 @@ import 'package:flutter/material.dart';
 import '../design_system/components/item_title.dart';
 
 import '../features/repertoires/models/repertoire_metadata.dart';
-import '../services/pgn_parsing_service.dart' as pgn;
+import '../chess_core/pgn/pgn_text.dart' as pgn;
 import '../services/repertoire_service.dart';
 import '../services/storage/storage_factory.dart';
 import '../services/training/chapter_layout.dart' show ChapterSummary;

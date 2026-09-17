@@ -14,7 +14,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:chess_auto_prep/services/jobs/repertoire_job.dart';
-import 'package:chess_auto_prep/services/pgn_parsing_service.dart'
+import 'package:chess_auto_prep/chess_core/pgn/pgn_text.dart'
     show extractHeaders, splitPgnIntoGames;
 import 'package:chess_auto_prep/services/storage/app_paths.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';

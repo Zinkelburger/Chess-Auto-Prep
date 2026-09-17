@@ -13,21 +13,86 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
-import '../models/move_tree.dart';
-import 'move_navigation.dart';
-import '../features/repertoires/models/repertoire_metadata.dart';
+import '../../../models/move_tree.dart';
+import '../../../core/move_navigation.dart';
+import '../../repertoires/models/repertoire_metadata.dart';
 import '../models/study_document.dart';
-import '../services/pgn_parsing_service.dart'
+import '../../../chess_core/pgn/pgn_text.dart'
     show splitPgnIntoGames, extractHeaders, stripBom, countPgnGames;
-import '../services/storage/storage_factory.dart';
-import '../services/storage/study_naming.dart';
-import '../utils/atomic_file.dart';
-import '../utils/chess_utils.dart' show tryParseFen;
-import '../utils/log.dart';
-import '../utils/safe_change_notifier.dart';
+import '../repositories/study_library_repository.dart';
+import '../../documents/repositories/pgn_document_store.dart';
+import '../../documents/repositories/document_save_actions.dart';
+import '../../documents/controllers/document_save_session.dart';
+import '../../documents/models/document_save_state.dart';
+import '../../documents/models/pgn_document.dart';
+import '../../../utils/chess_utils.dart' show tryParseFen;
+import '../../../utils/safe_change_notifier.dart';
 
 class StudyController extends ChangeNotifier
-    with SafeChangeNotifier, MoveNavigation {
+    with SafeChangeNotifier, MoveNavigation
+    implements DocumentSaveActions {
+  StudyController({
+    required this._library,
+    required this._documents,
+    this._autoSaveDelay = const Duration(seconds: 2),
+    Future<StudyDocument> Function(String, String, String)? decode,
+  }) : _decode = decode ?? _decodeStudy {
+    _attachSession(
+      DocumentSaveSession.draft(_documents, path: '', content: _doc.toPgn()),
+    );
+  }
+  final StudyLibraryRepository _library;
+  final PgnDocumentStore _documents;
+  final Duration _autoSaveDelay;
+  final Future<StudyDocument> Function(String, String, String) _decode;
+  late DocumentSaveSession _session;
+  StreamSubscription<DocumentSaveState>? _sessionSubscription;
+  final _saveChanges = StreamController<DocumentSaveState>.broadcast(
+    sync: true,
+  );
+  bool _reloading = false;
+  bool _autoSaveBlocked = false;
+  bool _relocating = false;
+  bool _adopting = false;
+  PgnOpenResult? _reloadFailure;
+  String? _recoveryPath;
+  @override
+  Stream<DocumentSaveState> get changes => _saveChanges.stream;
+  @override
+  DocumentSaveState get state {
+    final saved = _session.state;
+    final normal = saved.outcome == null;
+    return DocumentSaveState(
+      path: saved.path,
+      content: saved.content,
+      baseline: saved.baseline,
+      pendingEdits: _dirty,
+      phase: _reloading || _relocating
+          ? DocumentSavePhase.reloading
+          : _dirty && normal && !saved.busy
+          ? DocumentSavePhase.dirty
+          : saved.phase,
+      outcome: saved.outcome,
+      uncertainPath: saved.uncertainPath,
+      readFailure: _reloadFailure ?? saved.readFailure,
+      retainedDrafts: saved.retainedDrafts,
+    );
+  }
+
+  bool get replacingDocument => _reloading;
+  @override
+  void notifyListeners() {
+    if (isDisposed || _adopting) return;
+    _saveChanges.add(state);
+    super.notifyListeners();
+  }
+
+  void _attachSession(DocumentSaveSession session) {
+    unawaited(_sessionSubscription?.cancel());
+    _session = session;
+    _sessionSubscription = session.changes.listen((_) => notifyListeners());
+  }
+
   StudyDocument _doc = StudyDocument.fresh('Untitled study');
   StudyDocument get doc => _doc;
 
@@ -46,6 +111,7 @@ class StudyController extends ChangeNotifier
   int _editRevision = 0;
   Future<bool> _saveTail = Future.value(true);
   bool get dirty => _dirty;
+  bool get autoSaveEnabled => !_autoSaveBlocked && _doc.filePath != null;
 
   /// Whether the board shows Black at the bottom.  Follows the chapter's
   /// [StudyChapter.orientation] whenever a chapter opens; "Flip board" turns
@@ -64,14 +130,29 @@ class StudyController extends ChangeNotifier
   /// token before its await and bails if a newer open/replace superseded it.
   int _docGeneration = 0;
 
-  /// Exact content last read from or written to the active study. Autosaves
-  /// compare against it so an external edit is never silently overwritten.
-  String? _persistedContent;
-
-  String? saveError;
+  String? get saveError {
+    final outcome = _session.state.outcome;
+    final message = switch (outcome) {
+      PgnConflict() =>
+        'Study not saved because its file changed on disk. The newer disk copy was preserved.',
+      PgnNameCollision() =>
+        'A file already exists at that destination. Your draft is still open.',
+      PgnWriteUncertain() =>
+        'The study save could not be confirmed. Inspect or reload before saving again.',
+      PgnWriteFailed() =>
+        'Could not save the study. Your unsaved edits are still open.',
+      _ =>
+        _reloadFailure == null
+            ? null
+            : 'Could not reload the study. Your current edits are still open.',
+    };
+    if (message == null) return null;
+    return _recoveryPath == null
+        ? message
+        : '$message A recovery copy was saved to $_recoveryPath.';
+  }
 
   Timer? _autoSaveTimer;
-  static const _autoSaveDelay = Duration(seconds: 2);
 
   /// Studies on disk (refreshed by [refreshStudyList]).
   List<RepertoireMetadata> availableStudies = [];
@@ -83,34 +164,54 @@ class StudyController extends ChangeNotifier
   // ── File management ──────────────────────────────────────────────────
 
   Future<void> refreshStudyList() async {
-    availableStudies = await StorageFactory.instance.listStudyFiles();
+    final studies = await _library.list();
+    if (isDisposed) return;
+    availableStudies = studies;
     notifyListeners();
   }
 
   /// Create a new study file named [name] and make it active.
   /// Throws [ArgumentError] when the name is taken.
   Future<void> newStudy(String name) async {
-    final storage = StorageFactory.instance;
-    final path = await storage.studyFilePath(name);
-    if (await storage.fileExists(path)) {
+    if (_reloading || _relocating || isDisposed) return;
+    final path = await _library.pathForName(name);
+    if (await _library.exists(path)) {
       throw ArgumentError('A study named "$name" already exists');
     }
-    _docGeneration++; // supersede any in-flight openStudy
+    final generation = ++_docGeneration;
     if (!await flushSave()) return;
     final fresh = StudyDocument.fresh(name)..filePath = path;
-    final content = fresh.toPgn();
-    await storage.writeFile(path, content, createOnly: true);
-    _adoptDocument(fresh, persistedContent: content);
+    final result = await _documents.create(path, fresh.toPgn());
+    if (result is! PgnSaved) throw StudyWriteException(result);
+    if (isDisposed || generation != _docGeneration) return;
+    if (!await flushSave() ||
+        isDisposed ||
+        generation != _docGeneration ||
+        _dirty) {
+      return;
+    }
+    _adoptDocument(fresh, snapshot: result.after);
     await refreshStudyList();
   }
 
   /// Make [doc] the active study, its cursor at the first chapter's start.
-  /// [persistedContent] is the exact text on disk (null for a study that has
+  /// [snapshot] is the captured disk revision (null for a study that has
   /// never been written), so the next autosave can detect an external edit.
-  void _adoptDocument(StudyDocument doc, {required String? persistedContent}) {
+  void _adoptDocument(StudyDocument doc, {required PgnSnapshot? snapshot}) {
+    unawaited(_session.dispose());
     _doc = doc;
-    _persistedContent = persistedContent;
-    saveError = null;
+    _attachSession(
+      snapshot == null
+          ? DocumentSaveSession.draft(
+              _documents,
+              path: doc.filePath ?? '',
+              content: doc.toPgn(),
+            )
+          : DocumentSaveSession.opened(_documents, snapshot),
+    );
+    _reloadFailure = null;
+    _recoveryPath = null;
+    _autoSaveBlocked = false;
     _chapterIndex = 0;
     _path = TreePath.empty;
     _faceChapterOrientation();
@@ -124,17 +225,16 @@ class StudyController extends ChangeNotifier
   /// to disk — no parse/re-serialise round trip that could drop an annotation
   /// on the way in.  [name] is sanitised and, if taken, suffixed.
   Future<String> createStudyFromPgn(String name, String pgn) async {
-    _docGeneration++; // supersede any in-flight openStudy
-    if (!await flushSave()) throw StateError(saveError ?? 'Study not saved');
-    final reserved = await reserveStudyPath(name);
-    await StorageFactory.instance.writeFile(
-      reserved.path,
-      '${pgn.trim()}\n',
-      createOnly: true,
-    );
+    final generation = ++_docGeneration; // supersede any in-flight openStudy
+    if (_reloading || _relocating || isDisposed || !await flushSave()) {
+      throw StateError(saveError ?? 'Study not saved');
+    }
+    final path = await _library.suggestNewPath(name);
+    final result = await _documents.create(path, '${pgn.trim()}\n');
+    if (result is! PgnSaved) throw StudyWriteException(result);
     await refreshStudyList();
-    await openStudy(reserved.path);
-    return reserved.path;
+    if (!isDisposed && generation == _docGeneration) await openStudy(path);
+    return path;
   }
 
   /// Append a chapter (parsed from [pgn], including any `[FEN]` header) to
@@ -167,9 +267,9 @@ class StudyController extends ChangeNotifier
       _markDirty();
       if (!await flushSave()) throw StateError(saveError ?? 'Study not saved');
     } else {
-      final storage = StorageFactory.instance;
-      final existed = await storage.fileExists(path);
-      final existing = existed ? (await storage.readFile(path) ?? '') : '';
+      final opened = await _documents.open(path);
+      if (opened is PgnReadFailed) throw opened.error;
+      final existing = opened is PgnOpened ? opened.snapshot.content : '';
       firstIndex = countPgnGames(existing);
       final additions = chapters
           .map(
@@ -180,54 +280,37 @@ class StudyController extends ChangeNotifier
       final content = existing.trimRight().isEmpty
           ? additions
           : '${existing.trimRight()}\n\n$additions';
-      await storage.writeFile(
-        path,
-        content,
-        createOnly: !existed,
-        expectedContent: existed ? existing : null,
-      );
+      final result = opened is PgnOpened
+          ? await _documents.save(opened.snapshot, content)
+          : await _documents.create(path, content);
+      if (result is! PgnSaved) throw StudyWriteException(result);
     }
     await refreshStudyList();
     return firstIndex;
   }
 
   Future<void> openStudy(String path) async {
+    if (_reloading || _relocating || isDisposed) return;
     final generation = ++_docGeneration;
     if (!await flushSave()) return;
-    final content = await StorageFactory.instance.readFile(path);
-    if (generation != _docGeneration) return; // superseded by a newer open
-    final name = p.basenameWithoutExtension(path);
-    // fromPgn runs PgnGame.parsePgn + a full move replay for every chapter —
-    // off the UI isolate so opening a large study doesn't freeze the frame.
-    final text = content ?? '';
-    final loaded = await Isolate.run(
-      () => StudyDocument.fromPgn(text, name: name, filePath: path),
+    final opened = await _documents.open(path);
+    if (generation != _docGeneration || isDisposed) return;
+    if (opened is! PgnOpened) throw StateError('Could not open study: $opened');
+    final loaded = await _decode(
+      opened.snapshot.content,
+      p.basenameWithoutExtension(path),
+      opened.snapshot.path,
     );
-    // A later open (or newStudy/deleteStudy) may have finished while this
-    // decode ran; don't clobber it with this now-stale document.
-    if (generation != _docGeneration) return;
-    // Trees crossing the isolate boundary carry foreign node ids — adopt
-    // them only after re-minting via [MoveTree.copyWithFreshIds].
-    _adoptDocument(
-      StudyDocument(
-        name: loaded.name,
-        filePath: loaded.filePath,
-        chapters: [
-          for (final c in loaded.chapters)
-            StudyChapter(
-              name: c.name,
-              headers: c.headers,
-              // The copy carries the chapter's opening note with it, so this
-              // snapshot is what the next autosave writes back intact.
-              tree: c.tree.copyWithFreshIds(),
-              // Already resolved from the file's tags, which [headers] no
-              // longer carries.
-              orientation: c.orientation,
-            ),
-        ],
-      ),
-      persistedContent: content,
-    );
+    if (generation != _docGeneration || isDisposed) return;
+    // Editing remains possible during read/decode. Persist those newer edits
+    // before replacing their document, and stop if that save cannot be proved.
+    if (!await flushSave() ||
+        isDisposed ||
+        generation != _docGeneration ||
+        _dirty) {
+      return;
+    }
+    _adoptDocument(_freshIds(loaded), snapshot: opened.snapshot);
     notifyListeners();
   }
 
@@ -236,107 +319,299 @@ class StudyController extends ChangeNotifier
   /// opened via "Edit set in Study" keeps its own name; rename the set in
   /// Tactics mode instead).  Throws [ArgumentError] when the name is taken.
   Future<void> renameStudy(String newName) async {
-    final oldPath = _doc.filePath;
-    if (oldPath == null) return;
-    if (!availableStudies.any((s) => s.filePath == oldPath)) return;
-    final storage = StorageFactory.instance;
-    final newPath = await storage.studyFilePath(newName);
+    if (_reloading || _relocating || isDisposed) return;
+    final document = _doc;
+    final oldPath = document.filePath;
+    if (oldPath == null ||
+        !availableStudies.any((s) => s.filePath == oldPath)) {
+      return;
+    }
+    final generation = ++_docGeneration;
+    final newPath = await _library.pathForName(newName);
     if (newPath == oldPath) return;
-    if (await storage.fileExists(newPath)) {
+    if (await _library.exists(newPath)) {
       throw ArgumentError('A study named "$newName" already exists');
     }
-    if (!await flushSave()) return;
-    await storage.renameFile(oldPath, newPath);
-    _doc.filePath = newPath;
-    _doc.name = newName;
+    if (!await flushSave() ||
+        generation != _docGeneration ||
+        isDisposed ||
+        _dirty) {
+      return;
+    }
+    final baseline = _session.state.baseline;
+    if (baseline == null) return;
+    _relocating = true;
+    _autoSaveTimer?.cancel();
+    notifyListeners();
+    try {
+      final relocated = await _library.rename(baseline, newPath);
+      _session.relocate(relocated);
+      document.filePath = relocated.path;
+      document.name = newName;
+    } finally {
+      _relocating = false;
+      _scheduleAutoSave();
+      notifyListeners();
+    }
     await refreshStudyList();
   }
 
   Future<void> deleteStudy(String path) async {
-    await StorageFactory.instance.deleteFile(path);
-    if (_doc.filePath == path) {
-      _docGeneration++; // supersede any in-flight openStudy of this file
-      _adoptDocument(
-        StudyDocument.fresh('Untitled study'),
-        persistedContent: null,
-      );
+    if (_reloading || _relocating || isDisposed) return;
+    if (_doc.filePath != path) {
+      await _library.delete(path);
+      await refreshStudyList();
+      return;
+    }
+    final document = _doc;
+    final generation = ++_docGeneration;
+    if (!await flushSave() ||
+        generation != _docGeneration ||
+        isDisposed ||
+        _dirty) {
+      return;
+    }
+    _relocating = true;
+    _autoSaveTimer?.cancel();
+    notifyListeners();
+    try {
+      await _library.delete(path);
+      if (_dirty) {
+        // Edits made after confirmation belong to an unsaved document; never
+        // recreate the deleted path on a debounce or discard the newer draft.
+        document.filePath = null;
+        unawaited(_session.dispose());
+        _attachSession(
+          DocumentSaveSession.draft(
+            _documents,
+            path: '',
+            content: document.toPgn(),
+          ),
+        );
+      } else {
+        _adoptDocument(StudyDocument.fresh('Untitled study'), snapshot: null);
+      }
+    } finally {
+      _relocating = false;
+      notifyListeners();
     }
     await refreshStudyList();
   }
+
+  Future<String> copyDestination(String name) => _library.pathForName(name);
+
+  /// An export has its own save owner and never changes the open study's path,
+  /// revision or dirty state. The dialog owns the returned session's lifetime.
+  DocumentSaveSession exportSession(String destination) =>
+      DocumentSaveSession.draft(
+        _documents,
+        path: destination,
+        content: _doc.toPgn(),
+      );
 
   /// One chapter as a PGN game, tagged the way Lichess exports chapters.
   String chapterPgn(int index) =>
       _doc.chapters[index].toPgn(studyName: _doc.name);
 
-  /// Whole-file atomic rewrite (storage layer writes tmp + rename).
-  Future<bool> _save() {
-    final next = _saveTail.then((_) => _saveCurrent());
+  @override
+  Future<PgnWriteResult?> save() => _write();
+
+  @override
+  Future<PgnWriteResult?> saveCopy(String destination) =>
+      _write(copyTo: destination);
+
+  Future<PgnWriteResult?> _write({
+    String? copyTo,
+    bool automatic = false,
+  }) async {
+    if (_reloading || _relocating || isDisposed) return null;
+    final owner = _session;
+    PgnWriteResult? result;
+    final next = _saveTail.then((_) async {
+      if (_reloading || _relocating || !identical(owner, _session)) {
+        return false;
+      }
+      if (automatic && _autoSaveBlocked) return false;
+      final document = _doc;
+      final revision = _editRevision;
+      if (copyTo == null && document.filePath == null) return !_dirty;
+      _session.edit(document.toPgn());
+      result = copyTo == null
+          ? await _session.save()
+          : await _session.saveCopy(copyTo);
+      if (!identical(document, _doc)) return true;
+      if (result is PgnSaved || result == null && !_session.state.dirty) {
+        _dirty = _editRevision != revision;
+        if (result is PgnSaved) {
+          document.filePath = (result as PgnSaved).after.path;
+          if (copyTo != null) {
+            _docGeneration++;
+            document.name = p.basenameWithoutExtension(document.filePath!);
+          }
+        }
+        _recoveryPath = null;
+        _reloadFailure = null;
+        _autoSaveBlocked = false;
+        _scheduleAutoSave();
+        notifyListeners();
+        return true;
+      }
+      // Never replay a failed/uncertain operation on the debounce timer.
+      _autoSaveBlocked = true;
+      _autoSaveTimer?.cancel();
+      if (result != null) {
+        try {
+          _recoveryPath = await _library.retainRecovery(
+            document.name,
+            document.toPgn(),
+          );
+        } catch (_) {
+          /* Recovery is best effort; the live draft remains authoritative. */
+        }
+      }
+      notifyListeners();
+      return false;
+    });
     _saveTail = next;
-    return next;
+    await next;
+    if (copyTo != null && result is PgnSaved && !isDisposed) {
+      await refreshStudyList();
+    }
+    return result;
   }
 
-  Future<bool> _saveCurrent() async {
-    final document = _doc;
-    final revision = _editRevision;
-    final path = document.filePath;
-    if (path == null) return !_dirty;
-    try {
-      final content = document.toPgn();
-      await StorageFactory.instance.writeFile(
-        path,
-        content,
-        createOnly: _persistedContent == null,
-        expectedContent: _persistedContent,
-      );
-      if (!identical(_doc, document)) return true;
-      _persistedContent = content;
-      _dirty = _editRevision != revision;
-      saveError = null;
-      notifyListeners();
-      return true;
-    } on AtomicWriteConflict {
-      saveError =
-          'Study not saved because its file changed on disk. The newer disk '
-          'copy was preserved.';
-      notifyListeners();
-    } catch (e) {
-      saveError =
-          'Could not save the study. Your unsaved edits are still open.';
-      log.e('Error saving study: $e');
-      notifyListeners();
-    }
-    try {
-      final recovery =
-          'recovery/study-${DateTime.now().microsecondsSinceEpoch}.pgn';
-      await StorageFactory.instance.writeFile(
-        recovery,
-        document.toPgn(),
-        createOnly: true,
-      );
-      saveError = '$saveError A recovery copy was saved to $recovery.';
-    } catch (_) {
-      // The open document remains dirty when even a recovery write fails.
-    }
-    notifyListeners();
-    return false;
-  }
-
-  /// Persist any pending changes now (mode switch, dispose, file switch).
   Future<bool> flushSave() async {
     _autoSaveTimer?.cancel();
+    if (_reloading || _relocating) return false;
     await _saveTail;
+    if (_autoSaveBlocked || state.uncertain) return false;
     while (_dirty) {
-      if (!await _save()) return false;
+      final result = await _write(automatic: true);
+      if (result is! PgnSaved && _dirty) return false;
     }
-    return true;
+    return !state.uncertain;
   }
 
   void _markDirty() {
     _editRevision++;
     _dirty = true;
-    _autoSaveTimer?.cancel();
-    _autoSaveTimer = Timer(_autoSaveDelay, () => unawaited(_save()));
+    _scheduleAutoSave();
     notifyListeners();
+  }
+
+  void _scheduleAutoSave() {
+    _autoSaveTimer?.cancel();
+    if (!isDisposed &&
+        _dirty &&
+        !_reloading &&
+        !_relocating &&
+        !_autoSaveBlocked &&
+        _doc.filePath != null) {
+      _autoSaveTimer = Timer(
+        _autoSaveDelay,
+        () => unawaited(_saveAutomatically()),
+      );
+    }
+  }
+
+  Future<void> _saveAutomatically() async {
+    if (_autoSaveBlocked) return;
+    await _write(automatic: true);
+  }
+
+  @override
+  void keepEditing() {
+    _session.keepEditing();
+  }
+
+  @override
+  Future<PgnOpenResult> inspectCurrent() => _session.inspectCurrent();
+
+  @override
+  Future<void> reloadPreservingDraft() async {
+    if (_reloading || _relocating || isDisposed) return;
+    await _saveTail;
+    if (_reloading || _relocating || isDisposed) return;
+    final session = _session;
+    final generation = _docGeneration;
+    _reloading = true;
+    _autoSaveTimer?.cancel();
+    _reloadFailure = null;
+    notifyListeners();
+    try {
+      final opened = await session.inspectCurrent();
+      if (opened is! PgnOpened) {
+        _reloadFailure = opened;
+        return;
+      }
+      final snapshot = opened.snapshot;
+      final loaded = await _decode(
+        snapshot.content,
+        p.basenameWithoutExtension(snapshot.path),
+        snapshot.path,
+      );
+      if (isDisposed ||
+          generation != _docGeneration ||
+          !identical(session, _session)) {
+        return;
+      }
+      _adopting = true;
+      if (_dirty) session.edit(_doc.toPgn());
+      session.adoptReload(snapshot);
+      _installReloaded(_freshIds(loaded), dirty: false);
+    } catch (error) {
+      _reloadFailure = PgnReadFailed(error);
+    } finally {
+      _adopting = false;
+      _reloading = false;
+      notifyListeners();
+    }
+  }
+
+  @override
+  Future<void> restoreDraft(int index) async {
+    if (_reloading || state.busy || isDisposed) return;
+    final session = _session;
+    final generation = _docGeneration;
+    final draft = state.retainedDrafts[index];
+    _reloading = true;
+    _autoSaveTimer?.cancel();
+    _reloadFailure = null;
+    notifyListeners();
+    try {
+      final loaded = await _decode(
+        draft.content,
+        p.basenameWithoutExtension(state.path),
+        state.path,
+      );
+      if (isDisposed ||
+          generation != _docGeneration ||
+          !identical(session, _session)) {
+        return;
+      }
+      _adopting = true;
+      if (_dirty) session.edit(_doc.toPgn());
+      session.restoreCapturedDraft(index);
+      _installReloaded(_freshIds(loaded), dirty: session.state.dirty);
+    } catch (error) {
+      _reloadFailure = PgnReadFailed(error);
+    } finally {
+      _adopting = false;
+      _reloading = false;
+      notifyListeners();
+    }
+  }
+
+  void _installReloaded(StudyDocument doc, {required bool dirty}) {
+    _doc = doc;
+    _docGeneration++;
+    _editRevision++;
+    _chapterIndex = 0;
+    _path = TreePath.empty;
+    _faceChapterOrientation();
+    _dirty = dirty;
+    _autoSaveBlocked = dirty;
+    _recoveryPath = null;
   }
 
   // ── Chapters ─────────────────────────────────────────────────────────
@@ -396,7 +671,9 @@ class StudyController extends ChangeNotifier
     Side? orientation,
   }) async {
     // Off-isolate for the same reason as [openStudy]; ids re-minted on adopt.
+    final document = _doc;
     final games = await compute(_parseChapterTreesEntry, pgn);
+    if (isDisposed || !identical(document, _doc)) return 0;
     final usable = [
       // Skip fragments that are neither a game nor a headered stub.
       for (final game in games)
@@ -617,8 +894,18 @@ class StudyController extends ChangeNotifier
   @override
   void dispose() {
     _autoSaveTimer?.cancel();
-    // Best-effort synchronous kick; the atomic write completes on its own.
-    if (_dirty) unawaited(_save());
+    // Retain the existing best-effort close behavior until the app close guard
+    // migrates. Disposal must never replay a known failed/uncertain write.
+    if (_dirty &&
+        !_reloading &&
+        !_relocating &&
+        !_autoSaveBlocked &&
+        _session.state.outcome == null) {
+      unawaited(save());
+    }
+    unawaited(_sessionSubscription?.cancel());
+    unawaited(_saveTail.then((_) => _session.dispose()));
+    unawaited(_saveChanges.close());
     super.dispose();
   }
 }
@@ -640,3 +927,29 @@ List<(Map<String, String>, MoveTree)> _parseChapterTreesEntry(String pgn) {
       (extractHeaders(gameText), MoveTree.fromPgn(gameText)),
   ];
 }
+
+class StudyWriteException implements Exception {
+  const StudyWriteException(this.result);
+  final PgnWriteResult result;
+  @override
+  String toString() => 'Study was not confirmed saved: $result';
+}
+
+Future<StudyDocument> _decodeStudy(String content, String name, String path) =>
+    Isolate.run(
+      () => StudyDocument.fromPgn(content, name: name, filePath: path),
+    );
+
+StudyDocument _freshIds(StudyDocument loaded) => StudyDocument(
+  name: loaded.name,
+  filePath: loaded.filePath,
+  chapters: [
+    for (final c in loaded.chapters)
+      StudyChapter(
+        name: c.name,
+        headers: c.headers,
+        tree: c.tree.copyWithFreshIds(),
+        orientation: c.orientation,
+      ),
+  ],
+);

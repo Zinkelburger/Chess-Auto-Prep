@@ -3,9 +3,10 @@
 /// trainable tactics line.
 library;
 
+import '../support/study_fixture.dart';
+
 import 'dart:io';
 
-import 'package:chess_auto_prep/core/study_controller.dart';
 import 'package:chess_auto_prep/features/tactics/models/tactics_position.dart';
 import 'package:chess_auto_prep/features/tactics/models/tactics_session_settings.dart';
 import 'package:chess_auto_prep/services/repertoire_service.dart';
@@ -72,7 +73,7 @@ void main() {
     );
 
     // Save into a (not currently open) study file on disk.
-    final study = StudyController();
+    final study = studyWithStorage(StorageFactory.instance);
     final path = await StorageFactory.instance.studyFilePath('Puzzles');
     await study.addChapterToStudyFile(path, 'Back-rank mate', chapterPgn);
 
@@ -104,7 +105,7 @@ void main() {
 
   test('addChapterToStudyFile preserves custom headers when the target study '
       'is the open document', () async {
-    final study = StudyController();
+    final study = studyWithStorage(StorageFactory.instance);
     await study.newStudy('Open study');
     final path = study.doc.filePath!;
 
@@ -128,7 +129,7 @@ void main() {
   test(
     'an external edit is preserved instead of being overwritten by autosave',
     () async {
-      final study = StudyController();
+      final study = studyWithStorage(StorageFactory.instance);
       await study.newStudy('Concurrent edit');
       final path = study.doc.filePath!;
       await File(path).writeAsString('external editor content');

@@ -12,7 +12,7 @@ import 'package:flutter/material.dart';
 
 import '../../design_system/components/item_title.dart';
 
-import '../../core/study_controller.dart';
+import '../../features/studies/controllers/study_controller.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import 'study_chapter_actions.dart';

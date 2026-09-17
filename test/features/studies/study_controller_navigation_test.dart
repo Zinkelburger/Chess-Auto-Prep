@@ -1,5 +1,6 @@
+import '../../support/study_fixture.dart';
 import 'package:chess_auto_prep/core/move_navigation.dart';
-import 'package:chess_auto_prep/core/study_controller.dart';
+import 'package:chess_auto_prep/features/studies/controllers/study_controller.dart';
 import 'package:chess_auto_prep/models/move_tree.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -10,7 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// A controller whose single chapter holds 1.e4 e5 2.Nf3, plus the sideline
 /// 1.d4 branching from the root.
 StudyController _controllerWithLine() {
-  final c = StudyController();
+  final c = memoryStudy();
   final t = c.tree;
   final e4 = t.addMove(TreePath.empty, 'e4')!;
   final e5 = t.addMove(e4, 'e5')!;
@@ -21,7 +22,7 @@ StudyController _controllerWithLine() {
 
 void main() {
   test('StudyController adopts the shared MoveNavigation mixin', () {
-    expect(StudyController(), isA<MoveNavigation>());
+    expect(memoryStudy(), isA<MoveNavigation>());
   });
 
   group('StudyController navigation', () {
@@ -99,7 +100,7 @@ void main() {
     });
 
     test('an empty tree survives every directional call', () {
-      final c = StudyController();
+      final c = memoryStudy();
       expect(c.tree.isEmpty, isTrue);
       expect(() {
         c.goForward();
