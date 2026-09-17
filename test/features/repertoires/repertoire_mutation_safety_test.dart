@@ -17,6 +17,7 @@ import 'package:path/path.dart' as p;
 const original = '// Color: White\n\n[Event "Original"]\n\n1. e4 e5 *\n';
 
 void main() {
+  late GatedRepertoireDecoder decoder;
   late Directory directory;
   late File file;
   late RepertoireController controller;
@@ -32,7 +33,9 @@ void main() {
       supportRoot: Directory(p.join(directory.path, 'support')),
     );
     gateway = _InterleavingStorage(storage, () async {});
+    decoder = GatedRepertoireDecoder();
     controller = testRepertoireController(
+      decoder: decoder,
       documents: DocumentRepertoireRepository(LegacyPgnDocumentStore(gateway)),
     );
     await controller.setRepertoire(
@@ -199,7 +202,11 @@ void main() {
     () async {
       final editor = _PausedRepository(LegacyPgnDocumentStore(gateway));
       controller.dispose();
-      controller = testRepertoireController(documents: editor);
+      decoder = GatedRepertoireDecoder();
+      controller = testRepertoireController(
+        decoder: decoder,
+        documents: editor,
+      );
       await controller.setRepertoire(
         RepertoireMetadata(
           name: 'Chapter',
@@ -240,7 +247,11 @@ void main() {
           LegacyPgnDocumentStore(gateway),
         );
         controller.dispose();
-        controller = testRepertoireController(documents: repository);
+        decoder = GatedRepertoireDecoder();
+        controller = testRepertoireController(
+          decoder: decoder,
+          documents: repository,
+        );
         await controller.setRepertoire(
           RepertoireMetadata(
             name: 'First',
@@ -370,16 +381,65 @@ void main() {
     'DATA-03: presentation failure does not replay the committed undo',
     () async {
       await add(['Nf3', 'Nc6']);
-      controller.debugBeforeRepertoireApply = () async =>
-          throw StateError('refresh failed');
+      decoder.afterBuild = () async => throw StateError('refresh failed');
       await expectLater(controller.writer.undo(), throwsStateError);
       expect(await file.readAsString(), contains('Nf3'));
       expect(await file.readAsString(), isNot(contains('Nc6')));
-      controller.debugBeforeRepertoireApply = null;
+      decoder.afterBuild = null;
       expect(await controller.writer.undo(), isTrue);
       expect(await file.readAsString(), original);
     },
   );
+
+  test(
+    'failed chapter switch retains destination, board and saved undo',
+    () async {
+      await add(['Nf3']);
+      controller.loadPgnLine(controller.repertoireLines.single);
+      controller.goToEnd();
+      final board = controller.tree;
+      final fen = controller.fen;
+      final line = controller.selectedPgnLine;
+      final color = controller.isRepertoireWhite;
+      final root = controller.rootMoves;
+      final other = File(p.join(directory.path, 'other.pgn'));
+      await other.writeAsString(original);
+      decoder.afterBuild = () async => throw StateError('decode interrupted');
+      await controller.setRepertoire(
+        RepertoireMetadata(
+          name: 'Other',
+          filePath: other.path,
+          lastModified: DateTime(2026),
+        ),
+      );
+      expect(controller.loadError, isNotNull);
+      expect(controller.currentRepertoire!.filePath, file.path);
+      expect(controller.tree, same(board));
+      expect(controller.fen, fen);
+      expect(controller.selectedPgnLine, same(line));
+      expect(controller.isRepertoireWhite, color);
+      expect(controller.rootMoves, root);
+      expect(controller.writer.canUndo, isTrue);
+      decoder.afterBuild = null;
+      expect(await controller.writer.undo(), isTrue);
+      expect(await file.readAsString(), original);
+      expect(await other.readAsString(), original);
+    },
+  );
+
+  test('failed reload preserves a scratch deletion undo receipt', () async {
+    controller.loadMoveSequence(['e4', 'e5', 'Nf3']);
+    controller.deleteAtPath(const TreePath([0, 0]));
+    final board = controller.tree;
+    decoder.afterBuild = () async => throw StateError('decode interrupted');
+    await controller.loadRepertoire();
+    expect(controller.tree, same(board));
+    expect(controller.writer.canUndo, isTrue);
+    expect(await controller.writer.undo(), isTrue);
+    controller.goToEnd();
+    expect(controller.moveHistory, ['e4', 'e5', 'Nf3']);
+    expect(await file.readAsString(), original);
+  });
 
   test('STATE-01: a queued add cannot land on a switched chapter', () async {
     final other = File(p.join(directory.path, 'other.pgn'));

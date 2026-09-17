@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/features/repertoires/models/loaded_repertoire.dart';
 import 'package:chess_auto_prep/features/repertoires/controllers/repertoire_controller.dart';
 import 'package:chess_auto_prep/features/repertoires/repositories/repertoire_decoder.dart';
 import 'package:chess_auto_prep/features/repertoires/repositories/repertoire_document_repository.dart';
@@ -20,3 +21,22 @@ RepertoireDocumentRepository testRepertoireDocuments() =>
     DocumentRepertoireRepository(
       LegacyPgnDocumentStore(StorageFactory.instance),
     );
+
+/// Script completion windows at the injected decoder boundary, without
+/// test-only suspension hooks in the production session owner.
+class GatedRepertoireDecoder implements RepertoireDecoder {
+  GatedRepertoireDecoder({this.delegate = const IsolateRepertoireDecoder()});
+  final RepertoireDecoder delegate;
+  Future<void> Function()? beforeBuild;
+  Future<void> Function()? afterBuild;
+  @override
+  Future<LoadedRepertoire> build(
+    String? pgn, {
+    required bool fallbackIsWhite,
+  }) async {
+    await beforeBuild?.call();
+    final result = await delegate.build(pgn, fallbackIsWhite: fallbackIsWhite);
+    await afterBuild?.call();
+    return result;
+  }
+}
