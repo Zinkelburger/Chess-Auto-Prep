@@ -1,48 +1,50 @@
+import '../repositories/viewer_position_index_repository.dart';
+import '../repositories/viewer_opening_repository.dart';
+import '../repositories/viewer_solitaire_repository.dart';
 import 'dart:async';
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
-import '../chess_core/pgn/pgn_collection_players.dart';
-import '../features/documents/controllers/pgn_collection_editor.dart';
-import '../features/documents/controllers/viewer_collection_controller.dart';
-import '../features/documents/controllers/viewer_collection_load_controller.dart';
-import '../features/documents/controllers/viewer_filter_controller.dart';
-import '../features/documents/controllers/viewer_presentation_controller.dart';
-import '../features/documents/controllers/viewer_session_controller.dart';
-import '../features/documents/models/pgn_document.dart';
-import '../features/documents/models/pgn_workspace_snapshot.dart';
-import '../features/documents/models/viewer_collection_load.dart';
-import '../features/documents/models/viewer_filter_selection.dart';
-import '../features/documents/models/viewer_perspective.dart';
-import '../features/documents/models/viewer_session.dart';
-import '../features/documents/repositories/desktop_fullscreen_port.dart';
-import '../features/documents/repositories/document_save_actions.dart';
-import '../features/documents/repositories/pgn_collection_decoder.dart';
-import '../features/documents/repositories/pgn_collection_filter.dart';
-import '../features/documents/repositories/pgn_collection_repository.dart';
-import '../features/documents/repositories/pgn_library_repository.dart';
-import '../features/documents/repositories/viewer_preferences_repository.dart';
-import '../models/opening_tree.dart';
-import '../models/pgn_filter_models.dart';
-import '../models/pgn_game_entry.dart';
-import '../services/game_analysis_controller.dart';
-import '../services/opening_book_service.dart';
-import '../services/pgn_opening_headers.dart';
-import '../utils/chess_utils.dart';
-import '../utils/safe_change_notifier.dart';
-import 'pgn/auto_play_engine.dart';
-import 'pgn/pgn_fen_index.dart';
-import 'pgn/pgn_viewer_handle.dart';
-import 'pgn/solitaire_controller.dart';
-import 'pgn/viewer_opening_tree.dart';
-import 'pgn/viewer_solitaire_session.dart';
+import '../../../chess_core/pgn/pgn_collection_players.dart';
+import 'pgn_collection_editor.dart';
+import 'viewer_collection_controller.dart';
+import 'viewer_collection_load_controller.dart';
+import 'viewer_filter_controller.dart';
+import 'viewer_presentation_controller.dart';
+import 'viewer_session_controller.dart';
+import '../models/pgn_document.dart';
+import '../models/pgn_workspace_snapshot.dart';
+import '../models/viewer_collection_load.dart';
+import '../models/viewer_filter_selection.dart';
+import '../models/viewer_perspective.dart';
+import '../models/viewer_session.dart';
+import '../repositories/desktop_fullscreen_port.dart';
+import '../repositories/document_save_actions.dart';
+import '../repositories/pgn_collection_decoder.dart';
+import '../repositories/pgn_collection_filter.dart';
+import '../repositories/pgn_collection_repository.dart';
+import '../repositories/pgn_library_repository.dart';
+import '../repositories/viewer_preferences_repository.dart';
+import '../../../models/opening_tree.dart';
+import '../../../models/pgn_filter_models.dart';
+import '../../../models/pgn_game_entry.dart';
+import '../repositories/viewer_analysis_port.dart';
+import '../../../chess_core/pgn/pgn_opening_headers.dart';
+import '../../../utils/chess_utils.dart';
+import '../../../utils/safe_change_notifier.dart';
+import 'auto_play_engine.dart';
+import 'pgn_fen_index.dart';
+import '../repositories/pgn_viewer_handle.dart';
+import 'solitaire_controller.dart';
+import 'viewer_opening_tree.dart';
+import 'viewer_solitaire_session.dart';
 
-export '../models/pgn_game_entry.dart';
-export 'pgn/solitaire_controller.dart'
+export '../../../models/pgn_game_entry.dart';
+export 'solitaire_controller.dart'
     show SolitaireController, SolitaireGuess, SolitaireStep;
-export 'pgn/viewer_solitaire_session.dart' show SolitaireSetup;
+export 'viewer_solitaire_session.dart' show SolitaireSetup;
 
 /// Business logic and state for the PGN Viewer screen.
 ///
@@ -53,6 +55,9 @@ export 'pgn/viewer_solitaire_session.dart' show SolitaireSetup;
 class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
   PgnViewerController({
     required DesktopFullscreenPort window,
+    required this.positionIndex,
+    required this.openings,
+    required this.solitaireRepository,
     required this.collectionRepository,
     required this.collectionDecoder,
     required this.collectionFilter,
@@ -87,7 +92,6 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
       onSaved: (modified) {
         if (isDisposed) return;
         loadedFileModified = modified;
-        _fenIndex.markStale();
       },
     )..addListener(_onEditorChanged);
     _presentation = ViewerPresentationController(
@@ -97,6 +101,9 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
     );
   }
 
+  final ViewerPositionIndexRepository positionIndex;
+  final ViewerOpeningRepository openings;
+  final ViewerSolitaireRepository solitaireRepository;
   final PgnCollectionRepository collectionRepository;
   final PgnCollectionDecoder collectionDecoder;
   final PgnCollectionFilter collectionFilter;
@@ -205,14 +212,11 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
   }
 
   Future<void> flushPendingMetadata() async {
-    final path = filePath;
-    final total = allGames.length;
     await _editor.flushPendingMetadata();
-    await _fenIndex.flushIfStale(filePath: path, gameTotal: total);
   }
 
   final PgnViewerHandle pgnWidgetController;
-  final GameAnalysisController analysisController;
+  final ViewerAnalysisPort analysisController;
   final bool Function() isActive;
   final void Function(void Function() callback)? schedulePostFrame;
   final VoidCallback? onReclaimFocus;
@@ -445,6 +449,7 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
   void toggleBoardFlipped() => _presentation.toggleBoardFlipped();
 
   late final ViewerOpeningTree _viewerTree = ViewerOpeningTree(
+    repository: openings,
     isActive: isActive,
     onChanged: notifyListeners,
     filteredGames: () => filteredGames,
@@ -474,6 +479,13 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
   /// and the board glue; the delegating members below keep the controller's
   /// public API unchanged for the screens.
   late final ViewerSolitaireSession _solitaireSession = ViewerSolitaireSession(
+    repository: solitaireRepository,
+    onError: (error) {
+      if (!isDisposed) {
+        errorMessage = error;
+        notifyListeners();
+      }
+    },
     handle: pgnWidgetController,
     hasGames: () => filteredGames.isNotEmpty,
     userPlaysWhite: () => !boardFlipped,
@@ -516,7 +528,7 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
   }
 
   Future<void> setSolitaireRevealDelay(int seconds) =>
-      _solitaireSession.setRevealDelay(seconds);
+      persistViewerPreference(() => _solitaireSession.setRevealDelay(seconds));
   void revealCurrentMove() => _solitaireSession.revealCurrentMove();
   void hintCurrentMove() => _solitaireSession.hintCurrentMove();
 
@@ -528,6 +540,7 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
   }
 
   late final PgnFenIndex _fenIndex = PgnFenIndex(
+    repository: positionIndex,
     isActive: isActive,
     onChanged: _onFenIndexReady,
   );
@@ -578,13 +591,14 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
     _presentation.dispose();
     _openingEpoch++;
     _fenIndex.cancel();
+    _viewerTree.dispose();
     _autoPlay.dispose();
     _solitaireSession.dispose();
-    // A comment typed in the last 300 ms and a stale FEN-index stamp both
-    // still owe the file a write; the collection is going away, so now.
+    // Flush any comment typed during the last debounce interval before the
+    // editor is disposed. Explicit close paths surface persistence failures.
     final flush = flushPendingMetadata();
     _editor.removeListener(_onEditorChanged);
-    unawaited(flush.whenComplete(_editor.dispose));
+    unawaited(flush.catchError((Object _) {}).whenComplete(_editor.dispose));
     super.dispose();
   }
 
@@ -660,9 +674,8 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
     bool flushOutgoing = true,
     PgnCollectionEditContext? editContext,
   }) {
-    // Settle the outgoing collection's debts (a pending metadata write, a
-    // stale FEN-index stamp) before its path and games are replaced; the
-    // flush captures both synchronously.
+    // Capture the outgoing collection's pending metadata before its path
+    // and games are replaced.
     if (flushOutgoing) unawaited(flushPendingMetadata());
     _openingEpoch++;
     filePath = path;
@@ -771,7 +784,7 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
             savedSlice.additionalPositions.any(
               (position) => position.trim().isNotEmpty,
             )) {
-          await _fenIndex.tryLoadPersisted(path, entries.length);
+          await _fenIndex.tryLoadPersisted(path, _indexSource);
           if (!_isCurrentLoad(loadEpoch)) return;
         }
         await _restoreSavedSlice(savedSlice, entries);
@@ -1033,6 +1046,14 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
   }
 
+  List<GameRecord> get _indexSource => [
+    for (final game in allGames)
+      (
+        headers: Map<String, String>.unmodifiable(game.headers),
+        pgnText: game.pgnText,
+      ),
+  ];
+
   bool isPreparingCollection = false;
 
   /// Optional collection-wide work never holds the reader's loading overlay.
@@ -1052,7 +1073,7 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
       if (!_isCurrentLoad(epoch)) return;
       final path = filePath;
       if (restoreIndex && path != null && _fenIndex.value == null) {
-        await _fenIndex.tryLoadPersisted(path, allGames.length);
+        await _fenIndex.tryLoadPersisted(path, _indexSource);
       }
       if (!_isCurrentLoad(epoch)) return;
       if (_fenIndex.value == null) await _buildFenIndex();
@@ -1077,11 +1098,7 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
           ),
         )
         .toList();
-    return _fenIndex.build(
-      gameData,
-      filePath: filePath,
-      gameTotal: allGames.length,
-    );
+    return _fenIndex.build(gameData, filePath: filePath);
   }
 
   bool autoDetectOpenings = true;
@@ -1101,28 +1118,14 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
     final games = allGames;
     if (!games.any(needsOpeningHeaders)) return;
     final epoch = ++_openingEpoch;
-    final book = await OpeningBookService.instance.load();
-    if (!isActive() ||
+    final contentRevision = collectionRevision;
+    final openings = await this.openings.classify(_indexSource);
+    if (isDisposed ||
+        !isActive() ||
         !autoDetectOpenings ||
         !identical(allGames, games) ||
-        epoch != _openingEpoch) {
-      return;
-    }
-    final openings = await compute(classifyMainlineOpenings, (
-      book: book,
-      games: games
-          .map(
-            (game) => (
-              headers: Map<String, String>.of(game.headers),
-              pgnText: game.pgnText,
-            ),
-          )
-          .toList(),
-    ));
-    if (!isActive() ||
-        !autoDetectOpenings ||
-        !identical(allGames, games) ||
-        epoch != _openingEpoch) {
+        epoch != _openingEpoch ||
+        contentRevision != collectionRevision) {
       return;
     }
     var changed = false;

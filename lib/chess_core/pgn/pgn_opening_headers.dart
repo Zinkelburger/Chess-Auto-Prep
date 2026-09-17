@@ -1,11 +1,11 @@
 /// Filling `ECO` / `Opening` tags on parsed games from the bundled book.
 library;
 
-import '../models/pgn_game_entry.dart';
-import '../models/pgn_filter_models.dart';
-import '../utils/pgn_utils.dart';
-import 'opening_book_service.dart';
-import '../chess_core/pgn/mainline_lexer.dart' show movetextStart;
+import '../../models/pgn_game_entry.dart';
+import '../../models/pgn_filter_models.dart';
+import '../../utils/pgn_utils.dart';
+import 'opening_book.dart';
+import 'mainline_lexer.dart' show movetextStart;
 import 'package:chess_auto_prep/chess_core/pgn/pgn_position_replay.dart'
     show buildFenIndex;
 

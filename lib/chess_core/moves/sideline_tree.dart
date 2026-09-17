@@ -9,7 +9,7 @@
 library;
 
 import '../../models/move_tree.dart';
-import '../../chess_core/moves/move_tree_view.dart';
+import 'move_tree_view.dart';
 
 /// Sidelines keyed by the 0-based mainline ply they branch from: key `p`
 /// holds alternatives to the mainline move at index `p`.

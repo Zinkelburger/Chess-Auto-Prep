@@ -1,4 +1,4 @@
-import 'package:chess_auto_prep/core/pgn/pgn_dummy_mainline.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_dummy_mainline.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 

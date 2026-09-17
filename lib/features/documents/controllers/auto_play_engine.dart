@@ -49,6 +49,7 @@ class AutoPlayEngine {
   /// Run a callback after the current frame (so `goForward` settles first).
   final void Function(void Function() callback)? schedulePostFrame;
 
+  bool _disposed = false;
   Timer? _timer;
   bool isPlaying = false;
   bool autoNextGame = false;
@@ -61,6 +62,7 @@ class AutoPlayEngine {
   void toggle() => isPlaying ? stop() : start();
 
   void start() {
+    if (_disposed) return;
     _firstStep = true;
     isPlaying = true;
     onChanged();
@@ -78,14 +80,14 @@ class AutoPlayEngine {
 
   void _schedule() {
     _timer?.cancel();
-    if (!isPlaying) return;
+    if (_disposed || !isPlaying) return;
     final delay = _firstStep ? firstStepDelay : _stepDelay;
     _firstStep = false;
     _timer = Timer(delay, _step);
   }
 
   void _step() {
-    if (!isActive() || !isPlaying) return;
+    if (_disposed || !isActive() || !isPlaying) return;
     final fenBefore = currentFen();
     if (fenBefore == null) return;
     _lastStepTime = DateTime.now();
@@ -93,7 +95,7 @@ class AutoPlayEngine {
     goForward();
 
     void checkAfterForward() {
-      if (!isActive() || !isPlaying) return;
+      if (_disposed || !isActive() || !isPlaying) return;
       final fenAfter = currentFen();
       if (fenAfter == fenBefore) {
         if (autoNextGame && hasNextGame()) {
@@ -138,6 +140,8 @@ class AutoPlayEngine {
   }
 
   void dispose() {
+    _disposed = true;
+    isPlaying = false;
     _timer?.cancel();
     _timer = null;
   }

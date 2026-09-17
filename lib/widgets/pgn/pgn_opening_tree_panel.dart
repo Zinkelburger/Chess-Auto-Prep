@@ -11,7 +11,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../../core/pgn_viewer_controller.dart';
+import '../../features/documents/controllers/pgn_viewer_controller.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../game_nav_item.dart';

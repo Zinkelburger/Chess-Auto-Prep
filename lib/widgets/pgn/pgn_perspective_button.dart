@@ -10,7 +10,7 @@ import 'package:chess_auto_prep/features/documents/models/viewer_perspective.dar
 
 import 'package:flutter/material.dart';
 
-import '../../core/pgn_viewer_controller.dart';
+import '../../features/documents/controllers/pgn_viewer_controller.dart';
 import '../../theme/app_colors.dart';
 
 class PgnPerspectiveButton extends StatelessWidget {
