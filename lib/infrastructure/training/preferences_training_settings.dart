@@ -1,8 +1,9 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../features/training/models/training_settings.dart';
+import '../../features/training/models/training_configuration.dart';
 import '../../features/training/repositories/training_settings_repository.dart';
 
-class PreferencesTrainingSettings implements TrainingSettingsRepository {
+class PreferencesTrainingSettings implements TrainingSettingsStorage {
   static const _keyStreakThreshold = 'trainer_streak_threshold';
   static const _keyTrainingDepth = 'trainer_training_depth';
   static const _keyAutoNext = 'trainer_auto_next';
@@ -19,19 +20,10 @@ class PreferencesTrainingSettings implements TrainingSettingsRepository {
   static const _keyNewPerSession = 'trainer_new_lines_per_session';
   static const _keyReviewsPerSession = 'trainer_reviews_per_session';
 
-  static Future<void> _tail = Future.value();
-
-  Future<T> _serialize<T>(Future<T> Function() action) {
-    final result = _tail.then((_) => action());
-    _tail = result.then<void>((_) {}, onError: (Object _, StackTrace _) {});
-    return result;
-  }
-
   @override
-  Future<TrainingSettings> load() => _serialize(_load);
-
-  Future<TrainingSettings> _load() async {
+  Future<TrainingConfiguration> read() async {
     final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
     // Old versions silently imposed these caps. Migrate those defaults once;
     // explicit sizes chosen after this migration remain user preferences.
     if (!(prefs.getBool('trainer_uncapped_default_v1') ?? false)) {
@@ -43,76 +35,84 @@ class PreferencesTrainingSettings implements TrainingSettingsRepository {
       }
       await _write(prefs.setBool('trainer_uncapped_default_v1', true));
     }
-    return TrainingSettings(
-      correctStreakThreshold: prefs.getInt(_keyStreakThreshold) ?? 3,
-      trainingDepth: prefs.getInt(_keyTrainingDepth),
-      autoNext: prefs.getBool(_keyAutoNext) ?? true,
-      wrongMoveReplay: prefs.getBool(_keyWrongMoveReplay) ?? true,
-      learnRequiresClick: prefs.getBool(_keyLearnRequiresClick) ?? true,
-      learnDelaySec: prefs.getInt(_keyLearnDelaySec) ?? 3,
-      showRatingButtons: prefs.getBool(_keyShowRatingButtons) ?? true,
-      reviewOrder: ReviewOrder.fromStorage(prefs.getString(_keyReviewOrder)),
-      moveSpeedMs: prefs.getInt(_keyMoveSpeedMs) ?? 700,
-      skipToFirstComment: prefs.getBool(_keySkipToFirstComment) ?? true,
-      introSpeedMs: prefs.getInt(_keyIntroSpeedMs) ?? 600,
-      chapterGrouping: ChapterGroupingMode.fromStorage(
-        prefs.getString(_keyChapterGrouping),
+    return TrainingConfiguration(
+      TrainingSettings(
+        correctStreakThreshold: prefs.getInt(_keyStreakThreshold) ?? 3,
+        trainingDepth: prefs.getInt(_keyTrainingDepth),
+        autoNext: prefs.getBool(_keyAutoNext) ?? true,
+        wrongMoveReplay: prefs.getBool(_keyWrongMoveReplay) ?? true,
+        learnRequiresClick: prefs.getBool(_keyLearnRequiresClick) ?? true,
+        learnDelaySec: prefs.getInt(_keyLearnDelaySec) ?? 3,
+        showRatingButtons: prefs.getBool(_keyShowRatingButtons) ?? true,
+        reviewOrder: ReviewOrder.fromStorage(prefs.getString(_keyReviewOrder)),
+        moveSpeedMs: prefs.getInt(_keyMoveSpeedMs) ?? 700,
+        skipToFirstComment: prefs.getBool(_keySkipToFirstComment) ?? true,
+        introSpeedMs: prefs.getInt(_keyIntroSpeedMs) ?? 600,
+        chapterGrouping: ChapterGroupingMode.fromStorage(
+          prefs.getString(_keyChapterGrouping),
+        ),
+        chapterDelimiter: prefs.getString(_keyChapterDelimiter) ?? '#',
+        newLinesPerSession: prefs.getInt(_keyNewPerSession) ?? 0,
+        reviewsPerSession: prefs.getInt(_keyReviewsPerSession) ?? 0,
       ),
-      chapterDelimiter: prefs.getString(_keyChapterDelimiter) ?? '#',
-      newLinesPerSession: prefs.getInt(_keyNewPerSession) ?? 0,
-      reviewsPerSession: prefs.getInt(_keyReviewsPerSession) ?? 0,
     );
-  }
-
-  @override
-  Future<void> save(TrainingSettings settings) {
-    final snapshot = settings.snapshot();
-    return _serialize(() => _save(snapshot));
   }
 
   Future<void> _write(Future<bool> result) async {
     if (!await result) throw StateError('Training preferences were not saved.');
   }
 
-  Future<void> _save(TrainingSettings settings) async {
+  @override
+  Future<void> write(TrainingSettingsPatch edit) async {
     final prefs = await SharedPreferences.getInstance();
-    await _write(
-      prefs.setInt(_keyStreakThreshold, settings.correctStreakThreshold),
-    );
-    if (settings.trainingDepth case final depth?) {
-      await _write(prefs.setInt(_keyTrainingDepth, depth));
-    } else {
-      await _write(prefs.remove(_keyTrainingDepth));
+    for (final entry in edit.changes.entries) {
+      final value = entry.value;
+      switch (entry.key) {
+        case TrainingSetting.correctStreakThreshold:
+          await _write(prefs.setInt(_keyStreakThreshold, value as int));
+        case TrainingSetting.trainingDepth:
+          await _write(
+            value == null
+                ? prefs.remove(_keyTrainingDepth)
+                : prefs.setInt(_keyTrainingDepth, value as int),
+          );
+        case TrainingSetting.autoNext:
+          await _write(prefs.setBool(_keyAutoNext, value as bool));
+        case TrainingSetting.wrongMoveReplay:
+          await _write(prefs.setBool(_keyWrongMoveReplay, value as bool));
+        case TrainingSetting.learnRequiresClick:
+          await _write(prefs.setBool(_keyLearnRequiresClick, value as bool));
+        case TrainingSetting.learnDelaySec:
+          await _write(prefs.setInt(_keyLearnDelaySec, value as int));
+        case TrainingSetting.showRatingButtons:
+          await _write(prefs.setBool(_keyShowRatingButtons, value as bool));
+        case TrainingSetting.reviewOrder:
+          await _write(
+            prefs.setString(
+              _keyReviewOrder,
+              (value as ReviewOrder).storageValue,
+            ),
+          );
+        case TrainingSetting.moveSpeedMs:
+          await _write(prefs.setInt(_keyMoveSpeedMs, value as int));
+        case TrainingSetting.skipToFirstComment:
+          await _write(prefs.setBool(_keySkipToFirstComment, value as bool));
+        case TrainingSetting.introSpeedMs:
+          await _write(prefs.setInt(_keyIntroSpeedMs, value as int));
+        case TrainingSetting.chapterGrouping:
+          await _write(
+            prefs.setString(
+              _keyChapterGrouping,
+              (value as ChapterGroupingMode).storageValue,
+            ),
+          );
+        case TrainingSetting.chapterDelimiter:
+          await _write(prefs.setString(_keyChapterDelimiter, value as String));
+        case TrainingSetting.newLinesPerSession:
+          await _write(prefs.setInt(_keyNewPerSession, value as int));
+        case TrainingSetting.reviewsPerSession:
+          await _write(prefs.setInt(_keyReviewsPerSession, value as int));
+      }
     }
-    await _write(prefs.setBool(_keyAutoNext, settings.autoNext));
-    await _write(prefs.setBool(_keyWrongMoveReplay, settings.wrongMoveReplay));
-    await _write(
-      prefs.setBool(_keyLearnRequiresClick, settings.learnRequiresClick),
-    );
-    await _write(prefs.setInt(_keyLearnDelaySec, settings.learnDelaySec));
-    await _write(
-      prefs.setBool(_keyShowRatingButtons, settings.showRatingButtons),
-    );
-    await _write(
-      prefs.setString(_keyReviewOrder, settings.reviewOrder.storageValue),
-    );
-    await _write(prefs.setInt(_keyMoveSpeedMs, settings.moveSpeedMs));
-    await _write(
-      prefs.setBool(_keySkipToFirstComment, settings.skipToFirstComment),
-    );
-    await _write(prefs.setInt(_keyIntroSpeedMs, settings.introSpeedMs));
-    await _write(
-      prefs.setString(
-        _keyChapterGrouping,
-        settings.chapterGrouping.storageValue,
-      ),
-    );
-    await _write(
-      prefs.setString(_keyChapterDelimiter, settings.chapterDelimiter),
-    );
-    await _write(prefs.setInt(_keyNewPerSession, settings.newLinesPerSession));
-    await _write(
-      prefs.setInt(_keyReviewsPerSession, settings.reviewsPerSession),
-    );
   }
 }

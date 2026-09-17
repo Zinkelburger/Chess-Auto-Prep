@@ -1,3 +1,6 @@
+import 'package:chess_auto_prep/features/training/models/training_configuration.dart';
+import 'package:chess_auto_prep/features/training/controllers/training_settings_controller.dart';
+import '../../support/training_settings.dart';
 import 'dart:async';
 
 import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
@@ -7,7 +10,6 @@ import 'package:chess_auto_prep/features/training/controllers/training_session_c
 import 'package:chess_auto_prep/features/training/models/training_settings.dart';
 import 'package:chess_auto_prep/features/training/repositories/training_answers.dart';
 import 'package:chess_auto_prep/features/training/repositories/training_review_repository.dart';
-import 'package:chess_auto_prep/features/training/repositories/training_settings_repository.dart';
 import 'package:chess_auto_prep/features/training/repositories/training_source_repository.dart';
 import 'package:chess_auto_prep/models/repertoire_line.dart';
 import 'package:chess_auto_prep/models/repertoire_move_progress.dart';
@@ -103,15 +105,6 @@ class _Source implements TrainingSourceRepository {
   }) async => {};
 }
 
-class _Config implements TrainingSettingsRepository {
-  Completer<TrainingSettings>? pending;
-  @override
-  Future<TrainingSettings> load() =>
-      pending?.future ?? Future.value(TrainingSettings());
-  @override
-  Future<void> save(TrainingSettings settings) async {}
-}
-
 class _Answers implements TrainingAnswers {
   Completer<bool?>? pending;
   @override
@@ -151,23 +144,28 @@ void main() {
   late _Reviews reviews;
   late _Headers headers;
   late _Source source;
-  late _Config config;
+  late MemoryTrainingSettings config;
+  late TrainingSettingsController settingsOwner;
   late TrainingSessionController controller;
   setUp(() {
     reviews = _Reviews();
     headers = _Headers();
     source = _Source();
-    config = _Config();
+    config = MemoryTrainingSettings();
+    settingsOwner = TrainingSettingsController(config);
     controller = TrainingSessionController(
       session: testRepertoireController(),
       headers: headers,
       source: source,
-      configuration: config,
+      configuration: settingsOwner,
       reviewService: reviews,
       askedQuestions: _Answers(),
     );
   });
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    controller.dispose();
+    settingsOwner.dispose();
+  });
 
   test(
     'ARCH-01/STATE-01 stale source cannot publish even if adapter ignores cancellation',
@@ -204,7 +202,7 @@ void main() {
 
   test('STATE-01 repeated finished-line rating records one outcome', () async {
     controller.setRepertoire(_meta('/line.pgn'));
-    controller.settings.autoNext = false;
+    controller.settings = controller.settings..autoNext = false;
     controller.currentLine = fakeLine('line', ['e4']);
     await controller.rateLine(ReviewRating.good);
     await controller.rateLine(ReviewRating.easy);
@@ -216,7 +214,7 @@ void main() {
     'DATA-06 retry resumes failed outcome without double scheduling or counts',
     () async {
       controller.setRepertoire(_meta('/line.pgn'));
-      controller.settings.autoNext = false;
+      controller.settings = controller.settings..autoNext = false;
       controller.currentLine = fakeLine('line', ['e4']);
       reviews.failMoves = true;
       await controller.rateLine(ReviewRating.good);
@@ -278,18 +276,65 @@ void main() {
     },
   );
 
-  test('SET-01 later settings read wins over old asynchronous load', () async {
-    config.pending = Completer();
-    final old = controller.loadSettings();
-    final oldPending = config.pending!;
-    config.pending = Completer();
-    final current = controller.loadSettings();
-    config.pending!.complete(TrainingSettings(moveSpeedMs: 250));
-    await current;
-    oldPending.complete(TrainingSettings(moveSpeedMs: 1500));
-    await old;
-    expect(controller.settings.moveSpeedMs, 250);
-  });
+  test(
+    'SET-01 committed changes apply next sitting, not between auto-next lines',
+    () async {
+      config.value = TrainingConfiguration(
+        TrainingSettings(
+          moveSpeedMs: 1,
+          introSpeedMs: 1,
+          skipToFirstComment: false,
+          newLinesPerSession: 3,
+        ),
+      );
+      await controller.loadSettings();
+      final first = fakeLine('first', ['e4']);
+      final second = fakeLine('second', ['d4']);
+      controller.lines = [first, second];
+      controller.startLine(first);
+      await settingsOwner.apply(
+        trainingEdit(settingsOwner.state.committed!, (draft) {
+          draft.moveSpeedMs = 900;
+          draft.newLinesPerSession = 1;
+        }),
+      );
+      expect(settingsOwner.state.committed!.toSettings().moveSpeedMs, 900);
+      expect(controller.settings.moveSpeedMs, 1);
+      expect(controller.settings.newLinesPerSession, 3);
+      controller.startLine(second, keepRunScope: true);
+      expect(controller.settings.moveSpeedMs, 1);
+      controller.stopSession();
+      expect(controller.settings.moveSpeedMs, 900);
+      controller.startLearnSession();
+      expect(controller.settings.newLinesPerSession, 1);
+      expect(controller.remainingInRun, 1);
+    },
+  );
+
+  test(
+    'SET-01 a failed preference never becomes the active sitting configuration',
+    () async {
+      config.value = TrainingConfiguration(TrainingSettings(moveSpeedMs: 1));
+      await controller.loadSettings();
+      config.failWrites = true;
+      await expectLater(
+        settingsOwner.apply(
+          trainingEdit(
+            settingsOwner.state.committed!,
+            (draft) => draft.moveSpeedMs = 900,
+          ),
+        ),
+        throwsStateError,
+      );
+      controller.startLine(fakeLine('line', ['e4']));
+      expect(controller.settings.moveSpeedMs, 1);
+      config.failWrites = false;
+      await settingsOwner.retry();
+      expect(controller.settings.moveSpeedMs, 1);
+      controller.stopSession();
+      expect(controller.settings.moveSpeedMs, 900);
+    },
+  );
 
   test(
     'STATE-01 pending chapter answer cannot affect a newly selected source',
@@ -297,7 +342,9 @@ void main() {
       final answers = _Answers()..pending = Completer();
       final scope = ChapterScope(
         askedQuestions: answers,
-        saveSettings: (_) async {},
+        saveSettings: (before, after) async {
+          before.chapterGrouping = after.chapterGrouping;
+        },
         settings: () => TrainingSettings(),
         lines: () => [
           fakeLine('line', ['e4'], chapter: 'Chapter 1'),
@@ -340,6 +387,24 @@ void main() {
       expect(failures, hasLength(1));
       expect(headers.paths, ['/old.pgn']);
       expect(reviews.history, hasLength(1));
+    },
+  );
+  test(
+    'SET-01 failed initial settings read blocks source startup until retry',
+    () async {
+      config.failReads = true;
+      await controller.loadSettings();
+      controller.setStudySource(_meta('/line.pgn'));
+      await controller.loadRepertoire();
+      expect(source.pending, isEmpty);
+      expect(controller.error, 'Training settings could not be loaded.');
+      config.failReads = false;
+      final retry = controller.retryFailure();
+      await Future<void>.delayed(Duration.zero);
+      source.pending['/line.pgn']!.complete(_loaded('line'));
+      await retry;
+      expect(controller.error, isNull);
+      expect(controller.lines.single.id, 'line');
     },
   );
 }

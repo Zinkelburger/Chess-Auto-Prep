@@ -29,6 +29,7 @@ void main() {
     repService = FakeRepertoireService();
     reviewService = FakeReviewService();
     controller = createTrainingSession(
+      configuration: createTrainingSettings(),
       session: testRepertoireController(),
       repertoireService: repService,
       reviewService: reviewService,

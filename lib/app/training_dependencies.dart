@@ -1,14 +1,20 @@
 import '../features/repertoires/controllers/repertoire_controller.dart';
 import '../features/training/controllers/training_session_controller.dart';
+import '../features/training/controllers/training_settings_controller.dart';
+import '../features/training/repositories/training_settings_repository.dart';
 import '../infrastructure/training/preferences_training_settings.dart';
 import '../infrastructure/training/training_source_loader.dart';
 import '../services/asked_questions_store.dart';
 import '../services/repertoire_review_service.dart';
 import '../services/repertoire_service.dart';
 
-/// Production bridges are constructed once per training owner.
+TrainingSettingsController createTrainingSettings() =>
+    TrainingSettingsController(PreferencesTrainingSettings());
+
+/// Session bridges share the injected application configuration owner.
 TrainingSessionController createTrainingSession({
   required RepertoireController session,
+  required TrainingSettingsRepository configuration,
   RepertoireService? repertoireService,
   RepertoireReviewService? reviewService,
   AskedQuestionsStore? askedQuestions,
@@ -24,7 +30,7 @@ TrainingSessionController createTrainingSession({
       reviewService: reviews,
       askedQuestions: answers,
     ),
-    configuration: PreferencesTrainingSettings(),
+    configuration: configuration,
     reviewService: reviews,
     askedQuestions: answers,
   );

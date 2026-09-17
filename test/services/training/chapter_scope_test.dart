@@ -35,7 +35,9 @@ RepertoireLine line(
 ) {
   var lines = initial;
   final scope = ChapterScope(
-    saveSettings: (_) async {},
+    saveSettings: (before, after) async {
+      settings.chapterGrouping = after.chapterGrouping;
+    },
     askedQuestions: AskedQuestionsStore(),
     settings: () => settings,
     lines: () => lines,
