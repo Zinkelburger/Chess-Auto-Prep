@@ -1574,7 +1574,18 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     if (_controller.showOpeningTree) {
       await openTreePositionGameSearch(
         context: context,
-        controller: _controller,
+        games: [
+          for (final i in _controller.gamesAtTreePosition())
+            _controller.filteredGames[i],
+        ],
+        currentIndex: _controller.gamesAtTreePosition().indexOf(
+          _controller.currentGameIndex,
+        ),
+        onSelected: (game) {
+          if (!mounted) return;
+          final index = _controller.filteredGames.indexOf(game);
+          if (index >= 0) _controller.loadGameFromTree(index);
+        },
       );
       _reclaimFocus();
       return;

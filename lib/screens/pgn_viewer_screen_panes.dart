@@ -245,7 +245,12 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
   Widget _buildTreeTab() => Column(
     children: [
       PgnTreeToolbar(
-        controller: _controller,
+        config: _controller.activeSliceConfig,
+        player: _controller.collectionPlayer,
+        loading: _controller.isLoading,
+        hasActiveFilters: _controller.hasActiveFilters,
+        onApplyPreset: _controller.applySlicePreset,
+        onApplyConfig: _controller.recomputeAndApplyConfig,
         database: _tabController.databaseTree,
         onSourceChanged: (database) {
           if (!mounted) return;
@@ -256,7 +261,33 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
       Expanded(
         child: _tabController.databaseTree
             ? _buildExplorerTab()
-            : PgnOpeningTreePanel(controller: _controller),
+            : PgnOpeningTreePanel(
+                tree: _controller.openingTree,
+                gameCount: _controller.filteredGames.length,
+                includeVariations: _controller.treeIncludeVariations,
+                building: _controller.buildingTree,
+                processed: _controller.treeBuildProcessed,
+                total: _controller.treeBuildTotal,
+                currentMoveSequence: _controller.treeCurrentMoveSequence,
+                wdlPerspective: _controller.wdlPerspective,
+                matchingGames: [
+                  for (final i in _controller.gamesAtTreePosition())
+                    _controller.filteredGames[i],
+                ],
+                currentMatchingIndex: _controller.gamesAtTreePosition().indexOf(
+                  _controller.currentGameIndex,
+                ),
+                onIncludeVariationsChanged:
+                    _controller.setTreeIncludeVariations,
+                onMoveSelected: _controller.onTreeMoveSelected,
+                onGoBack: _controller.onTreeGoBack,
+                onGoForward: _controller.onTreeGoForward,
+                onGameSelected: (game) {
+                  if (!mounted) return;
+                  final index = _controller.filteredGames.indexOf(game);
+                  if (index >= 0) _controller.loadGameFromTree(index);
+                },
+              ),
       ),
     ],
   );
@@ -480,16 +511,38 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
           ),
         // One solitaire strip at a time: the choices, then the session, then
         // what to do with the finished game.
-        if (_controller.isSolitaireSetup)
-          SolitaireSetupStrip(controller: _controller),
+        if (_controller.solitaireSetup case final setup?)
+          SolitaireSetupStrip(
+            userIsWhite: setup.userIsWhite,
+            fromCurrentMove: setup.fromCurrentMove,
+            includeVariations: setup.includeVariations,
+            canStartHere: setup.canStartHere,
+            hasSidelines: setup.hasSidelines,
+            startHereLabel: setup.startHereLabel,
+            userMovesToGuess: setup.userMovesToGuess,
+            revealDelaySeconds: _controller.solitaire.revealDelaySec,
+            onUserSideChanged: (value) =>
+                _controller.updateSolitaireSetup(userIsWhite: value),
+            onFromCurrentMoveChanged: (value) =>
+                _controller.updateSolitaireSetup(fromCurrentMove: value),
+            onIncludeVariationsChanged: (value) =>
+                _controller.updateSolitaireSetup(includeVariations: value),
+            onRevealDelayChanged: (value) =>
+                unawaited(_controller.setSolitaireRevealDelay(value)),
+            onCancel: _controller.cancelSolitaireSetup,
+            onBegin: _controller.beginSolitaire,
+          ),
         if (_controller.isSolitaireMode && !_controller.solitaire.isComplete)
           SolitaireStatusBar(
-            controller: _controller,
+            controller: _controller.solitaire,
+            onHint: _controller.hintCurrentMove,
+            onReveal: _controller.revealCurrentMove,
             onExit: () => unawaited(_leaveSolitaire()),
           ),
         if (_controller.isSolitaireMode && _controller.solitaire.isComplete)
           SolitaireCompleteBanner(
-            controller: _controller,
+            controller: _controller.solitaire,
+            onNextGame: _controller.nextGame,
             onCopyPgn: _copyCurrentGamePgn,
             onAddToStudy: _addCurrentGameToStudy,
             onAnalyse: _analyseSolitaireGame,

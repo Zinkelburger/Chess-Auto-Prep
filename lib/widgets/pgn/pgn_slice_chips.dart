@@ -5,25 +5,25 @@ import 'package:chess_auto_prep/widgets/common/horizontal_wheel_scroll.dart';
 
 import 'package:flutter/material.dart';
 
-import '../../features/documents/controllers/pgn_viewer_controller.dart';
 import '../../models/pgn_filter_models.dart';
-import '../../theme/app_colors.dart';
-import '../../theme/app_text_styles.dart';
+import '../../design_system/theme/workspace_theme.dart';
+import '../../design_system/theme/app_typography.dart';
 import '../slice/eco_filter_chips.dart';
 
 class PgnSliceChips extends StatelessWidget {
-  final PgnViewerController controller;
+  final SliceConfig config;
+  final ValueChanged<int> onRemoveChip;
   final VoidCallback onOpenSliceDialog;
 
   const PgnSliceChips({
     super.key,
-    required this.controller,
+    required this.config,
+    required this.onRemoveChip,
     required this.onOpenSliceDialog,
   });
 
   @override
   Widget build(BuildContext context) {
-    final config = controller.activeSliceConfig;
     final labels = <({String value, String detail, String full})>[
       for (final position in [
         if (config.positionInput != null) config.positionInput!,
@@ -49,15 +49,15 @@ class PgnSliceChips extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 6),
                 child: Text(
                   config.matchAny ? 'OR' : 'AND',
-                  style: AppTextStyles.caption,
+                  style: AppTypography.caption(context),
                 ),
               ),
             SizedBox(
               key: ValueKey(('applied-filter', i)),
               width: 112,
-              height: 44,
+              height: 20 + 28 * MediaQuery.textScalerOf(context).scale(1),
               child: Material(
-                color: AppColors.surfaceInset,
+                color: WorkspaceTheme.of(context).inset,
                 borderRadius: BorderRadius.circular(6),
                 clipBehavior: Clip.antiAlias,
                 child: Row(
@@ -77,16 +77,19 @@ class PgnSliceChips extends StatelessWidget {
                                   labels[i].value,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: AppTextStyles.muted.copyWith(
-                                    color: AppColors.ink,
-                                    fontWeight: FontWeight.w500,
-                                  ),
+                                  style: AppTypography.secondary(context)
+                                      .copyWith(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onSurface,
+                                        fontWeight: FontWeight.w500,
+                                      ),
                                 ),
                                 Text(
                                   labels[i].detail,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: AppTextStyles.caption,
+                                  style: AppTypography.caption(context),
                                 ),
                               ],
                             ),
@@ -96,13 +99,14 @@ class PgnSliceChips extends StatelessWidget {
                     ),
                     IconButton(
                       tooltip: 'Remove ${labels[i].full}',
-                      onPressed: () => controller.removeSliceChip(i),
+                      onPressed: () => onRemoveChip(i),
                       icon: const Icon(Icons.close, size: 14),
-                      color: AppColors.onSurfaceMuted,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints.tightFor(
+                      constraints: BoxConstraints.tightFor(
                         width: 28,
-                        height: 44,
+                        height:
+                            20 + 28 * MediaQuery.textScalerOf(context).scale(1),
                       ),
                     ),
                   ],
@@ -114,9 +118,8 @@ class PgnSliceChips extends StatelessWidget {
           TextButton.icon(
             key: const ValueKey('add-collection-filter'),
             style: TextButton.styleFrom(
-              foregroundColor: AppColors.onSurfaceMuted,
-              backgroundColor: Colors.transparent,
-              textStyle: AppTextStyles.muted,
+              foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
+              textStyle: AppTypography.secondary(context),
               padding: const EdgeInsets.symmetric(horizontal: 8),
             ),
             onPressed: onOpenSliceDialog,
