@@ -1210,6 +1210,59 @@ complete the large-document gate. Visible movetext windowing, parsing/GC/retaine
 memory/native frame budgets, undo receipts, other editors and milestones 4–7
 remain unfinished.
 
+### Editor movetext viewport checkpoint (2026-09-17)
+
+After Study selected-view checkpoint `401c6141`, the shared interactive editor
+uses `features/documents/models/move_text_layout.dart` for a pure row index and
+`features/documents/widgets/move_text_viewport.dart` for lazy presentation.
+The prior recursive widget builder and eager `SingleChildScrollView`/`Column`
+are removed. Indexing is iterative, with shared linked ancestor addresses;
+selection compares node IDs, and paths are materialized only for actions.
+Runs contain at most 24 moves. Comments and runs still wrap naturally and have
+variable heights; this is not fixed-height clipping. The viewport prefetches
+240 pixels and the editor caches at most 96 recent row widgets.
+
+A two-sided sliver anchor lets distant selections mount without laying out all
+preceding rows. The exact selected chip is revealed inside long wrapped runs.
+Existing paragraph/chip identity remains stable across cursor-only updates.
+Inline draft text belongs to the editor, so eviction or re-anchoring cannot
+silently replace uncommitted text with the original comment. That regression
+was reproduced during implementation and now passes. The architecture lint
+allows Flutter's `WidgetsBinding` frame scheduling only in feature widgets;
+application service singletons remain forbidden, including in those widgets.
+
+A synthetic 20,000-ply index completes without recursive stack growth or copying
+20,000 ancestor lists. One debug run indexed it in about 20 ms. A separate
+20,000-node annotated wide-tree widget fixture mounts fewer than 30 move chips,
+jumps to the final variation, scrolls backwards and returns to the start.
+Tests also cover 200% text, long wrapped rows, variation numbering, null moves,
+metadata-only comments and draft restoration after eviction.
+
+Verification: all 190 focused document/Study/editor/repertoire-screen/startup
+tests pass, and all three native Linux journeys pass (20,000-node open/edit/save,
+Study restart recovery and save-conflict recovery). The large native fixture has
+100 annotated 200-ply branches in one chapter. Opening through UI settling took
+23,183 ms; distant navigation through settling took 640 ms; process RSS sampled
+after saving was 772,870,144 bytes. These debug measurements include native reads,
+worker decoding, receive/adoption, projections and the UI, but do not isolate
+their costs or distinguish retained memory from transient allocations. They
+identify an unresolved performance problem, not a passing large-document budget.
+Next profile decoding/adoption/indexing and GC in profile mode before choosing
+incremental indexing or worker residency. The initial native build failed from a
+missing Flutter rendering import for the cache-extent type; the corrected build
+passes all native journeys.
+Analysis/lint pass with nine pre-existing informational notices and 14 boundary
+regressions. In the headless app, opened the same course from the disposable Study
+library, selected a variation move and scrolled through wrapped annotations;
+inspected the [1280×720 viewport](images/renewal-study-lazy-rows.png). The preview
+was stopped. Windows/macOS and full release gates were not run for this checkpoint.
+
+The compact row index is still O(nodes + prose) and rebuilt on content edits.
+This checkpoint does not certify STATE-02's profile-mode allocation/GC/frame
+budgets, worker-residency decision, undo cycle measurements or image-memory
+budget. Viewer movetext uses its existing renderer; Viewer/Builder private-core
+adoption, Riverpod retirement and milestones 4–7 remain pending.
+
 ### Initial parity and ownership inventory (milestone 0, partial)
 
 The starting tree has 885 files under `lib/` and 674 under `test/`; these counts

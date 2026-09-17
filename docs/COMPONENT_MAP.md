@@ -520,7 +520,20 @@ and the chapter picker resolves a stable chapter key after its async dialog.
 Chapter rows use stable chapter keys; current-chapter menu identity follows the
 selected chapter. Inline rename rejects a switched document/destination.
 
-Visible-movetext windowing, Riverpod/legacy bridge retirement, undo receipts,
+`features/documents/models/move_text_layout.dart` indexes editor movetext into
+bounded move runs and variable-height prose/editor rows. Its iterative traversal
+preserves variation order and numbering without recursion or chess replay. Linked
+addresses share ancestors; move selection uses node IDs, materializing a path only
+for an action. `features/documents/widgets/move_text_viewport.dart` lazily mounts
+rows around a movable anchor with 240 pixels of prefetch. Distant navigation can
+anchor at a row without laying out its predecessors; selection reveals the exact
+chip even in a tall wrapped run. Stable keys support row reconciliation.
+`InteractivePgnEditor` retains at most 96 recently built rows, reuses them across
+cursor changes, and retains the single inline comment draft across eviction.
+The layout index itself remains O(nodes + prose), rebuilt on content revisions;
+this does not complete incremental indexing, parsing/allocation or frame budgets.
+
+Riverpod/legacy bridge retirement, undo receipts,
 bulk/decode allocation and native frame measurements, and Viewer/Builder
 private-core adoption remain unfinished.
 

@@ -6,6 +6,9 @@ library;
 
 import 'dart:async';
 
+import '../features/documents/models/move_text_layout.dart';
+import '../features/documents/widgets/move_text_viewport.dart';
+
 import 'package:chess_auto_prep/utils/pgn_nags.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
@@ -20,14 +23,12 @@ import 'package:chess_auto_prep/chess_core/pgn/move_text_writer.dart';
 import 'package:chess_auto_prep/utils/app_messages.dart';
 import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
     show commentProse, mergeCommentProse;
-import 'package:chess_auto_prep/utils/chess_utils.dart' show isNullMoveSan;
 import 'package:chess_auto_prep/utils/training_markers.dart';
 import 'package:chess_auto_prep/widgets/pgn/movetext_primitives.dart'
     show MoveChip, PgnMoveDecorations;
 import '../models/pgn_deletion_summary.dart';
 import '../design_system/components/confirm_dialog.dart';
 import 'pgn/comment_editor.dart';
-import 'pgn/comment_prose_spans.dart';
 import 'pgn/pgn_annotation_panel.dart';
 
 class InteractivePgnEditor extends StatefulWidget {
@@ -123,32 +124,33 @@ class InteractivePgnEditor extends StatefulWidget {
 
 class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   final TextEditingController _titleController = TextEditingController();
+  final _selectedMoveKey = GlobalKey();
   TreePath? _contextMenuPath;
   bool _contextMenuOpen = false;
 
   /// Move whose comment is being edited inline (viewer-style editor shown in
   /// the move flow), or null.
   TreePath? _editingCommentPath;
+  String? _inlineCommentDraft;
 
   Timer? _autoSaveTimer;
   VoidCallback? _pendingAutoSave;
   static const _autoSaveDelay = Duration(seconds: 2);
 
-  /// The rendered movetext, kept across cursor moves.
-  ///
-  /// Keyed on the tree's identity and [MoveTree.version], not on the cursor:
-  /// the rows are the same widgets whichever move is selected, and the
-  /// selection is painted by each chip listening to [_selection].  Stepping
-  /// through a line therefore rebuilds two chips, not a paragraph per node —
-  /// the lichess-mobile move list does the same with cached segments.
-  List<Widget>? _cachedMoveWidgets;
-  MoveTreeView? _cachedTree;
-  int _cachedVersion = -1;
+  // Cache only visible/recent rows. The pure index contains no widget trees,
+  // and linked addresses avoid copying every ancestor path during indexing.
+  MoveTextLayout? _layout;
+  MoveTreeView? _layoutTree;
+  int _layoutVersion = -1;
+  int? _layoutEditingNode;
+  (bool, TreePath?)? _rowContext;
+  final _rowWidgets = <Object, Widget>{};
+  static const _rowCacheLimit = 96;
 
   /// The cursor, for the chips.  Updated in [didUpdateWidget] so the two
   /// chips whose state changed repaint without the paragraph rebuilding.
-  late final ValueNotifier<TreePath> _selection = ValueNotifier(
-    widget.currentPath,
+  late final ValueNotifier<int?> _selection = ValueNotifier(
+    widget.tree.nodeAt(widget.currentPath)?.id,
   );
 
   @override
@@ -171,9 +173,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
             widget.tree.nodeAt(_editingCommentPath!)?.id) {
       _editingCommentPath = null;
     }
-    if (widget.currentPath != _selection.value) {
-      _selection.value = widget.currentPath;
-    }
+    _selection.value = widget.tree.nodeAt(widget.currentPath)?.id;
   }
 
   @override
@@ -181,7 +181,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     super.reassemble();
     // Hot reload must pick up layout changes even when the model is unchanged.
     // Cursor navigation still keeps the cached paragraphs in normal builds.
-    _cachedMoveWidgets = null;
+    _layout = null;
+    _rowWidgets.clear();
   }
 
   @override
@@ -204,7 +205,10 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     if (!mounted) return;
     _jumpTo(path);
     if (!mounted) return;
-    setState(() => _editingCommentPath = path);
+    setState(() {
+      _editingCommentPath = path;
+      _inlineCommentDraft = commentProse(widget.tree.commentAt(path) ?? '');
+    });
   }
 
   void _saveInlineComment(TreePath path, String comment) {
@@ -618,9 +622,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                     const Divider(height: 1, color: AppColors.divider),
                     const SizedBox(height: 4),
                   ],
-                  Expanded(
-                    child: SingleChildScrollView(child: _buildMovesDisplay()),
-                  ),
+                  Expanded(child: _buildMovesDisplay()),
                 ],
               ),
             ),
@@ -684,207 +686,96 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       );
     }
 
-    final (startMoveNumber, startIsWhite) = MoveTree.moveNumberFromFen(
-      widget.tree.startingFen,
-    );
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: _buildMoveRows(startMoveNumber, startIsWhite),
+    final editingNode = _editingCommentPath == null
+        ? null
+        : widget.tree.nodeAt(_editingCommentPath!)?.id;
+    if (_layout == null ||
+        !identical(_layoutTree, widget.tree) ||
+        _layoutVersion != widget.tree.version ||
+        _layoutEditingNode != editingNode) {
+      _layout = MoveTextLayout.capture(widget.tree, editingNodeId: editingNode);
+      _layoutTree = widget.tree;
+      _layoutVersion = widget.tree.version;
+      _layoutEditingNode = editingNode;
+      _rowWidgets.clear();
+    }
+    final rowContext = (_contextMenuOpen, _contextMenuPath);
+    if (_rowContext != rowContext) {
+      _rowContext = rowContext;
+      _rowWidgets.clear();
+    }
+    return MoveTextViewport(
+      layout: _layout!,
+      selectionKey: _selectedMoveKey,
+      session: widget.tree.identity,
+      selectedNodeId: widget.tree.nodeAt(widget.currentPath)?.id,
+      rowBuilder: _buildMoveRow,
     );
   }
 
-  // Note: this renders SAN straight from the tree — no dartchess replay. The
-  // editor used to thread a Position through the whole recursion (a full
-  // parseSan/play replay of every node on each rebuild) without ever using it.
-  //
-  // Move runs use baseline-aligned WidgetSpans, as in the viewer. Prose and
-  // variations break the run into full-width rows with bounded indentation.
-  // The tree and callback paths are untouched by this presentation layer.
-  List<Widget> _buildMoveRows(int startMoveNumber, bool startIsWhite) {
-    // The context-path highlight and the inline editor are transient render
-    // state, so neither may be served from nor written to the cache.
-    final canCache = !_contextMenuOpen && _editingCommentPath == null;
-    if (canCache &&
-        _cachedMoveWidgets != null &&
-        identical(widget.tree, _cachedTree) &&
-        widget.tree.version == _cachedVersion) {
-      return _cachedMoveWidgets!;
+  Widget _buildMoveRow(MoveTextRow row) {
+    final cached = _rowWidgets.remove(row.key);
+    if (cached != null) {
+      _rowWidgets[row.key] = cached;
+      return cached;
     }
-
-    final rows = <Widget>[];
-    final spans = <InlineSpan>[];
-
-    void addRow(Widget child, int depth, {double vertical = 3}) {
-      rows.add(
-        Padding(
-          padding: EdgeInsets.only(
-            left:
-                PgnTextStyles.depthIndent *
-                depth.clamp(0, PgnTextStyles.maxStyledDepth),
-            top: vertical,
-            bottom: vertical,
-          ),
-          child: SizedBox(width: double.infinity, child: child),
-        ),
-      );
-    }
-
-    void flushSpans(int depth) {
-      if (spans.isEmpty) return;
-      addRow(
-        Text.rich(
-          TextSpan(
-            style: PgnTextStyles.rowRootAt(depth),
-            children: List.of(spans),
-          ),
-        ),
-        depth,
-      );
-      spans.clear();
-    }
-
-    bool appendProse(String raw, int depth) {
-      if (raw.isEmpty) return false;
-      var emitted = false;
-      for (final paragraph in raw.split(RegExp(r'\n\s*\n'))) {
-        final prose = commentProseSpans(
-          paragraph,
-          style: PgnTextStyles.commentAt(depth),
-        );
-        if (prose.isEmpty) continue;
-        flushSpans(depth);
-        addRow(Text.rich(TextSpan(children: prose)), depth, vertical: 4);
-        emitted = true;
-      }
-      return emitted;
-    }
-
-    void appendNumber(int moveNumber, bool white, int depth) {
-      // NBSP glues the number to its move so a line break can never strand
-      // "12." at the end of a line.
-      spans.add(
-        TextSpan(
-          text: white ? '$moveNumber.\u00A0' : '$moveNumber...\u00A0',
-          style: PgnTextStyles.moveNumberAt(depth),
-        ),
-      );
-    }
-
-    void appendMove(MoveNodeView node, TreePath path, int depth) {
-      if (hasPuzzleStart(node.comment)) spans.add(_markerSpan(start: true));
-      spans.add(
-        WidgetSpan(
-          alignment: PlaceholderAlignment.baseline,
-          baseline: TextBaseline.alphabetic,
-          child: _buildSingleMoveWidget(node, path, depth),
-        ),
-      );
-      if (hasPuzzleEnd(node.comment)) spans.add(_markerSpan(start: false));
-      spans.add(const TextSpan(text: ' '));
-    }
-
-    // Appends the node's comment prose or its inline editor. Returns whether
-    // the flow was interrupted — a following Black move restates "N...".
-    bool appendAnnotations(MoveNodeView node, TreePath path, int depth) {
-      if (_editingCommentPath == path) {
-        flushSpans(depth);
-        addRow(_buildInlineCommentEditor(node, path), depth);
-        return true;
-      }
-      return appendProse(node.comment ?? '', depth);
-    }
-
-    void appendSiblings(
-      List<MoveNodeView> siblings,
-      int moveNumber,
-      bool isWhite,
-      int depth, {
-      bool isFirstMove = false,
-      bool renumber = false,
-      required TreePath parentPath,
-    }) {
-      if (siblings.isEmpty) return;
-
-      final main = siblings[0];
-      final mainPath = parentPath.child(0);
-
-      // Null moves ('--') anchor comments to a position; show the comment but
-      // never the SAN itself (matches the PGN viewer).
-      if (!isNullMoveSan(main.san)) {
-        if (isWhite) {
-          appendNumber(moveNumber, true, depth);
-        } else if (isFirstMove || renumber) {
-          appendNumber(moveNumber, false, depth);
-        }
-        appendMove(main, mainPath, depth);
-      }
-
-      var interrupted = appendAnnotations(main, mainPath, depth);
-
-      if (siblings.length > 1) {
-        interrupted = true;
-        flushSpans(depth);
-        for (int i = 1; i < siblings.length; i++) {
-          final variant = siblings[i];
-          final variantPath = parentPath.child(i);
-
-          if (!isNullMoveSan(variant.san)) {
-            appendNumber(moveNumber, isWhite, depth + 1);
-            appendMove(variant, variantPath, depth + 1);
+    final Widget child;
+    switch (row) {
+      case MoveTextRun():
+        final spans = <InlineSpan>[];
+        for (final move in row.moves) {
+          if (move.showNumber) {
+            spans.add(
+              TextSpan(
+                text: '${move.number}${move.white ? '.' : '...'}\u00a0',
+                style: PgnTextStyles.moveNumberAt(row.depth),
+              ),
+            );
           }
-
-          final variantInterrupted = appendAnnotations(
-            variant,
-            variantPath,
-            depth + 1,
+          if (hasPuzzleStart(move.node.comment)) {
+            spans.add(_markerSpan(start: true));
+          }
+          spans.add(
+            WidgetSpan(
+              alignment: PlaceholderAlignment.baseline,
+              baseline: TextBaseline.alphabetic,
+              child: _buildSingleMoveWidget(move.node, move.address, row.depth),
+            ),
           );
-
-          appendSiblings(
-            variant.children,
-            isWhite ? moveNumber : moveNumber + 1,
-            !isWhite,
-            depth + 1,
-            renumber: variantInterrupted,
-            parentPath: variantPath,
-          );
-
-          flushSpans(depth + 1);
+          if (hasPuzzleEnd(move.node.comment)) {
+            spans.add(_markerSpan(start: false));
+          }
+          spans.add(const TextSpan(text: ' '));
         }
-      }
-
-      appendSiblings(
-        main.children,
-        isWhite ? moveNumber : moveNumber + 1,
-        !isWhite,
-        depth,
-        renumber: interrupted,
-        parentPath: mainPath,
-      );
+        child = Text.rich(
+          TextSpan(style: PgnTextStyles.rowRootAt(row.depth), children: spans),
+        );
+      case MoveTextComment():
+        child = Text.rich(
+          TextSpan(
+            text: '${row.text} ',
+            style: PgnTextStyles.commentAt(row.depth),
+          ),
+        );
+      case MoveTextInlineEditor():
+        child = _buildInlineCommentEditor(row.node, row.address.toPath());
     }
-
-    // The chapter introduction reads first, as its own paragraph.
-    final intro = widget.tree.rootComment;
-    if (intro != null) {
-      appendProse(intro, 0);
-    }
-    appendSiblings(
-      widget.tree.roots,
-      startMoveNumber,
-      startIsWhite,
-      0,
-      isFirstMove: true,
-      parentPath: TreePath.empty,
+    final result = Padding(
+      padding: EdgeInsets.only(
+        left:
+            PgnTextStyles.depthIndent *
+            row.depth.clamp(0, PgnTextStyles.maxStyledDepth),
+        top: row is MoveTextComment ? 4 : 3,
+        bottom: row is MoveTextComment ? 4 : 3,
+      ),
+      child: SizedBox(width: double.infinity, child: child),
     );
-    flushSpans(0);
-
-    if (canCache) {
-      _cachedMoveWidgets = rows;
-      _cachedTree = widget.tree;
-      _cachedVersion = widget.tree.version;
+    // An inline editor must receive the latest retained draft after eviction.
+    if (row is! MoveTextInlineEditor) _rowWidgets[row.key] = result;
+    if (_rowWidgets.length > _rowCacheLimit) {
+      _rowWidgets.remove(_rowWidgets.keys.first);
     }
-
-    return rows;
+    return result;
   }
 
   /// Inline flag marking where the puzzle segment of the line starts/ends.
@@ -912,7 +803,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   /// being edited (right-click a move → Add/Edit Comment).
   Widget _buildInlineCommentEditor(MoveNodeView node, TreePath path) {
     return PgnCommentEditor(
-      initialText: commentProse(node.comment ?? ''),
+      initialText: _inlineCommentDraft ?? commentProse(node.comment ?? ''),
+      onChanged: (text) => _inlineCommentDraft = text,
       onSave: (text) =>
           _saveInlineComment(path, mergeCommentProse(node.comment ?? '', text)),
       onCancel: () {
@@ -922,15 +814,17 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     );
   }
 
-  /// Whether [nodePath] is on the path from root to [_contextMenuPath].
-  bool _isOnContextPath(TreePath nodePath) {
-    if (!_contextMenuOpen || _contextMenuPath == null) return false;
-    final ctx = _contextMenuPath!;
-    if (nodePath.length > ctx.length) return false;
-    final nodeList = nodePath.toList();
-    final ctxList = ctx.toList();
-    for (int i = 0; i < nodeList.length; i++) {
-      if (nodeList[i] != ctxList[i]) return false;
+  /// Only a context-menu gesture needs ancestor highlighting. Walk linked
+  /// indices without allocating a full path for every rendered chip.
+  bool _isOnContextPath(MoveTextAddress address) {
+    final target = _contextMenuPath;
+    if (!_contextMenuOpen || target == null || address.length > target.length) {
+      return false;
+    }
+    MoveTextAddress? cursor = address;
+    while (cursor != null) {
+      if (cursor.index != target[cursor.length - 1]) return false;
+      cursor = cursor.parent;
     }
     return true;
   }
@@ -941,14 +835,14 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   /// selected state actually flipped rebuild, not every chip on the page.
   Widget _buildSingleMoveWidget(
     MoveNodeView node,
-    TreePath nodePath,
+    MoveTextAddress nodePath,
     int depth,
   ) {
     final isOnCtxPath = _isOnContextPath(nodePath);
     final nagSuffix = allNagSuffix(node.nags);
     return _SelectionAwareChip(
       selection: _selection,
-      path: nodePath,
+      nodeId: node.id,
       builder: (isSelected) => _moveChip(
         node,
         nodePath,
@@ -962,7 +856,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
   Widget _moveChip(
     MoveNodeView node,
-    TreePath nodePath,
+    MoveTextAddress nodePath,
     int depth, {
     required String nagSuffix,
     required bool isSelected,
@@ -974,33 +868,37 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     final sanStyle = isSelected
         ? base.copyWith(color: AppColors.pgnMoveCurrentFg)
         : base;
-    return MoveChip(
-      san: node.san,
-      nagSuffix: nagSuffix,
-      sanStyle: sanStyle,
-      nagStyle: PgnTextStyles.nagAt(
-        depth,
-        moveStyle: sanStyle,
-        nags: node.nags,
+    return KeyedSubtree(
+      key: isSelected ? _selectedMoveKey : null,
+      child: MoveChip(
+        san: node.san,
+        nagSuffix: nagSuffix,
+        sanStyle: sanStyle,
+        nagStyle: PgnTextStyles.nagAt(
+          depth,
+          moveStyle: sanStyle,
+          nags: node.nags,
+        ),
+        decoration: PgnMoveDecorations.resolve(
+          selected: isSelected,
+          isEphemeral: node.isEphemeral,
+          onContextPath: isOnCtxPath,
+        ),
+        hoverDecoration: PgnMoveDecorations.resolve(
+          selected: isSelected,
+          isEphemeral: node.isEphemeral,
+          hovered: true,
+        ),
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _jumpTo(nodePath.toPath()),
+        onSecondaryTapDown: (d) =>
+            _showContextMenu(nodePath.toPath(), d.globalPosition),
       ),
-      decoration: PgnMoveDecorations.resolve(
-        selected: isSelected,
-        isEphemeral: node.isEphemeral,
-        onContextPath: isOnCtxPath,
-      ),
-      hoverDecoration: PgnMoveDecorations.resolve(
-        selected: isSelected,
-        isEphemeral: node.isEphemeral,
-        hovered: true,
-      ),
-      behavior: HitTestBehavior.opaque,
-      onTap: () => _jumpTo(nodePath),
-      onSecondaryTapDown: (d) => _showContextMenu(nodePath, d.globalPosition),
     );
   }
 }
 
-/// Rebuilds its chip only when "is [path] the selected move?" changes.
+/// Rebuilds its chip only when "is [nodeId] the selected move?" changes.
 ///
 /// A plain [ValueListenableBuilder] on the cursor would rebuild every chip
 /// in the movetext on every cursor move; this one compares the answer that
@@ -1009,12 +907,12 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 class _SelectionAwareChip extends StatefulWidget {
   const _SelectionAwareChip({
     required this.selection,
-    required this.path,
+    required this.nodeId,
     required this.builder,
   });
 
-  final ValueListenable<TreePath> selection;
-  final TreePath path;
+  final ValueListenable<int?> selection;
+  final int nodeId;
   final Widget Function(bool isSelected) builder;
 
   @override
@@ -1022,7 +920,7 @@ class _SelectionAwareChip extends StatefulWidget {
 }
 
 class _SelectionAwareChipState extends State<_SelectionAwareChip> {
-  late bool _selected = widget.selection.value == widget.path;
+  late bool _selected = widget.selection.value == widget.nodeId;
 
   @override
   void initState() {
@@ -1037,7 +935,7 @@ class _SelectionAwareChipState extends State<_SelectionAwareChip> {
       oldWidget.selection.removeListener(_onSelectionChanged);
       widget.selection.addListener(_onSelectionChanged);
     }
-    _selected = widget.selection.value == widget.path;
+    _selected = widget.selection.value == widget.nodeId;
   }
 
   @override
@@ -1048,7 +946,7 @@ class _SelectionAwareChipState extends State<_SelectionAwareChip> {
 
   void _onSelectionChanged() {
     if (!mounted) return;
-    final selected = widget.selection.value == widget.path;
+    final selected = widget.selection.value == widget.nodeId;
     if (selected == _selected) return;
     setState(() => _selected = selected);
   }

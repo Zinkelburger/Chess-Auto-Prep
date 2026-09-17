@@ -6,6 +6,12 @@ from check_architecture_boundaries import violations
 
 
 class BoundariesTest(unittest.TestCase):
+    def test_frame_scheduling_is_only_allowed_in_feature_widgets(self):
+        frame = 'WidgetsBinding.instance.addPostFrameCallback(callback);'
+        self.assertFalse(violations('lib/features/documents/widgets/viewport.dart', frame))
+        self.assertTrue(violations('lib/features/documents/controllers/session.dart', frame))
+        self.assertTrue(violations('lib/features/documents/widgets/viewport.dart', 'Engine.instance.start();'))
+
     def test_models_and_contracts_stay_pure(self):
         for area in ('models', 'repositories'):
             path = f'lib/features/repertoires/{area}/example.dart'

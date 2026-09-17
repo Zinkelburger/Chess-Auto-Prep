@@ -53,8 +53,11 @@ discovery for current/retained drafts, original game text, uncertain writes and
 game/mainline cursor/orientation. Close protection works before the reader opens.
 Study now keeps its editable document private and publishes immutable cached
 chapter/tree projections, with incremental local-edit updates, stable annotation
-focus and detached prior revisions. Viewer/Builder private-core adoption,
-visible-movetext windowing, undo receipts, variation-cursor/filter/panel
+focus and detached prior revisions. The shared interactive editor now lazily
+mounts variable-height move/comment rows, preserves inline drafts across eviction
+and reveals distant selections without laying out every preceding row.
+Viewer/Builder private-core adoption, Viewer movetext windowing, incremental
+editor indexing, undo receipts, variation-cursor/filter/panel
 restoration and complete large-document performance evidence remain pending.
 Study now has independent cursor/metadata projections and scoped subscriptions;
 metadata reads avoid tree materialization and ordinary annotation edits leave the
@@ -172,7 +175,7 @@ Design components are built on demand inside the first complete slice.
 | **Line probability display** | **Done** | Reach probability badge on each `LineItemRow` when `importance > 0` |
 | Extract `GenerationConfigForm` from generation tab | **Done** | `lib/widgets/generation/generation_config_form.dart`; tab owns build orchestration only |
 | Lines browser performance (debounce, lazy list) | **Done** | 300 ms search debounce, single `setState` filter reset, grouped `ListView.builder` in `LinesListPanel` |
-| PGN editor move-widget memoization | **Done** | `_buildMoveWidgets` cached when tree + path unchanged |
+| PGN editor move-widget memoization | **Done** | Bounded recent-row cache reused across cursor changes; only visible/prefetched rows mount. Tree edits rebuild the pure row index. |
 
 ### Expectimax lines & hover
 

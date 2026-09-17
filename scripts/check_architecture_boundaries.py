@@ -43,7 +43,13 @@ def violations(relative: str, source: str) -> list[str]:
             errors.append(f'{relative}: forbidden dependency {uri}')
     if (design and not relative.startswith('lib/design_system/theme/') or relative.startswith(('lib/features/repertoires/widgets/', 'lib/features/documents/widgets/', 'lib/features/settings/widgets/', 'lib/features/studies/widgets/'))) and re.search(r'\b(?:AppColors|AppTextStyles|AppPalette)\b|\bColors\.|\bColor(?:\.fromARGB|\.fromRGBO)?\s*\(|\bfontSize\s*:', source):
         errors.append(f'{relative}: widget bypasses active theme/typography')
-    if (feature or catalog) and re.search(r'\b\w+\.instance\b', source):
+    # A widget's frame scheduling is framework lifecycle, not an application
+    # service locator. Keep this exception narrow; domain owners still inject
+    # their schedulers, and storage/engine singletons remain forbidden in UI.
+    singleton_access = re.findall(r'\b(\w+)\.instance\b', source)
+    if feature and 'widgets' in path.parts[3:-1]:
+        singleton_access = [name for name in singleton_access if name != 'WidgetsBinding']
+    if (feature or catalog) and singleton_access:
         errors.append(f'{relative}: global singleton access bypasses injection')
     return errors
 

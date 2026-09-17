@@ -16,11 +16,15 @@ class PgnCommentEditor extends StatefulWidget {
   final ValueChanged<String> onSave;
   final VoidCallback onCancel;
 
+  /// Optional draft owner for hosts that virtualize or re-anchor this row.
+  final ValueChanged<String>? onChanged;
+
   const PgnCommentEditor({
     super.key,
     required this.initialText,
     required this.onSave,
     required this.onCancel,
+    this.onChanged,
   });
 
   @override
@@ -86,6 +90,7 @@ class _PgnCommentEditorState extends State<PgnCommentEditor> {
                 ),
                 border: InputBorder.none,
               ),
+              onChanged: widget.onChanged,
               onSubmitted: (_) => _save(),
             ),
           ),
