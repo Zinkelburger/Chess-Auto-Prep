@@ -1974,6 +1974,64 @@ ownership/projections, scoped widgets and complete session/undo/panel parity are
 still required. This checkpoint does not graduate milestone 3 or complete the
 full renewal; later features, performance and platform/release gates remain open.
 
+### Viewer navigation edit-context checkpoint (2026-09-17)
+
+Following collection checkpoint `fca0a99a`, the collection editor owns a private
+edit ledger per adopted collection. An opaque navigation context retains that
+ledger and validates its editor, path and ordered game identities on adoption.
+The legacy host no longer clears screen-only and edit tracking independently.
+The old outcome/block `Expando` maps are removed. Baseline, pending-write count,
+original game bytes, dirty metadata, screen-only substitutions, save outcome,
+read failure and automatic-save block now share one collection lifetime. Public
+save status and autosave configuration are read-only; changes use commands.
+The serialized write queue and retained-draft chooser remain editor-session-owned.
+
+Two file-level regressions failed before implementation. First, returning to a
+collection rebuilt its baseline from live game text and discarded screen-only
+substitutions; drill-only notes could enter a later perspective save. Second,
+returning while an outgoing save was pending detached its receipt from the new
+baseline, so a failed source write left the returned draft reporting clean.
+Both regressions now pass. Navigation preserves the exclusion and original
+bytes, and receipts update their captured ledger even while it is parked.
+Failures cannot publish errors, busy state or file timestamps onto an unrelated
+collection. Returning restores conflict/uncertain state and blocks implicit retry.
+
+Save Copy establishes a separate destination ledger, clearing the old source
+outcome for that destination while older navigation contexts retain their source
+baseline and conflict. Deliberate edits made during a copy remain dirty. Fresh
+adoption resets the whole ledger atomically; invalid contexts cannot replace it.
+The host rejects navigation callbacks after disposal.
+
+Verification: all 132 selected unit/widget regressions pass, including existing
+navigation, recovery, source-preservation, session, revision and data-integrity
+coverage. All 41 final affected tests pass after the status-API encapsulation;
+these batches overlap. Tests cover successful/failed receipts both before and
+after return, uncertain-write rejection, copy/source isolation and context
+validation. Analyze/lint passes with nine existing informational notices and all
+18 architecture-checker cases. An intermediate getter-edit compilation error was
+corrected before the final gates and native runs.
+
+All four selected Linux native cases pass: the new drill/navigation/perspective
+save/copy/reopen journey, the existing sorted collection/filter/history journey,
+and both clean-session and retained-draft restart cases. The new journey verifies
+that source banners and untouched games survive, drill annotations stay off disk,
+the copy gets its own path and a reopened copy has no transient drill notes. App
+owners are reconstructed in-process; this is not new OS-crash or other-platform
+evidence. No selected cases are skipped. Full-suite, engine, cross-platform and
+release gates were not run for this checkpoint.
+
+The [saved-copy preview](images/renewal-viewer-navigation-copy.png) was inspected
+in the private Linux app: game 1 of 2 shows `e4 e5`, no drill-only note, and the
+persisted black-side orientation. The preview used the native journey's disposable
+copy, selected through that isolated profile's last-file preference; recovery
+banners belong to other disposable fixtures. It does not access user data.
+
+These are in-memory navigation handles, not a durable navigation-history format
+or immutable game values. Private collection entries, remaining document/session/
+undo/panel parity,
+Builder recovery, later feature migrations and full performance/platform/release
+gates remain open. Milestones 1/2 and 3 are partial; 4–7 remain unfinished.
+
 ### Initial parity and ownership inventory (milestone 0, partial)
 
 The starting tree has 885 files under `lib/` and 674 under `test/`; these counts

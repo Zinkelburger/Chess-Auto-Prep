@@ -45,6 +45,7 @@ void main() {
   late PgnCollectionEditor editor;
   late List<PgnGameEntry> games;
   var savedCallbacks = 0;
+  String? currentPath;
   PgnGameEntry game(String name) => PgnGameEntry(
     headers: {'Event': name},
     pgnText: '[Event "$name"]\n\n1. e4 *',
@@ -53,21 +54,164 @@ void main() {
     games = [game('First')];
     repository = Repository();
     savedCallbacks = 0;
+    currentPath = '/games.pgn';
     editor = PgnCollectionEditor(
       repository: repository,
-      path: () => '/games.pgn',
+      path: () => currentPath,
       games: () => games,
       collectionPreamble: () => '; Retain this banner',
       selectedGame: () => games.first,
       onContentChanged: ({required resetIndex}) {},
       onSaved: (_) => savedCallbacks++,
-      onSavedCopy: (_) {},
+      onSavedCopy: (path) => currentPath = path,
       isActive: () => true,
     );
     editor.adoptPersistedGames(games);
     editor.setAutoSave(false);
   });
   tearDown(() => editor.dispose());
+
+  for (final returnBeforeReceipt in [true, false]) {
+    for (final fail in [true, false]) {
+      test(
+        'navigation ledger retains ${fail ? 'failed' : 'successful'} receipt '
+        '${returnBeforeReceipt ? 'after' : 'before'} return',
+        () async {
+          final gate = Completer<PgnWriteResult>();
+          repository.outcome = () => gate.future;
+          final outgoing = games;
+          final original = games.first.pgnText;
+          editor.persistMoveCommentsFor(games.first, '1. e4 {owned draft} *');
+          final context = editor.captureEditContext();
+          final saving = editor.saveChanges();
+          await Future<void>.delayed(Duration.zero);
+          games = [game('Incoming')];
+          editor.adoptPersistedGames(games);
+          expect(editor.isSaving, isFalse);
+          expect(editor.errorMessage, isNull);
+          expect(editor.hasUnsavedChanges, isFalse);
+          void restore() {
+            games = List.of(outgoing);
+            editor.adoptPersistedGames(games, context: context);
+          }
+
+          if (returnBeforeReceipt) {
+            restore();
+            expect(editor.isSaving, isTrue);
+          }
+          final saved = snapshot(repository.writes.single.values.single);
+          gate.complete(
+            fail
+                ? const PgnConflict(null)
+                : PgnSaved(before: null, after: saved),
+          );
+          await saving;
+          if (!returnBeforeReceipt) {
+            expect(editor.errorMessage, isNull);
+            expect(editor.lastResult, isNull);
+            expect(savedCallbacks, 0);
+            restore();
+          }
+          expect(editor.isSaving, isFalse);
+          expect(editor.hasUnsavedChanges, fail);
+          expect(editor.needsSaveRecovery, fail);
+          expect(
+            editor.captureWorkspace().persistedGames.single,
+            fail ? original : repository.writes.single.values.single,
+          );
+          if (fail) {
+            expect(editor.lastResult, isA<PgnConflict>());
+            expect(editor.errorMessage, contains('Changes'));
+            expect(editor.canReplaceCollection(), isFalse);
+          } else {
+            expect(editor.state.baseline, same(saved));
+            expect(editor.lastResult, isA<PgnSaved>());
+          }
+        },
+      );
+    }
+  }
+
+  test(
+    'uncertain receipt remains blocked after returning to its ledger',
+    () async {
+      final outgoing = games;
+      editor.setRating(3);
+      final context = editor.captureEditContext();
+      repository.outcome = () async => PgnWriteUncertain(
+        error: StateError('ack'),
+        before: null,
+        observed: null,
+      );
+      await editor.saveChanges();
+      games = [game('Other')];
+      editor.adoptPersistedGames(games);
+      games = outgoing;
+      editor.adoptPersistedGames(games, context: context);
+      expect(editor.state.uncertain, isTrue);
+      expect(editor.state.inspectionPath, '/games.pgn');
+      expect(await editor.saveChanges(), isFalse);
+      expect(repository.writes, hasLength(1));
+    },
+  );
+
+  test(
+    'copy forks its baseline while source navigation retains original edits',
+    () async {
+      final original = games.first.pgnText;
+      editor.persistMoveCommentsFor(games.first, '1. e4 {source draft} *');
+      final context = editor.captureEditContext();
+      repository.outcome = () async => const PgnConflict(null);
+      await editor.saveChanges();
+      expect(await editor.saveCopy('/copy.pgn'), isA<PgnSaved>());
+      expect(editor.lastResult, isA<PgnSaved>());
+      expect(editor.needsSaveRecovery, isFalse);
+      expect(editor.state.baseline!.path, '/copy.pgn');
+      expect(editor.hasUnsavedChanges, isFalse);
+      currentPath = '/games.pgn';
+      editor.adoptPersistedGames(games, context: context);
+      expect(editor.hasUnsavedChanges, isTrue);
+      expect(editor.lastResult, isA<PgnConflict>());
+      expect(editor.captureWorkspace().persistedGames.single, original);
+      expect(editor.state.baseline?.path, isNot('/copy.pgn'));
+    },
+  );
+
+  test(
+    'contexts reject wrong path, membership and owner without replacing state',
+    () {
+      final context = editor.captureEditContext();
+      editor.setRating(2);
+      currentPath = '/wrong.pgn';
+      expect(
+        () => editor.adoptPersistedGames(games, context: context),
+        throwsStateError,
+      );
+      currentPath = '/games.pgn';
+      expect(
+        () => editor.adoptPersistedGames([game('Wrong')], context: context),
+        throwsStateError,
+      );
+      final other = PgnCollectionEditor(
+        repository: repository,
+        path: () => currentPath,
+        games: () => games,
+        collectionPreamble: () => '',
+        selectedGame: () => games.first,
+        onContentChanged: ({required resetIndex}) {},
+        onSaved: (_) {},
+        onSavedCopy: (_) {},
+        isActive: () => true,
+      );
+      addTearDown(other.dispose);
+      expect(
+        () => other.adoptPersistedGames(games, context: context),
+        throwsStateError,
+      );
+      expect(editor.hasUnsavedChanges, isTrue);
+      expect(games.first.studyRating, 2);
+    },
+  );
 
   test(
     'perspective saves only the changed first game through its baseline',
@@ -204,8 +348,6 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       games = [game('Second')];
       editor.adoptPersistedGames(games);
-      editor.clearEditedGames();
-      editor.clearScreenOnlyMovetext();
       gate.complete(const PgnConflict(null));
       expect(await first, isFalse);
       expect(editor.lastResult, isNull);

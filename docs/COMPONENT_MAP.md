@@ -1581,6 +1581,25 @@ Restoring a draft keeps the captured reload revision as its explicit replacement
 baseline. It never silently adopts a newer disk revision. Scoped dirty state uses
 per-game baselines, without serializing the collection on UI notifications.
 
+Each adopted collection now has a private edit ledger inside
+`features/documents/controllers/pgn_collection_editor.dart`. Navigation retains an
+opaque `PgnCollectionEditContext` bound to its creating editor, path and ordered
+game identities. Returning restores persisted game originals, dirty tracking,
+screen-only substitutions, baseline, outcome and automatic-save block together.
+An outgoing receipt updates its own ledger whether it arrives before or after
+return; it cannot report an error, mark busy or stamp another collection. The
+serialized write queue remains editor-owned, while pending-write counts belong
+to individual ledgers. Separate partial-clear commands and outcome/block
+`Expando` maps are retired; save outcome, error and autosave settings expose
+read-only getters and explicit commands.
+
+Save Copy creates a separate destination ledger with the acknowledged baseline;
+older navigation handles retain the source baseline and any source conflict.
+The existing retained-draft chooser remains editor-session-wide, so recovery
+choices survive opening a pasted collection. These in-memory contexts are not
+a durable navigation-history format or private immutable game values; app
+restart still uses the workspace recovery and reading-session contracts.
+
 On Linux, the repository observes the current source, patches only uniquely
 matching original games, and commits through `NativePgnDocumentStore`. Unrelated
 bytes and the pre-save native history are preserved. A change between observation

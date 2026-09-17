@@ -65,8 +65,6 @@ class Fixture {
           games = parsed;
           path = destination;
           editor.adoptPersistedGames(games);
-          editor.clearEditedGames();
-          editor.clearScreenOnlyMovetext();
         };
       },
     );
@@ -287,7 +285,6 @@ void main() {
       f.games = parseMultiGamePgn(original);
       f.path = null;
       f.editor.adoptPersistedGames(f.games);
-      f.editor.clearEditedGames();
       expect(f.editor.hasUnsavedChanges, isFalse);
       expect(f.editor.state.dirty, isTrue);
       await f.editor.restoreDraft(0);

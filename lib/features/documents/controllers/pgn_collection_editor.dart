@@ -14,7 +14,9 @@ import '../repositories/pgn_collection_repository.dart';
 /// Owns collection edit tracking, autosave scheduling and serialized writes.
 /// Suppliers follow the legacy host's current collection; each write captures
 /// its games and baseline before awaiting. No widget or storage singleton owns
-/// this state. The remaining viewer migration will make game cores private.
+/// this state. Each collection owns an edit ledger retained by navigation;
+/// asynchronous receipts update that ledger even while another collection is open.
+/// The remaining viewer migration will make game cores private.
 class PgnCollectionEditor extends ChangeNotifier
     with SafeChangeNotifier
     implements DocumentSaveActions {
@@ -42,27 +44,22 @@ class PgnCollectionEditor extends ChangeNotifier
   final PgnCollectionRepository repository;
   final _changes = StreamController<DocumentSaveState>.broadcast(sync: true);
   final _retainedDrafts = <RetainedDocumentDraft>[];
-  PgnSnapshot? _baseline;
-  PgnOpenResult? _readFailure;
-  String? _uncertainPath;
-  String _capturedContent = '';
   bool _reloading = false;
   bool _copying = false;
   String? _copyDestination;
-  bool _wholeReplacement = false;
   @override
   Stream<DocumentSaveState> get changes => _changes.stream;
   @override
   DocumentSaveState get state => DocumentSaveState(
     path: filePath ?? '',
-    content: _capturedContent,
-    baseline: _baseline,
+    content: _session.capturedContent,
+    baseline: _session.baseline,
     dirtyOverride:
         hasUnsavedChanges || (filePath == null && allGames.isNotEmpty),
     pendingEdits: hasUnsavedChanges,
     outcome: lastResult,
-    readFailure: _readFailure,
-    uncertainPath: _uncertainPath,
+    readFailure: _session.readFailure,
+    uncertainPath: _session.uncertainPath,
     retainedDrafts: _retainedDrafts,
     phase: _reloading
         ? DocumentSavePhase.reloading
@@ -97,7 +94,7 @@ class PgnCollectionEditor extends ChangeNotifier
   @override
   Future<PgnOpenResult> inspectCurrent() async {
     try {
-      return await repository.open(_uncertainPath ?? filePath ?? '');
+      return await repository.open(_session.uncertainPath ?? filePath ?? '');
     } catch (error) {
       return PgnReadFailed(error);
     }
@@ -106,23 +103,23 @@ class PgnCollectionEditor extends ChangeNotifier
   @override
   void keepEditing() {
     if (state.busy || isDisposed) return;
-    if (lastResult is! PgnWriteUncertain) lastResult = null;
-    errorMessage = null;
-    _readFailure = null;
+    if (lastResult is! PgnWriteUncertain) _session.outcome = null;
+    _session.errorMessage = null;
+    _session.readFailure = null;
     notifyListeners();
   }
 
   @override
   Future<PgnWriteResult?> saveCopy(String destination) async {
     if (isDisposed || state.busy || allGames.isEmpty) return null;
-    persistDebounce?.cancel();
-    persistDebounce = null;
+    _persistDebounce?.cancel();
+    _persistDebounce = null;
     final source = allGames;
     final output = snapshotForSave();
     final content = _serialize(output);
-    _capturedContent = content;
+    _session.capturedContent = content;
     final previous = lastResult;
-    final previousUncertainPath = _uncertainPath;
+    final previousUncertainPath = _session.uncertainPath;
     _copying = true;
     _copyDestination = destination;
     notifyListeners();
@@ -134,23 +131,28 @@ class PgnCollectionEditor extends ChangeNotifier
     }
     if (!isDisposed && identical(source, allGames)) {
       if (result is PgnSaved) {
+        // A copy establishes a different persistence identity. Older navigation
+        // handles still point at the source ledger and its original baseline.
+        final copied = _CollectionEdits()
+          ..baseline = result.after
+          ..capturedContent = content
+          ..outcome = result
+          ..persisted = (Map<PgnGameEntry, String>.identity()..addAll(output));
+        copied.dirty.addAll(_session.dirty);
+        copied.edited.addAll(_session.edited);
+        copied.screenOnly.addAll(_session.screenOnly);
+        _session = copied;
         onSavedCopy(result.after.path);
-        _persistedGames = Map.identity()..addAll(output);
-        _baseline = result.after;
-        _wholeReplacement = false;
-        _uncertainPath = null;
-        _readFailure = null;
-        errorMessage = null;
       } else {
-        lastResult =
+        _session.outcome =
             previous is PgnWriteUncertain && result is! PgnWriteUncertain
             ? previous
             : result;
-        _uncertainPath = result is PgnWriteUncertain
+        _session.uncertainPath = result is PgnWriteUncertain
             ? destination
             : previousUncertainPath;
         _autoSaveBlocked = true;
-        errorMessage = _describe(lastResult!);
+        _session.errorMessage = _describe(lastResult!);
       }
     }
     _copying = false;
@@ -171,13 +173,15 @@ class PgnCollectionEditor extends ChangeNotifier
       content: _serialize(output),
       dirty: state.dirty,
       persistedGames: [
-        for (final game in allGames) _persistedGames[game] ?? output[game]!,
+        for (final game in allGames) _session.persisted[game] ?? output[game]!,
       ],
-      baseline: _baseline,
-      wholeReplacement: _wholeReplacement,
+      baseline: _session.baseline,
+      wholeReplacement: _session.wholeReplacement,
       uncertain: state.uncertain || _copying || isSaving,
       uncertainPath:
-          _copyDestination ?? _uncertainPath ?? (isSaving ? filePath : null),
+          _copyDestination ??
+          _session.uncertainPath ??
+          (isSaving ? filePath : null),
       retainedDrafts: _retainedDrafts,
       gameIndex: gameIndex,
       ply: ply,
@@ -191,8 +195,8 @@ class PgnCollectionEditor extends ChangeNotifier
     if (isDisposed || state.busy || prepareReplacement == null) {
       throw StateError('The collection cannot be restored while busy');
     }
-    persistDebounce?.cancel();
-    persistDebounce = null;
+    _persistDebounce?.cancel();
+    _persistDebounce = null;
     final source = allGames;
     final before = _serialize(snapshotForSave());
     _reloading = true;
@@ -213,26 +217,26 @@ class PgnCollectionEditor extends ChangeNotifier
         throw StateError('The current collection changed during recovery');
       }
       adopt();
-      _persistedGames = Map.identity();
+      _session.persisted = Map.identity();
       for (var i = 0; i < allGames.length; i++) {
-        _persistedGames[allGames[i]] = snapshot.persistedGames[i];
+        _session.persisted[allGames[i]] = snapshot.persistedGames[i];
       }
-      _editedGames.addAll(allGames);
-      _baseline = snapshot.baseline;
-      _capturedContent = snapshot.content;
-      _wholeReplacement = snapshot.wholeReplacement;
+      _session.edited.addAll(allGames);
+      _session.baseline = snapshot.baseline;
+      _session.capturedContent = snapshot.content;
+      _session.wholeReplacement = snapshot.wholeReplacement;
       _retainedDrafts.addAll(snapshot.retainedDrafts);
       if (displaced != null) _retainedDrafts.add(displaced);
       _autoSaveBlocked = true;
-      _uncertainPath = snapshot.uncertainPath;
-      lastResult = snapshot.uncertain
+      _session.uncertainPath = snapshot.uncertainPath;
+      _session.outcome = snapshot.uncertain
           ? PgnWriteUncertain(
               error: StateError('Recovered unresolved write'),
               before: snapshot.baseline,
               observed: null,
             )
           : null;
-      _readFailure = null;
+      _session.readFailure = null;
     } finally {
       _reloading = false;
       notifyListeners();
@@ -242,16 +246,16 @@ class PgnCollectionEditor extends ChangeNotifier
   @override
   Future<void> reloadPreservingDraft() async {
     if (isDisposed || state.busy || prepareReplacement == null) return;
-    persistDebounce?.cancel();
-    persistDebounce = null;
+    _persistDebounce?.cancel();
+    _persistDebounce = null;
     final source = allGames;
     _reloading = true;
-    _readFailure = null;
+    _session.readFailure = null;
     notifyListeners();
     try {
       final opened = await inspectCurrent();
       if (opened is! PgnOpened) {
-        _readFailure = opened;
+        _session.readFailure = opened;
         return;
       }
       final adopt = await prepareReplacement!(
@@ -263,13 +267,13 @@ class PgnCollectionEditor extends ChangeNotifier
       if (isDisposed || !identical(source, allGames)) return;
       if (retained != null) _retainedDrafts.add(retained);
       adopt();
-      _baseline = opened.snapshot;
-      _capturedContent = opened.snapshot.content;
+      _session.baseline = opened.snapshot;
+      _session.capturedContent = opened.snapshot.content;
       _autoSaveBlocked = true;
-      _uncertainPath = null;
-      lastResult = null;
+      _session.uncertainPath = null;
+      _session.outcome = null;
     } catch (error) {
-      _readFailure = PgnReadFailed(error);
+      _session.readFailure = PgnReadFailed(error);
     } finally {
       _reloading = false;
       notifyListeners();
@@ -283,7 +287,7 @@ class PgnCollectionEditor extends ChangeNotifier
     final draft = RetainedDocumentDraft(
       path: filePath ?? '',
       content: _serialize(snapshotForSave()),
-      baseline: _baseline,
+      baseline: _session.baseline,
     );
     final recovery = await repository.retainRecovery(draft.content);
     if (recovery == null) {
@@ -310,16 +314,16 @@ class PgnCollectionEditor extends ChangeNotifier
         index >= _retainedDrafts.length) {
       return;
     }
-    persistDebounce?.cancel();
-    persistDebounce = null;
+    _persistDebounce?.cancel();
+    _persistDebounce = null;
     final draft = _retainedDrafts[index];
     final source = allGames;
-    final baseline = _baseline;
+    final baseline = _session.baseline;
     final currentPath = filePath;
     final outcome = lastResult;
-    final uncertainPath = _uncertainPath;
+    final uncertainPath = _session.uncertainPath;
     _reloading = true;
-    _readFailure = null;
+    _session.readFailure = null;
     notifyListeners();
     try {
       final adopt = await prepareReplacement!(draft.content, currentPath);
@@ -329,17 +333,17 @@ class PgnCollectionEditor extends ChangeNotifier
       adopt();
       _retainedDrafts.removeAt(index);
       if (displaced != null) _retainedDrafts.add(displaced);
-      _baseline = baseline;
-      _capturedContent = draft.content;
-      _wholeReplacement = true;
-      _editedGames.addAll(allGames);
+      _session.baseline = baseline;
+      _session.capturedContent = draft.content;
+      _session.wholeReplacement = true;
+      _session.edited.addAll(allGames);
       _autoSaveBlocked = true;
       if (outcome is PgnWriteUncertain) {
-        lastResult = outcome;
-        _uncertainPath = uncertainPath;
+        _session.outcome = outcome;
+        _session.uncertainPath = uncertainPath;
       }
     } catch (error) {
-      _readFailure = PgnReadFailed(error);
+      _session.readFailure = PgnReadFailed(error);
     } finally {
       _reloading = false;
       notifyListeners();
@@ -360,8 +364,8 @@ class PgnCollectionEditor extends ChangeNotifier
 
   @override
   void dispose() {
-    persistDebounce?.cancel();
-    persistDebounce = null;
+    _persistDebounce?.cancel();
+    _persistDebounce = null;
     unawaited(_changes.close());
     super.dispose();
   }
@@ -375,33 +379,32 @@ class PgnCollectionEditor extends ChangeNotifier
     PgnSaved() => '',
   };
 
-  Timer? persistDebounce;
-  String? errorMessage;
-  final _outcomes = Expando<PgnWriteResult>();
-  PgnWriteResult? get lastResult => _outcomes[_persistedGames];
-  set lastResult(PgnWriteResult? value) => _outcomes[_persistedGames] = value;
-  bool autoSave = true;
-  final _blocked = Expando<bool>();
-  bool get _autoSaveBlocked => _blocked[_persistedGames] ?? false;
-  set _autoSaveBlocked(bool value) => _blocked[_persistedGames] = value;
-  int _pendingWrites = 0;
-  bool get isSaving => _pendingWrites > 0;
+  Timer? _persistDebounce;
+  final _contextOwner = Object();
+  _CollectionEdits _session = _CollectionEdits();
+  String? get errorMessage => _session.errorMessage;
+  PgnWriteResult? get lastResult => _session.outcome;
+  bool _autoSave = true;
+  bool get autoSave => _autoSave;
+  bool get _autoSaveBlocked => _session.autoSaveBlocked;
+  set _autoSaveBlocked(bool value) => _session.autoSaveBlocked = value;
+  bool get isSaving => _session.pendingWrites > 0;
   bool get needsSaveRecovery => _autoSaveBlocked || _retainedDrafts.isNotEmpty;
 
   bool get hasUnsavedChanges =>
-      _wholeReplacement ||
-      _dirtyGames.isNotEmpty ||
-      _editedGames.any(
+      _session.wholeReplacement ||
+      _session.dirty.isNotEmpty ||
+      _session.edited.any(
         (g) =>
-            (_screenOnlyMovetext[g] ?? g.pgnText).trim() !=
-            (_persistedGames[g] ?? g.pgnText).trim(),
+            (_session.screenOnly[g] ?? g.pgnText).trim() !=
+            (_session.persisted[g] ?? g.pgnText).trim(),
       );
 
   void setAutoSave(bool value) {
     if (autoSave == value) return;
-    autoSave = value;
-    persistDebounce?.cancel();
-    persistDebounce = null;
+    _autoSave = value;
+    _persistDebounce?.cancel();
+    _persistDebounce = null;
     if (value && hasUnsavedChanges) unawaited(persistMetadata());
     notifyListeners();
   }
@@ -421,7 +424,7 @@ class PgnCollectionEditor extends ChangeNotifier
     if (_reloading ||
         _copying ||
         ((!autoSave || _autoSaveBlocked) && hasUnsavedChanges)) {
-      errorMessage =
+      _session.errorMessage =
           'Unsaved changes — save or discard them before closing or opening another PGN.';
       notifyListeners();
       return false;
@@ -430,10 +433,10 @@ class PgnCollectionEditor extends ChangeNotifier
   }
 
   void discardChanges() {
-    persistDebounce?.cancel();
-    persistDebounce = null;
-    for (final g in _editedGames) {
-      final original = _persistedGames[g];
+    _persistDebounce?.cancel();
+    _persistDebounce = null;
+    for (final g in _session.edited) {
+      final original = _session.persisted[g];
       if (original == null) continue;
       g.pgnText = original;
       g.headers
@@ -442,67 +445,57 @@ class PgnCollectionEditor extends ChangeNotifier
       g.studyRating = int.tryParse(g.headers['StudyRating'] ?? '') ?? 0;
       g.studySummary = g.headers['StudySummary'] ?? '';
     }
-    _wholeReplacement = false;
-    _dirtyGames.clear();
-    _editedGames.clear();
-    _screenOnlyMovetext.clear();
-    errorMessage = null;
-    lastResult = null;
+    _session.wholeReplacement = false;
+    _session.dirty.clear();
+    _session.edited.clear();
+    _session.screenOnly.clear();
+    _session.errorMessage = null;
+    _session.outcome = null;
     onContentChanged(resetIndex: true);
     notifyListeners();
   }
 
-  Map<PgnGameEntry, String> _persistedGames = Map.identity();
   Future<void> _metadataWrites = Future.value();
 
-  void adoptPersistedGames(List<PgnGameEntry> games, {PgnSnapshot? baseline}) {
-    _baseline = baseline;
-    _capturedContent = baseline?.content ?? '';
-    _wholeReplacement = false;
-    _uncertainPath = null;
-    _readFailure = null;
-    errorMessage = null;
-    _dirtyGames.clear();
-    _persistedGames = Map.identity();
+  /// An opaque live context: receipts arriving after departure still belong to
+  /// these games. It is not a serialized checkpoint or a clone of game values.
+  PgnCollectionEditContext captureEditContext() => PgnCollectionEditContext._(
+    _contextOwner,
+    filePath,
+    List.unmodifiable(allGames),
+    _session,
+  );
+
+  void adoptPersistedGames(
+    List<PgnGameEntry> games, {
+    PgnSnapshot? baseline,
+    PgnCollectionEditContext? context,
+  }) {
+    if (context != null) {
+      if (isDisposed ||
+          !identical(context._owner, _contextOwner) ||
+          context._path != filePath ||
+          context._games.length != games.length ||
+          Iterable<int>.generate(
+            games.length,
+          ).any((i) => !identical(context._games[i], games[i]))) {
+        throw StateError('Edit context does not belong to this collection');
+      }
+      _session = context._edits;
+      return;
+    }
+    _session = _CollectionEdits()
+      ..baseline = baseline
+      ..capturedContent = baseline?.content ?? '';
     for (final game in games) {
-      _persistedGames[game] = game.pgnText;
+      _session.persisted[game] = game.pgnText;
     }
   }
 
   void rememberPersistedGame(PgnGameEntry game) {
-    _persistedGames.putIfAbsent(game, () => game.pgnText);
-    _editedGames.add(game);
+    _session.persisted.putIfAbsent(game, () => game.pgnText);
+    _session.edited.add(game);
   }
-
-  /// Games whose rating or summary changed since the last write.  Their
-  /// `[StudyRating]` / `[StudySummary]` headers are rewritten at persist
-  /// time; every other game's text is written as it stands.  Rewriting all
-  /// of them — in a `compute` that copied the whole collection into another
-  /// isolate — was the cost of every comment edit.
-  final Set<PgnGameEntry> _dirtyGames = Set.identity();
-
-  /// Movetext as it stood before something annotated a game *for the screen
-  /// only* — solitaire's guess notes. [doPersistMetadata] writes this in
-  /// place of the live text, so the drill's "(revealed)" notes can sit in the
-  /// movetext, ride along with Copy PGN and Add to study, and still never
-  /// reach the reader's file behind their back. A later deliberate write to
-  /// the same game (a comment edit, an engine review, a star) drops the
-  /// substitution: at that point the in-memory copy is the one that counts.
-  final Map<PgnGameEntry, String> _screenOnlyMovetext = Map.identity();
-
-  /// Games this session has actually changed. Not cleared after a write: it
-  /// is what a *later* write needs in order to tell our edits apart from
-  /// whatever else has reached the file since, and re-substituting text that
-  /// is already on disk costs nothing.
-  final Set<PgnGameEntry> _editedGames = Set.identity();
-
-  /// Forget which games were edited — the collection they belong to is going
-  /// away. Paired with [clearScreenOnlyMovetext].
-  void clearEditedGames() => _editedGames.clear();
-
-  /// Forget every screen-only substitution — the collection they described
-  /// is going away.
-  void clearScreenOnlyMovetext() => _screenOnlyMovetext.clear();
 
   void setRating(int stars) {
     final game = selectedGame();
@@ -518,8 +511,8 @@ class PgnCollectionEditor extends ChangeNotifier
     } else {
       game.headers['StudyRating'] = ratingHeader;
     }
-    _dirtyGames.add(game);
-    _editedGames.add(game);
+    _session.dirty.add(game);
+    _session.edited.add(game);
     if (changed) onContentChanged(resetIndex: false);
     notifyListeners();
     unawaited(persistMetadata());
@@ -540,41 +533,43 @@ class PgnCollectionEditor extends ChangeNotifier
     first.pgnText = pgn;
     // Keep drill-only annotations on screen, while saving the requested
     // header against the persisted movetext rather than hiding this edit.
-    if (_screenOnlyMovetext.containsKey(first)) {
-      _screenOnlyMovetext[first] = upsertPgnHeader(
-        _screenOnlyMovetext[first]!,
+    if (_session.screenOnly.containsKey(first)) {
+      _session.screenOnly[first] = upsertPgnHeader(
+        _session.screenOnly[first]!,
         'StudyPerspective',
         value,
       );
     }
-    _editedGames.add(first);
+    _session.edited.add(first);
     onContentChanged(resetIndex: false);
     notifyListeners();
     await persistMetadata();
   }
 
   Future<void> persistMetadata() async {
-    persistDebounce?.cancel();
-    persistDebounce = null;
+    _persistDebounce?.cancel();
+    _persistDebounce = null;
     if (!autoSave || _autoSaveBlocked || _reloading || _copying) return;
-    persistDebounce = Timer(const Duration(milliseconds: 300), () {
+    _persistDebounce = Timer(const Duration(milliseconds: 300), () {
       unawaited(doPersistMetadata());
     });
   }
 
   /// Snapshot all games for Save As, including staged metadata edits.
   Map<PgnGameEntry, String> snapshotForSave() {
-    _prepareMetadata();
-    return {for (final g in allGames) g: _screenOnlyMovetext[g] ?? g.pgnText};
+    final session = _session;
+    final games = allGames;
+    _prepareMetadata(session);
+    return {for (final g in games) g: session.screenOnly[g] ?? g.pgnText};
   }
 
-  List<PgnGameEntry> _prepareMetadata() {
-    final dirty = List.of(_dirtyGames);
-    _dirtyGames.clear();
+  List<PgnGameEntry> _prepareMetadata(_CollectionEdits session) {
+    final dirty = List.of(session.dirty);
+    session.dirty.clear();
     // A game the user has just rated is a game they touched: write what is
     // in memory, notes and all, rather than a snapshot taken before them.
     for (final g in dirty) {
-      _screenOnlyMovetext.remove(g);
+      session.screenOnly.remove(g);
     }
 
     if (dirty.isNotEmpty) {
@@ -606,8 +601,8 @@ class PgnCollectionEditor extends ChangeNotifier
   /// no longer matches the file — and is persisted once when the collection
   /// is closed rather than after every edit.
   Future<void> doPersistMetadata() async {
-    persistDebounce?.cancel();
-    persistDebounce = null;
+    _persistDebounce?.cancel();
+    _persistDebounce = null;
     final path = filePath;
     if (path == null ||
         !isActive() ||
@@ -616,18 +611,19 @@ class PgnCollectionEditor extends ChangeNotifier
         _copying) {
       return;
     }
+    final session = _session;
     final games = allGames;
     final preamble = collectionPreamble();
-    final originals = _persistedGames;
-    final dirty = _prepareMetadata();
-    final wholeReplacement = _wholeReplacement;
-    final baseline = _baseline;
+    final originals = session.persisted;
+    final dirty = _prepareMetadata(session);
+    final wholeReplacement = session.wholeReplacement;
+    final baseline = session.baseline;
 
     final output = {
-      for (final g in games) g: _screenOnlyMovetext[g] ?? g.pgnText,
+      for (final g in games) g: session.screenOnly[g] ?? g.pgnText,
     };
-    _capturedContent = _serialize(output);
-    _pendingWrites++;
+    session.capturedContent = '$preamble\n\n${output.values.join('\n\n')}\n';
+    session.pendingWrites++;
     notifyListeners();
     final task = _metadataWrites.then((_) async {
       final edits = <String, String>{
@@ -639,8 +635,8 @@ class PgnCollectionEditor extends ChangeNotifier
       if (edits.isEmpty && !wholeReplacement) return;
       PgnWriteResult result;
       try {
-        result = (_blocked[originals] ?? false)
-            ? _outcomes[originals]!
+        result = session.autoSaveBlocked
+            ? session.outcome!
             : wholeReplacement
             ? baseline == null
                   ? await repository.create(
@@ -655,7 +651,7 @@ class PgnCollectionEditor extends ChangeNotifier
       } catch (error) {
         result = PgnWriteUncertain(error: error, before: null, observed: null);
       }
-      _outcomes[originals] = result;
+      session.outcome = result;
       if (result is! PgnSaved) {
         String? recovery;
         Object? recoveryError;
@@ -666,65 +662,52 @@ class PgnCollectionEditor extends ChangeNotifier
         } catch (error) {
           recoveryError = error;
         }
-        errorMessage = recovery != null
+        session.errorMessage = recovery != null
             ? 'Changes could not be merged with $path. A recovery copy was saved to $recovery. ${_describe(result)}'
             : 'Changes to $path are unsaved: ${_describe(result)}. Recovery save also failed: $recoveryError';
-        _blocked[originals] = true;
-        if (filePath == path && identical(allGames, games)) {
-          _dirtyGames.addAll(dirty);
-          // A failed or uncertain operation never resumes implicitly.
-          _autoSaveBlocked = true;
-          if (result is PgnWriteUncertain) _uncertainPath = path;
-        }
-        notifyListeners();
+        session.autoSaveBlocked = true;
+        session.dirty.addAll(dirty);
+        if (result is PgnWriteUncertain) session.uncertainPath = path;
+        if (identical(_session, session)) notifyListeners();
         return;
       }
       for (final g in games) {
         originals[g] = output[g]!;
       }
-      // Everything past this point writes back to *controller* state, which
-      // is only ours while the collection we wrote is still the loaded one —
-      // and it may not be, because `_adoptCollection` fires this flush and
-      // then immediately replaces the collection.  Stamping regardless would
-      // hang the outgoing file's mtime on the incoming collection (defeating
-      // every staleness check) and mark the incoming FEN index stale for a
-      // write that never touched it.
-      if (filePath != path || !identical(allGames, games)) return;
-      // This write is ours, and the in-memory copy above already matches it.
-      // Re-stamping keeps a caller comparing mtimes from reading our own save
-      // as somebody else's edit and reloading the whole file for nothing.
-      _baseline = result.after;
-      _wholeReplacement = false;
-      _uncertainPath = null;
-      _readFailure = null;
-      errorMessage = null;
-      lastResult = result;
+      // Receipts belong to this ledger even after leaving or returning to it.
+      // Only derived host state needs the active-context check.
+      session.baseline = result.after;
+      session.wholeReplacement = false;
+      session.uncertainPath = null;
+      session.readFailure = null;
+      session.errorMessage = null;
+      if (filePath != path || !identical(_session, session)) return;
       DateTime? modified;
       try {
         modified = await repository.modified(path);
       } catch (_) {
         // The committed receipt remains valid even if derived stat refresh fails.
       }
-      if (filePath == path && identical(allGames, games)) {
+      if (filePath == path && identical(_session, session)) {
         onSaved(modified);
       }
     });
     _metadataWrites = task.catchError((Object e) {
-      errorMessage = 'Could not save: $e';
-      notifyListeners();
+      session.errorMessage = 'Could not save: $e';
+      if (identical(_session, session)) notifyListeners();
     });
     try {
       await _metadataWrites;
     } finally {
-      _pendingWrites--;
-      notifyListeners();
+      session.pendingWrites--;
+      if (identical(_session, session)) notifyListeners();
     }
   }
 
   /// Flush an outstanding autosave and await all serialized writes. The host
   /// separately owns derived indexes and their lifecycle.
   Future<void> flushPendingMetadata() async {
-    if (persistDebounce != null) await doPersistMetadata();
+    if (_persistDebounce != null) await doPersistMetadata();
     await _metadataWrites;
   }
 
@@ -751,10 +734,10 @@ class PgnCollectionEditor extends ChangeNotifier
   }) {
     rememberPersistedGame(game);
     if (writeToFile) {
-      _screenOnlyMovetext.remove(game);
-      _editedGames.add(game);
+      _session.screenOnly.remove(game);
+      _session.edited.add(game);
     } else {
-      _screenOnlyMovetext.putIfAbsent(game, () => game.pgnText);
+      _session.screenOnly.putIfAbsent(game, () => game.pgnText);
     }
 
     // Cut where the parser says the movetext starts, not at the last
@@ -785,4 +768,41 @@ class PgnCollectionEditor extends ChangeNotifier
     if (!writeToFile || filePath == null) return;
     unawaited(persistMetadata());
   }
+}
+
+/// In-memory navigation handle. Only its creating editor can restore it, and
+/// only with the exact captured path and ordered game identities.
+class PgnCollectionEditContext {
+  PgnCollectionEditContext._(this._owner, this._path, this._games, this._edits);
+  final Object _owner;
+  final String? _path;
+  final List<PgnGameEntry> _games;
+  final _CollectionEdits _edits;
+}
+
+/// All mutable save bookkeeping for one adopted collection. This stays private
+/// so callers cannot forge baselines, unblock uncertain writes or expose drill
+/// overlays to persistence. Navigation retains the ledger, not a frozen receipt.
+class _CollectionEdits {
+  PgnSnapshot? baseline;
+  PgnOpenResult? readFailure;
+  String? uncertainPath;
+  String capturedContent = '';
+  bool wholeReplacement = false;
+  String? errorMessage;
+  PgnWriteResult? outcome;
+  bool autoSaveBlocked = false;
+  int pendingWrites = 0;
+  Map<PgnGameEntry, String> persisted = Map.identity();
+
+  /// Only these games need rating/summary header serialization before saving.
+  final Set<PgnGameEntry> dirty = Set.identity();
+
+  /// Deliberately retained after saving to distinguish our edits on later writes.
+  final Set<PgnGameEntry> edited = Set.identity();
+
+  /// Durable movetext substituted for the live drill-only annotations. A later
+  /// deliberate annotation/rating edit removes its substitution; perspective
+  /// edits patch the durable header without exposing drill notes.
+  final Map<PgnGameEntry, String> screenOnly = Map.identity();
 }

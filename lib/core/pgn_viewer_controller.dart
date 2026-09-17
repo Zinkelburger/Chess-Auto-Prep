@@ -658,6 +658,7 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
     String preamble = '',
     PgnSnapshot? baseline,
     bool flushOutgoing = true,
+    PgnCollectionEditContext? editContext,
   }) {
     // Settle the outgoing collection's debts (a pending metadata write, a
     // stale FEN-index stamp) before its path and games are replaced; the
@@ -671,7 +672,11 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
     loadedFileModified = null;
     _collection.adopt(entries);
     _markCollectionChanged();
-    _editor.adoptPersistedGames(allGames, baseline: baseline);
+    _editor.adoptPersistedGames(
+      allGames,
+      baseline: baseline,
+      context: editContext,
+    );
     collectionPreamble = preamble;
     _detectProtagonist(entries);
     _filters.reset();
@@ -680,8 +685,6 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
     _gameCursorFen = null;
     perspective = newPerspective;
     _viewerTree.resetForNewFile();
-    _editor.clearScreenOnlyMovetext();
-    _editor.clearEditedGames();
   }
 
   /// [restoreSavedSlice] — reapply the slice persisted for this file. Off for
@@ -928,6 +931,7 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
   Future<bool> Function() captureNavigationContext() {
     _rememberCurrentPlace();
     final entries = List<PgnGameEntry>.of(allGames);
+    final editContext = _editor.captureEditContext();
     final visibleIndices = _collection.visibleIndices;
     final path = filePath;
     final modified = loadedFileModified;
@@ -942,7 +946,7 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
     final cursorPly = pgnWidgetController.mainLineIndex;
     final initialFen = pgnInitialFen;
     return () async {
-      if (!isActive() || !canReplaceCollection()) return false;
+      if (isDisposed || !isActive() || !canReplaceCollection()) return false;
       final loadEpoch = _collectionLoads.invalidate();
       isPreparingCollection = false;
       _filters.invalidate();
@@ -956,6 +960,7 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
         entries: List.of(entries),
         newPerspective: viewPerspective,
         preamble: preamble,
+        editContext: editContext,
       );
       loadedFileModified = modified;
       _collection.restoreView(
@@ -967,7 +972,8 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
       _resumePlyByGame.addAll(bookmarks);
       pgnInitialFen = cursorFen ?? initialFen;
       isLoading = false;
-      errorMessage = null;
+      errorMessage = _editor.errorMessage;
+      _lastEditorError = _editor.errorMessage;
       _filters.clearPendingRestore();
       if (filteredGames.isEmpty) currentPosition = Chess.initial;
       notifyListeners();
@@ -1017,8 +1023,6 @@ class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
     // An empty collection: _adoptCollection nulls the protagonist fields the
     // same way this used to by hand.
     _adoptCollection(
-      // Mutable, not `const []`: [allGames] is assigned as given, and sorting
-      // reorders these lists in place.
       path: null,
       entries: <PgnGameEntry>[],
       newPerspective: const Perspective(),

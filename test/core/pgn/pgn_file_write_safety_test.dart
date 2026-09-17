@@ -24,6 +24,7 @@ library;
 import '../../support/fake_desktop_fullscreen_port.dart';
 
 import 'dart:async';
+import 'package:chess_auto_prep/features/documents/models/viewer_perspective.dart';
 
 import 'package:chess_auto_prep/infrastructure/documents/isolate_pgn_collection_filter.dart';
 
@@ -222,6 +223,56 @@ void main() {
   });
 
   tearDown(() => StorageFactory.instanceForTest = null);
+
+  test('navigation keeps drill-only notes out of later file saves', () async {
+    final c = await _openTheFile(storage);
+    addTearDown(c.dispose);
+    final game = c.allGames.first;
+    c.persistMoveCommentsFor(
+      game,
+      '1. e4 {drill-only} e5 *',
+      writeToFile: false,
+    );
+    final back = c.captureNavigationContext();
+    await c.loadPgnContent('[Event "Elsewhere"]\n\n1. d4 *');
+    expect(await back(), isTrue);
+    expect(game.pgnText, contains('drill-only'));
+    expect(c.snapshotForSave()[game], isNot(contains('drill-only')));
+    c.setPerspective(const Perspective(mode: PerspectiveMode.black));
+    await c.flushPendingMetadata();
+    expect(storage.files[_path], isNot(contains('drill-only')));
+    expect(storage.files[_path], contains('[StudyPerspective "black"]'));
+  });
+
+  test(
+    'navigation return retains an outgoing save conflict and original bytes',
+    () async {
+      final c = await _openTheFile(storage);
+      addTearDown(c.dispose);
+      final game = c.allGames.first;
+      final original = game.pgnText;
+      final gate = Completer<void>();
+      storage.writeGate = gate;
+      c.persistMoveCommentsFor(game, '1. e4 {my draft} e5 *');
+      final saving = c.doPersistMetadata();
+      final back = c.captureNavigationContext();
+      await c.loadPgnContent('[Event "Elsewhere"]\n\n1. d4 *');
+      expect(await back(), isTrue);
+      storage.writeBehindOurBack(
+        _path,
+        '[Event "External replacement"]\n\n1. c4 *',
+      );
+      gate.complete();
+      await saving;
+      await c.flushPendingMetadata();
+      expect(c.hasUnsavedChanges, isTrue);
+      expect(c.needsSaveRecovery, isTrue);
+      expect(c.captureWorkspace().persistedGames.first, original);
+      expect(c.canReplaceCollection(), isFalse);
+      expect(storage.files[_path], contains('External replacement'));
+      expect(game.pgnText, contains('my draft'));
+    },
+  );
 
   test('manual edits stay off disk across games and save explicitly', () async {
     final c = await _openTheFile(storage);

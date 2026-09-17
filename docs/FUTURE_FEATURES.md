@@ -96,6 +96,10 @@ the collection save/recovery path and preserve drill-only annotations on screen.
 Collection membership/order/selection now have one pure owner with fixed published
 lists, atomic filter/navigation validation and deterministic sorting. External
 list/index writes are retired; game entry contents still need private ownership.
+Navigation now retains private collection edit ledgers, including screen-only
+substitutions, original bytes and pending save outcomes; returning cannot silently
+rebase a draft. Save Copy forks its destination baseline from the source context.
+Durable navigation history and private game-entry values remain unfinished.
 Legacy collection presentation/widget ownership, generation inline
 filter wiring, remaining Builder storage/
 session ownership and draft recovery, incremental editor indexing, undo receipts, variation-cursor/panel
