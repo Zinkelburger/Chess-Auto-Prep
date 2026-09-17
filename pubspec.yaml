@@ -24,6 +24,7 @@ dependencies:
   # UI and state management
   cupertino_icons: ^1.0.6
   provider: ^6.1.1
+  collection: ^1.19.1
 
   document_file_io:
     path: packages/document_file_io

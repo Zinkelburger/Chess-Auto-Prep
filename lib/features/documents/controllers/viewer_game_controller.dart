@@ -12,6 +12,7 @@
 library;
 
 import 'package:dartchess/dartchess.dart';
+import 'viewer_sideline_adoption.dart';
 import 'package:chess_auto_prep/chess_core/pgn/pgn_game_copy.dart';
 import 'package:chess_auto_prep/chess_core/pgn/pgn_game_view.dart';
 
@@ -215,9 +216,9 @@ class ViewerGameController {
     _leaveSideline();
   }
 
-  /// Take the annotations of a re-parsed copy of the loaded game — comments
-  /// and glyphs on the mainline moves — without touching the cursor, the
-  /// sidelines, or any analysis in progress.
+  /// Take annotations onto the matching stored tree while preserving node
+  /// identities, the cursor and scratch continuations. Incoming comments,
+  /// introductions, glyphs and sibling order apply throughout the tree.
   ///
   /// This is what an engine pass hands back: the same moves, now with
   /// `[%eval]`/`[%pv]` comments on them. Reloading for that would park the
@@ -233,11 +234,18 @@ class ViewerGameController {
     final incoming = parsed.moves.mainline().toList();
     if (!_sameMainline(incoming)) return false;
     final storedRoots = extractPgnVariations(parsed, _startPosition);
-    if (!_sameStoredSidelines(storedRoots, incoming)) return false;
-
-    for (final MapEntry(key: ply, value: roots) in storedRoots.entries) {
-      _sidelineViews.changed(ply);
-      _mergeSidelines(_variationsByPly.putIfAbsent(ply, () => []), roots);
+    final adoption = ViewerSidelineAdoption.plan(
+      current: _variationsByPly,
+      incoming: storedRoots,
+      enginePaths: {
+        for (var ply = 0; ply < incoming.length; ply++)
+          ply: analysisVariationPath(incoming[ply]),
+      },
+    );
+    if (adoption == null) return false;
+    for (final MapEntry(key: ply, value: dirty)
+        in adoption.apply(_variationsByPly).entries) {
+      _sidelineViews.changed(ply, ancestry: dirty);
     }
     _didMaterializeAnalysis = materialized;
     _mainlineChanged();
@@ -258,59 +266,6 @@ class ViewerGameController {
       if (incoming[i].san != _moveHistory[i].san) return false;
     }
     return true;
-  }
-
-  /// Sidelines stored in the PGN must be the ones already loaded; only
-  /// in-memory analysis (ephemeral nodes) and a freshly materialised engine
-  /// line at a classified ply may differ.
-  bool _sameStoredSidelines(
-    SidelineForest storedRoots,
-    List<PgnNodeData> incoming,
-  ) {
-    for (final ply in {...storedRoots.keys, ..._variationsByPly.keys}) {
-      final theirs = storedRoots[ply] ?? const <MoveNode>[];
-      final mine = [
-        for (final n in _variationsByPly[ply] ?? const <MoveNode>[])
-          if (!n.isEphemeral) n,
-      ];
-      final best = ply < incoming.length
-          ? analysisVariationPath(incoming[ply]).firstOrNull
-          : null;
-      if (mine.any((n) => _siblingWithSan(theirs, n.san) == null)) {
-        return false;
-      }
-      if (theirs.any(
-        (n) => _siblingWithSan(mine, n.san) == null && n.san != best,
-      )) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  /// Merge generated RAVs into existing nodes so a live variation cursor,
-  /// comments, and scratch continuations survive an arriving analysis pass.
-  /// [source] order wins; nodes only in [target] keep their place after it.
-  static void _mergeSidelines(List<MoveNode> target, List<MoveNode> source) {
-    final pending = [(target, source)];
-    while (pending.isNotEmpty) {
-      final (destination, incoming) = pending.removeLast();
-      final ordered = <MoveNode>[];
-      for (final node in incoming) {
-        final existing = _siblingWithSan(destination, node.san);
-        if (existing == null) {
-          ordered.add(node);
-        } else {
-          existing.isEphemeral = false;
-          pending.add((existing.children, node.children));
-          ordered.add(existing);
-        }
-      }
-      ordered.addAll(destination.where((node) => !ordered.contains(node)));
-      destination
-        ..clear()
-        ..addAll(ordered);
-    }
   }
 
   // ── Navigation ───────────────────────────────────────────────────────

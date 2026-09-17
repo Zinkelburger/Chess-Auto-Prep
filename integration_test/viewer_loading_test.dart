@@ -6,10 +6,12 @@ import 'package:chess_auto_prep/services/game_store/game_store.dart';
 import 'package:chess_auto_prep/services/game_store/game_store_service.dart';
 import 'package:chess_auto_prep/widgets/pgn_viewer_widget.dart';
 import '../test/support/viewer_loading_scenarios.dart';
+import '../test/support/viewer_annotation_scenarios.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   viewerLoadingScenarios();
+  viewerAnnotationScenarios();
   testWidgets(
     'app wiring loads the full archived game before its solution fallback',
     (tester) async {

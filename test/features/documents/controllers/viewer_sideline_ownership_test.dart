@@ -184,7 +184,10 @@ void main() {
       }
       expect(controller.goToAnalysisNode(leaf, 0), isTrue);
       expect(controller.analysisPath, hasLength(20000));
+      parent.data.comments = ['Incoming deep note'];
       expect(controller.adoptAnnotations(game), isTrue);
+      expect(controller.analysisPath.last.comment, 'Incoming deep note');
+      expect(leaf.comment, isNull);
       expect(controller.analysisPath.last.id, leaf.id);
       expect(controller.setNodeComment(leaf, 'Deep note'), isTrue);
       expect(controller.analysisPath.last.comment, 'Deep note');

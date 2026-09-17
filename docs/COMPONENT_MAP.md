@@ -585,9 +585,19 @@ text-only readers need no archive. Header-only updates refresh the Viewer title,
 a changed initial FEN replaces its position, and replacing a widget control
 handle detaches the old handle.
 
+`viewer_sideline_adoption.dart` validates every stored branch before applying
+incoming annotations. Nested prose, introductions and glyphs follow the incoming
+source; matching nodes keep their IDs, cursor and scratch continuations. Sibling
+reordering preserves matching node views, and unchanged projections are shared.
+Only nodes on the exact referenced engine path may extend a stored branch during
+annotation adoption. Other structural edits trigger replacement, preventing old
+nested moves from surviving a changed document. Duplicate equal-SAN siblings are
+matched by occurrence, never merged into one identity. Validation and application
+are iterative, including deep variations.
+
 Riverpod/legacy bridge retirement, undo receipts, bulk/decode allocation and
-native frame measurements remain unfinished. Viewer still needs nested annotation
-reconciliation, windowed movetext and migration of collection/widget orchestration.
+native frame measurements remain unfinished. Viewer still needs windowed movetext
+and migration of collection/widget orchestration.
 Builder still owns legacy storage/session collaborators and needs the remaining
 feature ownership, draft recovery and presentation migrations.
 

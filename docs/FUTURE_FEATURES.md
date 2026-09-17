@@ -70,8 +70,11 @@ preserves variation introductions separately from trailing notes. Its variation 
 and cursor are now private in the document-feature game controller, with immutable
 projections sharing untouched branches and refreshed focused-reader scopes. Pure
 analysis/replay helpers have canonical chess-core paths, and the controller runs
-without Flutter. Legacy collection controller/widget ownership, async load
-lifetime, nested annotation reconciliation, remaining Builder storage/
+without Flutter. Async loading now has an injected archive contract and a
+request owner that rejects superseded reads/failures/callbacks. Nested annotation
+adoption validates full stored topology, retains node identities and scratch
+continuations, and updates prose/introductions/glyphs through shared projections.
+Legacy collection controller/widget ownership, remaining Builder storage/
 session ownership and draft recovery, Viewer movetext windowing, incremental
 editor indexing, undo receipts, variation-cursor/filter/panel
 restoration and complete large-document performance evidence remain pending.

@@ -31,9 +31,21 @@ void main() {
     for (var i = 1; i < before[0]!.length; i++)
       identical(before[0]![i], after[0]![i]),
   ];
+  final refreshed = measure('annotation_refresh_and_project_us', () {
+    if (!owner.adoptAnnotations(parsed)) {
+      throw StateError('Unchanged topology rejected');
+    }
+    return owner.variationsByPly;
+  });
+  final refreshShared = [
+    for (var i = 1; i < after[0]!.length; i++)
+      identical(after[0]![i], refreshed[0]![i]),
+  ];
   owner.goToMainLineMove(100);
   if (shared.any((same) => !same) ||
-      !identical(after, owner.variationsByPly) ||
+      !identical(refreshed, owner.variationsByPly) ||
+      refreshShared.any((same) => !same) ||
+      owner.findNodeById(leaf.id)!.comment == 'Benchmark edit' ||
       leaf.comment == 'Benchmark edit') {
     throw StateError('Ownership/projection contract failed');
   }
@@ -42,6 +54,7 @@ void main() {
     jsonEncode({
       ...timings,
       'unchanged_roots_shared': shared.length,
+      'refresh_unchanged_roots_shared': refreshShared.length,
       'rss_bytes': ProcessInfo.currentRss,
     }),
   );

@@ -1526,6 +1526,53 @@ Viewer movetext windowing, scoped presentation state, workspace/undo/performance
 parity, full hierarchy/bridge retirement, milestones 4–7 and non-Linux/release
 gates. The full renewal remains incomplete.
 
+### Viewer nested annotation checkpoint (2026-09-17)
+
+`features/documents/controllers/viewer_sideline_adoption.dart` replaces the
+root-only comparison and merge. It validates all stored branches before applying
+an update. Removing, replacing or adding an ordinary nested move causes annotation
+adoption to decline; the widget then loads the changed game. A best-line reference
+permits additions only along that exact path, including when it extends an
+existing stored root or promotes an active scratch continuation. Unrelated new
+branches are not admitted merely because their first SAN matches an engine root.
+
+Accepted updates apply nested comments, starting comments and NAGs (including
+removals), while matching nodes retain identities and the current board/cursor.
+Unmatched scratch continuations stay ephemeral and are omitted from serialization.
+Duplicate equal-SAN siblings match by occurrence instead of aliasing one mutable
+node. Incoming sibling order wins; stable untouched descendants and plies share
+snapshots. Changed IDs propagate to their ancestors in one reverse traversal,
+without constructing a full ancestor list for every deep node. Both validation
+and application are iterative. The annotation-owner tests now live beside the
+owner under `test/features/documents/controllers/`.
+
+Verification (Linux, this checkpoint):
+
+| Check | Result |
+|---|---|
+| Unit/widget regression | 261 cases pass across document controllers, chess core, PGN helpers, Viewer loading/annotation/display/navigation, solitaire and reading panes. No selected failures or skips. |
+| Nested ownership | Full-tree annotation removal/replacement, rejected nested structural edits without mutation, exact engine-path extension, scratch retention, duplicate siblings, reorder/no-op projection sharing and deep adoption pass. The 20,000-ply case now verifies an incoming leaf comment before a local edit and serialization. |
+| Linux native integration | All 12 loading/annotation cases pass, including focused nested note adoption, its next serialized glyph edit, and nested structural replacement. The full-app collection annotation/save/conflict-recovery journey also passes (13 cases total). |
+| Plain Dart diagnostic | On the shared 20,000-node fixture: parse 84,518 µs, load 153,834 µs, first projection 31,742 µs, local edit/projection 3,457 µs, annotation refresh/projection 161,456 µs. Both edits share all 98 untouched roots. RSS 294,088,704 bytes; one-run diagnostics, not frame/allocation certification. |
+
+`collection` is now an explicit dependency for pure list comparison, using the
+already locked 1.19.1 version. The initial analysis check identified the missing
+direct declaration. Final analyze/lint passes with nine existing informational
+notices and no warnings or errors; all 18 architecture-checker regressions pass.
+The lockfile change only marks the existing package version as a direct dependency.
+
+The headless production app opened a disposable nested-variation fixture. Its
+inspected [1280×720 screenshot](images/renewal-viewer-nested-annotations.png)
+shows the selected Nc6 move, its separate introduction and trailing note, and
+the matching board. Live incoming-update behavior is covered by the native
+scenarios above. Recovery banners belong to the disposable profile, and the
+preview was stopped.
+
+Remaining: collection/widget orchestration, Viewer movetext windowing, scoped
+presentation, document/session/undo/performance parity, legacy hierarchy/bridge
+retirement, milestones 4–7 and non-Linux/release gates. This completes neither
+milestone 3 nor the full renewal.
+
 ### Initial parity and ownership inventory (milestone 0, partial)
 
 The starting tree has 885 files under `lib/` and 674 under `test/`; these counts
