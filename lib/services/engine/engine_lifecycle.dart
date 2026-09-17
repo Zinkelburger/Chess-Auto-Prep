@@ -45,7 +45,8 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
   /// user actions) change it — [suspend] shuts the engine down without
   /// touching it, so app-driven shutdowns (mode switch, app close) can't
   /// masquerade as the user disabling the engine.
-  bool _userWantsEngine = true;
+  bool _userWantsEngine = false;
+  bool _preferenceLoaded = false;
 
   /// Number of background jobs currently borrowing the shared pool (e.g. a
   /// tactics import). While positive, [suspend]/[toggleOff] cancel
@@ -68,18 +69,24 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
     }
   }
 
-  /// Load persisted toggle state. Call once at app startup.
-  ///
-  /// Engine is **on** by default; only a stored `false` disables it.
-  Future<void> loadPersistedState() async {
-    _userWantsEngine = await _loadEnabled();
+  /// Initialize in the same queue as toggles and generation transitions.
+  /// Failed reads leave the preference unknown and may be retried. A successful
+  /// explicit toggle also initializes it, so a late startup call cannot undo it.
+  /// Missing preferences default to enabled only after a successful read.
+  Future<void> loadPersistedState() => _serialExec(() async {
+    if (_preferenceLoaded) return;
+    final enabled = await _loadEnabled();
     if (isDisposed) return;
-    if (_userWantsEngine) {
+    _userWantsEngine = enabled;
+    _preferenceLoaded = true;
+    if (_state == EngineState.generating) {
+      _toggleStateBeforeGeneration = enabled;
+    } else if (enabled) {
       _resumeBoard();
       _state = EngineState.idle;
       notifyListeners();
     }
-  }
+  });
 
   Future<void> toggleOn() => _serialExec(_doToggleOn);
   Future<void> toggleOff() => _serialExec(_doToggleOff);
@@ -105,9 +112,12 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
 
   /// Restart after [suspend] when the user preference allows it.
   Future<void> resume() => _serialExec(() async {
-    if (_state == EngineState.generating) return;
+    if (_state == EngineState.generating || !_userWantsEngine) return;
     _resumeBoard();
-    if (_userWantsEngine) await _doToggleOn();
+    if (_state == EngineState.off) {
+      _state = EngineState.idle;
+      notifyListeners();
+    }
   });
 
   void _resumeBoard() {
@@ -123,6 +133,7 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
     await _saveEnabled(true);
     if (isDisposed) return;
     _userWantsEngine = true;
+    _preferenceLoaded = true;
     _resumeBoard();
     if (_state != EngineState.off) return;
     // Mounted boards prepare one shared process. Bulk workers are only
@@ -136,6 +147,7 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
     await _saveEnabled(false);
     if (isDisposed) return;
     _userWantsEngine = false;
+    _preferenceLoaded = true;
     await _doShutdown();
   }
 

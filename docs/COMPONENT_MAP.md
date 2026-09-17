@@ -175,8 +175,17 @@ The My books panel shows pending/failure state, keeps confirmed choices visible,
 and retries designation without recreating an already imported repertoire.
 The relocation operation maps path components and can retry a partial two-key
 update. Linux folder rename, deletion and restore invoke it through the directory
-journal above. Engine, display, training and credentials remain with
-their legacy owners. There is no cross-process preference transaction claim.
+journal above. Credentials and external evaluation-database settings retain
+legacy ownership. There is no cross-process preference transaction claim.
+
+`RuntimeSettings` composes the typed engine, bulk-analysis and board-display
+owners; their immutable configurations normalize both setter and explicit field
+edits. A failed initial read stays failed and retryable until a committed value
+exists. `EngineLifecycle` serializes preference initialization with toggles and
+generation transitions: unknown preferences do not enable analysis, late startup
+cannot undo a successful user toggle, and navigation resume does not rewrite
+preferences.
+
 Startup wraps legacy Linux/Windows preference backends in
 `FreshDesktopPreferencesStore`: serialized requests use fresh backend instances,
 so the plugin's second cache cannot confirm an unsaved value or flush a failed
