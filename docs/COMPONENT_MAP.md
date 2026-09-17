@@ -502,8 +502,9 @@ evidence, not a completed native frame/allocation budget.
 `chess_core/moves/tree_path.dart` is the canonical cursor value;
 `move_tree_view.dart` supplies shared read-only navigation, and
 `chess_core/pgn/move_text_writer.dart` serializes both immutable and mutable
-views. Legacy mutable parsing stays in `models/move_tree_pgn.dart` for its
-unmigrated owners. `InteractivePgnEditor` takes the read-only contract; glyph
+views. Mutable position replay stays in `models/move_tree_pgn.dart` for its
+unmigrated owners; replay and fresh-ID adoption use explicit stacks to handle
+deep lines without recursive decoding. `InteractivePgnEditor` takes the read-only contract; glyph
 changes require a host callback. Study dialogs retain chapter projections and
 reject edits/deletes when that chapter revision is no longer current. Promoting
 or removing siblings and deleting another chapter preserve the viewed position.
@@ -804,7 +805,15 @@ owns the annotated multi-game PGN round trip. `app/study_dependencies.dart` inje
 singleton or filesystem import. Linux uses the native identity/byte revision
 store; other hosts retain the explicitly content-only compatibility adapter.
 `chess_core/pgn/pgn_text.dart` is the canonical pure-Dart split/count/header/text
-module. Study tests mirror the feature under `test/features/studies/`.
+module. `chess_core/pgn/pgn_parser.dart` owns production single-game syntax
+parsing, enforced by architecture lint even in legacy directories. It bounds
+long annotated parser-input lines to avoid upstream quadratic suffix copying,
+preserves comment/header/escape-line semantics and removes explicit move-number
+labels (including `10000.`, otherwise misread upstream as a null move). Stored
+bytes and standalone null moves remain intact. Multi-game parsers and specialized
+lexical readers retain their existing boundaries. Study tests mirror the feature
+under `test/features/studies/`; the shared synthetic course also drives
+`tools/bench/study_document_bench.dart` and the native large-document journey.
 
 The Study toolbar's **Save and recovery…** opens the production shared
 `DocumentSavePanel` through `DocumentSaveActions`. Move edits mark a revision;
@@ -1712,8 +1721,8 @@ Used by:
 | `eval_database_settings.dart` | CdbDirect path, enable flags (persisted) |
 | `board_display_settings.dart` | `BoardDisplaySettings` — global board and move preferences: `BoardCoordinates` (none / inside / outside / every square) `PieceNotation` (letters / figurines), and opt-in legal-move dots (off by default; explicit feature hints such as bughouse drop targets remain available). Persisted; reached through `BoardDisplaySettings.of(context)`, which rebuilds the caller when a `DisplaySettingsScope` (planted above `MaterialApp`) is present and falls back to the singleton in bare widget tests |
 | `explorer_response.dart` | Opening explorer answer shape: `LichessDatabase` (which database is being asked), moves with counts, plus the games a source lists for the position (`ExplorerGame`, tagged with the `ExplorerGameSource` it can be fetched from — Lichess, masters or the local TWIC database) |
-| `move_tree.dart` | Editable PGN move tree (`MoveNode`, `MoveTree`). FEN cached per node; NAG lists copied on fresh-ID adoption. Cursor and read contracts live in `chess_core/moves/`. PGN parsing delegates to `move_tree_pgn.dart`; writing uses `chess_core/pgn/move_text_writer.dart`. Used by `RepertoireController` as the single source of truth for the move cursor. |
-| `move_tree_pgn.dart` | `MoveTreePgnCodec` — dartchess game tree → editable `MoveNode`s, preserving variations, starting comments and NAGs |
+| `move_tree.dart` | Editable PGN move tree (`MoveNode`, `MoveTree`). FEN cached per node; Iterative fresh-ID adoption copies NAG lists and preserves cached positions. Cursor and read contracts live in `chess_core/moves/`. PGN parsing delegates to `move_tree_pgn.dart`; writing uses `chess_core/pgn/move_text_writer.dart`. Used by `RepertoireController` as the single source of truth for the move cursor. |
+| `move_tree_pgn.dart` | `MoveTreePgnCodec` — iterative dartchess game-tree replay → editable `MoveNode`s, preserving variations, starting comments and NAGs |
 | `legal_destination_cache.dart` | `LegalDestinationCache` — bounded LRU of legal moves and their destination FENs per position, behind the opening tree's one-ply transposition scan |
 | `opening_tree_transfer.dart` | `OpeningTreeTransfer` — flat id-keyed encoding of an `OpeningTree` for isolate transfer (`toTransferJson` / `fromTransferJson` delegate here) |
 | `opening_tree.dart` | In-memory statistics tree indexed by FEN. Cursor walks by FEN (so 1.d4 Nf6 2.e3 c5 and 1.d4 c5 2.e3 Nf6 land on the same node). Off-book positions still list **one-ply transpositions** (`continuations` / `viaTransposition`). `hasMove`, `appendLine` / `appendLineFromFen` (null-move passes skip a node). `updateStats(null)` counts frequency without a fake draw; `hasWdl` hides the W/D/L bar on course trees |

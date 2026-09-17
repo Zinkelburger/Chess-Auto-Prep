@@ -9,6 +9,7 @@
 /// `pgn_viewer_screen_panes.dart`.
 library;
 
+import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
 import 'dart:async';
 import '../app/pgn_viewer_lifetime.dart';
 import '../design_system/components/name_entry_dialog.dart';
@@ -1504,7 +1505,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     List<String> pgnTexts,
   ) async* {
     for (var i = 0; i < pgnTexts.length; i++) {
-      yield PgnGame.parsePgn(pgnTexts[i]);
+      yield parsePgnGame(pgnTexts[i]);
       if (i % _scidYieldEvery == _scidYieldEvery - 1) {
         await Future<void>.delayed(Duration.zero);
       }

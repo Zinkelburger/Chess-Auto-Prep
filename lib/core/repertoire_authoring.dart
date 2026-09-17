@@ -6,6 +6,7 @@
 /// so the authoring logic can be unit-tested in isolation.
 library;
 
+import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart' show listEquals;
 
@@ -103,7 +104,7 @@ class RepertoireAuthoring {
   /// headers and start position are re-read from the text; identity, name,
   /// colour, importance, chapter and file position are kept.
   RepertoireLine rebuildLine(RepertoireLine line, String newPgn) {
-    final parsed = PgnGame.parsePgn(newPgn);
+    final parsed = parsePgnGame(newPgn);
     final mainline = parsed.moves.mainline().toList();
     final comments = <String, String>{};
     for (final (i, node) in mainline.indexed) {

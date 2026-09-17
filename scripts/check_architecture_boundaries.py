@@ -11,16 +11,19 @@ DIRECTIVE = re.compile(r"^\s*(?:import|export)\s+['\"]([^'\"]+)['\"]", re.M)
 
 def violations(relative: str, source: str) -> list[str]:
     path = Path(relative)
+    errors = []
+    executable = re.sub(r'(?m)^\s*//.*$', '', source)
+    if relative.startswith('lib/') and relative != 'lib/chess_core/pgn/pgn_parser.dart' and re.search(r'\bPgnGame\.parsePgn\s*\(', executable):
+        errors.append(f'{relative}: single-game parsing must use chess_core/pgn/pgn_parser.dart')
     feature = relative.startswith(('lib/features/repertoires/', 'lib/features/documents/', 'lib/features/settings/', 'lib/features/studies/'))
     chess = relative.startswith('lib/chess_core/')
     infrastructure = relative.startswith('lib/infrastructure/')
     design = relative.startswith('lib/design_system/')
     catalog = relative.startswith('widgetbook/')
     if not (feature or infrastructure or design or catalog or chess):
-        return []
+        return errors
     pure = chess or feature and any(part in ('models', 'repositories') for part in path.parts[3:-1])
     controller = feature and 'controllers' in path.parts[3:-1]
-    errors = []
     for uri in DIRECTIVE.findall(source):
         if uri.startswith('package:chess_auto_prep/'):
             target = ROOT / 'lib' / uri.split('/', 1)[1]
@@ -59,6 +62,11 @@ def main() -> int:
     for folder in ('lib/features/repertoires', 'lib/features/documents', 'lib/features/settings', 'lib/features/studies', 'lib/chess_core', 'lib/infrastructure', 'lib/design_system', 'widgetbook'):
         for path in (ROOT / folder).rglob('*.dart'):
             errors.extend(violations(path.relative_to(ROOT).as_posix(), path.read_text()))
+    checked_roots = ('lib/features/repertoires/', 'lib/features/documents/', 'lib/features/settings/', 'lib/features/studies/', 'lib/chess_core/', 'lib/infrastructure/', 'lib/design_system/')
+    for path in (ROOT / 'lib').rglob('*.dart'):
+        relative = path.relative_to(ROOT).as_posix()
+        if not relative.startswith(checked_roots):
+            errors.extend(violations(relative, path.read_text()))
     legacy = json.loads((ROOT / 'scripts/legacy_theme_consumers.json').read_text())
     observed = set()
     for path in (ROOT / 'lib').rglob('*.dart'):

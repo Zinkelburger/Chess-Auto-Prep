@@ -20,6 +20,7 @@ import 'package:chess_auto_prep/models/engine_settings.dart';
 import 'package:chess_auto_prep/widgets/analysis/stockfish_settings_dialog.dart';
 import 'package:chess_auto_prep/features/tactics/services/tactics_import_coordinator.dart';
 import 'package:flutter/material.dart';
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
@@ -121,6 +122,8 @@ void main() {
     ChangeNotifierProvider(
       create: (_) => AppState(),
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: SizedBox(
             width: 380,

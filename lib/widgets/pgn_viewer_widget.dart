@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
 import 'package:chess_auto_prep/widgets/common/horizontal_wheel_scroll.dart';
 import 'dart:async';
 
@@ -448,7 +449,7 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
   bool _adoptAnnotations(String? pgnText) {
     if (pgnText == null || _isLoading || _m.game == null) return false;
     try {
-      final adopted = _m.adoptAnnotations(PgnGame.parsePgn(pgnText));
+      final adopted = _m.adoptAnnotations(parsePgnGame(pgnText));
       if (adopted) {
         setState(() {});
         _persistMigratedAnalysis();
@@ -508,7 +509,7 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
         return;
       }
 
-      final game = PgnGame.parsePgn(pgnText);
+      final game = parsePgnGame(pgnText);
       if (!mounted) return;
 
       setState(() {

@@ -2,7 +2,7 @@
 /// filtering and the player's rating. Pure text functions, no engine.
 library;
 
-import 'package:dartchess/dartchess.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../../services/game_identity.dart' show platformGameUrl;
@@ -126,7 +126,7 @@ int? _gameIdInsertionIndex(List<String> lines) {
 /// from the game's `WhiteElo` / `BlackElo` header. Null when the user is not
 /// a player in the game or the header is missing or unparseable.
 int? extractUserElo(String gameText, String username) {
-  final game = PgnGame.parsePgn(gameText);
+  final game = parsePgnGame(gameText);
   final white = (game.headers['White'] ?? '').toLowerCase();
   final black = (game.headers['Black'] ?? '').toLowerCase();
   final wanted = username.toLowerCase();

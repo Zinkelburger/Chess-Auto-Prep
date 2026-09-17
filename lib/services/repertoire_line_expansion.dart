@@ -18,6 +18,7 @@
 /// already one-game-per-line is written byte for byte as it came.
 library;
 
+import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
 import 'package:dartchess/dartchess.dart';
 
 import '../models/repertoire_line.dart' show isModelGameHeaders;
@@ -185,7 +186,7 @@ String? courseChapterHeaderKey(List<String> games) {
 List<String>? _expandGame(String text, String titleKey, String? chapterKey) {
   final PgnGame<PgnNodeData> game;
   try {
-    game = PgnGame.parsePgn(text, initHeaders: PgnGame.emptyHeaders);
+    game = parsePgnGame(text, initHeaders: PgnGame.emptyHeaders);
   } catch (_) {
     // Unparseable text is not this function's to judge; it is copied through.
     return null;

@@ -26,6 +26,7 @@
 ///     cannot be converted to SAN (corrupt data); keeps saves lossless.
 library;
 
+import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
 import 'package:dartchess/dartchess.dart';
 
 import '../../../utils/movetext_builder.dart';
@@ -261,7 +262,7 @@ List<String> _pipeSeparated(String? value) =>
     }
 
     try {
-      final game = PgnGame.parsePgn(gameText);
+      final game = parsePgnGame(gameText);
       var pos = Chess.fromSetup(Setup.parseFen(fen)) as Position;
       final sanLine = <String>[];
       String? note = game.comments.isNotEmpty ? game.comments.join(' ') : null;

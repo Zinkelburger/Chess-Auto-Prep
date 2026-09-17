@@ -2,6 +2,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -49,12 +50,16 @@ void main() {
     WidgetTester tester, {
     required List<TacticsPosition> positions,
     bool isImporting = false,
+    int? maxAgeDays,
   }) async {
     final session = TacticsSessionController();
     addTearDown(session.dispose);
-    // Never expire, so the fixtures stay playable.
+    // Most fixtures use no expiry; expiry journeys select an explicit window.
     session.setSessionSettings(
-      const TacticsSessionSettings().copyWith(clearMaxAgeDays: true),
+      const TacticsSessionSettings().copyWith(
+        maxAgeDays: maxAgeDays,
+        clearMaxAgeDays: maxAgeDays == null,
+      ),
       save: false,
     );
     await tester.pumpWidget(
@@ -66,6 +71,8 @@ void main() {
           ),
         ],
         child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             appBar: AppBar(
               actions: [
@@ -169,6 +176,7 @@ void main() {
       tester,
       positions: [_position(id: '1')],
       isImporting: false,
+      maxAgeDays: 14,
     );
 
     await tester.tap(find.text('Filters…'));
@@ -197,6 +205,7 @@ void main() {
       tester,
       positions: [_position(id: '1')],
       isImporting: false,
+      maxAgeDays: 14,
     );
 
     await tester.tap(find.text('Filters…'));
@@ -224,6 +233,7 @@ void main() {
       tester,
       positions: [_position(id: '1')],
       isImporting: false,
+      maxAgeDays: 14,
     );
 
     await tester.tap(find.text('Filters…'));
@@ -278,6 +288,8 @@ void main() {
           ChangeNotifierProvider.value(value: runner),
         ],
         child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             appBar: AppBar(
               actions: [

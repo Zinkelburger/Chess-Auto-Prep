@@ -11,27 +11,33 @@ import 'move_tree.dart';
 abstract final class MoveTreePgnCodec {
   /// [MoveNode]s for dartchess's parsed [nodes], each carrying the position
   /// reached by playing its SAN from [parentPosition].  A node whose SAN is
-  /// illegal there is dropped together with its subtree.
+  /// illegal there is dropped together with its subtree. Iterative traversal
+  /// avoids silently turning a deep valid game into an empty tree on overflow.
   static List<MoveNode> nodesFromDartchess(
     List<PgnChildNode<PgnNodeData>> nodes,
     Position parentPosition,
   ) {
     final result = <MoveNode>[];
-    for (final node in nodes) {
+    final pending = [
+      for (final node in nodes.reversed) (node, parentPosition, result),
+    ];
+    while (pending.isNotEmpty) {
+      final (node, parent, output) = pending.removeLast();
       final san = node.data.san;
-      final afterPos = playSanOrNullMove(parentPosition, san);
+      final afterPos = playSanOrNullMove(parent, san);
       if (afterPos == null) continue;
-      result.add(
-        MoveNode(
-          san: san,
-          fen: afterPos.fen,
-          position: afterPos,
-          comment: joinComments(node.data.comments),
-          startingComment: joinComments(node.data.startingComments),
-          nags: node.data.nags?.toList(),
-          children: nodesFromDartchess(node.children, afterPos),
-        ),
+      final copy = MoveNode(
+        san: san,
+        fen: afterPos.fen,
+        position: afterPos,
+        comment: joinComments(node.data.comments),
+        startingComment: joinComments(node.data.startingComments),
+        nags: node.data.nags?.toList(),
       );
+      output.add(copy);
+      for (final child in node.children.reversed) {
+        pending.add((child, afterPos, copy.children));
+      }
     }
     return result;
   }

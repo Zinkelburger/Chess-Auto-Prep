@@ -10,20 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:provider/provider.dart';
 import 'helpers/tactics_helpers.dart';
-
-String _line(int branch, {int start = 0}) {
-  final text = StringBuffer();
-  const moves = ['Nf3', 'Nf6', 'Ng1', 'Ng8'];
-  for (var ply = start; ply < 200; ply++) {
-    if (ply.isEven || ply == start) {
-      text.write('${ply ~/ 2 + 1}${ply.isEven ? '.' : '...'} ');
-    }
-    text.write(
-      '${moves[ply % 4]} {Branch $branch move $ply. A wrapped course annotation with some explanatory prose.} ',
-    );
-  }
-  return text.toString();
-}
+import '../test/support/large_study_fixture.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -39,14 +26,7 @@ void main() {
       '${(await AppPaths.supportDirectory()).path}/large-study-${DateTime.now().microsecondsSinceEpoch}',
     ).create();
     final file = File('${directory.path}/Course.pgn');
-    final pgn = StringBuffer(
-      '[Event "Large course"]\n\n1. Nf3 {Branch 0 move 0.} ',
-    );
-    for (var branch = 1; branch < 100; branch++) {
-      pgn.write('(${_line(branch)}) ');
-    }
-    pgn.write('${_line(0, start: 1)} *');
-    await file.writeAsString(pgn.toString());
+    await file.writeAsString(largeStudyPgn());
     final watch = Stopwatch()..start();
     await study.openStudy(file.path);
     await tester.pumpAndSettle();

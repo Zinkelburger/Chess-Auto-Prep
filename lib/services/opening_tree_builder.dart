@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
 import 'dart:isolate';
 
 import 'package:dartchess/dartchess.dart';
@@ -87,7 +88,7 @@ class OpeningTreeBuilder {
           try {
             addGame(
               tree,
-              PgnGame.parsePgn(trimmed),
+              parsePgnGame(trimmed),
               usernameLower: usernameLower,
               userIsWhite: args.userIsWhite,
               maxDepth: args.maxDepth,

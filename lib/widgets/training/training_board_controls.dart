@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
 import 'package:dartchess/dartchess.dart' show PgnGame, PgnNodeData, Side;
 import 'package:flutter/material.dart';
 
@@ -221,7 +222,7 @@ class _LessonMovetextState extends State<_LessonMovetext> {
   void _readIntroduction() {
     _game = widget.line.fullPgn.isEmpty
         ? null
-        : PgnGame.parsePgn(widget.line.fullPgn);
+        : parsePgnGame(widget.line.fullPgn);
   }
 
   @override

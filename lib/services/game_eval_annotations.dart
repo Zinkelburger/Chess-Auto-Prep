@@ -9,6 +9,7 @@
 /// isolate-safe (used through `compute`).
 library;
 
+import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
 import 'package:dartchess/dartchess.dart';
 
 import '../core/pgn/pgn_analysis_variations.dart';
@@ -91,7 +92,7 @@ typedef CachedGameAnalysis = ({
 });
 
 CachedGameAnalysis? parseCachedEvals(String pgnText) {
-  final parsed = PgnGame.parsePgn(pgnText);
+  final parsed = parsePgnGame(pgnText);
   promoteNullMoveDummyMainline(parsed.moves);
   return _parseGameEvals(parsed);
 }
@@ -251,7 +252,7 @@ String? injectBestLines(String pgnText, Map<int, List<String>> linesByPly) {
   if (linesByPly.isEmpty) return null;
   final PgnGame<PgnNodeData> parsed;
   try {
-    parsed = PgnGame.parsePgn(pgnText);
+    parsed = parsePgnGame(pgnText);
   } on Object {
     return null;
   }

@@ -11,6 +11,7 @@ import 'package:dartchess/dartchess.dart';
 import '../constants/chess_constants.dart';
 import '../utils/chess_utils.dart' show playSanOrNullMove, tryParseFen;
 import '../utils/fen_utils.dart';
+import '../chess_core/pgn/pgn_parser.dart';
 import '../utils/pgn_nags.dart';
 import '../chess_core/moves/move_tree_view.dart';
 import '../chess_core/moves/tree_path.dart';
@@ -213,22 +214,27 @@ class MoveTree extends MoveTreeView {
   /// A tree received from another isolate (e.g. parsed via `compute`) holds
   /// ids minted by that isolate's own counter, which can collide with ids
   /// of nodes created here; adopt such a tree only through this copy.
-  MoveTree copyWithFreshIds() => MoveTree(
-    startingFen: startingFen,
-    roots: roots.map(_copyNodeWithFreshId).toList(),
-    rootComment: rootComment,
-  );
-
-  static MoveNode _copyNodeWithFreshId(MoveNode node) => MoveNode(
-    san: node.san,
-    fen: node.fen,
-    position: node._position,
-    comment: node.comment,
-    startingComment: node.startingComment,
-    nags: node.nags == null ? null : List.of(node.nags!),
-    isEphemeral: node.isEphemeral,
-    children: node.children.map(_copyNodeWithFreshId).toList(),
-  );
+  MoveTree copyWithFreshIds() {
+    final copy = MoveTree(startingFen: startingFen, rootComment: rootComment);
+    final pending = [for (final node in roots.reversed) (node, copy.roots)];
+    while (pending.isNotEmpty) {
+      final (node, output) = pending.removeLast();
+      final next = MoveNode(
+        san: node.san,
+        fen: node.fen,
+        position: node._position,
+        comment: node.comment,
+        startingComment: node.startingComment,
+        nags: node.nags == null ? null : List.of(node.nags!),
+        isEphemeral: node.isEphemeral,
+      );
+      output.add(next);
+      for (final child in node.children.reversed) {
+        pending.add((child, next.children));
+      }
+    }
+    return copy;
+  }
 
   // ── Lookup ──────────────────────────────────────────────────────────
 
@@ -392,7 +398,7 @@ class MoveTree extends MoveTreeView {
     }
 
     try {
-      final game = PgnGame.parsePgn(pgn);
+      final game = parsePgnGame(pgn);
       final effectiveFen =
           startingFen ?? game.headers['FEN'] ?? kStandardStartFen;
       final rootPos = tryParseFen(effectiveFen) ?? Chess.initial;

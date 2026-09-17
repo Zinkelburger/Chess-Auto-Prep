@@ -6,6 +6,13 @@ from check_architecture_boundaries import violations
 
 
 class BoundariesTest(unittest.TestCase):
+    def test_single_game_parser_boundary_also_covers_legacy_consumers(self):
+        direct = 'final game = PgnGame.parsePgn(text);'
+        self.assertTrue(violations('lib/services/legacy.dart', direct))
+        self.assertFalse(violations('lib/chess_core/pgn/pgn_parser.dart', direct))
+        self.assertFalse(violations('lib/services/legacy.dart', 'final game = parsePgnGame(text);'))
+        self.assertFalse(violations('lib/services/legacy.dart', '/// PgnGame.parsePgn(text) is the reference.'))
+
     def test_frame_scheduling_is_only_allowed_in_feature_widgets(self):
         frame = 'WidgetsBinding.instance.addPostFrameCallback(callback);'
         self.assertFalse(violations('lib/features/documents/widgets/viewport.dart', frame))

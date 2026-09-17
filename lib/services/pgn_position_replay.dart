@@ -5,6 +5,7 @@
 /// Every helper here is isolate-safe (no instance state captured).
 library;
 
+import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
 import 'package:dartchess/dartchess.dart';
 
 import '../core/pgn/pgn_dummy_mainline.dart';
@@ -39,7 +40,7 @@ Position _positionFromHeaders(Map<String, String> headers) {
 }
 
 PgnGame<PgnNodeData> _parsePgnForReplay(String pgnText) {
-  final game = PgnGame.parsePgn(pgnText);
+  final game = parsePgnGame(pgnText);
   promoteNullMoveDummyMainline(game.moves);
   return game;
 }

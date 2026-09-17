@@ -7,6 +7,7 @@
 /// `course_chapter_headers.dart`.
 library;
 
+import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
 import 'dart:isolate';
 
 import 'package:dartchess/dartchess.dart';
@@ -266,7 +267,7 @@ class RepertoireService {
     for (var gameIndex = 0; gameIndex < games.length; gameIndex++) {
       try {
         parsed.add((
-          game: PgnGame.parsePgn(games[gameIndex]),
+          game: parsePgnGame(games[gameIndex]),
           text: games[gameIndex],
           index: gameIndex,
         ));
@@ -476,7 +477,7 @@ class RepertoireService {
 
   Position extractStartPositionFromPgn(String pgnText) {
     try {
-      return extractStartPosition(PgnGame.parsePgn(pgnText));
+      return extractStartPosition(parsePgnGame(pgnText));
     } catch (_) {
       // Unparsable text has no start of its own.
       return Chess.initial;

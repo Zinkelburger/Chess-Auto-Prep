@@ -56,6 +56,10 @@ chapter/tree projections, with incremental local-edit updates, stable annotation
 focus and detached prior revisions. The shared interactive editor now lazily
 mounts variable-height move/comment rows, preserves inline drafts across eviction
 and reveals distant selections without laying out every preceding row.
+Production single-game PGN parsing now shares a guarded chess-core entry point;
+long annotated lines avoid quadratic upstream copying, and move replay/fresh-ID
+adoption handle deep lines iteratively. The native 20,000-node debug journey opens
+in 1.3 seconds, with profile-mode memory/frame gates still pending.
 Viewer/Builder private-core adoption, Viewer movetext windowing, incremental
 editor indexing, undo receipts, variation-cursor/filter/panel
 restoration and complete large-document performance evidence remain pending.

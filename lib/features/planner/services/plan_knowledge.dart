@@ -8,6 +8,7 @@
 /// user has played the move at this position, we know; otherwise we do not.
 library;
 
+import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
 import 'dart:isolate';
 
 import 'package:dartchess/dartchess.dart';
@@ -144,7 +145,7 @@ class PlanKnowledge {
     for (final text in pgn.splitPgnIntoGames(pgnText)) {
       final PgnGame game;
       try {
-        game = PgnGame.parsePgn(text);
+        game = parsePgnGame(text);
       } catch (_) {
         // An unparsable game is not the user's evidence of anything.
         continue;

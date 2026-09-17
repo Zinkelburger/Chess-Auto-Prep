@@ -1,9 +1,9 @@
 /// Stable identity for a stored game: which URL or hash the game is keyed by.
 library;
 
+import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
-import 'package:dartchess/dartchess.dart';
 
 /// A Lichess game path: the 8-char game id, optionally followed by the
 /// 4-char player suffix and/or a `/white` or `/black` orientation.
@@ -74,7 +74,7 @@ String canonicalGameKey(
 String _contentDigest(Map<String, String> headers, String pgn) {
   String moves;
   try {
-    moves = PgnGame.parsePgn(pgn).moves.mainline().map((m) => m.san).join(' ');
+    moves = parsePgnGame(pgn).moves.mainline().map((m) => m.san).join(' ');
   } catch (_) {
     // An unreadable game must not collide with another unreadable record.
     moves = pgn.trim();

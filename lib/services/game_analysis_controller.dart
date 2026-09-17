@@ -8,6 +8,7 @@
 /// the series is restored from those annotations without the engine.
 library;
 
+import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
 import 'dart:async';
 
 import 'package:dartchess/dartchess.dart';
@@ -205,7 +206,7 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
         !isDisposed && !_isCancelled && generation == _generation;
 
     try {
-      final parsed = PgnGame.parsePgn(pgnText);
+      final parsed = parsePgnGame(pgnText);
       promoteNullMoveDummyMainline(parsed.moves);
       final mainline = parsed.moves.mainline().toList();
       _totalMoves = mainline.where((move) => !isNullMoveSan(move.san)).length;

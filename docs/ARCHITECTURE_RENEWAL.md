@@ -1263,6 +1263,48 @@ budgets, worker-residency decision, undo cycle measurements or image-memory
 budget. Viewer movetext uses its existing renderer; Viewer/Builder private-core
 adoption, Riverpod retirement and milestones 4–7 remain pending.
 
+### PGN decoding checkpoint (2026-09-17)
+
+After viewport checkpoint `f433838c`, production single-game syntax parsing now
+uses `chess_core/pgn/pgn_parser.dart`. The boundary checker also enforces this
+entry point in unmigrated code. Multi-game parsing and specialized lexical
+readers retain their existing contracts.
+
+The upstream syntax parser repeatedly copies the remaining physical line around
+brace comments. A large annotated course on one line therefore incurred
+quadratic copying. The adapter bounds comment-bearing input segments while
+preserving header escapes, comment contents/newlines, semicolon comments and
+original escape-line behavior. Only temporary parser input changes; stored PGN
+bytes are untouched. Explicit move-number labels are discarded before parsing:
+the upstream parser otherwise mistakes `10000.` for a null move. Standalone
+null moves remain supported. Position replay and fresh-ID adoption now use
+explicit stacks, preserving sibling order and annotations without recursive
+decoding of deep lines.
+
+Evidence on Linux (debug builds, bounded local runner):
+
+| Check | Result |
+|---|---|
+| Same saved 20,000-node course, stage diagnosis | Syntax parsing fell from 15,742,099 µs to 81,495 µs; worker decode plus transfer fell from 16,627,796 µs to 252,213 µs in the first optimized diagnostic. |
+| Final portable synthetic-course diagnostic | Syntax 78,577 µs; replay 137,832 µs; fresh IDs 8,449 µs; projection 34,165 µs; row index 366,216 µs; worker decode plus transfer 275,183 µs. |
+| Native 20,000-node Study journey | Open/settle 1,328 ms (previous checkpoint: 23,183 ms); distant selection 657 ms; RSS after edit/save 769,368,064 bytes. Open, jump, edit and save pass. |
+| Broader regression suite | 1,202 tests pass; one existing skip documents game-ending draws incorrectly counted as clean in tactics mining. Includes semantic parser comparisons and a 20,000-ply numbered line with independent fresh IDs. |
+| Native recovery journeys | Study restart recovery and save/conflict/reload/exclusive-copy journeys pass, for three native journeys including the large document. |
+| Analysis and boundary lint | Pass with nine existing analyzer info notices; all 15 boundary-checker tests pass. |
+
+The broader run initially exposed the large move-number parser bug and missing
+localization/disabled-expiry assumptions in settings test fixtures; these were
+corrected before the passing run. The diagnostic is repeatable with
+`scripts/ci.sh test tools/bench/study_document_bench.dart`; it shares the native
+test's generated course and does not access user files by default.
+
+This removes the measured syntax bottleneck, not the remaining performance gates.
+Row indexing still scales with the selected chapter, and the native debug RSS
+measurement does not establish profile-mode allocation, GC or frame budgets.
+Incremental indexing, worker placement decisions, Viewer/Builder private cores,
+undo/session parity, presentation bridge retirement and milestones 4–7 remain
+unfinished. Windows/macOS native checks and full release gates were not run.
+
 ### Initial parity and ownership inventory (milestone 0, partial)
 
 The starting tree has 885 files under `lib/` and 674 under `test/`; these counts
