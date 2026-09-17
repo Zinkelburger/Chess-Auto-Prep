@@ -11,7 +11,7 @@ import 'package:chess_auto_prep/features/repertoires/widgets/repertoire_messages
 import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/l10n/generated/app_localizations_en.dart';
 import 'package:chess_auto_prep/l10n/localized_time.dart';
-import 'package:chess_auto_prep/theme/app_theme.dart';
+import 'package:chess_auto_prep/design_system/theme/app_theme.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

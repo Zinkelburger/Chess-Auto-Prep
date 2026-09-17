@@ -13,7 +13,7 @@ import 'package:flutter/services.dart';
 import '../../theme/app_text_styles.dart';
 import '../../theme/app_colors.dart';
 import 'movetext_primitives.dart' show GlyphButton;
-import '../common/confirm_dialog.dart';
+import '../../design_system/components/confirm_dialog.dart';
 
 class PgnAnnotationPanel extends StatefulWidget {
   /// Focuses the comment field of the most recently mounted panel that has a

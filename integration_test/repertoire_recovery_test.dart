@@ -11,7 +11,7 @@ import 'package:chess_auto_prep/infrastructure/settings/fresh_desktop_preference
 import 'package:chess_auto_prep/infrastructure/settings/shared_preferences_app_settings_repository.dart';
 import 'package:chess_auto_prep/services/storage/app_paths.dart';
 import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
-import 'package:chess_auto_prep/theme/app_theme.dart';
+import 'package:chess_auto_prep/design_system/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';

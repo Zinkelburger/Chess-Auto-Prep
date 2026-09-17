@@ -20,7 +20,7 @@ import 'models/bulk_analysis_settings.dart';
 import 'models/eval_database_settings.dart';
 import 'screens/main_screen.dart';
 import 'theme/app_colors.dart';
-import 'theme/app_theme.dart';
+import 'design_system/theme/app_theme.dart';
 
 import 'services/default_pgn_service.dart';
 import 'services/engine/engine_lifecycle.dart';

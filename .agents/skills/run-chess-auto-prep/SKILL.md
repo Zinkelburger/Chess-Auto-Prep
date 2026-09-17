@@ -28,6 +28,11 @@ a PNG from Flutter's layer tree; inspect the returned image after UI changes.
 `start --visible` uses a real window only for requested demos or native desktop
 behavior that needs testing. It still uses the isolated profile.
 
+For the component catalog, use `start --target widgetbook/main.dart`.
+`--target` accepts a Dart entrypoint inside the selected source checkout. The
+same headless display, isolated profile and bounded runner still apply. Stop the
+current preview before changing entrypoints; `status` records the active target.
+
 Driver state is per checkout. Work in your own worktree so another task cannot
 navigate or stop your app. `start --src DIR` builds a specific checkout and
 `start --worktree` creates a fresh HEAD snapshot; neither resets an existing

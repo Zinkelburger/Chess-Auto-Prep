@@ -8,7 +8,7 @@ import '../../../models/repertoire_line.dart';
 import '../../repertoires/models/repertoire_metadata.dart';
 import '../../../services/storage/storage_factory.dart';
 import '../../../widgets/common/choice_field.dart';
-import '../../../widgets/common/list_search_field.dart';
+import '../../../design_system/components/list_search_field.dart';
 import 'opening_position_preview.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';

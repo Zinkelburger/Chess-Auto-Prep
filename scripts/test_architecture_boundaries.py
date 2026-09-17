@@ -39,6 +39,21 @@ class BoundariesTest(unittest.TestCase):
                 self.assertTrue(violations(path, "import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';"))
         self.assertFalse(violations('lib/features/repertoires/widgets/catalog.dart', "import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';"))
 
+    def test_design_system_has_no_app_or_domain_dependencies(self):
+        for uri in ('../../features/repertoires/models/repertoire_metadata.dart', '../../theme/app_colors.dart', 'dart:io'):
+            self.assertTrue(violations('lib/design_system/components/example.dart', f"import '{uri}';"))
+        self.assertFalse(violations('lib/design_system/components/example.dart', "import '../theme/app_typography.dart';"))
+
+    def test_migrated_widgets_resolve_theme_roles(self):
+        path = 'lib/features/repertoires/widgets/example.dart'
+        for source in ("import '../../../theme/app_colors.dart';", 'final color = Color(0xff121212);', 'final style = TextStyle(fontSize: 14);'):
+            self.assertTrue(violations(path, source))
+        self.assertFalse(violations(path, 'final color = Theme.of(context).colorScheme.error;'))
+
+    def test_widgetbook_cannot_initialize_real_storage(self):
+        for source in ("import 'dart:io';", "import 'package:chess_auto_prep/services/storage/storage_factory.dart';", 'final repo = StorageFactory.instance;'):
+            self.assertTrue(violations('widgetbook/cases.dart', source))
+
     def test_injected_domain_dependencies_are_allowed(self):
         self.assertFalse(violations('lib/features/repertoires/controllers/example.dart', "import '../repositories/repertoire_catalog_repository.dart';"))
         self.assertFalse(violations('lib/infrastructure/repertoires/store.dart', "import '../../features/repertoires/repositories/repertoire_catalog_repository.dart';"))

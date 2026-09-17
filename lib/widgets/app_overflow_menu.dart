@@ -7,7 +7,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
-import '../theme/app_motion.dart';
+import '../design_system/theme/app_motion.dart';
 import '../theme/app_text_styles.dart';
 import 'info_hint.dart';
 

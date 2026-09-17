@@ -22,7 +22,7 @@ import 'package:chess_auto_prep/utils/training_markers.dart';
 import 'package:chess_auto_prep/widgets/pgn/movetext_primitives.dart'
     show MoveChip, PgnMoveDecorations;
 import '../models/pgn_deletion_summary.dart';
-import 'common/confirm_dialog.dart';
+import '../design_system/components/confirm_dialog.dart';
 import 'pgn/comment_editor.dart';
 import 'pgn/comment_prose_spans.dart';
 import 'pgn/pgn_annotation_panel.dart';

@@ -13,12 +13,12 @@
 /// scoped to that chapter ([ChapterPick.courseChapter]).
 library;
 
-import 'common/name_entry_dialog.dart';
+import '../design_system/components/name_entry_dialog.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'common/item_title.dart';
+import '../design_system/components/item_title.dart';
 
 import '../features/repertoires/models/repertoire_metadata.dart';
 import '../services/pgn_parsing_service.dart' as pgn;
@@ -29,9 +29,9 @@ import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
 import '../utils/safe_file_name.dart';
-import 'common/confirm_dialog.dart';
-import 'common/list_search_field.dart';
-import 'layout/empty_state_placeholder.dart';
+import '../design_system/components/confirm_dialog.dart';
+import '../design_system/components/list_search_field.dart';
+import '../design_system/components/empty_state_placeholder.dart';
 
 /// What the picker hands back: a chapter file, and — when the user tapped
 /// one of the course chapters listed under it — that chapter's title.

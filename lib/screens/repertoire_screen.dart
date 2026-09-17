@@ -64,7 +64,7 @@ import '../widgets/engine/floating_board_preview.dart';
 import '../features/repertoire/controllers/repertoire_layout_prefs.dart';
 import '../features/repertoire/widgets/repertoire_workspace_panel.dart';
 import '../features/repertoire/services/chapter_store.dart';
-import '../widgets/common/name_entry_dialog.dart';
+import '../design_system/components/name_entry_dialog.dart';
 import '../features/repertoire/services/repertoire_outline_service.dart';
 import '../features/repertoire/widgets/build_config_screen.dart';
 import '../features/repertoire/widgets/repertoire_lines_side_panel.dart';

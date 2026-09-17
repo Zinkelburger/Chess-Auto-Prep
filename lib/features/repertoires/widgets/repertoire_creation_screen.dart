@@ -5,7 +5,8 @@ import 'package:flutter/material.dart';
 
 import '../../../services/pgn_mainline_lexer.dart' as pgn;
 import '../../../services/pgn_parsing_service.dart' as pgn;
-import '../../../theme/app_text_styles.dart';
+import '../../../design_system/theme/app_typography.dart';
+import '../../../design_system/theme/app_spacing.dart';
 import '../../../widgets/pgn_import_dialog.dart';
 
 /// Shared material creation. Returns the new files to the caller; it never
@@ -117,7 +118,7 @@ class _RepertoireCreationScreenState extends State<RepertoireCreationScreen> {
         child: Align(
           heightFactor: 1,
           child: SizedBox(
-            width: 680,
+            width: AppSpacing.formWidth,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
               child: Column(
@@ -134,7 +135,7 @@ class _RepertoireCreationScreenState extends State<RepertoireCreationScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: AppSpacing.md),
                   ],
                   OverflowBar(
                     alignment: MainAxisAlignment.end,
@@ -165,15 +166,18 @@ class _RepertoireCreationScreenState extends State<RepertoireCreationScreen> {
       body: Align(
         alignment: Alignment.topCenter,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 680),
+          constraints: const BoxConstraints(maxWidth: AppSpacing.formWidth),
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(AppSpacing.xl),
             child: Form(
               key: _form,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(l10n.creationHeading, style: AppTextStyles.title),
+                  Text(
+                    l10n.creationHeading,
+                    style: AppTypography.title(context),
+                  ),
                   const SizedBox(height: 20),
                   TextFormField(
                     key: const ValueKey('repertoire-create-name'),
@@ -190,8 +194,11 @@ class _RepertoireCreationScreenState extends State<RepertoireCreationScreen> {
                         repertoireNameProblem(l10n, value?.trim() ?? ''),
                   ),
                   const SizedBox(height: 20),
-                  Text(l10n.playingSide, style: AppTextStyles.bodyStrong),
-                  const SizedBox(height: 8),
+                  Text(
+                    l10n.playingSide,
+                    style: AppTypography.bodyStrong(context),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
                   SegmentedButton<String>(
                     segments: [
                       ButtonSegment(value: 'White', label: Text(l10n.white)),
@@ -230,7 +237,7 @@ class _RepertoireCreationScreenState extends State<RepertoireCreationScreen> {
                             });
                           },
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: AppSpacing.lg),
                   if (!_empty) ...[
                     Align(
                       alignment: AlignmentDirectional.centerStart,
@@ -240,14 +247,14 @@ class _RepertoireCreationScreenState extends State<RepertoireCreationScreen> {
                         label: Text(l10n.openPgnFile),
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: AppSpacing.md),
                     TextField(
                       key: const ValueKey('repertoire-create-pgn'),
                       controller: _pgn,
                       enabled: !_busy,
                       minLines: 7,
                       maxLines: 12,
-                      style: AppTextStyles.mono,
+                      style: AppTypography.mono(context),
                       decoration: InputDecoration(
                         labelText: l10n.pgnMoves,
                         hintText: l10n.pgnPasteHint,
@@ -255,8 +262,11 @@ class _RepertoireCreationScreenState extends State<RepertoireCreationScreen> {
                       ),
                     ),
                   ] else
-                    Text(l10n.emptyRepertoireHelp, style: AppTextStyles.muted),
-                  const SizedBox(height: 24),
+                    Text(
+                      l10n.emptyRepertoireHelp,
+                      style: AppTypography.secondary(context),
+                    ),
+                  const SizedBox(height: AppSpacing.xl),
                 ],
               ),
             ),

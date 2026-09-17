@@ -10,7 +10,7 @@ import 'package:chess_auto_prep/infrastructure/documents/native_pgn_document_sto
 import 'package:chess_auto_prep/infrastructure/repertoires/legacy_repertoire_catalog_repository.dart';
 import 'package:chess_auto_prep/services/storage/app_paths.dart';
 import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
-import 'package:chess_auto_prep/theme/app_theme.dart';
+import 'package:chess_auto_prep/design_system/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';

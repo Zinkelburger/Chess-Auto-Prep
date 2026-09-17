@@ -30,7 +30,7 @@ import '../widgets/app_mode_switcher.dart';
 import '../widgets/app_overflow_menu.dart';
 import '../widgets/app_settings_button.dart';
 import '../widgets/board_editor/board_editor_dialog.dart';
-import '../widgets/common/confirm_dialog.dart';
+import '../design_system/components/confirm_dialog.dart';
 import '../models/pgn_deletion_summary.dart';
 import '../widgets/pgn/pgn_save_status.dart';
 import '../widgets/common/searchable_picker_dialog.dart';

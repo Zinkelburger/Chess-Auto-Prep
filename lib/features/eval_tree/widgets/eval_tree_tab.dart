@@ -20,7 +20,7 @@ import '../services/eval_tree_layout_engine.dart';
 import '../services/eval_tree_line_metrics.dart';
 import 'eval_tree_toolbar.dart';
 import 'eval_tree_viewport.dart';
-import '../../../widgets/layout/empty_state_placeholder.dart';
+import '../../../design_system/components/empty_state_placeholder.dart';
 import 'repertoire_tree_explorer.dart';
 
 class EvalTreePositionSelection {

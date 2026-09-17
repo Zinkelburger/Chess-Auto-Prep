@@ -50,7 +50,7 @@ import '../../../widgets/app_breadcrumb_trail.dart';
 import '../../../widgets/app_mode_switcher.dart';
 import '../../../widgets/app_overflow_menu.dart';
 import '../../../widgets/app_settings_button.dart';
-import '../../../widgets/common/confirm_dialog.dart';
+import '../../../design_system/components/confirm_dialog.dart';
 import '../../../widgets/eval_database_download_card.dart';
 import '../../../widgets/eval_database_settings_panel.dart';
 import '../../../widgets/lichess_eval_download_card.dart';

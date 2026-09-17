@@ -9,7 +9,7 @@ import 'package:flutter/material.dart';
 
 import '../features/repertoires/models/repertoire_metadata.dart';
 import '../widgets/chapter_list_body.dart';
-import '../widgets/common/item_title.dart';
+import '../design_system/components/item_title.dart';
 
 class RepertoireChaptersScreen extends StatelessWidget {
   final RepertoireMetadata repertoire;

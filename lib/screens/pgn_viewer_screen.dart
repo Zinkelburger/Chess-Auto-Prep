@@ -10,7 +10,7 @@
 library;
 
 import 'dart:async';
-import '../widgets/common/name_entry_dialog.dart';
+import '../design_system/components/name_entry_dialog.dart';
 import 'dart:convert';
 import 'package:dartchess/dartchess.dart'
     show Chess, Setup, PgnGame, PgnNodeData, Position;
@@ -60,7 +60,7 @@ import '../widgets/app_mode_switcher.dart';
 import '../widgets/app_overflow_menu.dart';
 import '../features/games/widgets/game_view_settings_dialog.dart';
 import '../widgets/app_settings_button.dart';
-import '../widgets/common/confirm_dialog.dart';
+import '../design_system/components/confirm_dialog.dart';
 import '../widgets/engine/engine_gate.dart';
 import '../widgets/layout/responsive_split_layout.dart';
 import '../widgets/chess_board_widget.dart';

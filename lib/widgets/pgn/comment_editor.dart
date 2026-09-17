@@ -9,7 +9,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
-import '../common/confirm_dialog.dart';
+import '../../design_system/components/confirm_dialog.dart';
 
 class PgnCommentEditor extends StatefulWidget {
   final String initialText;

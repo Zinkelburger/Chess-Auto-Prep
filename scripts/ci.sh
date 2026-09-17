@@ -50,7 +50,7 @@ run_step() {
       ;;
     analyze)
       "${JOB[@]}" run -- "$FLUTTER" gen-l10n || return $?
-      "${JOB[@]}" run -- "$FLUTTER" analyze lib test integration_test --no-fatal-infos
+      "${JOB[@]}" run -- "$FLUTTER" analyze lib test integration_test widgetbook --no-fatal-infos
       ;;
     test)
       "${JOB[@]}" run -- "$FLUTTER" gen-l10n || return $?

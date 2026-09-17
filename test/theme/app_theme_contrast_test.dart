@@ -2,7 +2,7 @@ import 'package:chess_auto_prep/core/app_state.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:chess_auto_prep/theme/app_colors.dart';
-import 'package:chess_auto_prep/theme/app_theme.dart';
+import 'package:chess_auto_prep/design_system/theme/app_theme.dart';
 import 'package:chess_auto_prep/widgets/app_overflow_menu.dart';
 import 'package:chess_auto_prep/widgets/analysis/stockfish_settings_dialog.dart';
 import 'package:chess_auto_prep/widgets/engine/inline_engine_settings.dart';

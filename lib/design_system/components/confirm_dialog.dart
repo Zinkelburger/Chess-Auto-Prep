@@ -4,8 +4,6 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../../theme/app_colors.dart';
-
 /// Ask before doing something the user cannot undo. Returns true only on an
 /// explicit confirm — dismissing the dialog (tap-away, Escape) is a "no".
 ///
@@ -28,6 +26,7 @@ Future<bool> confirmAction(
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
+      scrollable: true,
       title: Text(title),
       content: message == null ? null : Text(message),
       actions: [
@@ -40,7 +39,7 @@ Future<bool> confirmAction(
             onPressed: () => Navigator.pop(ctx, true),
             child: Text(
               confirmLabel,
-              style: const TextStyle(color: AppColors.danger),
+              style: TextStyle(color: Theme.of(ctx).colorScheme.error),
             ),
           )
         else

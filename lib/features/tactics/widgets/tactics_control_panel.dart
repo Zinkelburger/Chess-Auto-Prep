@@ -19,7 +19,7 @@ import '../../../utils/app_messages.dart';
 import '../../../utils/fen_utils.dart';
 import '../../../utils/app_shortcuts.dart';
 import '../../../utils/keyboard_shortcut_utils.dart';
-import '../../../widgets/common/confirm_dialog.dart';
+import '../../../design_system/components/confirm_dialog.dart';
 import '../../../widgets/engine/inline_engine_bar.dart';
 import '../../../widgets/pgn_viewer_widget.dart';
 import '../../../widgets/pgn_with_engine.dart';

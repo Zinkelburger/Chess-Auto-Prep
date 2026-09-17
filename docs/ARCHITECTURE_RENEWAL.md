@@ -605,6 +605,61 @@ first slice or PLAN-02. Remaining first-slice work includes shared save/conflict
 interaction, persistent shell, design-system/Widgetbook, complete settings and
 native/recovery/performance gates. Milestones 3–7 retain their full scope.
 
+### Design-system checkpoint — production controls and Widgetbook
+
+After localization checkpoint `7cd67ca5`, `lib/design_system/` owns the canonical
+production theme, motion, typography/spacing and five shared controls used by
+the catalog. Existing import sites are retargeted and old control/theme paths
+are removed, with no re-export copies. `WorkspaceTheme` supplies typed workspace
+surfaces with `copyWith`/`lerp`; standard roles remain in `ColorScheme` and
+`TextTheme`. The migrated catalog resolves the active theme and has no fixed
+palette/type-size reads. Shared controls also resolve theme colors; dark neutral
+values and bundled font names have one owner. The existing charcoal/neutral
+accent treatment is retained as the first reviewable direction.
+
+UI-01/ARCH-01: manual [Widgetbook 3.25](https://pub.dev/packages/widgetbook)
+cases use these production components and repository contracts, with in-memory
+library/recovery state and scripted creation success/delay/failure. Picker and
+chapter-navigation seams prevent fixtures opening real user storage. Theme and
+text-scale addons cover light/dark and 100/150/200%. A test exposed dialogs
+falling back to Widgetbook chrome's 100% scale; the case host now captures its
+scale along with Material's theme capture. This is fixture wiring, not a copied
+form implementation. Theme-switch tests retain creation draft, focus and
+selection, and reduced-motion navigation omits the fade.
+
+The design system cannot depend on app/features/storage. Migrated widgets cannot
+import legacy themes or invent colors/type sizes. The legacy exception ledger
+names 257 remaining file owners and removal milestones; lint rejects new users
+and requires deleting retired entries. Widgetbook cannot directly instantiate
+real storage or access global singletons. The check runner analyzes the catalog,
+and the app driver accepts an in-checkout `--target` while preserving bounded
+execution, private display/profile, and checkout ownership.
+
+Verification (Linux, source: the commit containing this record):
+
+- 70 focused widget/unit cases pass, covering theme contrast, 100/150/200% text,
+  dialog inheritance, keyboard rename, draft/focus preservation, reduced motion,
+  localization and legacy callers of the moved controls.
+- Five native desktop journeys pass: one real Widgetbook rename/delete/restore
+  journey with memory fixtures, two production catalog journeys, and two native
+  document-store failure/retry journeys. The fixture journey is not evidence of
+  disk persistence; the production journeys exercise that boundary.
+- `scripts/ci.sh analyze lint` passes with nine pre-existing informational
+  analyzer notices and all ten architecture-guard regression tests passing.
+- The driver launched `widgetbook/main.dart` on its private display/profile.
+  Inspected [dark catalog](images/renewal-widgetbook-dark.png),
+  [light catalog at 150%](images/renewal-widgetbook-light-150.png), and
+  [light rename dialog at 150%](images/renewal-widgetbook-light-dialog.png)
+  screenshots show readable controls and wrapping without overflow. Preview
+  stopped after inspection. This is implementation review, not owner acceptance.
+
+This checkpoint does not complete UI-01 or the first-slice gate: persisted light/dark/
+system appearance, full focus/disabled/busy/accessibility matrices, native reader
+checks and product-owner visual review remain open. Other screens still have
+legacy dark styles. Shared save/conflict interaction, persistent shell, settings,
+recovery/performance/platform evidence and PLAN-02 remain required. No later
+feature milestone is graduated by this component migration.
+
 ### Initial parity and ownership inventory (milestone 0, partial)
 
 The starting tree has 885 files under `lib/` and 674 under `test/`; these counts
@@ -654,7 +709,7 @@ Host matrix: Linux local development/runtime is available. Windows/macOS native
 packaging, signing, reader accessibility, vault and forced-parent-death checks
 are **unverified**, not inferred from Linux. Remote crash reporting, telemetry
 and cloud sync remain outside scope. No package or runtime version has changed
-in S0. Riverpod 3 and catalog ARB are now adopted; Widgetbook remains planned;
+in S0. Riverpod 3, catalog ARB and the first-slice Widgetbook are now adopted;
 SQLite remains the storage default and Drift remains deferred.
 
 Before starting 1/2, finish the missing inventory and record measured baseline

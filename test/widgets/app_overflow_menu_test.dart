@@ -3,7 +3,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:chess_auto_prep/theme/app_motion.dart';
+import 'package:chess_auto_prep/design_system/theme/app_motion.dart';
 import 'package:chess_auto_prep/widgets/app_overflow_menu.dart';
 
 Widget _wrap(

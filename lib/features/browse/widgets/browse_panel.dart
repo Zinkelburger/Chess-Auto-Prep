@@ -16,7 +16,7 @@ import 'package:chess_auto_prep/features/traps/services/trap_index_service.dart'
 import 'package:chess_auto_prep/features/browse/services/candidate_service.dart';
 import '../../../utils/app_shortcuts.dart';
 import '../../../services/lichess_auth_service.dart';
-import '../../../widgets/layout/empty_state_placeholder.dart';
+import '../../../design_system/components/empty_state_placeholder.dart';
 import '../../../widgets/lichess_login_prompt.dart';
 import 'candidate_row.dart';
 import 'expanded_trap_list.dart';

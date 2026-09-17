@@ -365,6 +365,43 @@ setup, engine settings, chapter naming and import confirmations remain forms,
 not modes. These are ownership decisions; the remaining work is tracked in
 [Layout & navigation](FUTURE_FEATURES.md#layout--navigation).
 
+#### Design system and component catalog
+
+`lib/design_system/theme/` owns `AppTheme`, `AppTypography`, `AppSpacing`,
+`AppMotion` and the interpolated `WorkspaceTheme` extension. Both light and dark
+factories register the same roles; widgets resolve the current theme. The app
+still opens in its existing dark appearance. Light/system appearance preferences
+and unmigrated screens are not yet certified.
+
+`lib/design_system/components/` is the canonical home for `ListSearchField`,
+`showNameEntryDialog`, `confirmAction`, `ItemTitle` and `EmptyStatePlaceholder`.
+All existing callers import these implementations; the old files were removed.
+Catalog/create/paste UI now uses resolved foreground, error, surface and type
+roles. Shared neutral values and font names have one owner; remaining dark
+`AppColors`/`AppTextStyles` consumers are listed with migration owners in
+`scripts/legacy_theme_consumers.json` (257 at this checkpoint). Architecture
+lint rejects new consumers and requires removing retired ledger entries. It
+also excludes feature/storage dependencies from the design system and literal
+colors/type sizes from migrated widgets.
+
+`widgetbook/main.dart` is a local developer entrypoint with production library,
+creation, search and empty-state widgets. Cases cover populated/empty/unavailable
+libraries, recovery, and successful/slow/failed creation with memory-only
+repositories, picker results and chapter navigation. The theme/text-scale addons
+use production light/dark themes at 100/150/200%; the case host preserves that
+configuration through pushed routes and dialogs. No real library, account or
+engine is initialized, and lint rejects direct storage/singleton access there.
+`RepertoireListBody.browseChapters` is the host-owned navigation seam used by the
+fixtures; production retains the existing chapter-screen handoff by default.
+
+Run `python3 scripts/app_driver.py start --target widgetbook/main.dart` from the
+task checkout, then use the normal dump/tap/screenshot/stop commands. This uses
+the same private display/profile and bounded runner as the app; stop it before
+checking that tree. `scripts/ci.sh analyze lint` includes the catalog source;
+`test/design_system/` and `integration_test/design_system_catalog_test.dart`
+exercise actual production controls. Reduced-motion page transitions skip the
+fade, and theme-switch tests retain the creation field's draft/focus/selection.
+
 #### Repertoire library and shared creation
 
 The catalog now lives in `lib/features/repertoires/`: `models/`, `controllers/`,
@@ -409,8 +446,8 @@ Localization dependencies are forbidden in migrated models, repositories,
 controllers and infrastructure by the architecture boundary check.
 
 The older singular `features/repertoire/` still owns the chapter organizer,
-document editing and generation. Existing theme, picker and codec helpers are
-retained until their owning renewal slice migrates. Boundary checks in local
+document editing and generation. Existing picker and codec helpers are retained until their owning renewal
+slice migrates; the catalog uses the shared design system above. Boundary checks in local
 lint prevent migrated catalog code from importing storage/infrastructure or
 accessing global singletons. This is a partial first slice; remaining renewal
 gates are tracked in [the execution record](ARCHITECTURE_RENEWAL.md#catalog-boundary-checkpoint--first-slice-in-progress).

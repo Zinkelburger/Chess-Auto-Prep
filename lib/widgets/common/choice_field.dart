@@ -20,7 +20,7 @@ import 'package:flutter/services.dart';
 
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
-import 'list_search_field.dart';
+import '../../design_system/components/list_search_field.dart';
 
 /// One row of a [ChoiceField].
 class ChoiceItem<T> {

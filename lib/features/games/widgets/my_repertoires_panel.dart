@@ -13,7 +13,7 @@ import '../../../services/storage/storage_factory.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../utils/app_messages.dart';
-import '../../../widgets/common/confirm_dialog.dart';
+import '../../../design_system/components/confirm_dialog.dart';
 import '../../../widgets/common/choice_field.dart';
 import '../../../widgets/pgn_import_dialog.dart';
 import '../services/my_repertoire_settings.dart';

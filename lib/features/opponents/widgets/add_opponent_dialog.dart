@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
-import '../../../widgets/common/list_search_field.dart';
+import '../../../design_system/components/list_search_field.dart';
 import '../models/person_record.dart';
 import '../services/opponent_store.dart';
 import 'person_edit_dialog.dart';

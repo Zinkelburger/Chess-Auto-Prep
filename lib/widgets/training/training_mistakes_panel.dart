@@ -6,7 +6,7 @@ import '../../theme/app_text_styles.dart';
 import '../../utils/fen_utils.dart' show plyFromFen;
 import '../../utils/movetext_builder.dart';
 import '../../utils/time_format.dart';
-import '../common/list_search_field.dart';
+import '../../design_system/components/list_search_field.dart';
 
 /// Searchable attempt history inside the trainer's existing side pane.
 class TrainingMistakesPanel extends StatefulWidget {

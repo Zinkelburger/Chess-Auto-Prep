@@ -23,7 +23,7 @@ import 'package:chess_auto_prep/theme/app_colors.dart';
 import 'package:chess_auto_prep/widgets/engine/expectimax_panel_host.dart';
 import 'package:chess_auto_prep/widgets/engine/unified_engine_pane.dart';
 import 'package:chess_auto_prep/utils/chess_utils.dart' show uciToSan;
-import 'package:chess_auto_prep/widgets/layout/empty_state_placeholder.dart';
+import 'package:chess_auto_prep/design_system/components/empty_state_placeholder.dart';
 import 'package:chess_auto_prep/features/eval_tree/widgets/compact_tree_outline.dart';
 import 'package:chess_auto_prep/widgets/opening_tree_widget.dart';
 import 'edit_context_layout_sheet.dart';

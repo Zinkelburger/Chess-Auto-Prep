@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../theme/app_colors.dart';
-import '../../theme/app_text_styles.dart';
+import '../theme/app_typography.dart';
 
 /// One-line filter box for any list of named things (repertoires, chapters,
 /// studies, games). Always mounted, never behind a magnifier icon that has to
@@ -63,7 +62,9 @@ class _ListSearchFieldState extends State<ListSearchField> {
     return TextField(
       controller: _controller,
       autofocus: widget.autofocus,
-      style: const TextStyle(fontSize: 13),
+      style: AppTypography.secondary(
+        context,
+      ).copyWith(color: theme.colorScheme.onSurface),
       textInputAction: TextInputAction.search,
       onSubmitted: widget.onSubmitted == null
           ? null
@@ -78,11 +79,11 @@ class _ListSearchFieldState extends State<ListSearchField> {
         hintText: widget.hintText,
         filled: widget.fillColor == null ? null : true,
         fillColor: widget.fillColor,
-        hintStyle: AppTextStyles.caption,
-        prefixIcon: const Icon(
+        hintStyle: AppTypography.caption(context),
+        prefixIcon: Icon(
           Icons.search,
           size: 16,
-          color: AppColors.onSurfaceMuted,
+          color: theme.colorScheme.onSurfaceVariant,
         ),
         prefixIconConstraints: const BoxConstraints(
           minWidth: 32,
@@ -113,8 +114,8 @@ class _ListSearchFieldState extends State<ListSearchField> {
         ),
         isDense: true,
         contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        border: border(AppColors.outline),
-        enabledBorder: border(AppColors.outline),
+        border: border(theme.colorScheme.outline),
+        enabledBorder: border(theme.colorScheme.outline),
         focusedBorder: border(theme.colorScheme.primary),
       ),
     );

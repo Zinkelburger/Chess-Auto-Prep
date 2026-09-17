@@ -6,7 +6,8 @@ import 'package:path/path.dart' as p;
 
 import '../../../services/pgn_mainline_lexer.dart' as pgn;
 import '../../../services/pgn_parsing_service.dart' as pgn;
-import '../../../theme/app_text_styles.dart';
+import '../../../design_system/theme/app_typography.dart';
+import '../../../design_system/theme/app_spacing.dart';
 import '../../../utils/app_messages.dart';
 import '../../../utils/safe_file_name.dart';
 import '../../../widgets/pgn_import_dialog.dart';
@@ -154,7 +155,7 @@ class _RepertoirePasteDialogState extends State<_RepertoirePasteDialog> {
   Widget build(BuildContext context) => PopScope(
     canPop: !_saving,
     child: AlertDialog(
-      title: Text(l10n.pastePgn, style: AppTextStyles.title),
+      title: Text(l10n.pastePgn, style: AppTypography.title(context)),
       scrollable: true,
       content: SizedBox(
         width: 460,
@@ -162,8 +163,8 @@ class _RepertoirePasteDialogState extends State<_RepertoirePasteDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(l10n.pasteHelp, style: AppTextStyles.muted),
-            const SizedBox(height: 16),
+            Text(l10n.pasteHelp, style: AppTypography.secondary(context)),
+            const SizedBox(height: AppSpacing.lg),
             TextField(
               key: const ValueKey('repertoire-import-pgn'),
               controller: _paste,
@@ -171,7 +172,7 @@ class _RepertoirePasteDialogState extends State<_RepertoirePasteDialog> {
               autofocus: true,
               minLines: 6,
               maxLines: 10,
-              style: AppTextStyles.mono,
+              style: AppTypography.mono(context),
               decoration: InputDecoration(
                 hintText: l10n.pgnExample,
                 border: const OutlineInputBorder(),
@@ -182,7 +183,7 @@ class _RepertoirePasteDialogState extends State<_RepertoirePasteDialog> {
               },
             ),
             if (_error != null) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               Semantics(
                 liveRegion: true,
                 child: Text(

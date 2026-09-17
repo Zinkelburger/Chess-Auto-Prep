@@ -17,6 +17,7 @@ library;
 import 'package:flutter/material.dart';
 
 import 'app_colors.dart';
+import '../design_system/theme/app_typography.dart';
 
 abstract final class AppTextStyles {
   /// Keep shared controls readable when a feature supplies a light surface.
@@ -34,24 +35,22 @@ abstract final class AppTextStyles {
 
   /// UI text. Inter: drawn for screens at small sizes, with real tabular
   /// figures. Set once on [ThemeData.fontFamily]; every style inherits it.
-  static const String uiFamily = 'Inter';
+  static const String uiFamily = AppTypography.uiFamily;
 
   /// Moves, FENs, evals, anything that has to line up in columns.
   /// `'monospace'` used to be the family here, which fontconfig resolves to
   /// DejaVu on Linux and Windows resolves to nothing reliable.
-  static const String monoFamily = 'SourceCodePro';
+  static const String monoFamily = AppTypography.monoFamily;
 
   /// The chess figurines (♔♕♖♗♘♙ and their black twins) and nothing else — a
   /// subset of Noto Sans Symbols 2. Installed as the theme's font fallback,
   /// not a family anything is set in, so `♘f3` draws the glyph from here and
   /// `f3` from whatever face the text is already in.
-  static const String figurineFamily = 'NotoSansSymbols2';
+  static const String figurineFamily = AppTypography.figurineFamily;
 
   /// Digits the same width everywhere, so ratings, evals and counts line up
   /// between rows without a mono face.
-  static const List<FontFeature> tabularFigures = [
-    FontFeature.tabularFigures(),
-  ];
+  static const List<FontFeature> tabularFigures = AppTypography.tabularFigures;
 
   // ── Ink (aliases of AppColors so PGN + chrome cannot drift) ─────────────
 
@@ -151,27 +150,4 @@ abstract final class AppTextStyles {
     height: 1.4,
     color: AppColors.onSurfaceMuted,
   );
-
-  /// Maps Material [TextTheme] slots onto these roles so widgets that use
-  /// `Theme.of(context).textTheme` stay consistent without a second palette.
-  static TextTheme materialTextTheme([TextTheme? base]) {
-    final b = base ?? ThemeData.dark().textTheme;
-    return b.copyWith(
-      displayLarge: b.displayLarge?.copyWith(color: ink),
-      displayMedium: b.displayMedium?.copyWith(color: ink),
-      displaySmall: b.displaySmall?.copyWith(color: ink),
-      headlineLarge: b.headlineLarge?.copyWith(color: ink),
-      headlineMedium: b.headlineMedium?.copyWith(color: ink),
-      headlineSmall: b.headlineSmall?.copyWith(color: ink),
-      bodyLarge: body.copyWith(fontSize: 16),
-      bodyMedium: body,
-      bodySmall: caption,
-      titleLarge: title.copyWith(fontSize: 20),
-      titleMedium: title.copyWith(fontSize: 16),
-      titleSmall: subtitle,
-      labelLarge: bodyStrong,
-      labelMedium: caption.copyWith(fontWeight: FontWeight.w500, color: ink),
-      labelSmall: caption,
-    );
-  }
 }

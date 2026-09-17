@@ -7,7 +7,7 @@ import '../../theme/app_colors.dart';
 import '../../utils/coverage_helpers.dart';
 import 'package:chess_auto_prep/services/line_metrics_helpers.dart';
 import '../../utils/lines_filter_helpers.dart';
-import '../layout/empty_state_placeholder.dart';
+import '../../design_system/components/empty_state_placeholder.dart';
 import 'line_item_row.dart';
 import 'line_table_layout.dart';
 

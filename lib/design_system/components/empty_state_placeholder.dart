@@ -6,7 +6,8 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../../theme/app_colors.dart';
+import '../theme/app_typography.dart';
+import '../theme/app_spacing.dart';
 
 class EmptyStatePlaceholder extends StatelessWidget {
   final IconData icon;
@@ -39,37 +40,43 @@ class EmptyStatePlaceholder extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.all(AppSpacing.xxl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: iconSize, color: AppColors.onSurfaceMuted),
-            const SizedBox(height: 16),
+            Icon(
+              icon,
+              size: iconSize,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(height: AppSpacing.lg),
             Text(
               title,
               style: Theme.of(context).textTheme.headlineSmall,
               textAlign: TextAlign.center,
             ),
             if (subtitle != null) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.sm),
               Text(
                 subtitle!,
-                style: const TextStyle(
-                  color: AppColors.onSurfaceMuted,
-                  fontSize: 14,
+                style: AppTypography.body(context).copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
                 textAlign: TextAlign.center,
               ),
             ],
             if (actionLabel != null && onAction != null) ...[
-              const SizedBox(height: 24),
+              const SizedBox(height: AppSpacing.xl),
               FilledButton.icon(
                 onPressed: onAction,
                 icon: Icon(actionIcon ?? Icons.add, size: 18),
                 label: Text(actionLabel!),
               ),
             ],
-            if (trailing != null) ...[const SizedBox(height: 24), trailing!],
+            if (trailing != null) ...[
+              const SizedBox(height: AppSpacing.xl),
+              trailing!,
+            ],
           ],
         ),
       ),

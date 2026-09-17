@@ -10,13 +10,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../common/item_title.dart';
+import '../../design_system/components/item_title.dart';
 
 import '../../core/study_controller.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import 'study_chapter_actions.dart';
-import '../common/list_search_field.dart';
+import '../../design_system/components/list_search_field.dart';
 
 class StudyChapterSidebar extends StatefulWidget {
   final StudyController study;

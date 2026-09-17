@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Drive the running Chess Auto Prep desktop app from a shell.
 
-    driver.py start [--src DIR] [--worktree] [--visible]   build + launch (queues on the
+    driver.py start [--src DIR] [--worktree] [--visible] [--target FILE]   build + launch (queues on the
                                                two-slot resource runner), daemonised
     driver.py dump [kinds=text,key,tooltip,field]
     driver.py tap text=Play | tooltip=… | key=… | x=10 y=20 [index=N] [count=2]
@@ -94,9 +94,10 @@ def pid_alive(pid: int | None) -> bool:
 # Daemon: owns the `flutter run --machine` process and the unix socket
 # ---------------------------------------------------------------------------
 class Daemon:
-    def __init__(self, src: Path, visible: bool = False):
+    def __init__(self, src: Path, visible: bool = False, target: str = "lib/main.dart"):
         self.src = src
         self.visible = visible
+        self.target = target
         self.proc: subprocess.Popen | None = None
         self.app_id: str | None = None
         self.started = threading.Event()
@@ -185,12 +186,12 @@ class Daemon:
         # Keep the run's own Dart/analysis noise out of the interesting log.
         cmd = [
             flutter_bin(), "run", "-d", "linux", "--machine",
-            "--dart-define=AGENT_DRIVER=true",
+            "--dart-define=AGENT_DRIVER=true", "--target", self.target,
         ]
         launch_cmd = resource_scoped_command(cmd, self.visible)
         self.logline(f"launch: {shlex.join(cmd)} (cwd {self.src})")
         write_state(status="starting", pid=os.getpid(), token=agent_job.process_token(os.getpid()), src=str(self.src),
-                    appId=None, vmService=None, headless=not self.visible,
+                    appId=None, vmService=None, headless=not self.visible, target=self.target,
                     profile=str(agent_job.driver_dir(self.src) / "profile"))
         self.proc = subprocess.Popen(
             launch_cmd, cwd=self.src, env=env, text=True, bufsize=1,
@@ -374,6 +375,15 @@ def cmd_start(argv: list[str]) -> None:
             # Build from a clean snapshot of HEAD plus the driver files, so a
             # half-edited shared working tree cannot break the launch.
             src = make_worktree()
+        target = 'lib/main.dart'
+        if '--target' in rest:
+            index = rest.index('--target')
+            if index + 1 >= len(rest):
+                raise SystemExit('--target requires a Dart entrypoint')
+            candidate = (src / rest[index + 1]).resolve()
+            if not candidate.is_relative_to(src) or candidate.suffix != '.dart' or not candidate.is_file():
+                raise SystemExit('--target must name a Dart file inside the source checkout')
+            target = candidate.relative_to(src).as_posix()
         st = read_state()
         if SOCK.exists() and pid_alive(st.get("pid")):
             print(
@@ -388,7 +398,7 @@ def cmd_start(argv: list[str]) -> None:
                 pass
         APP_LOG.write_text("")
         child = subprocess.Popen(
-            [sys.executable, str(Path(__file__).resolve()), "_serve", str(src), *( ["--visible"] if "--visible" in rest else [])],
+            [sys.executable, str(Path(__file__).resolve()), "_serve", str(src), "--target", target, *( ["--visible"] if "--visible" in rest else [])],
             start_new_session=True,
             stdin=subprocess.DEVNULL,
             stdout=open(STATE_DIR / "daemon.out", "w"),
@@ -444,7 +454,8 @@ def main(argv: list[str]) -> None:
         return
     if cmd == "_serve":
         src = Path(rest[0])
-        d = Daemon(src, visible="--visible" in rest)
+        target = rest[rest.index("--target") + 1] if "--target" in rest else "lib/main.dart"
+        d = Daemon(src, visible="--visible" in rest, target=target)
         d.launch()
         d.serve()
         return

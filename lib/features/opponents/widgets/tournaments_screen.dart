@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../models/analysis_player_info.dart';
-import '../../../widgets/common/confirm_dialog.dart';
-import '../../../widgets/common/list_search_field.dart';
+import '../../../design_system/components/confirm_dialog.dart';
+import '../../../design_system/components/list_search_field.dart';
 import '../models/tournament.dart';
 import '../services/opponent_store.dart';
 import 'opponent_actions.dart';

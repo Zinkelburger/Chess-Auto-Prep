@@ -4,7 +4,7 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../common/item_title.dart';
+import '../../design_system/components/item_title.dart';
 
 import '../../services/training/chapter_layout.dart';
 import '../../theme/app_colors.dart';

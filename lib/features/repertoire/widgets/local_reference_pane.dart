@@ -13,7 +13,7 @@ import '../../../services/storage/app_paths.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../utils/isolate_task.dart';
-import '../../../widgets/common/list_search_field.dart';
+import '../../../design_system/components/list_search_field.dart';
 import '../../../widgets/common/searchable_picker_dialog.dart';
 import '../../../widgets/opening_explorer/explorer_move_row.dart';
 import '../../../widgets/pgn/pgn_tree_games_list.dart';

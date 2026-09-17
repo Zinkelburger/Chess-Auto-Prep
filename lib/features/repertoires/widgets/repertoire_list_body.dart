@@ -13,13 +13,13 @@ import '../models/repertoire_creation.dart';
 import '../models/repertoire_recovery_entry.dart';
 import '../models/repertoire_recovery_required.dart';
 
-import '../../../widgets/common/name_entry_dialog.dart';
+import '../../../design_system/components/name_entry_dialog.dart';
 
 import 'package:path/path.dart' as p;
 
 import 'package:flutter/material.dart';
 
-import '../../../widgets/common/item_title.dart';
+import '../../../design_system/components/item_title.dart';
 
 import '../models/repertoire_metadata.dart';
 import '../../../screens/repertoire_chapters_screen.dart';
@@ -28,13 +28,14 @@ import 'repertoire_import_dialog.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../controllers/repertoire_catalog_controller.dart';
 import '../../../widgets/pgn_import_dialog.dart';
-import '../../../theme/app_colors.dart';
-import '../../../theme/app_text_styles.dart';
+import '../../../design_system/theme/workspace_theme.dart';
+import '../../../design_system/theme/app_typography.dart';
+import '../../../design_system/theme/app_spacing.dart';
 import '../../../utils/app_messages.dart';
 import '../../../l10n/localized_time.dart';
-import '../../../widgets/common/confirm_dialog.dart';
-import '../../../widgets/common/list_search_field.dart';
-import '../../../widgets/layout/empty_state_placeholder.dart';
+import '../../../design_system/components/confirm_dialog.dart';
+import '../../../design_system/components/list_search_field.dart';
+import '../../../design_system/components/empty_state_placeholder.dart';
 import '../../../widgets/chapter_list_body.dart' show ChapterPick;
 
 class RepertoireListBody extends ConsumerStatefulWidget {
@@ -59,6 +60,10 @@ class RepertoireListBody extends ConsumerStatefulWidget {
 
   final Future<PickedPgnImport?> Function() pickPgn;
 
+  /// Host-owned navigation seam; catalog fixtures never open real storage.
+  final Future<ChapterPick?> Function(BuildContext, RepertoireMetadata)?
+  browseChapters;
+
   const RepertoireListBody({
     super.key,
     required this.onSelected,
@@ -66,6 +71,7 @@ class RepertoireListBody extends ConsumerStatefulWidget {
     this.onRepertoireSelected,
     this.onStudySelected,
     this.pickPgn = pickPgnImport,
+    this.browseChapters,
   });
 
   @override
@@ -109,7 +115,7 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
   Widget build(BuildContext context) => Align(
     alignment: Alignment.topCenter,
     child: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 920),
+      constraints: const BoxConstraints(maxWidth: AppSpacing.catalogWidth),
       child: _buildContents(context),
     ),
   );
@@ -127,23 +133,23 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
     if (error != null) {
       return Center(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(AppSpacing.xl),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(
+              Icon(
                 Icons.error_outline,
                 size: 64,
-                color: AppColors.danger,
+                color: Theme.of(context).colorScheme.error,
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpacing.lg),
               Text(
                 error is RepertoireRecoveryRequired
                     ? l10n.recoveryRequired
                     : l10n.catalogLoadFailed,
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpacing.lg),
               FilledButton.icon(
                 onPressed: _loadRepertoires,
                 icon: const Icon(Icons.refresh),
@@ -166,10 +172,10 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
           const Divider(height: 1),
           if (catalog.actionError != null)
             Padding(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(AppSpacing.md),
               child: Text(
                 l10n.restoreFailed,
-                style: const TextStyle(color: AppColors.danger),
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
             ),
           Expanded(
@@ -240,7 +246,9 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
               ? Center(
                   child: Text(
                     l10n.nothingMatches(_search),
-                    style: const TextStyle(color: AppColors.onSurfaceMuted),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 )
               : ListView(
@@ -264,15 +272,15 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
   Widget _buildToolbar() {
     final importingFile = _importing && !_pasting;
     return Padding(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(AppSpacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
             _showRecovery ? l10n.repertoireRecovery : l10n.yourRepertoires,
-            style: AppTextStyles.title,
+            style: AppTypography.title(context),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.lg),
           Wrap(
             spacing: 12,
             runSpacing: 8,
@@ -330,7 +338,7 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
           ),
           if (!_showRecovery &&
               (_repertoires.isNotEmpty || _studies.isNotEmpty)) ...[
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.lg),
             ListSearchField(
               hintText: l10n.searchRepertoires,
               clearLabel: l10n.clearSearch,
@@ -350,11 +358,9 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
       padding: const EdgeInsets.only(top: 4, bottom: 10),
       child: Text(
         title,
-        style: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-          color: AppColors.onSurfaceMuted,
-        ),
+        style: AppTypography.secondary(
+          context,
+        ).copyWith(fontWeight: FontWeight.w700),
       ),
     );
   }
@@ -369,18 +375,18 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
         onTap: () => widget.onStudySelected?.call(study),
         borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(AppSpacing.lg),
           child: Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(AppSpacing.md),
                 decoration: BoxDecoration(
-                  color: AppColors.surfaceInset,
+                  color: WorkspaceTheme.of(context).inset,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.menu_book_outlined,
-                  color: AppColors.onSurfaceSoft,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                   size: 32,
                 ),
               ),
@@ -389,20 +395,11 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    ItemTitle(
-                      study.name,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    ItemTitle(study.name, style: AppTypography.title(context)),
                     const SizedBox(height: 4),
                     Text(
                       l10n.chapterCount(chapterCount),
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: AppColors.onSurfaceMuted,
-                      ),
+                      style: AppTypography.secondary(context),
                     ),
                   ],
                 ),
@@ -425,10 +422,10 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
       dense: true,
       contentPadding: const EdgeInsets.symmetric(horizontal: 8),
       leading: const Icon(Icons.library_books_outlined, size: 22),
-      title: ItemTitle(name, style: AppTextStyles.bodyStrong),
+      title: ItemTitle(name, style: AppTypography.bodyStrong(context)),
       subtitle: Text(
         l10n.repertoireDetails(l10n.chapterCount(chapterCount), timeAgo),
-        style: AppTextStyles.caption,
+        style: AppTypography.caption(context),
       ),
       onTap: () => widget.onRepertoireSelected != null
           ? widget.onRepertoireSelected!(repertoire)
@@ -461,11 +458,14 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
   /// Opens the chapter list for [repertoire]; a chosen chapter is forwarded to
   /// [widget.onSelected] (the contract the builder / trainer already consume).
   Future<void> _openRepertoire(RepertoireMetadata repertoire) async {
-    final pick = await Navigator.of(context).push<ChapterPick>(
-      MaterialPageRoute(
-        builder: (_) => RepertoireChaptersScreen(repertoire: repertoire),
-      ),
-    );
+    final browser = widget.browseChapters;
+    final pick = browser != null
+        ? await browser(context, repertoire)
+        : await Navigator.of(context).push<ChapterPick>(
+            MaterialPageRoute(
+              builder: (_) => RepertoireChaptersScreen(repertoire: repertoire),
+            ),
+          );
     if (pick != null && mounted) {
       final courseChapter = pick.courseChapter;
       final onCourseChapter = widget.onCourseChapterSelected;
