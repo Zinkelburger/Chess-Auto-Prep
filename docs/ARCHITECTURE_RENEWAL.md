@@ -50,6 +50,7 @@ ID when a requirement changes. IDs stay stable if milestones are rearranged.
 | PLAN-01 | Record authorized scope, parity inventory, named owners, defaults and bounded time/performance budgets before widening implementation. | [Working method](#working-method-checks-and-sizing) |
 | PLAN-02 | After the first slice, record continue, bounded repair or stop against the baseline; unresolved gates are not passes. | [Continuation](#continuation-decision-after-milestone-2) |
 | ARCH-01 | Migrated widgets/controllers cannot bypass injected domain boundaries; legacy singleton access is confined to injected bridge adapters. Verify import boundaries and feature wiring. | [Dependencies](#target-layout-and-dependency-rules) |
+| ARCH-02 | A completed workflow deletes its superseded owners, forwarding APIs and production consumers; no re-export shims, duplicate writers or permanent legacy bridge remain. All feature directories are covered by the final boundary gate. Report concrete deletions and parity evidence; line counts alone are not proof. | [Retirement gate](#retirement-is-part-of-each-workflow) |
 | DATA-01 | Reproduce each reported overwrite/undo race on current code; independently fix confirmed cases and retain regressions before rewrite-dependent writes. | [Safety prerequisite](#safety-prerequisite-on-current-code) |
 | DATA-02 | Create never replaces; every save/update validates its baseline through the shared mutation boundary. Exercise concurrent creation, stale saves and competing writers. | [PGN API](#one-safe-pgn-mutation-api-and-shared-save-interaction) |
 | DATA-03 | Undo snapshots come from the validated mutation baseline; only a proven history chain may advance its expected revision after undo. Preserve external edits and per-move/successive undo; test conflicts and failures. | [Undo receipts](#undo-receipt-provenance-and-history) |
@@ -2436,6 +2437,57 @@ propagating a new appearance across the application.
   [working method](#working-method-checks-and-sizing).
 
 ## Outcome and scope
+
+### Retirement is part of each workflow
+
+The product owner's 2026-09-17 direction is explicit: retain the new architecture,
+demolish the old one. Ownership extraction and removal of an old *path* are
+checkpoints, not retirement when the same forwarding owner survives elsewhere.
+Every workflow declared complete must satisfy ARCH-02:
+
+- Name its superseded owner types, APIs and production callers before editing.
+  Delete them at cutover, with zero remaining imports, re-exports or callers.
+- Route widgets to the substantial state/command owners they actually use.
+  Composition and cross-owner transactions may have a small lifetime owner;
+  it must not reproduce the old forwarding facade under a different name.
+- Keep one state authority and writer. Old on-disk formats may be decoded by the
+  new infrastructure adapter; this does not require retaining the old service.
+- Run failure/lifecycle and user-workflow parity checks against the new wiring,
+  and add guards against restoring retired owner paths/types.
+- Publish production additions/deletions separately from tests and generated
+  files. A mandatory added-lines/deleted-lines ratio is not the gate: it rewards
+  compressed code, unrelated deletions and missing tests. Actual retired owners,
+  callers, writers and dependency edges are the required evidence.
+
+Remaining bridges make their workflow unfinished. Milestone 7 audits retirement
+across the application; it is not permission to postpone every deletion until
+the end. Temporary working checkpoints may exist while tests and cutover are in
+progress, and must not be reported as completed migrations.
+
+Immediate Viewer removal scope: delete `PgnViewerController` itself, migrate
+screen/widget consumers to collection/editor/filter/presentation/tree/Solitaire
+owners, and consolidate document-session cancellation before or with cutover.
+Invalidation must precede cancellation; cleanup must be idempotent, terminate
+owned workers/timers and prevent late publication while preserving pending save
+and recovery semantics. A single helper must not indiscriminately reset unrelated
+state or pretend an in-flight storage commit has been cancelled. The supplied
+six-row review identifies recovery adoption, file open, decoded adoption, pasted
+content load, retained-context replacement and close. Exercise every path with
+delayed collection/game/filter/index/analysis work, autoplay and Solitaire setup;
+verify the shared cancellation contract plus each path's explicit retained state.
+Keep data/cache revisions distinct from cancellation tokens. Remove mirrored
+editor/presentation errors with the facade so consumers observe the owning state.
+Parent owns this slice from `d6abb6d1`, with five active hours including one
+validation reserve; midpoint is direct consumer wiring with the facade removed.
+
+The current host is still 1,609 lines after its path move. The current checker
+covers six feature directories and leaves 17 outside those rules. A read-only
+application of the same direct-boundary rules to all 23 directories found 414
+violations. These are explicit unfinished work, not certified new architecture.
+The final checker must discover all feature directories and fail on those
+violations; it must not silently skip newly added directories. Prefer completing
+that coverage and the actual migrations over a cosmetic move to `legacy_features/`.
+If an interim quarantine is needed, name it openly and remove it before completion.
 
 Make the entire first-party application understandable, testable and consistent:
 each workflow has a clear owner, each datum has one authoritative writer, and
