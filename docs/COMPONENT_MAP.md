@@ -365,6 +365,41 @@ setup, engine settings, chapter naming and import confirmations remain forms,
 not modes. These are ownership decisions; the remaining work is tracked in
 [Layout & navigation](FUTURE_FEATURES.md#layout--navigation).
 
+#### Shared document save interaction
+
+`features/documents/controllers/document_save_session.dart` owns a loaded
+snapshot, current draft and explicit save/reload transitions over injected
+`PgnDocumentStore`. It has no Flutter, provider, filesystem or global-service
+dependency. `DocumentSaveState` reports saving, saved, dirty, conflict, collision,
+failure and uncertain outcomes. Concurrent button submissions are rejected;
+text typed during a save remains dirty against the returned committed revision.
+Only an accepted receipt or explicit reload changes the baseline. An unexpected
+adapter exception is uncertain, never permission to replay a possibly committed
+operation.
+
+`saveCopy` exclusively creates and adopts the successful destination. Collision
+or failure keeps the original path/baseline; uncertain copy inspection targets
+the attempted destination. Inspection never adopts a revision. Reload reads
+again and retains the latest displaced draft, including edits made during the
+read; missing/unreadable files preserve both text and baseline. Restoring a
+retained draft changes editor text only, against the currently loaded revision.
+
+`features/documents/widgets/document_save_panel.dart` composes production
+`SaveStatus` with localized save/copy, read-only inspection, reload, keep-editing
+and retained-draft actions. It receives a session, destination picker callback
+and editor-focus callback. It displays the current destination, never performs
+direct disk operations and never retries on dismissal. The repertoire creation
+form uses the same status component; a name collision offers focus/selection
+of the name while preserving PGN and side.
+
+`widgetbook/document_cases.dart` supplies seven memory-backed cases using this
+session and panel. The editor and destination field are fixture hosts, not a
+replacement production editor or OS picker. Legacy editor/generator/undo and
+chapter writers have not yet adopted this session. Retained drafts live only
+for the session lifetime; persisted drafts, close guards, complete workspace
+restoration, PGN validation and large-document inspection remain in the document
+workspace migration. No process-crash recovery is implied by draft retention.
+
 #### Design system and component catalog
 
 `lib/design_system/theme/` owns `AppTheme`, `AppTypography`, `AppSpacing`,
@@ -374,7 +409,8 @@ still opens in its existing dark appearance. Light/system appearance preferences
 and unmigrated screens are not yet certified.
 
 `lib/design_system/components/` is the canonical home for `ListSearchField`,
-`showNameEntryDialog`, `confirmAction`, `ItemTitle` and `EmptyStatePlaceholder`.
+`showNameEntryDialog`, `confirmAction`, `ItemTitle`, `EmptyStatePlaceholder` and
+the presentation-only `SaveStatus`.
 All existing callers import these implementations; the old files were removed.
 Catalog/create/paste UI now uses resolved foreground, error, surface and type
 roles. Shared neutral values and font names have one owner; remaining dark

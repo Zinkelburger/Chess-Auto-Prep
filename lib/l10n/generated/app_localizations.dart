@@ -585,6 +585,138 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count}d ago'**
   String daysAgo(int count);
+
+  /// Shared document save interaction: saveChanges
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get saveChanges;
+
+  /// Shared document save interaction: saveCopy
+  ///
+  /// In en, this message translates to:
+  /// **'Save a copy…'**
+  String get saveCopy;
+
+  /// Shared document save interaction: keepEditing
+  ///
+  /// In en, this message translates to:
+  /// **'Keep editing'**
+  String get keepEditing;
+
+  /// Shared document save interaction: inspectCurrentDocument
+  ///
+  /// In en, this message translates to:
+  /// **'Inspect current file'**
+  String get inspectCurrentDocument;
+
+  /// Shared document save interaction: reloadPreservingDraft
+  ///
+  /// In en, this message translates to:
+  /// **'Reload and keep draft'**
+  String get reloadPreservingDraft;
+
+  /// Shared document save interaction: restoreRetainedDraft
+  ///
+  /// In en, this message translates to:
+  /// **'Restore retained draft'**
+  String get restoreRetainedDraft;
+
+  /// Shared document save interaction: documentClean
+  ///
+  /// In en, this message translates to:
+  /// **'No unsaved changes'**
+  String get documentClean;
+
+  /// Shared document save interaction: documentDirty
+  ///
+  /// In en, this message translates to:
+  /// **'Unsaved changes'**
+  String get documentDirty;
+
+  /// Shared document save interaction: documentSaving
+  ///
+  /// In en, this message translates to:
+  /// **'Saving…'**
+  String get documentSaving;
+
+  /// Shared document save interaction: documentSaved
+  ///
+  /// In en, this message translates to:
+  /// **'Saved'**
+  String get documentSaved;
+
+  /// Shared document save interaction: documentReloading
+  ///
+  /// In en, this message translates to:
+  /// **'Reading current file…'**
+  String get documentReloading;
+
+  /// Shared document save interaction: documentConflict
+  ///
+  /// In en, this message translates to:
+  /// **'The file changed or was removed. Your draft is unchanged. Inspect the current file or save a copy.'**
+  String get documentConflict;
+
+  /// Shared document save interaction: documentCollision
+  ///
+  /// In en, this message translates to:
+  /// **'That destination already exists. Nothing was replaced. Choose another name for your copy.'**
+  String get documentCollision;
+
+  /// Shared document save interaction: documentSaveFailed
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save. Your draft is unchanged. You can retry or save a copy.'**
+  String get documentSaveFailed;
+
+  /// Shared document save interaction: documentSaveUncertain
+  ///
+  /// In en, this message translates to:
+  /// **'The file may have been saved. Your draft is retained. Inspect and reload before saving again, or save a copy.'**
+  String get documentSaveUncertain;
+
+  /// Shared document save interaction: documentReadFailed
+  ///
+  /// In en, this message translates to:
+  /// **'Could not read the current file. Your draft and loaded revision are unchanged.'**
+  String get documentReadFailed;
+
+  /// Shared document save interaction: documentMissing
+  ///
+  /// In en, this message translates to:
+  /// **'The file no longer exists. Your draft is unchanged.'**
+  String get documentMissing;
+
+  /// Shared document save interaction: documentDraftRetained
+  ///
+  /// In en, this message translates to:
+  /// **'Your previous draft is kept in this session. Restore it or save it before closing the document.'**
+  String get documentDraftRetained;
+
+  /// Shared document save interaction: chooseAnotherName
+  ///
+  /// In en, this message translates to:
+  /// **'Choose another name'**
+  String get chooseAnotherName;
+
+  /// Shared document save interaction: closeDocumentInspection
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get closeDocumentInspection;
+
+  /// Shared document save interaction: copyDestination
+  ///
+  /// In en, this message translates to:
+  /// **'Copy destination'**
+  String get copyDestination;
+
+  /// Restore one of the drafts retained by this document session
+  ///
+  /// In en, this message translates to:
+  /// **'Restore draft {number}'**
+  String restoreRetainedDraftNumber(int number);
 }
 
 class _AppLocalizationsDelegate

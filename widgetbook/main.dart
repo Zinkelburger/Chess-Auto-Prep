@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:widgetbook/widgetbook.dart';
 
 import 'repertoire_cases.dart';
+import 'document_cases.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,6 +36,6 @@ class RenewalWidgetbook extends StatelessWidget {
       ),
       TextScaleAddon(min: 1, max: 2, divisions: 2, initialScale: 1),
     ],
-    directories: repertoireCases(),
+    directories: [...repertoireCases(), ...documentCases()],
   );
 }

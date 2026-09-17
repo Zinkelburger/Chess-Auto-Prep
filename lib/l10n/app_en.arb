@@ -395,5 +395,98 @@
         "format": "decimalPattern"
       }
     }
+  },
+  "saveChanges": "Save",
+  "@saveChanges": {
+    "description": "Shared document save interaction: saveChanges"
+  },
+  "saveCopy": "Save a copy…",
+  "@saveCopy": {
+    "description": "Shared document save interaction: saveCopy"
+  },
+  "keepEditing": "Keep editing",
+  "@keepEditing": {
+    "description": "Shared document save interaction: keepEditing"
+  },
+  "inspectCurrentDocument": "Inspect current file",
+  "@inspectCurrentDocument": {
+    "description": "Shared document save interaction: inspectCurrentDocument"
+  },
+  "reloadPreservingDraft": "Reload and keep draft",
+  "@reloadPreservingDraft": {
+    "description": "Shared document save interaction: reloadPreservingDraft"
+  },
+  "restoreRetainedDraft": "Restore retained draft",
+  "@restoreRetainedDraft": {
+    "description": "Shared document save interaction: restoreRetainedDraft"
+  },
+  "documentClean": "No unsaved changes",
+  "@documentClean": {
+    "description": "Shared document save interaction: documentClean"
+  },
+  "documentDirty": "Unsaved changes",
+  "@documentDirty": {
+    "description": "Shared document save interaction: documentDirty"
+  },
+  "documentSaving": "Saving…",
+  "@documentSaving": {
+    "description": "Shared document save interaction: documentSaving"
+  },
+  "documentSaved": "Saved",
+  "@documentSaved": {
+    "description": "Shared document save interaction: documentSaved"
+  },
+  "documentReloading": "Reading current file…",
+  "@documentReloading": {
+    "description": "Shared document save interaction: documentReloading"
+  },
+  "documentConflict": "The file changed or was removed. Your draft is unchanged. Inspect the current file or save a copy.",
+  "@documentConflict": {
+    "description": "Shared document save interaction: documentConflict"
+  },
+  "documentCollision": "That destination already exists. Nothing was replaced. Choose another name for your copy.",
+  "@documentCollision": {
+    "description": "Shared document save interaction: documentCollision"
+  },
+  "documentSaveFailed": "Could not save. Your draft is unchanged. You can retry or save a copy.",
+  "@documentSaveFailed": {
+    "description": "Shared document save interaction: documentSaveFailed"
+  },
+  "documentSaveUncertain": "The file may have been saved. Your draft is retained. Inspect and reload before saving again, or save a copy.",
+  "@documentSaveUncertain": {
+    "description": "Shared document save interaction: documentSaveUncertain"
+  },
+  "documentReadFailed": "Could not read the current file. Your draft and loaded revision are unchanged.",
+  "@documentReadFailed": {
+    "description": "Shared document save interaction: documentReadFailed"
+  },
+  "documentMissing": "The file no longer exists. Your draft is unchanged.",
+  "@documentMissing": {
+    "description": "Shared document save interaction: documentMissing"
+  },
+  "documentDraftRetained": "Your previous draft is kept in this session. Restore it or save it before closing the document.",
+  "@documentDraftRetained": {
+    "description": "Shared document save interaction: documentDraftRetained"
+  },
+  "chooseAnotherName": "Choose another name",
+  "@chooseAnotherName": {
+    "description": "Shared document save interaction: chooseAnotherName"
+  },
+  "closeDocumentInspection": "Close",
+  "@closeDocumentInspection": {
+    "description": "Shared document save interaction: closeDocumentInspection"
+  },
+  "copyDestination": "Copy destination",
+  "@copyDestination": {
+    "description": "Shared document save interaction: copyDestination"
+  },
+  "restoreRetainedDraftNumber": "Restore draft {number}",
+  "@restoreRetainedDraftNumber": {
+    "description": "Restore one of the drafts retained by this document session",
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
   }
 }

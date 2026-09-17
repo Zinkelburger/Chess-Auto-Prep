@@ -319,4 +319,79 @@ class AppLocalizationsEn extends AppLocalizations {
 
     return '${countString}d ago';
   }
+
+  @override
+  String get saveChanges => 'Save';
+
+  @override
+  String get saveCopy => 'Save a copy…';
+
+  @override
+  String get keepEditing => 'Keep editing';
+
+  @override
+  String get inspectCurrentDocument => 'Inspect current file';
+
+  @override
+  String get reloadPreservingDraft => 'Reload and keep draft';
+
+  @override
+  String get restoreRetainedDraft => 'Restore retained draft';
+
+  @override
+  String get documentClean => 'No unsaved changes';
+
+  @override
+  String get documentDirty => 'Unsaved changes';
+
+  @override
+  String get documentSaving => 'Saving…';
+
+  @override
+  String get documentSaved => 'Saved';
+
+  @override
+  String get documentReloading => 'Reading current file…';
+
+  @override
+  String get documentConflict =>
+      'The file changed or was removed. Your draft is unchanged. Inspect the current file or save a copy.';
+
+  @override
+  String get documentCollision =>
+      'That destination already exists. Nothing was replaced. Choose another name for your copy.';
+
+  @override
+  String get documentSaveFailed =>
+      'Could not save. Your draft is unchanged. You can retry or save a copy.';
+
+  @override
+  String get documentSaveUncertain =>
+      'The file may have been saved. Your draft is retained. Inspect and reload before saving again, or save a copy.';
+
+  @override
+  String get documentReadFailed =>
+      'Could not read the current file. Your draft and loaded revision are unchanged.';
+
+  @override
+  String get documentMissing =>
+      'The file no longer exists. Your draft is unchanged.';
+
+  @override
+  String get documentDraftRetained =>
+      'Your previous draft is kept in this session. Restore it or save it before closing the document.';
+
+  @override
+  String get chooseAnotherName => 'Choose another name';
+
+  @override
+  String get closeDocumentInspection => 'Close';
+
+  @override
+  String get copyDestination => 'Copy destination';
+
+  @override
+  String restoreRetainedDraftNumber(int number) {
+    return 'Restore draft $number';
+  }
 }

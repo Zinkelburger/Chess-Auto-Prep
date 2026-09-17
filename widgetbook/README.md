@@ -1,4 +1,4 @@
-# Repertoire component catalog
+# Renewal component catalog
 
 This local Widgetbook uses production widgets and themes with in-memory fixtures.
 It does not initialize the app's storage, account settings or engine services.
@@ -19,6 +19,12 @@ the production theme and scale from 100% to 200%, including pushed forms/dialogs
 Library fixtures support search, rename, delete and restore. Creation fixtures
 open the actual creation form with success, three-second delay or failure;
 imports use an in-memory PGN. Browse chapters uses an isolated navigation fake.
+The Documents / Save cases exercise clean, dirty, saving, conflict, collision,
+failure and uncertain states through the production save session and panel.
+The text field and copy destination are fixtures; copy paths are inert memory
+keys. Reload retains the draft in the session, and Restore puts it back into
+the field. Leaving the case disposes that fixture session.
+
 Reset a case by leaving it and returning. Fixtures are illustrative UI states,
 not persistence/recovery tests; the native repository journeys test those.
 

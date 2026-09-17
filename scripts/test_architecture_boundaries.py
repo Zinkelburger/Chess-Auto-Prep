@@ -39,6 +39,11 @@ class BoundariesTest(unittest.TestCase):
                 self.assertTrue(violations(path, "import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';"))
         self.assertFalse(violations('lib/features/repertoires/widgets/catalog.dart', "import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';"))
 
+    def test_document_save_widgets_use_active_theme(self):
+        self.assertTrue(violations('lib/features/documents/widgets/save.dart', "import '../../../theme/app_colors.dart';"))
+        self.assertTrue(violations('lib/features/documents/widgets/save.dart', 'const TextStyle(fontSize: 14);'))
+        self.assertFalse(violations('lib/features/documents/widgets/save.dart', "import '../../../design_system/components/save_status.dart';"))
+
     def test_design_system_has_no_app_or_domain_dependencies(self):
         for uri in ('../../features/repertoires/models/repertoire_metadata.dart', '../../theme/app_colors.dart', 'dart:io'):
             self.assertTrue(violations('lib/design_system/components/example.dart', f"import '{uri}';"))

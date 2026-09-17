@@ -29,6 +29,10 @@ The migrated catalog now has English ARB localization, typed message presentatio
 plural/date formatting and enlarged-label/text layout checks. Its theme and five
 shared controls now live in `design_system/`, with light/dark Widgetbook cases
 using production widgets and a guarded ledger of remaining legacy theme users.
+The shared save session/status interaction now preserves drafts across conflicts,
+reload and exclusive copies, with scripted catalog cases; repertoire creation
+uses the shared status control and preserves input on a naming collision.
+Legacy editor adoption, persisted drafts and close guards are still pending.
 Legacy unjournaled trash adoption, remaining settings/writers, transactional
 splitting of existing chapters, remaining localization, appearance persistence/accessibility and full slice
 gates remain unfinished. The staged rewrite, shared PGN mutation API, UI design

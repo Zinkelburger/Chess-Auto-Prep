@@ -6,6 +6,81 @@ import '../../widgetbook/main.dart';
 
 void main() {
   testWidgets(
+    'Widgetbook copy dialog keeps localization, theme and scale and saves the restored draft',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1600, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final route = Uri(
+        path: '/',
+        queryParameters: {
+          'path': 'documents/save/conflict',
+          'theme': '{name:Light}',
+          'text-scale': '{factor:2.0}',
+        },
+      ).toString();
+      await tester.pumpWidget(RenewalWidgetbook(initialRoute: route));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Reload and keep draft'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Restore retained draft'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('document-save-copy')));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      final field = find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(TextField),
+      );
+      expect(Theme.of(tester.element(field)).brightness, Brightness.light);
+      expect(MediaQuery.textScalerOf(tester.element(field)).scale(14), 28);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.widgetWithText(FilledButton, 'Save'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Saved'), findsOneWidget);
+      expect(find.text('/fixture/Copy.pgn'), findsOneWidget);
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const ValueKey('document-draft')))
+            .controller!
+            .text,
+        contains('My draft'),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final scenario in ['conflict', 'uncertain', 'collision']) {
+    testWidgets(
+      'Widgetbook exposes production document save $scenario interaction',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(1600, 1000));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        await tester.pumpWidget(
+          RenewalWidgetbook(initialRoute: '/?path=documents/save/$scenario'),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('document-save-copy')),
+          findsOneWidget,
+        );
+        expect(find.text('Inspect current file'), findsOneWidget);
+        await tester.tap(find.text('Keep editing'));
+        await tester.pumpAndSettle();
+        final editor = tester.widget<TextField>(
+          find.byKey(const ValueKey('document-draft')),
+        );
+        expect(editor.controller!.text, contains('My draft'));
+        expect(editor.focusNode!.hasFocus, isTrue);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets(
     'Widgetbook runs production creation with scripted failure and retained draft',
     (tester) async {
       await tester.binding.setSurfaceSize(const Size(1600, 1000));

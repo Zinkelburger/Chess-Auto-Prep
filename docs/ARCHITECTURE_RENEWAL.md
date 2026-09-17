@@ -660,6 +660,66 @@ legacy dark styles. Shared save/conflict interaction, persistent shell, settings
 recovery/performance/platform evidence and PLAN-02 remain required. No later
 feature milestone is graduated by this component migration.
 
+### Shared save checkpoint — draft-preserving interaction
+
+After design-system checkpoint `02a57df4`, the first-slice save foundation now
+includes `DocumentSaveSession`, immutable save state and `DocumentSavePanel`.
+The session receives `PgnDocumentStore` directly, with no Flutter/provider/I/O
+imports. The shared `SaveStatus` control receives text, tone and action widgets;
+the repertoire creation form adopts it and focuses/selects a colliding name
+without clearing PGN or side. New English ARB messages own this presentation.
+
+DATA-02/STATE-01/UI-01: a save submits the captured baseline and draft. Edits
+during I/O remain dirty after a successful receipt; duplicate submissions do
+not launch another operation. Conflicts and dismissal never adopt a newer
+revision. Copies use exclusive creation and adopt the destination only after a
+saved receipt. Uncertain outcomes block ordinary retry, including after edits
+or dismissal; an uncertain copy is inspected at its attempted destination.
+Unexpected adapter exceptions are treated as uncertain. A later failed copy
+cannot clear a preceding uncertain-write warning.
+
+Reload is explicit, reads afresh and retains displaced drafts in the session,
+including text entered while the read was pending. Missing/read failures never
+discard the draft or baseline. Each retained draft can be restored as unsaved
+text against the currently loaded revision; restore itself makes no write.
+Inspection is read-only and closing its dialog grants no replacement permission.
+Widgetbook has clean, dirty, saving, conflict, collision, failure and uncertain
+cases using the actual session and shared UI with a memory repository.
+
+Verification (Linux, source: the commit containing this record):
+
+- 60 distinct focused tests pass: the 59-case session/UI/localization/native-store
+  regression run plus the added real-Widgetbook copy-dialog regression; all six
+  Widgetbook cases pass after its fix. Coverage includes in-flight edits,
+  duplicate submission, conflict/dismissal, missing/read failure, exclusive copy,
+  uncertain write/copy, disposal, multiple retained drafts and keyboard focus.
+- Three native desktop journeys pass: the new shared save interaction over
+  disposable real files and both existing interrupted-import document-store
+  journeys. The new journey verifies an external edit survives rejection,
+  reload/restoration, a colliding copy and a successful copy reopened through a
+  fresh native store. It was rerun after session changes.
+- `scripts/ci.sh analyze lint` passes with nine existing informational notices
+  and all eleven architecture-guard tests passing. Document widgets now obey
+  the same active-theme boundary as catalog widgets.
+- Headless inspection checked [dark conflict](images/renewal-save-conflict-dark.png),
+  [light conflict at 200%](images/renewal-save-conflict-light-200.png) and
+  [retained draft at 200%](images/renewal-save-retained-light-200.png). Visual
+  inspection exposed the fixture copy dialog escaping the localized nested
+  navigator; a test reproduced the crash before `useRootNavigator: false`
+  fixed it. Repeated headless inspection verified the corrected
+  [copy dialog](images/renewal-save-copy-light-200.png) and
+  [saved copy](images/renewal-save-copy-saved-light-200.png) at 200% text;
+  preview stopped afterward. This is not product-owner acceptance.
+
+This advances the milestone-2 shared interaction requirement without claiming
+complete document adoption. The fixture editor/picker is not a production
+workspace. Legacy editor/generation/undo/chapter writers remain to migrate;
+persisted draft recovery, close guards, large-document inspection, validation,
+full workspace/session restoration and remaining native platform gates are
+unfinished. Draft retention here is in memory and lasts only for the session;
+it is not crash recovery. Persistent shell, appearance/settings, performance,
+owner review and PLAN-02 remain open for the first slice.
+
 ### Initial parity and ownership inventory (milestone 0, partial)
 
 The starting tree has 885 files under `lib/` and 674 under `test/`; these counts

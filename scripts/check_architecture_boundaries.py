@@ -31,7 +31,7 @@ def violations(relative: str, source: str) -> list[str]:
         forbidden = (
             design and (uri.startswith(('dart:io', 'dart:ffi', 'package:provider/', 'package:flutter_riverpod/', 'package:widgetbook/')) or (local and not local.startswith('lib/design_system/')))
             or catalog and (uri.startswith(('dart:io', 'dart:ffi')) or local.startswith(('lib/infrastructure/', 'lib/app/', 'lib/services/storage/')))
-            or relative.startswith('lib/features/repertoires/widgets/') and local.startswith('lib/theme/')
+            or relative.startswith(('lib/features/repertoires/widgets/', 'lib/features/documents/widgets/')) and local.startswith('lib/theme/')
             or pure and (uri.startswith(('dart:io', 'dart:isolate', 'dart:ffi', 'package:flutter', 'package:riverpod')) or local.startswith(('lib/services/', 'lib/infrastructure/', 'lib/app/')))
             or feature and (uri.startswith(('dart:io', 'dart:ffi', 'package:document_file_io/', 'package:shared_preferences/')) or local.startswith(('lib/infrastructure/', 'lib/app/', 'lib/services/storage/')))
             or controller and ('/widgets/' in local or '/screens/' in local or local.startswith('lib/services/'))
@@ -40,7 +40,7 @@ def violations(relative: str, source: str) -> list[str]:
         )
         if forbidden:
             errors.append(f'{relative}: forbidden dependency {uri}')
-    if (design and not relative.startswith('lib/design_system/theme/') or relative.startswith('lib/features/repertoires/widgets/')) and re.search(r'\b(?:AppColors|AppTextStyles|AppPalette)\b|\bColors\.|\bColor(?:\.fromARGB|\.fromRGBO)?\s*\(|\bfontSize\s*:', source):
+    if (design and not relative.startswith('lib/design_system/theme/') or relative.startswith(('lib/features/repertoires/widgets/', 'lib/features/documents/widgets/'))) and re.search(r'\b(?:AppColors|AppTextStyles|AppPalette)\b|\bColors\.|\bColor(?:\.fromARGB|\.fromRGBO)?\s*\(|\bfontSize\s*:', source):
         errors.append(f'{relative}: widget bypasses active theme/typography')
     if (feature or catalog) and re.search(r'\b\w+\.instance\b', source):
         errors.append(f'{relative}: global singleton access bypasses injection')

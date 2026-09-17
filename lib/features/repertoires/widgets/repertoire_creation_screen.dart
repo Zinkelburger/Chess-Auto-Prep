@@ -2,6 +2,7 @@ import '../../../l10n/generated/app_localizations.dart';
 import 'repertoire_messages.dart';
 import '../models/repertoire_creation.dart';
 import 'package:flutter/material.dart';
+import '../../../design_system/components/save_status.dart';
 
 import '../../../services/pgn_mainline_lexer.dart' as pgn;
 import '../../../services/pgn_parsing_service.dart' as pgn;
@@ -33,6 +34,8 @@ class _RepertoireCreationScreenState extends State<RepertoireCreationScreen> {
   final _name = TextEditingController();
   final _pgn = TextEditingController();
   final _form = GlobalKey<FormState>();
+  final _nameFocus = FocusNode();
+  bool _nameCollision = false;
   String _color = 'White';
   bool _empty = false;
   bool _busy = false;
@@ -40,6 +43,7 @@ class _RepertoireCreationScreenState extends State<RepertoireCreationScreen> {
 
   @override
   void dispose() {
+    _nameFocus.dispose();
     _name.dispose();
     _pgn.dispose();
     super.dispose();
@@ -49,6 +53,7 @@ class _RepertoireCreationScreenState extends State<RepertoireCreationScreen> {
     setState(() {
       _busy = true;
       _error = null;
+      _nameCollision = false;
     });
     try {
       final picked = await widget.pickPgn();
@@ -84,6 +89,7 @@ class _RepertoireCreationScreenState extends State<RepertoireCreationScreen> {
     setState(() {
       _busy = true;
       _error = null;
+      _nameCollision = false;
     });
     try {
       final name = _name.text.trim();
@@ -99,6 +105,7 @@ class _RepertoireCreationScreenState extends State<RepertoireCreationScreen> {
       if (mounted) {
         setState(() {
           _busy = false;
+          _nameCollision = e is RepertoireExistsException;
           _error = repertoireFailureMessage(
             l10n,
             e,
@@ -126,14 +133,24 @@ class _RepertoireCreationScreenState extends State<RepertoireCreationScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   if (_error != null) ...[
-                    Semantics(
-                      liveRegion: true,
-                      child: Text(
-                        _error!,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                      ),
+                    SaveStatus(
+                      message: _error!,
+                      tone: SaveStatusTone.error,
+                      actions: [
+                        if (_nameCollision)
+                          TextButton(
+                            onPressed: _busy
+                                ? null
+                                : () {
+                                    _nameFocus.requestFocus();
+                                    _name.selection = TextSelection(
+                                      baseOffset: 0,
+                                      extentOffset: _name.text.length,
+                                    );
+                                  },
+                            child: Text(l10n.chooseAnotherName),
+                          ),
+                      ],
                     ),
                     const SizedBox(height: AppSpacing.md),
                   ],
@@ -182,6 +199,7 @@ class _RepertoireCreationScreenState extends State<RepertoireCreationScreen> {
                   TextFormField(
                     key: const ValueKey('repertoire-create-name'),
                     controller: _name,
+                    focusNode: _nameFocus,
                     autofocus: true,
                     enabled: !_busy,
                     decoration: InputDecoration(
@@ -234,6 +252,7 @@ class _RepertoireCreationScreenState extends State<RepertoireCreationScreen> {
                             setState(() {
                               _empty = value.single;
                               _error = null;
+                              _nameCollision = false;
                             });
                           },
                   ),

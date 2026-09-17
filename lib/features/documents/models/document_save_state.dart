@@ -1,0 +1,53 @@
+import 'pgn_document.dart';
+
+enum DocumentSavePhase {
+  clean,
+  dirty,
+  saving,
+  saved,
+  conflict,
+  collision,
+  failed,
+  uncertain,
+  reloading,
+}
+
+/// An explicitly retained in-memory draft. Persistence/restart restoration is
+/// owned by the document workspace; this value does not promise crash recovery.
+class RetainedDocumentDraft {
+  const RetainedDocumentDraft({
+    required this.path,
+    required this.content,
+    required this.baseline,
+  });
+  final String path;
+  final String content;
+  final PgnSnapshot? baseline;
+}
+
+class DocumentSaveState {
+  DocumentSaveState({
+    required this.path,
+    required this.content,
+    required this.phase,
+    this.baseline,
+    this.outcome,
+    this.readFailure,
+    this.uncertainPath,
+    List<RetainedDocumentDraft> retainedDrafts = const [],
+  }) : retainedDrafts = List.unmodifiable(retainedDrafts);
+  final String path;
+  final String content;
+  final PgnSnapshot? baseline;
+  final DocumentSavePhase phase;
+  final PgnWriteResult? outcome;
+  final PgnOpenResult? readFailure;
+  final String? uncertainPath;
+  String get inspectionPath => uncertainPath ?? path;
+  final List<RetainedDocumentDraft> retainedDrafts;
+  bool get busy =>
+      phase == DocumentSavePhase.saving || phase == DocumentSavePhase.reloading;
+  bool get dirty => baseline == null || content != baseline!.content;
+  bool get uncertain => outcome is PgnWriteUncertain;
+  bool get canSave => !busy && !uncertain && dirty;
+}
