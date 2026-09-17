@@ -117,6 +117,7 @@ class _RecordingCoordinator extends TacticsImportCoordinator {
   _RecordingCoordinator()
     : super(pool: engines.pool, lifecycle: engines.lifecycle);
   final imports = <TacticsImportParams>[];
+  Future<void> Function()? afterImport;
 
   /// Whether each call was handed already-downloaded games (rather than being
   /// told to fetch them itself).
@@ -136,6 +137,7 @@ class _RecordingCoordinator extends TacticsImportCoordinator {
     imports.add(params);
     gotPgns.add(pgnContent != null);
     forced.add(forceDedupKeys);
+    await afterImport?.call();
     return true;
   }
 
@@ -305,6 +307,29 @@ void main() {
     await h.runner.start();
 
     expect(h.coordinator.imports.map((p) => p.username), ['me', 'me2']);
+  });
+
+  test('review captures configuration across accounts and applies edits next run', () async {
+    SharedPreferences.setMockInitialValues({});
+    await runtimeSettings.load();
+    final h = build(lichess: 'me', chesscom: 'me2');
+    addTearDown(h.games.dispose);
+    addTearDown(h.runner.dispose);
+    final originalDepth = runtimeSettings.bulk.depth;
+    final originalCores = runtimeSettings.engine.cores;
+    h.coordinator.afterImport = () async {
+      await runtimeSettings.bulk.setDepth(originalDepth + 1);
+      await runtimeSettings.engine.edit({'engine_settings.cores': 1});
+      expect(h.runner.depth, originalDepth);
+      expect(h.runner.cores, originalCores);
+    };
+    await h.runner.start();
+    expect(h.coordinator.imports.map((p) => p.depth), [originalDepth, originalDepth]);
+    expect(h.coordinator.imports.map((p) => p.cores), [originalCores, originalCores]);
+    h.coordinator.afterImport = null;
+    await h.runner.start();
+    expect(h.coordinator.imports.skip(2).map((p) => p.depth), [originalDepth + 1, originalDepth + 1]);
+    expect(h.coordinator.imports.skip(2).map((p) => p.cores), [1, 1]);
   });
 
   test('with no username there is nothing to start', () {

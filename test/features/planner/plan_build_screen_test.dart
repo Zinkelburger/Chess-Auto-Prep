@@ -1,3 +1,5 @@
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import '../../support/runtime_settings.dart';
 import 'package:chess_auto_prep/services/opening_catalog.dart';
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/features/planner/models/plan_models.dart';
@@ -117,7 +119,10 @@ const _blackGames = '''
 1. d4 d5 2. c4 c6 3. Nc3 Nf6 *
 ''';
 
+RuntimeSettings? _settings;
+RuntimeSettings get settings => _settings ??= testRuntimeSettings();
 void main() {
+  setUp(() { _settings = null; addTearDown(() => _settings?.dispose()); });
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -133,7 +138,7 @@ void main() {
     tester.view.physicalSize = const Size(1400, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(
+    await pumpRuntimeWidget(tester, settings,
       MaterialApp(
         home: Builder(
           builder: (context) => Scaffold(
@@ -402,7 +407,7 @@ void main() {
     tester.view.physicalSize = const Size(960, 500);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(
+    await pumpRuntimeWidget(tester, settings,
       MaterialApp(
         home: PlanBuildScreen(
           isWhite: false,
@@ -440,7 +445,7 @@ void main() {
       tester.view.physicalSize = const Size(1400, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
-      await tester.pumpWidget(
+      await pumpRuntimeWidget(tester, settings,
         MaterialApp(
           home: PlanBuildScreen(
             isWhite: false,

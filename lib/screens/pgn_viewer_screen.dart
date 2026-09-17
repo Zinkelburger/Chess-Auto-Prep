@@ -1162,13 +1162,14 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// that were played, so the comparison needs both halves together.
   @override
   Future<void> _detectTrophies() async {
+    final pool = context.read<StockfishPool>();
     final guesses = _controller.solitaire.guessLog;
     if (guesses.isEmpty || _controller.filteredGames.isEmpty) return;
 
     final game = _controller.filteredGames[_controller.currentGameIndex];
     try {
       final found = await detectSolitaireTrophies(
-        pool: context.read<StockfishPool>(),
+        pool: pool,
         guesses: guesses,
         evals: _analysisController.evals,
         userIsWhite: _controller.solitaire.userIsWhite,

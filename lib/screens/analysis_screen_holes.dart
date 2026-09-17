@@ -35,6 +35,7 @@ mixin _HoleHuntMixin on _AnalysisScreenStateBase {
     final tree = _openingTree;
     if (player == null || tree == null) return;
     final isWhite = _playerIsWhite;
+    final lease = context.read<GenerationLease>();
 
     setState(() {
       _isHunting = true;
@@ -60,7 +61,7 @@ mixin _HoleHuntMixin on _AnalysisScreenStateBase {
       final reportPath = corpus.cachePath(
         'holes_${isWhite ? 'white' : 'black'}.json',
       );
-      final result = await context.read<GenerationLease>().run(() {
+      final result = await lease.run(() {
         return _holeService.hunt(
           tree: tree,
           isWhiteRepertoire: isWhite,
