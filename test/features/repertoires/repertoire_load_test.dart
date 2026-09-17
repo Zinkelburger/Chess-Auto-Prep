@@ -437,18 +437,19 @@ void main() {
     test('the winner keeps its lines, tree and headers', () async {
       storage.files['/a.pgn'] = _whitePgn;
       storage.files['/b.pgn'] = _blackPgn;
-      final controller = testRepertoireController();
+      final decoder = GatedRepertoireDecoder();
+      final controller = testRepertoireController(decoder: decoder);
 
       final reached = Completer<void>();
       final gate = Completer<void>();
-      controller.debugBeforeRepertoireApply = () async {
+      decoder.afterBuild = () async {
         if (!reached.isCompleted) reached.complete();
         await gate.future;
       };
 
       final loadA = controller.setRepertoire(_meta('/a.pgn'));
       await reached.future.timeout(const Duration(seconds: 5));
-      controller.debugBeforeRepertoireApply = null;
+      decoder.afterBuild = null;
 
       await controller.setRepertoire(_meta('/b.pgn'));
       final winnerLines = controller.repertoireLines;

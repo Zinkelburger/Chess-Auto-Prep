@@ -109,6 +109,7 @@ Future<AppState> _pumpScreen(
   WidgetTester tester, {
   required String repertoirePath,
   Size size = const Size(1600, 1000),
+  RepertoireDecoder decoder = const IsolateRepertoireDecoder(),
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
@@ -125,9 +126,7 @@ Future<AppState> _pumpScreen(
         Provider<RepertoireDocumentRepository>.value(
           value: testRepertoireDocuments(),
         ),
-        Provider<RepertoireDecoder>.value(
-          value: const IsolateRepertoireDecoder(),
-        ),
+        Provider<RepertoireDecoder>.value(value: decoder),
       ],
       child: MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -417,10 +416,50 @@ void main() {
     await _settle(tester);
     expect(tester.takeException(), isNull);
   });
+  testWidgets(
+    'failed reload retains the editor and its draft under a dismissible error',
+    (tester) async {
+      final decoder = GatedRepertoireDecoder();
+      await _pumpScreen(
+        tester,
+        repertoirePath: _writeRepertoire(tester),
+        decoder: decoder,
+      );
+      await _settleUntil(tester, find.text('Italian Game'));
+      await tester.tap(find.text('Italian Game'));
+      await _settle(tester);
+      final controller = tester
+          .widget<PgnWithAnalysisPane>(find.byType(PgnWithAnalysisPane))
+          .controller;
+      final editor = tester.state(find.byType(InteractivePgnEditor));
+      final board = controller.tree;
+      final current = controller.currentRepertoire;
+      decoder.afterBuild = () async =>
+          throw StateError('Chapter temporarily unavailable');
+      unawaited(controller.loadRepertoire());
+      await _settleUntil(tester, find.byType(MaterialBanner));
+      expect(controller.currentRepertoire, current);
+      expect(controller.tree, same(board));
+      expect(tester.state(find.byType(InteractivePgnEditor)), same(editor));
+      await tester.tap(find.text('Dismiss'));
+      await tester.pump();
+      expect(find.byType(MaterialBanner), findsNothing);
+      expect(tester.state(find.byType(InteractivePgnEditor)), same(editor));
+      controller.playMove('d3');
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('reload preserves the board editor while the chapter loads', (
     tester,
   ) async {
-    await _pumpScreen(tester, repertoirePath: _writeRepertoire(tester));
+    final decoder = GatedRepertoireDecoder();
+    await _pumpScreen(
+      tester,
+      repertoirePath: _writeRepertoire(tester),
+      decoder: decoder,
+    );
     final controller = tester
         .widget<PgnWithAnalysisPane>(find.byType(PgnWithAnalysisPane))
         .controller;
@@ -441,7 +480,7 @@ void main() {
     final titleField = find.widgetWithText(TextField, 'Italian Game');
     expect(titleField, findsOneWidget);
     final gate = Completer<void>();
-    controller.debugBeforeRepertoireApply = () => gate.future;
+    decoder.afterBuild = () => gate.future;
     unawaited(controller.loadRepertoire());
     await tester.pump();
     expect(find.text('Loading repertoire...'), findsNothing);
@@ -464,7 +503,7 @@ void main() {
       contains('Save this before reloading'),
     );
     expect(tester.state(find.byType(InteractivePgnEditor)), same(editor));
-    controller.debugBeforeRepertoireApply = null;
+    decoder.afterBuild = null;
   });
 }
 

@@ -13,6 +13,7 @@ import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
 const _pgn = '// Color: White\n\n[Event "Line"]\n[Result "*"]\n\n1. e4 e5 *\n';
 
 void main() {
+  late GatedRepertoireDecoder decoder;
   late Directory directory;
   late RepertoireController controller;
   late RepertoireMetadata first;
@@ -33,7 +34,8 @@ void main() {
     second = chapter('Second');
     await File(first.filePath).writeAsString(_pgn);
     await File(second.filePath).writeAsString(_pgn);
-    controller = testRepertoireController();
+    decoder = GatedRepertoireDecoder();
+    controller = testRepertoireController(decoder: decoder);
     await controller.setRepertoire(first);
     controller.loadPgnLine(controller.repertoireLines.single);
   });
@@ -88,7 +90,7 @@ void main() {
       final tree = controller.tree;
       final lines = controller.repertoireLines;
       final gate = Completer<void>();
-      controller.debugBeforeRepertoireApply = () => gate.future;
+      decoder.afterBuild = () => gate.future;
       final load = controller.setRepertoire(second);
       expect(controller.isLoading, isTrue);
       expect(controller.tree, same(tree));
@@ -109,7 +111,7 @@ void main() {
       controller.setPendingLineSave(() {
         write = save(_pgn.replaceFirst('e5', 'e5 {Pending comment}'));
       });
-      controller.debugAfterRepertoireRead = () async {
+      decoder.beforeBuild = () async {
         expect(
           await File(first.filePath).readAsString(),
           contains('Pending comment'),
