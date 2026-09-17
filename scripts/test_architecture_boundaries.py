@@ -27,6 +27,15 @@ class BoundariesTest(unittest.TestCase):
         self.assertTrue(violations('lib/services/generation/pgn_export.dart', 'class PgnBatchWriter {}'))
         self.assertTrue(violations('lib/core/generation_session_controller.dart', 'final writer = PgnBatchWriter();'))
 
+    def test_retired_builder_history_and_append_apis_cannot_return(self):
+        for source in ('class AppendMovesResult {}',
+                       'editor.appendMoveAtPath(path, move);',
+                       'editor.appendMovesAtPath(path, moves);',
+                       'authoring.rebuildLine(line);',
+                       'save(reconcileInstalled: true);'):
+            with self.subTest(source=source):
+                self.assertTrue(violations('lib/services/renamed_writer.dart', source))
+
     def test_retired_builder_libraries_cannot_return_as_forwarding_shims(self):
         for path in ('lib/core/repertoire_controller.dart', 'lib/core/repertoire_writer.dart',
                      'lib/core/repertoire_authoring.dart', 'lib/core/move_navigation.dart',

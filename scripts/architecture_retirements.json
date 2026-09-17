@@ -13,6 +13,11 @@
     "lib/models/training_settings.dart"
   ],
   "symbols": [
-    "PgnBatchWriter"
+    "PgnBatchWriter",
+    "AppendMovesResult",
+    "appendMoveAtPath",
+    "appendMovesAtPath",
+    "rebuildLine",
+    "reconcileInstalled"
   ]
 }
