@@ -760,5 +760,108 @@
   "untitledPgnWorkspace": "Untitled PGN",
   "@untitledPgnWorkspace": {
     "description": "Workspace recovery display name"
+  },
+  "legacyAnalysisTitle": "Recover older analysis",
+  "@legacyAnalysisTitle": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "legacyAnalysisAction": "Recover older analysis…",
+  "@legacyAnalysisAction": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "legacyAnalysisProvenance": "These older files have no recorded source revision. Inspect or export them here; they do not replace the current chapter or its verified analysis. Original files stay unchanged.",
+  "@legacyAnalysisProvenance": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "legacyAnalysisTree": "Saved tree",
+  "@legacyAnalysisTree": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "legacyAnalysisProbes": "Saved probes",
+  "@legacyAnalysisProbes": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "legacyAnalysisTraps": "Saved traps",
+  "@legacyAnalysisTraps": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "legacyAnalysisPartial": "Unfinished build",
+  "@legacyAnalysisPartial": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "legacyAnalysisExport": "Export original file…",
+  "@legacyAnalysisExport": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "legacyAnalysisExportDirectory": "Choose a folder for the recovered file",
+  "@legacyAnalysisExportDirectory": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "legacyAnalysisEmpty": "No older analysis files found beside this chapter.",
+  "@legacyAnalysisEmpty": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "legacyAnalysisSelect": "Select a saved artifact to inspect its contents.",
+  "@legacyAnalysisSelect": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "legacyAnalysisNoEntries": "No saved entries",
+  "@legacyAnalysisNoEntries": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "legacyAnalysisUnreadable": "Could not read this entry",
+  "@legacyAnalysisUnreadable": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "legacyAnalysisResumeUnavailable": "Automatic resume is unavailable: this unfinished build has no verifiable source revision. You can inspect its explored positions, export the original file, or start a fresh build from the chapter.",
+  "@legacyAnalysisResumeUnavailable": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "legacyAnalysisConfig": "Saved configuration",
+  "@legacyAnalysisConfig": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "legacyAnalysisParent": "Previous position",
+  "@legacyAnalysisParent": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "legacyAnalysisFailure": "Recovery issue: {details}",
+  "@legacyAnalysisFailure": {
+    "description": "Legacy generation artifact recovery",
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "legacyAnalysisExported": "Original file exported to {path}",
+  "@legacyAnalysisExported": {
+    "description": "Legacy generation artifact recovery",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "legacyAnalysisEntry": "Entry {number}",
+  "@legacyAnalysisEntry": {
+    "description": "Legacy generation artifact recovery",
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
+  "legacyAnalysisNodes": "{nodes} saved nodes · depth {depth}",
+  "@legacyAnalysisNodes": {
+    "description": "Legacy generation artifact recovery",
+    "placeholders": {
+      "nodes": {
+        "type": "int"
+      },
+      "depth": {
+        "type": "int"
+      }
+    }
   }
 }

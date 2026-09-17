@@ -600,4 +600,77 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get untitledPgnWorkspace => 'Untitled PGN';
+
+  @override
+  String get legacyAnalysisTitle => 'Recover older analysis';
+
+  @override
+  String get legacyAnalysisAction => 'Recover older analysis…';
+
+  @override
+  String get legacyAnalysisProvenance =>
+      'These older files have no recorded source revision. Inspect or export them here; they do not replace the current chapter or its verified analysis. Original files stay unchanged.';
+
+  @override
+  String get legacyAnalysisTree => 'Saved tree';
+
+  @override
+  String get legacyAnalysisProbes => 'Saved probes';
+
+  @override
+  String get legacyAnalysisTraps => 'Saved traps';
+
+  @override
+  String get legacyAnalysisPartial => 'Unfinished build';
+
+  @override
+  String get legacyAnalysisExport => 'Export original file…';
+
+  @override
+  String get legacyAnalysisExportDirectory =>
+      'Choose a folder for the recovered file';
+
+  @override
+  String get legacyAnalysisEmpty =>
+      'No older analysis files found beside this chapter.';
+
+  @override
+  String get legacyAnalysisSelect =>
+      'Select a saved artifact to inspect its contents.';
+
+  @override
+  String get legacyAnalysisNoEntries => 'No saved entries';
+
+  @override
+  String get legacyAnalysisUnreadable => 'Could not read this entry';
+
+  @override
+  String get legacyAnalysisResumeUnavailable =>
+      'Automatic resume is unavailable: this unfinished build has no verifiable source revision. You can inspect its explored positions, export the original file, or start a fresh build from the chapter.';
+
+  @override
+  String get legacyAnalysisConfig => 'Saved configuration';
+
+  @override
+  String get legacyAnalysisParent => 'Previous position';
+
+  @override
+  String legacyAnalysisFailure(String details) {
+    return 'Recovery issue: $details';
+  }
+
+  @override
+  String legacyAnalysisExported(String path) {
+    return 'Original file exported to $path';
+  }
+
+  @override
+  String legacyAnalysisEntry(int number) {
+    return 'Entry $number';
+  }
+
+  @override
+  String legacyAnalysisNodes(int nodes, int depth) {
+    return '$nodes saved nodes · depth $depth';
+  }
 }

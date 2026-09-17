@@ -1059,6 +1059,126 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Untitled PGN'**
   String get untitledPgnWorkspace;
+
+  /// Legacy generation artifact recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Recover older analysis'**
+  String get legacyAnalysisTitle;
+
+  /// Legacy generation artifact recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Recover older analysis…'**
+  String get legacyAnalysisAction;
+
+  /// Legacy generation artifact recovery
+  ///
+  /// In en, this message translates to:
+  /// **'These older files have no recorded source revision. Inspect or export them here; they do not replace the current chapter or its verified analysis. Original files stay unchanged.'**
+  String get legacyAnalysisProvenance;
+
+  /// Legacy generation artifact recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Saved tree'**
+  String get legacyAnalysisTree;
+
+  /// Legacy generation artifact recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Saved probes'**
+  String get legacyAnalysisProbes;
+
+  /// Legacy generation artifact recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Saved traps'**
+  String get legacyAnalysisTraps;
+
+  /// Legacy generation artifact recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Unfinished build'**
+  String get legacyAnalysisPartial;
+
+  /// Legacy generation artifact recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Export original file…'**
+  String get legacyAnalysisExport;
+
+  /// Legacy generation artifact recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a folder for the recovered file'**
+  String get legacyAnalysisExportDirectory;
+
+  /// Legacy generation artifact recovery
+  ///
+  /// In en, this message translates to:
+  /// **'No older analysis files found beside this chapter.'**
+  String get legacyAnalysisEmpty;
+
+  /// Legacy generation artifact recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Select a saved artifact to inspect its contents.'**
+  String get legacyAnalysisSelect;
+
+  /// Legacy generation artifact recovery
+  ///
+  /// In en, this message translates to:
+  /// **'No saved entries'**
+  String get legacyAnalysisNoEntries;
+
+  /// Legacy generation artifact recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Could not read this entry'**
+  String get legacyAnalysisUnreadable;
+
+  /// Legacy generation artifact recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic resume is unavailable: this unfinished build has no verifiable source revision. You can inspect its explored positions, export the original file, or start a fresh build from the chapter.'**
+  String get legacyAnalysisResumeUnavailable;
+
+  /// Legacy generation artifact recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Saved configuration'**
+  String get legacyAnalysisConfig;
+
+  /// Legacy generation artifact recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Previous position'**
+  String get legacyAnalysisParent;
+
+  /// Legacy generation artifact recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Recovery issue: {details}'**
+  String legacyAnalysisFailure(String details);
+
+  /// Legacy generation artifact recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Original file exported to {path}'**
+  String legacyAnalysisExported(String path);
+
+  /// Legacy generation artifact recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Entry {number}'**
+  String legacyAnalysisEntry(int number);
+
+  /// Legacy generation artifact recovery
+  ///
+  /// In en, this message translates to:
+  /// **'{nodes} saved nodes · depth {depth}'**
+  String legacyAnalysisNodes(int nodes, int depth);
 }
 
 class _AppLocalizationsDelegate

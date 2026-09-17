@@ -10,11 +10,22 @@ class GenerationArtifactSnapshot {
   GenerationArtifactSnapshot({
     required this.origin,
     Map<GenerationArtifactKind, String> payloads = const {},
+    Map<GenerationArtifactKind, List<int>> originalBytes = const {},
+    Map<GenerationArtifactKind, String> readFailures = const {},
     this.generationId,
     this.notice,
-  }) : payloads = Map.unmodifiable(payloads);
+  }) : payloads = Map.unmodifiable(payloads),
+       originalBytes = Map.unmodifiable({
+         for (final entry in originalBytes.entries)
+           entry.key: List<int>.unmodifiable(entry.value),
+       }),
+       readFailures = Map.unmodifiable(readFailures);
   final GenerationArtifactOrigin origin;
   final Map<GenerationArtifactKind, String> payloads;
+
+  /// Exact legacy file bytes for explicit recovery export, never publication.
+  final Map<GenerationArtifactKind, List<int>> originalBytes;
+  final Map<GenerationArtifactKind, String> readFailures;
   final String? generationId;
   final String? notice;
 }

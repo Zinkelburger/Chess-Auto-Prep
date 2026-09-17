@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../l10n/generated/app_localizations.dart';
+
 import '../../repertoires/models/repertoire_metadata.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
@@ -52,6 +54,7 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
     this.onImportPgn,
     this.onReload,
     this.onGenerationSettings,
+    this.onRecoverAnalysis,
     this.repertoireSettingsBuilder,
   });
 
@@ -78,6 +81,7 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback? onImportPgn;
   final VoidCallback? onReload;
   final VoidCallback? onGenerationSettings;
+  final VoidCallback? onRecoverAnalysis;
 
   /// Controls for the selected repertoire, embedded in the shared settings pane.
   final WidgetBuilder? repertoireSettingsBuilder;
@@ -115,6 +119,7 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
           onImportPgn: onImportPgn,
           onReload: onReload,
           onGenerationSettings: onGenerationSettings,
+          onRecoverAnalysis: onRecoverAnalysis,
           onSettings: () =>
               openAppSettings(context, initialMode: AppMode.repertoire),
           onTrain: showTrainAction ? onTrainRepertoire : null,
@@ -500,6 +505,7 @@ class RepertoireActionsMenu extends StatelessWidget {
     this.onChoose,
     this.onReload,
     this.onGenerationSettings,
+    this.onRecoverAnalysis,
     this.onSettings,
     this.trainEnabled = true,
   });
@@ -512,6 +518,7 @@ class RepertoireActionsMenu extends StatelessWidget {
   final VoidCallback? onChoose;
   final VoidCallback? onReload;
   final VoidCallback? onGenerationSettings;
+  final VoidCallback? onRecoverAnalysis;
   final VoidCallback? onSettings;
 
   /// False keeps the Train row visible but greyed — while a build runs the
@@ -526,7 +533,7 @@ class RepertoireActionsMenu extends StatelessWidget {
   static const _train = 'Train';
   static const _check = 'Check';
 
-  List<AppMenuEntry> get _entries {
+  List<AppMenuEntry> _entries(BuildContext context) {
     final generate = <AppMenuEntry>[
       if (onPlanBuild != null)
         AppMenuEntry(
@@ -583,6 +590,12 @@ class RepertoireActionsMenu extends StatelessWidget {
           icon: Icons.refresh,
           onRun: onReload!,
         ),
+      if (onRecoverAnalysis != null)
+        AppMenuEntry(
+          label: AppLocalizations.of(context)!.legacyAnalysisAction,
+          icon: Icons.history,
+          onRun: onRecoverAnalysis!,
+        ),
       if (onGenerationSettings != null)
         AppMenuEntry(
           label: 'Generation settings…',
@@ -624,7 +637,7 @@ class RepertoireActionsMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final entries = _entries;
+    final entries = _entries(context);
     if (entries.isEmpty) return const SizedBox.shrink();
 
     // A quiet control: the bar's one labelled menu, drawn like the mode

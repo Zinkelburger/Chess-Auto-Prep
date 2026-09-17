@@ -15,9 +15,93 @@ import '../../../services/generation/tree_serialization.dart';
 /// explicit preview and are never used to resume or extend a generated cache.
 typedef SavedExpectimaxDatabase = ({BuildTree? tree, List<BuildTree> probes});
 
+/// A detached, read-only inspection. Parsed values never enter the live
+/// generated database, resume path or repository publication protocol.
+class LegacyAnalysisInspection {
+  LegacyAnalysisInspection(this.snapshot, this.items);
+  final GenerationArtifactSnapshot snapshot;
+  final List<LegacyAnalysisItem> items;
+}
+
+class LegacyAnalysisItem {
+  const LegacyAnalysisItem({
+    required this.kind,
+    this.tree,
+    this.trap,
+    this.error,
+  });
+  final GenerationArtifactKind kind;
+  final BuildTree? tree;
+  final TrapLineInfo? trap;
+  final String? error;
+}
+
 class GenerationArtifacts {
   GenerationArtifacts(this.repository);
   final GenerationArtifactRepository repository;
+
+  Future<LegacyAnalysisInspection> inspectLegacy(String path) async {
+    final snapshot = await repository.readLegacy(path);
+    final items = await Isolate.run(() {
+      final items = <LegacyAnalysisItem>[
+        for (final entry in snapshot.readFailures.entries)
+          LegacyAnalysisItem(kind: entry.key, error: entry.value),
+      ];
+      for (final entry in snapshot.payloads.entries) {
+        void decodeTree(String text) {
+          try {
+            items.add(
+              LegacyAnalysisItem(kind: entry.key, tree: deserializeTree(text)),
+            );
+          } catch (error) {
+            items.add(LegacyAnalysisItem(kind: entry.key, error: '$error'));
+          }
+        }
+
+        try {
+          switch (entry.key) {
+            case GenerationArtifactKind.tree:
+            case GenerationArtifactKind.partial:
+              decodeTree(entry.value);
+            case GenerationArtifactKind.probes:
+              final data = jsonDecode(entry.value) as Map<String, dynamic>;
+              for (final probe in data['trees'] as List) {
+                if (probe is String) {
+                  decodeTree(probe);
+                } else {
+                  items.add(
+                    LegacyAnalysisItem(
+                      kind: entry.key,
+                      error: 'Invalid saved probe entry',
+                    ),
+                  );
+                }
+              }
+            case GenerationArtifactKind.traps:
+              final data = jsonDecode(entry.value) as Map<String, dynamic>;
+              for (final trap in data['traps'] as List) {
+                try {
+                  items.add(
+                    LegacyAnalysisItem(
+                      kind: entry.key,
+                      trap: TrapLineInfo.fromJson(trap as Map<String, dynamic>),
+                    ),
+                  );
+                } catch (error) {
+                  items.add(
+                    LegacyAnalysisItem(kind: entry.key, error: '$error'),
+                  );
+                }
+              }
+          }
+        } catch (error) {
+          items.add(LegacyAnalysisItem(kind: entry.key, error: '$error'));
+        }
+      }
+      return items;
+    });
+    return LegacyAnalysisInspection(snapshot, List.unmodifiable(items));
+  }
 
   Future<GenerationArtifactProposal> prepareBundle(
     GenerationArtifactRun run, {
