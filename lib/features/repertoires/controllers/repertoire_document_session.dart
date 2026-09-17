@@ -26,6 +26,14 @@ String? _readContent(PgnOpenResult result) => switch (result) {
   PgnReadFailed(:final error) => throw error,
 };
 
+/// One not-yet-started line write. Replacements share its completion and retain
+/// only the latest PGN; active writes are never modified.
+class _PendingLineSave {
+  _PendingLineSave(this.content);
+  String content;
+  late final Future<bool> result;
+}
+
 class RepertoireDocumentSession {
   RepertoireDocumentSession({
     required this.documents,
@@ -191,10 +199,14 @@ class RepertoireDocumentSession {
   }
 
   Future<void> _lineSaveTail = Future.value();
+  final Map<(String, String, int), _PendingLineSave> _pendingLineSaves = {};
   Object? _lineSaveFailure;
   int _lineSaveRevision = 0;
 
   Future<T> runDocumentMutation<T>(Future<T> Function() action) {
+    // A command is an ordering barrier: later edits cannot replace work queued
+    // before that command, even when their captured line destination matches.
+    _pendingLineSaves.clear();
     final result = _lineSaveTail.then((_) {
       if (_disposed) throw StateError('The document session is closed.');
       if (_lineSaveFailure != null) {
@@ -224,8 +236,7 @@ class RepertoireDocumentSession {
     }
   }
 
-  /// Capture a save destination before a debounced editor edit can outlive
-  /// its chapter. A completed save may update the open chapter only if the
+  /// Capture a save destination before an editor edit can outlive its chapter. A completed save may update the open chapter only if the
   /// same load generation is still displayed.
   Future<bool> Function(String)? get selectedLineSaver {
     final selected = _selectedPgnLine;
@@ -261,16 +272,27 @@ class RepertoireDocumentSession {
     if (_disposed) {
       return Future.error(StateError('The document session is closed.'));
     }
-    final result = _lineSaveTail.then(
-      (_) => _persistLineContent(
-        newPgn,
+    final key = (filePath, lineId, generation);
+    final pending = _pendingLineSaves[key];
+    if (pending != null) {
+      pending.content = newPgn;
+      return pending.result;
+    }
+    final request = _PendingLineSave(newPgn);
+    _pendingLineSaves[key] = request;
+    request.result = _lineSaveTail.then((_) {
+      if (identical(_pendingLineSaves[key], request)) {
+        _pendingLineSaves.remove(key);
+      }
+      return _persistLineContent(
+        request.content,
         filePath: filePath,
         lineId: lineId,
         generation: generation,
         originals: originals,
-      ),
-    );
-    _lineSaveTail = result.then<void>(
+      );
+    });
+    _lineSaveTail = request.result.then<void>(
       (saved) {
         _lineSaveRevision++;
         _lineSaveFailure = saved ? null : 'The original line is unavailable.';
@@ -280,7 +302,7 @@ class RepertoireDocumentSession {
         _lineSaveFailure = error;
       },
     );
-    return result;
+    return request.result;
   }
 
   Future<bool> _persistLineContent(
@@ -695,6 +717,7 @@ class RepertoireDocumentSession {
   /// original game. This independent destination can resolve a failed source
   /// save, so it waits for the queue without requiring that source to recover.
   Future<PgnWriteResult> appendDraftTo(String filePath, String pgn) {
+    _pendingLineSaves.clear();
     final result = _lineSaveTail.then((_) {
       if (_disposed) throw StateError('The document session is closed.');
       return documents.appendPgn(filePath, pgn);

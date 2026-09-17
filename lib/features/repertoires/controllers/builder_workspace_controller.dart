@@ -235,30 +235,57 @@ class BuilderWorkspaceController extends ChangeNotifier
     if (_saveLine != null) unawaited(saveActiveLine());
   }
 
-  Future<bool> saveActiveLine() async {
+  final Map<Future<bool>, ({int revision, String key, String content})>
+  _lineSaveCaptures = {};
+  final Map<Future<bool>, Future<bool>> _lineSaveCompletions = {};
+
+  Future<bool> saveActiveLine() {
     final save = _saveLine;
-    if (save == null) return false;
-    final revision = _editRevision;
-    final key = _key;
+    if (save == null) return Future.value(false);
     final content = _content();
+    final saving = save(content);
+    // The document owner gives pending replacements one shared completion.
+    // Observe it once, replacing the captured PGN rather than retaining a
+    // suspended async frame/full snapshot for every keystroke.
+    _lineSaveCaptures[saving] = (
+      revision: _editRevision,
+      key: _key,
+      content: content,
+    );
+    return _lineSaveCompletions.putIfAbsent(
+      saving,
+      () => _completeLineSave(saving),
+    );
+  }
+
+  Future<bool> _completeLineSave(Future<bool> saving) async {
     try {
-      if (!await save(content)) {
+      if (!await saving) {
         throw StateError('The original line is unavailable.');
       }
       if (_closed) return true;
-      if (_drafts[key]?.content == content) _drafts.remove(key);
-      if (revision == _editRevision && key == _activeKey) {
+      final capture = _lineSaveCaptures[saving]!;
+      if (_drafts[capture.key]?.content == capture.content) {
+        _drafts.remove(capture.key);
+      }
+      if (capture.revision == _editRevision && capture.key == _activeKey) {
         _dirty = false;
         saveError = null;
       }
       notifyListeners();
       return true;
     } catch (error) {
-      if (!_closed && key == _activeKey) {
+      final capture = _lineSaveCaptures[saving]!;
+      if (!_closed &&
+          capture.key == _activeKey &&
+          capture.revision == _editRevision) {
         saveError = error;
         notifyListeners();
       }
       return false;
+    } finally {
+      _lineSaveCaptures.remove(saving);
+      _lineSaveCompletions.remove(saving);
     }
   }
 

@@ -1,5 +1,6 @@
 import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
 import 'package:chess_auto_prep/models/move_tree.dart';
+import 'package:chess_auto_prep/features/repertoires/repositories/repertoire_document_repository.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
@@ -55,6 +56,33 @@ class CopyDocuments extends MemoryDocuments {
       throw StateError('Concurrent destination change');
     }
     files[path] = content;
+  }
+}
+
+class SlowLineDocuments extends CopyDocuments {
+  final firstStarted = Completer<void>();
+  final firstGate = Completer<void>();
+  final writes = <String>[];
+  bool failLineWrites = false;
+  @override
+  Future<RepertoireLineSaveReceipt?> updateLineContent(
+    String path,
+    String lineId,
+    String content, {
+    required String expectedContent,
+  }) async {
+    writes.add(content);
+    if (writes.length == 1) {
+      firstStarted.complete();
+      await firstGate.future;
+    }
+    if (failLineWrites) throw StateError('slow store unavailable');
+    return super.updateLineContent(
+      path,
+      lineId,
+      content,
+      expectedContent: expectedContent,
+    );
   }
 }
 
@@ -742,6 +770,126 @@ void main() {
       expect(restarted.document.selectedPgnLine, isNull);
       expect(await restarted.saveActiveLine(), isFalse);
       expect(documents.files['/a'], pgn);
+    },
+  );
+
+  for (final fail in [false, true]) {
+    test(
+      'slow-store annotation burst retains only latest pending save, fail=$fail',
+      () async {
+        final slow = SlowLineDocuments()..files['/a'] = pgn;
+        slow.files['/b'] = pgn;
+        final owner = BuilderWorkspaceController(
+          checkpoint: () async {},
+          documents: slow,
+          decoder: const IsolateRepertoireDecoder(),
+        );
+        addTearDown(owner.dispose);
+        await owner.document.setRepertoire(chapter('/a'));
+        owner.selectLine(owner.document.repertoireLines.single);
+        slow.files['/a'] = owner.document.repertoireLines.single.fullPgn;
+        owner.setTitle('First write');
+        await slow.firstStarted.future;
+        slow.failLineWrites = fail;
+        final timer = Stopwatch()..start();
+        Future<bool>? sharedPending;
+        for (var i = 0; i < 250; i++) {
+          owner.board.setCommentAtPath(
+            const TreePath([0]),
+            '${'long annotation ' * 200}revision $i',
+          );
+          final pending = owner.saveActiveLine();
+          if (sharedPending != null)
+            expect(identical(pending, sharedPending), isTrue);
+          sharedPending = pending;
+        }
+        timer.stop();
+        // This is a recorded workload, not a timing assertion on a shared host.
+        print(
+          'Builder250 edits x3200-char annotation: ${timer.elapsedMilliseconds}ms; ${slow.writes.length} active write, one shared pending completion',
+        );
+        expect(slow.writes, hasLength(1));
+        expect(
+          owner.captureWorkspace().drafts.single.content,
+          contains('revision 249'),
+        );
+        var switched = false;
+        final switching = owner.document
+            .setRepertoire(chapter('/b'))
+            .then((_) => switched = true);
+        var closed = false;
+        final close = owner.document.flushDocumentForClose().then(
+          (_) => closed = true,
+        );
+        final checkedClose = fail
+            ? expectLater(close, throwsStateError)
+            : close;
+        await Future<void>.delayed(Duration.zero);
+        expect(switched, isFalse);
+        expect(closed, isFalse);
+        slow.firstGate.complete();
+        await switching;
+        await checkedClose;
+        expect(slow.writes, hasLength(2));
+        expect(slow.writes.last, contains('revision 249'));
+        if (fail) {
+          expect(
+            owner.captureWorkspace().drafts.single.content,
+            contains('revision 249'),
+          );
+          expect(owner.document.currentRepertoire!.filePath, '/a');
+          slow.failLineWrites = false;
+          expect(await owner.saveActiveLine(), isTrue);
+          await owner.document.flushDocumentForClose();
+          expect(slow.writes, hasLength(3));
+          expect(slow.files['/a'], contains('revision 249'));
+        } else {
+          expect(owner.captureWorkspace().drafts, isEmpty);
+          expect(owner.document.currentRepertoire!.filePath, '/b');
+          expect(slow.files['/a'], contains('revision 249'));
+        }
+        expect(slow.files['/b'], pgn);
+      },
+    );
+  }
+
+  test(
+    'explicit document command preserves ordering between coalesced edit bursts',
+    () async {
+      final slow = SlowLineDocuments()..files['/a'] = pgn;
+      final owner = BuilderWorkspaceController(
+        checkpoint: () async {},
+        documents: slow,
+        decoder: const IsolateRepertoireDecoder(),
+      );
+      addTearDown(owner.dispose);
+      await owner.document.setRepertoire(chapter('/a'));
+      owner.selectLine(owner.document.repertoireLines.single);
+      slow.files['/a'] = owner.document.repertoireLines.single.fullPgn;
+      final save = owner.document.selectedLineSaver!;
+      final first = save(pgn.replaceFirst('Original', 'active'));
+      await slow.firstStarted.future;
+      final before = save(pgn.replaceFirst('Original', 'before command'));
+      final beforeLatest = save(
+        pgn.replaceFirst('Original', 'latest before command'),
+      );
+      expect(identical(before, beforeLatest), isTrue);
+      String? observedAtCommand;
+      final command = owner.document.runDocumentMutation(() async {
+        observedAtCommand = slow.files['/a'];
+      });
+      final after = save(pgn.replaceFirst('Original', 'after command'));
+      expect(identical(before, after), isFalse);
+      final afterLatest = save(
+        pgn.replaceFirst('Original', 'latest after command'),
+      );
+      expect(identical(after, afterLatest), isTrue);
+      slow.firstGate.complete();
+      await Future.wait([first, before, command, after]);
+      await owner.document.flushDocumentForClose();
+      expect(slow.writes, hasLength(3));
+      expect(observedAtCommand, contains('latest before command'));
+      expect(slow.files['/a'], contains('latest after command'));
     },
   );
 
