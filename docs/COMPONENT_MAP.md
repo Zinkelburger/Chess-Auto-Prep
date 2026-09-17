@@ -1503,7 +1503,27 @@ manual-draft protection immediately before adopting a completed load.
 collection directory; direct Viewer `StorageFactory` access is retired. Startup
 selects its storage adapter and the directory supplier. The unused slice-export
 write bypass is removed; production export retains the shared exclusive-copy
-interaction. Filtering and full collection presentation ownership remain legacy.
+interaction.
+
+`features/documents/controllers/viewer_filter_controller.dart` now owns accepted
+filter selection, immutable config/index snapshots, request lifetime, failure
+state and saved-filter restoration notices. The slice mixin is retired.
+Overlapping requests obey the latest intent; reset, close, navigation and
+same-selection reapply revoke older work. In-place document changes rerun the
+pending intent against fresh records before publication. Failed matching keeps
+the previous selection and releases loading. Restore with no matches keeps the
+whole collection; a deliberate zero-match search remains a valid active filter.
+The host still orchestrates reader/tree/sort presentation and preference writes.
+
+`PgnCollectionFilter` is injected into both the Viewer owner and full filter
+workspace. Its infrastructure isolate adapter shares the pure predicates in
+`chess_core/pgn/pgn_slice_filter.dart`; the old services library is removed.
+Indexed queries still narrow candidates before replay, and only queried position
+lists are captured from the FEN index. The full workspace retains its separate
+editable draft, error/retry and debounce UI; callbacks reject replaced or edited
+source revisions. The generation inline editor still calls the infrastructure
+compute helper until its own workflow migrates. Full collection presentation,
+filter-widget theme/localization and broader session ownership remain unfinished.
 
 The editor owns rating/comment changes, screen-only solitaire substitutions,
 per-game persisted baselines, the autosave timer and serialized writes. It captures
@@ -2125,7 +2145,7 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 |------|---------|
 | `repertoire_service.dart` | Load/save repertoire, parse lines, append moves; in-place line edits and deletion locate games via `_findGameIndexByLineId` and rewrite via `_reassembleDocument` (atomic `_writeAtomically`); `deleteLine(filePath, lineId)` removes a game from disk |
 | `repertoire_review_service.dart` | Review scheduling |
-| `chess_core/pgn/pgn_text.dart`, `chess_core/pgn/pgn_position_replay.dart`, `services/pgn_slice_filter.dart` | Multi-game split/count (`splitPgnIntoGames`, `countPgnGames`); `[Event]`-delimited chunks, including back-to-back games without blank lines (tree_builder exports); `buildFenIndex` builds an inverted FEN→game-indices map in an isolate for O(1) position lookups (mainline **and RAVs**); `computeSliceMatches` is the shared entry point for position+header+sequence filtering (fast path with FEN index, slow path without); `serializeFenIndex`/`deserializeFenIndex` persist the index as a FENIDX3-format companion `.fenidx` file (header stores game count, PGN file size, and mtime for staleness detection; older blobs rebuild); `parseTargetFen` / `gamePassesThroughFen` / `buildFenIndex` / `mainlineSansAfterFen` replay ChessBase/Chessable **null moves** (`--` / `Z0`) as a turn pass so later same-side SAN stays on the index; `promoteNullMoveDummyMainline` runs before replay so Chessable intro chapters index the lesson moves; `gameMatchesSequence` ignores those tokens; `mainlineSansAfterFen` returns remaining SAN after a FEN along the line that found it (used by the opening-tree games list PV) |
+| `chess_core/pgn/pgn_text.dart`, `chess_core/pgn/pgn_position_replay.dart`, `chess_core/pgn/pgn_slice_filter.dart`, `infrastructure/documents/isolate_pgn_collection_filter.dart` | Multi-game split/count (`splitPgnIntoGames`, `countPgnGames`); `[Event]`-delimited chunks, including back-to-back games without blank lines (tree_builder exports); `buildFenIndex` builds an inverted FEN→game-indices map in an isolate for O(1) position lookups (mainline **and RAVs**); `computeSliceMatches` is the shared entry point for position+header+sequence filtering (fast path with FEN index, slow path without); `serializeFenIndex`/`deserializeFenIndex` persist the index as a FENIDX3-format companion `.fenidx` file (header stores game count, PGN file size, and mtime for staleness detection; older blobs rebuild); `parseTargetFen` / `gamePassesThroughFen` / `buildFenIndex` / `mainlineSansAfterFen` replay ChessBase/Chessable **null moves** (`--` / `Z0`) as a turn pass so later same-side SAN stays on the index; `promoteNullMoveDummyMainline` runs before replay so Chessable intro chapters index the lesson moves; `gameMatchesSequence` ignores those tokens; `mainlineSansAfterFen` returns remaining SAN after a FEN along the line that found it (used by the opening-tree games list PV) |
 | `opening_tree_builder.dart` | Build opening tree from PGN via `walkMainlineIntoTree`; `*` / empty Result → `userResult: null` and `includeVariations: true` (course sidelines become tree siblings); scored games stay mainline-only; `--`/`Z0` pass without a tree node |
 | `pgn_tree_core.dart` | Shared PGN attribution + walk used by `OpeningTreeBuilder` and `UnifiedAnalysisBuilder`; `includeVariations` counts each RAV as a line so sibling frequencies still sum to 100% |
 | `default_pgn_service.dart` | Bundled default PGN extraction (`rootBundle.load` + `decodeTextBytes` for Latin-1/Windows-1252 names in legacy PGNs) |

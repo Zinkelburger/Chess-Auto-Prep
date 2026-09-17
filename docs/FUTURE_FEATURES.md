@@ -85,8 +85,13 @@ are preserved. This does not complete variation cursor, panel or whole-workspace
 restoration. Collection read/decode requests now have a pure feature owner with
 stale-result rejection and an injected isolate decoder; read-only library lookups
 are also injected. Adoption rechecks manual edits made during file reads or paste
-parsing. Legacy collection presentation/filter/widget ownership, remaining Builder storage/
-session ownership and draft recovery, incremental editor indexing, undo receipts, variation-cursor/filter/panel
+parsing. Accepted Viewer filters now have a pure owner with immutable snapshots,
+latest-request acceptance, failed-query recovery and recomputation after in-place
+source edits. The slice mixin is retired; matching predicates and worker scheduling
+have separate chess-core/infrastructure homes. The full filter workspace injects
+its matcher. Legacy collection presentation/widget ownership, generation inline
+filter wiring, remaining Builder storage/
+session ownership and draft recovery, incremental editor indexing, undo receipts, variation-cursor/panel
 restoration and complete large-document performance evidence remain pending.
 Study now has independent cursor/metadata projections and scoped subscriptions;
 metadata reads avoid tree materialization and ordinary annotation edits leave the

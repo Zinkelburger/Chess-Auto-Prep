@@ -1,5 +1,8 @@
 import 'dart:io';
 
+import '../features/documents/repositories/pgn_collection_filter.dart';
+import '../infrastructure/documents/isolate_pgn_collection_filter.dart';
+
 import '../features/documents/repositories/pgn_library_repository.dart';
 import '../infrastructure/documents/storage_pgn_library_repository.dart';
 import '../services/default_pgn_service.dart';
@@ -109,3 +112,6 @@ PgnLibraryRepository createPgnLibraryRepository() =>
       StorageFactory.instance,
       directory: () => DefaultPgnService.collectionsPath,
     );
+
+PgnCollectionFilter createPgnCollectionFilter() =>
+    const IsolatePgnCollectionFilter();

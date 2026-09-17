@@ -4,13 +4,14 @@ library;
 
 import 'dart:async';
 
+import '../../features/documents/repositories/pgn_collection_filter.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../core/board_editor_controller.dart';
 import '../../core/slice_filter_controller.dart';
 import '../../models/pgn_filter_models.dart';
 import '../../models/pgn_game_entry.dart';
-import '../../services/pgn_slice_filter.dart' as pgn;
 import '../../theme/app_text_styles.dart';
 import '../../theme/app_colors.dart';
 import '../board_editor/board_editor_panel.dart';
@@ -29,6 +30,7 @@ class PgnGameFilterWorkspace extends StatefulWidget {
   const PgnGameFilterWorkspace({
     super.key,
     required this.allGames,
+    required this.matcher,
     required this.currentFen,
     required this.onApply,
     this.onOpenGame,
@@ -39,6 +41,7 @@ class PgnGameFilterWorkspace extends StatefulWidget {
   });
 
   final List<GameRecord> allGames;
+  final PgnCollectionFilter matcher;
   final String currentFen;
   final String? collectionName;
   final String? collectionPlayer;
@@ -137,7 +140,9 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
         _onFiltersChanged();
       }
     }
-    if (!identical(oldWidget.allGames, widget.allGames)) {
+    if (!identical(oldWidget.allGames, widget.allGames) ||
+        !identical(oldWidget.matcher, widget.matcher) ||
+        !identical(oldWidget.fenIndex, widget.fenIndex)) {
       _scheduledConfig = null;
       _onFiltersChanged();
     }
@@ -210,14 +215,9 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
   Future<void> _recompute(int generation) async {
     if (!mounted) return;
     try {
-      final indices = await pgn.computeSliceMatches(
-        games: widget.allGames,
-        targetFen: _filters.positionFen,
-        additionalTargetFens: _filters.additionalPositionFens,
-        matchAny: _filters.matchAny,
-        filters: _filters.rawHeaderFilters,
-        seqGroups: _filters.sequenceGroups,
-        seqGap: _filters.sequenceGap,
+      final indices = await widget.matcher.match(
+        _filters.buildConfig(),
+        widget.allGames,
         fenIndex: widget.fenIndex,
       );
       if (!mounted || generation != _generation) return;

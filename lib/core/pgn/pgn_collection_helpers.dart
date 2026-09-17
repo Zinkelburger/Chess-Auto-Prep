@@ -5,11 +5,9 @@
 library;
 
 import '../../chess_core/pgn/pgn_collection.dart';
-import '../../models/pgn_filter_models.dart';
 import '../../models/pgn_game_entry.dart';
 import '../../services/games_library/game_filter.dart' show dedupKeyForHeaders;
 import '../../chess_core/pgn/pgn_text.dart' as pgn;
-import '../../services/pgn_slice_filter.dart' as pgn;
 
 /// The file as it now stands on disk, with only the games *we* changed
 /// substituted into it — the write to use when the file moved under us.
@@ -81,90 +79,6 @@ String? mergeEditedGamesIntoDiskCopy({
   final preamble = pgnCollectionPreamble(diskContent);
   final body = [for (final c in chunks) c.trim()].join('\n\n');
   return preamble.isEmpty ? '$body\n' : '$preamble\n\n$body\n';
-}
-
-Future<List<int>> applySliceConfig(
-  SliceConfig config,
-  List<GameRecord> games, {
-  Map<String, List<int>>? fenIndex,
-}) {
-  final seqPattern = config.sequencePattern;
-  return pgn.computeSliceMatches(
-    games: games,
-    targetFen: pgn.parseTargetFen(config.positionInput),
-    additionalTargetFens: [
-      for (final input in config.additionalPositions)
-        ?pgn.parseTargetFen(input),
-    ],
-    matchAny: config.matchAny,
-    filters: config.headerFilters
-        .map((f) => (field: f.field, mode: f.mode, value: f.value))
-        .toList(),
-    seqGroups: (seqPattern != null && seqPattern.isNotEmpty)
-        ? pgn.parseSequenceGroups(seqPattern)
-        : const [],
-    seqGap: config.sequenceGap,
-    fenIndex: fenIndex,
-  );
-}
-
-/// [config] without the filter that entry [chipIndex] of
-/// [SliceConfig.chipLabels] describes, or null when [chipIndex] names no
-/// chip. Chips are laid out as the position input, then each non-empty
-/// additional position, then the sequence pattern, then each header filter
-/// with a value.
-SliceConfig? sliceConfigWithoutChip(SliceConfig config, int chipIndex) {
-  if (chipIndex < 0 || chipIndex >= config.chipLabels.length) return null;
-  final hasPosition = config.positionInput?.isNotEmpty ?? false;
-  final hasSequence = config.sequencePattern?.isNotEmpty ?? false;
-  final positionSlots = [
-    for (final (i, p) in config.additionalPositions.indexed)
-      if (p.isNotEmpty) i,
-  ];
-  final headerSlots = [
-    for (final (i, f) in config.headerFilters.indexed)
-      if (f.value.isNotEmpty) i,
-  ];
-
-  SliceConfig build({
-    String? positionInput,
-    List<String>? additionalPositions,
-    String? sequencePattern,
-    List<HeaderFilterConfig>? headerFilters,
-  }) => SliceConfig(
-    positionInput: positionInput,
-    additionalPositions: additionalPositions ?? config.additionalPositions,
-    matchAny: config.matchAny,
-    headerFilters: headerFilters ?? config.headerFilters,
-    sequencePattern: sequencePattern,
-    sequenceGap: config.sequenceGap,
-  );
-
-  var index = chipIndex;
-  if (hasPosition) {
-    if (index == 0) {
-      return build(sequencePattern: config.sequencePattern);
-    }
-    index--;
-  }
-  if (index < positionSlots.length) {
-    return build(
-      positionInput: config.positionInput,
-      additionalPositions: List.of(config.additionalPositions)
-        ..removeAt(positionSlots[index]),
-      sequencePattern: config.sequencePattern,
-    );
-  }
-  index -= positionSlots.length;
-  if (hasSequence) {
-    if (index == 0) return build(positionInput: config.positionInput);
-    index--;
-  }
-  return build(
-    positionInput: config.positionInput,
-    sequencePattern: config.sequencePattern,
-    headerFilters: List.of(config.headerFilters)..removeAt(headerSlots[index]),
-  );
 }
 
 /// Detect the player a whole collection is "about" by scanning every game's

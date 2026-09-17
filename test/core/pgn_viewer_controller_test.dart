@@ -1,5 +1,8 @@
 import 'dart:async';
 
+import 'package:chess_auto_prep/features/documents/repositories/pgn_collection_filter.dart';
+import 'package:chess_auto_prep/infrastructure/documents/isolate_pgn_collection_filter.dart';
+
 import 'package:chess_auto_prep/features/documents/repositories/pgn_collection_decoder.dart';
 import 'package:chess_auto_prep/features/documents/models/viewer_collection_load.dart';
 import 'package:chess_auto_prep/chess_core/pgn/pgn_collection.dart';
@@ -50,6 +53,7 @@ class _GatedOpeningController extends PgnViewerController {
   _GatedOpeningController()
     : super(
         collectionDecoder: const IsolatePgnCollectionDecoder(),
+        collectionFilter: const IsolatePgnCollectionFilter(),
         library: StoragePgnLibraryRepository(
           StorageFactory.instance,
           directory: () async => '/collections',
@@ -87,13 +91,29 @@ class _ControlledDecoder implements PgnCollectionDecoder {
   Future<DecodedPgnCollection> decode(String content) => pending.future;
 }
 
+class _ControlledFilter implements PgnCollectionFilter {
+  final pending = <Completer<List<int>>>[];
+  @override
+  Future<List<int>> match(
+    SliceConfig config,
+    List<GameRecord> games, {
+    Map<String, List<int>>? fenIndex,
+  }) {
+    final result = Completer<List<int>>();
+    pending.add(result);
+    return result.future;
+  }
+}
+
 PgnViewerController _makeController({
   PgnCollectionDecoder decoder = const IsolatePgnCollectionDecoder(),
+  PgnCollectionFilter matcher = const IsolatePgnCollectionFilter(),
 }) {
   // A detached widget controller behaves as a no-op stub (its methods guard on
   // a null attached state), so it is safe to use without mounting a widget.
   return PgnViewerController(
     collectionDecoder: decoder,
+    collectionFilter: matcher,
     library: StoragePgnLibraryRepository(
       StorageFactory.instance,
       directory: () async => '/collections',
@@ -225,6 +245,116 @@ void main() {
       c.closeFile();
     },
   );
+
+  group('filter request ownership', () {
+    const first = SliceConfig(
+      headerFilters: [
+        HeaderFilterConfig(
+          field: 'White',
+          mode: MatchMode.exact,
+          value: 'First',
+        ),
+      ],
+    );
+    const second = SliceConfig(
+      headerFilters: [
+        HeaderFilterConfig(
+          field: 'White',
+          mode: MatchMode.exact,
+          value: 'Second',
+        ),
+      ],
+    );
+    test(
+      'only the latest request changes the visible games and saved filter',
+      () async {
+        final matcher = _ControlledFilter();
+        final c = _makeController(matcher: matcher);
+        addTearDown(c.dispose);
+        final games = [_game(white: 'First'), _game(white: 'Second')];
+        _seed(c, games);
+        c.filePath = '/tmp/filter-requests.pgn';
+        final a = c.recomputeAndApplyConfig(first);
+        final b = c.recomputeAndApplyConfig(second);
+        matcher.pending[1].complete([1]);
+        await b;
+        matcher.pending[0].complete([0]);
+        await a;
+        expect(c.filteredGames, [games[1]]);
+        expect(c.isLoading, isFalse);
+        expect(
+          (await c.preferences.loadSlice(c.filePath!))!.toJsonString(),
+          second.toJsonString(),
+        );
+      },
+    );
+    test(
+      'filter failure preserves selection and same-selection retry clears its own error',
+      () async {
+        final matcher = _ControlledFilter();
+        final c = _makeController(matcher: matcher);
+        addTearDown(c.dispose);
+        final games = [_game(), _game()];
+        _seed(c, games);
+        c.applySlice([0], first);
+        final pending = c.recomputeAndApplyConfig(second);
+        matcher.pending.single.completeError(StateError('worker failed'));
+        await pending;
+        expect(c.filteredGames, [games[0]]);
+        expect(c.isLoading, isFalse);
+        expect(c.errorMessage, contains('Could not filter'));
+        c.applySlice([0], first);
+        expect(c.errorMessage, isNull);
+        c.errorMessage = 'An unrelated failure';
+        c.resetFilters();
+        expect(c.errorMessage, 'An unrelated failure');
+      },
+    );
+    test(
+      'in-place edits recompute a pending filter against current headers',
+      () async {
+        final matcher = _ControlledFilter();
+        final c = _makeController(matcher: matcher);
+        addTearDown(c.dispose);
+        final games = [_game(), _game()];
+        _seed(c, games);
+        c.setAutoSave(false);
+        c.rememberPersistedGame(games[0]);
+        final pending = c.recomputeAndApplyConfig(first);
+        c.setRating(4);
+        matcher.pending.single.complete([1]);
+        await Future<void>.delayed(Duration.zero);
+        expect(matcher.pending, hasLength(2));
+        matcher.pending.last.complete([0]);
+        await pending;
+        expect(c.filteredGames, [games[0]]);
+        expect(c.hasActiveFilters, isTrue);
+        expect(c.isLoading, isFalse);
+        expect(games[0].studyRating, 4);
+      },
+    );
+    test('a pending filter cannot release a newer collection load', () async {
+      final matcher = _ControlledFilter();
+      final decoder = _ControlledDecoder();
+      final c = _makeController(matcher: matcher, decoder: decoder);
+      addTearDown(c.dispose);
+      _seed(c, [_game(), _game()]);
+      final pending = c.recomputeAndApplyConfig(first);
+      final loading = c.loadPgnContent('[Event "Replacement"]\n\n1. d4 *');
+      matcher.pending.single.complete([1]);
+      await pending;
+      expect(c.isLoading, isTrue);
+      decoder.pending.complete(
+        DecodedPgnCollection(
+          parseMultiGamePgn('[Event "Replacement"]\n\n1. d4 *'),
+          '',
+        ),
+      );
+      await loading;
+      expect(c.hasActiveFilters, isFalse);
+      expect(c.allGames.single.headers['Event'], 'Replacement');
+    });
+  });
 
   group('load ordering', () {
     for (final pasted in [false, true]) {

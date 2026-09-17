@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:chess_auto_prep/infrastructure/documents/isolate_pgn_collection_filter.dart';
+
 import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_library_repository.dart';
 import 'package:chess_auto_prep/infrastructure/documents/isolate_pgn_collection_decoder.dart';
 import 'package:chess_auto_prep/chess_core/pgn/pgn_collection.dart';
@@ -85,6 +87,7 @@ void main() {
   ]) {
     final controller = PgnViewerController(
       collectionDecoder: const IsolatePgnCollectionDecoder(),
+      collectionFilter: const IsolatePgnCollectionFilter(),
       library: StoragePgnLibraryRepository(
         StorageFactory.instance,
         directory: () async => '/collections',
@@ -166,6 +169,31 @@ void main() {
     },
   );
 
+  test(
+    'restoring a saved filter does not borrow the departed reader cursor',
+    () async {
+      final preferences = SharedPreferencesViewerRepository(
+        SharedPreferences.getInstance,
+      );
+      await preferences.saveSlice(
+        path,
+        const SliceConfig(
+          headerFilters: [
+            HeaderFilterConfig(
+              field: 'Event',
+              mode: MatchMode.exact,
+              value: 'Game 0',
+            ),
+          ],
+        ),
+      );
+      final controller = make(_Handle()..mainLineIndex = 5, preferences);
+      await controller.loadFile(path);
+      expect(controller.filteredGames, hasLength(1));
+      expect(controller.resumePlyFor(controller.filteredGames.single), 0);
+    },
+  );
+
   test('a delayed recent-file read cannot erase a newly opened file', () async {
     final preferences = _DelayedRecentPreferences();
     final controller = make(null, preferences);
@@ -194,7 +222,7 @@ void main() {
         ],
       );
       await first.recomputeAndApplyConfig(config);
-      await first.persistSliceConfig(config);
+      await first.preferences.saveSlice(first.filePath!, config);
       final reopened = make();
       await reopened.loadFile(path);
       expect(reopened.filteredGames, hasLength(40));
@@ -248,7 +276,7 @@ void main() {
         ],
       );
       await first.recomputeAndApplyConfig(config);
-      await first.persistSliceConfig(config);
+      await first.preferences.saveSlice(first.filePath!, config);
       first.goToGame(36);
       handle.mainLineIndex = 4;
       first.rememberReadingPosition();
@@ -317,7 +345,7 @@ void main() {
         ],
       );
       await first.recomputeAndApplyConfig(config);
-      await first.persistSliceConfig(config);
+      await first.preferences.saveSlice(first.filePath!, config);
       final second = make();
       await second.loadFile(path);
       expect(second.activeSliceConfig.toJsonString(), config.toJsonString());

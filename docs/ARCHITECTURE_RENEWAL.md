@@ -1775,6 +1775,73 @@ Remaining: collection/filter/widget ownership, scoped presentation, complete
 session/undo parity, Builder storage/recovery, later feature migrations and
 non-Linux/release gates. Milestones 1/2 and 3 remain partial; 4–7 are unfinished.
 
+### Viewer filter ownership checkpoint (2026-09-17)
+
+Accepted filters now belong to the pure
+`features/documents/controllers/viewer_filter_controller.dart`, with immutable
+selection/config/index snapshots and captured game records. The owner validates
+worker indices, preserves the accepted selection on failure, and exposes loading,
+errors and restoration notices. Explicit apply, reset, close, navigation and
+disposal invalidate older work. Reapplying an identical selection also revokes a
+pending different request without moving the current reading cursor. Every new
+computation has its own request generation; the old mixin shared a generation
+between overlapping computations and allowed an older result to overwrite a
+newer intent.
+
+The first source-change guard simply cancelled matching, but a session regression
+showed this dropped a chip-removal request when background opening detection
+updated headers during its computation. The owner now keeps that logical request
+pending and refreshes records/index inputs after a source revision changes. Old
+results and old errors cannot publish; only a result for the current source and
+intent is accepted. A saved filter with no matches still falls back to the
+collection; deliberate zero-match requests retain the active filter. Only queried
+FEN-index entries are copied, preserving bounded index lookup overhead.
+
+The `pgn_viewer_controller_slices.dart` part/mixin is removed. The legacy host
+forwards filter commands and retains reader/tree/sort presentation effects and
+injected preference writes. Saved-filter loading uses the already-read config,
+removing a duplicate preference read. Navigation retains one immutable selection
+snapshot. The full filter workspace receives `PgnCollectionFilter` explicitly,
+keeps its editable draft on worker failure and offers retry; its source callbacks
+reject both replaced collections and obsolete content revisions.
+
+`chess_core/pgn/pgn_slice_filter.dart` contains the pure predicates and candidate
+matching; `infrastructure/documents/isolate_pgn_collection_filter.dart` owns
+isolate execution and indexed candidate preparation. The old services path is
+retired and callers use canonical imports. Chip-edit transformations have a
+canonical document-model path. The generation inline editor still uses the
+infrastructure helper directly and retains its legacy workflow ownership.
+
+Verification: all 354 selected unit/widget regressions pass, including header,
+position, AND/OR and sequence matching, malformed PGNs/null moves, indexed and
+replayed parity, immutable capture, overlapping requests, failure/retry, source
+refresh, saved filters, native file-write safety, Viewer widgets and close guards.
+All three Linux native cases pass: the new real filter UI apply/reopen/clear journey
+and both clean-session and draft-recovery restart journeys. The filter journey
+verifies selected game/mainline restoration and unchanged source bytes.
+
+Final review reproduced an introduced cursor leak: applying the restore result
+remembered the departed reader's ply on the newly adopted collection. Restoring
+now skips outgoing-cursor capture; all 58 affected follow-up tests pass, including
+that regression. The native filter journey passes again after this correction. Malformed decoded
+filter settings also release loading and report a failure before worker startup.
+The initial source-change cancellation regression and obsolete overrides/imports
+were corrected; an intermediate test fixture's callback conversion also failed
+to compile before repair. No selected cases are skipped. Full-suite, engine and
+other-platform gates were not rerun for this checkpoint.
+
+The headless production app was inspected with an Event filter in the
+[editable preview](images/renewal-viewer-filter-owner.png) and the
+[applied reading view](images/renewal-viewer-filter-applied.png), showing one
+selected game with the matching board and retained move cursor. Recovery banners
+belong to the disposable profile. The preview was stopped before final checks.
+Analyze/lint passes with nine existing informational notices and all 18
+architecture-checker cases.
+Remaining: private collection/presentation ownership, legacy filter draft widgets
+and theme/localization, complete session/undo parity, Builder storage/recovery,
+later features and non-Linux/release gates. Milestones 1/2 and 3 remain partial;
+4–7 remain unfinished.
+
 ### Initial parity and ownership inventory (milestone 0, partial)
 
 The starting tree has 885 files under `lib/` and 674 under `test/`; these counts

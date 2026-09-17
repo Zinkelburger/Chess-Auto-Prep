@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/features/documents/models/viewer_filter_actions.dart';
 import 'package:chess_auto_prep/chess_core/pgn/pgn_collection.dart';
 import 'package:chess_auto_prep/chess_core/pgn/study_metadata.dart';
 import 'package:flutter_test/flutter_test.dart';

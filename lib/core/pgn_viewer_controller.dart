@@ -1,5 +1,9 @@
 import 'dart:async';
 
+import '../features/documents/controllers/viewer_filter_controller.dart';
+import '../features/documents/models/viewer_filter_selection.dart';
+import '../features/documents/repositories/pgn_collection_filter.dart';
+
 import '../features/documents/repositories/pgn_library_repository.dart';
 import '../features/documents/controllers/viewer_collection_load_controller.dart';
 import '../features/documents/models/viewer_collection_load.dart';
@@ -42,7 +46,6 @@ export 'pgn/viewer_solitaire_session.dart' show SolitaireSetup;
 import '../utils/safe_change_notifier.dart';
 import '../utils/chess_utils.dart';
 
-part 'pgn/pgn_viewer_controller_slices.dart';
 part 'pgn/pgn_viewer_controller_window.dart';
 
 /// Board perspective mode persisted as [StudyPerspective] header on first game.
@@ -106,12 +109,14 @@ class Perspective {
 /// Business logic and state for the PGN Viewer screen.
 ///
 /// Collection edits and persistence belong to the injected [PgnCollectionEditor].
-/// Legacy slice/window responsibilities remain until their workflows migrate.
+/// Filter selection and request lifetime belong to [ViewerFilterController].
+/// Legacy presentation/window responsibilities remain until their workflows migrate.
 class PgnViewerController extends ChangeNotifier
-    with SafeChangeNotifier, _SliceOps, _WindowOps {
+    with SafeChangeNotifier, _WindowOps {
   PgnViewerController({
     required this.collectionRepository,
     required this.collectionDecoder,
+    required this.collectionFilter,
     required this.library,
     required this.preferences,
     required this.pgnWidgetController,
@@ -150,12 +155,13 @@ class PgnViewerController extends ChangeNotifier
 
   final PgnCollectionRepository collectionRepository;
   final PgnCollectionDecoder collectionDecoder;
+  final PgnCollectionFilter collectionFilter;
+  late final _filters = ViewerFilterController(collectionFilter);
   final PgnLibraryRepository library;
   late final _collectionLoads = ViewerCollectionLoadController(
     repository: collectionRepository,
     decoder: collectionDecoder,
   );
-  @override
   final ViewerPreferencesRepository preferences;
   late final PgnCollectionEditor _editor;
   DocumentSaveActions get saveActions => _editor;
@@ -173,7 +179,7 @@ class PgnViewerController extends ChangeNotifier
     return () {
       _collectionLoads.invalidate();
       _gameLoadEpoch++;
-      _sliceEpoch++;
+      _filters.invalidate();
       isLoading = false;
       isPreparingCollection = false;
       _restoringSession = false;
@@ -271,7 +277,6 @@ class PgnViewerController extends ChangeNotifier
   static bool _alwaysActive() => true;
 
   // File state
-  @override
   String? filePath;
 
   /// Modification time of [filePath] as it was when this collection was read,
@@ -295,15 +300,16 @@ class PgnViewerController extends ChangeNotifier
   int _collectionRevision = 0;
 
   @override
-  void _markCollectionChanged() => _collectionRevision++;
+  void _markCollectionChanged() {
+    _collectionRevision++;
+    _filters.sourceChanged();
+  }
 
   @override
   List<PgnGameEntry> filteredGames = [];
-  @override
-  bool hasActiveFilters = false;
+  bool get hasActiveFilters => _filters.selection.active;
 
-  @override
-  SliceConfig activeSliceConfig = const SliceConfig.empty();
+  SliceConfig get activeSliceConfig => _filters.selection.config;
 
   /// Surname of the player the loaded collection is about (null when mixed).
   /// Drives the one-click "«Player» as White/Black" slice presets.
@@ -356,7 +362,6 @@ class PgnViewerController extends ChangeNotifier
   /// bookmark without inventing an unstable header-based identifier.
   final Map<PgnGameEntry, int> _resumePlyByGame = {};
 
-  @override
   void _rememberCurrentPlace() {
     if (showOpeningTree || isSolitaireMode || isLoading) return;
     if (currentGameIndex < 0 || currentGameIndex >= filteredGames.length) {
@@ -411,7 +416,6 @@ class PgnViewerController extends ChangeNotifier
     }
   }
 
-  @override
   Future<void> persistViewerPreference(Future<void> Function() action) async {
     try {
       await action();
@@ -456,7 +460,6 @@ class PgnViewerController extends ChangeNotifier
 
   /// FEN the next [PgnViewerWidget] mount should park on (tree position after
   /// a games-at-position click, or the game cursor after leaving the tree).
-  @override
   String? pgnInitialFen;
 
   /// Game FEN snapshotted when entering the opening tree, restored when
@@ -469,7 +472,6 @@ class PgnViewerController extends ChangeNotifier
   @override
   Perspective perspective = const Perspective();
 
-  @override
   late final ViewerOpeningTree _viewerTree = ViewerOpeningTree(
     isActive: isActive,
     onChanged: notifyListeners,
@@ -484,7 +486,6 @@ class PgnViewerController extends ChangeNotifier
     onReclaimFocus: () => onReclaimFocus?.call(),
   );
 
-  @override
   bool get showOpeningTree => _viewerTree.showOpeningTree;
   bool get treeIncludeVariations => _viewerTree.includeVariations;
   void setTreeIncludeVariations(bool value) =>
@@ -566,10 +567,8 @@ class PgnViewerController extends ChangeNotifier
   /// Read-only access to the precomputed FEN → game-indices map.
   /// Returns null while building or after movetext edits invalidate it;
   /// consumers must then search the current game records by replay.
-  @override
   Map<String, List<int>>? get fenIndex => _fenIndex.value;
 
-  @override
   bool isLoading = false;
 
   /// Auto-play timer logic (extracted). The getters/methods below delegate
@@ -603,6 +602,7 @@ class PgnViewerController extends ChangeNotifier
   void dispose() {
     unawaited(saveSession());
     _collectionLoads.dispose();
+    _filters.dispose();
     _openingEpoch++;
     _fenIndex.cancel();
     _autoPlay.dispose();
@@ -702,9 +702,7 @@ class PgnViewerController extends ChangeNotifier
     collectionPreamble = preamble;
     _detectProtagonist(entries);
     filteredGames = List.of(entries);
-    hasActiveFilters = false;
-    activeSliceConfig = const SliceConfig.empty();
-    _activeSliceIndices = null;
+    _filters.reset();
     sortMode = GameSortMode.fileOrder;
     currentGameIndex = 0;
     _resumePlyByGame.clear();
@@ -730,8 +728,8 @@ class PgnViewerController extends ChangeNotifier
     // selected game stale immediately, before the new file finishes reading.
     _gameLoadEpoch++;
     errorMessage = null;
-    pendingSliceRestore = null;
-    _sliceEpoch++;
+    _filters.clearPendingRestore();
+    _filters.invalidate();
     final fileName = p.basename(path);
 
     isLoading = true;
@@ -757,7 +755,7 @@ class PgnViewerController extends ChangeNotifier
       final loaded = result as ViewerCollectionLoaded;
       final entries = List<PgnGameEntry>.of(loaded.document.games);
 
-      _sliceEpoch++;
+      _filters.invalidate();
       _restoringSession = true;
       _adoptCollection(
         path: path,
@@ -803,7 +801,7 @@ class PgnViewerController extends ChangeNotifier
           await _fenIndex.tryLoadPersisted(path, entries.length);
           if (!_isCurrentLoad(loadEpoch)) return;
         }
-        await tryRestoreSavedSlice(path, entries);
+        await _restoreSavedSlice(savedSlice, entries);
       }
       if (restoreSavedSlice) {
         if (!_isCurrentLoad(loadEpoch)) return;
@@ -876,8 +874,8 @@ class PgnViewerController extends ChangeNotifier
     _restoringSession = false;
     _gameLoadEpoch++;
     errorMessage = null;
-    pendingSliceRestore = null;
-    _sliceEpoch++;
+    _filters.clearPendingRestore();
+    _filters.invalidate();
     isLoading = true;
     notifyListeners();
     final result = await loading;
@@ -899,7 +897,7 @@ class PgnViewerController extends ChangeNotifier
     final entries = List<PgnGameEntry>.of(loaded.document.games);
 
     isLoading = false;
-    _sliceEpoch++;
+    _filters.invalidate();
     _fenIndex.reset();
     _adoptCollection(
       path: null,
@@ -938,11 +936,7 @@ class PgnViewerController extends ChangeNotifier
     final viewPerspective = perspective;
     final flipped = boardFlipped;
     final gameIndex = currentGameIndex;
-    final config = activeSliceConfig;
-    final activeFilters = hasActiveFilters;
-    final indices = _activeSliceIndices == null
-        ? null
-        : List<int>.of(_activeSliceIndices!);
+    final filterSelection = _filters.selection;
     final sorting = sortMode;
     final bookmarks = Map<PgnGameEntry, int>.of(_resumePlyByGame);
     final cursorFen = pgnWidgetController.currentFen;
@@ -952,7 +946,7 @@ class PgnViewerController extends ChangeNotifier
       if (!isActive() || !canReplaceCollection()) return false;
       final loadEpoch = _collectionLoads.invalidate();
       isPreparingCollection = false;
-      _sliceEpoch++;
+      _filters.invalidate();
       _gameLoadEpoch++;
       stopAutoPlay();
       analysisController.cancel();
@@ -966,16 +960,14 @@ class PgnViewerController extends ChangeNotifier
       );
       loadedFileModified = modified;
       filteredGames = List.of(filtered);
-      activeSliceConfig = config;
-      hasActiveFilters = activeFilters;
-      _activeSliceIndices = indices == null ? null : List.of(indices);
+      _filters.restoreSelection(filterSelection);
       sortMode = sorting;
       currentGameIndex = gameIndex;
       _resumePlyByGame.addAll(bookmarks);
       pgnInitialFen = cursorFen ?? initialFen;
       isLoading = false;
       errorMessage = null;
-      pendingSliceRestore = null;
+      _filters.clearPendingRestore();
       if (filteredGames.isEmpty) currentPosition = Chess.initial;
       notifyListeners();
       await loadCurrentGame();
@@ -1012,7 +1004,7 @@ class PgnViewerController extends ChangeNotifier
     _collectionLoads.invalidate();
     isPreparingCollection = false;
     _gameLoadEpoch++;
-    _sliceEpoch++;
+    _filters.invalidate();
     stopAutoPlay();
     if (isSolitaireMode) _solitaireSession.stop();
     _solitaireSession.cancelSetup();
@@ -1020,7 +1012,7 @@ class PgnViewerController extends ChangeNotifier
     analysisController.clearEvals();
     isLoading = false;
     errorMessage = null;
-    pendingSliceRestore = null;
+    _filters.clearPendingRestore();
     // An empty collection: _adoptCollection nulls the protagonist fields the
     // same way this used to by hand.
     _adoptCollection(
@@ -1163,7 +1155,6 @@ class PgnViewerController extends ChangeNotifier
   ({String player1, String player2})? detectBothPlayers() =>
       detectBothPlayersFrom(allGames);
 
-  @override
   Future<void> loadCurrentGame({bool enrich = true}) async {
     if (filteredGames.isEmpty) return;
     final gameLoadEpoch = ++_gameLoadEpoch;
@@ -1278,6 +1269,122 @@ class PgnViewerController extends ChangeNotifier
     ];
   }
 
+  SliceRestoreInfo? get pendingSliceRestore => _filters.pendingRestore;
+  void clearPendingSliceRestore() => _filters.clearPendingRestore();
+
+  static const _filterFailure = 'Could not filter these games. Try again.';
+
+  Future<void> _restoreSavedSlice(
+    SliceConfig config,
+    List<PgnGameEntry> entries,
+  ) => _computeFilter(config, entries, restoring: true);
+
+  Future<void> _computeFilter(
+    SliceConfig config,
+    List<PgnGameEntry> entries, {
+    bool restoring = false,
+  }) async {
+    final previous = _filters.selection;
+    final pending = _filters.compute(
+      config,
+      () => [
+        for (final game in entries)
+          (headers: game.headers, pgnText: game.pgnText),
+      ],
+      fenIndex: () => fenIndex,
+      restoring: restoring,
+    );
+    final request = _filters.revision;
+    isLoading = true;
+    notifyListeners();
+    final selection = await pending;
+    if (isDisposed || !isActive() || !_filters.isCurrent(request)) return;
+    isLoading = false;
+    if (_filters.error != null) {
+      errorMessage = _filterFailure;
+    } else if (errorMessage == _filterFailure) {
+      errorMessage = null;
+    }
+    if (selection == null || identical(selection, previous)) {
+      notifyListeners();
+      return;
+    }
+    _publishFilter(selection, restoring: restoring);
+  }
+
+  void _publishFilter(
+    ViewerFilterSelection selection, {
+    bool restoring = false,
+  }) {
+    final request = _filters.revision;
+    final path = filePath;
+    if (!restoring) _rememberCurrentPlace();
+    filteredGames = selection.indices!.map((i) => allGames[i]).toList();
+    currentGameIndex = 0;
+    pgnInitialFen = null;
+    if (!restoring) _viewerTree.clearTree();
+    notifyListeners();
+    if (!_filters.isCurrent(request) || restoring) return;
+    unawaited(_persistFilter(path, selection.config));
+    if (showOpeningTree) unawaited(_viewerTree.rebuild());
+    unawaited(loadCurrentGame());
+  }
+
+  void applySlice(List<int> indices, SliceConfig config) {
+    final changed = _filters.apply(indices, config, allGames.length);
+    final wasLoading = isLoading;
+    final hadFilterError = errorMessage == _filterFailure;
+    isLoading = false;
+    if (hadFilterError) errorMessage = null;
+    if (!changed) {
+      if (wasLoading || hadFilterError) notifyListeners();
+      return;
+    }
+    _publishFilter(_filters.selection);
+  }
+
+  void resetFilters() {
+    _rememberCurrentPlace();
+    _filters.reset();
+    if (errorMessage == _filterFailure) errorMessage = null;
+    final request = _filters.revision;
+    final path = filePath;
+    isLoading = false;
+    filteredGames = List.of(allGames);
+    currentGameIndex = 0;
+    pgnInitialFen = null;
+    _viewerTree.clearTree();
+    notifyListeners();
+    if (!_filters.isCurrent(request)) return;
+    unawaited(_persistFilter(path, const SliceConfig.empty()));
+    applySortMode();
+    if (showOpeningTree) unawaited(_viewerTree.rebuild());
+    unawaited(loadCurrentGame());
+  }
+
+  Future<void> removeSliceChip(int index) async {
+    final config = _filters.withoutChip(index);
+    if (config != null) await recomputeAndApplyConfig(config);
+  }
+
+  bool isPresetActive(HeaderFilterConfig filter) =>
+      _filters.isPresetActive(filter);
+  Future<void> applySlicePreset(HeaderFilterConfig filter) =>
+      recomputeAndApplyConfig(_filters.withPreset(filter));
+
+  Future<void> recomputeAndApplyConfig(SliceConfig config) async {
+    if (config.isEmpty) {
+      resetFilters();
+      return;
+    }
+    await _computeFilter(config, allGames);
+  }
+
+  Future<void> _persistFilter(String? path, SliceConfig config) async {
+    if (path == null) return;
+    await persistViewerPreference(() => preferences.saveSlice(path, config));
+  }
+
   void setSortMode(GameSortMode mode) {
     _rememberCurrentPlace();
     sortMode = mode;
@@ -1301,7 +1408,6 @@ class PgnViewerController extends ChangeNotifier
     notifyListeners();
   }
 
-  @override
   void applySortMode() {
     _viewerTree.clearCache();
     if (sortMode == GameSortMode.fileOrder) {

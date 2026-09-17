@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:chess_auto_prep/infrastructure/documents/isolate_pgn_collection_filter.dart';
+
 import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_library_repository.dart';
 import 'package:chess_auto_prep/infrastructure/documents/isolate_pgn_collection_decoder.dart';
 
@@ -60,6 +62,7 @@ void main() {
     });
     lifetime = PgnViewerLifetime(
       collectionDecoder: const IsolatePgnCollectionDecoder(),
+      collectionFilter: const IsolatePgnCollectionFilter(),
       library: StoragePgnLibraryRepository(
         StorageFactory.instance,
         directory: () async => '/collections',

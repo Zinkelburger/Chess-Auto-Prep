@@ -1,18 +1,16 @@
 /// Filtering a game collection: header matching, move-sequence patterns,
 /// position targets and the combined slice computation that the collection
-/// search, the inline import filter and `applySliceConfig` share.
+/// search, the inline import filter and the Viewer filter owner share.
 ///
-/// The predicates are isolate-safe; [computeSliceMatches] runs the per-game
-/// work in its own isolate.
+/// The predicates and candidate matching are pure Dart. Scheduling lives in the
+/// injected collection-filter adapter.
 library;
-
-import 'dart:isolate';
 
 import 'package:dartchess/dartchess.dart';
 
-import '../models/pgn_filter_models.dart';
-import '../utils/chess_utils.dart' show playSanOrNullMove;
-import '../utils/fen_utils.dart';
+import '../../models/pgn_filter_models.dart';
+import '../../utils/chess_utils.dart' show playSanOrNullMove;
+import '../../utils/fen_utils.dart';
 import 'package:chess_auto_prep/chess_core/pgn/pgn_position_replay.dart';
 
 // ── Field matching ───────────────────────────────────────────────────────────
@@ -249,74 +247,33 @@ String? parseTargetFen(String? input) {
 
 // ── Shared slice compute ─────────────────────────────────────────────────────
 
-/// Compute matching game indices for a combined position / sequence / header
-/// filter.  Uses [fenIndex] for O(1) position lookups when available,
-/// otherwise falls back to per-game replay in an isolate.
-///
-/// This is the single entry point shared by `PgnGameFilterWorkspace`,
-/// `InlineSliceEditor`, and `applySliceConfig`.
-Future<List<int>> computeSliceMatches({
-  required List<GameRecord> games,
-  String? targetFen,
-  List<String> additionalTargetFens = const [],
-  bool matchAny = false,
-  required List<({String field, MatchMode mode, String value})> filters,
-  required List<List<String>> seqGroups,
+/// Match a prepared set of candidates; callers own scheduling and input capture.
+List<int> matchPgnSliceCandidates({
+  required List<({int index, Map<String, String> headers, String pgnText})>
+  gameData,
+  required List<({String field, String modeName, String value})> filterData,
+  required List<String> targets,
+  required List<Set<int>>? positionSets,
+  required List<List<String>> seqCopy,
   required int seqGap,
-  Map<String, List<int>>? fenIndex,
+  required bool matchAny,
 }) {
-  final targets = {?targetFen, ...additionalTargetFens}.toList();
-  final filterData = filters
-      .map((f) => (field: f.field, modeName: f.mode.name, value: f.value))
-      .toList();
-  final seqCopy = seqGroups.map((g) => List<String>.from(g)).toList();
-  final positionSets = fenIndex == null
-      ? null
-      : [for (final fen in targets) (fenIndex[fen] ?? const <int>[]).toSet()];
-  final hasOtherFilters =
-      filters.any((f) => f.value.isNotEmpty) || seqCopy.isNotEmpty;
-
-  // With an index, the position targets narrow the candidates up front — and
-  // decide the slice outright when they are the only filter.
-  Set<int>? candidates;
-  if (positionSets != null &&
-      positionSets.isNotEmpty &&
-      (!matchAny || !hasOtherFilters)) {
-    candidates = Set<int>.of(positionSets.first);
-    for (final set in positionSets.skip(1)) {
-      candidates = matchAny
-          ? (candidates!..addAll(set))
-          : candidates!.intersection(set);
-    }
-    if (!hasOtherFilters) return Future.value(candidates!.toList()..sort());
-  }
-  final candidateIndices = candidates?.toList()?..sort();
-  final gameData = [
-    for (final i in candidateIndices ?? List.generate(games.length, (i) => i))
-      (
-        index: i,
-        headers: Map<String, String>.from(games[i].headers),
-        pgnText: games[i].pgnText,
-      ),
+  final compiled = _CompiledFilter.compileAll(filterData);
+  final noConditions = compiled.isEmpty && targets.isEmpty && seqCopy.isEmpty;
+  return [
+    for (final game in gameData)
+      if (noConditions ||
+          _gameMatches(
+            game,
+            compiled: compiled,
+            targets: targets,
+            positionSets: positionSets,
+            seqGroups: seqCopy,
+            seqGap: seqGap,
+            matchAny: matchAny,
+          ))
+        game.index,
   ];
-  return Isolate.run(() {
-    final compiled = _CompiledFilter.compileAll(filterData);
-    final noConditions = compiled.isEmpty && targets.isEmpty && seqCopy.isEmpty;
-    return [
-      for (final game in gameData)
-        if (noConditions ||
-            _gameMatches(
-              game,
-              compiled: compiled,
-              targets: targets,
-              positionSets: positionSets,
-              seqGroups: seqCopy,
-              seqGap: seqGap,
-              matchAny: matchAny,
-            ))
-          game.index,
-    ];
-  });
 }
 
 /// Whether one game satisfies the slice: every condition, or any when

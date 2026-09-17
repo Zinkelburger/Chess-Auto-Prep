@@ -9,8 +9,9 @@
 /// `pgn_viewer_screen_panes.dart`.
 library;
 
-import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
 import 'dart:async';
+
+import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
 import '../app/pgn_viewer_lifetime.dart';
 import '../design_system/components/name_entry_dialog.dart';
 import '../features/documents/controllers/document_save_session.dart';
@@ -923,6 +924,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   Widget _buildFilterWorkspace() {
     final source = _controller.allGames;
+    final revision = _controller.collectionRevision;
     if (!identical(source, _filterSource) ||
         _filterRevision != _controller.collectionRevision) {
       _filterSource = source;
@@ -937,6 +939,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
           .toList();
     }
     return PgnGameFilterWorkspace(
+      matcher: _controller.collectionFilter,
       key: ObjectKey(source),
       collectionName: _controller.filePath == null
           ? 'Pasted games'
@@ -948,13 +951,21 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       initialConfig: _controller.activeSliceConfig,
       fenIndex: _controller.fenIndex,
       onApply: (indices, config) {
-        if (!mounted || !identical(source, _controller.allGames)) return;
+        if (!mounted ||
+            !identical(source, _controller.allGames) ||
+            revision != _controller.collectionRevision) {
+          return;
+        }
         _filterReturnSource = null;
         _controller.applySlice(indices, config);
         _showPanel(PgnWorkspace.game);
       },
       onOpenGame: (indices, config, gameIndex) {
-        if (!mounted || !identical(source, _controller.allGames)) return;
+        if (!mounted ||
+            !identical(source, _controller.allGames) ||
+            revision != _controller.collectionRevision) {
+          return;
+        }
         _filterReturnSource = source;
         _controller.applySlice(indices, config);
         _controller.goToGame(

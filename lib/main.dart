@@ -210,6 +210,7 @@ class ChessAutoPrepApp extends StatelessWidget {
             create: (ctx) => PgnViewerLifetime(
               preferences: createViewerPreferencesRepository(),
               collectionDecoder: createPgnCollectionDecoder(),
+              collectionFilter: createPgnCollectionFilter(),
               library: createPgnLibraryRepository(),
               repository: ctx.read<PgnCollectionRepository>(),
               store: pgnRecoveryStore ?? createPgnRecoveryStore(),

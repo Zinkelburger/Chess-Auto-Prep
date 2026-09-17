@@ -10,7 +10,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/widgets.dart';
 
 import '../models/pgn_filter_models.dart';
-import '../services/pgn_slice_filter.dart' as pgn;
+import 'package:chess_auto_prep/chess_core/pgn/pgn_slice_filter.dart' as pgn;
 import '../utils/chess_utils.dart' show playSanOrNullMove;
 import '../utils/fen_utils.dart';
 import '../utils/san_token_utils.dart';
