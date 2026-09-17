@@ -1,9 +1,4 @@
-/// Auto-play timer logic for the PGN viewer, extracted from
-/// `PgnViewerController`.
-///
-/// Owns the timer + playback state and drives the board through injected
-/// callbacks. `PgnViewerController` keeps its public API and delegates here, so
-/// existing call-sites are unchanged.
+/// Owns Viewer playback timing and drives navigation through injected callbacks.
 library;
 
 import 'dart:async';
@@ -50,6 +45,7 @@ class AutoPlayEngine {
   final void Function(void Function() callback)? schedulePostFrame;
 
   bool _disposed = false;
+  int _run = 0;
   Timer? _timer;
   bool isPlaying = false;
   bool autoNextGame = false;
@@ -63,6 +59,7 @@ class AutoPlayEngine {
 
   void start() {
     if (_disposed) return;
+    _run++;
     _firstStep = true;
     isPlaying = true;
     onChanged();
@@ -70,6 +67,7 @@ class AutoPlayEngine {
   }
 
   void stop() {
+    _run++;
     _timer?.cancel();
     _timer = null;
     if (isPlaying) {
@@ -88,6 +86,7 @@ class AutoPlayEngine {
 
   void _step() {
     if (_disposed || !isActive() || !isPlaying) return;
+    final run = _run;
     final fenBefore = currentFen();
     if (fenBefore == null) return;
     _lastStepTime = DateTime.now();
@@ -95,7 +94,7 @@ class AutoPlayEngine {
     goForward();
 
     void checkAfterForward() {
-      if (_disposed || !isActive() || !isPlaying) return;
+      if (_disposed || !isActive() || !isPlaying || run != _run) return;
       final fenAfter = currentFen();
       if (fenAfter == fenBefore) {
         if (autoNextGame && hasNextGame()) {

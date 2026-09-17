@@ -52,7 +52,7 @@ void main() {
       context.read<AppState>().setMode(AppMode.pgnViewer);
       await tester.pumpAndSettle();
       final first = context.read<PgnViewerLifetime>();
-      await first.controller.loadFile(file.path);
+      await first.document.loadFile(file.path);
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('add-collection-filter')));
       await tester.pumpAndSettle();
@@ -88,20 +88,20 @@ void main() {
       );
       await tester.tap(apply);
       await tester.pumpAndSettle();
-      expect(first.controller.filteredGames.map((g) => g.headers['Event']), [
-        'First',
-        'Third',
-      ]);
       expect(
-        first.controller.activeSliceConfig.headerFilters.single.value,
+        first.document.collection.visibleGames.map((g) => g.headers['Event']),
+        ['First', 'Third'],
+      );
+      expect(
+        first.document.filters.selection.config.headerFilters.single.value,
         'Alice',
       );
-      first.controller.nextGame();
+      first.document.reading.nextGame();
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip(RegExp(r'^Forward')).first);
       await tester.pumpAndSettle();
       expect(first.reader.mainLineIndex, 1);
-      await first.controller.saveSession();
+      await first.document.reading.saveSession();
       expect(await file.readAsString(), original);
       await tester.pumpWidget(const SizedBox.shrink());
       await first.shutdown();
@@ -117,26 +117,25 @@ void main() {
       await waitFor(
         tester,
         () =>
-            restarted.controller.filePath == file.path &&
+            restarted.document.filePath == file.path &&
             restarted.reader.mainLineIndex == 1,
       );
       expect(
-        restarted.controller.filteredGames.map((g) => g.headers['Event']),
+        restarted.document.collection.visibleGames.map(
+          (g) => g.headers['Event'],
+        ),
         ['First', 'Third'],
       );
-      expect(restarted.controller.currentGameIndex, 1);
+      expect(restarted.document.collection.selectedIndex, 1);
       expect(
-        restarted.controller.activeSliceConfig.headerFilters.single.value,
+        restarted.document.filters.selection.config.headerFilters.single.value,
         'Alice',
       );
       await tester.tap(find.byTooltip(RegExp(r'^Remove White name')));
       await tester.pumpAndSettle();
-      expect(restarted.controller.filteredGames, hasLength(3));
-      expect(restarted.controller.hasActiveFilters, isFalse);
-      expect(
-        await restarted.controller.preferences.loadSlice(file.path),
-        isNull,
-      );
+      expect(restarted.document.collection.visibleGames, hasLength(3));
+      expect(restarted.document.filters.selection.active, isFalse);
+      expect(await restarted.document.preferences.loadSlice(file.path), isNull);
       expect(await file.readAsString(), original);
       await tester.pumpWidget(const SizedBox.shrink());
       await restarted.shutdown();

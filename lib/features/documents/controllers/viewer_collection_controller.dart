@@ -1,3 +1,6 @@
+import 'package:dartchess/dartchess.dart';
+import '../../../chess_core/pgn/pgn_collection_players.dart';
+import '../../../models/opening_tree.dart' show WdlPerspective;
 import '../../../chess_core/pgn/pgn_game_sorting.dart';
 import '../../../models/pgn_filter_models.dart';
 import '../../../models/pgn_game_entry.dart';
@@ -6,6 +9,105 @@ import '../../../models/pgn_game_entry.dart';
 /// cannot be reordered or resized. Entries still belong to the legacy editor;
 /// these lists are membership views, not immutable snapshots of game contents.
 class ViewerCollectionController {
+  int _contentRevision = 0;
+  int get contentRevision => _contentRevision;
+  void markContentChanged() => _contentRevision++;
+
+  /// Surname of the player the loaded collection is about (null when mixed).
+  /// Drives the one-click "«Player» as White/Black" slice presets.
+  String? sliceProtagonist;
+
+  /// When the whole file has the protagonist on one side only ("all Kasparov
+  /// black games"), that side; null when they play both colors.
+  Side? protagonistFixedSide;
+
+  /// Coloring for tree win/draw/loss stats: player-POV green/red when we know
+  /// whose games the current slice shows, neutral white/black otherwise.
+  WdlPerspective wdlPerspective(SliceConfig config) {
+    final p = sliceProtagonist;
+    if (p != null) {
+      for (final h in config.headerFilters) {
+        if (h.value != p || h.mode == MatchMode.notContains) continue;
+        if (h.field == 'White') return WdlPerspective.playerIsWhite;
+        if (h.field == 'Black') return WdlPerspective.playerIsBlack;
+      }
+      if (protagonistFixedSide == Side.white) {
+        return WdlPerspective.playerIsWhite;
+      }
+      if (protagonistFixedSide == Side.black) {
+        return WdlPerspective.playerIsBlack;
+      }
+    }
+    return WdlPerspective.whiteBlack;
+  }
+
+  void _detectProtagonist(List<PgnGameEntry> entries) {
+    sliceProtagonist = detectFileProtagonist(entries);
+    protagonistFixedSide = null;
+    final p = sliceProtagonist;
+    if (p == null) return;
+    var asWhite = 0, asBlack = 0;
+    for (final g in entries) {
+      if ((g.headers['White'] ?? '').split(',').first.trim() == p) asWhite++;
+      if ((g.headers['Black'] ?? '').split(',').first.trim() == p) asBlack++;
+    }
+    if (asWhite > 0 && asBlack == 0) protagonistFixedSide = Side.white;
+    if (asBlack > 0 && asWhite == 0) protagonistFixedSide = Side.black;
+  }
+
+  int? _collectionPlayerRevision;
+  List<PgnGameEntry>? _collectionPlayerSource;
+  String? _collectionPlayer;
+
+  /// Shared by Filter and Tree; based on the complete, unfiltered collection.
+  String? get collectionPlayer {
+    if (_collectionPlayerRevision != contentRevision ||
+        !identical(_collectionPlayerSource, games)) {
+      _collectionPlayerRevision = contentRevision;
+      _collectionPlayerSource = games;
+      _collectionPlayer = detectSingleCollectionPlayer(games);
+    }
+    return _collectionPlayer;
+  }
+
+  String? detectProtagonist() => detectProtagonistFrom(games);
+
+  /// Returns both player names when all games are between the same two players.
+  ({String player1, String player2})? detectBothPlayers() =>
+      detectBothPlayersFrom(games);
+
+  /// One-click slice presets derived from [sliceProtagonist].
+  ///
+  /// [shortLabel] is for the app bar, where two chips repeating a long
+  /// username push each other off the edge of a bar that only scrolls if you
+  /// know it does; the full [label] stays in the slice dialog and in the
+  /// chip's tooltip.
+  List<({String label, String shortLabel, HeaderFilterConfig filter})>
+  get slicePresets {
+    final p = sliceProtagonist;
+    if (p == null) return const [];
+    return [
+      (
+        label: '$p as White',
+        shortLabel: 'as White',
+        filter: HeaderFilterConfig(
+          field: 'White',
+          mode: MatchMode.contains,
+          value: p,
+        ),
+      ),
+      (
+        label: '$p as Black',
+        shortLabel: 'as Black',
+        filter: HeaderFilterConfig(
+          field: 'Black',
+          mode: MatchMode.contains,
+          value: p,
+        ),
+      ),
+    ];
+  }
+
   List<PgnGameEntry> _games = const [];
   Set<PgnGameEntry> _members = Set.identity();
   List<PgnGameEntry> _visible = const [];
@@ -19,6 +121,8 @@ class ViewerCollectionController {
   List<PgnGameEntry> get visibleGames => _visible;
   List<int> get visibleIndices => _indices;
   int get selectedIndex => _selected;
+  PgnGameEntry? get selectedGame =>
+      _visible.isEmpty ? null : _visible[_selected];
   GameSortMode get sortMode => _sort;
   int get viewRevision => _revision;
 
@@ -31,6 +135,7 @@ class ViewerCollectionController {
   /// collection or invalidate filter indices behind the owner's back.
   void adopt(Iterable<PgnGameEntry> games) {
     _games = List.unmodifiable(games);
+    _detectProtagonist(_games);
     _members = Set.identity()..addAll(_games);
     _replaceOrder(
       List.generate(_games.length, (index) => index),

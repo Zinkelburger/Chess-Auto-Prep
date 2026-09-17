@@ -304,7 +304,7 @@ void _editFirstComment(PgnNodeData node, String Function(String) edit) {
 ///
 /// [game] itself, not its mainline: the pass writes `[%eval]`/`[%pv]` onto
 /// the tree's own nodes, and this text goes on to *replace* the game in the
-/// reader's file (`PgnViewerController.persistMoveCommentsFor`). Serializing
+/// reader's file (`ViewerDocumentController.persistMoveCommentsFor`). Serializing
 /// the mainline alone deleted every variation and the game's opening
 /// comment from that file. Same writer as the comment editor's
 /// `ViewerGameController.buildAnnotatedMovetext`, which lands in the same slot.

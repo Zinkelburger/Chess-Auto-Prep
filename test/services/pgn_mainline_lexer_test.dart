@@ -63,7 +63,7 @@ void main() {
     });
 
     test('the header side rejoins new movetext into a readable game', () {
-      // What `PgnViewerController.persistMoveCommentsFor` does on every save.
+      // What `ViewerDocumentController.persistMoveCommentsFor` does on every save.
       const pgn = '[Event "G"]\n[Site "S"]\n\n1. d4 d5 *\n';
       final headerPart = pgn.substring(0, movetextStart(pgn)).trimRight();
       final rebuilt = '$headerPart\n\n1. d4 Nf6 *\n';

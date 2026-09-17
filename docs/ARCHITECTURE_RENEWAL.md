@@ -106,22 +106,28 @@ facade merely to keep its tests green.
 
 | Order / owner | Complete replacement and required deletions | Integration proof |
 |---|---|---|
-| Now: parent, Viewer | Delete `PgnViewerController`, forwarding methods and mirrored errors; connect all consumers to the substantial collection/editor/filter/presentation/tree owners. One session transition contract owns abandonment across the six reviewed paths. | Zero class/API references; no replacement facade; delayed work cannot publish after replacement; open/edit/save/recovery/navigation/close parity through final app wiring. |
-| Now: Builder agent | Finish native append/undo provenance and private opening graph ownership. Delete decoded-only history authorization, old append APIs and mutable graph exposure. | Native revision/history conflicts, successive/per-move undo, failed mutation retention and all graph consumers use the final projection. Entire Builder remains unfinished until the later closure below. |
-| Now: generation agent | Finish versioned artifact publication and every production reader in one cutover. Delete old artifact writers/path ownership, persistence methods and loader shims. | One publication authority; stale/interrupted output cannot replace current artifacts; readers agree on the selected generation; existing user artifacts remain readable. |
-| Now: settings/engine agent | Finish typed engine/bulk/board settings and the engine composition needed to consume them without transitional bindings. Delete the three old settings singletons, engine service global access and interim bind APIs; app-construct BoardEngine, StockfishPool and EngineSearchBudget with injected configuration. | One writer per key, serialized changes/failure/retry/restart, captured job configuration, production caller cutover and resource/scheduling parity. No temporary settings-to-engine binding. |
+| Completed: Viewer owner cutover (`141b5271` ancestry) | Deleted `PgnViewerController`, forwarding methods and mirrored errors; all consumers use the collection/editor/filter/presentation/tree owners. One session transition contract owns abandonment across the six reviewed paths. | Zero class/API references; no replacement facade; delayed work cannot publish after replacement; open/edit/save/recovery/navigation/close parity through final app wiring. |
+| Completed: Builder history (`09aeb6ed`) | Native append/undo provenance and private opening graph ownership. Deleted decoded-only history authorization, old append APIs and mutable graph exposure. | Native revision/history conflicts, successive/per-move undo, failed mutation retention and all graph consumers use the final projection. Entire Builder remains unfinished until the later closure below. |
+| Now: generation agent | Finish versioned artifact publication and every production reader in one cutover. Delete old artifact writers/path ownership, persistence methods and loader shims. | One publication authority; stale/interrupted output cannot replace current artifacts; readers agree on the selected generation; existing user artifacts remain accessible through production wiring. Legacy files currently survive and decode, but lack an app access/import path; this parity gate is still open. |
+| Completed: settings/engine (`f1109c5b`) | Typed engine/bulk/board settings and constructor-owned engines. Deleted the three old settings singletons, engine service global access and interim bind APIs; application composition injects BoardEngine, StockfishPool and EngineSearchBudget configuration. | One writer per key, serialized changes/failure/retry/restart, captured job configuration, production caller cutover and resource/scheduling parity. No temporary settings-to-engine binding. |
 | Next: finish existing migrated workflows | Close catalog, Study, Builder, Viewer and Training end to end: remaining host/provider/lifetime bridges, durable Builder recovery, final settings/session ownership, and all applicable UI/parity gates. Keep separate dependency-ordered cutovers where each deletes a complete responsibility. | No remaining temporary owner in each declared-complete workflow. Existing extracted code is reused or simplified; do not restart another extraction cycle. |
 | Then: engine/jobs and remaining domains | Replace each remaining workflow from the capability inventory, including actual worker/process ownership and all writers/readers. Consolidate singular `repertoire/` into its final domain as its remaining responsibilities retire. Adopt design-system controls while deleting each superseded control/theme dependency. | Dependency-ordered cutovers, shared-file parity and safety, native resource cleanup, feature and UI contracts; no second implementation or leftover theme owner for migrated surfaces. |
 | Last: application audit | Verify all features, formats, recovery, platforms, performance and release readiness. | No deferred retirement work, no hidden boundary exclusions, no production fallback; unverified host/release gates stay explicitly open. Publication still requires the user's request. |
 
-The parallel rows are the current work allocation, not four new frameworks.
-Each agent must report a completed deletion boundary before requesting
-integration. The settings/engine dependency expands that task by four active
-hours, including one validation reserve; midpoint is the actual service caller
-inventory and constructor wiring. This supersedes the earlier permission to
-retain app-level legacy engine bindings. The parent reconciles shared composition files and validates the
-combined callers. At a budget limit, back up the branch and revise the remaining
-work; do not land an incomplete layer just to report a checkpoint.
+The rows identify replacement boundaries, not four new frameworks. Viewer
+ownership retirement is verified; remaining parallel work closes Builder
+workspace/scratch recovery with facade deletion, and production access to legacy
+generation artifacts. Do not count an infrastructure decoder as user-facing
+migration parity. Each agent must report final runtime wiring, concrete deletions
+and behavior/failure evidence before integration.
+
+The two active replacements each have a four-active-hour estimate including one
+validation reserve. Their midpoint is the complete caller/recovery inventory and
+final dependency shape. The parent reconciles shared composition files and
+validates combined callers. At an estimate limit, back up the branch and revise
+remaining work; do not land an incomplete layer to report a checkpoint. These
+estimates do not change the full renewal objective or authorize transitional
+engine bindings, replacement facades or duplicate writers.
 
 **Make incompleteness visible.** The architecture checker now discovers every
 `lib/features/` directory and checks its imports, singleton access and widget
@@ -1277,7 +1283,7 @@ code references: [storage operations](../lib/services/storage/io_storage_service
 [undo writer](../lib/features/repertoires/controllers/repertoire_writer.dart),
 [chapter creation](../lib/features/repertoire/services/chapter_store.dart),
 [game store](../lib/services/game_store/game_store.dart),
-[generation artifacts](../lib/core/generation_artifacts.dart) and
+[generation artifacts](../lib/infrastructure/generation/storage_generation_artifact_repository.dart) and
 [schema guards/backups](../lib/services/storage/schema_guard.dart).
 
 ## Filesystem and cross-process contracts
@@ -3977,3 +3983,105 @@ safe identity fails DATA-04 and narrows work to a bounded repair, not a silent
 weaker implementation. No later feature slice starts before PLAN-02 records
 the first-slice result. Product-owner visual review remains required before
 propagating a new appearance across the application.
+
+### Generated artifact authority cutover — `7032e719`
+
+DATA-07, ARCH-01 and TEST-01: all production generated tree/probe/trap/partial
+writers and readers now use the injected `GenerationArtifactRepository`.
+`StorageGenerationArtifactRepository` captures native source/run identity and a
+deep configuration snapshot, stages immutable hashed payloads with a manifest,
+and selects them through one revision-checked current-generation pointer.
+Generation stages the full bundle before PGN export and selects against the
+acknowledged PGN revision; probes and partial resume/discard carry their captured
+source/generation identity. Builder, traps and training readers validate that
+same authority before adopting results.
+
+Retired production ownership: `lib/core/generation_artifacts.dart`
+(`GenerationArtifactStore` and its sidecar writer/path APIs),
+`ExpectimaxDatabase.persist`, `TrapExtractor` filesystem methods,
+`ExpectimaxProbeStore`, and the unused eval-tree file loader/IO/stub/tab plus its
+duplicate tests. The probe replacement is a pure codec, not a persistence
+forwarder. Existing sidecar formats remain explicitly decodable by the new
+infrastructure repository; they are untouched and never automatically promoted
+to authoritative or resumable output. The deleted tab had no production callers;
+it is not compatibility evidence.
+
+Validation: **155 focused tests passed**, including disposable native filesystem
+publication, generate → reopen → probe update → reopen, pause/live resume/cancel
+and reopened partial resume, stale runs, edited artifacts, source/config races,
+interruption and uncertain selection, plus relevant chess algorithms, training,
+traps and Builder receipt/widget regressions. Analyze/lint passed with 15 infos,
+zero warnings/errors. Headless Builder and settings screenshots were inspected.
+An earlier inadvertently broad run was stopped after 2,110 passes and five
+skips; it is incomplete and is not a passing-suite claim. Two initial invocations
+with nonexistent test paths failed before the corrected focused batch passed.
+
+Evidence limits: PGN and artifact-pointer commits are separate. If PGN commit
+succeeds and artifact selection fails, the PGN stays saved, the old cache is
+rejected for its new source, and the failed job reports the retained proposal
+path. Artifact-only interrupted publication retains a valid prior generation
+and recoverable proposal. Old generations and edited artifacts are retained;
+no recovery browser or garbage-collection policy is added. Native filesystem
+evidence is Linux-only; other host/release gates and the broader renewal remain
+open. Engine runtime ownership is a separate cutover, not claimed by this commit.
+
+
+### Completed engine/settings wiring and Viewer retirement checks (2026-09-17)
+
+Engine/settings cutover integrated at `f1109c5b`: final constructors and all
+selected production consumers replace old settings/engine singleton access and
+temporary bindings. Analyze/lint passed with 45 informational findings; settings
+and configuration capture checks passed 91 tests, final fixture/settings checks
+passed 31, runtime lifetime checks passed three, and native Stockfish checks
+passed two. Native Linux failure, retained draft, Retry, committed preferences
+and full-process restart were inspected. Twenty-two resolved boundary-debt
+entries were removed. Windows/macOS native verification, credentials and external
+evaluation-database settings remain open. A subsequent full-suite audit and its
+fixture repairs are recorded with the combined integration evidence below.
+
+Viewer checkpoint `141b5271` deletes `PgnViewerController` and the unused
+`PgnPerspectiveButton`, updates every consumer, and introduces no compatibility
+facade. The document owner handles collection transactions; reading and library
+owners handle their distinct state. Editor, filter, presentation, tree, playback
+and Solitaire commands are consumed directly. UI error selection does not mirror
+errors into document state; recovery and the leave dialog observe all relevant
+owners. One replacement transition invalidates work before cancellation. Empty
+filters cancel selected-game work; delayed restores and handoffs cannot move a
+newer selected game. Retired paths/types are protected by the retirement gate.
+
+The merged Viewer/engine source passes 375 focused tests and six Linux native
+journeys across collection order/navigation, filtering, presentation, edit
+contexts and restart recovery. This includes the 49-test owner suite and its navigation-cursor regression. This is ownership retirement, not whole Viewer
+certification: the legacy screen/reader widgets, complete design-system gates,
+immutable game contents and unverified platform gates remain separate work.
+
+Legacy artifact decoding has no production caller yet. Legacy tree/trap/probe
+display and partial resume are not restored by the artifact cutover. Original
+files survive, but explicit provenance-reviewed access/import remains a DATA-07
+migration/parity gate; infrastructure decoding alone does not close it.
+
+Viewer production diff against integrated `f1109c5b`: 2,539 added and 2,405
+removed lines (net +134), separate from tests and documentation. The 1,609-line
+facade and 136-line unused perspective widget are deleted. Direct owner wiring,
+serialized recent preferences, lifecycle fixes and scaled controls account for
+new code. This is not a net-size reduction; the retirement evidence is deletion
+of the forwarding owner/API, error mirrors and consumer dependencies. Continued
+workflow work must still remove remaining legacy ownership and UI debt.
+
+
+Combined verification: the full engine/artifact baseline at `f1109c5b` ran
+6,421 passing tests, 12 skips and four failures. The failures were two Builder
+settings fixtures, one settings contrast fixture, and a cache-only Explorer
+fixture that unintentionally gained a scripted engine. All four were repaired;
+the focused fixture suites passed 14 and 10 tests. The cache-only test now injects
+an unavailable engine and still asserts that uncached evaluations stay absent.
+This is full-baseline evidence plus focused repairs, not a claim of a green full
+suite on the final merged Viewer revision. The merged Viewer tests and six native
+journeys above passed. Final analyze/lint passed with informational findings only.
+
+Production Linux screenshots were inspected for the
+[restored reader](images/renewal-viewer-owner-cutover.png) and
+[collection tree](images/renewal-viewer-tree-cutover.png), using only the disposable
+profile left by the restart journey. The preview was stopped before the final
+checks. Existing leaf tests additionally cover active themes and 200% text scaling;
+these screenshots do not prove all UI-01 or non-Linux gates.

@@ -52,8 +52,8 @@ void main() {
       context.read<AppState>().setMode(AppMode.pgnViewer);
       await tester.pumpAndSettle();
       final first = context.read<PgnViewerLifetime>();
-      await first.controller.loadFile(file.path);
-      first.controller.setAutoSave(false);
+      await first.document.loadFile(file.path);
+      first.document.editor.setAutoSave(false);
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('view-settings-pgnViewer')));
       await tester.pumpAndSettle();
@@ -77,12 +77,12 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(first.controller.boardFlipped, isTrue);
-      expect(first.controller.hasUnsavedChanges, isTrue);
+      expect(first.document.presentation.boardFlipped, isTrue);
+      expect(first.document.editor.hasUnsavedChanges, isTrue);
       expect(await file.readAsString(), original);
       await tester.tap(find.byTooltip(RegExp(r'^Close settings')));
       await tester.pumpAndSettle();
-      expect(await first.controller.saveChanges(), isTrue);
+      expect(await first.document.editor.saveChanges(), isTrue);
       final saved = await file.readAsString();
       expect(saved.replaceFirst('[StudyPerspective "black"]\n', ''), original);
       expect(
@@ -93,7 +93,7 @@ void main() {
       );
 
       await tester.sendKeyEvent(LogicalKeyboardKey.f11);
-      await waitFor(tester, () => first.controller.isFullScreen);
+      await waitFor(tester, () => first.document.presentation.isFullScreen);
       expect(find.byType(FullscreenGameView), findsOneWidget);
       expect(
         tester
@@ -102,7 +102,7 @@ void main() {
         isTrue,
       );
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-      await waitFor(tester, () => !first.controller.isFullScreen);
+      await waitFor(tester, () => !first.document.presentation.isFullScreen);
       expect(find.byType(FullscreenGameView), findsNothing);
       expect(await file.readAsString(), saved);
       await tester.pumpWidget(const SizedBox.shrink());
@@ -116,12 +116,11 @@ void main() {
       final next = nextContext.read<PgnViewerLifetime>();
       await waitFor(
         tester,
-        () =>
-            next.controller.filePath == file.path && !next.controller.isLoading,
+        () => next.document.filePath == file.path && !next.document.isLoading,
       );
-      expect(next.controller.boardFlipped, isTrue);
-      expect(next.controller.perspective.toHeaderValue(), 'black');
-      expect(next.controller.isFullScreen, isFalse);
+      expect(next.document.presentation.boardFlipped, isTrue);
+      expect(next.document.presentation.perspective.toHeaderValue(), 'black');
+      expect(next.document.presentation.isFullScreen, isFalse);
       expect(await file.readAsString(), saved);
       await tester.pumpWidget(const SizedBox.shrink());
       await next.shutdown();

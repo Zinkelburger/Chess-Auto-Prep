@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/models/pgn_game_entry.dart';
 import 'package:chess_auto_prep/app/runtime_settings.dart';
 import 'package:chess_auto_prep/app/engine_runtime.dart';
 import '../support/runtime_settings.dart';
@@ -24,7 +25,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:chess_auto_prep/features/documents/controllers/pgn_viewer_controller.dart';
+import 'package:chess_auto_prep/features/documents/controllers/viewer_document_controller.dart';
 import 'package:chess_auto_prep/models/pgn_filter_models.dart';
 import 'package:chess_auto_prep/services/game_analysis_controller.dart';
 import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
@@ -46,6 +47,21 @@ class _GatedStorage extends IOStorageService {
       (size: 1, modified: DateTime.fromMillisecondsSinceEpoch(1));
 }
 
+class _RecoveryStorage extends _GatedStorage {
+  final retained = <String>[];
+  @override
+  Future<void> writeFile(
+    String path,
+    String content, {
+    bool createOnly = false,
+    String? expectedContent,
+  }) async {
+    expect(path, startsWith('recovery/'));
+    expect(createOnly, isTrue);
+    retained.add(content);
+  }
+}
+
 /// Stub analysis controller: no isolates, no engine, no IO. Lets us exercise
 /// `loadCurrentGame` (called by every navigation/slice method) deterministically.
 class _FakeAnalysisController extends GameAnalysisController {
@@ -58,7 +74,16 @@ class _FakeAnalysisController extends GameAnalysisController {
   void cancel() {}
 }
 
-class _GatedOpeningController extends PgnViewerController {
+class _AbandonAnalysis extends _FakeAnalysisController {
+  int cancellations = 0;
+  int clears = 0;
+  @override
+  void cancel() => cancellations++;
+  @override
+  void clearEvals() => clears++;
+}
+
+class _GatedOpeningController extends ViewerDocumentController {
   _GatedOpeningController()
     : super(
         positionIndex: createViewerPositionIndex(),
@@ -146,15 +171,25 @@ class _FailingWindow extends FakeDesktopFullscreenPort {
   }
 }
 
-PgnViewerController _makeController({
+class _CursorHandle extends PgnViewerWidgetController {
+  final jumps = <int>[];
+  @override
+  int get mainLineIndex => 7;
+  @override
+  void goToMainLineIndex(int index) => jumps.add(index);
+}
+
+ViewerDocumentController _makeController({
   FakeDesktopFullscreenPort? window,
+  PgnViewerWidgetController? handle,
+  void Function(void Function())? schedulePostFrame,
   GameAnalysisController? analysis,
   PgnCollectionDecoder decoder = const IsolatePgnCollectionDecoder(),
   PgnCollectionFilter matcher = const IsolatePgnCollectionFilter(),
 }) {
   // A detached widget controller behaves as a no-op stub (its methods guard on
   // a null attached state), so it is safe to use without mounting a widget.
-  return PgnViewerController(
+  return ViewerDocumentController(
     positionIndex: createViewerPositionIndex(),
     openings: createViewerOpenings(),
     solitaireRepository: createViewerSolitaire(),
@@ -171,14 +206,15 @@ PgnViewerController _makeController({
     collectionRepository: StoragePgnCollectionRepository(
       StorageFactory.instance,
     ),
-    pgnWidgetController: PgnViewerWidgetController(),
+    pgnWidgetController: handle ?? PgnViewerWidgetController(),
+    schedulePostFrame: schedulePostFrame,
     analysisController: analysis ?? _FakeAnalysisController(),
   );
 }
 
 /// Populate the game list without going through `loadFile` (which needs storage
 /// IO). Mirrors the post-load state the controller expects.
-void _seed(PgnViewerController c, List<PgnGameEntry> games) {
+void _seed(ViewerDocumentController c, List<PgnGameEntry> games) {
   expect(c.adoptDecodedCollection(DecodedPgnCollection(games, '')), isNotNull);
 }
 
@@ -212,14 +248,17 @@ void main() {
           pgnText: '[FEN "$fen"]\n\n17... e4 *',
         ),
       ]);
-      await c.loadCurrentGame();
-      expect(c.currentPosition.fen, Chess.fromSetup(Setup.parseFen(fen)).fen);
-      c.toggleOpeningTree();
-      await c.rebuildOpeningTree();
-      c.onTreeMoveSelected('e4');
-      final treeFen = c.currentPosition.fen;
-      await c.loadCurrentGame();
-      expect(c.currentPosition.fen, treeFen);
+      await c.reading.loadCurrentGame();
+      expect(
+        c.reading.currentPosition.fen,
+        Chess.fromSetup(Setup.parseFen(fen)).fen,
+      );
+      c.reading.toggleOpeningTree();
+      await c.reading.tree.rebuild();
+      c.reading.tree.onMoveSelected('e4');
+      final treeFen = c.reading.currentPosition.fen;
+      await c.reading.loadCurrentGame();
+      expect(c.reading.currentPosition.fen, treeFen);
     },
   );
 
@@ -231,20 +270,44 @@ void main() {
       final games = [_game(white: 'First'), _game(white: 'Second')];
       _seed(c, games);
       c.applySlice([1], const SliceConfig.empty());
-      await c.loadCurrentGame();
+      await c.reading.loadCurrentGame();
       const fen = '4k3/8/8/4p3/8/8/8/4K3 b - - 0 17';
-      c.pgnInitialFen = fen;
+      c.reading.pgnInitialFen = fen;
       final restore = c.captureNavigationContext();
       _seed(c, [_game(white: 'Other collection')]);
-      c.pgnInitialFen = null;
+      c.reading.pgnInitialFen = null;
 
       await restore();
 
-      expect(c.allGames, games);
-      expect(c.filteredGames, [games[1]]);
-      expect(c.currentGameIndex, 0);
-      expect(c.hasActiveFilters, isTrue);
-      expect(c.currentPosition.fen, Chess.fromSetup(Setup.parseFen(fen)).fen);
+      expect(c.collection.games, games);
+      expect(c.collection.visibleGames, [games[1]]);
+      expect(c.collection.selectedIndex, 0);
+      expect(c.filters.selection.active, isTrue);
+      expect(
+        c.reading.currentPosition.fen,
+        Chess.fromSetup(Setup.parseFen(fen)).fen,
+      );
+    },
+  );
+
+  test(
+    'restored cursor cannot move a newer selection in the same collection',
+    () async {
+      final frames = <void Function()>[];
+      final handle = _CursorHandle();
+      final c = _makeController(handle: handle, schedulePostFrame: frames.add);
+      addTearDown(c.dispose);
+      c.setAutoDetectOpenings(false);
+      _seed(c, [_game(white: 'First'), _game(white: 'Second')]);
+      final restore = c.captureNavigationContext();
+      expect(await restore(), isTrue);
+      expect(frames, isNotEmpty);
+      await c.reading.selectGame(1);
+      for (final callback in frames) {
+        callback();
+      }
+      expect(c.collection.selectedIndex, 1);
+      expect(handle.jumps, isEmpty);
     },
   );
 
@@ -268,13 +331,13 @@ void main() {
       await c.classificationStarted.future;
       expect(c.isLoading, isFalse);
       expect(c.isPreparingCollection, isTrue);
-      expect(c.allGames.length, 1000);
-      c.nextGame();
-      expect(c.currentGameIndex, 1);
+      expect(c.collection.games.length, 1000);
+      c.reading.nextGame();
+      expect(c.collection.selectedIndex, 1);
       c.closeFile();
       c.classificationFinished.complete();
       await Future<void>.delayed(Duration.zero);
-      expect(c.allGames, isEmpty);
+      expect(c.collection.games, isEmpty);
       expect(c.isPreparingCollection, isFalse);
     },
   );
@@ -285,15 +348,15 @@ void main() {
       final c = _makeController();
       addTearDown(c.dispose);
       _seed(c, [_game(), _game()]);
-      c.toggleBoardFlipped();
-      c.nextGame();
-      await c.loadCurrentGame();
-      expect(c.boardFlipped, isTrue);
-      c.prevGame();
-      await c.loadCurrentGame();
-      expect(c.boardFlipped, isTrue);
+      c.presentation.toggleBoardFlipped();
+      c.reading.nextGame();
+      await c.reading.loadCurrentGame();
+      expect(c.presentation.boardFlipped, isTrue);
+      c.reading.prevGame();
+      await c.reading.loadCurrentGame();
+      expect(c.presentation.boardFlipped, isTrue);
       await c.loadPgnContent('[Event "Another"]\n\n1. d4 d5 *');
-      expect(c.boardFlipped, isTrue);
+      expect(c.presentation.boardFlipped, isTrue);
       c.closeFile();
     },
   );
@@ -332,7 +395,7 @@ void main() {
         await b;
         matcher.pending[0].complete([0]);
         await a;
-        expect(c.filteredGames, [games[1]]);
+        expect(c.collection.visibleGames, [games[1]]);
         expect(c.isLoading, isFalse);
         expect(
           (await c.preferences.loadSlice(c.filePath!))!.toJsonString(),
@@ -352,10 +415,12 @@ void main() {
         final pending = c.recomputeAndApplyConfig(second);
         matcher.pending.single.completeError(StateError('worker failed'));
         await pending;
-        expect(c.filteredGames, [games[0]]);
+        expect(c.collection.visibleGames, [games[0]]);
         expect(c.isLoading, isFalse);
-        expect(c.errorMessage, contains('Could not filter'));
+        expect(c.filters.error, isNotNull);
+        expect(c.errorMessage, isNull);
         c.applySlice([0], first);
+        expect(c.filters.error, isNull);
         expect(c.errorMessage, isNull);
         c.errorMessage = 'An unrelated failure';
         c.resetFilters();
@@ -370,17 +435,17 @@ void main() {
         addTearDown(c.dispose);
         final games = [_game(), _game()];
         _seed(c, games);
-        c.setAutoSave(false);
-        c.rememberPersistedGame(games[0]);
+        c.editor.setAutoSave(false);
+        c.editor.rememberPersistedGame(games[0]);
         final pending = c.recomputeAndApplyConfig(first);
-        c.setRating(4);
+        c.editor.setRating(4);
         matcher.pending.single.complete([1]);
         await Future<void>.delayed(Duration.zero);
         expect(matcher.pending, hasLength(2));
         matcher.pending.last.complete([0]);
         await pending;
-        expect(c.filteredGames, [games[0]]);
-        expect(c.hasActiveFilters, isTrue);
+        expect(c.collection.visibleGames, [games[0]]);
+        expect(c.filters.selection.active, isTrue);
         expect(c.isLoading, isFalse);
         expect(games[0].studyRating, 4);
       },
@@ -403,8 +468,8 @@ void main() {
         ),
       );
       await loading;
-      expect(c.hasActiveFilters, isFalse);
-      expect(c.allGames.single.headers['Event'], 'Replacement');
+      expect(c.filters.selection.active, isFalse);
+      expect(c.collection.games.single.headers['Event'], 'Replacement');
     });
   });
 
@@ -418,11 +483,11 @@ void main() {
           final decoder = _ControlledDecoder();
           final c = _makeController(decoder: decoder);
           addTearDown(c.dispose);
-          c.setAutoSave(false);
+          c.editor.setAutoSave(false);
           final game = _game();
           _seed(c, [game]);
           c.filePath = '/tmp/current.pgn';
-          c.rememberPersistedGame(game);
+          c.editor.rememberPersistedGame(game);
           const incoming = '[Event "Replacement"]\n\n1. d4 d5 *';
           final loading = pasted
               ? c.loadPgnContent(incoming)
@@ -434,12 +499,12 @@ void main() {
             DecodedPgnCollection(parseMultiGamePgn(incoming), ''),
           );
           await loading;
-          expect(c.allGames.single, same(game));
+          expect(c.collection.games.single, same(game));
           expect(c.filePath, '/tmp/current.pgn');
           expect(game.pgnText, contains('Keep my draft'));
-          expect(c.hasUnsavedChanges, isTrue);
+          expect(c.editor.hasUnsavedChanges, isTrue);
           expect(c.isLoading, isFalse);
-          expect(c.errorMessage, contains('Unsaved changes'));
+          expect(c.editor.errorMessage, contains('Unsaved changes'));
         },
       );
     }
@@ -455,7 +520,7 @@ void main() {
         final loading = c.loadPgnContent('unreadable input');
         decoder.pending.completeError(const FormatException('bad document'));
         await loading;
-        expect(c.allGames.single, same(game));
+        expect(c.collection.games.single, same(game));
         expect(c.isLoading, isFalse);
         expect(c.errorMessage, 'Could not parse the pasted PGN');
       },
@@ -477,7 +542,7 @@ void main() {
       );
       await newLoad;
       expect(c.filePath, '/tmp/new.pgn');
-      expect(c.allGames.single.headers['Event'], 'New');
+      expect(c.collection.games.single.headers['Event'], 'New');
 
       storage.reads['/tmp/old.pgn']!.complete(
         '[Event "Old"]\n[White "Old"]\n[Black "B"]\n\n1. e4 e5 *',
@@ -486,7 +551,7 @@ void main() {
 
       expect(c.filePath, '/tmp/new.pgn');
       expect(
-        c.allGames.single.headers['Event'],
+        c.collection.games.single.headers['Event'],
         'New',
         reason: 'late work must not land on the selected collection',
       );
@@ -507,56 +572,144 @@ void main() {
       await load;
 
       expect(c.filePath, isNull);
-      expect(c.allGames, isEmpty);
+      expect(c.collection.games, isEmpty);
       expect(c.isLoading, isFalse);
     });
   });
+
+  for (final transition in [
+    'file open',
+    'pasted text',
+    'decoded adoption',
+    'workspace recovery',
+    'navigation restoration',
+    'close',
+  ]) {
+    test(
+      '$transition abandons playback and analysis from the old collection',
+      () async {
+        final storage = _RecoveryStorage();
+        StorageFactory.instanceForTest = storage;
+        final decoder = _ControlledDecoder();
+        final analysis = _AbandonAnalysis();
+        final c = _makeController(decoder: decoder, analysis: analysis);
+        addTearDown(c.dispose);
+        _seed(c, [_game()]);
+        c.setAutoDetectOpenings(false);
+        final snapshot = c.captureWorkspace();
+        final restoreNavigation = c.captureNavigationContext();
+        final cancellations = analysis.cancellations;
+        final clears = analysis.clears;
+        c.reading.playback.start();
+        expect(c.reading.playback.isPlaying, isTrue);
+        final replacement = DecodedPgnCollection([_game(white: 'New')], '');
+        switch (transition) {
+          case 'file open':
+            final operation = c.loadFile('/tmp/replacement.pgn');
+            // Work stops at the request, before the slow file can finish.
+            expect(c.reading.playback.isPlaying, isFalse);
+            await Future<void>.delayed(Duration.zero);
+            storage.reads['/tmp/replacement.pgn']!.complete(null);
+            await operation;
+          case 'pasted text':
+            final operation = c.loadPgnContent('new games');
+            expect(c.reading.playback.isPlaying, isFalse);
+            decoder.pending.complete(replacement);
+            await operation;
+          case 'decoded adoption':
+            c.adoptDecodedCollection(replacement);
+          case 'workspace recovery':
+            final operation = c.restoreWorkspace(snapshot);
+            decoder.pending.complete(DecodedPgnCollection([_game()], ''));
+            await operation;
+            expect(storage.retained.single, contains('1. e4 e5'));
+          case 'navigation restoration':
+            await restoreNavigation();
+          case 'close':
+            c.closeFile();
+        }
+        expect(c.reading.playback.isPlaying, isFalse);
+        expect(analysis.cancellations, greaterThan(cancellations));
+        expect(analysis.clears, greaterThan(clears));
+      },
+    );
+  }
+
+  test(
+    'close publishes completed teardown before a listener opens another collection',
+    () {
+      final c = _makeController();
+      addTearDown(c.dispose);
+      _seed(c, [_game(white: 'Departing')]);
+      c.reading.playback.start();
+      var reopened = false;
+      c.changes.addListener(() {
+        if (!c.reading.playback.isPlaying && !reopened) {
+          reopened = true;
+          c.adoptDecodedCollection(
+            DecodedPgnCollection([_game(white: 'New')], ''),
+          );
+        }
+      });
+      c.closeFile();
+      expect(reopened, isTrue);
+      expect(c.collection.games.single.headers['White'], 'New');
+    },
+  );
 
   group('game navigation', () {
     test('goToGame moves to a valid index', () {
       final c = _makeController();
       _seed(c, [_game(), _game(), _game()]);
 
-      c.goToGame(2);
-      expect(c.currentGameIndex, 2);
+      c.reading.goToGame(2);
+      expect(c.collection.selectedIndex, 2);
     });
 
     test('goToGame ignores out-of-range indices', () {
       final c = _makeController();
       _seed(c, [_game(), _game(), _game()]);
 
-      c.goToGame(1);
-      c.goToGame(-1);
-      expect(c.currentGameIndex, 1, reason: 'negative index is a no-op');
+      c.reading.goToGame(1);
+      c.reading.goToGame(-1);
+      expect(
+        c.collection.selectedIndex,
+        1,
+        reason: 'negative index is a no-op',
+      );
 
-      c.goToGame(99);
-      expect(c.currentGameIndex, 1, reason: 'index >= length is a no-op');
+      c.reading.goToGame(99);
+      expect(
+        c.collection.selectedIndex,
+        1,
+        reason: 'index >= length is a no-op',
+      );
     });
 
     test('nextGame/prevGame clamp at the list bounds', () {
       final c = _makeController();
       _seed(c, [_game(), _game(), _game()]);
 
-      c.prevGame();
-      expect(c.currentGameIndex, 0, reason: 'cannot go before first');
+      c.reading.prevGame();
+      expect(c.collection.selectedIndex, 0, reason: 'cannot go before first');
 
-      c.nextGame();
-      c.nextGame();
-      c.nextGame();
-      expect(c.currentGameIndex, 2, reason: 'cannot go past last');
+      c.reading.nextGame();
+      c.reading.nextGame();
+      c.reading.nextGame();
+      expect(c.collection.selectedIndex, 2, reason: 'cannot go past last');
 
-      c.prevGame();
-      expect(c.currentGameIndex, 1);
+      c.reading.prevGame();
+      expect(c.collection.selectedIndex, 1);
     });
 
     test('loadGameFromTree selects that game and leaves tree mode', () {
       final c = _makeController();
       _seed(c, [_game(), _game()]);
 
-      c.loadGameFromTree(1);
+      c.reading.loadGameFromTree(1);
 
-      expect(c.currentGameIndex, 1);
-      expect(c.showOpeningTree, isFalse);
+      expect(c.collection.selectedIndex, 1);
+      expect(c.reading.tree.showOpeningTree, isFalse);
     });
 
     test(
@@ -564,24 +717,24 @@ void main() {
       () {
         final c = _makeController();
         _seed(c, [_game(), _game()]);
-        c.pgnInitialFen =
+        c.reading.pgnInitialFen =
             'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
 
-        c.nextGame();
+        c.reading.nextGame();
 
-        expect(c.pgnInitialFen, isNull);
-        expect(c.currentGameIndex, 1);
+        expect(c.reading.pgnInitialFen, isNull);
+        expect(c.collection.selectedIndex, 1);
       },
     );
 
     test('navigation is a no-op when there are no games', () {
       final c = _makeController();
-      expect(c.filteredGames, isEmpty);
+      expect(c.collection.visibleGames, isEmpty);
 
-      c.nextGame();
-      c.prevGame();
-      c.goToGame(0);
-      expect(c.currentGameIndex, 0);
+      c.reading.nextGame();
+      c.reading.prevGame();
+      c.reading.goToGame(0);
+      expect(c.collection.selectedIndex, 0);
     });
   });
 
@@ -595,14 +748,14 @@ void main() {
           _game(white: 'Polgar, Judit', black: 'Anand, Viswanathan'),
           _game(white: 'Kramnik, Vladimir', black: 'Polgar, Judit'),
         ]);
-        expect(c.collectionPlayer, 'Polgar, Judit');
+        expect(c.collection.collectionPlayer, 'Polgar, Judit');
         c.applySlice([1], const SliceConfig.empty());
-        expect(c.collectionPlayer, 'Polgar, Judit');
+        expect(c.collection.collectionPlayer, 'Polgar, Judit');
         _seed(c, [
           _game(white: 'my_username', black: 'Opponent A'),
           _game(white: 'Opponent B', black: 'my_username'),
         ]);
-        expect(c.collectionPlayer, 'my_username');
+        expect(c.collection.collectionPlayer, 'my_username');
       },
     );
 
@@ -615,17 +768,17 @@ void main() {
           _game(white: 'A', black: 'B'),
           _game(white: 'B', black: 'A'),
         ]);
-        expect(c.collectionPlayer, isNull);
+        expect(c.collection.collectionPlayer, isNull);
         _seed(c, [
           for (var i = 0; i < 4; i++)
             _game(white: 'Early player', black: 'P$i'),
           for (var i = 4; i < 8; i++) _game(white: 'P$i', black: 'Q$i'),
         ]);
-        expect(c.collectionPlayer, isNull);
+        expect(c.collection.collectionPlayer, isNull);
         _seed(c, [_game()]);
-        expect(c.collectionPlayer, isNull);
+        expect(c.collection.collectionPlayer, isNull);
         _seed(c, []);
-        expect(c.collectionPlayer, isNull);
+        expect(c.collection.collectionPlayer, isNull);
       },
     );
 
@@ -658,9 +811,9 @@ void main() {
       DecodedPgnCollection([_game(white: 'Departed')], ''),
     );
     await pending;
-    expect(c.allGames, [incoming]);
+    expect(c.collection.games, [incoming]);
     expect(c.isLoading, isFalse);
-    expect(c.currentGameIndex, 0);
+    expect(c.collection.selectedIndex, 0);
   });
 
   test(
@@ -672,12 +825,12 @@ void main() {
       _seed(c, [_game()]);
       var armed = true;
       Future<bool>? next;
-      c.addListener(() {
+      c.changes.addListener(() {
         if (!armed) return;
         armed = false;
-        next = c.selectGame(0);
+        next = c.reading.selectGame(0);
       });
-      expect(await c.selectGame(0), isFalse);
+      expect(await c.reading.selectGame(0), isFalse);
       expect(analysis.reads, hasLength(1));
       analysis.reads.single.complete(false);
       expect(await next!, isTrue);
@@ -693,12 +846,12 @@ void main() {
       _seed(c, [_game()]);
       var notifications = 0;
       Future<bool>? reentrant;
-      c.addListener(() {
+      c.changes.addListener(() {
         notifications++;
         // The first notification publishes selection, the second orientation.
-        if (notifications == 2) reentrant = c.selectGame(0);
+        if (notifications == 2) reentrant = c.reading.selectGame(0);
       });
-      final first = c.selectGame(0);
+      final first = c.reading.selectGame(0);
       expect(analysis.reads, hasLength(2));
       analysis.reads.last.complete(false);
       expect(await first, isFalse);
@@ -713,12 +866,12 @@ void main() {
       final analysis = _GatedAnalysis();
       final c = _makeController(analysis: analysis);
       _seed(c, [_game()]);
-      final pending = c.selectGame(0);
+      final pending = c.reading.selectGame(0);
       c.dispose();
       analysis.reads.single.complete(true);
       expect(await pending, isFalse);
       expect(analysis.enrichments, 0);
-      await c.loadCurrentGame();
+      await c.reading.loadCurrentGame();
       expect(analysis.reads, hasLength(1));
     },
   );
@@ -730,14 +883,14 @@ void main() {
       final c = _makeController(analysis: analysis);
       addTearDown(c.dispose);
       _seed(c, [_game(white: 'First'), _game(white: 'Second')]);
-      final first = c.selectGame(0);
-      final second = c.selectGame(1);
+      final first = c.reading.selectGame(0);
+      final second = c.reading.selectGame(1);
       analysis.reads.first.complete(false);
       expect(await first, isFalse);
       analysis.reads.last.complete(false);
       expect(await second, isTrue);
-      expect(c.currentGameIndex, 1);
-      expect(await c.selectGame(8), isFalse);
+      expect(c.collection.selectedIndex, 1);
+      expect(await c.reading.selectGame(8), isFalse);
     },
   );
 
@@ -748,25 +901,28 @@ void main() {
       addTearDown(c.dispose);
       final games = [_game(white: 'First'), _game(white: 'Second')];
       _seed(c, games);
-      final all = c.allGames;
-      final visible = c.filteredGames;
+      final all = c.collection.games;
+      final visible = c.collection.visibleGames;
       games.clear();
-      expect(c.allGames, hasLength(2));
-      expect(() => c.allGames.removeLast(), throwsUnsupportedError);
-      expect(() => c.filteredGames.sort((a, b) => 0), throwsUnsupportedError);
+      expect(c.collection.games, hasLength(2));
+      expect(() => c.collection.games.removeLast(), throwsUnsupportedError);
+      expect(
+        () => c.collection.visibleGames.sort((a, b) => 0),
+        throwsUnsupportedError,
+      );
       c.setSortMode(GameSortMode.fileOrder);
       expect(all, hasLength(2));
       expect(visible, hasLength(2));
-      c.setAutoSave(false);
-      c.setRating(5);
+      c.editor.setAutoSave(false);
+      c.editor.setRating(5);
       expect(
         c.adoptDecodedCollection(
           DecodedPgnCollection([_game(white: 'New')], ''),
         ),
         isNull,
       );
-      expect(c.allGames, same(all));
-      expect(c.errorMessage, contains('Unsaved changes'));
+      expect(c.collection.games, same(all));
+      expect(c.editor.errorMessage, contains('Unsaved changes'));
     },
   );
 
@@ -777,55 +933,66 @@ void main() {
         final window = _FailingWindow();
         final c = _makeController(window: window);
         addTearDown(c.dispose);
-        await c.toggleFullScreen();
-        expect(c.errorMessage, contains('Could not change the window'));
+        await c.presentation.toggleFullScreen();
+        expect(c.presentation.error, isA<StateError>());
+        expect(c.errorMessage, isNull);
         c.errorMessage = 'Newer document failure';
-        c.toggleBoardFlipped();
+        c.presentation.toggleBoardFlipped();
         expect(c.errorMessage, 'Newer document failure');
         window.fail = false;
-        await c.toggleFullScreen();
-        expect(c.isFullScreen, isTrue);
+        await c.presentation.toggleFullScreen();
+        expect(c.presentation.isFullScreen, isTrue);
         expect(c.errorMessage, 'Newer document failure');
         window.fail = true;
-        await c.exitFullScreen();
-        expect(c.errorMessage, contains('Could not change the window'));
+        await c.presentation.exitFullScreen();
+        expect(c.presentation.error, isA<StateError>());
+        expect(c.errorMessage, 'Newer document failure');
         window.fail = false;
-        await c.exitFullScreen();
-        expect(c.errorMessage, isNull);
+        await c.presentation.exitFullScreen();
+        expect(c.presentation.error, isNull);
+        expect(c.errorMessage, 'Newer document failure');
       },
     );
 
     test('setPerspective updates the field and notifies', () {
       final c = _makeController();
       var notifications = 0;
-      c.addListener(() => notifications++);
+      c.changes.addListener(() => notifications++);
 
       c.setPerspective(const Perspective(mode: PerspectiveMode.black));
-      expect(c.perspective.mode, PerspectiveMode.black);
+      expect(c.presentation.perspective.mode, PerspectiveMode.black);
       expect(notifications, greaterThan(0));
     });
 
     test('orientation follows perspective for the current game', () {
       final c = _makeController();
       _seed(c, [_game(white: 'hero', black: 'villain')]);
-      c.setAutoSave(false);
+      c.editor.setAutoSave(false);
       addTearDown(c.dispose);
 
       c.setPerspective(const Perspective(mode: PerspectiveMode.white));
-      expect(c.boardFlipped, isFalse);
+      expect(c.presentation.boardFlipped, isFalse);
 
       c.setPerspective(const Perspective(mode: PerspectiveMode.black));
-      expect(c.boardFlipped, isTrue);
+      expect(c.presentation.boardFlipped, isTrue);
 
       c.setPerspective(
         const Perspective(mode: PerspectiveMode.player, playerName: 'villain'),
       );
-      expect(c.boardFlipped, isTrue, reason: 'protagonist plays Black');
+      expect(
+        c.presentation.boardFlipped,
+        isTrue,
+        reason: 'protagonist plays Black',
+      );
 
       c.setPerspective(
         const Perspective(mode: PerspectiveMode.player, playerName: 'hero'),
       );
-      expect(c.boardFlipped, isFalse, reason: 'protagonist plays White');
+      expect(
+        c.presentation.boardFlipped,
+        isFalse,
+        reason: 'protagonist plays White',
+      );
     });
   });
 
@@ -850,15 +1017,15 @@ void main() {
         _seed(c, games);
         c.setSortMode(GameSortMode.dateDesc);
         final published = <List<String>>[];
-        c.addListener(
+        c.changes.addListener(
           () => published.add(
-            c.filteredGames.map((g) => g.headers['Date']!).toList(),
+            c.collection.visibleGames.map((g) => g.headers['Date']!).toList(),
           ),
         );
         c.applySlice([0, 2], const SliceConfig.empty());
-        expect(c.filteredGames, [games[2], games[0]]);
+        expect(c.collection.visibleGames, [games[2], games[0]]);
         c.resetFilters();
-        expect(c.filteredGames, [games[1], games[2], games[0]]);
+        expect(c.collection.visibleGames, [games[1], games[2], games[0]]);
         for (final dates in published) {
           expect(dates, List.of(dates)..sort((a, b) => b.compareTo(a)));
         }
@@ -869,15 +1036,19 @@ void main() {
       final c = _makeController();
       final games = List.generate(5, (i) => _game(white: 'P$i'));
       _seed(c, games);
-      c.goToGame(3);
+      c.reading.goToGame(3);
 
       c.applySlice([1, 3], const SliceConfig.empty());
 
-      expect(c.filteredGames, hasLength(2));
-      expect(c.filteredGames[0], same(games[1]));
-      expect(c.filteredGames[1], same(games[3]));
-      expect(c.hasActiveFilters, isTrue);
-      expect(c.currentGameIndex, 0, reason: 'slice resets to first game');
+      expect(c.collection.visibleGames, hasLength(2));
+      expect(c.collection.visibleGames[0], same(games[1]));
+      expect(c.collection.visibleGames[1], same(games[3]));
+      expect(c.filters.selection.active, isTrue);
+      expect(
+        c.collection.selectedIndex,
+        0,
+        reason: 'slice resets to first game',
+      );
     });
 
     test('applySlice with identical indices+config is a no-op', () {
@@ -885,11 +1056,11 @@ void main() {
       _seed(c, [_game(), _game(), _game()]);
 
       c.applySlice([0, 1], const SliceConfig.empty());
-      c.goToGame(1);
+      c.reading.goToGame(1);
       c.applySlice([0, 1], const SliceConfig.empty());
 
       expect(
-        c.currentGameIndex,
+        c.collection.selectedIndex,
         1,
         reason: 'repeat slice must not reset the cursor',
       );
@@ -900,14 +1071,14 @@ void main() {
       final games = List.generate(4, (i) => _game(white: 'P$i'));
       _seed(c, games);
       c.applySlice([2], const SliceConfig.empty());
-      expect(c.filteredGames, hasLength(1));
+      expect(c.collection.visibleGames, hasLength(1));
 
       c.resetFilters();
 
-      expect(c.filteredGames, hasLength(4));
-      expect(c.hasActiveFilters, isFalse);
-      expect(c.activeSliceConfig.isEmpty, isTrue);
-      expect(c.currentGameIndex, 0);
+      expect(c.collection.visibleGames, hasLength(4));
+      expect(c.filters.selection.active, isFalse);
+      expect(c.filters.selection.config.isEmpty, isTrue);
+      expect(c.collection.selectedIndex, 0);
     });
   });
 
@@ -926,16 +1097,16 @@ void main() {
       c.closeFile();
 
       expect(c.filePath, isNull);
-      expect(c.allGames, isEmpty);
-      expect(c.filteredGames, isEmpty);
-      expect(c.hasActiveFilters, isFalse);
-      expect(c.activeSliceConfig.isEmpty, isTrue);
-      expect(c.currentGameIndex, 0);
+      expect(c.collection.games, isEmpty);
+      expect(c.collection.visibleGames, isEmpty);
+      expect(c.filters.selection.active, isFalse);
+      expect(c.filters.selection.config.isEmpty, isTrue);
+      expect(c.collection.selectedIndex, 0);
       expect(c.errorMessage, isNull);
       expect(c.isLoading, isFalse);
-      expect(c.showOpeningTree, isFalse);
-      expect(c.perspective.mode, PerspectiveMode.white);
-      expect(c.boardFlipped, isFalse);
+      expect(c.reading.tree.showOpeningTree, isFalse);
+      expect(c.presentation.perspective.mode, PerspectiveMode.white);
+      expect(c.presentation.boardFlipped, isFalse);
     });
 
     test('closed collection membership remains protected', () {
@@ -944,10 +1115,13 @@ void main() {
 
       c.closeFile();
 
-      expect(() => c.allGames.add(_game()), throwsUnsupportedError);
-      expect(() => c.filteredGames.add(_game()), throwsUnsupportedError);
+      expect(() => c.collection.games.add(_game()), throwsUnsupportedError);
+      expect(
+        () => c.collection.visibleGames.add(_game()),
+        throwsUnsupportedError,
+      );
       _seed(c, [_game()]);
-      expect(c.allGames, hasLength(1));
+      expect(c.collection.games, hasLength(1));
     });
 
     test('clears the protagonist detected from the closed collection', () {
@@ -959,19 +1133,20 @@ void main() {
 
       c.closeFile();
 
-      expect(c.sliceProtagonist, isNull);
-      expect(c.protagonistFixedSide, isNull);
+      expect(c.collection.sliceProtagonist, isNull);
+      expect(c.collection.protagonistFixedSide, isNull);
     });
 
-    test('keeps the recent-files list — it is the way back in', () {
+    test('keeps the recent-files list — it is the way back in', () async {
       final c = _makeController();
-      c.recentFiles = ['/tmp/a.pgn', '/tmp/b.pgn'];
+      await c.libraryState.addToRecentFiles('/tmp/b.pgn');
+      await c.libraryState.addToRecentFiles('/tmp/a.pgn');
       _seed(c, [_game()]);
       c.filePath = '/tmp/a.pgn';
 
       c.closeFile();
 
-      expect(c.recentFiles, ['/tmp/a.pgn', '/tmp/b.pgn']);
+      expect(c.libraryState.recentFiles, ['/tmp/a.pgn', '/tmp/b.pgn']);
     });
 
     test('closed membership still supports a later sort through the owner', () {
@@ -988,13 +1163,13 @@ void main() {
     test('navigation after a close is a no-op', () {
       final c = _makeController();
       _seed(c, [_game(), _game()]);
-      c.goToGame(1);
+      c.reading.goToGame(1);
 
       c.closeFile();
-      c.nextGame();
-      c.prevGame();
+      c.reading.nextGame();
+      c.reading.prevGame();
 
-      expect(c.currentGameIndex, 0);
+      expect(c.collection.selectedIndex, 0);
     });
   });
 }

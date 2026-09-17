@@ -1,9 +1,5 @@
-/// Opening-tree mode for the PGN viewer, extracted from `PgnViewerController`.
-///
-/// Owns the tree state (build progress, current cursor, position cache) and the
-/// tree-mode navigation logic, driving the board through injected callbacks.
-/// `PgnViewerController` keeps its public tree getters/methods and delegates
-/// here, so existing call-sites are unchanged.
+/// Owns Viewer opening-tree construction, progress, cursor and position cache.
+/// Navigation drives the board through injected callbacks.
 ///
 /// Cursor ownership: the merged opening tree is its own exploration surface,
 /// not the current game's move list. Re-entering (T, or app-bar back after a
@@ -114,11 +110,17 @@ class ViewerOpeningTree {
   Map<String, List<int>>? _mainlineIndex;
   List<PgnGameEntry> _indexedGames = const [];
 
-  /// Reset tree state when a new file is loaded.
-  void resetForNewFile() {
+  /// Stop a pending build without discarding the currently displayed tree.
+  void cancelBuild() {
     _generation++;
     _task?.cancel();
     _task = null;
+    buildingTree = false;
+  }
+
+  /// Reset tree state when a new file is loaded.
+  void resetForNewFile() {
+    cancelBuild();
     _mainlineIndex = null;
     _indexedGames = const [];
     buildingTree = false;
@@ -134,9 +136,7 @@ class ViewerOpeningTree {
   /// Drop the built tree (e.g. after re-slicing); a rebuild follows if shown.
   /// The saved return position is dropped too — it belongs to the old slice.
   void clearTree() {
-    _generation++;
-    _task?.cancel();
-    _task = null;
+    cancelBuild();
     _mainlineIndex = null;
     _indexedGames = const [];
     _cursorStartFen = openingTree?.cursorRoot.fen ?? _cursorStartFen;
@@ -450,8 +450,6 @@ class ViewerOpeningTree {
 
   void dispose() {
     _disposed = true;
-    _generation++;
-    _task?.cancel();
-    _task = null;
+    cancelBuild();
   }
 }
