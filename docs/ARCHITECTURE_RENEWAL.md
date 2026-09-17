@@ -1359,6 +1359,54 @@ Provider retirement remain pending. Viewer private-core adoption and windowing,
 complete editor parity/performance gates, milestones 4–7 and non-Linux/release
 gates also remain unfinished.
 
+### Viewer mainline ownership checkpoint (2026-09-17)
+
+After Builder checkpoint `ca376687`, Viewer copies caller-owned parsed games
+before normalization and keeps its parsed input and editable mainline private.
+`chess_core/pgn/pgn_game_view.dart` supplies detached immutable metadata and move
+snapshots; `pgn_game_copy.dart` copies parsed trees iteratively. Local annotation
+edits retain unchanged move snapshots, navigation reuses the list, and the
+renderer shares the owner's position memo across annotation revisions.
+
+Mainline comment/glyph commands accept opaque move identities. Delayed callbacks
+from a replaced game are rejected without emitting a save. Annotation adoption
+detaches the incoming values, retains cursor/session identity, and rejects the
+same SAN played from a different starting position before modifying live state.
+Serialization copies mainline annotations before shortening stored engine-line
+references, so preparing output cannot silently mutate the owner.
+
+Viewer sideline extraction now uses the existing shared iterative move-tree
+decoder. This also fixes variation introductions: starting comments remain
+separate from trailing comments through extraction, rendering and saving; the
+intro appears before the move it introduces. The shared training reader accepts
+the immutable mainline values without changing its workflow ownership.
+
+Verification (Linux, this checkpoint): 232 selected unit/widget cases pass,
+covering Viewer/core PGN, collection setup, parser properties, training reader,
+analysis annotations and movetext rendering. New regressions exercise a
+20,000-ply parsed-input copy with independent annotation containers, retained
+snapshots, stale callbacks, atomic rejected adoption, serializer purity and
+variation-introduction ordering. Three native journeys pass: collection save/
+conflict/reload/retained-draft/collision-safe copy; pasted-collection exclusive
+copy/export; app-owned close/restart recovery with cursor and source preservation.
+The save journey also preserves a variation introduction and unrelated game
+bytes. Analysis and lint pass with nine existing info notices and all 15
+architecture-checker tests passing.
+
+The disposable headless production app opened a fixture with a mainline note,
+variation introduction and trailing sideline note. The inspected
+[1280×720 Viewer screenshot](images/renewal-viewer-mainline.png) confirms their
+order and legibility. The preview was stopped; its existing recovery banners
+belong to earlier test fixtures. The first focused run exposed introduction
+folding and a whitespace-sensitive PGN assertion; the decoder/rendering fix and
+semantic assertion passed the complete selected rerun.
+
+This advances STATE-02, ARCH-01 and annotation parity without completing the
+Viewer private-core migration. Its sideline forest remains mutable, and the
+legacy controller, widget mixins, asynchronous load lifetime and eager movetext
+rendering remain to migrate. Full hierarchy/legacy retirement, editor session/
+undo/performance gates, milestones 4–7 and non-Linux/release gates are unfinished.
+
 ### Initial parity and ownership inventory (milestone 0, partial)
 
 The starting tree has 885 files under `lib/` and 674 under `test/`; these counts

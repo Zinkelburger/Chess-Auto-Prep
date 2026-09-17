@@ -56,7 +56,7 @@ bool _isEvalOnlyComment(String raw) =>
 /// The distinction matters: one `[%eval]` dropped on a single move by a human
 /// annotator is a fact worth reading, and stays visible. Eighty of them are
 /// noise, and get replaced by the mistake marks [_buildEvalNotes] derives.
-bool _isMachineAnnotated(List<PgnNodeData> moveHistory) {
+bool _isMachineAnnotated(List<PgnMoveSnapshot> moveHistory) {
   var realPlies = 0;
   var scored = 0;
   for (final data in moveHistory) {

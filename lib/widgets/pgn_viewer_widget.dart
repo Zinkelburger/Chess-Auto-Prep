@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/chess_core/pgn/pgn_game_view.dart';
 import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
 import 'package:chess_auto_prep/widgets/common/horizontal_wheel_scroll.dart';
 import 'dart:async';
@@ -337,8 +338,8 @@ abstract class _PgnViewerWidgetStateBase extends State<PgnViewerWidget> {
   /// setState wrappers in the part-file mixins.
   final ViewerGameModel _m = ViewerGameModel();
 
-  PgnGame? get _game => _m.game;
-  List<PgnNodeData> get _moveHistory => _m.moveHistory;
+  PgnGameMetadata? get _game => _m.game;
+  List<PgnMoveSnapshot> get _moveHistory => _m.moveHistory;
   int get _mainLineIndex => _m.mainLineIndex;
   Position get _currentPosition => _m.currentPosition;
   Position get _startPosition => _m.startPosition;
@@ -464,9 +465,9 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
   /// Defer during widget updates and bind the callback to this exact game.
   void _persistMigratedAnalysis() {
     if (!_m.didMaterializeAnalysis || !widget.persistMoves) return;
-    final game = _m.game;
+    final session = _m.session;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !identical(_m.game, game)) return;
+      if (!mounted || !identical(_m.session, session)) return;
       _notifyCommentsChanged();
     });
   }
@@ -514,6 +515,7 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
 
       setState(() {
         _m.load(game);
+        _editingCommentIndex = null;
         _gameInfo = _buildGameInfo(game);
         _gameInfoNoResult = _buildGameInfo(game, includeResult: false);
         _isLoading = false;
@@ -676,6 +678,7 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
         expandAll: expandAll,
         game: _game,
         moveHistory: _moveHistory,
+        mainlinePositions: _m.mainline,
         variationsByPly: _variationsByPly,
         mainLineIndex: _mainLineIndex,
         currentMoveKey: currentMoveKey,

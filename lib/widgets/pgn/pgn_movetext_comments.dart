@@ -2,7 +2,7 @@ part of 'pgn_movetext_view.dart';
 
 /// The move's comment as the inline editor should show it: every block joined,
 /// so editing it edits all of it (see `_writeWholeComment`).
-String _rawComment(PgnNodeData moveData) => joinComments(moveData.comments);
+String _rawComment(PgnMoveSnapshot moveData) => joinComments(moveData.comments);
 
 /// The generated `[%...]` metrics of a move as one quiet run — "eval +0.31 ·
 /// only move · 42% likely".

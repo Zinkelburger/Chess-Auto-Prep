@@ -12,6 +12,8 @@
 library;
 
 import 'package:dartchess/dartchess.dart';
+import '../../chess_core/pgn/pgn_game_copy.dart';
+import '../../chess_core/pgn/pgn_game_view.dart';
 
 import '../../models/move_tree.dart';
 import '../../services/game_eval_annotations.dart' show annotateGameMoveQuality;
@@ -44,11 +46,45 @@ enum ViewerMoveKind {
 }
 
 class ViewerGameModel {
-  PgnGame? game;
+  PgnGame? _game;
+  PgnGameMetadata? _metadata;
+  PgnGameMetadata? get game => _metadata;
+  Object _session = Object();
+  Object get session => _session;
+
+  List<PgnMoveSnapshot>? _moveView;
+  final _moveSnapshots = <PgnNodeData, PgnMoveSnapshot>{};
+  Expando<Object> _moveIdentities = Expando('Viewer move identities');
+
+  List<PgnMoveSnapshot> get moveHistory =>
+      _moveView ??= List.unmodifiable(_moveHistory.map(_snapshotOf));
+
+  PgnMoveSnapshot _snapshotOf(PgnNodeData move) => _moveSnapshots.putIfAbsent(
+    move,
+    () => PgnMoveSnapshot.capture(
+      move,
+      identity: _moveIdentities[move] ??= Object(),
+    ),
+  );
+
+  void _mainlineChanged([PgnNodeData? move]) {
+    _moveView = null;
+    if (move == null) {
+      _moveSnapshots.clear();
+    } else {
+      _moveSnapshots.remove(move);
+    }
+  }
+
+  bool _matchesMove(int index, Object? expectedMove) =>
+      index >= 0 &&
+      index < _moveHistory.length &&
+      (expectedMove == null ||
+          identical(_moveIdentities[_moveHistory[index]], expectedMove));
 
   /// Whether the last load/adoption converted legacy PVs to stored variations.
   bool didMaterializeAnalysis = false;
-  List<PgnNodeData> moveHistory = [];
+  List<PgnNodeData> _moveHistory = [];
   Position startPosition = Chess.initial;
   Position currentPosition = Chess.initial;
 
@@ -84,17 +120,22 @@ class ViewerGameModel {
   /// mainline grows.  Every navigation reads from here instead of replaying
   /// the game from the start.
   MainlinePositions get mainline =>
-      MainlinePositions.of(moveHistory, startPosition);
+      MainlinePositions.of(_moveHistory, startPosition);
 
   // ── Load ─────────────────────────────────────────────────────────────
 
   /// Adopt a freshly parsed game: mainline spine, start position, and the
   /// PGN's own sidelines. Resets the cursor to the start.
   void load(PgnGame parsed) {
+    parsed = copyParsedPgn(parsed);
+    _session = Object();
+    _mainlineChanged();
+    _moveIdentities = Expando('Viewer move identities');
     promoteNullMoveDummyMainline(parsed.moves);
     didMaterializeAnalysis = annotateGameMoveQuality(parsed);
-    game = parsed;
-    moveHistory = parsed.moves.mainline().toList();
+    _game = parsed;
+    _metadata = PgnGameMetadata.capture(parsed);
+    _moveHistory = parsed.moves.mainline().toList();
     startPosition = startPositionFromGame(parsed);
     currentPosition = startPosition;
     variationsByPly = extractPgnVariations(parsed, startPosition);
@@ -113,8 +154,10 @@ class ViewerGameModel {
   /// is not the same game — a different mainline, or a different set of
   /// stored sidelines — in which case the caller must reload.
   bool adoptAnnotations(PgnGame parsed) {
+    parsed = copyParsedPgn(parsed);
+    if (startPositionFromGame(parsed).fen != startPosition.fen) return false;
     promoteNullMoveDummyMainline(parsed.moves);
-    didMaterializeAnalysis = annotateGameMoveQuality(parsed);
+    final materialized = annotateGameMoveQuality(parsed);
     final incoming = parsed.moves.mainline().toList();
     if (!_sameMainline(incoming)) return false;
     final storedRoots = extractPgnVariations(parsed, startPosition);
@@ -123,9 +166,12 @@ class ViewerGameModel {
     for (final MapEntry(key: ply, value: roots) in storedRoots.entries) {
       _mergeSidelines(variationsByPly.putIfAbsent(ply, () => []), roots);
     }
-    game = parsed;
+    didMaterializeAnalysis = materialized;
+    _mainlineChanged();
+    _game = parsed;
+    _metadata = PgnGameMetadata.capture(parsed);
     for (var i = 0; i < incoming.length; i++) {
-      moveHistory[i]
+      _moveHistory[i]
         ..comments = incoming[i].comments
         ..startingComments = incoming[i].startingComments
         ..nags = incoming[i].nags;
@@ -134,9 +180,9 @@ class ViewerGameModel {
   }
 
   bool _sameMainline(List<PgnNodeData> incoming) {
-    if (incoming.length != moveHistory.length) return false;
+    if (incoming.length != _moveHistory.length) return false;
     for (var i = 0; i < incoming.length; i++) {
-      if (incoming[i].san != moveHistory[i].san) return false;
+      if (incoming[i].san != _moveHistory[i].san) return false;
     }
     return true;
   }
@@ -197,7 +243,7 @@ class ViewerGameModel {
   bool goToMainLineMove(int moveIndex) {
     final frontier = revealedPly;
     if (frontier != null && moveIndex > frontier) moveIndex = frontier;
-    if (moveIndex < 0 || moveIndex > moveHistory.length) return false;
+    if (moveIndex < 0 || moveIndex > _moveHistory.length) return false;
     mainLineIndex = moveIndex;
     currentPosition = mainline.at(moveIndex);
     _leaveSideline();
@@ -312,9 +358,11 @@ class ViewerGameModel {
     final onMainline = analysisPath.isEmpty && allowMainline;
 
     // Amend mode at the end of the mainline: extend it rather than fork.
-    if (editing && onMainline && mainLineIndex == moveHistory.length) {
-      moveHistory.add(PgnNodeData(san: san));
-      mainLineIndex = moveHistory.length;
+    if (editing && onMainline && mainLineIndex == _moveHistory.length) {
+      final added = PgnNodeData(san: san);
+      _moveHistory.add(added);
+      _mainlineChanged(added);
+      mainLineIndex = _moveHistory.length;
       currentPosition = newPos;
       return ViewerMoveKind.extendedMainline;
     }
@@ -322,8 +370,8 @@ class ViewerGameModel {
     // The game's own next move: follow it instead of duplicating it as a
     // sideline beside itself.
     if (onMainline &&
-        mainLineIndex < moveHistory.length &&
-        moveHistory[mainLineIndex].san == san) {
+        mainLineIndex < _moveHistory.length &&
+        _moveHistory[mainLineIndex].san == san) {
       mainLineIndex++;
       currentPosition = newPos;
       return ViewerMoveKind.followedMainline;
@@ -406,10 +454,10 @@ class ViewerGameModel {
   /// at each guessed ply; live ephemeral matches are promoted, not
   /// duplicated. Returns whether anything changed (→ persist).
   bool addGuessVariations(Map<int, List<String>> wrongByPly) {
-    if (wrongByPly.isEmpty || moveHistory.isEmpty) return false;
+    if (wrongByPly.isEmpty || _moveHistory.isEmpty) return false;
     var changed = false;
     for (final MapEntry(key: ply, value: sans) in wrongByPly.entries) {
-      if (ply < 0 || ply >= moveHistory.length || sans.isEmpty) continue;
+      if (ply < 0 || ply >= _moveHistory.length || sans.isEmpty) continue;
       final from = mainline.tryAt(ply);
       if (from == null) continue;
       final roots = variationsByPly.putIfAbsent(ply, () => []);
@@ -462,10 +510,10 @@ class ViewerGameModel {
   /// game's own annotations.
   void appendGuessNotes(Map<int, String> notes) {
     for (final MapEntry(key: index, value: note) in notes.entries) {
-      if (index < 0 || index >= moveHistory.length) continue;
-      final moveData = moveHistory[index];
+      if (index < 0 || index >= _moveHistory.length) continue;
+      final moveData = _moveHistory[index];
       final appended = _withNote(joinComments(moveData.comments), note);
-      if (appended != null) writeWholeComment(moveData, appended);
+      if (appended != null) setMainlineComment(index, appended);
     }
   }
 
@@ -533,24 +581,26 @@ class ViewerGameModel {
     node.comment = trimmed.isEmpty ? null : trimmed;
   }
 
-  void toggleMainlineNag(int moveIndex, int nagId) {
-    if (moveIndex < 0 || moveIndex >= moveHistory.length) return;
-    final moveData = moveHistory[moveIndex];
+  bool toggleMainlineNag(int moveIndex, int nagId, {Object? expectedMove}) {
+    if (!_matchesMove(moveIndex, expectedMove)) return false;
+    final moveData = _moveHistory[moveIndex];
     final next = toggleQualityNag(moveData.nags, nagId);
     moveData.nags = next.isEmpty ? null : next;
+    _mainlineChanged(moveData);
+    return true;
   }
 
-  /// Write [text] as the move's *whole* comment, replacing every block it
-  /// had: the editors read a move's comment with [joinComments], so what the
-  /// user edited is all of it — writing into `comments[0]` and leaving the
-  /// rest would duplicate the blocks they just merged.
-  static void writeWholeComment(PgnNodeData moveData, String text) {
+  /// Replace the whole comment, retaining no caller-owned values. A delayed
+  /// panel supplies the move identity it displayed so game replacement cannot
+  /// redirect that edit to the same numeric index in a different game.
+  bool setMainlineComment(int index, String text, {Object? expectedMove}) {
+    if (!_matchesMove(index, expectedMove)) return false;
+    final move = _moveHistory[index];
     final trimmed = text.trim();
-    if (trimmed.isEmpty) {
-      moveData.comments?.clear();
-    } else {
-      moveData.comments = [trimmed];
-    }
+    if (joinComments(move.comments) == trimmed) return false;
+    move.comments = trimmed.isEmpty ? null : [trimmed];
+    _mainlineChanged(move);
+    return true;
   }
 
   // ── Serialization ────────────────────────────────────────────────────
@@ -564,31 +614,33 @@ class ViewerGameModel {
   /// difference in what the reader's file keeps.
   String buildAnnotatedMovetext() => buildGameMovetext(
     moves: serializer.buildViewerPgnTree(
-      moveHistory: moveHistory,
+      moveHistory: _moveHistory,
       sidelines: variationsByPly,
     ),
-    comments: game?.comments ?? const [],
-    fen: game?.headers['FEN'],
-    result: game?.headers['Result'],
+    comments: _game?.comments ?? const [],
+    fen: _game?.headers['FEN'],
+    result: _game?.headers['Result'],
   );
 
   /// Move data from the game start to [node]: the mainline up to the branch
   /// point, then the variation path. Null when the node can't be located.
-  List<PgnNodeData>? lineToVariationNode(MoveNode node, int branchPly) {
+  List<PgnMoveSnapshot>? lineToVariationNode(MoveNode node, int branchPly) {
     final path = variationsByPly.pathToNode(node, branchPly: branchPly);
     if (path == null) return null;
     return [
-      for (var i = 0; i < branchPly && i < moveHistory.length; i++)
-        moveHistory[i],
-      for (final n in path) serializer.pgnNodeDataFor(n),
+      for (var i = 0; i < branchPly && i < _moveHistory.length; i++)
+        _snapshotOf(_moveHistory[i]),
+      for (final n in path)
+        PgnMoveSnapshot.capture(serializer.pgnNodeDataFor(n)),
     ];
   }
 
   /// Serialize a single line to PGN: `[FEN]`/`[SetUp]` headers when the game
   /// starts from a custom position, then numbered movetext (comments and
   /// NAGs of the source moves included).
-  String buildLinePgn(List<PgnNodeData> line) =>
-      serializer.buildLinePgn(line, setupFen: game?.headers['FEN']);
+  String buildLinePgn(List<PgnMoveSnapshot> line) => serializer.buildLinePgn([
+    for (final move in line) move.toPgnNodeData(),
+  ], setupFen: _game?.headers['FEN']);
 
   // ── Shared helpers ───────────────────────────────────────────────────
 

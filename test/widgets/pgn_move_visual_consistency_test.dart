@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/chess_core/pgn/pgn_game_view.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -42,7 +43,11 @@ void main() {
                   : PgnMovetextView(
                       game: null,
                       moveHistory: surface == _Surface.mainline
-                          ? [PgnNodeData(san: 'e4', nags: nags)]
+                          ? [
+                              PgnMoveSnapshot.capture(
+                                PgnNodeData(san: 'e4', nags: nags),
+                              ),
+                            ]
                           : const [],
                       variationsByPly: surface == _Surface.variation
                           ? {

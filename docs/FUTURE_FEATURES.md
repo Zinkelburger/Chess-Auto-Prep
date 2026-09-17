@@ -63,7 +63,11 @@ in 1.3 seconds, with profile-mode memory/frame gates still pending.
 Builder now publishes immutable cached move-tree views and detaches caller-owned
 trees at adoption. Study and Builder share the projection cache; Builder autosaves
 capture the current owner revision before UI rebuilds and retain their destination
-across chapter changes. Viewer private-core adoption, remaining Builder storage/
+across chapter changes. Viewer now detaches parsed input and exposes immutable
+headers/mainline annotations with stable move identities; stale mainline editor
+callbacks are rejected after game replacement. Serialization works on copies and
+preserves variation introductions separately from trailing notes. Its mutable
+sideline forest, legacy controller/widget ownership, remaining Builder storage/
 session ownership and draft recovery, Viewer movetext windowing, incremental
 editor indexing, undo receipts, variation-cursor/filter/panel
 restoration and complete large-document performance evidence remain pending.

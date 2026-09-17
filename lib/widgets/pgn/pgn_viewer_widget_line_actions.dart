@@ -154,15 +154,15 @@ mixin _PgnViewerLineActions on _PgnViewerWidgetStateBase {
 
   /// Move data from the game start to [node]: the mainline up to the branch
   /// point, then the variation path. Null when the node can't be located.
-  List<PgnNodeData>? _lineToVariationNode(MoveNode node, int branchPly) =>
+  List<PgnMoveSnapshot>? _lineToVariationNode(MoveNode node, int branchPly) =>
       _m.lineToVariationNode(node, branchPly);
 
   /// Serialize a single line to PGN: `[FEN]`/`[SetUp]` headers when the game
   /// starts from a custom position, then numbered movetext (comments and
   /// NAGs of the source moves included).
-  String _buildLinePgn(List<PgnNodeData> line) => _m.buildLinePgn(line);
+  String _buildLinePgn(List<PgnMoveSnapshot> line) => _m.buildLinePgn(line);
 
-  String _suggestChapterName(List<PgnNodeData> line) {
+  String _suggestChapterName(List<PgnMoveSnapshot> line) {
     final coords = coordsAtPly(
       ply: line.length - 1,
       startFullmoves: _startPosition.fullmoves,
@@ -178,14 +178,14 @@ mixin _PgnViewerLineActions on _PgnViewerWidgetStateBase {
     return 'Line to $moveLabel';
   }
 
-  Future<void> _copyLinePgn(List<PgnNodeData> line) async {
+  Future<void> _copyLinePgn(List<PgnMoveSnapshot> line) async {
     if (line.isEmpty) return;
     await Clipboard.setData(ClipboardData(text: _buildLinePgn(line)));
     if (!mounted) return;
     showAppSnackBar(context, 'Line copied to clipboard');
   }
 
-  Future<void> _addLineToStudy(List<PgnNodeData> line) async {
+  Future<void> _addLineToStudy(List<PgnMoveSnapshot> line) async {
     if (line.isEmpty) return;
     final pgn = _buildLinePgn(line);
     await runAddToStudyFlow(

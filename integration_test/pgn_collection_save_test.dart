@@ -23,7 +23,7 @@ void main() {
       ).create();
       final file = File('${root.path}/games.pgn');
       const first =
-          '[Event "Native viewer"]\n[White "Alice"]\n[Black "Bob"]\n[WhiteElo "2000"]\n[Result "*"]\n\n1. e4 e5 *';
+          '[Event "Native viewer"]\n[White "Alice"]\n[Black "Bob"]\n[WhiteElo "2000"]\n[Result "*"]\n\n1. e4 e5 ({Native variation introduction} 1... c5) *';
       const other = '[Event "Unrelated"]\n\n1. d4 {keep this} *';
       const original = '; My banner\n\n$first\n\n$other\n';
       await file.writeAsString(original);
@@ -66,6 +66,8 @@ void main() {
       expect(saved, startsWith('; My banner'));
       expect(saved, contains(other));
       expect(saved, contains('Native editor saved note'));
+      expect(saved, contains('Native variation introduction'));
+      expect(saved, contains('c5'));
       final history = Directory('${root.path}/.cap-pgn-history');
       final archived = await history
           .list()

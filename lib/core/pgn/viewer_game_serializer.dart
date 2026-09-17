@@ -11,6 +11,7 @@ library;
 import 'package:dartchess/dartchess.dart';
 
 import '../../models/move_tree.dart';
+import '../../chess_core/pgn/pgn_game_copy.dart';
 import 'pgn_analysis_variations.dart';
 import 'sideline_tree.dart';
 
@@ -33,7 +34,9 @@ PgnNode<PgnNodeData> buildViewerPgnTree({
   }
 
   for (var i = 0; i < moveHistory.length; i++) {
-    final mainChild = PgnChildNode<PgnNodeData>(moveHistory[i]);
+    final mainChild = PgnChildNode<PgnNodeData>(
+      copyPgnMoveData(moveHistory[i]),
+    );
     parent.children.add(mainChild); // index 0 = mainline continuation
     addSidelines(i); // alternatives to moveHistory[i], sharing `parent`
     parent = mainChild;
@@ -62,6 +65,9 @@ PgnNodeData pgnNodeDataFor(MoveNode node) {
     san: node.san,
     comments: comment == null || comment.isEmpty ? null : [comment],
     nags: nags == null || nags.isEmpty ? null : List<int>.of(nags),
+    startingComments: node.startingComment == null
+        ? null
+        : [node.startingComment!],
   );
 }
 

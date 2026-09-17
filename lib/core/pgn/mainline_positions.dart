@@ -7,24 +7,26 @@
 /// `play` rounds, twice (once for the cursor, once for the highlight).
 ///
 /// This is the single memo behind all of them.  It is keyed on the identity
-/// of the `moveHistory` list, the same object the model and the movetext
-/// widget share, so both read the same entry; it grows in place when the
-/// mainline is extended (amend mode) and is rebuilt when the list is replaced
-/// or shrinks.
+/// of the owner's private mainline list. The model supplies this memo to its
+/// movetext widget, so immutable annotation revisions do not trigger SAN replay.
+/// It grows when the mainline is extended and is rebuilt when the list is
+/// replaced or shrinks. Standalone hosts can key a memo on immutable snapshots.
 library;
 
 import 'package:dartchess/dartchess.dart';
+import '../../chess_core/pgn/pgn_game_view.dart';
 
 import '../../utils/chess_utils.dart' show playSanOrNullMove;
 import '../../utils/fen_utils.dart';
 
 class MainlinePositions {
-  MainlinePositions._(this.start, this._history);
+  MainlinePositions._(this.start, this._length, this._sanAt);
 
   /// The position before the first ply.
   final Position start;
 
-  final List<PgnNodeData> _history;
+  final int Function() _length;
+  final String Function(int) _sanAt;
 
   /// `[k]` is the board after `k` half-moves.  Shorter than the mainline
   /// when a SAN fails to play; see [reachablePlies].
@@ -41,38 +43,51 @@ class MainlinePositions {
     'MainlinePositions',
   );
 
-  /// The memo for [moveHistory] played from [start]; creates or refreshes it
+  /// The memo for [history] played from [start]; creates or refreshes it
   /// as needed.  A different [start] object for the same list (a reload)
   /// rebuilds from scratch.
-  static MainlinePositions of(List<PgnNodeData> moveHistory, Position start) {
+  static MainlinePositions of(List<PgnNodeData> history, Position start) =>
+      _forHistory(history, start, () => history.length, (i) => history[i].san);
+
+  static MainlinePositions ofSnapshots(
+    List<PgnMoveSnapshot> history,
+    Position start,
+  ) => _forHistory(history, start, () => history.length, (i) => history[i].san);
+
+  static MainlinePositions _forHistory(
+    Object moveHistory,
+    Position start,
+    int Function() length,
+    String Function(int) sanAt,
+  ) {
     final cached = _byHistory[moveHistory];
     if (cached != null && identical(cached.start, start)) {
       return cached.._sync();
     }
-    final fresh = MainlinePositions._(start, moveHistory)
+    final fresh = MainlinePositions._(start, length, sanAt)
       .._positions.add(start)
       .._sync();
     _byHistory[moveHistory] = fresh;
     return fresh;
   }
 
-  /// Bring [_positions] in line with the current [_history]: play the plies
+  /// Bring [_positions] in line with the current history: play the plies
   /// added since last time, or start over if the list shrank.
   void _sync() {
-    if (_history.length < _consumed) {
+    if (_length() < _consumed) {
       _positions.length = 1;
       _normalizedFens = null;
       _consumed = 0;
     }
-    if (_consumed == _history.length) return;
+    if (_consumed == _length()) return;
     // A ply that failed to play leaves everything after it unreachable; the
     // positions stop there, but the plies still count as consumed so the
     // same illegal move is not retried on every read.
     var pos = _positions.last;
     final broken = _positions.length - 1 < _consumed;
-    for (var i = _consumed; i < _history.length; i++) {
+    for (var i = _consumed; i < _length(); i++) {
       if (!broken) {
-        final next = playSanOrNullMove(pos, _history[i].san);
+        final next = playSanOrNullMove(pos, _sanAt(i));
         if (next != null) {
           pos = next;
           _positions.add(pos);
@@ -80,10 +95,10 @@ class MainlinePositions {
         }
       }
       // Once broken, fall through for the rest.
-      _consumed = _history.length;
+      _consumed = _length();
       return;
     }
-    _consumed = _history.length;
+    _consumed = _length();
   }
 
   /// Number of plies with a position: `[0, reachablePlies]` are valid

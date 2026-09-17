@@ -32,7 +32,10 @@ List<InlineSpan>? _buildInlineVariationAtPly(
 
   final line = <MoveNode>[];
   while (true) {
-    if (node.comment?.trim().isNotEmpty ?? false) return null;
+    if ((node.comment?.trim().isNotEmpty ?? false) ||
+        (node.startingComment?.trim().isNotEmpty ?? false)) {
+      return null;
+    }
     line.add(node);
     if (line.length > _kMaxInlineVariationPlies) return null;
 
@@ -109,6 +112,7 @@ bool _isRepeatedProseReference(PgnMovetextView view, MoveNode node, int ply) =>
     !node.isEphemeral &&
     node.children.isEmpty &&
     (node.nags?.isEmpty ?? true) &&
+    (node.startingComment?.trim().isEmpty ?? true) &&
     _metricsSpans(node.comment ?? '').isEmpty &&
     ply < view.moveHistory.length &&
     node.san == view.moveHistory[ply].san &&
@@ -208,6 +212,32 @@ Widget _buildVariationDocument(
     var alternatives = <MoveNode>[];
     while (cursor != null) {
       final node = cursor;
+      final introduction = node.startingComment;
+      if (introduction != null && introduction.trim().isNotEmpty) {
+        flush();
+        final prose = _renderComment(
+          view,
+          introduction,
+          anchorPly: index,
+          interactive: false,
+        );
+        if (prose.block != null || prose.spans.isNotEmpty) {
+          children.add(
+            Padding(
+              padding: EdgeInsets.only(left: indent),
+              child: _readableProse(
+                prose.block ??
+                    Text.rich(
+                      TextSpan(
+                        style: PgnTextStyles.commentAt(depth),
+                        children: prose.spans,
+                      ),
+                    ),
+              ),
+            ),
+          );
+        }
+      }
       final pos = _coordsAtPly(view, index);
       final comment = node.comment;
       final rendered = comment == null

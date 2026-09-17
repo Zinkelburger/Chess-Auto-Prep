@@ -52,9 +52,11 @@ mixin _PgnViewerAnnotations on _PgnViewerWidgetStateBase {
   }
 
   /// Mainline counterpart of [_setPanelNodeComment], bound to the move's
-  /// [PgnNodeData] so late flushes hit the move they were typed on.
-  void _setPanelMainlineComment(PgnNodeData moveData, String text) {
-    ViewerGameModel.writeWholeComment(moveData, text);
+  /// opaque identity so a late flush cannot hit a replacement game's move.
+  void _setPanelMainlineComment(int index, PgnMoveSnapshot move, String text) {
+    if (!_m.setMainlineComment(index, text, expectedMove: move.identity)) {
+      return;
+    }
     _refreshAfterCommentEdit();
     _notifyCommentsChanged();
   }
@@ -107,9 +109,13 @@ mixin _PgnViewerAnnotations on _PgnViewerWidgetStateBase {
       nags = moveData.nags ?? const [];
       final raw = joinComments(moveData.comments);
       comment = commentProse(raw);
-      onToggleNag = (nagId) => _toggleNag(mainIndex, nagId);
-      onCommentChanged = (text) =>
-          _setPanelMainlineComment(moveData, mergeCommentProse(raw, text));
+      onToggleNag = (nagId) =>
+          _toggleNag(mainIndex, nagId, expectedMove: moveData.identity);
+      onCommentChanged = (text) => _setPanelMainlineComment(
+        mainIndex,
+        moveData,
+        mergeCommentProse(raw, text),
+      );
     }
 
     return PgnAnnotationPanel(
@@ -131,7 +137,7 @@ mixin _PgnViewerAnnotations on _PgnViewerWidgetStateBase {
       newComment,
     );
     setState(() {
-      ViewerGameModel.writeWholeComment(moveData, merged);
+      _m.setMainlineComment(moveIndex, merged, expectedMove: moveData.identity);
       _editingCommentIndex = null;
     });
     _notifyCommentsChanged();
@@ -157,9 +163,11 @@ mixin _PgnViewerAnnotations on _PgnViewerWidgetStateBase {
     if (changed) _notifyCommentsChanged();
   }
 
-  void _toggleNag(int moveIndex, int nagId) {
-    if (moveIndex < 0 || moveIndex >= _moveHistory.length) return;
-    setState(() => _m.toggleMainlineNag(moveIndex, nagId));
+  void _toggleNag(int moveIndex, int nagId, {Object? expectedMove}) {
+    if (!_m.toggleMainlineNag(moveIndex, nagId, expectedMove: expectedMove)) {
+      return;
+    }
+    _refreshAfterCommentEdit();
     _notifyCommentsChanged();
   }
 }

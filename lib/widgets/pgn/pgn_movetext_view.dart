@@ -5,6 +5,7 @@
 /// every explanation in its original place in the PGN.
 library;
 
+import 'package:chess_auto_prep/chess_core/pgn/pgn_game_view.dart';
 import '../../utils/pgn_nags.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart' show listEquals;
@@ -60,12 +61,15 @@ final _kHoverDecoration = PgnMoveDecorations.hover;
 
 class PgnMovetextView extends StatefulWidget {
   /// The parsed game (for game-level comments before any move).
-  final PgnGame? game;
+  final PgnGameMetadata? game;
   final PgnReadingBranch? readingScope;
   final bool expandAll;
 
   /// Mainline moves in display order.
-  final List<PgnNodeData> moveHistory;
+  final List<PgnMoveSnapshot> moveHistory;
+
+  /// Shared owner memo; annotation-only revisions do not replay the game.
+  final MainlinePositions? mainlinePositions;
 
   /// ply (0-based mainline index) -> root variation nodes branching there.
   final Map<int, List<MoveNode>> variationsByPly;
@@ -151,6 +155,7 @@ class PgnMovetextView extends StatefulWidget {
     this.readingScope,
     this.expandAll = false,
     required this.moveHistory,
+    this.mainlinePositions,
     required this.variationsByPly,
     required this.mainLineIndex,
     required this.analysisPath,

@@ -1,5 +1,6 @@
+import 'package:chess_auto_prep/chess_core/pgn/pgn_game_view.dart';
 import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
-import 'package:dartchess/dartchess.dart' show PgnGame, PgnNodeData, Side;
+import 'package:dartchess/dartchess.dart' show PgnNodeData, Side;
 import 'package:flutter/material.dart';
 
 import '../../core/repertoire_controller.dart';
@@ -218,11 +219,11 @@ class _LessonMovetext extends StatefulWidget {
 
 class _LessonMovetextState extends State<_LessonMovetext> {
   final _scroll = ScrollController();
-  PgnGame? _game;
+  PgnGameMetadata? _game;
   void _readIntroduction() {
     _game = widget.line.fullPgn.isEmpty
         ? null
-        : parsePgnGame(widget.line.fullPgn);
+        : PgnGameMetadata.capture(parsePgnGame(widget.line.fullPgn));
   }
 
   @override
@@ -231,14 +232,16 @@ class _LessonMovetextState extends State<_LessonMovetext> {
     _readIntroduction();
   }
 
-  List<PgnNodeData> get _moves => [
+  List<PgnMoveSnapshot> get _moves => [
     for (int i = 0; i < widget.revealed; i++)
-      PgnNodeData(
-        san: widget.line.moves[i],
-        comments:
-            widget.showComments && widget.line.comments[i.toString()] != null
-            ? [widget.line.comments[i.toString()]!]
-            : [],
+      PgnMoveSnapshot.capture(
+        PgnNodeData(
+          san: widget.line.moves[i],
+          comments:
+              widget.showComments && widget.line.comments[i.toString()] != null
+              ? [widget.line.comments[i.toString()]!]
+              : [],
+        ),
       ),
   ];
   @override
