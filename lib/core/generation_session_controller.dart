@@ -31,8 +31,6 @@ import '../services/engine/engine_interrupt.dart';
 import '../services/engine/engine_lifecycle.dart';
 import '../services/engine/stockfish_pool.dart';
 import '../services/generation/course/course_builder.dart';
-import '../services/generation/course/course_composer.dart';
-import '../services/generation/course/enrichment_runner.dart';
 import '../services/generation/eca_calculator.dart';
 import '../services/generation/fen_map.dart';
 import '../services/generation/generation_config.dart';
@@ -135,20 +133,13 @@ class GenerationSessionController extends ChangeNotifier
     progress: progress,
   );
 
-  /// Runs the best-effort post-build passes and keeps their counts.
-  late final EnrichmentRunner _enrichment = EnrichmentRunner(
-    config: () => activeConfig,
-    isCancelled: () => _cancelRequested,
-    onStatus: (message) =>
-        progress.setStatus(message, GenerationPhase.extractingLines),
-    ensureEngine: _ensureEnginePool,
-  );
-
   /// Turns the extracted lines into the course document — the enrichment
   /// passes, the model games, the naming and the composition.
   late final CourseBuilder _courseBuilder = CourseBuilder(
     pool: _enginePool,
-    enrichment: _enrichment,
+    isCancelled: () => _cancelRequested,
+    onStatus: (message) =>
+        progress.setStatus(message, GenerationPhase.extractingLines),
     gameDatabase: () => buildService.lastGameDatabase,
     masterDbFor: _masterDbFor,
     fenMap: () => _database.current?.fenMap,
@@ -190,36 +181,6 @@ class GenerationSessionController extends ChangeNotifier
 
   /// Non-null when the most recent run failed.
   String? lastError;
-
-  /// Chapter structure of the most recent export, for the run summary and
-  /// for anything that wants to show what the course looks like.
-  List<ChapterOutline> lastCourseOutline = const [];
-
-  /// Why the last run produced no model games, or empty when it produced some
-  /// (or was not asked for any).
-  String lastModelGameNote = '';
-
-  /// Lines the last export left out because the repertoire file already had
-  /// them (see [GenerationRequest.existingLineKeys]).
-  int _duplicatesSkipped = 0;
-
-  /// Losing replies the last run showed the punishment for.
-  int get lastRefutationCount =>
-      _enrichment.countOf(EnrichmentPass.refutations);
-
-  /// Positions where the last run showed a refuted move the book leaves out.
-  int get lastAlternativeCount =>
-      _enrichment.countOf(EnrichmentPass.alternatives);
-
-  /// Moves the last run annotated as improvements on a cited master game.
-  int get lastImprovementCount =>
-      _enrichment.countOf(EnrichmentPass.improvements);
-
-  EnrichmentCounts get _enrichmentCounts => (
-    refutations: lastRefutationCount,
-    alternatives: lastAlternativeCount,
-    improvements: lastImprovementCount,
-  );
 
   bool get isGenerating => _isGenerating;
   bool get isPaused => _isPaused;
@@ -269,14 +230,6 @@ class GenerationSessionController extends ChangeNotifier
     final service = masterGames();
     if (!service.isAvailableForGeneration) return null;
     return service.db;
-  }
-
-  /// Bring the shared engine pool up if nothing has started it yet.
-  Future<void> _ensureEnginePool() async {
-    if (_enginePool.workerCount != 0) return;
-    final threads = activeConfig?.resolvedEngineThreads;
-    if (threads == null) return;
-    await _enginePool.prepareForTreeBuild(threads);
   }
 
   // ── Pipeline ─────────────────────────────────────────────────────────
@@ -394,8 +347,13 @@ class GenerationSessionController extends ChangeNotifier
         probes: _database.probes,
         traps: _trapLinesOf(tree, config) ?? const [],
       );
-      await _exportLinesPhase(tree, extracted, request, prefix);
-      if (_cancelRequested || isDisposed) return;
+      final exported = await _exportLinesPhase(
+        tree,
+        extracted,
+        request,
+        prefix,
+      );
+      if (exported == null || _cancelRequested || isDisposed) return;
       await _artifacts.repository.select(
         _artifactRun!,
         proposal,
@@ -408,10 +366,10 @@ class GenerationSessionController extends ChangeNotifier
         extracted: extracted,
         config: config,
         elapsed: progress.elapsed,
-        duplicatesSkipped: _duplicatesSkipped,
-        courseOutline: lastCourseOutline,
-        enrichment: _enrichmentCounts,
-        modelGameNote: lastModelGameNote,
+        duplicatesSkipped: exported.duplicatesSkipped,
+        courseOutline: exported.built.course.outline,
+        enrichment: exported.built.enrichment,
+        modelGameNote: exported.modelGameNote,
         bookStats: buildService.buildStats,
         finishedEarly: finishedEarly,
       );
@@ -497,10 +455,6 @@ class GenerationSessionController extends ChangeNotifier
     _finishNowRequested = false;
     lastError = null;
     lastRunSummary = '';
-    lastCourseOutline = const [];
-    lastModelGameNote = '';
-    _duplicatesSkipped = 0;
-    _enrichment.reset();
     lastConfig = config;
     progress.begin();
     activeConfig = config;
@@ -765,7 +719,9 @@ class GenerationSessionController extends ChangeNotifier
       GenerationPhase.verifying,
     );
     try {
-      await _ensureEnginePool();
+      if (_enginePool.workerCount == 0) {
+        await _enginePool.prepareForTreeBuild(config.resolvedEngineThreads);
+      }
       final verifier = RepertoireVerifier(pool: _enginePool, config: config);
       final report = await verifier.verify(
         tree,
@@ -879,7 +835,8 @@ class GenerationSessionController extends ChangeNotifier
   /// Compose the extracted lines into a course — chapters cut at branch
   /// points, named from the ECO book. Stage the complete output before one
   /// revision-checked source commit; never flush an incomplete export.
-  Future<void> _exportLinesPhase(
+  Future<({CourseBuild built, int duplicatesSkipped, String modelGameNote})?>
+  _exportLinesPhase(
     BuildTree tree,
     ExtractedLines extracted,
     GenerationRequest request,
@@ -896,22 +853,21 @@ class GenerationSessionController extends ChangeNotifier
       prefix: prefix,
     );
     final course = built.course;
-    lastCourseOutline = course.outline;
-    lastModelGameNote = built.modelGameNote;
+    var modelGameNote = built.modelGameNote;
 
     final saved = <String>[];
-    _duplicatesSkipped = 0;
+    var duplicatesSkipped = 0;
     for (final entry in course.entries) {
       // Already in the file: writing it again would only duplicate it.
       if (request.existingLineKeys.contains(
         GenerationRequest.lineKey(entry.movesSan),
       )) {
-        _duplicatesSkipped++;
+        duplicatesSkipped++;
         continue;
       }
       saved.add(entry.pgn);
     }
-    if (_cancelRequested || isDisposed) return;
+    if (_cancelRequested || isDisposed) return null;
     final result = await _publication.publish(
       _publicationSource!,
       games: saved,
@@ -926,11 +882,11 @@ class GenerationSessionController extends ChangeNotifier
         _publishedSource = snapshot;
         final path = staged.modelGamesPath;
         if (path != null) {
-          lastModelGameNote = '$lastModelGameNote Model games saved to $path.';
+          modelGameNote = '$modelGameNote Model games saved to $path.';
         }
         if (receiptError != null) {
-          lastModelGameNote =
-              '$lastModelGameNote PGN saved; publication receipt needs '
+          modelGameNote =
+              '$modelGameNote PGN saved; publication receipt needs '
               'reconciliation at ${staged.manifestPath}.';
         }
         if (!isDisposed) {
@@ -956,6 +912,11 @@ class GenerationSessionController extends ChangeNotifier
           '${staged.manifestPath} before retrying.',
         );
     }
+    return (
+      built: built,
+      duplicatesSkipped: duplicatesSkipped,
+      modelGameNote: modelGameNote,
+    );
   }
 
   /// Write the side artifacts: serialized tree, run debug dump, trap index,

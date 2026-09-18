@@ -103,7 +103,8 @@
     "lib/features/repertoire/widgets/repertoire_lines_side_panel.dart",
     "lib/widgets/layout/jobs_tab_content.dart",
     "lib/models/eval_database_settings.dart",
-    "lib/features/training/repositories/training_settings_repository.dart"
+    "lib/features/training/repositories/training_settings_repository.dart",
+    "lib/services/generation/course/enrichment_runner.dart"
   ],
   "symbols": [
     "PgnBatchWriter",
@@ -247,6 +248,9 @@
     "TrainingSettingsRepository",
     "TrainingSettingsStorage",
     "TrainingSettingsPatch",
-    "TrainingSetting"
+    "TrainingSetting",
+    "EnrichmentRunner",
+    "EnrichmentPass",
+    "EnrichmentProbe"
   ]
 }

@@ -1352,11 +1352,11 @@ start another lookup.
 
 ```
 GenerationSessionController (owns TreeBuildService + CoherenceService)
-  ← RepertoireGenerationTab reports lifecycle (markGenerating, onTreeBuilt, onTreeReset)
+  ← RepertoireGenerationTab submits a captured GenerationRequest and publication receiver
   ← Screen/JobsPanel call pauseBuild/resumeBuild/cancelBuild/finishNow directly
   ← BuildConfigScreen hosts manual configuration; it closes when a run starts.
 
-RepertoireGenerationTab (config UI + build orchestration)
+GenerationSessionController (run ordering, cancellation and publication)
   → controller.cancelBuild() → drain owned partial staging before cleanup
       (selected partial generation survives cancel)
   → EngineLifecycle.enterGeneration(threads)
@@ -1371,10 +1371,19 @@ RepertoireGenerationTab (config UI + build orchestration)
   → RepertoireSelector + LineExtractor
   → TrapExtractor → in-memory trap index
   → GenerationArtifacts.prepareBundle → immutable tree/probes/traps/partial proposal
+  → CourseBuilder → sequential probes + composition → course and immutable counts
   → GenerationPublicationController → source PGN commit + Builder receipt
   → GenerationArtifactRepository.select → matching current artifact generation
   → EngineLifecycle.exitGeneration()
 ```
+
+`CourseBuilder` owns the four enrichment passes in order: refutations,
+alternatives, engine tails and master improvements. Disabled, engine-free and
+cancelled work skips preparation; preparation errors fail export, while engine
+startup and probe errors leave that pass empty and allow later passes. Database
+suppliers remain live at each pass. Counts derive from the local results and
+return with the composed course; the session uses a local export result for its
+summary. There is no separate enrichment runner, count reset or session mirror.
 
 **Build modes** (enum `BuildMode` in `generation_config.dart`, UI labels in parentheses):
 - `stockfishExpectimax` ("Stockfish Expectimax (recommended)") — default; Stockfish MultiPV + Maia opponent, traps auto-detected

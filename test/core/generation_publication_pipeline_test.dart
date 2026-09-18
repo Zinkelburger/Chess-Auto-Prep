@@ -31,6 +31,26 @@ class _Lifecycle implements EngineLifecycle {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+class _ReceiptFailureStorage extends MemoryStorage {
+  @override
+  Future<void> writeFile(
+    String path,
+    String content, {
+    bool createOnly = false,
+    String? expectedContent,
+  }) async {
+    if (path.endsWith('published.json')) {
+      throw StateError('receipt unavailable');
+    }
+    await super.writeFile(
+      path,
+      content,
+      createOnly: createOnly,
+      expectedContent: expectedContent,
+    );
+  }
+}
+
 BuildTree _completedTree() {
   final root = BuildTreeNode(
     fen: kStandardStartFen,
@@ -63,7 +83,14 @@ void main() {
     addTearDown(() => _engineFixtureSettings?.dispose());
   });
   TestWidgetsFlutterBinding.ensureInitialized();
-  for (final outcome in ['success', 'conflict', 'refresh failure']) {
+  for (final outcome in [
+    'success',
+    'conflict',
+    'refresh failure',
+    'uncertain',
+    'receipt warning',
+    'cancel after save',
+  ]) {
     final conflict = outcome == 'conflict';
     final refreshFails = outcome == 'refresh failure';
     test('full pipeline: $outcome', () async {
@@ -73,7 +100,16 @@ void main() {
       addTearDown(() => directory.delete(recursive: true));
       final path = p.join(directory.path, 'Main.pgn');
       final documents = Store()..current = snapshot('original', path: path);
-      final storage = MemoryStorage();
+      final storage = outcome == 'receipt warning'
+          ? _ReceiptFailureStorage()
+          : MemoryStorage();
+      if (outcome == 'uncertain') {
+        documents.onSave = (before, content) async => PgnWriteUncertain(
+          error: StateError('acknowledgement lost'),
+          before: before,
+          observed: snapshot(content, path: path, revision: 'uncertain'),
+        );
+      }
       final lifecycle = _Lifecycle();
       if (conflict) {
         lifecycle.onEnter = () {
@@ -127,6 +163,7 @@ void main() {
             saved.add(receipt);
             await Future<void>.delayed(Duration.zero);
             if (refreshFails) throw StateError('decode unavailable');
+            if (outcome == 'cancel after save') controller.cancelBuild();
           },
         ),
       );
@@ -143,6 +180,23 @@ void main() {
           storage.files.keys.any((path) => path.endsWith('_tree.json')),
           isFalse,
         );
+      } else if (outcome == 'uncertain') {
+        expect(job.status, JobStatus.failed);
+        expect(
+          controller.lastError,
+          contains('Publication outcome is uncertain'),
+        );
+        expect(controller.lastRunSummary, isNot(contains('Complete in')));
+        expect(saved, isEmpty);
+      } else if (outcome == 'cancel after save') {
+        expect(controller.lastError, isNull);
+        expect(job.status, JobStatus.cancelled);
+        expect(
+          controller.lastRunSummary,
+          'Generated PGN saved before cancellation.',
+        );
+        expect(saved, hasLength(1));
+        expect(documents.current.content, contains('e4'));
       } else if (refreshFails) {
         expect(job.status, JobStatus.failed);
         expect(controller.lastError, contains('Generated PGN saved'));
@@ -154,6 +208,13 @@ void main() {
         expect(job.status, JobStatus.completed);
         expect(saved, isNotEmpty);
         expect(documents.current.content, contains('e4'));
+        if (outcome == 'receipt warning') {
+          expect(
+            controller.lastRunSummary,
+            contains('PGN saved; publication receipt needs reconciliation'),
+          );
+          expect(controller.lastRunSummary, contains('manifest.json'));
+        }
       }
     });
   }

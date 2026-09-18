@@ -2,6 +2,10 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:chess_auto_prep/app/builder_lifetime.dart';
+import 'package:chess_auto_prep/chess_core/generation/build_tree_node.dart';
+import 'package:chess_auto_prep/constants/chess_constants.dart';
+import 'package:chess_auto_prep/core/generation_session_types.dart';
+import 'package:chess_auto_prep/services/generation/generation_config.dart';
 import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
 import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/screens/repertoire_screen.dart';
@@ -122,6 +126,140 @@ void main() {
       }
       await tester.tap(find.byTooltip('Close'));
       await _ready(tester, actions.hitTestable());
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    },
+  );
+  testWidgets(
+    'native Build publishes an admitted completed tree and refreshes the open chapter',
+    (tester) async {
+      final root = await AppPaths.repertoiresDirectory();
+      final folder = await Directory(
+        p.join(
+          root.path,
+          'Publication ${DateTime.now().microsecondsSinceEpoch}',
+        ),
+      ).create(recursive: true);
+      addTearDown(() => folder.delete(recursive: true));
+      final source = File(p.join(folder.path, 'Original.pgn'));
+      const originalPgn =
+          '// Color: White\n\n[Event "Retained d4 line"]\n[Result "*"]\n\n'
+          '1. d4 *\n';
+      await source.writeAsString(originalPgn);
+      await pumpApp(tester);
+      getAppState(tester).switchToBuilder(repertoirePath: source.path);
+      await _ready(tester, find.text('Retained d4 line'));
+      final document = tester
+          .element(find.byType(RepertoireScreen))
+          .read<BuilderLifetime>()
+          .workspace
+          .document;
+      expect(document.repertoireLines.map((line) => line.moves), [
+        ['d4'],
+      ]);
+      final beforeRevision = document.sourceRevision;
+
+      await tester.tap(find.text('Actions'));
+      await _ready(tester, find.text('Generate from here…').hitTestable());
+      await tester.tap(find.text('Generate from here…'));
+      final actions = find.byKey(const ValueKey('generation-actions'));
+      await _ready(tester, actions.hitTestable());
+      await tester.tap(actions);
+      final build = find.byKey(const ValueKey('build-chessdb-repertoire'));
+      await _ready(tester, build.hitTestable());
+      await tester.tap(build);
+      await _ready(tester, find.text('Generate Repertoire').hitTestable());
+      final configuration = tester.widget<RepertoireGenerationTab>(
+        find.byType(RepertoireGenerationTab),
+      );
+      final receiver = configuration.createPublicationReceiver();
+      expect(receiver, isNotNull);
+      final controller = configuration.generationController;
+      final jobsBefore = JobManager.instance.jobs.toSet();
+
+      // Exercise native staging, source commit, and the route's actual receipt
+      // adoption without a network build or enrichment probe. The complete
+      // one-ply tree follows the same resumed-tree path as the pipeline tests.
+      final treeRoot = BuildTreeNode(
+        fen: kStandardStartFen,
+        moveSan: '',
+        moveUci: '',
+        ply: 0,
+        isWhiteToMove: true,
+        nodeId: 0,
+      )..engineEvalCp = 20;
+      treeRoot.children.add(
+        BuildTreeNode(
+          fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1',
+          moveSan: 'e4',
+          moveUci: 'e2e4',
+          ply: 1,
+          isWhiteToMove: false,
+          nodeId: 1,
+          parent: treeRoot,
+        )..engineEvalCp = -20,
+      );
+      final tree = BuildTree(
+        root: treeRoot,
+        maxPlyReached: 1,
+        buildComplete: true,
+      )..computeMetadata();
+      await controller
+          .startBuild(
+            GenerationRequest(
+              jobLabel: 'Native publication acceptance',
+              config: const TreeBuildConfig(
+                startFen: kStandardStartFen,
+                playAsWhite: true,
+                maxPly: 1,
+                engineThreads: 1,
+                useMasterGames: false,
+                downloadMasterGamesIfMissing: false,
+                verifyFinal: false,
+                modelGameCount: 0,
+                refutationLines: false,
+                alternativeLines: false,
+                engineTailPlies: 0,
+              ),
+              repertoireFilePath: source.path,
+              buildRootFen: kStandardStartFen,
+              lineMovePrefix: const [],
+              repertoireStartFen: kStandardStartFen,
+              existingTree: tree,
+              existingLineKeys: {
+                for (final moves in configuration.existingLineMoves)
+                  GenerationRequest.lineKey(moves),
+              },
+              onPublished: receiver!,
+            ),
+          )
+          .timeout(const Duration(seconds: 60));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(controller.isGenerating, isFalse);
+      expect(controller.lastError, isNull);
+      expect(controller.lastRunSummary, contains('Complete in'));
+      final job = JobManager.instance.jobs
+          .where((job) => !jobsBefore.contains(job))
+          .single;
+      expect(job.status, JobStatus.completed);
+      expect(job.error, isNull);
+      expect(document.currentRepertoire?.filePath, source.path);
+      expect(document.isLoading, isFalse);
+      expect(document.loadError, isNull);
+      expect(document.sourceRevision, isNot(beforeRevision));
+      expect(
+        document.repertoireLines.map((line) => line.moves),
+        unorderedEquals([
+          ['d4'],
+          ['e4'],
+        ]),
+      );
+      final published = await source.readAsString();
+      expect(published, startsWith(originalPgn));
+      expect(published, contains('1. e4'));
+      expect(document.repertoirePgn, published);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
