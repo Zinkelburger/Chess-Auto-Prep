@@ -233,44 +233,33 @@ Finish the safety work already in flight, then simplify the existing graph.
 
 ### What the code establishes
 
-Measurements below compare the recorded renewal baseline `e477dc58` with local
-main `a6238ff5`, excluding concurrent worktrees. They count physical lines,
-including comments and blanks, in tracked `lib/**/*.dart` files. Generated Dart
-is included in this historical comparison; subsequent cutovers must report it
-separately. These are review baselines, not implementation-size targets.
+Rechecked against Git on September 18: the quoted review table is accurate for
+`a6238ff5`, but is not current main. Counts below use physical lines, including
+comments and blanks, in tracked `lib/**/*.dart` files. Generated Dart is included
+in this historical comparison; individual cutovers report it separately. These
+are measurements, not implementation-size targets.
 
-| Tracked scope | Baseline | Main snapshot | Finding |
-|---|---:|---:|---|
-| All production Dart | 218,957 lines / 890 files | 236,991 lines / 1,055 files | +18,034 lines (8.2%); no overall size reduction |
-| `screens/pgn_viewer_screen.dart` | 1,909 | 1,977 | Consumer grew despite facade retirement |
-| `screens/repertoire_screen.dart` | 1,191 | 1,333 | Consumer simplification remains open |
-| `screens/study_screen.dart` | 880 | 926 | Consumer simplification remains open |
-| `core/generation_session_controller.dart` | 1,321 | 1,455 | Orchestration remains unfinished |
+| Tracked scope | Sept 16 `e477dc58` | Review `a6238ff5` | Main `8ccfe557` | Main versus Sept 16 |
+|---|---:|---:|---:|---:|
+| All library Dart | 218,957 / 890 files | 236,991 / 1,055 files | 227,852 / 995 files | +8,895 (+4.1%) |
+| Viewer screen | 1,909 | 1,977 | 1,875 | −34 |
+| Builder screen | 1,191 | 1,333 | 1,459 | +268 |
+| Study screen | 880 | 926 | 1,101 | +221 |
+| Generation session controller | 1,321 | 1,455 | 1,447 | +126 |
 
-At this snapshot, generated localization accounts for 2,272 lines of the total;
-excluding it still leaves growth of 15,762 lines. `services/` contains 43,968
-lines and `widgets/` 55,788. There are 99 commits since the baseline, including
-merges (57 on the first-parent history). Commit count is activity, not completion.
-At that snapshot, six enforced and 17 unfinished features included zero complete
-features. The current inventory above separately records later deletions.
+Main is 9,139 lines smaller than the review snapshot; only Viewer among these
+four consumers is smaller than September 16. Legacy `services/` still holds
+42,560 lines and `widgets/` 49,712. Riverpod's production imports and package
+dependency are deleted. Six feature directories are enforced, fourteen are
+unfinished and none is complete; three unused directories were removed, not
+graduated. Milestones 6–7 remain Not started. Structural enforcement is not
+workflow completion.
 
-The same measurement at combined consumer-consolidation checkpoint `eaefa33a`,
-including the reviewed layout, Jobs and generation-form deletions, is:
-
-| Tracked scope | September 16 | Current checkpoint | Change from September 16 |
-|---|---:|---:|---:|
-| All library Dart, including generated code | 218,957 | 227,852 | +8,895 (+4.1%) |
-| Viewer screen | 1,909 | 1,875 | −34 |
-| Builder screen | 1,191 | 1,459 | +268 |
-| Study screen | 880 | 1,101 | +221 |
-| Generation session controller | 1,321 | 1,447 | +126 |
-
-All-library code is down 9,139 lines from the reviewed `a6238ff5` snapshot,
-with Viewer now 34 lines below September 16; the other three consumers remain
-larger. Legacy `services/` still holds 42,560 lines and `widgets/` 49,712. Riverpod's production
-imports and package dependency are now deleted; the current inventory is six
-enforced and 14 unfinished feature directories, with none complete. The three
-removed feature directories contained unused code, not graduated workflows.
+The review snapshot grew by 18,034 lines (8.2%), including 2,272 added generated
+localization lines. Its 99 commits include merges (57 first-parent commits),
+over 35 hours 37 minutes between snapshot commit timestamps. The claim that
+all added layers is unsupported: the history also contains deletions and safety
+repairs. Neither commit pace nor aggregate deletion proves simpler live workflows.
 
 Against the separate simplification baseline `fa7f309e`, the completed batch
 removes 14,144 handwritten library lines, with generated localization +2,514
@@ -417,7 +406,11 @@ product owner to choose implementation details.
    internal structure and tests within the agreed contracts. Discoveries may
    change the design; new owners, public contracts, state mirrors or dependency
    mechanisms require coordinator review before expanding the implementation.
-   Keep private work backed up, but do not integrate incomplete scaffolding.
+   Check the combined agent diff at midpoint, including new files and unfinished
+   caller wiring. Exceeding the declared growth/complexity envelope stops that
+   cutover for redesign before further implementation. Do not automatically
+   raise the estimate or reclassify growth as safety work. Keep private work
+   backed up; incomplete scaffolding does not enter main.
 4. **Review the implementation independently.** A different agent reviews the
    actual base-to-head diff and production callers, not just the implementer's
    report. Check correctness, lifecycle, unnecessary abstractions, complexity
@@ -442,6 +435,7 @@ product owner to choose implementation details.
 
 | Order | Final result | Required removals and evidence |
 |---|---|---|
+| Held: evaluation settings/resource ownership | Rework the proposed replacement before resuming implementation | Private work already adds 337 production lines against `8ccfe557`, above its declared +100–300 envelope, with app wiring and conditional cleanup still unfinished. Duplicate UI error/status handling and cleanup ordering require design review. The branch is a checkpoint, not an accepted cutover; no source is integrated and no simplicity credit is claimed. See the [midpoint evidence](ARCHITECTURE_RENEWAL_EVIDENCE.md#september-18-size-audit-and-midpoint-hold). |
 | Builder layout retirement (`011bc833`) | Screen uses the actual board pane and live outline/analysis layout APIs | Whole ten-file scope 4,167→3,912 (−255 handwritten): 60 lines of live board/toolbar forwarding and 195 of dormant branches, unused preferences and their wiring/documentation. No new owner or visual design. Exact source review and 56 focused tests pass; combined native evidence is in the evidence record. |
 | Jobs ownership consolidation (`65ccc3bc`) | Existing JobsPanel listens to its run owners and calls them directly | Deletes JobsTabContent, four forwarded actions and the Jobs view's BuilderWorkspace dependency. Whole eleven-file scope 6,069→6,026 (−43): −67 forwarding, +24 separately reproduced dialog lifecycle/admission safety. Independent review and 82 focused tests pass. Actual running export remains widget-tested; native evidence covers the concrete dialog. |
 | Generation form consolidation (`ff3db250`) | Immutable config owns inherited settings; form state owns rendered edits | Deletes 18 hidden text controllers and three hidden booleans. Whole ten-file scope 5,943→5,812 (−131 handwritten), with no generated growth or new owner/API. Same 48 parity cases pass old and new code; 49 new-source cases include the approved editable-first error priority. Invalid inherited settings still reject. Independent review and caller checks pass. |

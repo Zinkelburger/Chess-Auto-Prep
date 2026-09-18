@@ -4275,3 +4275,54 @@ Final combined analyze/lint passes: **64 pre-existing infos, no warnings/errors*
 Log: `/tmp/renewal-consumer-consolidation-gates.log`. Local links in the plan,
 evidence record and component map resolve. Windows/macOS native behavior and the
 remaining whole-renewal exit gates were not run or claimed by this batch.
+
+
+## September 18 size audit and midpoint hold
+
+Independent inspection of tracked Git blobs reproduces the review's exact
+`e477dc58`→`a6238ff5` table and the updated `8ccfe557` table in the
+[plan](ARCHITECTURE_RENEWAL.md#what-the-code-establishes). Use
+`git ls-tree -r --name-only REF lib/`, filter `.dart`, and count physical lines
+from `git cat-file --batch`; include comments, blanks and generated files.
+No concurrent worktree is included in main's totals. The only generated Dart
+identified is localization: 0→2,272→5,361 lines. Handwritten library code is
+therefore 218,957→234,719→222,491: current main is still 3,534 handwritten lines
+above September 16, even after removing 12,228 since the reviewed snapshot.
+
+The historical 99 commits comprise 77 non-merges and 22 merges, with 57 commits
+on the first-parent history. Counting each non-merge against its parent over
+tracked library Dart gives 60 net increases, 13 zero deltas and four net
+reductions. This refutes “all adding layers”; it does not establish better
+architecture. Current feature/debt data reports 6 enforced, 14 unfinished,
+0 complete and 1,233 exact debt entries. Source/package searches find no
+Riverpod dependency or production import. Milestones 6–7 remain Not started.
+
+**Midpoint decision: hold the evaluation-settings cutover for redesign.** The
+private `codex/eval-settings-ownership` checkpoint `2a585ef2`, based on
+`8ccfe557`, adds 337 handwritten production lines before app composition,
+job configuration capture and conditional deletion are wired. Its estimate
+was +100–300, declared as safety/capability work rather than simplification.
+The actual partial diff already exceeds it: UI +249, download controllers
++138, replacement settings model/owner −50. Duplicate UI load/error/status
+handling and proposed conditional-retry bookkeeping need review before further
+implementation; automatic growth-budget increases are not the remedy.
+
+The checkpoint is backed up only, **not integrated into main**. Owner/model
+checks pass 13 cases; the new UI check passes two and fails one because loading
+notifies Provider during widget build. Download tests are not run. Whole-tree
+analysis fails (25 errors, 1 warning, 66 infos), including the intentionally
+unfinished app/caller wiring; lint rejects three stale debt entries. These are
+failed gates, not completion evidence. Mutation and rule checks pass. Logs:
+`/tmp/eval-settings-owner-model-verified.log`, `/tmp/eval-settings-ui-initial.log`,
+`/tmp/eval-settings-midpoint-checks.log`, `/tmp/eval-settings-midpoint-lint.log`.
+The environment doctor also reports the lint blocker; no containment bypass or
+user-data check was used. No source from this experiment enters the docs audit.
+
+Before resuming, settle a smaller complete contract: existing download owners
+own artifact errors; each settings surface presents one settings status; app
+composition owns resource shutdown; destructive deletion retains files if the
+necessary settings change fails. Review queued A/B selection and failed-write
+semantics before selecting an API. These are design requirements, not implemented
+behavior or permission to add another owner/retry framework. The source branch
+must pass independent correctness, complexity and combined behavior review
+before integration. Full renewal remains Partial.
