@@ -41,7 +41,7 @@ import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../widgets/chess_board_widget.dart';
 import '../features/coverage/widgets/coverage_calculator_widget.dart';
 import '../widgets/pgn_with_analysis_pane.dart';
-import '../services/storage/storage_factory.dart';
+import '../features/repertoires/repositories/repertoire_catalog_repository.dart';
 import '../widgets/pgn_import_dialog.dart';
 import '../widgets/repertoire_generation_tab.dart';
 import '../features/generate/widgets/generate_position_pane.dart';
@@ -1258,20 +1258,8 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
           onSelectRepertoire: _showRepertoireSelection,
         ),
         body: RepertoireListBody(
-          onRepertoireSelected: (repertoire) async {
-            final chapters = await StorageFactory.instance.listChapters(
-              repertoire.filePath,
-            );
-            if (!mounted) return;
-            if (chapters.isNotEmpty) {
-              await _controller.document.setRepertoire(chapters.first);
-            }
-            _reclaimFocus();
-          },
-          onSelected: (repertoire) async {
-            await _controller.document.setRepertoire(repertoire);
-            _reclaimFocus();
-          },
+          onRepertoireSelected: _openSelectedRepertoire,
+          onSelected: _openSelectedRepertoire,
         ),
       );
     }
@@ -1280,9 +1268,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     return (
       appBar: RepertoireToolbar(
         title: RepertoireBreadcrumbTitle(
-          repertoireName: p.basename(
-            StorageFactory.instance.parentPath(repertoire.filePath),
-          ),
+          repertoireName: p.basename(p.dirname(repertoire.filePath)),
           chapterName: repertoire.name,
           chapters: _chapters,
           currentChapterPath: repertoire.filePath,

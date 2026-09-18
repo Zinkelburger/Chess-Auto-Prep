@@ -174,6 +174,16 @@ void main() {
           second.workspace.board.tree.toPgnMoveText(),
           contains('Retained failed edit'),
         );
+        // Selecting the source's outline row must not grant a recovered draft
+        // authority that native identity validation already rejected.
+        second.workspace.selectLine(
+          second.workspace.document.repertoireLines.single,
+        );
+        expect(second.workspace.sourceChanged, replaceIdentity);
+        expect(
+          second.workspace.document.selectedPgnLine == null,
+          replaceIdentity,
+        );
         second.workspace.setTitle('After restart');
         await second.workspace.document.flushDocumentForClose();
         if (replaceIdentity) {

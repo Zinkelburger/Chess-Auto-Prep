@@ -14,6 +14,8 @@ library;
 import 'package:chess_auto_prep/app/builder_lifetime.dart';
 import 'package:chess_auto_prep/features/repertoires/models/builder_workspace_snapshot.dart';
 import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
+import 'package:chess_auto_prep/features/repertoires/repositories/repertoire_catalog_repository.dart';
+import 'package:chess_auto_prep/infrastructure/repertoires/legacy_repertoire_catalog_repository.dart';
 import '../support/generation_artifacts_fixture.dart';
 import 'package:chess_auto_prep/features/generation/services/generation_artifacts.dart';
 import 'package:chess_auto_prep/features/generation/controllers/generation_publication_controller.dart';
@@ -57,6 +59,29 @@ class _TestPaths extends PathProviderPlatform with MockPlatformInterfaceMixin {
   Future<String?> getApplicationDocumentsPath() async => root;
   @override
   Future<String?> getApplicationSupportPath() async => root;
+}
+
+class _ChapterCatalog extends LegacyRepertoireCatalogRepository {
+  _ChapterCatalog(this.folder) : super(StorageFactory.instance);
+  final String folder;
+  bool unavailable = false;
+  int chapterReads = 0;
+
+  @override
+  Future<List<RepertoireMetadata>> listRepertoires() async => [
+    RepertoireMetadata(
+      filePath: folder,
+      name: 'MyRep',
+      lastModified: DateTime(2026),
+    ),
+  ];
+
+  @override
+  Future<List<RepertoireMetadata>> listChapters(String folderPath) {
+    chapterReads++;
+    if (unavailable) throw StateError('Chapter listing unavailable');
+    return super.listChapters(folderPath);
+  }
 }
 
 const _chapterPgn = '''
@@ -119,6 +144,7 @@ Future<AppState> _pumpScreen(
   Size size = const Size(1600, 1000),
   RepertoireDecoder decoder = const IsolateRepertoireDecoder(),
   BuilderLifetime? restoredLifetime,
+  RepertoireCatalogRepository? catalog,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
@@ -159,6 +185,7 @@ Future<AppState> _pumpScreen(
         home: const RepertoireScreen(),
       ),
     ),
+    catalog: catalog,
   );
   await tester.pump();
   appState.switchToBuilder(repertoirePath: repertoirePath);
@@ -190,6 +217,61 @@ void main() {
     GameStoreService.instance.close();
     PathProviderPlatform.instance = originalPaths;
     if (await storageRoot.exists()) await storageRoot.delete(recursive: true);
+  });
+
+  testWidgets('failed copy destination listing retains the draft and retries', (
+    tester,
+  ) async {
+    final path = _writeRepertoire(tester);
+    final catalog = _ChapterCatalog(File(path).parent.path)..unavailable = true;
+    await _pumpScreen(tester, repertoirePath: path, catalog: catalog);
+    final lifetime = tester
+        .element(find.byType(RepertoireScreen))
+        .read<BuilderLifetime>();
+    lifetime.workspace.composeMoves(['d4', 'd5']);
+    lifetime.workspace.setTitle('Retained copy');
+    await tester.pump();
+    final original = File(path).readAsStringSync();
+    await tester.tap(find.byKey(const ValueKey('save-builder-draft-copy')));
+    await _settleUntil(tester, find.widgetWithText(ListTile, 'MyRep'));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.widgetWithText(ListTile, 'MyRep'));
+    await _settle(tester, cycles: 10);
+    expect(catalog.chapterReads, 1);
+    expect(
+      find.text(
+        'The draft is retained. Choose a destination and try saving it again.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      lifetime.workspace.retainedDrafts.single.content,
+      contains('Retained copy'),
+    );
+    expect(File(path).readAsStringSync(), original);
+    expect(tester.takeException(), isNull);
+    catalog.unavailable = false;
+    await tester.tap(find.byKey(const ValueKey('save-builder-draft-copy')));
+    await _settleUntil(tester, find.widgetWithText(ListTile, 'MyRep'));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.widgetWithText(ListTile, 'MyRep'));
+    await _settle(tester);
+    final deadline = DateTime.now().add(const Duration(seconds: 15));
+    while (lifetime.workspace.uncertainCopies.any(
+          (copy) => lifetime.workspace.copyInProgress(copy.draftKey),
+        ) &&
+        DateTime.now().isBefore(deadline)) {
+      await _settle(tester, cycles: 1);
+    }
+    expect(catalog.chapterReads, 2);
+    expect(lifetime.workspace.saveError, isNull);
+    expect(
+      lifetime.workspace.uncertainCopies.map((copy) => copy.outcome.error),
+      isEmpty,
+    );
+    expect(lifetime.workspace.retainedDrafts, isEmpty);
+    expect(File(path).readAsStringSync(), contains('Retained copy'));
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets(
@@ -627,5 +709,10 @@ void main() {
   });
 }
 
-Future<void> pumpCatalogWidget(WidgetTester tester, Widget child) =>
-    tester.pumpWidget(AppDependencies(child: child));
+Future<void> pumpCatalogWidget(
+  WidgetTester tester,
+  Widget child, {
+  RepertoireCatalogRepository? catalog,
+}) => tester.pumpWidget(
+  AppDependencies(repertoireCatalog: catalog, child: child),
+);

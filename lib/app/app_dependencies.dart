@@ -126,6 +126,9 @@ class _AppDependenciesState extends State<AppDependencies> {
         value: widget.trainingSettings ?? _trainingSettings,
         child: legacy_provider.MultiProvider(
           providers: [
+            legacy_provider.Provider<RepertoireCatalogRepository>.value(
+              value: widget.repertoireCatalog ?? _defaultCatalog,
+            ),
             legacy_provider.Provider<BoardEngine>.value(value: _engines.board),
             legacy_provider.Provider<StockfishPool>.value(value: _engines.pool),
             legacy_provider.Provider<EngineSearchBudget>.value(

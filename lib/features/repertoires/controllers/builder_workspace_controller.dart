@@ -265,7 +265,10 @@ class BuilderWorkspaceController extends ChangeNotifier
       }
       if (_closed) return true;
       final capture = _lineSaveCaptures[saving]!;
-      if (_drafts[capture.key]?.content == capture.content) {
+      // Source acknowledgement does not settle a concurrent copy elsewhere.
+      // Recovery must retain the draft until that copy is reconciled.
+      if (!_uncertainCopies.containsKey(capture.key) &&
+          _drafts[capture.key]?.content == capture.content) {
         _drafts.remove(capture.key);
       }
       if (capture.revision == _editRevision && capture.key == _activeKey) {
@@ -568,6 +571,7 @@ class BuilderWorkspaceController extends ChangeNotifier
         'Recovered Builder cursor does not belong to its tree.',
       );
     }
+    _beginUserIntent();
     _captureDraft();
     var sourceUnavailable = false;
     if (draft.repertoire != null) {
@@ -583,8 +587,24 @@ class BuilderWorkspaceController extends ChangeNotifier
           document.loadError != null ||
           document.currentRepertoire != draft.repertoire;
     }
-    // Native identity and raw bytes evidence authorize reattachment. Decoded
-    // text equality and older checkpoints without evidence cannot do so.
+    _applyDraft(draft, parsed: parsed, sourceUnavailable: sourceUnavailable);
+    notifyListeners();
+  }
+
+  void _applyDraft(
+    BuilderDraft draft, {
+    MoveTree? parsed,
+    bool sourceUnavailable = false,
+  }) {
+    parsed ??= MoveTree.fromPgn(draft.content);
+    if (!parsed.isValidPath(TreePath(draft.cursor))) {
+      throw const FormatException(
+        'Recovered Builder cursor does not belong to its tree.',
+      );
+    }
+    // Every entry point, including selecting a retained outline row, needs
+    // native identity and raw bytes evidence before reattaching autosave.
+    // Equal text and older checkpoints without evidence cannot authorize it.
     RepertoireLine? target;
     if (!sourceUnavailable &&
         draft.sourceRevision != null &&
@@ -600,17 +620,6 @@ class BuilderWorkspaceController extends ChangeNotifier
         sourceUnavailable || (draft.lineId != null && target == null);
     document.selectLine(target);
     _saveLine = target == null ? null : document.selectedLineSaver;
-    _applyDraft(draft, parsed: parsed);
-    notifyListeners();
-  }
-
-  void _applyDraft(BuilderDraft draft, {MoveTree? parsed}) {
-    parsed ??= MoveTree.fromPgn(draft.content);
-    if (!parsed.isValidPath(TreePath(draft.cursor))) {
-      throw const FormatException(
-        'Recovered Builder cursor does not belong to its tree.',
-      );
-    }
     _withoutCapture(
       () => board.loadAnnotatedTree(parsed!, cursor: TreePath(draft.cursor)),
     );

@@ -301,6 +301,8 @@ class FixtureRepertoireRepository implements RepertoireCatalogRepository {
   }
 
   @override
+  Future<List<RepertoireMetadata>> listChapters(String folderPath) async => [];
+  @override
   Future<List<RepertoireMetadata>> listStudies() async => [];
   @override
   Future<List<RepertoireRecoveryEntry>> listRecovery() async => [...recovery];

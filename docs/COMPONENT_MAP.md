@@ -44,7 +44,24 @@ Last reviewed against `lib/` and `tree_builder/` (June 2026, post 7-phase remedi
 
 **June 2026 remediation (7-phase refactor):** Repertoire metadata is typed (`RepertoireMetadata` replaces `Map<String, dynamic>`). `AppState` no longer tracks a global saved-games list. `RepertoireController` navigation funnels through `playMove` / `playMoveAtTreePath` (removed `userPlayedMove`, `_isInternalUpdate`). `GenerationSessionController.dispose()` stops an in-flight build. Lines browser uses typed `LineSortBy` / `LineMetricsFilter`, 300 ms search debounce, and lazy grouped `ListView.builder` rows. PGN editor memoizes move widgets and delegates clipboard/persist I/O to parent callbacks. Coherence FP-Growth runs in `Isolate.run`. `EngineLifecycle.enterGeneration` / `exitGeneration` are serialized via `_serialExec`. Startup failures surface via `runZonedGuarded` → `StartupErrorApp`; repertoire load failures via `RepertoireController.loadError`. Deleted unused `ease_calculator.dart`. New extractions: `GenerationConfigForm`, `RepertoireShortcuts`.
 
-**Repertoire navigation model:** `RepertoireBoardController` in `features/repertoires/controllers/` privately owns the mutable `MoveTree`, cursor, cached position and immutable SAN/FEN paths. It has no Flutter or storage dependency. `RepertoireController` delegates board commands, synchronizes the opening graph, and publishes cursor versus structural notifications. The public `tree` is a cached immutable `MoveTreeSnapshot`; loading an annotated caller-owned tree adopts a detached copy with fresh node IDs. All navigation goes through `controller.jump(path)`. `controller.awaitLoaded()` returns a Future that completes when the current load finishes (Completer-based); used by `repertoire_screen` for deep-link line navigation and generation seeding instead of listener polling. The PGN editor (`InteractivePgnEditor`) is a pure view that receives `tree` + `currentPath` as props and fires `onJump` / `onCommentChanged` / `onDelete` / `onPromote` / `onMakeMainLine` callbacks. Clipboard writes wired in `EditMainZone` via `onCopyToClipboard`; debounced line saves use `onAutoSave` (falls back to `onLineEdited`) and optional `onDirty`. The "Save to Repertoire" button and `onLineSaved`/`onPersistNewLine` callbacks have been removed — lines are auto-saved. The editor's injected `snapshotForSave` supplier captures the owner's latest immutable revision synchronously after an edit, before the next widget rebuild. The supplier is scoped to the displayed tree identity; the pending save still captures its original content and destination before chapter changes.
+**Repertoire navigation model:** `RepertoireBoardController` privately owns the
+mutable move tree, cursor and cached immutable projections. Builder widgets use
+its commands directly; Trainer owns only a board. `BuilderWorkspaceController`
+owns editable drafts, retained copies and recovery attachment, while
+`RepertoireDocumentSession` owns chapter loading and ordered writes. The old
+`RepertoireController` facade is deleted. `InteractivePgnEditor` emits edits and
+title changes; it no longer owns an autosave timer or snapshot supplier. The
+workspace captures edits immediately, and the document owner retains one active
+write and one latest pending edit per line between explicit command barriers.
+
+`BuilderLifetime` owns the workspace and recovery for the application lifetime.
+Recovery retains annotations, headers, cursor and native source evidence;
+restored drafts attach autosave only when that evidence and the original line
+still match, including when selected through the outline. Explicit copies persist
+intent before appending, retain uncertain outcomes across restart, and require
+inspection before retry. Close joins copy/reconciliation actions and their final
+checkpoints. A source autosave cannot retire a draft referenced by an unresolved
+copy.
 
 **Viewer game ownership:** `features/documents/controllers/viewer_game_controller.dart`
 privately owns the parsed game, mainline, variation forest and board cursor. Its
@@ -71,18 +88,14 @@ has moved to a toolbar control.
 
 **PGN context menu (right-click):** Uses Flutter's built-in `showMenu` API (Overlay-based, avoids Stack/Positioned layout issues). Menu items: Add Comment (focuses comment TextField), Promote Variation (non-mainline only), Make Main Line (recursive promote to root, non-mainline only), Duplicate Line (copies full line to clipboard), Copy PGN from Here, View in Lines (existing-line only; switches to Lines tab), Delete from Here. When the context menu is open, all moves from root to the right-clicked position are highlighted (blueGrey background). Delete from Here records a draft-only undo via `RepertoireWriter.recordDraftUndo()`, making it reversible with Ctrl+Z without replacing the chapter on disk. Its opaque board receipt validates both the adoption lifetime and expected movetext; adopting an equal-looking board cannot authorize restoring an old draft. Successive deletions remain undoable within their original lifetime.
 
-**Builder document boundary:** `RepertoireController` and `RepertoireWriter` now
-live in `features/repertoires/controllers/`; their old `core/` libraries are
-removed. `RepertoireAuthoring` is a pure feature-model helper with no storage
-service construction. `RepertoireController` requires a
-`RepertoireDocumentRepository` and `RepertoireDecoder`; its writer receives the
-same repository. App startup supplies both through Provider, including the
-Trainer's board session. Screens and these hosts no longer resolve storage,
-construct a file editor or schedule decoder isolates. The old
-`core/repertoire_loader.dart` is retired: its result lives in
-`features/repertoires/models/loaded_repertoire.dart`, its contract in
-`features/repertoires/repositories/repertoire_decoder.dart`, and its isolate
-implementation in `infrastructure/repertoires/isolate_repertoire_decoder.dart`.
+**Builder document boundary:** The workspace and writer receive the same
+`RepertoireDocumentRepository`; the document session also receives a
+`RepertoireDecoder`. App startup constructs these owners and their lifetime.
+The retired loader's result is `features/repertoires/models/loaded_repertoire.dart`,
+with its decoder contract in `features/repertoires/repositories/` and isolate
+implementation in `infrastructure/repertoires/`. Builder destination selection
+uses the injected catalog's `listChapters` capability. Legacy outline and chapter
+creation services remain separate migration work.
 
 `DocumentRepertoireRepository` adapts the shared `PgnDocumentStore` for chapter
 reads, line edits/deletion, imports, metadata replacement, append and undo.
@@ -125,7 +138,7 @@ fixture or alternate profile is not silently read through `StorageFactory`.
 Pure text parsing does not resolve storage; the legacy default remains for
 unmigrated callers. Remaining outline/generation file-editor callers still need migration.
 
-**Line deletion:** `RepertoireController.deleteLine(line)` validates the loaded game through its injected document repository and reloads only the same active chapter. `LineItemRow` shows a trash icon with a confirmation dialog; callbacks thread through `LinesListPanel` → `RepertoireLinesBrowser` → `repertoire_screen`.
+**Line deletion:** `RepertoireDocumentSession.deleteLine(line)` validates the loaded game through its injected document repository and reloads only the same active chapter. `LineItemRow` shows a trash icon with a confirmation dialog; callbacks thread through `LinesListPanel` → `RepertoireLinesBrowser` → `repertoire_screen`.
 
 **Chess logic:** `dartchess` for rules/FEN; `flutter_chess_board` for display.
 
@@ -770,7 +783,10 @@ The catalog now lives in `lib/features/repertoires/`: `models/`, `controllers/`,
 `repositories/` and `widgets/`. `AppDependencies` in `lib/app/` injects the
 `RepertoireCatalogRepository` contract, using the explicit
 `LegacyRepertoireCatalogRepository` adapter in `lib/infrastructure/repertoires/`.
-The adapter is the catalog's only storage/creation caller. The manual Riverpod
+The catalog contract also lists a folder's chapters for Builder open/copy
+selection. `AppDependencies` exposes that same repository through Provider;
+listing failures retain the draft and surface localized feedback. The adapter
+is the catalog's only storage/creation caller. The manual Riverpod
 controller owns immutable list/action state, rejects overlapping commands,
 coalesces refresh, ignores stale reads, and keeps a submitted commit alive
 when its last listener leaves. Failed reloads retain the last good snapshot;

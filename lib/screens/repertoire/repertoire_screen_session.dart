@@ -289,13 +289,10 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
       ),
     );
     if (!mounted || pick == null) return;
-    final picked = pick.chapter;
-    final chapters = p.extension(picked.filePath).toLowerCase() == '.pgn'
-        ? [picked]
-        : await StorageFactory.instance.listChapters(picked.filePath);
-    if (!mounted || chapters.isEmpty) return;
     try {
-      await _controller.saveDraftToChapter(draft, chapters.first);
+      final chapter = await _resolveChapter(pick.chapter);
+      if (!mounted || chapter == null) return;
+      await _controller.saveDraftToChapter(draft, chapter);
     } catch (error) {
       if (mounted) {
         showAppSnackBar(
@@ -320,12 +317,32 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
     if (pick != null && mounted) {
       // A selection made now supersedes an older deferred source request.
       _appState?.takeHandoff<OpenBuilder>();
-      final picked = pick.chapter;
-      final chapters = p.extension(picked.filePath).toLowerCase() == '.pgn'
-          ? [picked]
-          : await StorageFactory.instance.listChapters(picked.filePath);
-      if (!mounted || chapters.isEmpty) return;
-      await _controller.document.setRepertoire(chapters.first);
+      await _openSelectedRepertoire(pick.chapter);
+    }
+    _reclaimFocus();
+  }
+
+  Future<RepertoireMetadata?> _resolveChapter(RepertoireMetadata picked) async {
+    if (p.extension(picked.filePath).toLowerCase() == '.pgn') return picked;
+    final chapters = await context
+        .read<RepertoireCatalogRepository>()
+        .listChapters(picked.filePath);
+    return chapters.firstOrNull;
+  }
+
+  Future<void> _openSelectedRepertoire(RepertoireMetadata picked) async {
+    try {
+      final chapter = await _resolveChapter(picked);
+      if (!mounted || chapter == null) return;
+      await _controller.document.setRepertoire(chapter);
+    } catch (error) {
+      if (mounted) {
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context).catalogLoadFailed,
+          isError: true,
+        );
+      }
     }
     _reclaimFocus();
   }

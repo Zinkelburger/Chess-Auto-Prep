@@ -26,11 +26,13 @@ RepertoireMetadata chapter(String path) => RepertoireMetadata(
 
 class CopyDocuments extends MemoryDocuments {
   Completer<void>? saveGate;
+  Completer<void>? appendStarted;
   PgnWriteResult? appendOutcome;
   int appendCalls = 0;
   @override
   Future<PgnWriteResult> appendPgn(String path, String content) async {
     appendCalls++;
+    appendStarted?.complete();
     final opened = await read(path);
     if (opened is! PgnOpened) {
       return PgnWriteFailed(StateError('Missing destination'));
@@ -154,6 +156,24 @@ void main() {
       expect(documents.files['/a'], pgn);
     },
   );
+
+  test('opening a retained scratch supersedes an older chapter load', () async {
+    final owner = workspace();
+    addTearDown(owner.dispose);
+    owner.composeMoves(['d4', 'd5']);
+    final scratch = owner.captureWorkspace().drafts.single;
+    expect(scratch.repertoire, isNull);
+    documents.readGate = Completer<void>();
+    documents.readStarted = Completer<void>();
+    final loading = owner.document.setRepertoire(chapter('/a'));
+    await documents.readStarted!.future;
+    await owner.openRetainedDraft(scratch);
+    documents.readGate!.complete();
+    await loading;
+    expect(owner.captureWorkspace().activeKey, scratch.key);
+    expect(owner.board.moveHistory, ['d4', 'd5']);
+    expect(owner.document.currentRepertoire, isNull);
+  });
 
   test(
     'failed line save keeps draft and retry after failed switch remains bound to A',
@@ -494,6 +514,85 @@ void main() {
     },
   );
 
+  for (final newerEdit in [false, true]) {
+    test(
+      'autosave retains draft referenced by unresolved copy, newerEdit=$newerEdit',
+      () async {
+        final slow = SlowLineDocuments()
+          ..files['/a'] = pgn
+          ..files['/b'] = pgn
+          ..saveGate = Completer<void>()
+          ..appendStarted = Completer<void>();
+        final checkpoints = <BuilderWorkspaceSnapshot>[];
+        late BuilderWorkspaceController owner;
+        owner = BuilderWorkspaceController(
+          documents: slow,
+          decoder: const IsolateRepertoireDecoder(),
+          checkpoint: () async => checkpoints.add(owner.captureWorkspace()),
+        );
+        addTearDown(owner.dispose);
+        await owner.document.setRepertoire(chapter('/a'));
+        owner.selectLine(owner.document.repertoireLines.single);
+        slow.files['/a'] = owner.document.repertoireLines.single.fullPgn;
+        owner.setTitle('Copied edit');
+        await slow.firstStarted.future;
+        final draft = owner.captureWorkspace().drafts.single;
+        final before = (await slow.read('/b') as PgnOpened).snapshot;
+        slow.appendOutcome = PgnWriteUncertain(
+          error: 'acknowledgement lost',
+          before: null,
+          observed: before,
+        );
+        final copying = owner.saveDraftToChapter(draft, chapter('/b'));
+        if (newerEdit) owner.setTitle('Newer source edit');
+        slow.firstGate.complete();
+        await slow.appendStarted!.future;
+        const codec = BuilderWorkspaceCodec();
+        // A crash during append must leave a decodable checkpoint even after
+        // the source autosave was acknowledged.
+        final inFlight = owner.captureWorkspace();
+        expect(inFlight.drafts, hasLength(1));
+        expect(
+          codec.decode(codec.encode(inFlight)).uncertainCopies,
+          hasLength(1),
+        );
+        slow.saveGate!.complete();
+        await copying;
+        for (final checkpoint in checkpoints) {
+          codec.decode(codec.encode(checkpoint));
+        }
+        final restarted = BuilderWorkspaceController(
+          documents: slow,
+          decoder: const IsolateRepertoireDecoder(),
+          checkpoint: () async {},
+        );
+        addTearDown(restarted.dispose);
+        await restarted.restoreWorkspace(
+          codec.decode(codec.encode(owner.captureWorkspace())),
+        );
+        expect(restarted.uncertainCopies, hasLength(1));
+        await expectLater(
+          restarted.saveDraftToChapter(
+            restarted.retainedDrafts.single,
+            chapter('/b'),
+          ),
+          throwsStateError,
+        );
+        await restarted.acknowledgeInspectedCopy(
+          restarted.uncertainCopies.single,
+        );
+        expect(restarted.uncertainCopies, isEmpty);
+        expect(restarted.retainedDrafts, hasLength(newerEdit ? 1 : 0));
+        if (newerEdit)
+          expect(
+            restarted.retainedDrafts.single.content,
+            contains('Newer source edit'),
+          );
+        expect(slow.appendCalls, 1);
+      },
+    );
+  }
+
   test(
     'uncertain native install is not repeated and a proven installed revision resolves it',
     () async {
@@ -741,11 +840,12 @@ void main() {
       final first = workspace();
       await first.document.setRepertoire(chapter('/a'));
       final line = first.document.repertoireLines.single;
+      final key = '/a\u0000${line.id}';
       final snapshot = BuilderWorkspaceSnapshot(
-        activeKey: 'old',
+        activeKey: key,
         drafts: [
           BuilderDraft(
-            key: 'old',
+            key: key,
             repertoire: chapter('/a'),
             content: line.fullPgn,
             sourcePgn: first.document.repertoirePgn,
@@ -767,6 +867,11 @@ void main() {
         restarted.document.repertoirePgn,
         snapshot.drafts.single.sourcePgn,
       );
+      expect(restarted.sourceChanged, isTrue);
+      expect(restarted.document.selectedPgnLine, isNull);
+      expect(await restarted.saveActiveLine(), isFalse);
+      restarted.selectLine(restarted.document.repertoireLines.single);
+      restarted.setTitle('Still detached after selecting its outline row');
       expect(restarted.sourceChanged, isTrue);
       expect(restarted.document.selectedPgnLine, isNull);
       expect(await restarted.saveActiveLine(), isFalse);
