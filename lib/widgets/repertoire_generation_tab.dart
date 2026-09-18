@@ -81,8 +81,8 @@ class RepertoireGenerationTab extends StatefulWidget {
 }
 
 class _RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
-  /// Ranking of the finished build's lines, rebuilt whenever the tree
-  /// changes. Null until there is a completed tree to slice.
+  /// Ranking captured for this configuration. An own cut can invalidate the
+  /// global artifact; its remaining-line receipt still uses this same ranking.
   RepertoireSlicer? _slicer;
   BuildTree? _slicerTree;
 
@@ -216,7 +216,7 @@ class _RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     int? maxPlyOverride,
   }) async {
     final ctrl = widget.generationController;
-    if (ctrl.isGenerating) return;
+    if (!mounted || ctrl.isGenerating) return;
     final form = _configFormKey.currentState;
     if (form == null) return;
 
@@ -472,23 +472,18 @@ class _RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   /// stall — which is unavoidable on this isolate — at least happens with
   /// something on screen.
   void _refreshSlicer(GenerationSessionController ctrl) {
+    // Keep the route's plan through its own source refresh, including when
+    // the original artifact no longer validates against the edited chapter.
+    if (_slicerTree != null) return;
     final tree = ctrl.generatedTree;
     final config = ctrl.generatedTreeConfig;
-    if (tree == null || config == null || ctrl.isExpectimaxProbe) {
-      _slicer = null;
-      _slicerTree = null;
-      _countedForKeep = null;
-      _ranking = false;
-      return;
-    }
-    if (identical(tree, _slicerTree)) return;
+    if (tree == null || config == null || ctrl.isExpectimaxProbe) return;
     _slicerTree = tree;
-    _slicer = null;
-    _countedForKeep = null;
     _ranking = true;
+    final fenMap = ctrl.generatedTreeFenMap;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !identical(_slicerTree, tree)) return;
-      _rankTree(tree, config, ctrl.generatedTreeFenMap);
+      if (!mounted) return;
+      _rankTree(tree, config, fenMap);
     });
   }
 
