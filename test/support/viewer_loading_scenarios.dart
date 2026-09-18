@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -21,6 +22,8 @@ void viewerLoadingScenarios() {
     final control = PgnViewerWidgetController();
     Future<void> show(String fen) => tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: PgnViewerWidget(
             controller: control,
@@ -48,6 +51,8 @@ void viewerLoadingScenarios() {
       var loaded = 0;
       Future<void> show(String? id) => tester.pumpWidget(
         MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: PgnViewerWidget(
               storedGames: archive,
@@ -80,6 +85,8 @@ void viewerLoadingScenarios() {
         var loaded = 0;
         Future<void> show(String id) => tester.pumpWidget(
           MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: Scaffold(
               body: Provider<StoredGameRepository>.value(
                 value: archive,
@@ -127,6 +134,8 @@ void viewerLoadingScenarios() {
       final control = PgnViewerWidgetController();
       Future<void> show(String text) => tester.pumpWidget(
         MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: PgnViewerWidget(
               storedGames: archive,
@@ -156,6 +165,8 @@ void viewerLoadingScenarios() {
     final control = PgnViewerWidgetController();
     Future<void> show(DelayedGameArchive archive) => tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: Provider<StoredGameRepository>.value(
             value: archive,
@@ -183,6 +194,8 @@ void viewerLoadingScenarios() {
     final control = PgnViewerWidgetController();
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: PgnViewerWidget(
             gameId: 'pending',
@@ -210,6 +223,8 @@ void viewerLoadingScenarios() {
       Future<void> show(PgnViewerWidgetController handle, String name) =>
           tester.pumpWidget(
             MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
               home: Scaffold(
                 body: PgnViewerWidget(
                   controller: handle,
@@ -244,6 +259,8 @@ void viewerLoadingScenarios() {
     final saves = <String>[];
     Future<void> show(String? id) => tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: PgnViewerWidget(
             gameId: id,

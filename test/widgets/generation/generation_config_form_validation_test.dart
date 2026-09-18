@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/app/runtime_settings.dart';
 import '../../support/runtime_settings.dart';
 // Start refuses a numeric knob it cannot use and names it, instead of
@@ -36,6 +37,8 @@ void main() {
           ),
         ],
         child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: SingleChildScrollView(
               child: GenerationConfigForm(

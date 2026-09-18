@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
@@ -14,6 +15,8 @@ void viewerAnnotationScenarios() {
       final saves = <String>[];
       var loads = 0;
       Widget host(String pgn) => MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: PgnViewerWidget(
             pgnText: pgn,
@@ -86,6 +89,8 @@ void viewerAnnotationScenarios() {
       final control = PgnViewerWidgetController();
       var loads = 0;
       Widget host(String pgn) => MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: PgnViewerWidget(
             pgnText: pgn,

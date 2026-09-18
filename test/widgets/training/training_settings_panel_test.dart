@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'dart:async';
 import 'package:chess_auto_prep/features/settings/models/settings_state.dart';
 import 'package:chess_auto_prep/features/training/controllers/training_settings_controller.dart';
@@ -31,6 +32,8 @@ void main() {
     var repetition = RepetitionMode.spaced;
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: StatefulBuilder(
             builder: (context, setState) => TrainingSettingsPanel(
@@ -149,6 +152,8 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: Row(
             children: [

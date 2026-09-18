@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'dart:async';
 import 'package:chess_auto_prep/models/repertoire_line.dart';
 import 'package:chess_auto_prep/design_system/components/list_search_field.dart';
@@ -38,6 +39,8 @@ RepertoireReviewEntry _entry(String lineId, {DateTime? due}) =>
     );
 
 Widget _wrap(Widget child) => MaterialApp(
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
   theme: ThemeData.dark(),
   home: Scaffold(body: SizedBox(width: 900, height: 700, child: child)),
 );

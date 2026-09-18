@@ -2,13 +2,14 @@
 /// line) land in the move tree without duplicating what is already there.
 library;
 
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
+
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/widgets/pgn_viewer_widget.dart';
 import 'package:chess_auto_prep/widgets/pgn/movetext_primitives.dart';
-import 'package:chess_auto_prep/theme/app_colors.dart';
 
 Future<PgnViewerWidgetController> _pumpViewer(
   WidgetTester tester,
@@ -17,6 +18,8 @@ Future<PgnViewerWidgetController> _pumpViewer(
   final controller = PgnViewerWidgetController();
   await tester.pumpWidget(
     MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
         body: PgnViewerWidget(pgnText: pgn, controller: controller),
       ),
@@ -64,7 +67,11 @@ void main() {
       final selections = tester
           .widgetList<MoveChip>(find.byType(MoveChip))
           .where(
-            (chip) => chip.decoration?.color == AppColors.pgnMoveCurrentBg,
+            (chip) =>
+                chip.decoration?.color ==
+                Theme.of(
+                  tester.element(find.byType(PgnViewerWidget)),
+                ).colorScheme.primaryContainer,
           );
       expect(selections.map((chip) => chip.san), [
         'Nf6',
@@ -81,7 +88,11 @@ void main() {
         tester
             .widgetList<MoveChip>(find.byType(MoveChip))
             .where(
-              (chip) => chip.decoration?.color == AppColors.pgnMoveCurrentBg,
+              (chip) =>
+                  chip.decoration?.color ==
+                  Theme.of(
+                    tester.element(find.byType(PgnViewerWidget)),
+                  ).colorScheme.primaryContainer,
             )
             .map((chip) => chip.san),
         ['e5'],
@@ -141,6 +152,8 @@ void main() {
     final writes = <String>[];
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: PgnViewerWidget(
             controller: controller,

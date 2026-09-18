@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_annotation_panel.dart';
 import 'package:chess_auto_prep/widgets/pgn_viewer_widget.dart';
@@ -12,6 +13,8 @@ void main() {
       final saves = <String>[];
       await tester.pumpWidget(
         MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: StatefulBuilder(
               builder: (context, update) => PgnViewerWidget(
@@ -57,6 +60,8 @@ void main() {
       final control = PgnViewerWidgetController();
       final saves = <String>[];
       Widget host(String pgn) => MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: PgnViewerWidget(
             controller: control,
@@ -112,6 +117,8 @@ void main() {
       final control = PgnViewerWidgetController();
       final saves = <String>[];
       Widget host(String pgn) => MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: PgnViewerWidget(
             controller: control,
@@ -156,6 +163,8 @@ void main() {
   ) async {
     await tester.pumpWidget(
       const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: PgnViewerWidget(
             pgnText:

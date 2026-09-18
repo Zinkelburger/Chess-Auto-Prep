@@ -24,6 +24,8 @@
 /// for in writing rather than appearing by omission.
 library;
 
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
+
 import '../../support/runtime_settings.dart';
 import 'package:chess_auto_prep/app/runtime_settings.dart';
 
@@ -154,6 +156,8 @@ Future<TreeBuildConfig> _throughForm(
         ),
       ],
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: SingleChildScrollView(
             child: GenerationConfigForm(
@@ -518,6 +522,8 @@ void main() {
             ),
           ],
           child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: Scaffold(
               body: SingleChildScrollView(
                 child: GenerationConfigForm(
@@ -650,6 +656,8 @@ void main() {
             ),
           ],
           child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: Scaffold(
               body: SingleChildScrollView(
                 child: GenerationConfigForm(

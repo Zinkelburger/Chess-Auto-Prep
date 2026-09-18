@@ -6,10 +6,13 @@
 /// marked. These pin both halves of that: the silence, and the marks.
 library;
 
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/theme/app_colors.dart';
+import 'package:chess_auto_prep/widgets/pgn/pgn_text_styles.dart';
 import 'package:chess_auto_prep/widgets/pgn/movetext_primitives.dart';
 
 import 'package:chess_auto_prep/widgets/pgn_viewer_widget.dart';
@@ -26,6 +29,8 @@ void main() {
   }) async {
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: PgnViewerWidget(pgnText: pgn, controller: controller),
         ),
@@ -160,7 +165,12 @@ void main() {
           '!?' => AppColors.nagInteresting,
           _ => null,
         };
-        if (expected != null) expect(chip.nagStyle.color, expected);
+        if (expected != null) {
+          expect(
+            chip.nagStyle.color,
+            PgnTextStyles.annotationInk(tester.element(verdict), expected),
+          );
+        }
       }
     }
     const colors = {
@@ -169,7 +179,18 @@ void main() {
       'Blunder': AppColors.nagBlunder,
       'Interesting': AppColors.nagInteresting,
     };
-    expect(verdicts, colors);
+    expect(
+      verdicts,
+      colors.map(
+        (label, color) => MapEntry(
+          label,
+          PgnTextStyles.annotationInk(
+            tester.element(find.byType(PgnViewerWidget)),
+            color,
+          ),
+        ),
+      ),
+    );
   });
 
   testWidgets('analysis preserves author glyphs and positional annotations', (

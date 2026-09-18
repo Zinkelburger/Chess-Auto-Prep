@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/models/repertoire_line.dart';
 import 'package:chess_auto_prep/widgets/training/trainer_browser.dart';
 import 'package:dartchess/dartchess.dart' show Chess;
@@ -33,6 +34,8 @@ Future<void> _pump(
   );
   await tester.pumpWidget(
     MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
         body: TrainerBrowser(session: session, onReadLines: onReadLines),
       ),

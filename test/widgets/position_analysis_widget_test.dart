@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/app/runtime_settings.dart';
 import '../support/runtime_settings.dart';
 import 'package:flutter/material.dart';
@@ -33,6 +34,8 @@ void main() {
       );
       analysis.linkFenToGame(fen, analysis.addGame(game));
       Widget host(int generation) => MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: PositionAnalysisWidget(
             playerIsWhite: true,
@@ -69,6 +72,8 @@ void main() {
       tester,
       settings,
       const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: Center(
             child: SizedBox(
@@ -105,6 +110,8 @@ void main() {
       tester,
       settings,
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: Center(
             child: SizedBox(
