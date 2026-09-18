@@ -101,9 +101,36 @@ void main() {
             .boardFlipped,
         isTrue,
       );
+      final fullscreen = find.byType(FullscreenGameView);
+      final startPly = first.reader.mainLineIndex;
+      expect(first.reader.mainLineLength, 2);
+      await tester.tap(
+        find.descendant(
+          of: fullscreen,
+          matching: find.byIcon(Icons.chevron_right),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(first.reader.mainLineIndex, startPly + 1);
+      await tester.tap(
+        find.descendant(
+          of: fullscreen,
+          matching: find.byIcon(Icons.chevron_left),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(first.reader.mainLineIndex, startPly);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+      expect(first.reader.mainLineIndex, startPly + 1);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.pumpAndSettle();
+      expect(first.reader.mainLineIndex, startPly);
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await waitFor(tester, () => !first.document.presentation.isFullScreen);
       expect(find.byType(FullscreenGameView), findsNothing);
+      expect(first.reader.mainLineIndex, startPly);
+      expect(first.reader.mainLineLength, 2);
       expect(await file.readAsString(), saved);
       await tester.pumpWidget(const SizedBox.shrink());
       await first.shutdown();

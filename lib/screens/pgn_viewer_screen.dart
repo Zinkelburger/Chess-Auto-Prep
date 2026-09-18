@@ -36,7 +36,6 @@ import '../services/scid/scid_writer.dart';
 import '../utils/open_in_file_manager.dart';
 import '../features/documents/controllers/viewer_document_controller.dart';
 import '../features/documents/repositories/pgn_viewer_handle.dart';
-import '../features/documents/controllers/pgn_pane_router.dart';
 import '../chess_core/pgn/pgn_copy.dart';
 import '../features/documents/controllers/solitaire_controller.dart';
 import '../features/games/services/game_deviation_service.dart';
@@ -138,13 +137,10 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// pane is on screen instead of always the game.
   @override
   late final PgnViewerWidgetController _lineWidgetController;
-  PgnPaneRouter get _paneRouter => PgnPaneRouter(
-    game: _pgnWidgetController,
-    book: _referenceReaders[_tabController.index] ?? _lineWidgetController,
-    isBookActive: () =>
-        _onLineTab || _referenceReaders.containsKey(_tabController.index),
-    onGameBoardMove: _document.reading.onBoardMove,
-  );
+  PgnViewerHandle? get _movementReader => _document.presentation.isFullScreen
+      ? _pgnWidgetController
+      : _referenceReaders[_tabController.index] ??
+            (_onLineTab ? _lineWidgetController : null);
   @override
   late final GameAnalysisController _analysisController;
   @override
@@ -1078,6 +1074,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   /// Where the game's own movetext cursor is, so returning from the Line tab
   /// restores the board instead of leaving a book position on it.
+  @override
   Position? _gamePanePosition;
   Position? _bookPanePosition;
 
@@ -1105,6 +1102,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     if (!mounted) return;
     _document.reading.rememberReadingPosition();
     _gamePanePosition = position;
+    if (_document.presentation.isFullScreen) setState(() {});
     // TabBarView keeps the Game child alive while Book is visible. Engine or
     // async widget updates from that hidden child must not steal the board.
     if (!_onLineTab &&
@@ -1650,7 +1648,8 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// dispatch centralized here so a new command cannot accidentally mutate
   /// the reader behind the selected tab.
   @override
-  PgnViewerHandle get _activeMovetextController => _paneRouter.active;
+  PgnViewerHandle get _activeMovetextController =>
+      _movementReader ?? _pgnWidgetController;
 
   @override
   void _handleBoardMove(String san) {
@@ -1662,7 +1661,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       }
       return;
     }
-    _paneRouter.playBoardMove(san);
+    _document.reading.onBoardMove(san, reader: _movementReader);
   }
 
   /// The viewer's keyboard shortcuts, dispatched through [handleKeyBindings]
@@ -1721,13 +1720,13 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     ...KeyBinding.forShortcut(
       AppShortcut.backOneMove,
       'Back one move',
-      () => _paneRouter.goBack(_document.reading.navigateBack),
+      () => _document.reading.navigateBack(reader: _movementReader),
       repeats: true,
     ),
     ...KeyBinding.forShortcut(
       AppShortcut.forwardOneMove,
       'Forward one move',
-      () => _paneRouter.goForward(_document.reading.navigateForward),
+      () => _document.reading.navigateForward(reader: _movementReader),
       repeats: true,
     ),
     // Home/End and PageUp/PageDown both jump to the ends of the line: the
@@ -1736,13 +1735,13 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     ...KeyBinding.forShortcut(
       AppShortcut.goToStart,
       'Go to start of line',
-      () => _paneRouter.goToStart(_document.reading.navigateToStart),
+      () => _document.reading.navigateToStart(reader: _movementReader),
     ),
 
     ...KeyBinding.forShortcut(
       AppShortcut.goToEnd,
       'Go to end of line',
-      () => _paneRouter.goToEnd(_document.reading.navigateToEnd),
+      () => _document.reading.navigateToEnd(reader: _movementReader),
     ),
 
     // In the PGN reader, the four arrow keys form one spatial model: left /
@@ -1888,7 +1887,8 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) =>
-      _tabController.index == PgnWorkspace.filters
+      !_document.presentation.isFullScreen &&
+          _tabController.index == PgnWorkspace.filters
       ? KeyEventResult.ignored
       : handleKeyBindings(_keyBindings, event, node: node);
 
@@ -1903,9 +1903,12 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       child: GestureDetector(
         behavior: HitTestBehavior.translucent,
         onTap: _reclaimFocus,
-        child: _document.presentation.isFullScreen
-            ? _buildFullScreenView(theme)
-            : Scaffold(
+        child: Stack(
+          children: [
+            Visibility(
+              visible: !_document.presentation.isFullScreen,
+              maintainState: true,
+              child: Scaffold(
                 appBar: _buildAppBar(theme),
                 body: Stack(
                   children: [
@@ -1939,6 +1942,11 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
                   ],
                 ),
               ),
+            ),
+            if (_document.presentation.isFullScreen)
+              _buildFullScreenView(theme),
+          ],
+        ),
       ),
     );
     return content;

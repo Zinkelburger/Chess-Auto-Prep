@@ -86,6 +86,15 @@ separate work.
 from its `ViewerCollectionController`; autoplay steps its `PgnViewerHandle`
 directly. Reading-mode position callbacks remain explicit because the opening
 tree can have a different cursor from the game reader.
+`ViewerReadingController` also dispatches external board/step commands. The
+screen supplies the current Book/reference reader explicitly when appropriate;
+fullscreen supplies the primary reader. Without that argument, commands use the
+existing game/tree/Solitaire rules. `PgnPaneRouter` and its callback dispatch are
+retired; there is no retained active-reader state. Home/End on a reference reader
+remain direct ply jumps, preserving its ephemeral variations. Fullscreen keeps
+that existing reader subtree mounted but hidden and unfocusable; both keyboard
+and button movement target the primary game, and leaving restores the reference
+pane's cursor.
 
 The shared annotation panel flushes pending prose before a glyph action emits a
 save. A same-target rebuild does not replace a pending draft just because focus
