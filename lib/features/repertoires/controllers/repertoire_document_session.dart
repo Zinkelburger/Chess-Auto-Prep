@@ -531,6 +531,7 @@ class RepertoireDocumentSession {
   // one place — see the note there.
 
   int _loadGeneration = 0;
+  int get loadGeneration => _loadGeneration;
 
   final List<Completer<void>> _loadCompleters = [];
 

@@ -1,5 +1,9 @@
 import 'dart:io';
-import '../documents/legacy_pgn_document_store.dart';
+import '../../features/documents/models/pgn_document.dart';
+import '../../features/training/models/chapter_layout.dart' show ChapterSummary;
+import '../../chess_core/pgn/pgn_text.dart' show extractRepertoireColor;
+import '../../chess_core/pgn/repertoire_pgn_text.dart' show chapterHeader;
+import '../../services/repertoire_service.dart';
 import '../../features/repertoires/models/repertoire_recovery_entry.dart';
 import '../../services/storage/io_storage_service.dart';
 import '../../features/documents/repositories/pgn_document_store.dart';
@@ -14,9 +18,9 @@ import '../../utils/safe_file_name.dart';
 /// document store and recoverable directory transactions replace StorageService
 /// in renewal milestones 2/3. All dependencies are supplied by app startup.
 class LegacyRepertoireCatalogRepository implements RepertoireCatalogRepository {
-  LegacyRepertoireCatalogRepository(this._storage, {this.documents});
+  LegacyRepertoireCatalogRepository(this._storage, {required this.documents});
 
-  final PgnDocumentStore? documents;
+  final PgnDocumentStore documents;
 
   final StorageService _storage;
 
@@ -30,6 +34,48 @@ class LegacyRepertoireCatalogRepository implements RepertoireCatalogRepository {
   @override
   Future<List<RepertoireMetadata>> listChapters(String folderPath) =>
       _storage.listChapters(folderPath);
+
+  @override
+  Future<List<ChapterSummary>> chapterSections(String path) =>
+      RepertoireService(storage: _storage).courseChaptersInFile(path);
+
+  @override
+  Future<PgnWriteResult> createChapter({
+    required String folderPath,
+    required String name,
+    bool? isWhite,
+  }) async {
+    try {
+      name = requireSafeFileName(name);
+      final path = _storage.chapterFilePath(folderPath, name);
+      final chapters = await listChapters(folderPath);
+      if (chapters.any(
+        (chapter) => chapter.name.toLowerCase() == name.toLowerCase(),
+      )) {
+        return const PgnNameCollision();
+      }
+      if (isWhite == null) {
+        for (final chapter in chapters) {
+          final content = await _storage.readFile(chapter.filePath);
+          if (content == null) continue;
+          final color = extractRepertoireColor(content);
+          if (color == null || color.isEmpty) continue;
+          isWhite = color.toLowerCase() != 'black';
+          break;
+        }
+      }
+      return await documents.create(
+        path,
+        chapterHeader(
+          name: name,
+          isWhite: isWhite ?? true,
+          createdAt: DateTime.now(),
+        ),
+      );
+    } catch (error) {
+      return PgnWriteFailed(error);
+    }
+  }
 
   @override
   Future<List<RepertoireMetadata>> listStudies() => _storage.listStudyFiles();
@@ -48,7 +94,6 @@ class LegacyRepertoireCatalogRepository implements RepertoireCatalogRepository {
     }
     // This preflight supplies a friendly error; createOnly at the storage
     // boundary remains responsible for refusing a competing file creation.
-    final documents = this.documents;
     return createRepertoire(
       storage: _storage,
       name: request.name,
@@ -57,7 +102,7 @@ class LegacyRepertoireCatalogRepository implements RepertoireCatalogRepository {
       gameCount: request.gameCount,
       chapterName: request.chapterName,
       splitChapters: request.splitChapters,
-      documents: documents ?? LegacyPgnDocumentStore(_storage),
+      documents: documents,
     );
   }
 

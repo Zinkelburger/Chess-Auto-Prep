@@ -108,8 +108,21 @@ has moved to a toolbar control.
 The retired loader's result is `features/repertoires/models/loaded_repertoire.dart`,
 with its decoder contract in `features/repertoires/repositories/` and isolate
 implementation in `infrastructure/repertoires/`. Builder destination selection
-uses the injected catalog's `listChapters` capability. Legacy outline and chapter
-creation services remain separate migration work.
+uses the injected catalog's `listChapters` capability. The same catalog owns
+`createChapter` for Builder, Outline and the chapter picker; only an acknowledged
+`PgnSaved.after.path` may become the selection. Exclusive document creation
+preserves competing files, and uncertain outcomes retain inspection paths without
+automatic retry. `ChapterStore` is retired; the pure `chapterHeader` formatter lives
+in `chess_core/pgn/repertoire_pgn_text.dart`.
+
+Builder loads sibling chapters when its breadcrumb picker opens, without a
+background sibling cache. The existing document generation rejects stale list,
+dialog and load continuations, including A→B→A switches. The chapter manager
+renders file listings before enriching them with catalog `chapterSections`
+(header-only course grouping), rejecting results from replaced folder requests.
+Picker creation inherits an available sibling color; unreadable color sources
+fail before creation. Builder and Outline capture their explicit color. Chapter
+rename/delete and Outline line transfers remain legacy migration work.
 
 `DocumentRepertoireRepository` adapts the shared `PgnDocumentStore` for chapter
 reads, line edits/deletion, imports, metadata replacement, append and undo.

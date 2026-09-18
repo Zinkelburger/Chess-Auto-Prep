@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/infrastructure/documents/legacy_pgn_document_store.dart';
 import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/app/app_dependencies.dart';
 import 'package:chess_auto_prep/features/repertoires/models/repertoire_creation.dart';
@@ -83,7 +84,10 @@ void main() {
                 result = await showRepertoireImportDialog(
                   context,
                   existingNames: existingNames,
-                  create: LegacyRepertoireCatalogRepository(storage).create,
+                  create: LegacyRepertoireCatalogRepository(
+                    storage,
+                    documents: LegacyPgnDocumentStore(storage),
+                  ).create,
                   pickPgn: picker ?? () async => _picked,
                 );
               },
@@ -94,7 +98,7 @@ void main() {
       ),
     );
     await tester.tap(find.text('Open'));
-    await tester.pumpAndSettle();
+    await _settleImport(tester);
   }
 
   testWidgets(
@@ -170,7 +174,7 @@ void main() {
     await open(tester, picker: () => pending.future);
     await pumpCatalogWidget(tester, const SizedBox());
     pending.complete(_picked);
-    await tester.pumpAndSettle();
+    await _settleImport(tester);
     expect(tester.takeException(), isNull);
     expect(storage.files, isEmpty);
   });
@@ -181,13 +185,13 @@ void main() {
     storage.failWrite = true;
     await open(tester);
     expect(
-      find.textContaining('Could not import the repertoire'),
+      find.textContaining('The file may already be saved.'),
       findsOneWidget,
     );
     expect(result, isNull);
     storage.failWrite = false;
     await tester.tap(find.text('Open'));
-    await tester.pumpAndSettle();
+    await _settleImport(tester);
     expect(result, isNotNull);
   });
 
@@ -213,7 +217,7 @@ void main() {
           ),
         ),
       );
-      await tester.pumpAndSettle();
+      await _settleImport(tester);
       await tester.tap(find.text('Open PGN file…'));
       await tester.pump();
       expect(calls, 1);
@@ -223,7 +227,7 @@ void main() {
         isNull,
       );
       pending.complete(_picked);
-      await tester.pumpAndSettle();
+      await _settleImport(tester);
       expect(selected!.filePath, '/repertoires/Caro-Kann/Main.pgn');
       expect(find.text('Open PGN file…'), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -244,21 +248,18 @@ void main() {
           ),
         ),
       );
-      await tester.pumpAndSettle();
+      await _settleImport(tester);
       await tester.tap(find.widgetWithText(TextButton, 'Paste PGN'));
-      await tester.pumpAndSettle();
+      await _settleImport(tester);
       expect(find.byType(TextField), findsOneWidget);
       await tester.enterText(paste, '[Event "Empty"]\n\n*');
       await tester.pump();
       await tester.tap(find.widgetWithText(FilledButton, 'Import'));
-      await tester.pumpAndSettle();
+      await _settleImport(tester);
       expect(find.text('Paste PGN with moves to train.'), findsOneWidget);
       await tester.enterText(paste, _pgn);
       await tester.pump();
-      await tester.runAsync(() async {
-        await tester.tap(find.widgetWithText(FilledButton, 'Import'));
-        await storage.written.future.timeout(const Duration(seconds: 10));
-      });
+      await tester.tap(find.widgetWithText(FilledButton, 'Import'));
       // Disk completion precedes controller refresh and Navigator completion.
       // Wait for the user-visible handoff, rather than assuming the write's
       // completer also means that the route has returned its result.
@@ -270,7 +271,7 @@ void main() {
         // progress indicator while real async controller work is still pending.
         await tester.pump(const Duration(milliseconds: 100));
       }
-      await tester.pumpAndSettle();
+      await _settleImport(tester);
       expect(selected, isNotNull);
       expect(selected!.filePath, '/repertoires/Pasted repertoire/Main.pgn');
       expect(selected!.gameCount, 2);
@@ -286,9 +287,9 @@ void main() {
         home: Scaffold(body: RepertoireListBody(onSelected: (_) {})),
       ),
     );
-    await tester.pumpAndSettle();
+    await _settleImport(tester);
     await tester.tap(find.text('Create new repertoire'));
-    await tester.pumpAndSettle();
+    await _settleImport(tester);
     expect(find.byType(RepertoireCreationScreen), findsOneWidget);
   }
 
@@ -301,11 +302,11 @@ void main() {
       'Draft',
     );
     await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
+    await _settleImport(tester);
     expect(storage.files, isEmpty);
     expect(find.byType(RepertoireListBody), findsOneWidget);
     await tester.tap(find.text('Create new repertoire'));
-    await tester.pumpAndSettle();
+    await _settleImport(tester);
     expect(
       tester.widget<TextFormField>(find.byType(TextFormField)).controller!.text,
       isEmpty,
@@ -327,9 +328,9 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await _settleImport(tester);
     await tester.tap(find.text('Create new repertoire'));
-    await tester.pumpAndSettle();
+    await _settleImport(tester);
     await tester.enterText(
       find.byKey(const ValueKey('repertoire-create-name')),
       'My Caro',
@@ -340,7 +341,7 @@ void main() {
       _pgn,
     );
     await tester.tap(find.widgetWithText(FilledButton, 'Create repertoire'));
-    await tester.pumpAndSettle();
+    await _settleImport(tester);
     expect(find.byType(RepertoireCreationScreen), findsNothing);
     expect(selected!.filePath, '/repertoires/My Caro/Main.pgn');
     expect(selected!.gameCount, 2);
@@ -357,7 +358,7 @@ void main() {
         'My Caro',
       );
       await tester.tap(find.widgetWithText(FilledButton, 'Create repertoire'));
-      await tester.pumpAndSettle();
+      await _settleImport(tester);
       expect(
         find.text('Open or paste a PGN with moves to train.'),
         findsOneWidget,
@@ -369,8 +370,8 @@ void main() {
       );
       storage.failWrite = true;
       await tester.tap(find.widgetWithText(FilledButton, 'Create repertoire'));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('Your input is still here'), findsOneWidget);
+      await _settleImport(tester);
+      expect(find.textContaining('The file may already be saved.'), findsOneWidget);
       expect(
         tester
             .widget<TextField>(
@@ -382,7 +383,7 @@ void main() {
       );
       storage.failWrite = false;
       await tester.tap(find.widgetWithText(FilledButton, 'Create repertoire'));
-      await tester.pumpAndSettle();
+      await _settleImport(tester);
       expect(storage.files, hasLength(1));
       expect(find.byType(RepertoireCreationScreen), findsNothing);
     },
@@ -399,7 +400,7 @@ void main() {
       await tester.tap(find.text('Empty repertoire'));
       await tester.pump();
       await tester.tap(find.widgetWithText(FilledButton, 'Create repertoire'));
-      await tester.pumpAndSettle();
+      await _settleImport(tester);
       expect(storage.files.keys.single, '/repertoires/Later/Main.pgn');
       expect(find.byType(RepertoireListBody), findsOneWidget);
       expect(find.byType(RepertoireCreationScreen), findsNothing);
@@ -408,4 +409,19 @@ void main() {
 }
 
 Future<void> pumpCatalogWidget(WidgetTester tester, Widget child) =>
-    tester.pumpWidget(AppDependencies(child: child));
+    tester.pumpWidget(
+      AppDependencies(
+        documentStore: LegacyPgnDocumentStore(StorageFactory.instance),
+        child: child,
+      ),
+    );
+
+Future<void> _settleImport(WidgetTester tester) async {
+  // Import preparation runs in a real isolate, outside the fake frame clock.
+  for (var i = 0; i < 20; i++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 10)),
+    );
+    await tester.pump(const Duration(milliseconds: 40));
+  }
+}

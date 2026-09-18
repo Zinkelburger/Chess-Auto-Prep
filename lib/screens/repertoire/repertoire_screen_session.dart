@@ -496,20 +496,6 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
     _reclaimFocus();
   }
 
-  /// Loads the sibling chapters of the active repertoire folder so the toolbar
-  /// breadcrumb can offer one-click switching.
-  Future<void> _loadChapters() async {
-    final current = _controller.document.currentRepertoire;
-    if (current == null) return;
-    try {
-      final chapters = await _chapterStore.listSiblings(current.filePath);
-      if (!mounted) return;
-      setState(() => _chapters = chapters);
-    } catch (e) {
-      log.w('Load chapters failed', name: 'RepertoireScreen', error: e);
-    }
-  }
-
   /// Confirm before throwing a paused build away — the partial tree is deleted
   /// and cannot be resumed afterward.
   Future<void> _confirmDiscardBuild() async {
@@ -551,7 +537,13 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
   Future<void> _showChapterList() async {
     final current = _controller.document.currentRepertoire;
     if (current == null) return;
-    final folder = _chapterStore.folderMetadata(current.filePath);
+    final generation = _controller.document.loadGeneration;
+    final folderPath = p.dirname(current.filePath);
+    final folder = RepertoireMetadata(
+      filePath: folderPath,
+      name: p.basename(folderPath),
+      lastModified: DateTime.now(),
+    );
 
     final chapter = (await _workspaceNavigation.push<ChapterPick>(
       MaterialPageRoute(
@@ -559,21 +551,12 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
       ),
     ))?.chapter;
 
-    if (chapter != null && mounted) _appState?.takeHandoff<OpenBuilder>();
-    if (chapter != null && mounted && chapter.filePath != current.filePath) {
-      await _controller.document.setRepertoire(chapter);
+    if (!mounted || !_controller.document.isCurrent(generation)) return;
+    if (chapter != null) {
+      _appState?.takeHandoff<OpenBuilder>();
+      await _openChapterPath(chapter.filePath);
     }
-    // Chapters may have been added/renamed/deleted without switching.
-    await _loadChapters();
-    _reclaimFocus();
-  }
-
-  /// Switches the active chapter from the breadcrumb dropdown.
-  Future<void> _onChapterSelected(RepertoireMetadata chapter) async {
-    if (chapter.filePath == _controller.document.currentRepertoire?.filePath) {
-      return;
-    }
-    await _controller.document.setRepertoire(chapter);
+    if (mounted) unawaited(_outline.refresh());
     _reclaimFocus();
   }
 
@@ -584,7 +567,9 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
     final current = _controller.document.currentRepertoire;
     if (current == null) return;
 
-    final taken = {for (final c in _chapters) c.name.toLowerCase()};
+    final generation = _controller.document.loadGeneration;
+    final isWhite = _controller.document.isRepertoireWhite;
+    final folderPath = p.dirname(current.filePath);
     final name = await showNameEntryDialog(
       context,
       title: 'New chapter',
@@ -592,27 +577,28 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
       confirmLabel: 'Create',
       prompt: 'Name this chapter (e.g. a variation or system):',
       allowUnchanged: true,
-      validate: (name) =>
-          RepertoireOutlineService.validateName(name) ??
-          (taken.contains(name.toLowerCase())
-              ? 'A chapter named "$name" already exists.'
-              : null),
+      validate: RepertoireOutlineService.validateName,
     );
-    if (name == null || !mounted) return;
-
-    final result = await _chapterStore.create(
-      folderPath: _chapterStore.folderOf(current.filePath),
-      name: name,
-      isWhite: _controller.document.isRepertoireWhite,
-    );
-    if (!mounted) return;
-    if (!result.succeeded) {
-      showAppSnackBar(context, result.error!, isError: true);
+    if (name == null ||
+        !mounted ||
+        !_controller.document.isCurrent(generation)) {
       return;
     }
-
-    await _controller.document.setRepertoire(result.chapter!);
-    await _loadChapters();
+    final result = await context
+        .read<RepertoireCatalogRepository>()
+        .createChapter(folderPath: folderPath, name: name, isWhite: isWhite);
+    if (!mounted || !_controller.document.isCurrent(generation)) return;
+    if (result case PgnSaved(:final after)) {
+      await _openChapterPath(after.path);
+    } else {
+      showAppSnackBar(context, switch (result) {
+        PgnNameCollision() => 'That chapter already exists.',
+        PgnWriteUncertain(:final recoveryPath) =>
+          'Chapter creation needs verification: ${p.join(folderPath, "$name.pgn")}.'
+              '${recoveryPath == null ? "" : " Recovery: $recoveryPath."} Do not retry.',
+        _ => 'Could not create chapter.',
+      }, isError: true);
+    }
     _reclaimFocus();
   }
 }

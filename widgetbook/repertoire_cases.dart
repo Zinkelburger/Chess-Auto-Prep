@@ -1,3 +1,6 @@
+import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
+import 'package:chess_auto_prep/features/training/models/chapter_layout.dart'
+    show ChapterSummary;
 import 'package:chess_auto_prep/design_system/components/empty_state_placeholder.dart';
 import 'package:chess_auto_prep/design_system/components/list_search_field.dart';
 import 'package:chess_auto_prep/design_system/theme/app_spacing.dart';
@@ -300,6 +303,17 @@ class FixtureRepertoireRepository implements RepertoireCatalogRepository {
 
   @override
   Future<List<RepertoireMetadata>> listChapters(String folderPath) async => [];
+  @override
+  Future<List<ChapterSummary>> chapterSections(String path) async => [];
+  @override
+  Future<PgnWriteResult> createChapter({
+    required String folderPath,
+    required String name,
+    bool? isWhite,
+  }) async => PgnWriteFailed(
+    UnsupportedError('This catalog fixture has no chapter editor.'),
+  );
+
   @override
   Future<List<RepertoireMetadata>> listStudies() async => [];
   @override

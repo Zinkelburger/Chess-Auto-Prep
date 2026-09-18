@@ -79,7 +79,6 @@ import '../features/traps/widgets/traps_tab_content.dart';
 import '../widgets/engine/floating_board_preview.dart';
 import '../features/repertoire/controllers/repertoire_layout_prefs.dart';
 import '../features/repertoire/widgets/repertoire_workspace_panel.dart';
-import '../features/repertoire/services/chapter_store.dart';
 import '../design_system/components/name_entry_dialog.dart';
 import '../features/repertoire/services/repertoire_outline_service.dart';
 import '../features/repertoire/widgets/build_config_screen.dart';
@@ -237,14 +236,6 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   final RepertoireLayoutPrefs _layout = RepertoireLayoutPrefs();
 
   String? _lastRepertoireId;
-
-  /// Reads and creates the chapters of the active repertoire folder.
-  final ChapterStore _chapterStore = ChapterStore();
-
-  /// Sibling chapters of the current repertoire folder, for the toolbar
-  /// breadcrumb's chapter dropdown. Reloaded whenever the active chapter
-  /// changes or chapters are added/renamed/deleted.
-  List<RepertoireMetadata> _chapters = [];
 
   final FocusNode _focusNode = FocusNode();
   final GlobalKey _linesPreviewStackKey = GlobalKey();
@@ -497,7 +488,7 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
 
   // Outline column actions, implemented on the concrete state and called
   // from the layout mixin.
-  Future<void> _openChapterPath(String path);
+  Future<int?> _openChapterPath(String path);
   Future<void> _openOutlineLine(String chapterPath, OutlineLine line);
   Future<void> _generateIntoChapter(String chapterPath);
   Future<void> _auditChapter(String chapterPath);
@@ -718,7 +709,6 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
 
     if (newRepertoireId != null) {
       unawaited(_auditController.tryRestore(newRepertoireId!));
-      unawaited(_loadChapters());
     }
     _syncOutline();
   }
@@ -732,6 +722,8 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
   void _syncOutline() {
     final current = _controller.document.currentRepertoire;
     if (current == null || _controller.document.isLoading) return;
+    final generation = _controller.document.loadGeneration;
+    final isWhite = _controller.document.isRepertoireWhite;
     final chapterPath = current.filePath;
     final pgn = _controller.document.repertoirePgn;
     final sameChapter =
@@ -749,14 +741,14 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
 
     unawaited(() async {
       final root = await _repertoireRootFor(chapterPath);
-      if (!mounted) return;
+      if (!mounted || !_controller.document.isCurrent(generation)) return;
       final sameRoot = _outlineRoot != null && p.equals(_outlineRoot!, root);
       if (!sameRoot) {
         _outlineRoot = root;
         await _outline.open(
           rootPath: root,
           activeChapterPath: chapterPath,
-          isWhite: _controller.document.isRepertoireWhite,
+          isWhite: isWhite,
         );
       } else {
         if (_outline.activeChapterPath == null ||
@@ -784,7 +776,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     } catch (_) {
       // Fall through to the immediate parent.
     }
-    return _chapterStore.folderOf(chapterPath);
+    return p.dirname(chapterPath);
   }
 
   /// The outline renamed, moved or deleted the chapter the board shows.
@@ -797,7 +789,6 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
       if (next != null) {
         unawaited(_openChapterPath(next.path));
       }
-      unawaited(_loadChapters());
       return;
     }
     final current = _controller.document.currentRepertoire;
@@ -809,34 +800,42 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
       return;
     }
     unawaited(_openChapterPath(newPath));
-    unawaited(_loadChapters());
   }
 
   /// Switch the board/editor to the chapter file at [path].
   @override
-  Future<void> _openChapterPath(String path) async {
-    final current = _controller.document.currentRepertoire;
-    if (current != null && p.equals(current.filePath, path)) return;
-    final known = _chapters.where((c) => p.equals(c.filePath, path));
-    final meta = known.isNotEmpty
-        ? known.first
-        : RepertoireMetadata(
-            filePath: path,
-            name: p.basenameWithoutExtension(path),
-            lastModified: DateTime.now(),
-          );
-    await _controller.document.setRepertoire(meta);
+  Future<int?> _openChapterPath(String path) async {
+    final document = _controller.document;
+    if (!document.isLoading && document.currentRepertoire?.filePath == path) {
+      return document.loadError == null ? document.loadGeneration : null;
+    }
+    final loading = document.setRepertoire(
+      RepertoireMetadata(
+        filePath: path,
+        name: p.basenameWithoutExtension(path),
+        lastModified: DateTime.now(),
+      ),
+    );
+    final generation = document.loadGeneration;
+    await loading;
+    if (!mounted ||
+        !document.isCurrent(generation) ||
+        document.loadError != null) {
+      return null;
+    }
     _reclaimFocus();
+    return generation;
   }
 
   /// A line picked in the outline: switch chapter if needed, then load it.
   @override
   Future<void> _openOutlineLine(String chapterPath, OutlineLine line) async {
-    await _openChapterPath(chapterPath);
-    if (!mounted) return;
-    // setRepertoire loads asynchronously; wait for the lines to be there.
-    await _controller.document.awaitLoaded();
-    if (!mounted) return;
+    final generation = await _openChapterPath(chapterPath);
+    if (!mounted ||
+        generation == null ||
+        !_controller.document.isCurrent(generation)) {
+      return;
+    }
     final match = _controller.document.repertoireLines
         .where((l) => l.gameIndex == line.gameIndex)
         .firstOrNull;
@@ -854,10 +853,12 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
   /// chapter's file, so this is what "into this chapter" means.
   @override
   Future<void> _generateIntoChapter(String chapterPath) async {
-    await _openChapterPath(chapterPath);
-    if (!mounted) return;
-    await _controller.document.awaitLoaded();
-    if (!mounted) return;
+    final generation = await _openChapterPath(chapterPath);
+    if (!mounted ||
+        generation == null ||
+        !_controller.document.isCurrent(generation)) {
+      return;
+    }
     _controller.composeMoves(
       _commonPrefix(_controller.document.repertoireLines.map((l) => l.moves)),
     );
@@ -884,8 +885,12 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
 
   @override
   Future<void> _auditChapter(String chapterPath) async {
-    await _openChapterPath(chapterPath);
-    if (!mounted) return;
+    final generation = await _openChapterPath(chapterPath);
+    if (!mounted ||
+        generation == null ||
+        !_controller.document.isCurrent(generation)) {
+      return;
+    }
     _openAuditDialog(forceConfig: true);
   }
 
@@ -903,7 +908,6 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
   void _onPlannedChapterChanged(String chapterPath) {
     if (!mounted) return;
     unawaited(_outline.refresh());
-    unawaited(_loadChapters());
     final current = _controller.document.currentRepertoire;
     if (current != null && p.equals(current.filePath, chapterPath)) {
       unawaited(_controller.document.loadRepertoire());
@@ -1311,16 +1315,21 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     }
 
     final repertoire = _controller.document.currentRepertoire!;
+    final generation = _controller.document.loadGeneration;
     return (
       appBar: RepertoireToolbar(
         title: RepertoireBreadcrumbTitle(
-          repertoireName: p.basename(p.dirname(repertoire.filePath)),
-          chapterName: repertoire.name,
-          chapters: _chapters,
-          currentChapterPath: repertoire.filePath,
+          key: ValueKey(generation),
+          chapter: repertoire,
+          catalog: context.read<RepertoireCatalogRepository>(),
+          isCurrent: () =>
+              mounted &&
+              _controller.document.isCurrent(generation) &&
+              !_generationController.isGenerating,
           enabled: !_generationController.isGenerating,
           onSwitchRepertoire: _showRepertoireSelection,
-          onSelectChapter: _onChapterSelected,
+          onSelectChapter: (chapter) =>
+              unawaited(_openChapterPath(chapter.filePath)),
           onAddChapter: _addChapterInline,
           onViewChapters: _showChapterList,
         ),

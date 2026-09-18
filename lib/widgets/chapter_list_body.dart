@@ -21,8 +21,10 @@ import 'package:flutter/material.dart';
 import '../design_system/components/item_title.dart';
 
 import '../features/repertoires/models/repertoire_metadata.dart';
-import '../chess_core/pgn/pgn_text.dart' as pgn;
-import '../services/repertoire_service.dart';
+import 'package:provider/provider.dart';
+import 'package:path/path.dart' as p;
+import '../features/documents/models/pgn_document.dart';
+import '../features/repertoires/repositories/repertoire_catalog_repository.dart';
 import '../services/storage/storage_factory.dart';
 import '../features/training/models/chapter_layout.dart' show ChapterSummary;
 import '../design_system/theme/workspace_theme.dart';
@@ -63,6 +65,9 @@ class ChapterListBody extends StatefulWidget {
 }
 
 class _ChapterListBodyState extends State<ChapterListBody> {
+  late final _catalog = context.read<RepertoireCatalogRepository>();
+  Object? _readRequest;
+  bool _creating = false;
   List<RepertoireMetadata> _chapters = [];
 
   /// Course chapters found inside each chapter file, by file path. Absent
@@ -94,24 +99,33 @@ class _ChapterListBodyState extends State<ChapterListBody> {
     unawaited(_loadChapters());
   }
 
+  @override
+  void didUpdateWidget(covariant ChapterListBody oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.repertoire.filePath != _dirPath) unawaited(_loadChapters());
+  }
+
   Future<void> _loadChapters() async {
     if (!mounted) return;
+    final request = _readRequest = Object();
     setState(() {
+      _courseChapters.clear();
+      _expandedCourses.clear();
       _isLoading = true;
       _loadError = null;
     });
 
     try {
-      final chapters = await StorageFactory.instance.listChapters(_dirPath);
-      if (!mounted) return;
+      final chapters = await _catalog.listChapters(_dirPath);
+      if (!mounted || !identical(request, _readRequest)) return;
       setState(() {
         _chapters = chapters;
         _isLoading = false;
       });
-      unawaited(_loadCourseChapters(chapters));
+      unawaited(_loadCourseChapters(chapters, request));
     } catch (e) {
       debugPrint('Load chapters failed: $e');
-      if (!mounted) return;
+      if (!mounted || !identical(request, _readRequest)) return;
       setState(() {
         _chapters = [];
         _isLoading = false;
@@ -123,33 +137,21 @@ class _ChapterListBodyState extends State<ChapterListBody> {
   /// Reads each file's course chapters after the list is up, so the files
   /// show at once and a course's chapters fill in under it. A file that
   /// cannot be read simply lists no chapters; the file itself still opens.
-  Future<void> _loadCourseChapters(List<RepertoireMetadata> chapters) async {
-    final service = RepertoireService();
+  Future<void> _loadCourseChapters(
+    List<RepertoireMetadata> chapters,
+    Object request,
+  ) async {
     for (final chapter in chapters) {
       List<ChapterSummary> sections;
       try {
-        sections = await service.courseChaptersInFile(chapter.filePath);
+        sections = await _catalog.chapterSections(chapter.filePath);
       } catch (e) {
         debugPrint('Course chapters of ${chapter.filePath} failed: $e');
         sections = const [];
       }
-      if (!mounted) return;
+      if (!mounted || !identical(request, _readRequest)) return;
       setState(() => _courseChapters[chapter.filePath] = sections);
     }
-  }
-
-  /// The repertoire's color, read from any existing chapter's `// Color:`
-  /// comment so new chapters inherit it. Defaults to White.
-  Future<String> _repertoireColor() async {
-    for (final chapter in _chapters) {
-      final content = await StorageFactory.instance.readFile(chapter.filePath);
-      if (content == null) continue;
-      final color = pgn.extractRepertoireColor(content);
-      if (color != null && color.isNotEmpty) {
-        return color.toLowerCase() == 'black' ? 'Black' : 'White';
-      }
-    }
-    return 'White';
   }
 
   @override
@@ -248,7 +250,7 @@ class _ChapterListBodyState extends State<ChapterListBody> {
           ),
           const SizedBox(width: 12),
           FilledButton.icon(
-            onPressed: _showCreateDialog,
+            onPressed: _creating ? null : _showCreateDialog,
             icon: const Icon(Icons.add, size: 18),
             label: const Text('Add chapter'),
           ),
@@ -405,6 +407,9 @@ class _ChapterListBodyState extends State<ChapterListBody> {
   );
 
   Future<void> _showCreateDialog() async {
+    if (_creating) return;
+    final request = _readRequest;
+    final folder = _dirPath;
     final name = await showNameEntryDialog(
       context,
       title: 'Add Chapter',
@@ -416,41 +421,39 @@ class _ChapterListBodyState extends State<ChapterListBody> {
           validateSafeFileName(value) ??
           (_nameTaken(value) ? 'A chapter named "$value" exists' : null),
     );
-    if (name == null || !mounted) return;
-
+    if (name == null || !mounted || !identical(request, _readRequest)) return;
+    setState(() => _creating = true);
     try {
-      final storage = StorageFactory.instance;
-      final folder = _dirPath;
-      final color = await _repertoireColor();
-      final path = storage.chapterFilePath(folder, name);
-      if (await storage.fileExists(path)) {
-        if (mounted) {
-          showAppSnackBar(
-            context,
-            'That chapter already exists.',
-            requiresAttention: true,
-          );
-        }
-        return;
-      }
-      final header =
-          '// $name\n'
-          '// Color: $color\n'
-          '// Created on ${DateTime.now().toString().split('.')[0]}\n\n';
-      await storage.writeFile(path, header, createOnly: true);
-
-      final created = RepertoireMetadata(
-        filePath: path,
+      final result = await _catalog.createChapter(
+        folderPath: folder,
         name: name,
-        gameCount: 0,
-        lastModified: DateTime.now(),
       );
-      if (mounted) widget.onSelected(ChapterPick(created));
-    } catch (e) {
-      debugPrint('Create chapter failed: $e');
-      if (mounted) {
+      if (!mounted || !identical(request, _readRequest)) return;
+      if (result case PgnSaved(:final after)) {
+        widget.onSelected(
+          ChapterPick(
+            RepertoireMetadata(
+              filePath: after.path,
+              name: name,
+              lastModified: DateTime.now(),
+            ),
+          ),
+        );
+      } else {
+        showAppSnackBar(context, switch (result) {
+          PgnNameCollision() => 'That chapter already exists.',
+          PgnWriteUncertain(:final recoveryPath) =>
+            'Chapter creation needs verification: ${p.join(folder, "$name.pgn")}.'
+                '${recoveryPath == null ? "" : " Recovery: $recoveryPath."} Do not retry.',
+          _ => 'Could not create chapter.',
+        }, isError: true);
+      }
+    } catch (error) {
+      if (mounted && identical(request, _readRequest)) {
         showAppSnackBar(context, 'Could not create chapter.', isError: true);
       }
+    } finally {
+      if (mounted) setState(() => _creating = false);
     }
   }
 

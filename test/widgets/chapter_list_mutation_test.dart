@@ -1,3 +1,7 @@
+import 'package:provider/provider.dart';
+import 'package:chess_auto_prep/features/repertoires/repositories/repertoire_catalog_repository.dart';
+import 'package:chess_auto_prep/infrastructure/repertoires/legacy_repertoire_catalog_repository.dart';
+import 'package:chess_auto_prep/infrastructure/documents/legacy_pgn_document_store.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -92,6 +96,13 @@ void main() {
   Future<void> open(WidgetTester tester) async {
     await tester.pumpWidget(
       MaterialApp(
+        builder: (context, child) => Provider<RepertoireCatalogRepository>(
+          create: (_) => LegacyRepertoireCatalogRepository(
+            StorageFactory.instance,
+            documents: LegacyPgnDocumentStore(StorageFactory.instance),
+          ),
+          child: child!,
+        ),
         theme: AppTheme.dark(),
         home: Scaffold(
           body: ChapterListBody(
@@ -117,13 +128,16 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'Main');
     await tester.tap(find.text('Create'));
-    await _until(tester, () => storage.writeFinished.isCompleted);
+    await _until(tester, () => find.byType(SnackBar).evaluate().isNotEmpty);
     expect(
       File(p.join(folder.path, 'Main.pgn')).readAsStringSync(),
       _competingPgn,
     );
     expect(selected, isNull);
-    expect(find.text('Could not create chapter.'), findsOneWidget);
+    expect(
+      find.textContaining('Chapter creation needs verification:'),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });

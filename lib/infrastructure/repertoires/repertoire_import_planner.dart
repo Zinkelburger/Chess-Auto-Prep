@@ -1,12 +1,18 @@
+import 'dart:isolate';
 import 'package:chess_auto_prep/chess_core/pgn/repertoire_document_mutation.dart';
 import '../../features/repertoires/models/repertoire_creation.dart';
 import '../../features/repertoires/models/repertoire_publication.dart';
 import '../../features/repertoire/services/course_chapter_partition.dart';
-import '../../features/repertoire/services/chapter_store.dart';
 import '../../services/repertoire_service.dart';
 import '../../chess_core/pgn/repertoire_line_expansion.dart';
 import '../../chess_core/pgn/repertoire_pgn_text.dart';
 import '../../utils/safe_file_name.dart';
+
+/// Keep document stores and mutation callbacks outside the isolate closure.
+Future<RepertoirePublication> prepareRepertoireImport(
+  CreateRepertoire request,
+  DateTime createdAt,
+) => Isolate.run(() => planRepertoireImport(request, createdAt));
 
 /// Reuses the existing parser and pinning semantics without mutating a live file.
 RepertoirePublication planRepertoireImport(
@@ -18,7 +24,7 @@ RepertoirePublication planRepertoireImport(
   if (request.color != 'White' && request.color != 'Black') {
     throw ArgumentError.value(request.color, 'color');
   }
-  final header = ChapterStore.chapterHeader(
+  final header = chapterHeader(
     name: chapter,
     isWhite: request.color == 'White',
     createdAt: createdAt,
@@ -49,7 +55,7 @@ RepertoirePublication planRepertoireImport(
       for (final entry in partition.chapters.entries) {
         final name = names[entry.key]!;
         chapters['$name.pgn'] = reassemblePgnDocument(
-          ChapterStore.chapterHeader(
+          chapterHeader(
             name: name,
             isWhite: request.color == 'White',
             createdAt: createdAt,

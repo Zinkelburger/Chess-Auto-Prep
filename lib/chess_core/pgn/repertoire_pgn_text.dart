@@ -230,3 +230,21 @@ String buildMinimalGamePgn(
 
   return [...headers, '', buildNumberedMovetext(moves)].join('\n');
 }
+
+/// Comment header written above an empty chapter. The colour line is the
+/// one part that matters — it is what tells a later load which side the
+/// chapter is for, so it must survive a chapter created before any moves.
+String chapterHeader({
+  required String name,
+  required bool isWhite,
+  required DateTime createdAt,
+  String? courseChapter,
+}) {
+  // `// Chapter:` says this file *is* one course chapter, so the parser
+  // names its lines by their titles instead of looking for chapters in
+  // the headers again (see `extractCourseChapter`).
+  return '// $name\n'
+      '// Color: ${isWhite ? 'White' : 'Black'}\n'
+      '${courseChapter == null ? '' : '// Chapter: $courseChapter\n'}'
+      '// Created on ${createdAt.toString().split('.')[0]}\n\n';
+}

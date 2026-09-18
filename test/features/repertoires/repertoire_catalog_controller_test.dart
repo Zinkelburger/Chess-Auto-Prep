@@ -1,3 +1,6 @@
+import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
+import 'package:chess_auto_prep/features/training/models/chapter_layout.dart'
+    show ChapterSummary;
 import 'dart:async';
 import 'package:chess_auto_prep/features/repertoires/models/repertoire_recovery_entry.dart';
 import 'package:chess_auto_prep/features/repertoires/models/repertoire_recovery_required.dart';
@@ -15,6 +18,14 @@ RepertoireMetadata entry(String name, [int day = 1]) => RepertoireMetadata(
 );
 
 class Catalog implements RepertoireCatalogRepository {
+  @override
+  Future<List<ChapterSummary>> chapterSections(String path) async => [];
+  @override
+  Future<PgnWriteResult> createChapter({
+    required String folderPath,
+    required String name,
+    bool? isWhite,
+  }) async => PgnWriteFailed(UnimplementedError());
   @override
   bool get supportsRecovery => true;
   List<RepertoireRecoveryEntry> recovery = [];

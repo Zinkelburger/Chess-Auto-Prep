@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/infrastructure/repertoires/legacy_repertoire_catalog_repository.dart';
 import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
 import 'package:chess_auto_prep/features/repertoire/services/chapter_splitter.dart';
 import 'package:chess_auto_prep/infrastructure/documents/native_pgn_document_store.dart';
@@ -56,6 +57,10 @@ void main() {
     documents = _FailingDestinations();
     controller = RepertoireOutlineController(
       service: RepertoireOutlineService(
+        catalog: LegacyRepertoireCatalogRepository(
+          storage,
+          documents: NativePgnDocumentStore(),
+        ),
         storage: storage,
         splitter: ChapterSplitter(documents: documents, storage: storage),
       ),

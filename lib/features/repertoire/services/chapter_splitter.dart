@@ -39,7 +39,6 @@ import '../../documents/repositories/pgn_document_store.dart';
 import '../../../services/repertoire_review_service.dart';
 import '../../../services/repertoire_service.dart';
 import '../../../services/storage/storage_service.dart';
-import 'chapter_store.dart';
 import 'course_chapter_partition.dart';
 import 'review_progress_repointer.dart';
 
@@ -165,7 +164,7 @@ class ChapterSplitter {
       final outcome = await _documents.create(
         path,
         reassemblePgnDocument(
-          ChapterStore.chapterHeader(
+          chapterHeader(
             name: name,
             isWhite: sideIsWhite,
             createdAt: DateTime.now(),

@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/infrastructure/documents/native_pgn_document_store.dart';
 import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'dart:io';
 
@@ -61,7 +62,10 @@ void main() {
         );
         await tester.pumpWidget(
           AppDependencies(
-            repertoireCatalog: LegacyRepertoireCatalogRepository(storage),
+            repertoireCatalog: LegacyRepertoireCatalogRepository(
+              storage,
+              documents: NativePgnDocumentStore(),
+            ),
             child: MaterialApp(
               localizationsDelegates: AppLocalizations.localizationsDelegates,
               supportedLocales: AppLocalizations.supportedLocales,
@@ -162,7 +166,10 @@ void main() {
 
       await tester.pumpWidget(
         AppDependencies(
-          repertoireCatalog: LegacyRepertoireCatalogRepository(storage),
+          repertoireCatalog: LegacyRepertoireCatalogRepository(
+            storage,
+            documents: NativePgnDocumentStore(),
+          ),
           child: MaterialApp(
             localizationsDelegates: AppLocalizations.localizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,

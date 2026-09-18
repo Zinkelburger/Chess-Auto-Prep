@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/infrastructure/repertoires/legacy_repertoire_catalog_repository.dart';
 import 'package:chess_auto_prep/infrastructure/documents/native_pgn_document_store.dart';
 import 'dart:async';
 import 'dart:io';
@@ -122,6 +123,10 @@ void main() {
       review: RepertoireReviewService(storage: csv),
     );
     service = RepertoireOutlineService(
+      catalog: LegacyRepertoireCatalogRepository(
+        storage,
+        documents: NativePgnDocumentStore(),
+      ),
       storage: storage,
       repointer: repointer,
       splitter: ChapterSplitter(

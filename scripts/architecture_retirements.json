@@ -88,7 +88,8 @@
     "lib/widgets/common/icon_filter_chip.dart",
     "lib/features/traps/widgets/trap_move_indicator.dart",
     "lib/widgets/pgn/comment_prose_spans.dart",
-    "lib/widgets/engine/engine_toggle_button.dart"
+    "lib/widgets/engine/engine_toggle_button.dart",
+    "lib/features/repertoire/services/chapter_store.dart"
   ],
   "symbols": [
     "PgnBatchWriter",
@@ -189,6 +190,7 @@
     "onPauseGeneration",
     "onResumeGeneration",
     "onCancelGeneration",
-    "onFinishNowGeneration"
+    "onFinishNowGeneration",
+    "ChapterStore"
   ]
 }
