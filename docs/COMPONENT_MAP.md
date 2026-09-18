@@ -1523,6 +1523,12 @@ ends its retry admission and releases retry snapshots; admitted writes finish,
 while generation checks suppress old tally/error/advancement. The redundant
 rating-button wrapper and all-caught-up panel are retired.
 
+`TrainerBrowser` receives the existing session directly for chapter scope,
+Learn/Review, per-line practice and bulk-known commands. The screen retains
+only navigation callbacks; browser-local search, sort and checkbox selection
+stay in the widget. Its chapter inventory includes read-only model games even
+when those chapters contain no trainable lines.
+
 `AppDependencies` owns one `TrainingSettingsController`. Settings panels submit
 immutable field patches and share committed values, pending drafts and visible
 save failures with Retry. Fresh reads and serialized writes preserve changes

@@ -3,6 +3,7 @@ import 'package:chess_auto_prep/widgets/training/trainer_browser.dart';
 import 'package:dartchess/dartchess.dart' show Chess;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import '../../support/trainer_browser_session.dart';
 
 RepertoireLine _line(String id, String chapter) => RepertoireLine(
   id: id,
@@ -25,19 +26,15 @@ Future<void> _pump(
     tester.view.resetPhysicalSize();
     tester.view.resetDevicePixelRatio();
   });
+  final session = await trainerBrowserSession(
+    name: 'French',
+    lines: [_line('a', 'One'), _line('b', 'One'), _line('c', 'Two')],
+    activeChapter: activeChapter,
+  );
   await tester.pumpWidget(
     MaterialApp(
       home: Scaffold(
-        body: TrainerBrowser(
-          title: 'French',
-          lines: [_line('a', 'One'), _line('b', 'One'), _line('c', 'Two')],
-          reviewMap: const {},
-          chapterOf: (line) => line.chapter,
-          activeChapter: activeChapter,
-          ungroupedChapter: '__ungrouped__',
-          onTrainLine: (_) {},
-          onReadLines: onReadLines,
-        ),
+        body: TrainerBrowser(session: session, onReadLines: onReadLines),
       ),
     ),
   );
