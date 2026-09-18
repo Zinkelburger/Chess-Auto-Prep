@@ -37,7 +37,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
 import 'package:chess_auto_prep/constants/chess_constants.dart';
-import 'package:chess_auto_prep/models/eval_database_settings.dart';
+import 'package:chess_auto_prep/features/settings/controllers/eval_database_settings.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';
 import 'package:chess_auto_prep/services/generation/skeleton_plan.dart';
 import 'package:chess_auto_prep/widgets/generation/generation_config_form.dart';
@@ -75,7 +75,7 @@ const Map<String, String> _knownLossy = {
   'memorability_tolerance_cp': 'forced to 0 while novelties are on',
 
   // ── Owned by global settings, not by the config ──────────────────────
-  // These three are read from EvalDatabaseSettings.instance at build time,
+  // These three are read from runtimeSettings.databases at build time,
   // not from the form, and are gated behind a runtime probe for a cdb-direct
   // install that no test machine has. A config cannot dictate them.
   'enable_cdbdirect': 'read from EvalDatabaseSettings, gated on availability',
@@ -154,7 +154,7 @@ Future<TreeBuildConfig> _throughForm(
     MultiProvider(
       providers: [
         ChangeNotifierProvider<EvalDatabaseSettings>.value(
-          value: EvalDatabaseSettings.instance,
+          value: runtimeSettings.databases,
         ),
       ],
       child: MaterialApp(
@@ -666,7 +666,7 @@ void main() {
         MultiProvider(
           providers: [
             ChangeNotifierProvider<EvalDatabaseSettings>.value(
-              value: EvalDatabaseSettings.instance,
+              value: runtimeSettings.databases,
             ),
           ],
           child: MaterialApp(
@@ -800,7 +800,7 @@ void main() {
         MultiProvider(
           providers: [
             ChangeNotifierProvider<EvalDatabaseSettings>.value(
-              value: EvalDatabaseSettings.instance,
+              value: runtimeSettings.databases,
             ),
           ],
           child: MaterialApp(

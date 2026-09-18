@@ -12,6 +12,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../services/eval/lichess_eval_controller.dart';
 import '../services/eval/lichess_eval_source.dart';
@@ -32,11 +33,10 @@ Future<LichessDownloadRequest?> showLichessDownloadDialog(
   BuildContext context, {
   LichessEvalController? controller,
 }) {
+  final download = controller ?? context.read<LichessEvalController>();
   return showDialog<LichessDownloadRequest>(
     context: context,
-    builder: (_) => _LichessDownloadDialog(
-      controller: controller ?? LichessEvalController.instance,
-    ),
+    builder: (_) => _LichessDownloadDialog(controller: download),
   );
 }
 

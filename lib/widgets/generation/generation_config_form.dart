@@ -4,7 +4,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../models/eval_database_settings.dart';
+import '../../features/settings/controllers/eval_database_settings.dart';
+import '../../features/settings/widgets/settings_section_status.dart';
 import '../../services/eval/cdbdirect_eval_provider.dart';
 import '../../services/generation/generation_config.dart';
 import '../../services/generation/generation_presets.dart';
@@ -73,6 +74,11 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
   void initState() {
     super.initState();
     _bulkSettings.addListener(_refreshEngineSettings);
+    unawaited(
+      context.read<EvalDatabaseSettings>().ensureLoaded().catchError(
+        (Object _) {},
+      ),
+    );
     if (widget.initialConfig != null) {
       _applyInitialConfig(widget.initialConfig!);
     }
@@ -111,6 +117,10 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        SettingsSectionStatus(
+          owner: context.watch<EvalDatabaseSettings>(),
+          policy: 'Builds use saved evaluation database preferences.',
+        ),
         // Source (What to build) sits above the search fields it gates;
         // the source picker leads so its dependent controls stay below it.
         _outputSection(),

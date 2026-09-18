@@ -8,7 +8,7 @@ library;
 
 import 'package:flutter/widgets.dart';
 
-import '../../models/eval_database_settings.dart';
+import '../../features/settings/controllers/eval_database_settings.dart';
 import '../../services/eval/chessdb_api_provider.dart';
 import '../../services/generation/generation_config.dart';
 import '../../utils/safe_change_notifier.dart';

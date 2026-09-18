@@ -71,6 +71,10 @@ mixin _GenerationConfigIo
 
   /// Returns an error message when the current settings cannot start a build.
   String? validateBeforeStart() {
+    final databases = context.read<EvalDatabaseSettings>();
+    if (databases.state.committed == null) {
+      return 'Load saved evaluation database preferences before starting. Retry above if loading failed.';
+    }
     final numError = _firstNumFieldError();
     if (numError != null) return numError;
     if (_buildMode == BuildMode.dbExplorer && _pgnSources.filePaths.isEmpty) {
@@ -83,7 +87,7 @@ mixin _GenerationConfigIo
     if (_buildMode == BuildMode.maiaDbExplore &&
         !_evalSources.enableLocalChessDb &&
         !_evalSources.enableChessDbApi &&
-        !EvalDatabaseSettings.instance.enableCdbDirect) {
+        !databases.enableCdbDirect) {
       setState(() => _showEvalSources = true);
       return '"Database win rates" needs at least one evaluation database. '
           'Expand "Evaluation databases" at the bottom of the form and '
@@ -91,7 +95,7 @@ mixin _GenerationConfigIo
     }
     if (_buildMode == BuildMode.chessDbBook &&
         !_evalSources.enableChessDbApi &&
-        !EvalDatabaseSettings.instance.enableCdbDirect) {
+        !databases.enableCdbDirect) {
       setState(() => _showEvalSources = true);
       return 'The ChessDB mainline book needs ChessDB itself. Expand '
           '"Evaluation databases" at the bottom of the form and enable the '
@@ -236,7 +240,7 @@ mixin _GenerationConfigIo
               selectionMode: SelectionMode.expectimax,
               engineTailPlies: 0,
             ),
-      databases: EvalDatabaseSettings.instance,
+      databases: context.read<EvalDatabaseSettings>(),
       cdbDirectAvailable: _cdbDirectAvailable,
       engineEvalDepth: evalDepth,
     );

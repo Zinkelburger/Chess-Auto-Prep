@@ -1,3 +1,6 @@
+import 'package:chess_auto_prep/features/settings/controllers/eval_database_settings.dart';
+import 'package:chess_auto_prep/features/settings/models/eval_database_configuration.dart';
+import '../../support/runtime_settings.dart';
 import 'dart:io';
 import 'dart:math';
 
@@ -45,6 +48,8 @@ void main() {
   // The test binding otherwise answers every socket with an empty 400.
   setUpAll(() => HttpOverrides.global = null);
 
+  late MemorySettingsSection<EvalDatabaseConfiguration> settingsStorage;
+  late EvalDatabaseSettings settings;
   late Directory tmp;
   late _FakeMirror mirror;
   late CdbSnapshot snapshot;
@@ -55,6 +60,9 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    settingsStorage = MemorySettingsSection(EvalDatabaseConfiguration());
+    settings = EvalDatabaseSettings(settingsStorage);
+    await settings.ensureLoaded();
     tmp = await Directory.systemTemp.createTemp('cdb_download_test');
     final rng = Random(7);
     payload = List<int>.generate(fileBytes, (_) => rng.nextInt(256));
@@ -67,12 +75,13 @@ void main() {
   });
 
   tearDown(() async {
+    settings.dispose();
     await mirror.stop();
     if (await tmp.exists()) await tmp.delete(recursive: true);
   });
 
   CdbSnapshotDownloadController newController() =>
-      CdbSnapshotDownloadController(concurrency: 1, urlBuilder: mirror.urlFor);
+      CdbSnapshotDownloadController(settings: settings, concurrency: 1, urlBuilder: mirror.urlFor);
 
   File localFile() => File(p.join(tmp.path, repoPath));
 
@@ -88,6 +97,28 @@ void main() {
     expect(controller.filesDone, 1);
     expect(await localFile().readAsBytes(), payload);
     expect(mirror.rangeHeaders, [null]);
+    controller.dispose();
+  });
+
+  test('activation failure retains complete files and retries only settings', () async {
+    final controller = newController();
+    await controller.prepare(snapshot: snapshot, parentDir: tmp.path);
+    settingsStorage.failure = StateError('settings unavailable');
+
+    await controller.start();
+
+    expect(controller.phase, CdbDownloadPhase.complete);
+    expect(controller.error, isNull);
+    expect(await localFile().readAsBytes(), payload);
+    expect(settings.state.error, isNotNull);
+    expect(settings.enableCdbDirect, isFalse);
+    expect(mirror.rangeHeaders, [null]);
+    settingsStorage.failure = null;
+    await settings.retry();
+    expect(settings.enableCdbDirect, isTrue);
+    expect(settings.cdbDirectPath, controller.dataDirectory);
+    expect(mirror.rangeHeaders, [null]);
+    await controller.close();
     controller.dispose();
   });
 

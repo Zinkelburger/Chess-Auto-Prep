@@ -4,7 +4,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../models/eval_database_settings.dart';
+import '../../features/settings/controllers/eval_database_settings.dart';
+import '../../features/settings/widgets/settings_section_status.dart';
 import '../../services/eval/lichess_eval_controller.dart';
 import '../../services/eval/sqlite_eval_provider.dart';
 import '../../theme/app_colors.dart';
@@ -42,7 +43,7 @@ class EvalSourcesSection extends StatelessWidget {
     required this.cdbDirectAvailable,
   });
 
-  Future<void> _pickLocalChessDbFile() async {
+  Future<void> _pickLocalChessDbFile(BuildContext context) async {
     final file = await FilePicker.pickFile(
       dialogTitle: 'Select ChessDB SQLite file',
       type: FileType.custom,
@@ -51,11 +52,9 @@ class EvalSourcesSection extends StatelessWidget {
       linuxOptions: const LinuxOptions(lockParentWindow: true),
     );
     final path = file?.path;
-    if (path == null) return;
-    controller.setLocalChessDbFile(
-      path,
-      valid: await validateChessDbEvalFile(path),
-    );
+    if (!context.mounted || path == null) return;
+    final valid = await validateChessDbEvalFile(path);
+    if (context.mounted) controller.setLocalChessDbFile(path, valid: valid);
   }
 
   Widget _numField(
@@ -117,9 +116,13 @@ class EvalSourcesSection extends StatelessWidget {
           'only runs when they all miss.',
           style: AppTextStyles.caption,
         ),
+        SettingsSectionStatus(
+          owner: context.watch<EvalDatabaseSettings>(),
+          policy: 'Builds use saved evaluation database preferences.',
+        ),
         const SizedBox(height: 14),
         _chessDbDumpSource(context),
-        _sqliteSliceSource(),
+        _sqliteSliceSource(context),
         _lichessSource(context),
         _chessDbApiSource(),
         const Divider(height: 28),
@@ -151,6 +154,9 @@ class EvalSourcesSection extends StatelessWidget {
 
   Widget _chessDbDumpSource(BuildContext context) {
     final databases = context.watch<EvalDatabaseSettings>();
+    if (databases.state.committed == null) {
+      return SettingsSectionStatus(owner: databases, policy: '');
+    }
     final configured =
         databases.enableCdbDirect && databases.cdbDirectPath.isNotEmpty;
 
@@ -181,9 +187,17 @@ class EvalSourcesSection extends StatelessWidget {
         const SizedBox(height: 10),
         AppSwitch(
           label: 'Use during builds',
-          value: databases.enableCdbDirect,
-          onChanged: (v) => unawaited(databases.setEnableCdbDirect(v)),
-          enabled: databases.cdbDirectPath.isNotEmpty && !isGenerating,
+          value: databases.editing.enableCdbDirect,
+          onChanged: (v) {
+            if (!context.mounted) return;
+            unawaited(
+              databases.setEnableCdbDirect(v).catchError((Object _) {}),
+            );
+          },
+          enabled:
+              databases.cdbDirectPath.isNotEmpty &&
+              !isGenerating &&
+              !databases.state.busy,
           tooltip: 'Machine-wide, shared with the Databases page.',
           disabledReason: databases.cdbDirectPath.isEmpty
               ? 'No dump on this machine yet.'
@@ -205,7 +219,7 @@ class EvalSourcesSection extends StatelessWidget {
 
   // ── Source 2: a hand-picked SQLite slice ─────────────────────────────────
 
-  Widget _sqliteSliceSource() {
+  Widget _sqliteSliceSource(BuildContext context) {
     final localFieldsEnabled = controller.enableLocalChessDb && !isGenerating;
     final path = controller.localChessDbPathField.text;
     final valid = controller.localChessDbFileValid;
@@ -252,7 +266,7 @@ class EvalSourcesSection extends StatelessWidget {
               message: 'Browse for a ChessDB .db file',
               child: IconButton(
                 onPressed: localFieldsEnabled
-                    ? () => unawaited(_pickLocalChessDbFile())
+                    ? () => unawaited(_pickLocalChessDbFile(context))
                     : null,
                 icon: const Icon(Icons.folder_open),
               ),
@@ -277,7 +291,8 @@ class EvalSourcesSection extends StatelessWidget {
 
   Widget _lichessSource(BuildContext context) {
     final databases = context.watch<EvalDatabaseSettings>();
-    final lichess = LichessEvalController.instance;
+    if (databases.state.committed == null) return const SizedBox.shrink();
+    final lichess = context.watch<LichessEvalController>();
 
     return ListenableBuilder(
       listenable: lichess,
@@ -294,9 +309,14 @@ class EvalSourcesSection extends StatelessWidget {
           const SizedBox(height: 10),
           AppSwitch(
             label: 'Use during builds',
-            value: databases.enableLichessEvals,
-            onChanged: (v) => unawaited(databases.setEnableLichessEvals(v)),
-            enabled: lichess.isReady && !isGenerating,
+            value: databases.editing.enableLichessEvals,
+            onChanged: (v) {
+              if (!context.mounted) return;
+              unawaited(
+                databases.setEnableLichessEvals(v).catchError((Object _) {}),
+              );
+            },
+            enabled: lichess.isReady && !isGenerating && !databases.state.busy,
             tooltip: 'Machine-wide, shared with the Databases page.',
             disabledReason: lichess.isReady
                 ? 'A build is running.'

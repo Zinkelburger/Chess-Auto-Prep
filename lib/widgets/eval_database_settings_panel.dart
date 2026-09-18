@@ -13,10 +13,13 @@ import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../features/settings/widgets/settings_section_status.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../models/eval_database_settings.dart';
+import '../features/settings/controllers/eval_database_settings.dart';
 import '../theme/app_colors.dart';
 import '../services/eval/cdb_snapshot_catalog.dart';
 import '../services/eval/cdb_snapshot_download.dart';
@@ -67,9 +70,8 @@ class EvalDatabaseSettingsPanel extends StatefulWidget {
 }
 
 class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
-  final EvalDatabaseSettings _settings = EvalDatabaseSettings.instance;
-  final CdbSnapshotDownloadController _download =
-      CdbSnapshotDownloadController.instance;
+  late final EvalDatabaseSettings _settings;
+  late final CdbSnapshotDownloadController _download;
   final TextEditingController _pathCtrl = TextEditingController();
 
   CdbDirectDirValidation? _dirValidation;
@@ -79,11 +81,14 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
   @override
   void initState() {
     super.initState();
+    _settings = context.read<EvalDatabaseSettings>();
+    _download = context.read<CdbSnapshotDownloadController>();
+    unawaited(_settings.ensureLoaded().catchError((Object _) {}));
     _settings.addListener(_onSettingsChanged);
     _download.addListener(_onDownloadChanged);
-    _pathCtrl.text = _settings.cdbDirectPath;
-    if (widget.libraryAvailable && _settings.cdbDirectPath.isNotEmpty) {
-      unawaited(_validatePath(_settings.cdbDirectPath));
+    _pathCtrl.text = _settings.editing.cdbDirectPath;
+    if (widget.libraryAvailable && _settings.editing.cdbDirectPath.isNotEmpty) {
+      unawaited(_validatePath(_settings.editing.cdbDirectPath));
     }
   }
 
@@ -96,9 +101,9 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
   }
 
   void _onSettingsChanged() {
-    if (_pathCtrl.text != _settings.cdbDirectPath) {
-      _pathCtrl.text = _settings.cdbDirectPath;
-      unawaited(_validatePath(_settings.cdbDirectPath));
+    if (_pathCtrl.text != _settings.editing.cdbDirectPath) {
+      _pathCtrl.text = _settings.editing.cdbDirectPath;
+      unawaited(_validatePath(_settings.editing.cdbDirectPath));
     }
     if (mounted) setState(() {});
   }
@@ -119,7 +124,7 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
     }
     final result = await validateCdbDirectDataDirDetailed(path);
     final volume = await volumeForPath(path);
-    if (!mounted) return;
+    if (!mounted || path != _settings.editing.cdbDirectPath) return;
     setState(() {
       _dirValidation = result;
       _pathMedia = volume?.media;
@@ -127,15 +132,22 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
   }
 
   Future<void> _pickDirectory() async {
-    if (!widget.libraryAvailable) return;
+    if (!mounted || !widget.libraryAvailable) return;
     final result = await FilePicker.getDirectoryPath(
       dialogTitle: 'Select ChessDB data directory',
     );
-    if (result == null) return;
-    await _settings.setCdbDirectPath(result);
-    await _validatePath(result);
-    if (_dirValidation?.isValid == true) {
-      await _settings.setEnableCdbDirect(true);
+    if (!mounted || result == null) return;
+    try {
+      await _settings.setCdbDirectPath(result);
+      if (!mounted) return;
+      await _validatePath(result);
+      if (mounted &&
+          _settings.editing.cdbDirectPath == result &&
+          _dirValidation?.isValid == true) {
+        await _settings.setEnableCdbDirect(true);
+      }
+    } catch (_) {
+      // The shared settings status retains the failed edit and offers Retry.
     }
   }
 
@@ -151,14 +163,25 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final available = widget.libraryAvailable;
+    final status = SettingsSectionStatus(
+      owner: _settings,
+      policy: 'Saved preferences apply to new builds and lookups.',
+    );
+    if (_settings.state.committed == null) return status;
+    final available = widget.libraryAvailable && !_settings.state.busy;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        status,
         AppSwitch(
           label: 'Use offline ChessDB',
-          value: _settings.enableCdbDirect,
-          onChanged: (v) => _settings.setEnableCdbDirect(v),
+          value: _settings.editing.enableCdbDirect,
+          onChanged: (v) {
+            if (!mounted) return;
+            unawaited(
+              _settings.setEnableCdbDirect(v).catchError((Object _) {}),
+            );
+          },
           enabled: available,
           tooltip:
               'Answer eval lookups from the dump on disk before trying the '
@@ -191,9 +214,14 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
       children: [
         AppSwitch(
           label: 'Read in larger blocks',
-          value: _settings.cdbDirectReadAhead,
-          onChanged: (v) => _settings.setCdbDirectReadAhead(v),
-          enabled: available && _settings.enableCdbDirect,
+          value: _settings.editing.cdbDirectReadAhead,
+          onChanged: (v) {
+            if (!mounted) return;
+            unawaited(
+              _settings.setCdbDirectReadAhead(v).catchError((Object _) {}),
+            );
+          },
+          enabled: available && _settings.editing.enableCdbDirect,
           tooltip:
               'Reads a larger block around each lookup — worth it on a '
               'spinning disk, wasted work on an SSD.',
@@ -263,13 +291,16 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
               ),
             if (_pathCtrl.text.isNotEmpty)
               IconButton(
-                onPressed: () async {
-                  await _settings.setCdbDirectPath('');
-                  setState(() {
-                    _dirValidation = null;
-                    _pathMedia = null;
-                  });
-                },
+                onPressed: available
+                    ? () {
+                        if (!mounted) return;
+                        unawaited(
+                          _settings
+                              .setCdbDirectPath('')
+                              .catchError((Object _) {}),
+                        );
+                      }
+                    : null,
                 icon: const Icon(Icons.clear),
                 tooltip: 'Clear path',
               ),
@@ -305,7 +336,9 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
     final snapshotId = _download.snapshot?.id ?? kChessDbFallbackSnapshotId;
     return ExpansionTile(
       initiallyExpanded: _setupExpanded,
-      onExpansionChanged: (v) => setState(() => _setupExpanded = v),
+      onExpansionChanged: (v) {
+        if (mounted) setState(() => _setupExpanded = v);
+      },
       tilePadding: EdgeInsets.zero,
       title: const Text(
         'Download it yourself instead',

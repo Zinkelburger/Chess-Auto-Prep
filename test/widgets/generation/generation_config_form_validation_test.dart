@@ -6,7 +6,7 @@ import '../../support/runtime_settings.dart';
 // Start refuses a numeric knob it cannot use and names it, instead of
 // quietly building with a default in its place.
 
-import 'package:chess_auto_prep/models/eval_database_settings.dart';
+import 'package:chess_auto_prep/features/settings/controllers/eval_database_settings.dart';
 import 'package:chess_auto_prep/widgets/generation/generation_config_form.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -38,7 +38,7 @@ void main() {
       MultiProvider(
         providers: [
           ChangeNotifierProvider<EvalDatabaseSettings>.value(
-            value: EvalDatabaseSettings.instance,
+            value: settings.databases,
           ),
         ],
         child: MaterialApp(

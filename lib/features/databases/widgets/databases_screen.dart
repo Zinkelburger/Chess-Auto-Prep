@@ -33,7 +33,8 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../../models/eval_database_settings.dart';
+import '../../settings/controllers/eval_database_settings.dart';
+import '../../settings/widgets/settings_section_status.dart';
 import '../../../services/eval/cdbdirect_eval_provider.dart';
 import '../../../services/eval/cdb_snapshot_download.dart';
 import '../../../services/eval/lichess_eval_controller.dart';
@@ -70,9 +71,9 @@ class DatabasesScreen extends StatefulWidget {
 }
 
 class _DatabasesScreenState extends State<DatabasesScreen> {
-  final _download = CdbSnapshotDownloadController.instance;
-  final _lichess = LichessEvalController.instance;
-  final _settings = EvalDatabaseSettings.instance;
+  late final CdbSnapshotDownloadController _download;
+  late final LichessEvalController _lichess;
+  late final EvalDatabaseSettings _settings;
 
   DatabaseInventory _inventory = const DatabaseInventory.empty();
   CdbDirectLibraryStatus? _cdbStatus;
@@ -84,13 +85,16 @@ class _DatabasesScreenState extends State<DatabasesScreen> {
   @override
   void initState() {
     super.initState();
+    _download = context.read<CdbSnapshotDownloadController>();
+    _lichess = context.read<LichessEvalController>();
+    _settings = context.read<EvalDatabaseSettings>();
+    unawaited(_settings.ensureLoaded().catchError((Object _) {}));
     _download.addListener(_onChanged);
     _lichess.addListener(_onChanged);
     _settings.addListener(_onChanged);
     // Reads disk only. Nothing here starts a transfer: a page about what you
     // already have must never be the thing that fetches 1.2 TB.
-    unawaited(_download.loadSaved());
-    unawaited(_lichess.loadSaved());
+    // The mounted download cards restore their own artifact status.
     unawaited(_measure());
   }
 
@@ -214,18 +218,31 @@ class _DatabasesScreenState extends State<DatabasesScreen> {
                     const SizedBox(height: 12),
                   ],
                   _intro(),
+                  SettingsSectionStatus(
+                    owner: _settings,
+                    policy:
+                        'Saved preferences apply to new builds and lookups.',
+                  ),
                   if (widget.embedded) ...[
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text(
-                        'Use online ChessDB during repertoire builds',
+                    if (_settings.state.committed != null)
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text(
+                          'Use online ChessDB during repertoire builds',
+                        ),
+                        subtitle: const Text('Uses your daily ChessDB quota.'),
+                        value: _settings.editing.chessDbApiForExpectimax,
+                        onChanged: _settings.state.busy
+                            ? null
+                            : (value) {
+                                if (!mounted) return;
+                                unawaited(
+                                  _settings
+                                      .setChessDbApiForExpectimax(value)
+                                      .catchError((Object _) {}),
+                                );
+                              },
                       ),
-                      subtitle: const Text('Uses your daily ChessDB quota.'),
-                      value: _settings.chessDbApiForExpectimax,
-                      onChanged: (value) => unawaited(
-                        _settings.setChessDbApiForExpectimax(value),
-                      ),
-                    ),
                     Align(
                       alignment: Alignment.centerLeft,
                       child: TextButton.icon(
@@ -486,6 +503,14 @@ class _DatabasesScreenState extends State<DatabasesScreen> {
       _settings.enableCdbDirect && _settings.cdbDirectPath.isNotEmpty;
 
   Widget _chessDbCard() {
+    if (_settings.state.committed == null) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: Text(
+          'ChessDB configuration is not available until saved preferences load.',
+        ),
+      );
+    }
     final status = _cdbStatus;
     final reason = status == null ? null : chessDbUnavailableReason(status);
     final footprint = _inventory[StoreLabels.chessDbDump];

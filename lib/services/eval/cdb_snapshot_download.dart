@@ -20,7 +20,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../models/eval_database_settings.dart';
+import '../../features/settings/controllers/eval_database_settings.dart';
 import '../../utils/safe_change_notifier.dart';
 import '../../utils/time_format.dart';
 import '../jobs/repertoire_job.dart';
@@ -73,6 +73,7 @@ const int kCdbRecommendedHeadroomBytes = 20 * 1000 * 1000 * 1000;
 class CdbSnapshotDownloadController extends ChangeNotifier
     with SafeChangeNotifier {
   CdbSnapshotDownloadController({
+    required this.settings,
     CdbSnapshotCatalog? catalog,
     this.concurrency = 4,
     Uri Function(String repoPath)? urlBuilder,
@@ -85,8 +86,7 @@ class CdbSnapshotDownloadController extends ChangeNotifier
     );
   }
 
-  static final CdbSnapshotDownloadController instance =
-      CdbSnapshotDownloadController();
+  final EvalDatabaseSettings settings;
 
   static const _keyParentDir = 'eval.cdb_download.parent_dir';
   static const _keySnapshotId = 'eval.cdb_download.snapshot_id';
@@ -116,6 +116,34 @@ class CdbSnapshotDownloadController extends ChangeNotifier
 
   bool _stopRequested = false;
   Future<void>? _runInFlight;
+  Future<void>? _closeFuture;
+
+  Future<T> _operate<T>(Future<T> Function() action, {bool interrupt = false}) {
+    if (_closeFuture != null || isDisposed) {
+      return Future.error(StateError('Download controller is closed'));
+    }
+    final previous = _runInFlight;
+    if (previous != null && !interrupt) {
+      return Future.error(StateError('A download operation is still running'));
+    }
+    if (interrupt) _stopRequested = true;
+    if (!interrupt) _stopRequested = false;
+    final settled = Completer<void>();
+    _runInFlight = settled.future;
+    return (() async {
+      try {
+        await previous;
+        if (_closeFuture != null || isDisposed) {
+          throw StateError('Download controller is closed');
+        }
+        return await action();
+      } finally {
+        if (identical(_runInFlight, settled.future)) _runInFlight = null;
+        settled.complete();
+        notifyListeners();
+      }
+    })();
+  }
   Timer? _ticker;
   RepertoireJob? _job;
 
@@ -136,6 +164,7 @@ class CdbSnapshotDownloadController extends ChangeNotifier
   List<CdbFileProblem> get problems => _problems;
 
   bool get isRunning =>
+      _runInFlight != null ||
       _phase == CdbDownloadPhase.downloading ||
       _phase == CdbDownloadPhase.preparing ||
       _phase == CdbDownloadPhase.checking;
@@ -178,8 +207,12 @@ class CdbSnapshotDownloadController extends ChangeNotifier
   ///
   /// Only reads what is on disk — it never starts a transfer, so launching
   /// the app on a metered connection does not silently resume 1.2 TB.
-  Future<void> loadSaved() async {
-    if (_snapshot != null || isRunning) return;
+  Future<void> loadSaved() {
+    if (_snapshot != null || isRunning) return Future.value();
+    return _operate(_loadSaved);
+  }
+
+  Future<void> _loadSaved() async {
     final prefs = await SharedPreferences.getInstance();
     final parent = prefs.getString(_keyParentDir);
     final id = prefs.getString(_keySnapshotId);
@@ -188,6 +221,7 @@ class CdbSnapshotDownloadController extends ChangeNotifier
 
     try {
       final snap = await _catalog.fetchSnapshot(id);
+      if (_stopRequested) return;
       _snapshot = snap;
       _parentDir = parent;
       _bytesTotal = snap.totalBytes;
@@ -203,8 +237,7 @@ class CdbSnapshotDownloadController extends ChangeNotifier
   Future<void> prepare({
     required CdbSnapshot snapshot,
     required String parentDir,
-  }) async {
-    if (isRunning) return;
+  }) => _operate(() async {
     _snapshot = snapshot;
     _parentDir = parentDir;
     _bytesTotal = snapshot.totalBytes;
@@ -220,7 +253,7 @@ class CdbSnapshotDownloadController extends ChangeNotifier
 
     _phase = _phaseForMeasuredBytes();
     notifyListeners();
-  }
+  });
 
   CdbDownloadPhase _phaseForMeasuredBytes() => _bytesDone >= _bytesTotal
       ? CdbDownloadPhase.complete
@@ -229,13 +262,16 @@ class CdbSnapshotDownloadController extends ChangeNotifier
   // ── Transfer ─────────────────────────────────────────────────────────────
 
   /// Start, or carry on from where a previous attempt stopped.
-  Future<void> start() async {
-    if (isRunning) return _runInFlight;
+  Future<void> start() {
+    if (isRunning) return _runInFlight ?? Future.value();
+    return _operate(_start);
+  }
+
+  Future<void> _start() async {
     final snap = _snapshot;
     final parent = _parentDir;
     if (snap == null || parent == null) return;
 
-    _stopRequested = false;
     _error = null;
     _phase = CdbDownloadPhase.downloading;
     _job = ensureEvalDatabaseJob(
@@ -246,8 +282,7 @@ class CdbSnapshotDownloadController extends ChangeNotifier
     _startTicker();
     notifyListeners();
 
-    _runInFlight = _run(snap, parent);
-    return _runInFlight;
+    await _run(snap, parent);
   }
 
   /// Park the transfer. Everything already fetched stays on disk.
@@ -258,8 +293,9 @@ class CdbSnapshotDownloadController extends ChangeNotifier
   }
 
   /// Forget the download without touching the files.
-  Future<void> forget() async {
-    await pause();
+  Future<void> forget() => _operate(_forget, interrupt: true);
+
+  Future<void> _forget() async {
     _snapshot = null;
     _parentDir = null;
     _bytesDone = 0;
@@ -274,23 +310,21 @@ class CdbSnapshotDownloadController extends ChangeNotifier
   }
 
   /// Delete every file fetched so far, then forget the download.
-  Future<void> deleteFiles() async {
-    await pause();
+  Future<void> deleteFiles() => _operate(() async {
     final parent = _parentDir;
     final snap = _snapshot;
     if (parent != null && snap != null) {
       final dir = Directory(p.join(parent, snap.id));
       if (await dir.exists()) await dir.delete(recursive: true);
     }
-    await forget();
-  }
+    await _forget();
+  }, interrupt: true);
 
   /// Compare local file lengths with the manifest and report the mismatches.
-  Future<List<CdbFileProblem>> check() async {
+  Future<List<CdbFileProblem>> check() => _operate(() async {
     final snap = _snapshot;
     final parent = _parentDir;
     if (snap == null || parent == null) return const [];
-    if (isRunning) return _problems;
 
     final previous = _phase;
     _phase = CdbDownloadPhase.checking;
@@ -321,7 +355,7 @@ class CdbSnapshotDownloadController extends ChangeNotifier
     }
     notifyListeners();
     return found;
-  }
+  });
 
   // ── Internals ────────────────────────────────────────────────────────────
 
@@ -363,6 +397,10 @@ class CdbSnapshotDownloadController extends ChangeNotifier
         queue.add(file);
       }
 
+      if (_stopRequested) {
+        _phase = CdbDownloadPhase.paused;
+        return;
+      }
       if (queue.isEmpty) {
         await _finish(snap, parent);
         return;
@@ -385,13 +423,16 @@ class CdbSnapshotDownloadController extends ChangeNotifier
         await _finish(snap, parent);
       }
     } catch (e) {
-      _error = '$e';
-      _phase = CdbDownloadPhase.failed;
-      _job?.fail('$e');
+      if (_stopRequested) {
+        _phase = CdbDownloadPhase.paused;
+      } else {
+        _error = '$e';
+        _phase = CdbDownloadPhase.failed;
+        _job?.fail('$e');
+      }
     } finally {
       _stopTicker();
       _activeFiles.clear();
-      _runInFlight = null;
       notifyListeners();
     }
   }
@@ -413,6 +454,7 @@ class CdbSnapshotDownloadController extends ChangeNotifier
   }
 
   Future<void> _finish(CdbSnapshot snap, String parent) async {
+    if (_stopRequested || isDisposed) return;
     _phase = CdbDownloadPhase.complete;
     _bytesDone = _bytesTotal;
     _filesDone = snap.files.length;
@@ -422,8 +464,13 @@ class CdbSnapshotDownloadController extends ChangeNotifier
     _job?.updateStatus(JobStatus.completed);
 
     final dataDir = _dataDirectoryOf(parent, snap);
-    await EvalDatabaseSettings.instance.setCdbDirectPath(dataDir);
-    await EvalDatabaseSettings.instance.setEnableCdbDirect(true);
+    if (_stopRequested || isDisposed) return;
+    try {
+      await settings.configureCdbDirectory(dataDir);
+    } catch (_) {
+      // The artifact is complete. Settings retains its failed activation for
+      // explicit retry; downloading the same files again cannot repair it.
+    }
   }
 
   Future<void> _worker(Queue<CdbSnapshotFile> queue, String parent) async {
@@ -440,7 +487,7 @@ class CdbSnapshotDownloadController extends ChangeNotifier
         );
         if (outcome == SnapshotFileOutcome.complete) _filesDone++;
       } catch (e) {
-        _error = 'Downloading ${file.name} failed: $e';
+        if (!_stopRequested) _error = 'Downloading ${file.name} failed: $e';
       } finally {
         _activeFiles.remove(file.name);
         notifyListeners();
@@ -474,10 +521,18 @@ class CdbSnapshotDownloadController extends ChangeNotifier
     _rate.reset(_bytesDone);
   }
 
+  Future<void> close() {
+    if (_closeFuture case final pending?) return pending;
+    _stopRequested = true;
+    _stopTicker();
+    _http.close(force: true);
+    _catalog.dispose();
+    return _closeFuture = (() async { await _runInFlight; })();
+  }
+
   @override
   void dispose() {
-    _ticker?.cancel();
-    _http.close(force: true);
+    unawaited(close());
     super.dispose();
   }
 }

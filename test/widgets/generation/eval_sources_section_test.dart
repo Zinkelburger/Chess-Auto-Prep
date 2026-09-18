@@ -8,10 +8,9 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:provider/provider.dart';
+import '../../support/runtime_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:chess_auto_prep/models/eval_database_settings.dart';
 import 'package:chess_auto_prep/widgets/generation/eval_sources_controller.dart';
 import 'package:chess_auto_prep/widgets/generation/eval_sources_section.dart';
 
@@ -20,17 +19,18 @@ Future<void> _pump(
   EvalSourcesController controller, {
   bool cdbDirectAvailable = true,
 }) async {
-  await tester.pumpWidget(
-    ChangeNotifierProvider<EvalDatabaseSettings>.value(
-      value: EvalDatabaseSettings.instance,
-      child: MaterialApp(
-        home: Scaffold(
-          body: SingleChildScrollView(
-            child: EvalSourcesSection(
-              controller: controller,
-              isGenerating: false,
-              cdbDirectAvailable: cdbDirectAvailable,
-            ),
+  final settings = testRuntimeSettings();
+  addTearDown(settings.dispose);
+  await pumpRuntimeWidget(
+    tester,
+    settings,
+    MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: EvalSourcesSection(
+            controller: controller,
+            isGenerating: false,
+            cdbDirectAvailable: cdbDirectAvailable,
           ),
         ),
       ),

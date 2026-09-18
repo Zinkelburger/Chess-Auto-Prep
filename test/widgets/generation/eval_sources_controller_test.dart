@@ -7,12 +7,15 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
+import '../../support/runtime_settings.dart';
+import 'package:chess_auto_prep/app/runtime_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:chess_auto_prep/constants/chess_constants.dart';
-import 'package:chess_auto_prep/models/eval_database_settings.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';
 import 'package:chess_auto_prep/widgets/generation/eval_sources_controller.dart';
+
+late RuntimeSettings runtime;
 
 const _seedFen = kStandardStartFen;
 const _base = TreeBuildConfig(startFen: _seedFen, playAsWhite: true);
@@ -23,7 +26,7 @@ TreeBuildConfig _readBack(
   int engineEvalDepth = 20,
 }) => controller.applyTo(
   _base,
-  databases: EvalDatabaseSettings.instance,
+  databases: runtime.databases,
   cdbDirectAvailable: cdbDirectAvailable,
   engineEvalDepth: engineEvalDepth,
 );
@@ -33,11 +36,16 @@ void main() {
 
   late EvalSourcesController controller;
 
-  setUp(() {
+  setUp(() async {
+    runtime = testRuntimeSettings();
+    await runtime.load();
     SharedPreferences.setMockInitialValues({});
     controller = EvalSourcesController();
   });
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    controller.dispose();
+    runtime.dispose();
+  });
 
   group('applyConfig ↔ applyTo', () {
     test('every field the section owns survives the round trip', () {
@@ -131,9 +139,9 @@ void main() {
 
   group('the cdb-direct gate', () {
     test('nothing is written when the install is not there', () async {
-      await EvalDatabaseSettings.instance.setEnableCdbDirect(true);
-      await EvalDatabaseSettings.instance.setCdbDirectPath('/opt/cdb');
-      await EvalDatabaseSettings.instance.setCdbDirectReadAhead(true);
+      await runtime.databases.setEnableCdbDirect(true);
+      await runtime.databases.setCdbDirectPath('/opt/cdb');
+      await runtime.databases.setCdbDirectReadAhead(true);
 
       final back = _readBack(controller, cdbDirectAvailable: false);
 
@@ -143,8 +151,8 @@ void main() {
     });
 
     test('app settings win when it is', () async {
-      await EvalDatabaseSettings.instance.setEnableCdbDirect(true);
-      await EvalDatabaseSettings.instance.setCdbDirectPath('/opt/cdb');
+      await runtime.databases.setEnableCdbDirect(true);
+      await runtime.databases.setCdbDirectPath('/opt/cdb');
 
       final back = _readBack(controller, cdbDirectAvailable: true);
 
@@ -159,8 +167,8 @@ void main() {
     // so every build the form started had the Lichess step switched off no
     // matter what had been downloaded.
     test('app settings reach the config', () async {
-      await EvalDatabaseSettings.instance.setEnableLichessEvals(true);
-      await EvalDatabaseSettings.instance.setLichessEvalsPath('/data/lichess');
+      await runtime.databases.setEnableLichessEvals(true);
+      await runtime.databases.setLichessEvalsPath('/data/lichess');
 
       final back = _readBack(controller);
 
@@ -169,8 +177,8 @@ void main() {
     });
 
     test('the switch alone is not enough without a path', () async {
-      await EvalDatabaseSettings.instance.setEnableLichessEvals(true);
-      await EvalDatabaseSettings.instance.setLichessEvalsPath('');
+      await runtime.databases.setEnableLichessEvals(true);
+      await runtime.databases.setLichessEvalsPath('');
 
       final back = _readBack(controller);
 
@@ -182,8 +190,8 @@ void main() {
     });
 
     test('a path alone does not switch it on', () async {
-      await EvalDatabaseSettings.instance.setEnableLichessEvals(false);
-      await EvalDatabaseSettings.instance.setLichessEvalsPath('/data/lichess');
+      await runtime.databases.setEnableLichessEvals(false);
+      await runtime.databases.setLichessEvalsPath('/data/lichess');
 
       expect(_readBack(controller).enableLichessEvals, isFalse);
     });

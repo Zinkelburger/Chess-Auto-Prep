@@ -1,3 +1,6 @@
+import 'package:chess_auto_prep/features/settings/controllers/eval_database_settings.dart';
+import 'package:chess_auto_prep/features/settings/models/eval_database_configuration.dart';
+import '../../support/runtime_settings.dart';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
@@ -102,12 +105,17 @@ void main() {
       '8/8/8/8/${i ~/ 64}p${i % 64 ~/ 8}/8/${i % 8}p/K6k w - -',
   ];
 
+  late MemorySettingsSection<EvalDatabaseConfiguration> settingsStorage;
+  late EvalDatabaseSettings settings;
   late Directory tmp;
   late _FakeLichess server;
   late Uint8List archive;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    settingsStorage = MemorySettingsSection(EvalDatabaseConfiguration());
+    settings = EvalDatabaseSettings(settingsStorage);
+    await settings.ensureLoaded();
     tmp = await Directory.systemTemp.createTemp('lichess_ctrl_pause');
     final jsonl = [
       for (var i = 0; i < positions; i++) evalLine(fens[i], i - 6000, 30),
@@ -118,11 +126,12 @@ void main() {
   });
 
   tearDown(() async {
+    settings.dispose();
     await server.stop();
     if (await tmp.exists()) await tmp.delete(recursive: true);
   });
 
-  LichessEvalController controller() => LichessEvalController(
+  LichessEvalController controller() => LichessEvalController(settings: settings,
     source: LichessEvalSource(
       client: MockClient((request) async {
         if (request.method == 'HEAD') {
@@ -195,6 +204,48 @@ void main() {
     expect(server.ranges, [null], reason: 'the finished archive is reused');
     await expectCompleteStore(c);
     c.dispose();
+  });
+
+  test('deletion drains import isolate before removing its files', () async {
+    final c = controller();
+    final info = await c.refreshSource();
+    await c.prepare(info: info, parentDir: tmp.path);
+    final directory = c.storeDirectory!;
+    final run = c.start();
+    await waitUntil(() => c.phase == LichessEvalPhase.importing);
+
+    final deletion = c.deleteEverything();
+    await expectLater(c.prepare(info: info, parentDir: tmp.path), throwsStateError);
+    await deletion;
+    await run;
+
+    expect(await Directory(directory).exists(), isFalse);
+    expect(c.isReady, isFalse);
+    expect(c.phase, LichessEvalPhase.idle);
+    expect(settings.enableLichessEvals, isFalse);
+    expect(settings.lichessEvalsPath, isEmpty);
+    await c.close();
+    c.dispose();
+  });
+
+  test('close drains import and suppresses activation after disposal', () async {
+    final c = controller();
+    final info = await c.refreshSource();
+    await c.prepare(info: info, parentDir: tmp.path);
+    final run = c.start();
+    await waitUntil(() => c.phase == LichessEvalPhase.importing);
+
+    final closing = c.close();
+    expect(identical(closing, c.close()), isTrue);
+    c.dispose();
+    await closing;
+    await run;
+
+    expect(c.isReady, isFalse);
+    expect(settingsStorage.writes, isEmpty);
+    final manifest = await readManifest(c.storePaths!);
+    expect(manifest?.complete, isNot(isTrue));
+    await expectLater(c.prepare(info: info, parentDir: tmp.path), throwsStateError);
   });
 
   test('a mirror that ignores the range restarts the archive', () async {
