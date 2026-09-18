@@ -3205,3 +3205,63 @@ lines**. All library Dart totals **228,887**, still **9,930 above** September 16
 they cannot offset growth when judging a separate active workflow. Current
 Viewer/Builder/Study/Generation-session file counts are 1,954 / 1,459 / 1,049 /
 1,455. Whole renewal and the larger consumer simplifications remain Partial.
+
+
+### Chapter split source identity and partial-output safety — 2026-09-18
+
+Backend `f317b8a1` and complete consumer `7e09cf81` replace the existing splitter's
+uncaptured exhausted-source deletion with the shared document mutation boundary.
+A valid baseline run against `cfdf999b` has six passing and two failing tests:
+changed-content and equal-text native replacements were removed after destination
+creation. The earlier attempted red run failed on a test storage fixture and is
+not counted as defect reproduction.
+
+The splitter now opens one snapshot, parses that captured content off the UI
+thread, creates destinations exclusively, then conditionally saves the remainder
+or quarantines the captured exhausted source. Only confirmed source mutation
+allows training progress to move. The existing native storage implementation
+validates native identity and raw bytes under its existing lock, retains recovery
+bytes, uses the existing no-replace rename primitive and verifies the retained
+object before acknowledging. A move whose acknowledgement cannot be established
+returns explicit uncertainty with observed and recovery paths. External processes
+can still race the last validation and rename; this is recoverable uncertainty,
+not a claim of filesystem source compare-and-swap. Unsupported hosts reject an
+exhausted-source split before creating destinations.
+
+The existing outline owner rejects overlapping structural edits through refresh.
+One app-selected document store and one composed outline service feed the actual
+Builder, Library and planner consumers. Partial failures preserve confirmed output
+paths separately from candidate paths; confirmed source removal followed by a
+progress failure no longer leaves the active outline pointed at the removed file.
+No automatic retry or rollback is claimed. The real desktop collision journey
+saves One.pgn, then encounters an existing Two.pgn directory: original Course
+bytes remain unchanged, One exists once and Two remains a directory. The
+[inspected partial-output dialog](images/renewal-chapter-split-partial.png)
+labels confirmed files and paths to inspect separately and offers Close only.
+The headless preview used disposable data and was stopped.
+
+Legacy repertoire import now uses the same pure import planner as native
+publication, removing temporary Main-file creation, splitting and deletion.
+Direct-publication failures report paths to inspect instead of incorrectly
+claiming private preparation. The duplicate import choreography and catalog
+callback remove 95 lines, but the **complete safety unit grows by 306 handwritten
+production lines**: backend +201 and consumers +105. Generated localization adds
+22 lines and ARB adds 18, counted separately. Native package code is line-neutral;
+its existing rename method is renamed to reflect file and directory use.
+
+Independent exact-commit review approved the backend and all production consumers.
+Backend focused checks pass 94 tests. Corrected consumer checks pass 100 tests
+across splitter, outline/controller/UI, imports, My books and native publication;
+the final main composition test also passes. An earlier broad run had seven
+fixture failures, all repaired and covered by that final run. Analyze/lint passes
+with the 64 existing infos, no warnings/errors and 45 architecture checker cases.
+This is a completed safety repair, not whole-catalog or whole-renewal completion.
+
+Combined integration over `5e988e59` passes **90 focused tests** covering native
+quarantine, splitter, outline/controller/UI and actual main/Builder screens, plus
+analyze/lint. The merge preserves all retired paths; the inventory remains 21
+features with 1,301 exact debt entries. All 119 checked local documentation file
+targets exist. Current all-library Dart totals **229,215 lines** (+4.7% against
+September 16). Against `fa7f309e`, the batch has 1,301 handwritten production lines
+added and 11,590 deleted: **−10,289**, with generated localization +22 separate.
+The validated safety growth does not change the independent simplification gates.
