@@ -2650,9 +2650,10 @@ or user data was required. These checks do not certify Windows/macOS native
 publication or the whole Study theme.
 
 Maintainability remains **Partial**. Compared with main `29fbb4b0`, the complete
-branch adds 886 production lines excluding localization; Study screen grows
+branch adds 941 handwritten production Dart lines, including localization
+helpers and excluding generated accessors/ARB; Study screen grows
 926→1049, URL dialog 434→479 and Builder screen 1315→1345. The review repair alone
-adds 155 production lines over `3f3521bb`. Retirement and ownership improved:
+adds 155 handwritten production Dart lines over `3f3521bb`. Retirement and ownership improved:
 one publication authority replaces the duplicate create path and all old
 `services/study_import/` files are gone. This is a safety/capability closure,
 not evidence of an overall code-size or consumer-complexity reduction. The
