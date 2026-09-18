@@ -60,5 +60,7 @@ class DocumentSaveState {
       dirtyOverride ??
       (pendingEdits || baseline == null || content != baseline!.content);
   bool get uncertain => outcome is PgnWriteUncertain;
+  bool get needsResolution =>
+      dirty || uncertain || busy || retainedDrafts.isNotEmpty;
   bool get canSave => path.isNotEmpty && !busy && !uncertain && dirty;
 }

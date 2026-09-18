@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/features/documents/controllers/viewer_collection_controller.dart';
 import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chess_auto_prep/features/documents/controllers/pgn_fen_index.dart';
@@ -185,8 +186,7 @@ void main() {
         repository: repository,
         isActive: () => true,
         onChanged: () => changes++,
-        filteredGames: () => games,
-        allGames: () => games,
+        collection: ViewerCollectionController()..adopt(games),
         fenIndex: () => null,
         currentFen: () => OpeningTree().root.fen,
         applyPosition: (_) => positions++,

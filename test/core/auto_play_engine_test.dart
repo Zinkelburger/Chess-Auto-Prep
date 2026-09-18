@@ -2,18 +2,24 @@
 
 import 'package:chess_auto_prep/features/documents/controllers/auto_play_engine.dart';
 import 'package:fake_async/fake_async.dart';
+import 'package:chess_auto_prep/features/documents/repositories/pgn_viewer_handle.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// A scriptable board: each goForward advances along [fens] until the end,
 /// after which currentFen stops changing (mimicking "no more moves").
-class _FakeBoard {
+class _FakeBoard implements PgnViewerHandle {
   _FakeBoard(this.fens);
   final List<String> fens;
   int idx = 0;
+  @override
   String? get currentFen => idx < fens.length ? fens[idx] : fens.last;
+  @override
   void goForward() {
     if (idx < fens.length - 1) idx++;
   }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 AutoPlayEngine _engine(
@@ -23,8 +29,7 @@ AutoPlayEngine _engine(
 }) {
   return AutoPlayEngine(
     isActive: () => true,
-    currentFen: () => board.currentFen,
-    goForward: board.goForward,
+    handle: board,
     hasNextGame: () => hasNext,
     nextGame: onNext ?? () {},
     onChanged: () {},
@@ -88,8 +93,7 @@ void main() {
           void Function()? afterFrame;
           final engine = AutoPlayEngine(
             isActive: () => true,
-            currentFen: () => board.currentFen,
-            goForward: board.goForward,
+            handle: board,
             hasNextGame: () => false,
             nextGame: () {},
             onChanged: () {},
@@ -115,8 +119,7 @@ void main() {
         final frames = <void Function()>[];
         final engine = AutoPlayEngine(
           isActive: () => true,
-          currentFen: () => board.currentFen,
-          goForward: board.goForward,
+          handle: board,
           hasNextGame: () => false,
           nextGame: () {},
           onChanged: () {},

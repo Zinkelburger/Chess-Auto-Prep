@@ -43,20 +43,15 @@ class ViewerReadingController extends ChangeNotifier with SafeChangeNotifier {
       repository: openings,
       isActive: isActive,
       onChanged: notifyListeners,
-      filteredGames: () => collection.visibleGames,
-      allGames: () => collection.games,
+      collection: collection,
       fenIndex: index,
       currentFen: () => currentPosition.fen,
-      gameStartFen: () => collection.visibleGames.isEmpty
-          ? null
-          : collection.visibleGames[collection.selectedIndex].headers['FEN'],
       applyPosition: (position) => currentPosition = position,
       onReclaimFocus: onReclaimFocus,
     );
     playback = AutoPlayEngine(
       isActive: isActive,
-      currentFen: () => handle.currentFen,
-      goForward: handle.goForward,
+      handle: handle,
       hasNextGame: () =>
           collection.selectedIndex < collection.visibleGames.length - 1,
       nextGame: nextGame,

@@ -65,6 +65,11 @@ and Viewer model paths are removed, with imports/tests migrated. The standalone
 widget lifetime, collection orchestration and full presentation migration remain
 separate work.
 
+`ViewerOpeningTree` reads games, visible games and the selected setup directly
+from its `ViewerCollectionController`; autoplay steps its `PgnViewerHandle`
+directly. Reading-mode position callbacks remain explicit because the opening
+tree can have a different cursor from the game reader.
+
 The shared annotation panel flushes pending prose before a glyph action emits a
 save. A same-target rebuild does not replace a pending draft just because focus
 has moved to a toolbar control.
@@ -531,7 +536,13 @@ work; explicit Close without saving approves a revision without mutating it, so
 another owner's veto cannot erase the draft. Known failed/uncertain autosaves are
 not implicitly replayed. `PgnCloseGuard` now registers at app scope too, including
 before the Viewer screen exists, and retains an approved-for-discard draft until
-actual application exit. `PgnViewerLifetime` constructs and disposes the legacy
+actual application exit. Both Viewer screen navigation and native close use
+`showDocumentLeaveDialog` in `document_save_dialog.dart`, subscribed to the
+existing save-state stream. Its choice captures the revision at the click;
+callers validate that approval before leaving. Screen navigation explicitly
+discards approved edits, while native approval retains them until all owners
+agree. Pending reader comments are flushed again after awaited autosave before
+checking whether the document is clean. `PgnViewerLifetime` constructs and disposes the legacy
 viewer/reader/analysis owners; the screen borrows them and only owns its view
 listeners and focus. Repertoire
 registers pending line-comment saves; repeated failures continue to block closing.

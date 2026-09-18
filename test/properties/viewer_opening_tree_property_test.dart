@@ -1,5 +1,7 @@
 library;
 
+import 'package:chess_auto_prep/features/documents/controllers/viewer_collection_controller.dart';
+
 import 'package:chess_auto_prep/app/viewer_dependencies.dart';
 
 /// Invariant tests for the PGN viewer's opening-tree cursor.
@@ -28,8 +30,7 @@ ViewerOpeningTree _viewer(_Board board) => ViewerOpeningTree(
   repository: createViewerOpenings(),
   isActive: () => true,
   onChanged: () {},
-  filteredGames: () => const [],
-  allGames: () => const [],
+  collection: ViewerCollectionController(),
   fenIndex: () => null,
   currentFen: () => board.position.fen,
   applyPosition: (position) => board.position = position,

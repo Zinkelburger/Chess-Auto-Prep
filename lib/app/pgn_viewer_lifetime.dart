@@ -177,7 +177,6 @@ class PgnViewerCloseHost extends StatelessWidget {
   @override
   Widget build(BuildContext context) => PgnCloseGuard(
     actions: lifetime.document.editor,
-    workspace: lifetime.document.changes,
     revision: () => lifetime.closeRevision,
     flush: lifetime.flushForClose,
     chooseCopyDestination: (context) =>
