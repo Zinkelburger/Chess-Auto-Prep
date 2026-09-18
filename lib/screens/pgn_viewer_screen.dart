@@ -77,8 +77,6 @@ import '../widgets/game_analysis_tab.dart';
 import '../features/documents/controllers/pgn_workspace.dart';
 import '../widgets/pgn/pgn_workspace_bar.dart';
 import '../widgets/pgn/pgn_slice_chips.dart';
-import '../widgets/pgn/pgn_database_picker.dart';
-import '../widgets/pgn/pgn_database_panel.dart';
 import '../widgets/pgn/pgn_collection_panel.dart';
 import '../features/games/models/game_view_preferences.dart';
 import '../features/games/widgets/add_games_to_study.dart';
@@ -139,14 +137,11 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   late final PgnViewerWidgetController _lineWidgetController;
   PgnViewerHandle? get _movementReader => _document.presentation.isFullScreen
       ? _pgnWidgetController
-      : _referenceReaders[_tabController.index] ??
-            (_onLineTab ? _lineWidgetController : null);
+      : (_onLineTab ? _lineWidgetController : null);
   @override
   late final GameAnalysisController _analysisController;
   @override
   late final PgnWorkspace _tabController;
-  final Map<int, String> _databasePaths = {};
-  int? _databasePickerTab;
   List<PgnGameEntry>? _filterSource;
   List<GameRecord> _filterRecords = [];
   int? _filterRevision;
@@ -168,10 +163,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     _reclaimFocus();
   }
 
-  final Map<int, PgnDatabasePanelController> _databasePanels = {};
-  final Map<int, PgnGameEntry> _referenceGames = {};
-  final Map<int, PgnViewerWidgetController> _referenceReaders = {};
-  final Map<int, Position> _referencePositions = {};
   final FocusNode _focusNode = FocusNode(debugLabel: 'PgnViewerScreen');
 
   @override
@@ -347,74 +338,8 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     _document.reading.playback.stop();
     _tabController.close(id);
     if (id == PgnWorkspace.filters) _filterReturnSource = null;
-    if (_databasePickerTab == id) _databasePickerTab = null;
-    _databasePaths.remove(id);
-    _databasePanels.remove(id);
-    _referenceGames.remove(id);
-    _referenceReaders.remove(id);
-    _referencePositions.remove(id);
     setState(() {});
     _reclaimFocus();
-  }
-
-  void _openDatabase(String path) {
-    if (!mounted) return;
-    final pickerId = _databasePickerTab;
-    final existing = _databasePaths.entries
-        .where((e) => e.value == path)
-        .firstOrNull;
-    final id = existing?.key ?? pickerId ?? _tabController.add('Database');
-    if (pickerId != null && pickerId != id) _tabController.close(pickerId);
-    _databasePickerTab = null;
-    _tabController.titles[id] = p.basenameWithoutExtension(path);
-    _databasePaths[id] = path;
-    _databasePanels.putIfAbsent(id, PgnDatabasePanelController.new);
-    unawaited(_document.libraryState.addToRecentFiles(path));
-    _showPanel(id);
-  }
-
-  @override
-  Widget _buildExtraPanel(int id) {
-    if (id == PgnWorkspace.filters) return _buildFilterWorkspace();
-    if (id == _databasePickerTab) {
-      return PgnDatabasePicker(
-        recent: _document.libraryState.recentFiles,
-        onSelected: _openDatabase,
-        onCollection: () => _showPanel(PgnWorkspace.collection),
-      );
-    }
-    if (_databasePaths[id] case final path?) {
-      return PgnDatabasePanel(
-        key: ValueKey('database-$id'),
-        controller: _databasePanels[id]!,
-        path: path,
-        fen: _gamePanePosition?.fen ?? _document.reading.currentPosition.fen,
-        onOpenGame: (game) {
-          if (!mounted) return;
-          final readerId = _tabController.add(game.label);
-          _referenceGames[readerId] = game;
-          _referenceReaders[readerId] = PgnViewerWidgetController();
-          _referencePositions[readerId] =
-              _gamePanePosition ?? _document.reading.currentPosition;
-          _showPanel(readerId);
-        },
-      );
-    }
-    final game = _referenceGames[id]!;
-    return PgnViewerWidget(
-      key: ValueKey('reference-$id'),
-      pgnText: game.pgnText,
-      controller: _referenceReaders[id],
-      initialFen: _referencePositions[id]?.fen,
-      showReadingOptions: false,
-      bookFormatting: game.isCourseStyle,
-      onPositionChanged: (position) {
-        if (!mounted || !_referenceReaders.containsKey(id)) return;
-        _referencePositions[id] = position;
-        if (_tabController.index == id)
-          _document.reading.onPositionChanged(position);
-      },
-    );
   }
 
   void _onControllerUpdate() {
@@ -470,7 +395,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         if (!mounted || !restored || epoch != _navigationRestoreEpoch) return;
         _singleGameFocus = singleGame;
         for (final tab in _tabController.openTabs) {
-          if (!openTabs.contains(tab) && tab < 7) _tabController.close(tab);
+          if (!openTabs.contains(tab)) _tabController.close(tab);
         }
         for (final tab in openTabs) {
           _tabController.openInBackground(tab);
@@ -720,10 +645,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       _document.reading.toggleOpeningTree();
     }
     setState(() {});
-    if (_referencePositions[_tabController.index] case final position?) {
-      _document.reading.onPositionChanged(position);
-      return;
-    }
     if (wantTree) return;
     if (_tabController.index == PgnWorkspace.filters &&
         _filterOriginFen != null) {
@@ -925,6 +846,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   @override
   void _openSliceDialog() => _showPanel(PgnWorkspace.filters);
 
+  @override
   Widget _buildFilterWorkspace() {
     final source = _document.collection.games;
     final revision = _document.collection.contentRevision;
@@ -1107,7 +1029,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     // async widget updates from that hidden child must not steal the board.
     if (!_onLineTab &&
         _tabController.index != PgnWorkspace.filters &&
-        !_referenceReaders.containsKey(_tabController.index) &&
         !_document.reading.tree.showOpeningTree) {
       _document.reading.onPositionChanged(position);
     }
@@ -1320,12 +1241,10 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   @override
   Future<void> _copyCurrentGamePgn({bool mainlineOnly = false}) async {
     if (_document.collection.visibleGames.isEmpty) return;
-    final pgnText =
-        (_referenceGames[_tabController.index] ??
-                _document.collection.visibleGames[_document
-                    .collection
-                    .selectedIndex])
-            .pgnText;
+    final pgnText = _document
+        .collection
+        .visibleGames[_document.collection.selectedIndex]
+        .pgnText;
     await Clipboard.setData(
       ClipboardData(
         text: mainlineOnly ? mainlinePgnWithoutComments(pgnText) : pgnText,
@@ -1351,10 +1270,8 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   Future<void> _addCurrentGameToStudy() async {
     await addGamesToStudy(
       context,
-      games: _onReferenceTab
-          ? [_referenceGames[_tabController.index]!]
-          : _document.collection.visibleGames,
-      currentIndex: _onReferenceTab ? 0 : _document.collection.selectedIndex,
+      games: _document.collection.visibleGames,
+      currentIndex: _document.collection.selectedIndex,
     );
     _reclaimFocus();
   }
@@ -1541,7 +1458,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   @override
   void _toggleEditMode() {
-    if (!mounted || _onReferenceTab) return;
+    if (!mounted) return;
     _pgnWidgetController.flushPendingComments();
     _showPanel(PgnWorkspace.game);
     setState(() => _editMode = !_editMode);
@@ -1595,12 +1512,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   }
 
   Future<void> _openGameSearch() async {
-    if (_databasePanels[_tabController.index] case final panel?) {
-      await panel.search();
-      if (mounted) _reclaimFocus();
-      return;
-    }
-    if (_onReferenceTab) return;
     if (_document.reading.tree.showOpeningTree) {
       await openTreePositionGameSearch(
         context: context,
@@ -1635,10 +1546,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   /// Whether the Book tab is the one on screen (and so owns the board and the
   /// arrow keys).
-  @override
-  bool get _onReferenceTab =>
-      _referenceReaders.containsKey(_tabController.index);
-
   @override
   bool get _onLineTab =>
       !_document.reading.solitaire.isActive &&
@@ -1748,13 +1655,19 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     // right move within a line, up / down move between chapters. Letter
     // aliases made the simple model harder to learn, so this screen does not
     // inherit the app-wide P/S alternatives.
-    ...KeyBinding.forShortcut(AppShortcut.nextItem, 'Next game', () {
-      if (!_onReferenceTab) _document.reading.nextGame();
-    }, repeats: true),
-    ...KeyBinding.forShortcut(AppShortcut.previousItem, 'Previous game', () {
-      if (!_onReferenceTab) _document.reading.prevGame();
-    }, repeats: true),
-    if (!_onLineTab && !_onReferenceTab)
+    ...KeyBinding.forShortcut(
+      AppShortcut.nextItem,
+      'Next game',
+      _document.reading.nextGame,
+      repeats: true,
+    ),
+    ...KeyBinding.forShortcut(
+      AppShortcut.previousItem,
+      'Previous game',
+      _document.reading.prevGame,
+      repeats: true,
+    ),
+    if (!_onLineTab)
       ...KeyBinding.forShortcut(
         AppShortcut.fullScreen,
         'Toggle fullscreen',
@@ -1771,7 +1684,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       'Toggle engine',
       _toggleEngine,
     ),
-    if (!_onLineTab && !_onReferenceTab) ...[
+    if (!_onLineTab) ...[
       ...KeyBinding.forShortcut(
         AppShortcut.autoPlay,
         'Toggle auto-play',
@@ -1872,7 +1785,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// some other binding.
   @override
   bool _toggleSolitaireMode() {
-    if (_document.reading.tree.showOpeningTree || _onReferenceTab) return true;
+    if (_document.reading.tree.showOpeningTree) return true;
     if (_document.reading.solitaire.isActive) {
       unawaited(_leaveSolitaire());
     } else {

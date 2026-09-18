@@ -92,7 +92,9 @@
     "lib/features/repertoire/services/chapter_store.dart",
     "lib/features/master_games/controllers/master_practice_controller.dart",
     "lib/features/master_games/services/master_practice_review.dart",
-    "lib/features/master_games/widgets/master_practice_dialog.dart"
+    "lib/features/master_games/widgets/master_practice_dialog.dart",
+    "lib/widgets/pgn/pgn_database_picker.dart",
+    "lib/widgets/pgn/pgn_database_panel.dart"
   ],
   "symbols": [
     "PgnBatchWriter",
@@ -203,6 +205,11 @@
     "MasterPracticeReviewer",
     "MasterPracticeDialog",
     "showMasterPracticeReview",
-    "StudyChapterActions"
+    "StudyChapterActions",
+    "PgnDatabasePicker",
+    "PgnDatabasePanel",
+    "PgnDatabasePanelController",
+    "DatabaseIndex",
+    "indexPgnDatabase"
   ]
 }

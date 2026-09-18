@@ -10,12 +10,8 @@ class PgnWorkspace extends ChangeNotifier {
   static const collection = 5;
   static const filters = 6;
 
-  /// Ids at or above this belong to panels added with [add]; their titles are
-  /// forgotten when they close.
-  static const _firstCustomId = 7;
-
   final List<int> _open = [game];
-  final Map<int, String> titles = {
+  final Map<int, String> titles = const {
     game: 'Game',
     books: 'My books',
     explorer: 'Database explorer',
@@ -56,7 +52,6 @@ class PgnWorkspace extends ChangeNotifier {
     }
   }
 
-  int _nextId = _firstCustomId;
   List<int> get openTabs => List.unmodifiable(_open);
   int get index => _index;
   set index(int value) {
@@ -80,19 +75,12 @@ class PgnWorkspace extends ChangeNotifier {
   }
 
   void animateTo(int value) => index = value;
-  int add(String title) {
-    final id = _nextId++;
-    titles[id] = title;
-    return id;
-  }
-
   void close(int id) {
     if (id == game) return;
     final position = _open.indexOf(id);
     if (position < 0) return;
     _open.removeAt(position);
     if (_index == id) _index = _open[(position - 1).clamp(0, _open.length - 1)];
-    if (id >= _firstCustomId) titles.remove(id);
     _notifySelection();
   }
 

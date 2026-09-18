@@ -11,7 +11,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
   GameAnalysisController get _analysisController;
   PgnWorkspace get _tabController;
   void _closePanel(int id);
-  Widget _buildExtraPanel(int id);
+  Widget _buildFilterWorkspace();
   void _handleBoardMove(String san);
   Future<void> _leaveSolitaire();
   void _analyseSolitaireGame();
@@ -45,9 +45,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
 
   Widget _buildFullScreenView(ThemeData theme) {
     final coversReference =
-        _onLineTab ||
-        _onReferenceTab ||
-        _tabController.index == PgnWorkspace.filters;
+        _onLineTab || _tabController.index == PgnWorkspace.filters;
     return FullscreenGameView(
       position: coversReference
           ? _gamePanePosition ?? _document.reading.currentPosition
@@ -179,9 +177,8 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
             ),
           ),
         ),
-        if (_document.collection.visibleGames.isNotEmpty && !_onReferenceTab)
+        if (_document.collection.visibleGames.isNotEmpty)
           _buildCollectionNavigation(),
-        if (_onReferenceTab) const SizedBox(height: 48),
       ],
     );
   }
@@ -244,7 +241,8 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
                         ),
                         4 => _buildTreeTab(),
                         5 => _buildDatabaseTools(),
-                        _ => _buildExtraPanel(id),
+                        PgnWorkspace.filters => _buildFilterWorkspace(),
+                        _ => const SizedBox.shrink(),
                       },
                     ),
                   ),
