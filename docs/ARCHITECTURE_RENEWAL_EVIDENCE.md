@@ -3860,3 +3860,89 @@ against the growth-review snapshot. Against fa7f309e, handwritten reduction is
 **13,837**, generated +264 separately. Unused/dormant deletion still accounts for
 12,154 removed lines; zero features have graduated. Study appearance closure is
 private until its full shared consumer graph and legacy-boundary removal pass.
+
+
+### Study appearance through final app wiring — 2026-09-18
+
+Production `6270a265` against `7c8c5596` removes Study's forced-dark application
+boundary after converting its actual PGN, engine, dialogs, setup and shared
+controls together. The existing app appearance preference remains the sole
+owner. `PgnTextStyles` now lives at `widgets/pgn/pgn_text_styles.dart`, requires
+context and has no old-path shim; the retirement manifest rejects restoration.
+Rendered editor rows invalidate on inherited appearance changes while preserving
+the document index and editor lifetime. Floating engine previews resolve their
+own inherited theme, without replacing the engine/preview owner. Board-coordinate
+chrome receives explicit resolved ink; board pigments remain intentional.
+
+Independent review found and repaired annotation contrast on hover and ChoiceField
+rows clipping at 200% text scale. The same existing row-height computation now
+serves rendering and keyboard scroll. Nested board setup uses vertical side
+choices under constrained/scaled widths instead of shrinking the text. An open
+notice uses paired theme colors for text, action and dismissal, preserving error
+persistence and timed attention notices. Converted control labels and count
+messages use localization; the sole-reader English import-source label getter
+is deleted. No new coordinator, style owner, callback facade or runtime fallback.
+
+The complete **45-file scope grows 15,127→15,404 (+277 handwritten)**, including
+Study screen 1,072→1,101. The library diff is +1,209/−932 handwritten, generated
++2,199 and ARB +1,113 separately. Old/new canonical style paths account for two
+diff paths but one scope responsibility. Six engine consumer files plus 17 other
+retirements reduce the legacy-theme ledger **205→182**; one resolved feature-debt
+entry leaves 1,243. This completes an appearance capability and removes its old
+theme path; it does **not** pass a net-size simplification gate or certify Study.
+
+**98 combined focused tests**, **44 additional retained-caller tests**, and
+analyze/lint pass at the reviewed production source (63 existing infos, no
+warnings/errors, 45 checker cases). The retained batch initially had 23 failures
+from two bare widget hosts lacking app localization; fixture commit `f84ba7a2`
+adds only their delegates/imports. A wider widget-directory run exposed
+additional indirect hosts and old fixed-color assertions; it was stopped after
+682 passes, 69 failures and a stalled Viewer copy scenario. That scenario passed
+alone without changes. Independently reviewed fixture repairs preserve selection,
+annotation classification and draft assertions; 140 focused cases pass. The
+final **entire widget-directory rerun passes all 759 tests**, with no failures or
+skips; the copy stall did not recur. No production change or timing workaround
+was introduced for that stall. These overlapping batches are not additive unique
+test counts.
+
+**Seven Linux native tests across six targets pass**: actual app appearance and
+inline draft retention; Study restart recovery; two Study save/recovery cases;
+a 20,000-node Study; Viewer editing; and Builder native history. The new appearance
+fixture `c77a66dd` exercises Dark, Light, System and simulated platform changes,
+with the same chapter/cursor/flip, nonzero scroll, editor/field state, text
+selection and dirty document contents. Its final Save closes the inline editor;
+durable saves are proved by the separate existing targets. Initial native
+fixture assumptions incorrectly required the selected chip to stay mounted after
+scroll and treated typing as uncommitted to the in-memory document. Existing
+production behavior disproved both; the corrected fixture passes independently
+reviewed assertions. The large-document run reports debug open 1,902 ms, distant
+jump 710 ms and RSS 824,782,848 bytes; this is diagnostic evidence, not a new
+profile-mode performance-budget result.
+
+The actual 1,280×720 app was inspected in
+[Dark](images/study-appearance-dark.png),
+[Light](images/study-appearance-light.png), and
+[nested light setup](images/study-appearance-setup-light.png). These screenshots
+use 100% text scale. Enlarged-text proof comes from the actual widget dialog/setup
+tests, including an open en-passant picker and a retained FEN draft across themes;
+no 200% native screenshot claim is made. The disposable preview is stopped.
+
+**Whole Study remains Partial.** Its library namespace adapter still renames
+without validating the captured source revision and deletes by path. Native
+no-clobber already works and deletion retains quarantined bytes, so this is not a
+claim of demonstrated destruction. Existing namespace coverage proves a later
+save conflicts after external replacement; it does not prove source-safe
+relocation. Training-reference/late-writer recovery remains a shared unresolved
+contract. Controller-built save/recovery text reaches the PgnSaveStatus tooltip;
+board validation diagnostics and some namespace failure presentation remain
+English/incomplete. Whole-feature consumer simplicity, native accessibility and
+other-host gates also remain open. Existing Linux stopped-profile restore and
+profile-mode large-document evidence retain their original bounded credit.
+Editing, save sessions, imports and app recovery already have final owners; these
+remaining gaps do not call for another coordinator.
+
+Library Dart is **228,385**: +9,428 (+4.3%) against September 16 and −8,606 against
+the growth review. Against fa7f309e, handwritten reduction is **13,560**, generated
++2,463 separately. Unused/dormant retirement still accounts for 12,154 removed
+lines. Zero features have graduated; no broader extraction program is authorized
+by these capability and safety results.
