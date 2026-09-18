@@ -55,7 +55,7 @@
   "lib/features/repertoire/widgets/reference_game_dialog.dart": "repertoire; renewal milestone 3",
   "lib/features/repertoire/widgets/repertoire_board_pane.dart": "repertoire; renewal milestone 3",
   "lib/features/repertoire/widgets/repertoire_database_pane.dart": "repertoire; renewal milestone 3",
-  "lib/features/repertoire/widgets/repertoire_lines_side_panel.dart": "repertoire; renewal milestone 3",
+  "lib/features/repertoire/widgets/repertoire_outline_controls.dart": "repertoire; renewal milestone 3",
   "lib/features/repertoire/widgets/repertoire_outline_panel.dart": "repertoire; renewal milestone 3",
   "lib/features/repertoire/widgets/repertoire_reload_dialog.dart": "repertoire; renewal milestone 3",
   "lib/features/repertoire/widgets/repertoire_settings_body.dart": "repertoire; renewal milestone 3",

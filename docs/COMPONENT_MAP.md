@@ -1209,7 +1209,7 @@ The quiz uses `services/eco_trie.dart` to identify opening forks and `services/p
 - `lib/features/audit/services/audit_persistence.dart` — centralized save/load for audit snapshots (result + config + resume state)
 - `lib/widgets/layout/jobs_panel.dart` — jobs panel: one compact card per active generation/audit job (phase, live stats, threads/hash, progress bar, controls); completed jobs as simple tiles; no duplicate status banners
 - `lib/widgets/repertoire_lines_browser.dart` — line search/filter/group browser; now the outline column's *metrics view*, not the default
-- `lib/widgets/layout/board_zone.dart` — board wrapper, passes annotations
+- `lib/features/repertoire/widgets/repertoire_board_pane.dart` — board, annotations and retained hover-preview owner composed directly by Builder
 - `lib/widgets/chess_board_widget.dart` — board + annotation overlay (arrows, circles, labels)
 - `lib/services/jobs/repertoire_job.dart` — background job manager; `RepertoireJob` includes `configSnapshot` (serialized `AuditConfig.toMap()`) for audit jobs
 
@@ -2745,11 +2745,17 @@ Builder uses the screen's wide/compact workspace layouts. The unused configurabl
 Edit context layout, arrangement sheet, model, descriptors and preference writer
 are retired; no production route constructed that subtree. The existing Viewer
 opening-tree divider remains shared. This removes 1,124 dormant production lines
-and does not change active editor, document or save ownership.
+and does not change active editor, document or save ownership. The screen now
+composes `RepertoireBoardPane` directly and the toolbar places its existing trap
+navigation directly. `RepertoireLayoutPrefs` retains only live board, outline
+and analysis-dock preferences; `analysisCollapsed` preserves the existing
+`repertoire.lines_panel_collapsed` storage key. The unused right-side Lines
+width/state, generic expanded side panel and optional notation header are
+removed. The notation surface retains its clipping, border and child geometry.
 
 | File | Purpose |
 |------|---------|
-| `layout/board_zone.dart` | Board wrapper; app-bar trap navigation via `BoardZoneControls` |
+| `features/repertoire/widgets/repertoire_outline_controls.dart` | Collapsed chapter strip and outline resize handle; only the live left-hand outline can be resized |
 | `layout/edit_context_split_handle.dart` | Draggable divider retained by the PGN Viewer opening-tree panel |
 | `layout/bottom_pane.dart` | VS Code-style resizable, collapsible bottom pane with tabs (Findings/Jobs); collapsed by default, opens at max height (60%) to minimise board area, auto-opens on audit/generation start, drag-resizable, badge counts |
 | `layout/repertoire_status_bar.dart` | Bottom metrics bar (badges open bottom pane tabs) |

@@ -42,11 +42,10 @@ mixin _RepertoireLayout
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _buildOutlineSidePanel(outlineWidth),
-              RepertoireLinesPanelDragHandle(
+              RepertoireOutlineResizeHandle(
                 currentWidth: outlineWidth,
                 minWidth: RepertoireLayoutPrefs.minPanelWidth,
                 maxWidth: constraints.maxWidth * .24,
-                panelOnLeft: true,
                 onWidthChanged: _layout.dragOutlinePanelWidth,
                 onDragEnd: _layout.saveOutlinePanelWidth,
               ),
@@ -71,17 +70,8 @@ mixin _RepertoireLayout
   /// The left column: the outline, collapsible to a strip.
   Widget _buildOutlineSidePanel(double width) {
     if (_layout.outlinePanelCollapsed) {
-      return RepertoireLinesSidePanel(
-        collapsed: true,
-        width: width,
-        lineCount: _controller.document.repertoireLines.length,
-        tabController: _sidePanelTabController,
-        tabs: const [],
-        stripLabel: 'Chapters',
-        hideTooltip: 'Hide chapters',
-        showTooltip: 'Show chapters',
-        onCollapsedChanged: _layout.setOutlinePanelCollapsed,
-        children: const [],
+      return RepertoireOutlineStrip(
+        onExpand: () => _layout.setOutlinePanelCollapsed(false),
       );
     }
     return SizedBox(
@@ -116,21 +106,21 @@ mixin _RepertoireLayout
                 ),
               ),
               IconButton(
-                tooltip: _layout.linesPanelCollapsed
+                tooltip: _layout.analysisCollapsed
                     ? 'Show analysis panel'
                     : 'Hide analysis panel',
                 icon: Icon(
-                  _layout.linesPanelCollapsed
+                  _layout.analysisCollapsed
                       ? Icons.expand_more
                       : Icons.expand_less,
                   size: 18,
                 ),
-                onPressed: _layout.toggleLinesPanelCollapsed,
+                onPressed: _layout.toggleAnalysisCollapsed,
               ),
             ],
           ),
         ),
-        if (!_layout.linesPanelCollapsed)
+        if (!_layout.analysisCollapsed)
           Expanded(
             child: TabBarView(
               controller: _sidePanelTabController,
@@ -237,7 +227,7 @@ mixin _RepertoireLayout
       children: [
         Expanded(
           child: _cursorScoped(
-            (_) => BoardZone(
+            (_) => RepertoireBoardPane(
               boardPreview: _boardPreview,
               fen: _ephemeralPreview?.fen ?? _controller.board.fen,
               positionFromFen: _positionFromFen,
@@ -286,12 +276,11 @@ mixin _RepertoireLayout
         Expanded(
           flex: 2,
           child: RepertoireWorkspacePanel(
-            icon: Icons.edit_note,
             child: _cursorScoped((_) => _buildPgnTab()),
           ),
         ),
         const SizedBox(height: 8),
-        if (_layout.linesPanelCollapsed)
+        if (_layout.analysisCollapsed)
           SizedBox(height: 34, child: _buildAnalysisDock())
         else
           Expanded(flex: 3, child: _buildAnalysisDock()),

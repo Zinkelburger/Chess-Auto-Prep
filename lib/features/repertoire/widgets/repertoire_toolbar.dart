@@ -15,7 +15,6 @@ import '../../games/widgets/my_repertoires_section.dart';
 import '../../../core/app_state.dart';
 import '../../../widgets/app_overflow_menu.dart';
 import '../../../widgets/common/searchable_picker_dialog.dart';
-import '../../../widgets/layout/board_zone.dart';
 
 /// App bar for the repertoire screen: title, generation status, and actions.
 ///
@@ -108,7 +107,7 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
             : title,
       ),
       actions: [
-        BoardZoneControls(trapNavigation: trapNavigation),
+        ?trapNavigation,
         if (isGenerating)
           RepertoireGenerationStatusChip(
             isPaused: isGenerationPaused,

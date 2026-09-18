@@ -49,7 +49,7 @@ import '../widgets/repertoire_generation_tab.dart';
 import '../features/generate/widgets/generate_position_pane.dart';
 import '../features/generate/widgets/position_generation_settings.dart';
 import '../widgets/generation/generation_lock_overlay.dart';
-import '../widgets/layout/board_zone.dart';
+import '../features/repertoire/widgets/repertoire_board_pane.dart';
 import '../widgets/layout/bottom_pane.dart';
 import '../widgets/layout/repertoire_status_bar.dart';
 import '../widgets/chapter_list_body.dart' show ChapterPick;
@@ -82,7 +82,7 @@ import '../features/repertoire/widgets/repertoire_workspace_panel.dart';
 import '../design_system/components/name_entry_dialog.dart';
 import '../features/repertoire/services/repertoire_outline_service.dart';
 import '../features/repertoire/widgets/build_config_screen.dart';
-import '../features/repertoire/widgets/repertoire_lines_side_panel.dart';
+import '../features/repertoire/widgets/repertoire_outline_controls.dart';
 import '../features/repertoire/widgets/repertoire_database_pane.dart';
 import '../features/traps/controllers/trap_session_controller.dart';
 import '../features/traps/services/trap_line_builder.dart';
@@ -274,7 +274,7 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
     if (_isCompactLayout) {
       _toolsTabController.animateTo(2);
     } else {
-      unawaited(_layout.setLinesPanelCollapsed(false));
+      unawaited(_layout.setAnalysisCollapsed(false));
       _sidePanelTabController.animateTo(1);
     }
     _reclaimFocus();

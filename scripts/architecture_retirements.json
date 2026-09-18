@@ -98,7 +98,9 @@
     "lib/features/settings/controllers/settings_section_controller.dart",
     "lib/widgets/study/chapter_manager_dialog.dart",
     "lib/theme/pgn_text_styles.dart",
-    "lib/features/traps/widgets/traps_tab_content.dart"
+    "lib/features/traps/widgets/traps_tab_content.dart",
+    "lib/widgets/layout/board_zone.dart",
+    "lib/features/repertoire/widgets/repertoire_lines_side_panel.dart"
   ],
   "symbols": [
     "PgnBatchWriter",
@@ -227,6 +229,13 @@
     "_seedGenerationAfterLoad",
     "awaitLoaded",
     "_openMovesAfterLoad",
-    "_openLineAfterLoad"
+    "_openLineAfterLoad",
+    "BoardZone",
+    "BoardZoneControls",
+    "RepertoireLinesSidePanel",
+    "RepertoireLinesPanelDragHandle",
+    "dragLinesPanelWidth",
+    "saveLinesPanelWidth",
+    "resolveLinesPanelWidth"
   ]
 }
