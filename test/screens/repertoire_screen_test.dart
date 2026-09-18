@@ -37,6 +37,9 @@ import 'package:chess_auto_prep/app/app_dependencies.dart';
 import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/widgets/escape_to_pop_scope.dart';
 
+import 'package:chess_auto_prep/chess_core/generation/tree_serialization.dart';
+import 'package:chess_auto_prep/services/storage/storage_service.dart';
+import '../services/generation/generation_test_helpers.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -142,6 +145,48 @@ class _DeleteAdmissionRepository extends DocumentRepertoireRepository {
     deletions.add((path: path, games: Map.of(expectedGames)));
     return 0;
   }
+}
+
+/// Real PGN adapter over immediate disposable file I/O, avoiding native locks
+/// whose asynchronous handles do not run on the widget test's fake clock.
+class _CutFileStorage implements StorageService {
+  int writes = 0;
+  bool failWrite = false;
+  bool failRefresh = false;
+  @override
+  Future<String?> readFile(String path) async {
+    if (failRefresh && writes > 0) throw StateError('read unavailable');
+    return File(path).existsSync() ? File(path).readAsStringSync() : null;
+  }
+
+  @override
+  Future<void> writeFile(
+    String path,
+    String content, {
+    bool createOnly = false,
+    String? expectedContent,
+  }) async {
+    if (failWrite) throw StateError('write unavailable');
+    final file = File(path);
+    expect(file.readAsStringSync(), expectedContent);
+    file.writeAsStringSync(content);
+    writes++;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+Future<RepertoireGenerationTab> _openCutConfiguration(
+  WidgetTester tester,
+) async {
+  await tester.tap(find.byKey(const ValueKey('generation-actions')));
+  await _settleUntil(tester, find.text('Cut lines…').hitTestable());
+  await tester.tap(find.text('Cut lines…'));
+  await _settleUntil(tester, find.byTooltip('Close').hitTestable());
+  return tester.widget<RepertoireGenerationTab>(
+    find.byType(RepertoireGenerationTab),
+  );
 }
 
 const _chapterPgn = '''
@@ -575,6 +620,21 @@ void main() {
             expect(document.loadGeneration, greaterThan(generationA + 1));
           }
           expect(find.byType(RepertoireGenerationTab), findsOneWidget);
+          final rendered = tester.widget<RepertoireGenerationTab>(
+            find.byType(RepertoireGenerationTab),
+          );
+          expect(
+            rendered.currentRepertoire,
+            same(configuration.currentRepertoire),
+          );
+          expect(rendered.fen, configuration.fen);
+          expect(rendered.isWhiteRepertoire, configuration.isWhiteRepertoire);
+          expect(
+            rendered.currentMoveSequence,
+            configuration.currentMoveSequence,
+          );
+          expect(rendered.repertoireStartFen, configuration.repertoireStartFen);
+          expect(rendered.existingLineMoves, configuration.existingLineMoves);
 
           if (startBuild) {
             final controller = configuration.generationController;
@@ -611,6 +671,183 @@ void main() {
         },
       );
     }
+  }
+
+  testWidgets('canceled configuration cannot admit commands after reopening', (
+    tester,
+  ) async {
+    final path = _writeRepertoire(tester);
+    final documents = _DeleteAdmissionRepository();
+    await _pumpScreen(
+      tester,
+      repertoirePath: path,
+      documents: documents,
+      size: const Size(950, 1200),
+    );
+    await tester.tap(find.text('Actions'));
+    await _settleUntil(tester, find.text('Generate from here…').hitTestable());
+    await tester.tap(find.text('Generate from here…'));
+    await _settleUntil(
+      tester,
+      find.byKey(const ValueKey('generation-actions')).hitTestable(),
+    );
+    final old = await _openCutConfiguration(tester);
+    final key = old.existingLineMoves.single.join(' ');
+    expect(old.createPublicationReceiver(), isNotNull);
+    await tester.tap(find.byTooltip('Close'));
+    await tester.pump();
+    expect(old.createPublicationReceiver(), isNull);
+    expect(await old.onTrimLines!({key}), isNull);
+    await _settleUntil(
+      tester,
+      find.byKey(const ValueKey('generation-actions')).hitTestable(),
+    );
+    final current = await _openCutConfiguration(tester);
+    expect(current.createPublicationReceiver(), isNotNull);
+    expect(old.createPublicationReceiver(), isNull);
+    expect(await old.onTrimLines!({key}), isNull);
+    final noOp = await current.onTrimLines!({});
+    expect(noOp!.removed, 0);
+    expect(noOp.remainingMoves, hasLength(1));
+    expect(documents.deletions, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final outcome in [
+    'saved',
+    'writeFailure',
+    'refreshFailure',
+    'sourceChanged',
+  ]) {
+    testWidgets('visible Cut handles $outcome with refreshed admission', (
+      tester,
+    ) async {
+      final path = _writeRepertoire(tester);
+      final helper = StandardTree();
+      helper.root.children.remove(helper.d4);
+      helper.e4.isRepertoireMove = true;
+      helper.e4e5nf3.isRepertoireMove = true;
+      helper.e4c5nf3.isRepertoireMove = true;
+      final replyFen = playUciMove(helper.e4.fen, 'e7e6')!;
+      final reply = makeNode(
+        fen: replyFen,
+        san: 'e6',
+        uci: 'e7e6',
+        ply: 2,
+        isWhiteToMove: true,
+        parent: helper.e4,
+        moveProbability: 0.1,
+        cumulativeProbability: 0.1,
+      );
+      makeNode(
+        fen: playUciMove(replyFen, 'd2d4')!,
+        san: 'd4',
+        uci: 'd2d4',
+        ply: 3,
+        isWhiteToMove: false,
+        parent: reply,
+        cumulativeProbability: 0.1,
+      ).isRepertoireMove = true;
+      final tree = helper.toTree()
+        ..buildComplete = true
+        ..configSnapshot = const TreeBuildConfig(
+          startFen: kStandardStartFen,
+          playAsWhite: true,
+          minProbability: 0.01,
+        ).toJson();
+      const content =
+          '// Color: White\n\n[Event "One"]\n\n1. e4 e5 2. Nf3 *\n\n[Event "Two"]\n\n1. e4 c5 2. Nf3 *\n\n[Event "Three"]\n\n1. e4 e6 2. d4 *\n';
+      File(path).writeAsStringSync(content);
+      final storage = _CutFileStorage();
+      final artifacts = MemoryGenerationArtifacts()
+        ..saved[path] = {GenerationArtifactKind.tree: serializeTree(tree)};
+      // Native artifact selection is tied to its original source revision.
+      // Once Cut changes that source, its global artifact may no longer load.
+      artifacts.beforeRead = (_) async {
+        if (storage.writes > 0) artifacts.saved.remove(path);
+      };
+      await _pumpScreen(
+        tester,
+        repertoirePath: path,
+        documents: DocumentRepertoireRepository(
+          LegacyPgnDocumentStore(storage),
+        ),
+        artifacts: GenerationArtifacts(artifacts),
+        size: const Size(950, 1200),
+      );
+      final document = tester
+          .element(find.byType(RepertoireScreen))
+          .read<BuilderLifetime>()
+          .workspace
+          .document;
+      await tester.tap(find.text('Actions'));
+      await _settleUntil(
+        tester,
+        find.text('Generate from here…').hitTestable(),
+      );
+      await tester.tap(find.text('Generate from here…'));
+      await _settleUntil(
+        tester,
+        find.byKey(const ValueKey('generation-actions')).hitTestable(),
+      );
+      final configuration = await _openCutConfiguration(tester);
+      await _settleUntil(tester, find.byType(Slider));
+      expect(document.repertoireLines, hasLength(3));
+      storage.failWrite = outcome == 'writeFailure';
+      storage.failRefresh = outcome == 'refreshFailure';
+      if (outcome == 'sourceChanged') {
+        final other = File('${File(path).parent.path}/Other.pgn')
+          ..writeAsStringSync(content);
+        unawaited(
+          document.setRepertoire(
+            RepertoireMetadata(
+              name: 'Other',
+              filePath: other.path,
+              lastModified: DateTime(2026),
+            ),
+          ),
+        );
+        await _settle(tester);
+      }
+      for (final keep in outcome == 'saved' ? [2, 1] : [2]) {
+        final slider = tester.widget<Slider>(find.byType(Slider));
+        slider.onChanged!(keep.toDouble());
+        slider.onChangeEnd!(keep.toDouble());
+        await tester.pump();
+        expect(find.text('Remove 1 line'), findsOneWidget);
+        final before = document.loadGeneration;
+        await tester.tap(find.text('Remove 1 line'));
+        await _settle(tester);
+        if (outcome != 'saved') {
+          final message = switch (outcome) {
+            'writeFailure' =>
+              'The cut could not be confirmed. Reload the chapter before making further changes.',
+            'sourceChanged' =>
+              'The chapter changed. Close this configuration and open it again.',
+            _ =>
+              'Removed 1 line, but this configuration could not be refreshed. Reload the chapter before making further changes.',
+          };
+          expect(find.text(message), findsOneWidget);
+          expect(find.byType(Slider), findsNothing);
+          expect(find.text('Remove 1 line'), findsNothing);
+          expect(storage.writes, outcome == 'refreshFailure' ? 1 : 0);
+          if (outcome != 'refreshFailure') {
+            expect(File(path).readAsStringSync(), content);
+          }
+          expect(tester.takeException(), isNull);
+          return;
+        }
+        expect(document.loadGeneration, greaterThan(before));
+        expect(document.repertoireLines, hasLength(keep));
+        expect(configuration.generationController.generatedTree, isNull);
+        expect(find.text('Nothing to remove'), findsOneWidget);
+        expect(find.byType(Slider), findsOneWidget);
+      }
+      expect(storage.writes, 2);
+      expect(document.repertoireLines.single.moves, ['e4', 'e5', 'Nf3']);
+      expect(File(path).readAsStringSync(), isNot(contains('[Event "Three"]')));
+      expect(tester.takeException(), isNull);
+    });
   }
 
   testWidgets('inline chapter creation rejects case-insensitive duplicate', (

@@ -298,6 +298,35 @@ void main() {
     );
   }
 
+  test(
+    'superseded own cut refresh never returns another chapter projection',
+    () async {
+      final other = File(p.join(directory.path, 'other.pgn'));
+      await other.writeAsString(original.replaceFirst('Original', 'Other'));
+      decoder.afterBuild = () async {
+        decoder.afterBuild = null;
+        await controller.document.setRepertoire(
+          RepertoireMetadata(
+            name: 'Other',
+            filePath: other.path,
+            lastModified: DateTime(2026),
+          ),
+        );
+      };
+      final receipt = await controller.document.deleteLines([
+        controller.document.repertoireLines.single,
+      ], expectedGeneration: controller.document.loadGeneration);
+      expect(receipt!.removed, 1);
+      expect(receipt.refreshedGeneration, isNull);
+      expect(receipt.remainingLines, isNull);
+      expect(controller.document.currentRepertoire!.filePath, other.path);
+      expect(
+        controller.document.repertoireLines.single.fullPgn,
+        contains('[Event "Other"]'),
+      );
+    },
+  );
+
   for (final bulk in [false, true]) {
     test(
       'a late ${bulk ? 'bulk' : 'single'} deletion cannot clear a new chapter',
