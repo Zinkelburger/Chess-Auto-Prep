@@ -2,6 +2,11 @@
 /// chapter sidebar, and engine. Layout widgets live under `widgets/study/`.
 library;
 
+import '../features/studies/repositories/study_import_repository.dart';
+
+import '../l10n/study_import_labels.dart';
+import '../features/studies/models/study_import_state.dart';
+
 import 'dart:async';
 
 import 'package:dartchess/dartchess.dart' show Side;
@@ -21,10 +26,8 @@ import '../design_system/components/name_entry_dialog.dart';
 import '../l10n/generated/app_localizations.dart';
 import '../chess_core/moves/tree_path.dart';
 import '../chess_core/pgn/repertoire_line_ids.dart';
-import '../services/repertoire_service.dart';
-import '../services/storage/storage_factory.dart';
-import '../services/study_import/study_import_controller.dart';
-import '../services/study_import/study_import_exception.dart';
+import '../chess_core/pgn/mainline_lexer.dart' as pgn;
+import '../features/studies/controllers/study_import_controller.dart';
 import '../theme/app_colors.dart';
 import '../utils/app_messages.dart';
 import '../utils/app_shortcuts.dart';
@@ -73,13 +76,14 @@ class _StudyScreenState extends State<StudyScreen> {
   /// Background collection downloads. App-wide, because a run outlives this
   /// screen — [_seenImportGeneration] is seeded so a run that finished before
   /// the screen existed is not re-announced.
-  final StudyImportController _import = StudyImportController.instance;
+  late final StudyImportController _import;
   late int _seenImportGeneration;
 
   @override
   void initState() {
     super.initState();
     _study = context.read<StudyController>();
+    _import = context.read<StudyImportController>();
     unawaited(_study.refreshStudyList());
     _seenImportGeneration = _import.resultGeneration;
     _import.addListener(_onImportResult);
@@ -110,9 +114,23 @@ class _StudyScreenState extends State<StudyScreen> {
     unawaited(_openFromHandoff(handoff));
   }
 
+  int _handoffEpoch = 0;
   Future<void> _openFromHandoff(EditStudy handoff) async {
-    await _study.openStudy(handoff.studyPath);
-    if (!mounted) return;
+    final epoch = ++_handoffEpoch;
+    bool opened;
+    try {
+      opened = await _study.openStudy(handoff.studyPath);
+    } catch (_) {
+      if (mounted && epoch == _handoffEpoch) {
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context).studyOpenFailed,
+          isError: true,
+        );
+      }
+      return;
+    }
+    if (!mounted || epoch != _handoffEpoch || !opened) return;
     final chapterIndex = handoff.chapterIndex;
     final chapterName = handoff.chapterName;
     if (chapterIndex != null && _study.chapterList.chapters.isNotEmpty) {
@@ -237,70 +255,114 @@ class _StudyScreenState extends State<StudyScreen> {
   /// download and is handed to [StudyImportController] to run in the
   /// background (results arrive via [_onImportResult]).
   Future<void> _importFromUrl() async {
-    final plan = await ImportFromUrlDialog.show(
+    final session = _study.title.session;
+    await ImportFromUrlDialog.show(
       context,
       canAppend: _study.title.filePath != null,
+      repository: context.read<StudyImportRepository>(),
+      apply: (plan) async {
+        if (!mounted) return false;
+        if (plan is LichessStudyPlan) {
+          if (plan.appendToCurrent && session != _study.title.session) {
+            return false;
+          }
+          return _applyLichessPlan(plan);
+        }
+        return _startCollectionDownload(plan as CollectionPlan);
+      },
     );
-    if (plan == null || !mounted) return;
-
-    switch (plan) {
-      case LichessStudyPlan():
-        await _applyLichessPlan(plan);
-      case CollectionPlan():
-        _startCollectionDownload(plan);
-    }
   }
 
-  Future<void> _applyLichessPlan(LichessStudyPlan plan) async {
-    if (plan.appendToCurrent) {
-      final added = await _study.importChapters(plan.pgn);
-      if (!mounted) return;
+  Future<bool> _applyLichessPlan(LichessStudyPlan plan) async {
+    final session = _study.title.session;
+    final chapters = _study.chapterList.chapters.length;
+    var consumed = false;
+    try {
+      if (plan.appendToCurrent) {
+        final added = await _study.importChapters(plan.pgn);
+        if (!mounted || session != _study.title.session) return true;
+        final l10n = AppLocalizations.of(context);
+        showAppSnackBar(context, l10n.studyImportAdded(added));
+        return true;
+      }
+      final result = await _import.publishStudy(name: plan.name, pgn: plan.pgn);
+      consumed = true;
+      // The result listener reports the captured publication, not whichever
+      // study happens to be active when this asynchronous operation completes.
+      if (mounted &&
+          session == _study.title.session &&
+          result.studyPath != null) {
+        await _study.openStudy(result.studyPath!);
+      }
+      return true;
+    } catch (error) {
+      if (!mounted) return false;
+      final l10n = AppLocalizations.of(context);
       showAppSnackBar(
         context,
-        added == 0
-            ? 'Nothing to import from that study.'
-            : 'Added $added chapter${added == 1 ? '' : 's'} '
-                  'from "${plan.name}".',
-        isError: added == 0,
+        error is StudyImportRejected
+            ? studyImportFailureLabel(l10n, error.failure)
+            : l10n.studyImportApplyFailed,
+        isError: true,
       );
-      return;
+      // Appended chapters already belong to the editor even if autosave failed;
+      // resubmitting them would duplicate work. A rejected create stays in-dialog.
+      return consumed ||
+          (plan.appendToCurrent &&
+              session == _study.title.session &&
+              _study.chapterList.chapters.length > chapters);
     }
-
-    await _study.createStudyFromPgn(plan.name, plan.pgn);
-    if (!mounted) return;
-    final chapters = _study.chapterList.chapters.length;
-    showAppSnackBar(
-      context,
-      'Imported "${_study.title.name}" — $chapters '
-      'chapter${chapters == 1 ? '' : 's'}.',
-    );
   }
 
-  void _startCollectionDownload(CollectionPlan plan) {
+  bool _startCollectionDownload(CollectionPlan plan) {
+    final rejection = _import.admissionFailure;
+    if (rejection != null) {
+      showAppSnackBar(
+        context,
+        studyImportFailureLabel(
+          AppLocalizations.of(context),
+          rejection.failure,
+        ),
+        isError: true,
+      );
+      return false;
+    }
     final minutes = (plan.gameIds.length * plan.delay.inSeconds / 60)
         .ceil()
         .clamp(1, 9999);
-    try {
-      // Deliberately not awaited: the run outlives this screen, and progress
-      // comes back through the status chip and [_onImportResult].
-      unawaited(
-        _import.startCollectionDownload(
-          gameIds: plan.gameIds,
-          studyName: plan.studyName,
-          delay: plan.delay,
-        ),
-      );
-    } on StudyImportException catch (e) {
-      showAppSnackBar(context, e.message, isError: true);
-      return;
-    }
+    // Deliberately not awaited: the application owns this background job.
+    unawaited(
+      _import
+          .startCollectionDownload(
+            gameIds: plan.gameIds,
+            studyName: plan.studyName,
+            delay: plan.delay,
+          )
+          .then<void>(
+            (_) {},
+            onError: (Object error, StackTrace stack) {
+              if (!mounted) return;
+              showAppSnackBar(
+                context,
+                studyImportFailureLabel(
+                  AppLocalizations.of(context),
+                  error is StudyImportRejected
+                      ? error.failure
+                      : StudyImportFailure.startup,
+                ),
+                isError: true,
+              );
+            },
+          ),
+    );
     showAppSnackBar(
       context,
-      'Downloading ${plan.gameIds.length} games (~$minutes min). '
-      'chessgames.com is slow on purpose — keep working, it runs in the '
-      'background.',
+      AppLocalizations.of(
+        context,
+      ).studyImportBackground(plan.gameIds.length, minutes),
       requiresAttention: true,
     );
+    return true;
   }
 
   /// One SnackBar per finished collection download, whenever Study mode is on
@@ -313,39 +375,79 @@ class _StudyScreenState extends State<StudyScreen> {
     }
     _seenImportGeneration = _import.resultGeneration;
 
-    final error = result.error;
-    final message =
-        error ??
-        (result.cancelled
-            ? 'Stopped after ${result.chapters} of '
-                  '${result.chapters + result.failed} games — saved as '
-                  '"${result.studyName}".'
-            : 'Imported ${result.chapters} games into "${result.studyName}"'
-                  '${result.failed > 0 ? ' (${result.failed} unavailable)' : ''}.');
-
-    final path = result.studyPath;
+    final l10n = AppLocalizations.of(context);
+    final failure = result.failure;
+    final message = failure != null
+        ? studyImportFailureLabel(l10n, failure)
+        : !result.wroteAnything
+        ? l10n.studyImportNoContent(result.failed)
+        : result.cancelled
+        ? l10n.studyImportStopped(result.chapters, result.studyName)
+        : l10n.studyImportComplete(
+            result.chapters,
+            result.failed,
+            result.studyName,
+          );
+    final publication = result.publication;
+    final review = publication != null && !result.wroteAnything;
     showAppSnackBar(
       context,
       message,
-      isError: error != null,
-      actionLabel: result.wroteAnything ? 'Open' : null,
-      onAction: result.wroteAnything ? () => _study.openStudy(path!) : null,
+      isError: failure != null,
+      requiresAttention: true,
+      actionLabel: review
+          ? l10n.studyImportReviewAction
+          : result.wroteAnything
+          ? l10n.studyImportOpen
+          : null,
+      onAction: review
+          ? _reviewImportedStudy
+          : result.wroteAnything
+          ? () => _study.openStudy(result.studyPath!)
+          : null,
     );
+  }
+
+  Future<void> _reviewImportedStudy() async {
+    final session = _import.publicationRecovery;
+    if (session == null) return;
+    await showDocumentSaveDialog(
+      context,
+      title: AppLocalizations.of(context).studyImportReview,
+      session: session,
+      chooseCopyDestination: _chooseExportDestination,
+    );
+    if (mounted && !session.state.dirty && !session.state.uncertain) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    }
   }
 
   /// Open a PGN file from disk: every game becomes a chapter appended to
   /// the study.  (Pasting PGN is the "New chapter" dialog's job.)
   Future<void> _importPgn() async {
+    final session = _study.title.session;
     final file = await FilePicker.pickFile(
       dialogTitle: 'Import PGN as chapters',
       type: FileType.custom,
       allowedExtensions: ['pgn', 'txt'],
     );
     final path = file?.path;
-    if (path == null) return;
-    final pgn = await StorageFactory.instance.readFile(path) ?? '';
+    if (path == null || !mounted || session != _study.title.session) return;
     if (!mounted) return;
-    await _addChaptersFromPgn(pgn);
+    try {
+      final added = await _study.importFile(path);
+      if (mounted && added > 0) {
+        showAppSnackBar(context, 'Added $added chapters.');
+      }
+    } catch (_) {
+      if (mounted) {
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context).studyImportPgnFailed,
+          isError: true,
+        );
+      }
+    }
   }
 
   Future<void> _addChaptersFromPgn(
@@ -535,12 +637,16 @@ class _StudyScreenState extends State<StudyScreen> {
     // LineID/Id/Guid header (Chessable/ChessBase exports).
     String? lineId;
     if (!wholeStudy) {
-      final service = RepertoireService();
+      final text = _study.chapterPgn(_study.chapterIndex);
+      final moves = pgn.mainlineSansOf(text);
       lineId =
-          service.lineIdForGamePgn(
-            _study.chapterPgn(_study.chapterIndex),
-            _study.chapterIndex,
-          ) ??
+          (moves.isEmpty
+              ? null
+              : repertoireLineIds.fromHeaders(
+                  pgn.extractHeaderBlock(text),
+                  moves,
+                  _study.chapterIndex,
+                )) ??
           repertoireLineIds.stable(
             _study.tree.sanSequenceAt(
               _study.tree.mainlineEndFrom(TreePath.empty),
@@ -548,8 +654,15 @@ class _StudyScreenState extends State<StudyScreen> {
             _study.chapterIndex,
           );
     }
-    await _study.flushSave();
-    if (!mounted) return;
+    final revision = _study.navigationRevision;
+    final chapter = _study.chapterIndex;
+    if (!await _study.flushSave() ||
+        !mounted ||
+        _study.title.filePath != path ||
+        _study.chapterIndex != chapter ||
+        _study.navigationRevision != revision) {
+      return;
+    }
     context.read<AppState>().switchToStudyTraining(path: path, lineId: lineId);
   }
 
@@ -577,8 +690,15 @@ class _StudyScreenState extends State<StudyScreen> {
       );
       return;
     }
-    await _study.flushSave();
-    if (!mounted) return;
+    final chapter = _study.chapterIndex;
+    final revision = _study.navigationRevision;
+    if (!await _study.flushSave() ||
+        !mounted ||
+        _study.title.filePath != path ||
+        _study.chapterIndex != chapter ||
+        _study.navigationRevision != revision) {
+      return;
+    }
     context.read<AppState>().switchToPgnViewer(
       path: path,
       gameIndex: _study.chapterIndex,
@@ -734,7 +854,10 @@ class _StudyScreenState extends State<StudyScreen> {
           actions: [
             StudySaveButton(study: _study),
             // Only visible while a collection download is running.
-            const StudyImportStatusChip(),
+            StudyImportStatusChip(
+              controller: _import,
+              onReview: _reviewImportedStudy,
+            ),
             StudySelector<bool>(
               study: _study,
               select: (owner) => owner.title.filePath != null,

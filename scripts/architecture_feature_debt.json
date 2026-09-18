@@ -665,8 +665,6 @@
     "lib/features/games/services/my_repertoire_settings.dart: forbidden dependency ../../../infrastructure/settings/shared_preferences_app_settings_repository.dart",
     "lib/features/games/services/my_repertoire_settings.dart: global singleton access bypasses injection: repository: SharedPreferencesAppSettingsRepository.instance.repertoireBooks,",
     "lib/features/games/services/opening_review.dart: forbidden dependency dart:io",
-    "lib/features/games/widgets/add_games_to_study.dart: forbidden dependency ../../../services/storage/storage_factory.dart",
-    "lib/features/games/widgets/add_games_to_study.dart: global singleton access bypasses injection: await StorageFactory.instance.studyFilePath(destination.newStudyName!);",
     "lib/features/games/widgets/analysis_block.dart: forbidden dependency ../../../theme/app_colors.dart",
     "lib/features/games/widgets/analysis_block.dart: forbidden dependency ../../../theme/app_text_styles.dart",
     "lib/features/games/widgets/analysis_block.dart: widget bypasses active theme/typography: : AppColors.buttonSurface,",

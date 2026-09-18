@@ -5,9 +5,9 @@
 ///
 ///   * **The collection page** is plain HTML behind an AWS WAF. A non-browser
 ///     request often gets a challenge page instead — tiny, no `gid=` links.
-///     [extractCollectionGameIds] returning empty *is* that signal, and the
+///     `extractCollectionGameIds` returning empty *is* that signal, and the
 ///     caller is expected to fall back to asking the user for the ids
-///     ([parsePastedGameIds] takes either a pasted id list or the saved page
+///     (`parsePastedGameIds` takes either a pasted id list or the saved page
 ///     source).
 ///   * **`/njs/api/game/viewPGN/<gid>`** answers plain PGN and generally does
 ///     not need a browser session — but it bans fast callers. ~2–3 s apart
@@ -20,7 +20,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
-import '../chess_api_urls.dart';
+import '../../services/chess_api_urls.dart';
 
 /// Sent on every chessgames.com request. The API 403s obvious bots, and the
 /// `Referer`/`Origin` pair is what the site's own front-end sends.
@@ -73,19 +73,6 @@ Future<String?> fetchCollectionHtml(String cid, {http.Client? client}) async {
 
 /// Every `gid=` linked from [html], in page order, de-duplicated.
 ///
-/// Collection pages list each game twice (the board thumbnail and the move
-/// list link), and page order is the order the collection's author chose — so
-/// first-seen order is the order to import in.
-List<String> extractCollectionGameIds(String html) {
-  final ids = <String>[];
-  final seen = <String>{};
-  for (final match in RegExp(r'gid=(\d+)').allMatches(html)) {
-    final id = match.group(1)!;
-    if (seen.add(id)) ids.add(id);
-  }
-  return ids;
-}
-
 /// The collection's name, from the page `<title>`.
 ///
 /// Returns `null` when the page is a WAF challenge or otherwise title-less.
@@ -110,25 +97,6 @@ String? extractCollectionTitle(String html) {
     '',
   );
   return title.isEmpty ? null : title;
-}
-
-/// Pull game ids out of whatever the user pasted when the collection page was
-/// blocked: a whole saved page source, a list of URLs, or bare ids one per
-/// line.
-///
-/// Bare numbers are only accepted when the text holds no `gid=` at all, so
-/// pasting page HTML can't pick up unrelated digits.
-List<String> parsePastedGameIds(String text) {
-  final fromLinks = extractCollectionGameIds(text);
-  if (fromLinks.isNotEmpty) return fromLinks;
-
-  final ids = <String>[];
-  final seen = <String>{};
-  for (final match in RegExp(r'\b(\d{4,9})\b').allMatches(text)) {
-    final id = match.group(1)!;
-    if (seen.add(id)) ids.add(id);
-  }
-  return ids;
 }
 
 // ── Single game ──────────────────────────────────────────────────────────

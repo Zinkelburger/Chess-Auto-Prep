@@ -122,22 +122,24 @@ class _StudyPickerBarState extends State<StudyPickerBar> {
             ),
           )
         else
-          Tooltip(
-            message: canRename ? 'Rename study' : '',
-            child: InkWell(
-              onTap: canRename ? _startNameEdit : null,
-              borderRadius: BorderRadius.circular(4),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 260),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 4,
-                  ),
-                  child: Text(
-                    isExternal ? '${current.name} (set)' : current.name,
-                    style: theme.textTheme.bodyMedium,
-                    overflow: TextOverflow.ellipsis,
+          Flexible(
+            child: Tooltip(
+              message: canRename ? 'Rename study' : '',
+              child: InkWell(
+                onTap: canRename ? _startNameEdit : null,
+                borderRadius: BorderRadius.circular(4),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 260),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 4,
+                    ),
+                    child: Text(
+                      isExternal ? '${current.name} (set)' : current.name,
+                      style: theme.textTheme.bodyMedium,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ),
               ),

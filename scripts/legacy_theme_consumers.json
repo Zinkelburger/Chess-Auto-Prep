@@ -233,7 +233,6 @@
   "lib/widgets/study/import_from_url_dialog.dart": "widgets; renewal milestone 6",
   "lib/widgets/study/new_chapter_dialog.dart": "widgets; renewal milestone 6",
   "lib/widgets/study/study_chapter_sidebar.dart": "widgets; renewal milestone 6",
-  "lib/widgets/study/study_import_status_chip.dart": "widgets; renewal milestone 6",
   "lib/widgets/training/chapter_setup_dialog.dart": "widgets; renewal milestone 6",
   "lib/widgets/training/line_preview_dialog.dart": "widgets; renewal milestone 6",
   "lib/widgets/training/move_input_widget.dart": "widgets; renewal milestone 6",

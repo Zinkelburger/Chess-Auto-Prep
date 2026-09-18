@@ -26,6 +26,30 @@ class DocumentSaveSession implements DocumentSaveActions {
          phase: DocumentSavePhase.dirty,
        );
 
+  /// Adopt an unsuccessful create receipt without inventing a baseline or
+  /// discarding native uncertainty evidence. An unresolved destination is empty
+  /// and can only be saved through an explicitly selected copy destination.
+  DocumentSaveSession.failedCreate(
+    this._store, {
+    required String path,
+    required String content,
+    required PgnWriteResult outcome,
+  }) : _state = DocumentSaveState(
+         path: path,
+         content: content,
+         outcome: outcome,
+         uncertainPath: outcome is PgnWriteUncertain ? path : null,
+         phase: switch (outcome) {
+           PgnNameCollision() => DocumentSavePhase.collision,
+           PgnConflict() => DocumentSavePhase.conflict,
+           PgnWriteFailed() => DocumentSavePhase.failed,
+           PgnWriteUncertain() => DocumentSavePhase.uncertain,
+           PgnSaved() => throw ArgumentError(
+             'A successful create is an opened document',
+           ),
+         },
+       );
+
   /// Rehydrate captured work without reading or adopting newer source bytes.
   /// The structured editor keeps implicit autosave blocked until user action.
   DocumentSaveSession.recovered(

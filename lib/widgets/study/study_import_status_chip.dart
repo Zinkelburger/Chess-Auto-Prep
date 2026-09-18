@@ -7,25 +7,45 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../../services/study_import/study_import_controller.dart';
-import '../../theme/app_colors.dart';
-import '../../theme/app_text_styles.dart';
+import '../../features/studies/controllers/study_import_controller.dart';
+import '../../design_system/theme/app_typography.dart';
+import '../../l10n/generated/app_localizations.dart';
+import '../../l10n/study_import_labels.dart';
 
 class StudyImportStatusChip extends StatelessWidget {
-  const StudyImportStatusChip({super.key, this.controller});
+  const StudyImportStatusChip({
+    super.key,
+    required this.controller,
+    required this.onReview,
+  });
 
-  /// Defaults to the app-wide instance; injectable for widget tests.
-  final StudyImportController? controller;
+  final StudyImportController controller;
+  final VoidCallback onReview;
 
   @override
   Widget build(BuildContext context) {
-    final import = controller ?? StudyImportController.instance;
+    final import = controller;
     return ListenableBuilder(
       listenable: import,
       builder: (context, _) {
-        if (!import.isRunning) return const SizedBox.shrink();
+        if (!import.isRunning) {
+          if (import.needsPublicationReview) {
+            return Tooltip(
+              message: AppLocalizations.of(context).studyImportReview,
+              child: TextButton.icon(
+                onPressed: onReview,
+                icon: const Icon(Icons.warning_amber),
+                label: Text(
+                  AppLocalizations.of(context).studyImportReviewAction,
+                ),
+              ),
+            );
+          }
+          return const SizedBox.shrink();
+        }
         return Tooltip(
-          message: '${import.label}\n${import.message}',
+          message:
+              '${import.label}\n${studyImportProgressLabel(AppLocalizations.of(context), import.progress, import.gamesTotal)}',
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
             child: Row(
@@ -41,13 +61,15 @@ class StudyImportStatusChip extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'Importing ${import.gamesDone}/${import.gamesTotal}',
-                  style: AppTextStyles.caption,
+                  AppLocalizations.of(
+                    context,
+                  ).studyImportProgress(import.gamesDone, import.gamesTotal),
+                  style: AppTypography.caption(context),
                 ),
                 IconButton(
                   icon: const Icon(Icons.close, size: 16),
-                  tooltip: 'Stop the download (keeps what has arrived)',
-                  color: AppColors.onSurfaceMuted,
+                  tooltip: AppLocalizations.of(context).studyImportStop,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                   onPressed: import.cancel,
                 ),
               ],

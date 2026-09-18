@@ -26,7 +26,10 @@ import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
 import '../core/app_state.dart';
-import '../features/studies/controllers/study_controller.dart';
+import '../features/studies/controllers/study_import_controller.dart';
+import '../features/studies/models/study_import_state.dart';
+import '../l10n/study_import_labels.dart';
+import '../l10n/generated/app_localizations.dart';
 import '../features/repertoires/controllers/repertoire_controller.dart';
 import '../core/generation_session_controller.dart';
 import '../core/generation_session_types.dart';
@@ -335,12 +338,39 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
             createPublicationReceiver: () =>
                 _controller.publishedDocumentReceiver,
             onCreateStudy: (name, pgn) async {
-              final study = context.read<StudyController>();
+              final importer = context.read<StudyImportController>();
               final app = context.read<AppState>();
-              final path = await study.createStudyFromPgn(name, pgn);
-              if (!mounted) return;
-              await _workspaceNavigation.maybePop();
-              app.switchToStudyEdit(path: path);
+              final labels = AppLocalizations.of(context);
+              try {
+                final result = await importer.publishStudy(
+                  name: name,
+                  pgn: pgn,
+                );
+                if (!mounted) return;
+                final path = result.studyPath;
+                if (path == null) {
+                  showAppSnackBar(
+                    context,
+                    studyImportFailureLabel(
+                      labels,
+                      result.failure ?? StudyImportFailure.publication,
+                    ),
+                    isError: true,
+                    actionLabel: labels.studyImportReviewAction,
+                    onAction: () => app.setMode(AppMode.study),
+                  );
+                  return;
+                }
+                await _workspaceNavigation.maybePop();
+                if (mounted) app.switchToStudyEdit(path: path);
+              } on StudyImportRejected catch (error) {
+                if (mounted)
+                  showAppSnackBar(
+                    context,
+                    studyImportFailureLabel(labels, error.failure),
+                    isError: true,
+                  );
+              }
             },
           ),
         ),

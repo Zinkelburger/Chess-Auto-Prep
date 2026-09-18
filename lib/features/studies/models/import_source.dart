@@ -140,3 +140,35 @@ ImportSource? _parseChessgames(Uri uri) {
   if (cid == null || !_digits.hasMatch(cid)) return null;
   return ChessgamesCollectionSource(cid);
 }
+
+/// Collection pages list each game twice (the board thumbnail and the move
+/// list link), and page order is the order the collection's author chose — so
+/// first-seen order is the order to import in.
+List<String> extractCollectionGameIds(String html) {
+  final ids = <String>[];
+  final seen = <String>{};
+  for (final match in RegExp(r'gid=(\d+)').allMatches(html)) {
+    final id = match.group(1)!;
+    if (seen.add(id)) ids.add(id);
+  }
+  return ids;
+}
+
+/// Pull game ids out of whatever the user pasted when the collection page was
+/// blocked: a whole saved page source, a list of URLs, or bare ids one per
+/// line.
+///
+/// Bare numbers are only accepted when the text holds no `gid=` at all, so
+/// pasting page HTML can't pick up unrelated digits.
+List<String> parsePastedGameIds(String text) {
+  final fromLinks = extractCollectionGameIds(text);
+  if (fromLinks.isNotEmpty) return fromLinks;
+
+  final ids = <String>[];
+  final seen = <String>{};
+  for (final match in RegExp(r'\b(\d{4,9})\b').allMatches(text)) {
+    final id = match.group(1)!;
+    if (seen.add(id)) ids.add(id);
+  }
+  return ids;
+}

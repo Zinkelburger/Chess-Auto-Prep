@@ -1,3 +1,5 @@
+import 'package:chess_auto_prep/features/studies/repositories/study_import_repository.dart';
+import 'package:chess_auto_prep/features/studies/controllers/study_import_controller.dart';
 import 'dart:io';
 import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
 import 'package:chess_auto_prep/features/studies/controllers/study_controller.dart';
@@ -11,6 +13,53 @@ import 'helpers/tactics_helpers.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  testWidgets(
+    'cached collection creates a native study without replacing its namesake',
+    (tester) async {
+      await pumpApp(tester);
+      await switchToMode(tester, 'Study');
+      final context = tester.element(find.byType(StudyScreen));
+      final study = context.read<StudyController>();
+      final importer = context.read<StudyImportController>();
+      final name =
+          'Imported collection ${DateTime.now().microsecondsSinceEpoch}';
+      await study.newStudy(name);
+      final original = File(study.title.filePath!);
+      final originalBytes = await original.readAsBytes();
+      await context.read<StudyImportRepository>().cacheGame(
+        '972801',
+        '[Event "Source"]\n[White "A"]\n[Black "B"]\n\n1. e4 e5 *',
+      );
+      final result = await importer.startCollectionDownload(
+        gameIds: ['972801'],
+        studyName: name,
+      );
+      await tester.pumpAndSettle();
+      expect(result.failure, isNull);
+      expect(result.studyPath, endsWith('$name (2).pgn'));
+      expect(result.publication!.outcome, isA<PgnSaved>());
+      expect(
+        (result.publication!.outcome as PgnSaved).after.revision.nativeIdentity,
+        isNot('legacy-content'),
+      );
+      expect(await original.readAsBytes(), originalBytes);
+      await tester.tap(find.widgetWithText(SnackBarAction, 'Open'));
+      for (
+        var i = 0;
+        i < 100 && study.title.filePath != result.studyPath;
+        i++
+      ) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      expect(study.title.filePath, result.studyPath);
+      expect(study.doc.toPgn(), contains('1. e4 e5'));
+      expect(study.dirty, isFalse);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    },
+  );
+
   testWidgets(
     'Study move edit, native conflict, retained reload and exclusive copy',
     (tester) async {

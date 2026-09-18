@@ -544,6 +544,30 @@ integration offer. This prevents GTK's modal first-run prompt (outside Flutter's
 layer-tree screenshots) from swallowing native input/close events. Explicit
 fixture choices remain intact; the user's desktop preferences are never touched.
 
+#### Study import and publication
+
+App composition provides `StudyImportRepository` and `StudyImportController`
+directly through Provider. The controller owns one admitted collection download
+or completed-PGN publication, its native receipt, and any unresolved
+`DocumentSaveSession`; it never selects the active editor. The URL dialog owns
+its scoped network source and keeps a resolved download until its apply callback
+accepts it. Retrying uses current destination options without fetching again.
+
+Collection downloads, Lichess imports and Builder study exports all publish
+through the same controller. `StorageStudyImportRepository` creates destinations
+exclusively, bounds name collisions, and returns exact submitted content/path
+with native outcomes. Uncertain publication exposes the existing document review
+and copy actions and participates in app-close confirmation. Ordinary shutdown
+settles admitted work. `StudyController` owns chapter append and boolean document
+adoption; failed append keeps dirty chapters, and superseded adoption cannot
+announce a different active study as the imported result. Its duplicate
+`createStudyFromPgn` path and the old `services/study_import/` directory are gone.
+
+Network sources close their injected transport. The owned Lichess API client
+cancels backoff/retry timers on closure and rejects pending/future requests.
+The import dialog is scrollable at enlarged text sizes; the rest of the legacy
+Study presentation remains outside this completed import-safety responsibility.
+
 #### Study document projections
 
 `StudyController` privately owns the mutable `StudyDocument` and `MoveTree`.
