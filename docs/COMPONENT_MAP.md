@@ -321,6 +321,13 @@ share; `BughouseHistory.play` is the one path a move takes onto a line.
 `services/bughouse_engine_protocol.dart` parses Hivemind's lines and
 `services/bughouse_engine_report.dart` assembles the diagnostic block.
 
+`tools/bughouse_db/hivemind_book.py` builds a precomputed Hivemind book beside
+the FICS book (`~/.local/share/chess-prep/bughouse-db/hivemind_book.db`, same
+position key): every legal move on both boards, each scored for A + C being
+ahead, even and behind on the clock, with a principal variation. One engine,
+one search at a time, resumable; by default it follows the four most-played
+FICS moves of each position to ply 10. The Lab does not read it yet.
+
 Engine failures show the exit code and Windows NTSTATUS name without guessing
 which file caused it. **Copy full report** copies the diagnostic block through
 `END BUGHOUSE DIAGNOSTICS`, including OS/app/runtime, executable and arguments,

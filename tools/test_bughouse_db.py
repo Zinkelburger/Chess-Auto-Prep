@@ -198,6 +198,17 @@ class TestIndexAndBook(unittest.TestCase):
         # One game each way: 1-0 is WhiteA's team, 0-1 is BlackA's.
         self.assertEqual((move["team_a"], move["team_b"]), (1, 1))
 
+    def test_hivemind_book_follows_the_most_played_moves(self):
+        from bughouse_db import hivemind_book as hb
+
+        with tempfile.TemporaryDirectory() as tmp:
+            con = hb.open_db(Path(tmp) / "hivemind_book.db")
+            hb.expand_fics(con, self.con, hb.DualBoard(), "", 0, width=4)
+            rows = con.execute("SELECT line, ply, priority, status FROM position").fetchall()
+            con.close()
+        # The fixture's only continuation from the start, queued by its games.
+        self.assertEqual(rows, [("A:e4", 1, -2.0, "queued")])
+
     def test_branch_after_the_shared_opening(self):
         from bughouse_db.book import explore
         from bughouse.board import DualBoard
@@ -230,6 +241,33 @@ class TestIndexAndBook(unittest.TestCase):
         data = explore(self.con, empty, empty)
         self.assertEqual(data["games"], 0)
         self.assertEqual(data["moves"], [])
+
+
+class TestHivemindBook(unittest.TestCase):
+    """The engine-free parts of hivemind_book.py."""
+
+    def test_key_is_the_fics_book_key(self):
+        from bughouse_db import hivemind_book as hb
+
+        self.assertEqual(hb.key_of(hb.DualBoard()), position_key(dual_key_fen(START, START)))
+
+    def test_clock_cases_map_onto_the_one_engine_bit(self):
+        import chess
+        from bughouse_db.hivemind_book import team_bits
+
+        # A + C is White on board A. Only the team ahead has the bit on.
+        self.assertEqual(team_bits("ahead"), {chess.WHITE: True, chess.BLACK: False})
+        self.assertEqual(team_bits("even"), {chess.WHITE: False, chess.BLACK: False})
+        self.assertEqual(team_bits("behind"), {chess.WHITE: False, chess.BLACK: True})
+
+    def test_seats_follow_the_side_to_move(self):
+        from bughouse_db import hivemind_book as hb
+
+        dual = hb.DualBoard()
+        self.assertEqual((hb.seat_of(dual, 0), hb.seat_of(dual, 1)), ("A", "D"))
+        dual.push("A", "e4")
+        dual.push("B", "d4")
+        self.assertEqual((hb.seat_of(dual, 0), hb.seat_of(dual, 1)), ("B", "C"))
 
 
 class TestIndexReplacementSafety(unittest.TestCase):
