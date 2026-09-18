@@ -1839,6 +1839,78 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{path}\n{message}'**
   String chapterDeleteContext(String path, String message);
+
+  /// Study chapter list control: studyChapterListTitle
+  ///
+  /// In en, this message translates to:
+  /// **'Chapters ({count})'**
+  String studyChapterListTitle(int count);
+
+  /// Study chapter list control: studyNewChapter
+  ///
+  /// In en, this message translates to:
+  /// **'New chapter'**
+  String get studyNewChapter;
+
+  /// Study chapter list control: studySearchChapters
+  ///
+  /// In en, this message translates to:
+  /// **'Search chapters'**
+  String get studySearchChapters;
+
+  /// Study chapter list control: studyFilteredReorder
+  ///
+  /// In en, this message translates to:
+  /// **'Reordering is off while searching'**
+  String get studyFilteredReorder;
+
+  /// Study chapter list control: studyDragReorder
+  ///
+  /// In en, this message translates to:
+  /// **'Drag to reorder'**
+  String get studyDragReorder;
+
+  /// Study chapter list control: studyNoMatchingChapters
+  ///
+  /// In en, this message translates to:
+  /// **'No matching chapters'**
+  String get studyNoMatchingChapters;
+
+  /// Study chapter list control: studyChapterOpenNow
+  ///
+  /// In en, this message translates to:
+  /// **'Open now'**
+  String get studyChapterOpenNow;
+
+  /// Study chapter list control: studyEditChapter
+  ///
+  /// In en, this message translates to:
+  /// **'Edit chapter'**
+  String get studyEditChapter;
+
+  /// Study chapter list control: studyDeleteChapter
+  ///
+  /// In en, this message translates to:
+  /// **'Delete chapter'**
+  String get studyDeleteChapter;
+
+  /// Study chapter list control: studyKeepOneChapter
+  ///
+  /// In en, this message translates to:
+  /// **'A study needs at least one chapter'**
+  String get studyKeepOneChapter;
+
+  /// Study chapter list control: studyChapterActions
+  ///
+  /// In en, this message translates to:
+  /// **'Chapter actions'**
+  String get studyChapterActions;
+
+  /// Study chapter list control: studyChaptersDone
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get studyChaptersDone;
 }
 
 class _AppLocalizationsDelegate

@@ -2265,8 +2265,11 @@ outside this responsibility.
 
 `app/runtime_settings.dart` constructs one application-scoped owner per section.
 Immutable configurations live in `features/settings/models/`;
-`controllers/settings_section_controller.dart` serializes field edits against
-fresh storage, confirms writes by rereading, and retains failed drafts for retry.
+the existing `controllers/section_settings_owner.dart` directly serializes field
+edits against fresh storage, confirms writes by rereading, and retains failed
+drafts for retry. The private forwarding controller and stream relay are retired.
+The same owner handles admission, state, notifications and disposal: admitted
+writes settle after disposal without notifying, while new edits are rejected.
 `infrastructure/settings/preferences_section_storage.dart` preserves existing
 keys and migrations, including worker/thread settings and `tactics_import.depth`.
 Normal and inline controls share loading, saving, failure and retry state.
@@ -2814,7 +2817,7 @@ and does not change active editor, document or save ownership.
 | `study/study_side_pane.dart` | Engine bar + compact chapter bar + PGN editor; compact and sidebar chapter menus retain their chapter key across selection/reordering and ignore removed targets. One plain `onChapterAction` callback dispatches to the screen’s existing dialogs; shared `studyChapterMenuItems` builds the entries without a callback-holder object. Shared borderless move selection/hover and neutral Notes field with no move-specific placeholder. |
 | `pgn/add_to_study_dialog.dart` | Shared destination picker for adding lines and games: an always-visible Add new study button opens a dedicated name prompt with a suggested unused name and duplicate validation; search and Enter select existing studies only. |
 | `study/study_picker_bar.dart` | App-bar study switcher with an explicit Rename study pencil and inline name editing constrained to available title width. At the shared compact breakpoint, `StudySaveButton` uses a tooltip-labelled save/recovery icon (including its warning state) to leave room for the title controls; wide layouts retain the text label. |
-| `study/study_chapter_sidebar.dart` | Searchable, reorderable chapter list; New chapter sits above the filter and rows, with per-chapter actions in a trailing menu |
+| `study/study_chapter_sidebar.dart` | One searchable, reorderable chapter list for the persistent sidebar and modal manager. The sidebar adds New chapter and the full row menu; the manager keeps inline Edit/Delete, active-chapter status and Done. Row selection/actions resolve captured chapter keys; actions dispatch to the screen’s existing confirmation commands. Reorder rejects a changed list projection or disposed list. Filtered lists disable reorder; selecting stays in the manager. The former separate chapter-manager list and delete handler are retired. Shared list controls resolve the supplied theme and text scale; the overall Study mode retains its legacy dark boundary until its other controls migrate. |
 | `study/study_name_dialog.dart` | Shared name prompt for studies and chapters |
 | `features/opponents/` | `PlayersPrepScreen` is Library → Players & prep: persistent All players / Groups tabs, searchable groups and inline group sheets under the mode bar. Reuses `PeopleScreen`, `TournamentsScreen`, `TournamentScreen` and `PlayerTable` over `OpponentStore`; no file migration or interactive engine. Selection, filters and group context survive mode changes, and game-set links refresh on return. `OpenPlayerAnalysis` delivers the selected corpus once to the canonical Analysis screen, including when it is already mounted. Study/train actions retain their existing handoffs. See [Players and groups](OPPONENT_PREP.md#in-the-app). |
 | `opponent_list_import_dialog.dart` | Import an opponent-list JSON into Player Analysis |

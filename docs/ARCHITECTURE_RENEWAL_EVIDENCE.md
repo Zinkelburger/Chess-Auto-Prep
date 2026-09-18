@@ -3646,3 +3646,85 @@ library changes are +2,265/−16,067 (**−13,802**), with generated localizatio
 +135 separately. Unused/dormant retirement accounts for 12,154 removed lines;
 it does not establish whole-workflow maintainability. Feature graduation remains
 zero and the renewal remains Partial.
+
+
+### Settings admission and notification consolidation — 2026-09-18
+
+`e6016121` against `a5b3a393` removes the private SettingsSectionController.
+Tracked callers show it was instantiated only by SectionSettingsOwner; its
+pure-Dart/stream interface had no independent consumer. The existing owner now
+contains that same serialized read/edit/retry state machine and directly notifies
+its existing listeners. Three typed public owners, immutable configurations,
+settings storage boundary and runtime/control APIs are unchanged. No new owner,
+result, callback bag, compatibility shim or dependency mechanism is introduced.
+
+The action path loses one forwarding object and the synchronous stream-to-notifier
+relay. Stream creation, subscription cancellation and duplicate disposed state
+are gone; SafeChangeNotifier owns disposal. The existing queue tail is installed
+before notifications, so listener-submitted edits remain serialized. Already
+admitted writes settle after disposal without notification; new writes reject.
+Failed draft reconciliation, independent-field updates and explicit retry retain
+their previous semantics. This is a responsibility consolidation, not a claim
+that the old relay had a confirmed correctness defect.
+
+The complete changed production scope is the owner/controller pair, **244→211
+lines (−33)**. Including unchanged EngineSettings, BulkAnalysisSettings,
+BoardDisplaySettings, SettingsSectionStatus and RuntimeSettings yields the
+seven-file ownership/status/composition scope **487→454**. No code was moved
+into another helper or consumer. Two new behavior tests cover disposal during
+two admitted writes and an edit submitted by a notification listener; both pass
+on the baseline, alongside its eight existing tests. Final **66 tests pass**
+across owner, typed settings, control panels, runtime, engine lifecycle/budget
+and Settings screen. Analyze/lint passes; final retirement/doc lint passes.
+Independent review approves the actual state machine and exact e6016121.
+No control layout or visible behavior changes, so no new preview is required.
+
+The retirement manifest forbids the old controller path and symbol. Final
+library Dart totals **225,782**, +6,825 (+3.1%) against September 16 and −11,209
+against the growth-review snapshot. Handwritten changes against fa7f309e are
+**−13,835**; generated localization remains +135. Unused/dormant retirement stays
+12,154 lines: this additional 33-line reduction belongs to active settings
+ownership. Whole renewal and feature graduation remain Partial/unproven.
+
+
+### Growth audit and shared Study chapter list — 2026-09-18
+
+The committed September 16/growth-review comparison reproduces exactly at `e477dc58`
+and `a6238ff5`: 218,957→236,991 tracked library Dart lines. Independent tracked-blob
+counts at `ea1b7547` give 225,782. These include comments, blanks and generated
+Dart; generated localization is respectively 0, 2,272 and 2,982 lines. Provider
+consolidation is already complete, but milestone 6/7 and whole-feature graduation
+remain open. Two small passed simplification trials do not establish overall
+maintainability. Every subsequent simplification must pass the same complete-
+scope reduction, ownership and parity review; unrelated deletion gives no credit.
+
+Study source `3fb4c491`, final evidence `c832d248`, consolidates the sidebar and
+manager into the existing StudyChapterSidebar. Deletes the 221-line manager
+and duplicate search/reorder/confirmation implementation. The screen composes
+the bounded dialog using its existing action handlers; no new controller or
+forwarding owner. Selection resolves the captured chapter identity, and reorder
+rejects a changed projection or disposed widget. Search, inline Edit/Delete,
+active-row reveal, Done/Escape and continued selection within the manager remain.
+
+Full five-file scope **1,785→1,644 (−141 handwritten)** includes screen growth
+**1,050→1,072 (+22)**. Generated localization adds 110 and ARB adds 53 separately.
+Independent source/evidence review approves the final result. **43 focused tests**
+cover chapter behavior, stale callbacks, disposal, light/dark components and
+200% scaling with 100 chapters; **two Linux native journeys** cover restart
+recovery and large documents. Analyze/lint passes (63 existing infos, no warnings
+or errors, 45 checker cases). Earlier fixture/finder failures were corrected and
+the final batch rerun; no tests skipped. The actual-app
+[wide list](images/renewal-study-chapter-list-wide.png),
+[manager](images/renewal-study-chapter-list-manager.png) and
+[filtered list](images/renewal-study-chapter-list-filtered.png) were inspected;
+the disposable preview is stopped. Three legacy-theme entries are removed
+(208→205); the wider Study dark boundary remains necessary.
+
+Combined library Dart is **225,751**: +6,794 (+3.1%) against September 16 and
+−11,240 against the growth review. Against fa7f309e, handwritten reduction is
+**13,976**, generated localization +245 separately. Unused/dormant retirement
+still accounts for 12,154 removed lines. Zero features have graduated. Training
+browser work remains outside main pending truthful bulk-save failure recovery
+and native Read-line parity; a smaller diff alone does not pass its workflow gate.
+Combined Study/settings integration passes 53 affected tests and analyze/lint;
+the retirement manifest retains both independently deleted owners.
