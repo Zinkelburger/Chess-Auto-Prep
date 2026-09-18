@@ -374,25 +374,6 @@ class StudyController extends ChangeNotifier
     _dirty = false;
   }
 
-  /// Write [pgn] out as a brand-new study named [name] (one chapter per game)
-  /// and open it.  Returns the file path.
-  ///
-  /// The study file format *is* multi-game PGN, so the download goes straight
-  /// to disk — no parse/re-serialise round trip that could drop an annotation
-  /// on the way in.  [name] is sanitised and, if taken, suffixed.
-  Future<String> createStudyFromPgn(String name, String pgn) async {
-    final generation = ++_docGeneration; // supersede any in-flight openStudy
-    if (_reloading || _relocating || isDisposed || !await flushSave()) {
-      throw StateError(saveError ?? 'Study not saved');
-    }
-    final path = await _library.suggestNewPath(name);
-    final result = await _documents.create(path, '${pgn.trim()}\n');
-    if (result is! PgnSaved) throw StudyWriteException(result);
-    await refreshStudyList();
-    if (!isDisposed && generation == _docGeneration) await openStudy(path);
-    return path;
-  }
-
   /// Append a chapter (parsed from [pgn], including any `[FEN]` header) to
   /// the study at [path], creating the file when it doesn't exist yet.
   ///

@@ -17,7 +17,6 @@ import 'package:flutter/services.dart';
 
 import '../../services/lichess_auth_service.dart';
 import '../../features/studies/repositories/study_import_repository.dart';
-import 'package:provider/provider.dart';
 import '../../features/studies/models/import_source.dart';
 import '../../features/studies/controllers/study_import_controller.dart';
 import '../../features/studies/models/study_import_exception.dart';
@@ -64,9 +63,14 @@ class ImportFromUrlDialog extends StatefulWidget {
     super.key,
     required this.canAppend,
     required this.repository,
+    required this.apply,
   });
 
   final StudyImportRepository repository;
+
+  /// False keeps the resolved download here for retry; true means an app owner
+  /// has accepted its bytes, including an uncertain publication or dirty append.
+  final Future<bool> Function(StudyImportPlan) apply;
 
   /// Whether there is an open study to append to.
   final bool canAppend;
@@ -75,12 +79,15 @@ class ImportFromUrlDialog extends StatefulWidget {
   static Future<StudyImportPlan?> show(
     BuildContext context, {
     required bool canAppend,
+    required StudyImportRepository repository,
+    required Future<bool> Function(StudyImportPlan) apply,
   }) {
     return showDialog<StudyImportPlan>(
       context: context,
       builder: (_) => ImportFromUrlDialog(
         canAppend: canAppend,
-        repository: context.read<StudyImportController>().repository,
+        repository: repository,
+        apply: apply,
       ),
     );
   }
@@ -97,6 +104,7 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
   );
 
   ImportSource? _source;
+  StudyImportPlan? _resolvedPlan;
   bool _appendToCurrent = false;
   bool _busy = false;
   String? _error;
@@ -119,6 +127,7 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
   void _onUrlChanged(String value) {
     setState(() {
       _source = parseImportSource(value);
+      _resolvedPlan = null;
       _error = null;
     });
   }
@@ -140,7 +149,7 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
     });
 
     try {
-      final plan = switch (source) {
+      final plan = _resolvedPlan ??= switch (source) {
         LichessStudySource() ||
         LichessUserStudiesSource() => await _resolveLichess(source),
         ChessgamesCollectionSource() => await _resolveCollection(source),
@@ -149,7 +158,26 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
         if (mounted) setState(() => _busy = false);
         return;
       }
-      Navigator.pop(context, plan);
+      final submitted = switch (plan) {
+        LichessStudyPlan() => LichessStudyPlan(
+          pgn: plan.pgn,
+          name: plan.name,
+          appendToCurrent: _canAppend && _appendToCurrent,
+        ),
+        CollectionPlan() => CollectionPlan(
+          gameIds: plan.gameIds,
+          studyName: plan.studyName,
+          delay: _delay,
+        ),
+      };
+      if (await widget.apply(submitted)) {
+        if (mounted) Navigator.pop(context, submitted);
+      } else if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = AppLocalizations.of(context).studyImportNotAccepted;
+        });
+      }
     } on StudyImportException catch (e) {
       if (mounted) {
         setState(() {
@@ -199,6 +227,7 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
+      scrollable: true,
       title: const Text('Import from URL'),
       content: SizedBox(
         width: 520,
@@ -315,16 +344,11 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
       );
     }
 
-    return SizedBox(
-      height: 34,
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 34),
       child: Align(
         alignment: Alignment.centerLeft,
-        child: Text(
-          text,
-          style: AppTextStyles.caption.copyWith(color: color),
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
+        child: Text(text, style: AppTextStyles.caption.copyWith(color: color)),
       ),
     );
   }
@@ -375,6 +399,7 @@ class _PasteGameIdsDialogState extends State<_PasteGameIdsDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
+      scrollable: true,
       title: const Text('Collection page blocked'),
       content: SizedBox(
         width: 520,
@@ -419,8 +444,8 @@ class _PasteGameIdsDialogState extends State<_PasteGameIdsDialog> {
               ),
             ),
             const SizedBox(height: 6),
-            SizedBox(
-              height: 20,
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 20),
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(

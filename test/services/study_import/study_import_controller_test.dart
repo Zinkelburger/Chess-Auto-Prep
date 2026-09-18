@@ -243,6 +243,9 @@ void main() {
   StudyImportController createController() {
     final controller = createStudyImportController(
       documents: LegacyPgnDocumentStore(storage),
+      repository: createStudyImportRepository(
+        documents: LegacyPgnDocumentStore(storage),
+      ),
     );
     addTearDown(() async {
       await controller.shutdown();

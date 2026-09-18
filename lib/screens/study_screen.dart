@@ -2,6 +2,8 @@
 /// chapter sidebar, and engine. Layout widgets live under `widgets/study/`.
 library;
 
+import '../features/studies/repositories/study_import_repository.dart';
+
 import '../l10n/study_import_labels.dart';
 import '../features/studies/models/study_import_state.dart';
 
@@ -254,51 +256,77 @@ class _StudyScreenState extends State<StudyScreen> {
   /// background (results arrive via [_onImportResult]).
   Future<void> _importFromUrl() async {
     final session = _study.title.session;
-    final plan = await ImportFromUrlDialog.show(
+    await ImportFromUrlDialog.show(
       context,
       canAppend: _study.title.filePath != null,
+      repository: context.read<StudyImportRepository>(),
+      apply: (plan) async {
+        if (!mounted) return false;
+        if (plan is LichessStudyPlan) {
+          if (plan.appendToCurrent && session != _study.title.session) {
+            return false;
+          }
+          return _applyLichessPlan(plan);
+        }
+        return _startCollectionDownload(plan as CollectionPlan);
+      },
     );
-    if (plan == null || !mounted) return;
-    if (plan is LichessStudyPlan &&
-        plan.appendToCurrent &&
-        session != _study.title.session) {
-      return;
-    }
-
-    switch (plan) {
-      case LichessStudyPlan():
-        await _applyLichessPlan(plan);
-      case CollectionPlan():
-        _startCollectionDownload(plan);
-    }
   }
 
-  Future<void> _applyLichessPlan(LichessStudyPlan plan) async {
-    if (plan.appendToCurrent) {
-      final added = await _study.importChapters(plan.pgn);
-      if (!mounted) return;
+  Future<bool> _applyLichessPlan(LichessStudyPlan plan) async {
+    final session = _study.title.session;
+    final chapters = _study.chapterList.chapters.length;
+    var consumed = false;
+    try {
+      if (plan.appendToCurrent) {
+        final added = await _study.importChapters(plan.pgn);
+        if (!mounted || session != _study.title.session) return true;
+        final l10n = AppLocalizations.of(context);
+        showAppSnackBar(context, l10n.studyImportAdded(added));
+        return true;
+      }
+      final result = await _import.publishStudy(name: plan.name, pgn: plan.pgn);
+      consumed = true;
+      // The result listener reports the captured publication, not whichever
+      // study happens to be active when this asynchronous operation completes.
+      if (mounted &&
+          session == _study.title.session &&
+          result.studyPath != null) {
+        await _study.openStudy(result.studyPath!);
+      }
+      return true;
+    } catch (error) {
+      if (!mounted) return false;
+      final l10n = AppLocalizations.of(context);
       showAppSnackBar(
         context,
-        added == 0
-            ? 'Nothing to import from that study.'
-            : 'Added $added chapter${added == 1 ? '' : 's'} '
-                  'from "${plan.name}".',
-        isError: added == 0,
+        error is StudyImportRejected
+            ? studyImportFailureLabel(l10n, error.failure)
+            : l10n.studyImportApplyFailed,
+        isError: true,
       );
-      return;
+      // Appended chapters already belong to the editor even if autosave failed;
+      // resubmitting them would duplicate work. A rejected create stays in-dialog.
+      return consumed ||
+          (plan.appendToCurrent &&
+              session == _study.title.session &&
+              _study.chapterList.chapters.length > chapters);
     }
-
-    await _study.createStudyFromPgn(plan.name, plan.pgn);
-    if (!mounted) return;
-    final chapters = _study.chapterList.chapters.length;
-    showAppSnackBar(
-      context,
-      'Imported "${_study.title.name}" — $chapters '
-      'chapter${chapters == 1 ? '' : 's'}.',
-    );
   }
 
-  void _startCollectionDownload(CollectionPlan plan) {
+  bool _startCollectionDownload(CollectionPlan plan) {
+    final rejection = _import.admissionFailure;
+    if (rejection != null) {
+      showAppSnackBar(
+        context,
+        studyImportFailureLabel(
+          AppLocalizations.of(context),
+          rejection.failure,
+        ),
+        isError: true,
+      );
+      return false;
+    }
     final minutes = (plan.gameIds.length * plan.delay.inSeconds / 60)
         .ceil()
         .clamp(1, 9999);
@@ -334,6 +362,7 @@ class _StudyScreenState extends State<StudyScreen> {
       ).studyImportBackground(plan.gameIds.length, minutes),
       requiresAttention: true,
     );
+    return true;
   }
 
   /// One SnackBar per finished collection download, whenever Study mode is on

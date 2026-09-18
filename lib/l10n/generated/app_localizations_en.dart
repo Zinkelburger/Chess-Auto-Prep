@@ -890,4 +890,17 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get legacyAnalysisNotSaved => 'Not saved';
+
+  @override
+  String studyImportAdded(int count) {
+    return 'Added $count chapters.';
+  }
+
+  @override
+  String get studyImportApplyFailed =>
+      'Could not finish the import. Your existing work is preserved.';
+
+  @override
+  String get studyImportNotAccepted =>
+      'The import was not accepted. Resolve the active import or study change, then retry. Your download is kept in this dialog.';
 }

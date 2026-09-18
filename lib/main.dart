@@ -1,3 +1,4 @@
+import 'features/studies/repositories/study_import_repository.dart';
 import 'features/studies/widgets/study_save_button.dart'
     show chooseStudyCopyDestination;
 import 'features/studies/widgets/study_import_close_guard.dart';
@@ -291,8 +292,14 @@ class ChessAutoPrepApp extends StatelessWidget {
           ChangeNotifierProvider<StudyController>(
             create: (_) => createStudyController(documents: documents),
           ),
+          Provider<StudyImportRepository>(
+            create: (_) => createStudyImportRepository(documents: documents),
+          ),
           ChangeNotifierProvider<StudyImportController>(
-            create: (_) => createStudyImportController(documents: documents),
+            create: (context) => createStudyImportController(
+              documents: documents,
+              repository: context.read<StudyImportRepository>(),
+            ),
           ),
           ChangeNotifierProvider<
             WorkspaceRecoveryController<StudyWorkspaceSnapshot>

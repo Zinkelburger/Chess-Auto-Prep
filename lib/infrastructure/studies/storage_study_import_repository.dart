@@ -116,8 +116,12 @@ class _Source implements StudyImportSource {
     if (_closed) return;
     _closed = true;
     _closing.complete();
-    client.close();
-    _lichess?.close();
+    final lichess = _lichess;
+    if (lichess == null) {
+      client.close();
+    } else {
+      lichess.close();
+    }
   }
 
   @override
@@ -157,6 +161,7 @@ class _Source implements StudyImportSource {
         RegExp(r'^Bearer ', caseSensitive: false),
         '',
       ),
+      client: client,
     );
     final result = await lichess.fetchLichessStudy(
       source,

@@ -1,3 +1,4 @@
+import '../features/studies/repositories/study_import_repository.dart';
 import 'package:flutter/widgets.dart';
 import '../l10n/generated/app_localizations.dart';
 import '../features/studies/controllers/study_import_controller.dart';
@@ -39,27 +40,32 @@ WorkspaceRecoveryStore<StudyWorkspaceSnapshot> createStudyRecoveryStore() =>
 /// Downloads belong to the application, not the Study route. A null platform
 /// selection preserves the Windows/macOS storage adapter until their native
 /// document commit protocols pass the platform adoption gates.
-StudyImportController createStudyImportController({
+StudyImportRepository createStudyImportRepository({
   required PgnDocumentStore? documents,
 }) {
   final storage = StorageFactory.instance;
   final store = documents ?? LegacyPgnDocumentStore(storage);
-  return StudyImportController(
+  return StorageStudyImportRepository(
+    library: LegacyStudyLibraryRepository(storage, store),
     documents: store,
-    repository: StorageStudyImportRepository(
-      library: LegacyStudyLibraryRepository(storage, store),
-      documents: store,
-      cacheDirectory: () => AppPaths.chessgamesCacheDirectory(create: true),
-      authHeaders: () => LichessAuthService.instance.getHeaders(),
-    ),
-    jobs: RepertoireStudyImportJobs(
-      JobManager.instance,
-      () => lookupAppLocalizations(
-        basicLocaleListResolution(
-          WidgetsBinding.instance.platformDispatcher.locales,
-          AppLocalizations.supportedLocales,
-        ),
-      ),
-    ),
+    cacheDirectory: () => AppPaths.chessgamesCacheDirectory(create: true),
+    authHeaders: () => LichessAuthService.instance.getHeaders(),
   );
 }
+
+StudyImportController createStudyImportController({
+  required PgnDocumentStore? documents,
+  required StudyImportRepository repository,
+}) => StudyImportController(
+  documents: documents ?? LegacyPgnDocumentStore(StorageFactory.instance),
+  repository: repository,
+  jobs: RepertoireStudyImportJobs(
+    JobManager.instance,
+    () => lookupAppLocalizations(
+      basicLocaleListResolution(
+        WidgetsBinding.instance.platformDispatcher.locales,
+        AppLocalizations.supportedLocales,
+      ),
+    ),
+  ),
+);

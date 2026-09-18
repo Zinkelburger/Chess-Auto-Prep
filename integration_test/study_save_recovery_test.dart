@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/features/studies/repositories/study_import_repository.dart';
 import 'package:chess_auto_prep/features/studies/controllers/study_import_controller.dart';
 import 'dart:io';
 import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
@@ -25,7 +26,7 @@ void main() {
       await study.newStudy(name);
       final original = File(study.title.filePath!);
       final originalBytes = await original.readAsBytes();
-      await importer.repository.cacheGame(
+      await context.read<StudyImportRepository>().cacheGame(
         '972801',
         '[Event "Source"]\n[White "A"]\n[Black "B"]\n\n1. e4 e5 *',
       );

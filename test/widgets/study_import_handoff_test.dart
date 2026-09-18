@@ -1,6 +1,9 @@
 @Timeout(Duration(seconds: 45))
 library;
 
+import 'package:chess_auto_prep/features/studies/models/import_source.dart';
+import 'package:chess_auto_prep/widgets/study/import_from_url_dialog.dart';
+
 import 'package:chess_auto_prep/widgets/study/study_import_status_chip.dart';
 import 'package:chess_auto_prep/features/documents/widgets/document_save_dialog.dart';
 import 'package:chess_auto_prep/features/studies/models/study_document.dart';
@@ -36,9 +39,10 @@ const _game = '[Event "Source"]\n\n1. e4 e5 *';
 class _Imports implements StudyImportRepository {
   _Imports(this.publication);
   final StudyImportPublication publication;
+  Future<StudyImportPublication> Function(String, String)? onPublish;
   @override
   Future<StudyImportPublication> publish(String name, String pgn) async =>
-      publication;
+      onPublish == null ? publication : onPublish!(name, pgn);
   @override
   Future<String?> readCachedGame(String id) async => _game;
   @override
@@ -48,6 +52,9 @@ class _Imports implements StudyImportRepository {
 }
 
 class _Source implements StudyImportSource {
+  @override
+  Future<FetchedStudy> fetchLichess(ImportSource source) async =>
+      (pgn: _game, name: 'Downloaded');
   @override
   void close() {}
   @override
@@ -87,19 +94,20 @@ void main() {
       autoSaveDelay: const Duration(hours: 1),
     );
     await study.openStudy('/studies/Source.pgn');
-    final importer = StudyImportController(
-      documents: store,
-      repository: _Imports(
-        StudyImportPublication(
-          path: '/studies/Downloaded.pgn',
-          content: _game,
-          outcome: PgnWriteUncertain(
-            error: StateError('ack lost'),
-            before: null,
-            observed: null,
-          ),
+    final imports = _Imports(
+      StudyImportPublication(
+        path: '/studies/Downloaded.pgn',
+        content: _game,
+        outcome: PgnWriteUncertain(
+          error: StateError('ack lost'),
+          before: null,
+          observed: null,
         ),
       ),
+    );
+    final importer = StudyImportController(
+      documents: store,
+      repository: imports,
       jobs: RepertoireStudyImportJobs(
         JobManager.instance,
         AppLocalizationsEn.new,
@@ -120,6 +128,7 @@ void main() {
       settings,
       MultiProvider(
         providers: [
+          Provider<StudyImportRepository>.value(value: imports),
           ChangeNotifierProvider<StudyController>.value(value: study),
           ChangeNotifierProvider<StudyImportController>.value(value: importer),
           ChangeNotifierProvider<AppState>.value(value: app),
@@ -172,6 +181,139 @@ void main() {
       close: close,
     );
   }
+
+  Future<void> importLichess(WidgetTester tester, {bool append = false}) async {
+    final menu = tester.widget<AppOverflowMenu>(
+      find.byType(AppOverflowMenu).first,
+    );
+    menu.entries.singleWhere((e) => e.label == 'From URL…').onRun();
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find
+          .descendant(
+            of: find.byType(ImportFromUrlDialog),
+            matching: find.byType(TextField),
+          )
+          .first,
+      'https://lichess.org/study/abcdefgh',
+    );
+    await tester.pumpAndSettle();
+    if (append) {
+      await tester.tap(
+        find.text('Add to the current study instead of creating a new one'),
+      );
+      await tester.pumpAndSettle();
+    }
+    await tester.tap(find.text('Import'));
+    if (append) {
+      // Chapter parsing runs on a real isolate. Alternate real scheduling with
+      // fake-clock pumps so its response can reach the widget callback.
+      final study = tester
+          .element(find.byType(StudyScreen))
+          .read<StudyController>();
+      for (var i = 0; i < 100 && !study.dirty; i++) {
+        await tester.pump();
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+      }
+    }
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets(
+    'Lichess uncertain publication retains downloaded bytes and review',
+    (tester) async {
+      final f = await host(tester);
+      await importLichess(tester);
+      expect(f.importer.needsPublicationReview, isTrue);
+      expect(f.importer.publicationRecovery!.state.content, _game);
+      expect(
+        f.importer.publicationRecovery!.state.path,
+        '/studies/Downloaded.pgn',
+      );
+      expect(f.study.title.filePath, '/studies/Source.pgn');
+      await tester.tap(find.byTooltip('Review downloaded study'));
+      await tester.pumpAndSettle();
+      expect(find.byType(DocumentSavePanel), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'failed Lichess append reports failure and keeps unsaved chapters',
+    (tester) async {
+      final f = await host(tester);
+      f.store.onSave = (_, _) async => PgnWriteFailed(StateError('disk full'));
+      await importLichess(tester, append: true);
+      expect(f.study.chapterList.chapters, hasLength(2));
+      expect(f.study.dirty, isTrue);
+      expect(
+        find.text(
+          'Could not finish the import. Your existing work is preserved.',
+        ),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'late publication reports its destination without opening over a newer study',
+    (tester) async {
+      final f = await host(tester);
+      final imports =
+          tester.element(find.byType(StudyScreen)).read<StudyImportRepository>()
+              as _Imports;
+      final pending = Completer<StudyImportPublication>();
+      imports.onPublish = (_, _) => pending.future;
+      // An indeterminate import indicator intentionally stays active until publication.
+      final menu = tester.widget<AppOverflowMenu>(
+        find.byType(AppOverflowMenu).first,
+      );
+      menu.entries.singleWhere((e) => e.label == 'From URL…').onRun();
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find
+            .descendant(
+              of: find.byType(ImportFromUrlDialog),
+              matching: find.byType(TextField),
+            )
+            .first,
+        'https://lichess.org/study/abcdefgh',
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Import'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      f.store.onOpen = (path) async =>
+          PgnOpened(snapshot('[Event "Unrelated"]\n\n1. d4 *', path: path));
+      final opening = f.study.openStudy('/studies/Unrelated.pgn');
+      await tester.pump();
+      expect(await opening, isTrue);
+      pending.complete(
+        StudyImportPublication(
+          path: '/studies/Downloaded.pgn',
+          content: _game,
+          outcome: PgnSaved(
+            before: null,
+            after: snapshot(_game, path: '/studies/Downloaded.pgn'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(f.study.title.filePath, '/studies/Unrelated.pgn');
+      expect(
+        find.text('Imported 1 games into “Downloaded” (0 unavailable).'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Imported “Unrelated”'), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 
   for (final label in ['Train this chapter', 'Browse in PGN viewer']) {
     testWidgets('$label refuses a failed save', (tester) async {

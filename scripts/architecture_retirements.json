@@ -39,6 +39,7 @@
     "PgnPerspectiveButton",
     "GenerationArtifactStore",
     "ExpectimaxProbeStore",
-    "serializeTreeInIsolate"
+    "serializeTreeInIsolate",
+    "createStudyFromPgn"
   ]
 }

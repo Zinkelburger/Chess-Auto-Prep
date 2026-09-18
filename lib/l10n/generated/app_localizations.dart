@@ -1503,6 +1503,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Not saved'**
   String get legacyAnalysisNotSaved;
+
+  /// No description provided for @studyImportAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'Added {count} chapters.'**
+  String studyImportAdded(int count);
+
+  /// Study import or adoption failure; existing edits remain available.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not finish the import. Your existing work is preserved.'**
+  String get studyImportApplyFailed;
+
+  /// An admission rejection keeps downloaded input in its dialog for retry.
+  ///
+  /// In en, this message translates to:
+  /// **'The import was not accepted. Resolve the active import or study change, then retry. Your download is kept in this dialog.'**
+  String get studyImportNotAccepted;
 }
 
 class _AppLocalizationsDelegate

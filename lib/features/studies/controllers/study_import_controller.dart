@@ -17,8 +17,8 @@
 /// Progress is mirrored into a [RepertoireJob] so the run shows up in the jobs
 /// panel alongside generation and audit, and survives leaving Study mode.
 ///
-/// The Lichess path is a single request and does not come through here — see
-/// `lichess_study_client.dart`.
+/// Completed Lichess downloads and generated PGN use [publishStudy], sharing
+/// publication recovery and app-close ownership without a download job.
 library;
 
 import 'dart:async';
@@ -27,7 +27,8 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 
 import '../../../utils/safe_change_notifier.dart';
-import '../../../chess_core/pgn/pgn_text.dart' show extractHeaders;
+import '../../../chess_core/pgn/pgn_text.dart'
+    show extractHeaders, countPgnGames;
 import '../../documents/models/pgn_document.dart';
 import '../models/chapter_naming.dart';
 import '../models/study_import_state.dart';
@@ -49,7 +50,7 @@ class StudyImportResult {
 
   final String studyName;
 
-  /// Where the study was written — `null` when nothing was downloaded.
+  /// Acknowledged destination; null for empty or unsuccessful publication.
   final String? studyPath;
 
   final int chapters;
@@ -70,7 +71,7 @@ class StudyImportResult {
 
 class StudyImportController extends ChangeNotifier with SafeChangeNotifier {
   StudyImportController({
-    required this.repository,
+    required this._repository,
     required this.jobs,
     required this._documents,
   });
@@ -85,7 +86,7 @@ class StudyImportController extends ChangeNotifier with SafeChangeNotifier {
       (_publicationRecovery!.state.dirty ||
           _publicationRecovery!.state.uncertain);
 
-  final StudyImportRepository repository;
+  final StudyImportRepository _repository;
   final StudyImportJobs jobs;
   StudyImportSource? _source;
   Future<StudyImportResult>? _pending;
@@ -175,19 +176,8 @@ class StudyImportController extends ChangeNotifier with SafeChangeNotifier {
     required String studyName,
     Duration delay = defaultDelay,
   }) {
-    if (_closing || isDisposed) {
-      return Future.error(const StudyImportRejected(StudyImportFailure.closed));
-    }
-    if (needsPublicationReview) {
-      return Future.error(
-        const StudyImportRejected(StudyImportFailure.unresolvedPublication),
-      );
-    }
-    if (_running) {
-      return Future.error(
-        const StudyImportRejected(StudyImportFailure.alreadyRunning),
-      );
-    }
+    final rejection = admissionFailure;
+    if (rejection != null) return Future.error(rejection);
     if (gameIds.isEmpty) {
       return Future.error(
         const StudyImportRejected(StudyImportFailure.emptyCollection),
@@ -206,6 +196,49 @@ class StudyImportController extends ChangeNotifier with SafeChangeNotifier {
     );
   }
 
+  /// Synchronous admission policy, also used by dialogs before handing off work.
+  StudyImportRejected? get admissionFailure {
+    if (_closing || isDisposed) {
+      return const StudyImportRejected(StudyImportFailure.closed);
+    }
+    if (needsPublicationReview) {
+      return const StudyImportRejected(
+        StudyImportFailure.unresolvedPublication,
+      );
+    }
+    if (_running) {
+      return const StudyImportRejected(StudyImportFailure.alreadyRunning);
+    }
+    return null;
+  }
+
+  /// Publish completed downloaded PGN through the same retained receipt and
+  /// close ownership as a collection. No document is opened as a side effect.
+  Future<StudyImportResult> publishStudy({
+    required String name,
+    required String pgn,
+  }) {
+    final rejection = admissionFailure;
+    if (rejection != null) return Future.error(rejection);
+    _running = true;
+    _cancelRequested = false;
+    _label = name;
+    _done = _total = countPgnGames(pgn);
+    _progress = const StudyImportProgress(StudyImportStage.starting);
+    final pending = _pending =
+        _finish(
+          studyName: name,
+          content: pgn,
+          chapters: _total,
+          failed: 0,
+        ).whenComplete(() {
+          _running = false;
+          notifyListeners();
+        });
+    notifyListeners();
+    return pending;
+  }
+
   Future<StudyImportResult> _start({
     required List<String> gameIds,
     required String studyName,
@@ -220,7 +253,7 @@ class StudyImportController extends ChangeNotifier with SafeChangeNotifier {
     StudyImportSource? client;
     try {
       _reportJob(() => _job = jobs.start(studyName));
-      client = _source = repository.openSource();
+      client = _source = _repository.openSource();
       notifyListeners();
       return await _run(
         client: client,
@@ -236,7 +269,8 @@ class StudyImportController extends ChangeNotifier with SafeChangeNotifier {
     } catch (_) {
       final result = await _finish(
         studyName: studyName,
-        chapters: const [],
+        content: '',
+        chapters: 0,
         failed: 0,
         failure: StudyImportFailure.startup,
       );
@@ -276,7 +310,7 @@ class StudyImportController extends ChangeNotifier with SafeChangeNotifier {
         if (_cancelRequested) break;
         final gid = gameIds[i];
 
-        var pgn = await repository.readCachedGame(gid);
+        var pgn = await _repository.readCachedGame(gid);
         if (_cancelRequested) break;
         if (pgn == null) {
           final fetched = await _fetchWithBackoff(
@@ -310,7 +344,7 @@ class StudyImportController extends ChangeNotifier with SafeChangeNotifier {
 
           pgn = fetched.pgn;
           if (pgn != null) {
-            await repository.cacheGame(gid, pgn);
+            await _repository.cacheGame(gid, pgn);
           } else {
             failed++;
             _publishProgress(
@@ -341,7 +375,8 @@ class StudyImportController extends ChangeNotifier with SafeChangeNotifier {
 
     return _finish(
       studyName: studyName,
-      chapters: chapters,
+      content: chapters.isEmpty ? '' : '${chapters.join('\n\n')}\n',
+      chapters: chapters.length,
       failed: failed,
       failure: failure,
     );
@@ -388,18 +423,16 @@ class StudyImportController extends ChangeNotifier with SafeChangeNotifier {
   /// Write the collected games out as a study file.
   Future<StudyImportResult> _finish({
     required String studyName,
-    required List<String> chapters,
+    required String content,
+    required int chapters,
     required int failed,
     StudyImportFailure? failure,
   }) async {
     String? path;
     StudyImportPublication? publication;
-    if (chapters.isNotEmpty) {
+    if (chapters > 0) {
       try {
-        publication = await repository.publish(
-          studyName,
-          '${chapters.join('\n\n')}\n',
-        );
+        publication = await _repository.publish(studyName, content);
         final outcome = publication.outcome;
         if (outcome is PgnSaved) {
           path = outcome.after.path;
@@ -413,7 +446,7 @@ class StudyImportController extends ChangeNotifier with SafeChangeNotifier {
       } catch (error) {
         publication = StudyImportPublication(
           path: '',
-          content: '${chapters.join('\n\n')}\n',
+          content: content,
           outcome: PgnWriteUncertain(
             error: error,
             before: null,
@@ -440,7 +473,7 @@ class StudyImportController extends ChangeNotifier with SafeChangeNotifier {
     final result = StudyImportResult(
       studyName: studyName,
       studyPath: path,
-      chapters: path == null ? 0 : chapters.length,
+      chapters: path == null ? 0 : chapters,
       failed: failed,
       cancelled: _cancelRequested,
       failure: failure,

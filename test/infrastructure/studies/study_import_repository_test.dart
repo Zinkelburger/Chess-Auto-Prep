@@ -1,3 +1,5 @@
+import 'package:fake_async/fake_async.dart';
+import 'package:chess_auto_prep/features/studies/models/import_source.dart';
 import 'package:chess_auto_prep/features/studies/repositories/study_import_repository.dart';
 import '../../support/scripted_document_store.dart';
 import '../../support/study_fixture.dart';
@@ -186,6 +188,72 @@ void main() {
       },
     );
   }
+
+  test(
+    'completed headerless PGN uses retained publication and exact input bytes',
+    () async {
+      final importer = StudyImportController(
+        repository: repository,
+        documents: repository.documents,
+        jobs: RepertoireStudyImportJobs(
+          JobManager.instance,
+          AppLocalizationsEn.new,
+        ),
+      );
+      const content = '  1. e4 e5 *\n';
+      final result = await importer.publishStudy(
+        name: 'Headerless',
+        pgn: content,
+      );
+      expect(result.chapters, 1);
+      expect(await File(result.studyPath!).readAsString(), content);
+      expect(
+        (await importer.publishStudy(name: 'Empty', pgn: '  ')).wroteAnything,
+        isFalse,
+      );
+      await importer.shutdown();
+      importer.dispose();
+    },
+  );
+
+  test(
+    'close cancels the injected Lichess transport backoff and all further attempts',
+    () {
+      fakeAsync((time) {
+        var calls = 0;
+        client = MockClient((request) async {
+          calls++;
+          expect(request.url.host, 'lichess.org');
+          return http.Response('', 429);
+        });
+        final source = repository.openSource();
+        Object? failure;
+        var completed = false;
+        unawaited(
+          source
+              .fetchLichess(const LichessStudySource(studyId: 'abcdefgh'))
+              .then<void>(
+                (_) => completed = true,
+                onError: (Object error) {
+                  failure = error;
+                  completed = true;
+                },
+              ),
+        );
+        time.flushMicrotasks();
+        expect(calls, 1);
+        expect(completed, isFalse);
+        expect(time.nonPeriodicTimerCount, greaterThan(0));
+        source.close();
+        time.flushMicrotasks();
+        expect(completed, isTrue);
+        expect(failure, isStateError);
+        expect(time.nonPeriodicTimerCount, 0);
+        time.elapse(const Duration(minutes: 10));
+        expect(calls, 1);
+      });
+    },
+  );
 
   test('cache validates IDs and preserves acknowledged content', () async {
     await repository.cacheGame('42', game);
