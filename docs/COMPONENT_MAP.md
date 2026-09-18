@@ -1323,6 +1323,13 @@ same universal Stockfish 19 engine; `ditto --arch` also thins the universal ONNX
 Release packaging uses `zip -ry` so framework `Versions/Current` symlinks are
 stored as links (plain `zip -r` packed Stockfish/Maia/Flutter three times).
 
+The Builder Jobs view binds directly to its existing generation, audit and job
+registry owners. `JobsPanel` listens to all three, invokes their controls, and
+hosts the existing snapshot-export dialog; only navigation to configuration
+stays with the screen. `JobsTabContent` and its command-forwarding callbacks
+are retired. Audit cancellation persists progress using the audit session's
+captured source, including resumed/queued runs; an idle cancel remains a no-op.
+
 ### Tree generation (expectimax pipeline)
 
 ```

@@ -98,7 +98,8 @@
     "lib/features/settings/controllers/settings_section_controller.dart",
     "lib/widgets/study/chapter_manager_dialog.dart",
     "lib/theme/pgn_text_styles.dart",
-    "lib/features/traps/widgets/traps_tab_content.dart"
+    "lib/features/traps/widgets/traps_tab_content.dart",
+    "lib/widgets/layout/jobs_tab_content.dart"
   ],
   "symbols": [
     "PgnBatchWriter",
@@ -227,6 +228,7 @@
     "_seedGenerationAfterLoad",
     "awaitLoaded",
     "_openMovesAfterLoad",
-    "_openLineAfterLoad"
+    "_openLineAfterLoad",
+    "JobsTabContent"
   ]
 }

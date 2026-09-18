@@ -18,6 +18,8 @@ import '../../services/jobs/repertoire_job.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../utils/time_format.dart';
+import '../../utils/app_messages.dart';
+import '../generation/snapshot_export_dialog.dart';
 import '../generation/depth_progress_bars.dart';
 
 class JobsPanel extends StatelessWidget {
@@ -27,10 +29,6 @@ class JobsPanel extends StatelessWidget {
   final VoidCallback? onOpenGenerationDialog;
   final VoidCallback? onOpenAuditDialog;
   final VoidCallback? onOpenCoverageDialog;
-  final VoidCallback? onExportLinesGeneration;
-  final VoidCallback? onPauseAudit;
-  final VoidCallback? onResumeAudit;
-  final VoidCallback? onCancelAudit;
 
   const JobsPanel({
     super.key,
@@ -40,14 +38,19 @@ class JobsPanel extends StatelessWidget {
     this.onOpenGenerationDialog,
     this.onOpenAuditDialog,
     this.onOpenCoverageDialog,
-    this.onExportLinesGeneration,
-    this.onPauseAudit,
-    this.onResumeAudit,
-    this.onCancelAudit,
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: Listenable.merge([
+      jobManager,
+      generationController,
+      auditController,
+    ]),
+    builder: (context, _) => _buildJobs(context),
+  );
+
+  Widget _buildJobs(BuildContext context) {
     final jobs = jobManager.jobs;
     final active = jobManager.activeJobs;
     final completed = jobManager.completedJobs;
@@ -105,6 +108,27 @@ class JobsPanel extends StatelessWidget {
         ],
       ],
     );
+  }
+
+  /// Ask for a new repertoire name (+ verify choice) and export the lines
+  /// the build has found so far.  The run continues either way.
+  Future<void> _exportSnapshot(BuildContext context) async {
+    final gc = generationController;
+    final config = gc.activeConfig;
+    final choice = await showSnapshotExportDialog(
+      context,
+      suggestedName: gc.snapshotNameSuggestion(),
+      canVerify: config?.needsStockfish ?? false,
+      verifyDepth: config?.resolvedVerifyDepth,
+    );
+    if (choice == null || !context.mounted) return;
+    final (ok, message) = await gc.exportSnapshot(
+      repertoireName: choice.name,
+      verify: choice.verify,
+    );
+    if (context.mounted) {
+      showAppSnackBar(context, message, isError: !ok);
+    }
   }
 
   Widget _buildEmptyState(BuildContext context) {
@@ -235,24 +259,23 @@ class JobsPanel extends StatelessWidget {
       onResume: gc.resumeBuild,
       onCancel: gc.cancelBuild,
       extraActions: [
-        if (onExportLinesGeneration != null)
-          Tooltip(
-            message: !extrasEnabled
-                ? extrasDisabledMessage
-                : gc.isSnapshotExporting
-                ? (gc.snapshotStatus ?? 'Exporting snapshot…')
-                : 'Save the lines found so far to a new repertoire — '
-                      'the run keeps going',
-            child: TextButton(
-              onPressed: extrasEnabled && !gc.isSnapshotExporting
-                  ? onExportLinesGeneration
-                  : null,
-              child: const Text(
-                'Export Lines',
-                style: TextStyle(fontSize: 12, color: AppColors.info),
-              ),
+        Tooltip(
+          message: !extrasEnabled
+              ? extrasDisabledMessage
+              : gc.isSnapshotExporting
+              ? (gc.snapshotStatus ?? 'Exporting snapshot…')
+              : 'Save the lines found so far to a new repertoire — '
+                    'the run keeps going',
+          child: TextButton(
+            onPressed: extrasEnabled && !gc.isSnapshotExporting
+                ? () => _exportSnapshot(context)
+                : null,
+            child: const Text(
+              'Export Lines',
+              style: TextStyle(fontSize: 12, color: AppColors.info),
             ),
           ),
+        ),
         Tooltip(
           message: extrasEnabled
               ? 'Stop exploring and build lines from '
@@ -294,9 +317,9 @@ class JobsPanel extends StatelessWidget {
       resourceLabel: null,
       progress: fraction,
       isPaused: ac.isPaused,
-      onPause: onPauseAudit,
-      onResume: onResumeAudit,
-      onCancel: onCancelAudit,
+      onPause: ac.pause,
+      onResume: ac.resume,
+      onCancel: ac.cancel,
     );
   }
 

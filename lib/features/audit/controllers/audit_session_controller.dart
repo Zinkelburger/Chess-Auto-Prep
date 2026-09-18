@@ -142,10 +142,10 @@ class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
   }
 
-  void cancel(String? repertoireFilePath) {
+  void cancel() {
     if (!_isAuditing) return;
     _service.cancel();
-    saveProgress(repertoireFilePath);
+    saveProgress(_activeRepertoireId);
     _runVersion++;
     currentJob?.updateStatus(JobStatus.cancelled);
     currentJob = null;

@@ -242,7 +242,7 @@ void main() {
       expect(controller.isPaused, isFalse);
       controller.resume();
       expect(controller.isPaused, isFalse);
-      controller.cancel(_a);
+      controller.cancel();
       expect(storage.files, isEmpty);
     });
 
@@ -265,12 +265,13 @@ void main() {
     test(
       'cancel saves an interrupted snapshot with the live findings',
       () async {
+        await controller.tryRestore(_a);
         startAudit();
         controller.onLiveFinding(_finding('Nf6'));
         controller.onProgress(2, 8);
         final job = controller.currentJob!;
 
-        controller.cancel(_a);
+        controller.cancel();
         await settle();
 
         expect(controller.isAuditing, isFalse);
@@ -291,7 +292,7 @@ void main() {
     test('cancelling a paused run clears the pause', () {
       startAudit();
       controller.pause();
-      controller.cancel(_a);
+      controller.cancel();
       expect(controller.isPaused, isFalse);
       expect(controller.isAuditing, isFalse);
     });
@@ -299,7 +300,7 @@ void main() {
     test('progress is not saved when no config was ever given', () async {
       controller.onAuditingChanged(true, jobs, 'A');
       controller.onLiveFinding(_finding('Nf6'));
-      controller.cancel(_a);
+      controller.cancel();
       await settle();
       expect(storage.files, isEmpty);
     });
@@ -532,6 +533,65 @@ void main() {
         );
 
     test(
+      'canceling a queued run saves its own source before it starts',
+      () async {
+        final service = _GatedAudit();
+        controller.dispose();
+        controller = AuditSessionController(
+          service: service,
+          prepareEngine: () async {},
+          releaseEngine: () async {},
+        );
+        final first = launch(_a);
+        await settle();
+        controller.cancel();
+        await settle();
+        final savedA = storage.files[_aJson];
+        final second = launch(_b);
+        expect(controller.activeRepertoireId, _b);
+        controller.cancel();
+        await settle();
+        expect(storage.files[_aJson], savedA);
+        expect(snapshotAt(_bJson).isComplete, isFalse);
+        expect(snapshotAt(_bJson).result.findings, isEmpty);
+        service.completions.single.complete(_result([]));
+        await first;
+        await second;
+        expect(service.starts, hasLength(1));
+        expect(controller.isAuditing, isFalse);
+      },
+    );
+
+    test(
+      'fileless run cancellation retains progress without inventing a path',
+      () async {
+        final service = _GatedAudit();
+        controller.dispose();
+        controller = AuditSessionController(
+          service: service,
+          prepareEngine: () async {},
+          releaseEngine: () async {},
+        );
+        final run = controller.launch(
+          config: _quiet,
+          tree: tree,
+          isWhiteRepertoire: true,
+          jobManager: jobs,
+          repertoireLabel: 'Unsaved',
+          repertoireFilePath: null,
+        );
+        await settle();
+        controller.cancel();
+        await settle();
+        expect(controller.activeRepertoireId, isNull);
+        expect(controller.interruptedSnapshot!.result.findings, hasLength(1));
+        expect(storage.files, isEmpty);
+        service.completions.single.complete(_result([]));
+        await run;
+      },
+    );
+
+    test(
       'cancelled completion cannot mark the saved partial report complete',
       () async {
         final service = _GatedAudit();
@@ -543,7 +603,7 @@ void main() {
         );
         final run = launch(_a);
         await settle();
-        controller.cancel(_a);
+        controller.cancel();
         await settle();
         expect(controller.interruptedSnapshot, isNotNull);
         service.completions.single.complete(_result([_finding('d5')]));
