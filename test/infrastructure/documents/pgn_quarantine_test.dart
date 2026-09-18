@@ -131,8 +131,9 @@ void main() {
       final before = await baseline(NativePgnDocumentStore());
       final store = NativePgnDocumentStore(
         flushDirectory: (path) async {
-          if (path == root.path)
+          if (path == root.path) {
             throw const FileSystemException('flush failed');
+          }
           await syncDirectory(path);
         },
       );
