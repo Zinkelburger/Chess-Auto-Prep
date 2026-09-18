@@ -3168,3 +3168,40 @@ Including earlier completed simplifications, the batch against `fa7f309e` remove
 **7,232 production lines**. All library Dart now totals **232,250 lines**, still
 13,293 above September 16's 218,957 (6.1%). This is a verified retirement result;
 the rest of the architecture renewal remains Partial.
+
+
+### Obsolete eval-tree display retirement — 2026-09-18
+
+Reviewed commit `5bcea12e` against `844aa08a` deletes the entire unused
+`features/eval_tree/` presentation and derived snapshot/metrics implementation.
+The complete 14-file production scope falls from 3,921 to 558 lines:
+**−3,363 handwritten lines** (7 added / 3,370 deleted), with generated code
+unchanged. The existing generation bundle no longer eagerly computes two
+unconsumed display representations. Its live tree, FEN index, traps, configuration,
+probes and position-selection behavior remain intact. Nine theme tokens used
+only by the deleted presentation are removed. No replacement owner is added.
+
+Independent review traced the actual bundle, generation, database and
+serialization consumers. Four tests owned solely by removed components are
+retired (402 lines); the serialization test/helper remains. Three retained owner
+tests initially failed to compile against removed snapshot APIs; they now assert
+the corresponding live tree/FEN/trap/perspective behavior, preserving meaningful
+coverage. The corrected **132-test focused suite passes**, including three native
+filesystem artifact journeys covering generate/reopen/update/reopen, interrupted
+resume/cancel and artifact authority. Analyze passes with 64 infos and no
+warnings/errors. Final lint passes after removing exactly 113 deleted-path debt
+entries and the empty feature directory; no boundary gate was weakened.
+
+The feature inventory is now **21 directories: six enforced, 15 unfinished,
+none complete**. Recorded dependency violations fall from 1,416 to 1,303 and
+legacy theme consumers from 230 to 224. Component/backlog descriptions name the
+active position/database surfaces; old graph-display guidance is explicitly
+historical. The active line metrics, trap calculations and artifact serialization
+remain in use and are retained.
+
+The full simplification batch against `fa7f309e` now removes **10,595 production
+lines**. All library Dart totals **228,887**, still **9,930 above** September 16's
+218,957 (+4.5%). The two unused-workflow removals account for 8,440 deleted lines;
+they cannot offset growth when judging a separate active workflow. Current
+Viewer/Builder/Study/Generation-session file counts are 1,954 / 1,459 / 1,049 /
+1,455. Whole renewal and the larger consumer simplifications remain Partial.
