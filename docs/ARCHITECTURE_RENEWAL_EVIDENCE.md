@@ -4037,3 +4037,81 @@ Library Dart at this checkpoint is **228,126**, down 8,865 from the reviewed
 growth snapshot but still 9,169 above September 16. Build/Cut source admission
 remains a separate in-progress safety repair; native identity before mutation
 reads, whole-feature simplicity and feature graduation remain open.
+
+### Build/Cut source admission and repeated-cut parity — 2026-09-18
+
+Independently reviewed `a50d2539` completes the source-admission repair planned
+before implementation. At baseline `e05e8e86`, delayed inline chapter creation
+can replace A with B behind an open Cut configuration. Its retained command then
+admits deletion against B, or against a new A after A→B→A. The baseline tests use
+the actual screen/catalog completion and a recording delete adapter: they prove
+wrong destination/index admission, not native data loss. Early native-write
+fixture attempts stalled in fake-clock scheduling and are not product failures.
+The authoritative two-case RED is `451a148e` and
+`/tmp/generation-source-admission-baseline-red.log`.
+
+The screen captures chapter, position, side and move inputs before opening the
+route. Existing route identity and document generation admit Start/Cut; canceled
+callbacks cannot become valid when another route opens. Start captures a fresh
+publication receiver before mutating configuration or quota state. An admitted
+receiver remains document-scoped after the configuration closes. Cut uses the
+existing document queue and its captured destination. Its typed result reports
+the acknowledged removal count and carries remaining lines only with valid
+source authority. A real empty-selection no-op retains admission without
+inventing a refresh; a nonempty request returning zero must refresh because the
+file may be missing. The exact successful load—not a post-await counter read or
+an inferred increment—can renew the route. Failure, missing content or
+supersession cannot return a newer chapter's projection.
+
+Visible repeated-cut coverage also exposed a separate continuation problem:
+after the first cut changes source bytes, the shared artifact may become
+unavailable and the old UI clears its ranking/controls. The existing route now
+retains its captured ranking with coherent tree/config/FEN inputs, while its
+remaining-line projection advances only through acknowledged receipts. The
+test deliberately makes the artifact unavailable, verifies the global tree is
+null, and performs real PGN removals **3→2→1** through the actual Remove button.
+This proves controlled artifact-unavailability behavior, not new native
+artifact-validation coverage. Obsolete ranking reset branches are deleted.
+
+Complete nine-file scope against `e05e8e86` is **4,859→4,963 (+104 handwritten)**:
+screen +33, tab +39 and document session +32; screen parts, document repository
+contract/adapter and configuration host remain unchanged. Generated localization
+adds 51 lines and ARB adds 21 separately. There is no new controller, adapter
+layer or independently advanced revision counter; the existing command gains
+an explicit result contract. This is declared safety growth, **not a reduction
+pass**. Combined with the separate handoff cut, the union of 12 production graph
+files grows 6,230→6,314 (+84 handwritten); the 20-line deletion cannot hide that
+net growth or justify broad rewrite expansion.
+
+All **62 affected screen/mutation tests pass**, with no failures/skips; this
+includes stale actual Start, canceled/reopened routes, successive visible cuts,
+write failure, committed-cut refresh failure, missing files and superseded own
+refresh. Independent reviews cover both production and meaningful behavioral
+assertions. Exact analyze/lint passes with 64 existing infos, no warnings/errors
+and 45 checker cases. Test-fixture corrections included menu readiness and a
+stale localized-label expectation; no production error was suppressed.
+
+The new Linux `builder_generation_admission_test.dart` presses the actual
+Generate button after real document A→B→A transitions behind configuration. A
+fresh rejection appears each time, no job starts, and both PGNs remain exactly
+unchanged. The [inspected native screenshot](images/renewal-generation-source-rejected.png)
+shows the original configuration and readable rejection. This fixture uses a
+direct document transition to isolate production admission; widget tests
+separately drive the delayed catalog completion. The first native attempt
+stopped in an empty-finder loading wait, corrected before the passing run.
+No engine generation run or non-Linux host coverage is claimed.
+
+After merging this repair with `57b10629`, **144 combined tests pass, zero
+failures/skips**, across the actual screen, document load/session, workspace
+recovery, pending handoff and mutation-safety suites. This union includes the
+agent suites above; their overlapping counts must not be added. The combined
+log is `/tmp/renewal-source-admission-combined-tests.log`. The final merged Linux
+Start case also passes, and its screenshot exactly matches the inspected image.
+Final analyze/lint retains the same 64 infos, no warnings/errors; logs are
+`/tmp/renewal-source-admission-exact-{native,gates}.log`.
+
+Current library Dart is **228,281**, down 8,710 from the reviewed snapshot and
+still 9,324 (+4.3%) above September 16. Native identity before the mutation's
+initial read, remaining catalog/training writers, whole-feature consumer
+simplicity and all feature graduations remain open. These results close the
+named admission responsibility, not whole Builder, Generation or renewal.

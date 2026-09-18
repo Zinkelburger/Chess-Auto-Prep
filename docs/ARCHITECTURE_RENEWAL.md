@@ -254,26 +254,26 @@ merges (57 on the first-parent history). Commit count is activity, not completio
 At that snapshot, six enforced and 17 unfinished features included zero complete
 features. The current inventory above separately records later deletions.
 
-The same measurement at Builder handoff checkpoint `57b10629`, including
+The same measurement at combined Builder source-admission checkpoint `0648fbf8`, including
 reviewed Trainer recovery, document-store, settings and Study consolidation, is:
 
 | Tracked scope | September 16 | Current checkpoint | Change from September 16 |
 |---|---:|---:|---:|
-| All library Dart, including generated code | 218,957 | 228,126 | +9,169 (+4.2%) |
+| All library Dart, including generated code | 218,957 | 228,281 | +9,324 (+4.3%) |
 | Viewer screen | 1,909 | 1,875 | −34 |
-| Builder screen | 1,191 | 1,426 | +235 |
+| Builder screen | 1,191 | 1,459 | +268 |
 | Study screen | 880 | 1,101 | +221 |
 | Generation session controller | 1,321 | 1,447 | +126 |
 
-All-library code is down 8,865 lines from the reviewed `a6238ff5` snapshot,
+All-library code is down 8,710 lines from the reviewed `a6238ff5` snapshot,
 with Viewer now 34 lines below September 16; the other three consumers remain
-larger. Legacy `services/` still holds 42,560 lines and `widgets/` 49,905. Riverpod's production
+larger. Legacy `services/` still holds 42,560 lines and `widgets/` 49,944. Riverpod's production
 imports and package dependency are now deleted; the current inventory is six
 enforced and 14 unfinished feature directories, with none complete. The three
 removed feature directories contained unused code, not graduated workflows.
 
 Against the separate simplification baseline `fa7f309e`, the completed batch
-removes 13,819 handwritten library lines, with generated localization +2,463
+removes 13,715 handwritten library lines, with generated localization +2,514
 reported separately. Chapter read/create and deletion Widgetbook changes add 22 lines, outside
 that library total. Of the removals, 12,154 lines come from the prior unused analysis,
 eval-tree and other presentation/custom-tab retirement. These unrelated deletions cannot
@@ -443,8 +443,8 @@ product owner to choose implementation details.
 | Order | Final result | Required removals and evidence |
 |---|---|---|
 | Builder handoff consolidation (`57b10629`) | One continuation awaits its own load and validates source, successful content and current navigation intent | Deletes both detached line/move continuations and the shared `awaitLoaded` waiter list/API. Complete eight-file scope 4,989→4,969 (−20 handwritten): screen +4, document owner −24, other callers unchanged. Five controlled failures reproduce on baseline; all 106 affected tests and the existing Linux Builder edit/save/reload journey pass after repair. Ready same-source navigation and copied pending inputs retain parity. Independent exact source review passes. Whole Builder remains Partial. |
-| In progress: Build/Cut source admission | Existing document and route lifetimes admit commands against the chapter that supplied their inputs | Delayed creation and A→B→A reproduce incorrect delete admission through a recording adapter; this proves the wrong destination request, not destructive native IO. Configuration captures source inputs; only an acknowledged own-cut refresh may renew admission and the remaining-line projection. Canceled-route callbacks reject new commands without invalidating an admitted run's publication callback. No new coordinator or generic token framework. This is a declared safety repair; growth is reported separately from simplification. Native file identity before a mutation's initial read remains a separate open contract. |
-| Builder dormant launch and trap wrapper retired (`708b58e4`) | Builder directly composes its existing trap browser; manual generation keeps its current form and owner | Deletes the unreachable discovery/auto-start chain, retry loops, outer key/public APIs and forwarding trap wrapper with no replacement inputs. Complete 17-file scope 7,340→7,101 (−239 handwritten; generated unchanged); Builder screen 1,468→1,422. Dormant deletion and the removed live forwarding layer are reported separately in the evidence. Independent review, 69 affected tests and actual-app browser/tour/configuration checks pass. Whole Builder/Generation and delayed-source safety remain open. |
+| Build/Cut source admission repaired (`a50d2539`) | Existing document and route lifetimes admit commands against the chapter that supplied their inputs; repeated cuts retain their original ranking | Rejects delayed-source, A→B→A and canceled-route commands. Only an acknowledged own refresh renews admission and the remaining-line projection; failed/missing refresh never borrows another chapter's authority. Complete nine-file scope 4,859→4,963 (+104 handwritten), generated +51 and ARB +21 separately: safety growth, not simplification credit. No new owner/interface/counter. Independent source/test review and 62 affected tests pass; actual Linux Start rejection preserves both files and starts no job. Combined validation is in the evidence record. Native identity before a mutation's initial read remains open. |
+| Builder dormant launch and trap wrapper retired (`708b58e4`) | Builder directly composes its existing trap browser; manual generation keeps its current form and owner | Deletes the unreachable discovery/auto-start chain, retry loops, outer key/public APIs and forwarding trap wrapper with no replacement inputs. Complete 17-file scope 7,340→7,101 (−239 handwritten; generated unchanged); Builder screen 1,468→1,422. Dormant deletion and the removed live forwarding layer are reported separately in the evidence. Independent review, 69 affected tests and actual-app browser/tour/configuration checks pass. Whole Builder/Generation remain Partial; source admission is repaired separately above. |
 | Reviewed safety/recovery cutovers | Builder durable workspace, native recovery identity and bounded autosave; Study app-owned import/publication; Generation retained-output recovery | Named old owners/callers removed and independent repairs reviewed. These are safety/retirement results with production growth; keep their evidence separate from the two required net-reduction trials. |
 | Composition trial passed (`e1286ced`) | Constructors plus Provider throughout catalog/settings/app presentation | Riverpod owners/bindings/dependency and generic stored-game/display scopes deleted; −48 handwritten production lines against `fa7f309e`, independently reviewed with lifecycle/settings parity. |
 | Bounded Viewer trial passed (`e1286ced`); wider consumer work remains open | Shared leave approval and existing collection/reader owners replace duplicate prompts and five suppliers | −32 handwritten production lines against `4ebb3a36`; native approval never discards early and screen discard validates click-time revision. Both trials together pass 6,569 tests with 12 skips and no failures. This permits the next bounded deletion, not whole-Viewer graduation. |
