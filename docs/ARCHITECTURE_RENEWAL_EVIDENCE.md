@@ -3762,3 +3762,41 @@ No visible layout/behavior changes require a new preview. Final library total is
 **225,716**, +6,759 (+3.1%) from September 16 and −11,275 from the growth review.
 Against fa7f309e, handwritten reduction is **14,011**, generated localization
 +245 separately. No feature graduation; whole renewal remains Partial.
+
+
+### Trainer reading uses the existing Viewer collection — 2026-09-18
+
+`accadd1f` against `ec5be76f` completes the Read-lines handoff. Native validation
+of the old browser found it wrote a relative cache path through StorageService,
+then handed that relative path to the Viewer’s absolute-path document store;
+the actual UI reported that it could not read the file. The temporary writer,
+cache-path construction and Trainer’s storage singleton import are deleted.
+
+The existing immutable OpenPgnViewer gains mutually exclusive file/content
+constructors. Trainer synchronously captures ordered PGNs, source title, selected
+index and ply after validating mounted/loading/source membership. Viewer uses
+its existing leave approval, content decoder, collection owner and navigation
+lifetime. Collection-owned title metadata resets/restores with the collection;
+UI supplies display fallback copy. No new owner, queue or dependency mechanism.
+
+Read now opens an independent fileless collection: edits use existing Save a copy,
+export and unsaved-close protection, rather than autosaving an invisible cache
+file. Original training PGNs remain unchanged. The complete five-file production
+scope grows **4,404→4,442 (+38 handwritten)**, including Viewer **1,867→1,875**;
+Trainer screen remains 1,001. Generated/ARB changes are zero. This removes one
+writer and fixes a user-visible failure; it is not a net-size simplification.
+
+Independent source review covers final `accadd1f`. **45 focused tests** exercise
+content/index/ply, one-time handoff, leave cancellation, late decoding against a
+newer file, edited copy bytes and restored title/cursor. The native Linux journey
+uses the actual retained Trainer callback before source change and A→B→A, opens
+two games, edits and saves via the real copy dialog, returns to Trainer, and
+checks original bytes plus absence of the old cache file. The inspected
+[actual Viewer](images/renewal-trainer-read-content.png) shows source title, notes,
+two games and Save/recovery; its disposable preview is stopped. Final focused,
+native and analyze/lint checks use the merged selected-store fixture with only
+one publication gate. Wider Training safety/ownership completion remains open.
+
+Library Dart totals **225,754**: +6,797 (+3.1%) against September 16 and −11,237
+against the growth review. Against fa7f309e, handwritten reduction is **13,973**,
+generated localization +245 separately. No feature graduation.
