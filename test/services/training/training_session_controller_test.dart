@@ -679,9 +679,11 @@ void main() {
 
       controller.startLine(line);
       controller.lineHadMistake = false;
+      controller.phase = TrainingPhase.finished;
       await controller.rateLine(ReviewRating.good);
       controller.startLine(line);
       controller.lineHadMistake = false;
+      controller.phase = TrainingPhase.finished;
       await controller.rateLine(ReviewRating.good);
       expect(controller.sessionCorrect, 2);
       expect(controller.sessionStreak, 2);
@@ -689,6 +691,7 @@ void main() {
 
       controller.startLine(line);
       controller.lineHadMistake = true;
+      controller.phase = TrainingPhase.finished;
       await controller.rateLine(ReviewRating.good);
       expect(controller.sessionIncorrect, 1);
       expect(controller.sessionStreak, 0, reason: 'mistake resets the streak');
@@ -696,6 +699,7 @@ void main() {
 
       controller.startLine(line);
       controller.lineHadMistake = false;
+      controller.phase = TrainingPhase.finished;
       await controller.rateLine(ReviewRating.good);
       expect(controller.sessionCorrect, 3);
       expect(controller.sessionStreak, 1);
@@ -860,7 +864,7 @@ void main() {
       await waitFor(() => controller.waitingForUser);
 
       await controller.handleUserMove(fakeMove(uci: 'e2e4', san: 'e4'));
-      await waitFor(() => controller.phase == TrainingPhase.finished);
+      await waitFor(() => controller.completionCommitted);
       expect(controller.feedback, 'Puzzle solved!');
 
       // The finished line left the queue; stats recorded, no scheduling.
@@ -891,7 +895,7 @@ void main() {
       await waitFor(() => controller.waitingForUser);
       expect(controller.currentLine!.id, 'B');
       await controller.handleUserMove(fakeMove(uci: 'd2d4', san: 'd4'));
-      await waitFor(() => controller.phase == TrainingPhase.finished);
+      await waitFor(() => controller.completionCommitted);
       expect(controller.dueQueue, isEmpty);
 
       controller.nextLine();
@@ -911,7 +915,7 @@ void main() {
       await waitFor(() => controller.waitingForUser);
 
       await controller.handleUserMove(fakeMove(uci: 'd2d4', san: 'd4'));
-      await waitFor(() => controller.phase == TrainingPhase.finished);
+      await waitFor(() => controller.completionCommitted);
       expect(controller.feedback, 'Solved — with mistakes.');
       await waitFor(() => reviewService.history.length == 1);
       expect(controller.reviewMap['A']!.failCount, 1);
@@ -932,7 +936,7 @@ void main() {
       await waitFor(() => controller.waitingForUser);
 
       await controller.handleUserMove(fakeMove(uci: 'e2e4', san: 'e4'));
-      await waitFor(() => controller.phase == TrainingPhase.finished);
+      await waitFor(() => controller.completionCommitted);
 
       await controller.rateLine(ReviewRating.good);
       expect(controller.currentLine!.id, 'B');
@@ -1157,6 +1161,7 @@ void main() {
 
         // "Again" leaves A due now — it is no longer *untrained*, so the strict
         // intent match would have dropped it from the run.
+        controller.phase = TrainingPhase.finished;
         await controller.rateLine(ReviewRating.again);
         controller.rebuildQueueAndAdvance();
         expect(controller.currentLine!.id, 'B');

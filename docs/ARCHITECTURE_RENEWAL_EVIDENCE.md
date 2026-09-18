@@ -3075,3 +3075,59 @@ local documentation file targets checked exist. Against the pre-trial baseline
 `fa7f309e`, this integrated batch removes 2,009 handwritten production lines,
 including the separately identified two-line chapter safety addition; generated
 code is unchanged. Overall app size is still above the September 16 baseline.
+
+
+### Training completion ownership — 2026-09-18
+
+Implementation `e4468ea6`, based on `8c0537d3`, replaces the following workflow.
+The baseline allowed the result widget to schedule auto-rating/auto-next while
+linear persistence ran separately. Delayed or failed persistence could lose the
+completion tally/error after Next invalidated its generation; automatic spaced
+rating required a mounted widget. The initial controlled run reproduced three
+failures (12 passes). The existing session now owns finish, captured persistence,
+tally and advance; the result panel only renders available commands. The existing
+progress store serializes captured outcomes, uses required attempt identity for
+explicit retry, and releases abandoned retry snapshots without cancelling
+admitted writes. Source reload waits for those writes to settle, not necessarily
+succeed. No new controller, writer, interface or compatibility facade was added.
+
+The screen's 17-field forwarding constructor, widget scheduling flags/callbacks,
+public rating-button wrapper and duplicate all-caught-up panel are removed.
+Interval formatting moves from the persistence service into the existing time
+format utility. Complete six-file handwritten production scope versus `8c0537d3`
+shrinks from 3857 to 3711 lines (146 net removed); generated Dart
+and localization deltas are zero. Whole Training remains Partial: theme,
+localization, crash-resume and other-platform gates are outside this cutover.
+
+207 focused tests pass, plus the refined 20-test ownership suite, including
+cancellation followed by a failed save and a successful distinct completion.
+Coverage includes delayed/failed linear persistence, repeated completion/Next,
+automatic rating without widgets, partial-write Retry, distinct same-line
+attempts, queued source snapshots, same-source reload, frozen settings and the
+existing error/Retry UI. An intermediate run had three fixture failures (a newly
+asynchronous loader assumption and two unflushed widget-test timers), all repaired.
+Analyze/lint pass with no warnings/errors and all 45 architecture-checker cases.
+The Linux native journey passes: actual input callbacks complete two puzzles,
+Next waits for completion, repeated completion does not duplicate the result,
+and two distinct history rows/pass counts survive a source reload. Initial
+native fixture runs incorrectly skipped the browser action, used an ambiguous
+Learn finder, or failed to deliver the second input; these were corrected without
+production hooks and are not passes. Final review accepted the exact commit.
+
+A separate disposable headless app journey completed both puzzles and the final
+summary through visible controls. The [second completion](images/renewal-training-completion-second.png)
+and [summary](images/renewal-training-completion-summary.png) screenshots were
+inspected by implementer and coordinator; the preview was stopped. Final
+analyze/lint retains 64 infos, zero warnings/errors and 1,457 exact feature-debt
+entries. Whole renewal remains Partial.
+
+Combined integration with Viewer/chapter safety `4de86060` passes **217**
+focused Training, scheduling, Viewer and real-file chapter widget tests, plus
+analyze/lint. The sole merge conflict was the retirement manifest; the union
+retains Viewer and both Training retired symbols. All 118 checked local
+documentation file targets exist. Against `fa7f309e`, the completed batch has
+725 production lines added and 2,880 deleted: **−2,155**, generated unchanged.
+The entire current `lib/` still contains **237,327 Dart lines in 1,052 files**,
+versus 218,957 lines at the September 16 baseline (`e477dc58`): +18,370 (8.4%).
+These bounded deletions do not erase the earlier safety/recovery growth or
+establish that all screens/features are simpler.

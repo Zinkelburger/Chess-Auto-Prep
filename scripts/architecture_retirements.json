@@ -84,6 +84,8 @@
     "PgnWithAnalysisPane",
     "EditMainZone",
     "RepertoireAnalysisDock",
-    "PgnPaneRouter"
+    "PgnPaneRouter",
+    "TrainingRatingButtons",
+    "AllCaughtUpPanel"
   ]
 }

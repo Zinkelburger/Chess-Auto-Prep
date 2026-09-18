@@ -1434,6 +1434,19 @@ appends or tallying twice. The existing error panel retries the pending action;
 failed header mirrors remain queued. This retry state is in memory; crash-resume
 remains a separate requirement.
 
+`TrainingSessionController` owns finish → persist → tally → advance for both
+linear and spaced runs, including automatic ratings while no result widget is
+mounted. `TrainingResultsPanel` is a stateless direct consumer: it neither
+schedules work nor mirrors session fields. Manual Next, skip, restart, exclusion
+and repeat completion cannot bypass a pending/failed completion. Existing Retry
+resumes the captured result; a different run receives a distinct attempt identity.
+`ReviewProgressStore` captures source/reviews/moves before queuing disk stages,
+serializes distinct attempts and joins retries of the same attempt. Source reload
+waits for admitted writes to settle before reading progress. Cancelling a line
+ends its retry admission and releases retry snapshots; admitted writes finish,
+while generation checks suppress old tally/error/advancement. The redundant
+rating-button wrapper and all-caught-up panel are retired.
+
 `AppDependencies` owns one `TrainingSettingsController`. Settings panels submit
 immutable field patches and share committed values, pending drafts and visible
 save failures with Retry. Fresh reads and serialized writes preserve changes

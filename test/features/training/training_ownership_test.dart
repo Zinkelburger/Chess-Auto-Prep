@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/features/training/models/training_phase.dart';
 import 'package:chess_auto_prep/features/training/models/training_configuration.dart';
 import 'package:chess_auto_prep/features/training/controllers/training_settings_controller.dart';
 import '../../support/training_settings.dart';
@@ -147,7 +148,9 @@ void main() {
   late MemoryTrainingSettings config;
   late TrainingSettingsController settingsOwner;
   late TrainingSessionController controller;
+  var disposed = false;
   setUp(() {
+    disposed = false;
     reviews = _Reviews();
     headers = _Headers();
     source = _Source();
@@ -163,7 +166,7 @@ void main() {
     );
   });
   tearDown(() {
-    controller.dispose();
+    if (!disposed) controller.dispose();
     settingsOwner.dispose();
   });
 
@@ -172,8 +175,10 @@ void main() {
     () async {
       controller.setStudySource(_meta('/old.pgn'));
       final old = controller.loadRepertoire();
+      await Future<void>.delayed(Duration.zero);
       controller.setStudySource(_meta('/new.pgn'));
       final current = controller.loadRepertoire();
+      await Future<void>.delayed(Duration.zero);
       source.pending['/new.pgn']!.complete(_loaded('new'));
       await current;
       source.pending['/old.pgn']!.complete(_loaded('old'));
@@ -188,6 +193,7 @@ void main() {
     () async {
       controller.setRepertoire(_meta('/old.pgn'));
       controller.currentLine = fakeLine('old', ['e4']);
+      controller.phase = TrainingPhase.finished;
       reviews.saveGate = Completer();
       final saving = controller.rateLine(ReviewRating.good);
       controller.setStudySource(_meta('/new.pgn'));
@@ -204,6 +210,7 @@ void main() {
     controller.setRepertoire(_meta('/line.pgn'));
     controller.settings = controller.settings..autoNext = false;
     controller.currentLine = fakeLine('line', ['e4']);
+    controller.phase = TrainingPhase.finished;
     await controller.rateLine(ReviewRating.good);
     await controller.rateLine(ReviewRating.easy);
     expect(reviews.history, hasLength(1));
@@ -216,12 +223,13 @@ void main() {
       controller.setRepertoire(_meta('/line.pgn'));
       controller.settings = controller.settings..autoNext = false;
       controller.currentLine = fakeLine('line', ['e4']);
+      controller.phase = TrainingPhase.finished;
       reviews.failMoves = true;
       await controller.rateLine(ReviewRating.good);
       expect(controller.error, contains('Could not save rating'));
       expect(controller.sessionCorrect, 0);
       reviews.failMoves = false;
-      await controller.rateLine(ReviewRating.good);
+      await controller.retryFailure();
       expect(reviews.scheduleCalls, 1);
       expect(reviews.saveCalls, 1);
       expect(reviews.history, hasLength(1));
@@ -233,6 +241,7 @@ void main() {
   test('STATE-01 linear completion callback commits once', () async {
     controller.setStudySource(_meta('/line.pgn'));
     controller.currentLine = fakeLine('line', ['e4']);
+    controller.phase = TrainingPhase.finished;
     controller.completeLine();
     controller.completeLine();
     await Future<void>.delayed(Duration.zero);
@@ -240,11 +249,187 @@ void main() {
     expect(controller.sessionCorrect, 1);
   });
 
+  test('linear completion waits for persistence before any advance', () async {
+    controller.setStudySource(_meta('/line.pgn'));
+    final first = fakeLine('first', ['e4']);
+    final second = fakeLine('second', ['d4']);
+    controller.lines = [first, second];
+    controller.currentLine = first;
+    reviews.saveGate = Completer();
+    controller.completeLine();
+    controller.nextLine();
+    controller.skipLine();
+    controller.restartLine();
+    await controller.setLineExcluded(first, true);
+    expect(controller.reviewMap[first.id]?.excluded, isNot(true));
+    await controller.rateLine(ReviewRating.good);
+    expect(controller.currentLine, same(first));
+    expect(controller.sessionCorrect, 0);
+    await Future<void>.delayed(Duration.zero);
+    expect(reviews.saveCalls, 1);
+    reviews.saveGate!.complete();
+    await Future<void>.delayed(Duration.zero);
+    expect(controller.currentLine, same(second));
+    expect(controller.sessionCorrect, 1);
+    expect(reviews.history, hasLength(1));
+  });
+
+  test(
+    'failed linear completion retains the original result until retry',
+    () async {
+      controller.setStudySource(_meta('/line.pgn'));
+      final first = fakeLine('first', ['e4']);
+      final second = fakeLine('second', ['d4']);
+      controller.lines = [first, second];
+      controller.currentLine = first;
+      reviews.failMoves = true;
+      controller.completeLine();
+      await Future<void>.delayed(Duration.zero);
+      controller.nextLine();
+      controller.skipLine();
+      controller.restartLine();
+      controller.completeLine();
+      await controller.setLineExcluded(first, true);
+      expect(controller.reviewMap[first.id]?.excluded, isNot(true));
+      expect(controller.currentLine, same(first));
+      expect(controller.error, contains('Could not save completion'));
+      expect(controller.sessionCorrect, 0);
+      reviews.failMoves = false;
+      // Retry must tally the captured result, not this later presentation edit.
+      controller.lineHadMistake = true;
+      await controller.retryFailure();
+      expect(controller.currentLine, same(second));
+      expect(controller.sessionCorrect, 1);
+      expect(controller.sessionIncorrect, 0);
+      expect(reviews.history.single.hadMistake, isFalse);
+      expect(reviews.saveCalls, 1);
+    },
+  );
+
+  test(
+    'restarted line queues a distinct result behind its previous save',
+    () async {
+      controller.setRepertoire(_meta('/line.pgn'));
+      controller.settings = controller.settings
+        ..showRatingButtons = false
+        ..autoNext = false;
+      final line = fakeLine('line', ['e4']);
+      controller.currentLine = line;
+      reviews.saveGate = Completer();
+      controller.completeLine();
+      await Future<void>.delayed(Duration.zero);
+      controller.stopSession();
+      controller.currentLine = line;
+      controller.lineHadMistake = true;
+      controller.completeLine();
+      controller.completeLine();
+      await Future<void>.delayed(Duration.zero);
+      expect(reviews.saveCalls, 1);
+      expect(controller.completionBusy, isTrue);
+      expect(controller.canAdvance, isFalse);
+      reviews.saveGate!.complete();
+      await Future<void>.delayed(Duration.zero);
+      expect(reviews.history.map((entry) => entry.rating), ['good', 'again']);
+      expect(reviews.history.map((entry) => entry.hadMistake), [false, true]);
+      expect(reviews.saveCalls, 2);
+      expect(reviews.saved.last.passCount, 1);
+      expect(reviews.saved.last.failCount, 1);
+      expect(controller.sessionCorrect, 0);
+      expect(controller.sessionIncorrect, 1);
+      expect(controller.completionCommitted, isTrue);
+      expect(controller.canAdvance, isTrue);
+    },
+  );
+
+  test(
+    'same-source reload waits for prior save before adopting review counts',
+    () async {
+      controller.setRepertoire(_meta('/line.pgn'));
+      controller.settings = controller.settings..autoNext = false;
+      final line = fakeLine('line', ['e4']);
+      controller.currentLine = line;
+      controller.phase = TrainingPhase.finished;
+      reviews.saveGate = Completer();
+      final first = controller.rateLine(ReviewRating.good);
+      await Future<void>.delayed(Duration.zero);
+      final loading = controller.loadRepertoire();
+      await Future<void>.delayed(Duration.zero);
+      expect(source.pending, isEmpty);
+      reviews.saveGate!.complete();
+      await first;
+      await Future<void>.delayed(Duration.zero);
+      expect(source.pending.keys, ['/line.pgn']);
+      source.pending['/line.pgn']!.complete(
+        LoadedTrainingSource(
+          lines: [line],
+          reviewByLine: {line.id: reviews.saved.single},
+          moveProgress: {},
+          otherRepertoires: [],
+          isFolder: false,
+        ),
+      );
+      await loading;
+      controller.currentLine = line;
+      controller.phase = TrainingPhase.finished;
+      controller.lineHadMistake = true;
+      await controller.rateLine(ReviewRating.again);
+      expect(reviews.history.map((entry) => entry.rating), ['good', 'again']);
+      expect(reviews.saved.last.passCount, 1);
+      expect(reviews.saved.last.failCount, 1);
+      expect(controller.sessionCorrect, 0);
+      expect(controller.sessionIncorrect, 1);
+    },
+  );
+
+  test('automatic spaced rating needs no mounted result widget', () async {
+    controller.setRepertoire(_meta('/line.pgn'));
+    controller.settings = controller.settings
+      ..showRatingButtons = false
+      ..autoNext = false;
+    controller.currentLine = fakeLine('first', ['e4']);
+    controller.lineHadMistake = true;
+    controller.completeLine();
+    await Future<void>.delayed(Duration.zero);
+    expect(reviews.scheduleCalls, 1);
+    expect(reviews.history.single.rating, ReviewRating.again.name);
+    expect(controller.sessionIncorrect, 1);
+    controller.completeLine();
+    await Future<void>.delayed(Duration.zero);
+    expect(reviews.history, hasLength(1));
+  });
+
+  for (final end in ['source', 'stop', 'dispose']) {
+    test(
+      'pending linear completion settles original writes after $end without publishing',
+      () async {
+        controller.setStudySource(_meta('/old.pgn'));
+        controller.currentLine = fakeLine('old', ['e4']);
+        reviews.saveGate = Completer();
+        controller.completeLine();
+        if (end == 'source') {
+          controller.setStudySource(_meta('/new.pgn'));
+        } else if (end == 'stop') {
+          controller.stopSession();
+        } else {
+          controller.dispose();
+          disposed = true;
+        }
+        reviews.saveGate!.complete();
+        await Future<void>.delayed(Duration.zero);
+        expect(reviews.history.single.repertoireId, '/old.pgn');
+        expect(controller.sessionCorrect, 0);
+        expect(controller.runComplete, isFalse);
+        if (end != 'dispose') expect(controller.currentLine, isNull);
+      },
+    );
+  }
+
   test(
     'DATA-06 linear retry resumes after a partial write and tallies once',
     () async {
       controller.setStudySource(_meta('/line.pgn'));
       controller.currentLine = fakeLine('line', ['e4']);
+      controller.phase = TrainingPhase.finished;
       reviews.failMoves = true;
       controller.completeLine();
       await Future<void>.delayed(Duration.zero);
@@ -262,16 +447,29 @@ void main() {
   );
 
   test(
-    'STATE-01 failed old rating cannot replace new source error state',
+    'cancelled failed outcome cannot poison or replay into the next completion',
     () async {
       controller.setRepertoire(_meta('/old.pgn'));
       controller.currentLine = fakeLine('old', ['e4']);
+      controller.phase = TrainingPhase.finished;
       reviews.saveGate = Completer();
       reviews.failMoves = true;
       final saving = controller.rateLine(ReviewRating.good);
       controller.setStudySource(_meta('/new.pgn'));
       reviews.saveGate!.complete();
       await saving;
+      expect(controller.error, isNull);
+      expect(reviews.history, isEmpty);
+      reviews.failMoves = false;
+      controller.settings = controller.settings..autoNext = false;
+      controller.currentLine = fakeLine('new', ['d4']);
+      controller.completeLine();
+      await Future<void>.delayed(Duration.zero);
+      expect(controller.completionCommitted, isTrue);
+      expect(controller.sessionCorrect, 1);
+      expect(reviews.history.single.repertoireId, '/new.pgn');
+      expect(reviews.history.single.rating, '');
+      expect(reviews.scheduleCalls, 1);
       expect(controller.error, isNull);
     },
   );
@@ -377,6 +575,7 @@ void main() {
       await progress.recordRating(
         fakeLine('old', ['e4']),
         ReviewRating.good,
+        attempt: Object(),
         hadMistake: false,
       );
       headers.fail = true;

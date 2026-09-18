@@ -1,3 +1,5 @@
+import 'package:chess_auto_prep/utils/time_format.dart'
+    show formatReviewInterval;
 import 'dart:math';
 
 import 'package:chess_auto_prep/models/repertoire_review_entry.dart';
@@ -161,9 +163,9 @@ void main() {
 
   group('formatInterval', () {
     test('a zero interval reads as "now", not as a rounding artefact', () {
-      expect(RepertoireReviewService.formatInterval(0), 'now');
-      expect(RepertoireReviewService.formatInterval(1), '1d');
-      expect(RepertoireReviewService.formatInterval(1 / 48), '<1m');
+      expect(formatReviewInterval(0), 'now');
+      expect(formatReviewInterval(1), '1d');
+      expect(formatReviewInterval(1 / 48), '<1m');
     });
   });
 }
