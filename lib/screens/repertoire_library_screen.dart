@@ -36,14 +36,7 @@ class RepertoireLibraryScreen extends StatefulWidget {
 }
 
 class _RepertoireLibraryScreenState extends State<RepertoireLibraryScreen> {
-  late final RepertoireOutlineController _outline = RepertoireOutlineController(
-    service: context.read<RepertoireOutlineService>(),
-    catalog: context.read<RepertoireCatalogRepository>(),
-    onActiveChapterMoved: (path) {
-      if (!mounted) return;
-      _outline.setActiveChapter(path);
-    },
-  );
+  late final RepertoireOutlineController _outline;
   AppState? _app;
   AppMode? _lastMode;
   RepertoireMetadata? _folder;
@@ -52,6 +45,19 @@ class _RepertoireLibraryScreenState extends State<RepertoireLibraryScreen> {
   void _refreshCatalog() =>
       unawaited(context.read<RepertoireCatalogController>().refresh());
   int _openEpoch = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _outline = RepertoireOutlineController(
+      service: context.read<RepertoireOutlineService>(),
+      catalog: context.read<RepertoireCatalogRepository>(),
+      onActiveChapterMoved: (path) {
+        if (!mounted) return;
+        _outline.setActiveChapter(path);
+      },
+    );
+  }
 
   @override
   void didChangeDependencies() {

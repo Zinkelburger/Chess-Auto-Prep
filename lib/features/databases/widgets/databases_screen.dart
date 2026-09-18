@@ -95,8 +95,9 @@ class _DatabasesScreenState extends State<DatabasesScreen> {
   /// page exists to describe a machine whose storage may well be the thing
   /// that is wrong.
   Future<void> _measure() async {
+    if (!mounted) return;
     final databases = _settings.committed;
-    if (mounted) setState(() => _measuring = true);
+    setState(() => _measuring = true);
 
     final support = await _supportPath();
     final book = await _openBookStatus();

@@ -91,7 +91,7 @@ class PlanBuildScreen extends StatefulWidget {
   final String? chesscomUsername;
   final String? lichessUsername;
 
-  /// Injectable for tests.
+  /// Captured by the caller for this planning session.
   final PlanDataSource dataSource;
   final AnalysisGamesService? gamesService;
   final int defaultElo;
