@@ -62,7 +62,19 @@
     "lib/widgets/engine/expectimax_probe_hooks.dart",
     "lib/widgets/engine/inline_expectimax_bar.dart",
     "lib/services/analysis_service.dart",
-    "lib/models/analysis/move_analysis_result.dart"
+    "lib/models/analysis/move_analysis_result.dart",
+    "lib/features/eval_tree/adapters/eval_tree_snapshot_adapter.dart",
+    "lib/features/eval_tree/controllers/eval_tree_controller.dart",
+    "lib/features/eval_tree/models/eval_tree_snapshot.dart",
+    "lib/features/eval_tree/services/eval_tree_layout_engine.dart",
+    "lib/features/eval_tree/services/eval_tree_line_metrics.dart",
+    "lib/features/eval_tree/tree_colors.dart",
+    "lib/features/eval_tree/widgets/compact_tree_outline.dart",
+    "lib/features/eval_tree/widgets/eval_tree_details_pane.dart",
+    "lib/features/eval_tree/widgets/eval_tree_node_chip.dart",
+    "lib/features/eval_tree/widgets/eval_tree_toolbar.dart",
+    "lib/features/eval_tree/widgets/eval_tree_viewport.dart",
+    "lib/features/eval_tree/widgets/repertoire_tree_explorer.dart"
   ],
   "symbols": [
     "PgnBatchWriter",
@@ -128,6 +140,17 @@
     "AnalysisService",
     "MoveAnalysisResult",
     "PoolStatus",
-    "PoolPhase"
+    "PoolPhase",
+    "EvalTreeController",
+    "EvalTreeLayoutEngine",
+    "EvalTreeSnapshotAdapter",
+    "EvalTreeSnapshot",
+    "EvalTreeLineMetricsCache",
+    "RepertoireTreeExplorer",
+    "CompactTreeOutline",
+    "EvalTreeDetailsPane",
+    "EvalTreeNodeChip",
+    "EvalTreeToolbar",
+    "EvalTreeViewport"
   ]
 }

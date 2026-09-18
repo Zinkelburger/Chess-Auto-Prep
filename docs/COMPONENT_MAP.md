@@ -34,7 +34,7 @@ Last reviewed against `lib/` and `tree_builder/` (June 2026, post 7-phase remedi
 |-------|------|--------------|
 | **Screens** | Top-level routes / modes | `screens/` |
 | **Widgets** | UI composition | `widgets/`, `features/*/widgets/` |
-| **Features** | Domain-vertical modules (audit, browse, traps, coverage, eval tree) | `features/` |
+| **Features** | Domain-vertical modules (audit, traps, coverage, generation) | `features/` |
 | **Core** | Session controllers shared across repertoire UI | `core/` |
 | **Services** | Business logic, engines, I/O | `services/` |
 | **Models** | Immutable / serializable data | `models/` |
@@ -342,7 +342,7 @@ and "infinite traps" class of bugs.
 
 1. **One owner of the generated tree.** `GenerationSessionController` holds a
    single `GeneratedRepertoire` bundle (`lib/core/generated_repertoire.dart`)
-   containing the tree, `FenMap`, eval-tree snapshot, and trap index. All of
+   containing the tree, `FenMap`, and trap index. All of
    these are derived **once**, in `GeneratedRepertoire.fromTree`, the moment a
    tree is built — never inside a widget `initState`/`didUpdateWidget`.
 2. **One definition of position identity.** Transposition keys and trap lookup
@@ -2266,22 +2266,16 @@ renewal work; Windows/macOS native verification remains open.
 | **widgets/trap_tour_bar.dart** | Sequential trap tour bar with list hover preview |
 | **widgets/traps_browser.dart** | Rich trap list with mini board, per-reply stats, classification badges, sort by Eval Drop/Most Common/Trap%/Surplus; filter toggle: All Explored vs In Repertoire (wired into repertoire screen Lines tab) |
 
-### `lib/features/eval_tree/`
+### Generated tree presentation
 
-| File | Purpose |
-|------|---------|
-| **adapters/eval_tree_snapshot_adapter.dart** | `BuildTree` → lightweight snapshot for UI |
-| **controllers/eval_tree_controller.dart** | Graph selection, pan, focused window |
-| **models/eval_tree_snapshot.dart** | Serializable snapshot node |
-| **services/eval_tree_layout_engine.dart** | Graph layout for focused window (~400 nodes) |
-| **services/eval_tree_line_metrics.dart** | Per-node / per-line metrics including `linePlayability` |
-| **tree_colors.dart** | Node coloring by eval/ease |
-| **widgets/eval_tree_details_pane.dart** | Selected node detail |
-| **widgets/eval_tree_node_chip.dart** | Graph node widget |
-| **widgets/eval_tree_toolbar.dart** | Graph controls |
-| **widgets/eval_tree_viewport.dart** | `graphview` wrapper |
-| **widgets/repertoire_tree_explorer.dart** | Table explorer at current FEN (candidates, metrics) |
-| **widgets/compact_tree_outline.dart** | Scrollable indented [BuildTree] outline with eval, expectimax V%, and move probability per row; expand/collapse + tap-to-navigate |
+The disconnected eval-tree graph, explorer and compact outline are retired.
+`GeneratedRepertoire` retains the generated tree, FEN index, trap index,
+configuration and probes; it no longer builds unused graph snapshots or subtree
+metric caches. Builder's `GeneratePositionPane` uses `positionMoves` over the
+shared FEN index and live generation nodes. `RepertoireLinesBrowser` derives its
+line metrics through `services/line_metrics_helpers.dart`, `tree_my_ease.dart`
+and `TrapIndexService`. The chapter/line outline and BuildTree serialization
+remain active. Graph-layout guidance is historical; no graph widget remains.
 
 ### `lib/features/audit/`
 
@@ -2842,10 +2836,6 @@ and does not change active editor, document or save ownership.
 | `test/features/engine_tournament/engine_tournament_screen_test.dart` | Screen boots empty and populated, a games-row click hands the viewer the match PGN parked on that game, and an `OpenEngineTournament` handoff selects the named tournament (or leaves the screen intact and says so when it is gone); the history rail's score line and its filter |
 | `test/features/engine_tournament/tournament_open_request_test.dart` | The request file the MCP side writes and the app consumes: round trip, read-and-clear, malformed and stale requests, and the watcher's already-waiting / written-live / stopped paths |
 | `test/features/engine_tournament/engine_registry_test.dart` | Bundled-first ordering, bundled settings persisted without its path, update/remove, corrupt-file tolerance |
-| `test/features/eval_tree/eval_tree_controller_test.dart` | Graph controller |
-| `test/features/eval_tree/eval_tree_line_metrics_test.dart` | Line metrics |
-| `test/features/eval_tree/eval_tree_layout_engine_test.dart` | Layout performance |
-| `test/features/eval_tree/eval_tree_snapshot_adapter_test.dart` | Snapshot adapter |
 | `test/features/eval_tree/tree_serialization_eval_tree_test.dart` | Tree JSON round-trip |
 | `test/models/opening_tree_test.dart` | Opening tree mutations; `updateStats(null)` frequency without WDL; one-ply transposition (1.d4 c5 2.e3 shows Nf6 when the book is 1.d4 Nf6 2.e3 c5) |
 | `test/models/pgn_game_entry_test.dart` | Course `"Chapter — Line"` labels vs player `"White vs Black"` |

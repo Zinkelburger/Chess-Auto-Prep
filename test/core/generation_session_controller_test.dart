@@ -145,7 +145,7 @@ void main() {
       expect(controller.current, isNotNull);
       expect(controller.generatedTree, same(tree));
       expect(controller.generatedTreeFenMap, isNotNull);
-      expect(controller.current!.snapshot.root.fen, kStandardStartFen);
+      expect(controller.current!.tree.root.fen, kStandardStartFen);
       expect(notified, 1);
 
       controller.dispose();
@@ -163,7 +163,7 @@ void main() {
         _smallTree(configSnapshot: {'play_as_white': false}),
       );
 
-      expect(controller.current!.snapshot.playAsWhite, isFalse);
+      expect(controller.current!.playAsWhite, isFalse);
       controller.dispose();
     });
 

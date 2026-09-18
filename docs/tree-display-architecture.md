@@ -1,4 +1,10 @@
-# Tree Display Architecture: Lessons Learned
+# Tree Display Architecture: Historical Lessons
+
+**Historical guidance:** the disconnected eval-tree graph, explorer and compact
+outline were retired in September 2026. This document records their layout
+lessons, not an implemented graph or a plan to restore one. The shared BuildTree
+indexing, metadata and serialization remain active; current Builder views read
+the generated FEN index, position rows and line/trap metrics directly.
 
 How to structure a tree database so it can be rendered in an interactive graph
 without freezing the UI. Based on our experience with a 115,000-node chess

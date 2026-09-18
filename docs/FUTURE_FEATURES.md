@@ -220,7 +220,7 @@ Design components are built on demand inside the first complete slice.
 | Inline **expectimax continuation** on candidate hover | **Not started** | Hover previews FEN only; no `ClickableMoveLineWidget` under row |
 | **Coverage ring** per opponent candidate | **Not started** | The unused candidate chip implementation is retired; active explorer rows have no coverage ring |
 | **W/D/B result bar** for opponent moves | **Done** | Active `ExplorerMoveRow` uses `WinDrawLossBar` with the local explorer's white/draw/black counts |
-| `RepertoireTreeExplorer` DB frequency columns | **Not started** | Explorer shows engine metrics, not Lichess W/D/B |
+| Combined generated-evaluation and DB-frequency columns | **Deferred** | The old tree explorer is retired. Any combined view belongs to the current Builder database pane; no replacement graph is planned. |
 | Entry: **Build manually** (empty repertoire, DB-only) | **Partial** | Empty repertoire creation and the active Database explorer are available; no dedicated entry CTA |
 | Entry: **Browse Result** after generation | **Partial** | Tree loads; no explicit post-gen browse button |
 | PGN editor persistence ownership | **Partial** | Builder controller/writer now use injected document contracts and the shared native PGN store on Linux; durable draft recovery, native undo receipts and remaining outline/generation editor callers are pending |
@@ -253,7 +253,7 @@ Design components are built on demand inside the first complete slice.
 | **Ctrl+click** add-with-confirm for out-of-repertoire moves | **Not started** | |
 | Inline move **annotations** on lines (prob %, ★ repertoire, ⚠ trap) | **Not started** | `MoveAnnotation` model not on `ClickableMoveLineWidget` |
 | Side-by-side Engine + Expectimax panels | **Not started** | Builder exposes live Engine and generated evaluation reference tabs separately; the unreachable old dock is retired. |
-| Hover preview on **all** move surfaces | **Partial** | Engine, expectimax, browse, traps, suggestions, PGN trap dots, lines browser — **not** eval-tree explorer rows, all PGN moves |
+| Hover preview on **all** move surfaces | **Partial** | Active engine/generated positions, traps, PGN trap dots and lines browser have previews; coverage of all PGN moves remains incomplete. Retired browse/suggestion/eval-tree widgets are not future targets. |
 | Independent persist of expectimax panel toggle | **Partial** | `showExpectimaxDock` persisted; not spec’s toolbar toggle semantics |
 
 ### Trap UI
@@ -338,7 +338,7 @@ Design components are built on demand inside the first complete slice.
 
 These remain **undecided**; pick one before implementing dependent UI:
 
-1. **Browse vs Eval Tree tab** — Coexist vs merge. Current: coexist via chips + eval tree in Analyze mode.
+1. **Generated evaluations and database browsing** — Current Builder database sources share the board. The disconnected Browse and Eval Tree implementations are retired; any further consolidation applies to the current pane.
 2. **Expectimax + Engine both ON** — Side-by-side vs tabbed on narrow screens. Current: tabbed dock.
 3. **On-the-fly auto-compute** — Off by default (recommended). Not implemented.
 4. **Engine toggle persist on restart** — Implemented (`engine_lifecycle.toggle_on`); verify product preference for first-install default.
@@ -361,5 +361,5 @@ because it presented completed engine recovery work as unbuilt scope.
 - `docs/COMPONENT_MAP.md` — current implementation
 - `docs/ALGORITHM.md` — Flutter pipeline description
 - `tree_builder/ALGORITHM.md` — C `tree_builder` CLI (db-explorer, expectimax)
-- `docs/tree-display-architecture.md` — eval-tree graph performance principles
+- `docs/tree-display-architecture.md` — historical eval-tree graph performance lessons
 - `tree_builder/TODO_cloud_evals.md` — infra backlog

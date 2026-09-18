@@ -97,20 +97,24 @@ void main() {
       expect(db.mainTreeIsProbe, isFalse);
     });
 
-    test('republishing the same tree with more probes keeps its snapshot', () {
-      final tree = _tree(kStandardStartFen);
-      db.publish(tree);
-      final before = db.current!;
+    test(
+      'republishing the same tree with more probes keeps its trap index',
+      () {
+        final tree = _tree(kStandardStartFen);
+        db.publish(tree);
+        final before = db.current!;
 
-      db.publish(
-        tree,
-        probes: [_tree(_afterE4C5, childFen: 'c')],
-        mainTreeChanged: false,
-      );
+        db.publish(
+          tree,
+          probes: [_tree(_afterE4C5, childFen: 'c')],
+          mainTreeChanged: false,
+        );
 
-      expect(db.current!.snapshot, same(before.snapshot));
-      expect(db.current!.probes.length, 1);
-    });
+        expect(db.current!.tree, same(before.tree));
+        expect(db.current!.traps, same(before.traps));
+        expect(db.current!.probes.length, 1);
+      },
+    );
 
     test('starting a full build retains the probe-origin tree', () async {
       final probe = _tree(_afterD4);
@@ -295,7 +299,7 @@ void main() {
       expect(mainTreeChanged, isTrue);
       expect(tree.root.children.single.engineEvalCp, -31);
       expect(tree.root.children.single.enginePv, ['e7e5', 'g1f3']);
-      expect(db.current!.snapshot.node(2).evalForUsCp, 31);
+      expect(db.current!.fenMap.getCanonical(_afterE4)!.engineEvalCp, -31);
       expect(db.probes, isEmpty, reason: 'nothing grafted, nothing added');
     });
 
@@ -389,7 +393,7 @@ void main() {
       expect(landing.mainTreeChanged, isTrue);
       expect(landing.added, 1);
       expect(
-        db.current!.snapshot.nodesById.values.map((node) => node.fen),
+        db.current!.tree.nodeIndex.values.map((node) => node.fen),
         contains(_afterE4C5),
       );
       expect(db.probes, isEmpty);

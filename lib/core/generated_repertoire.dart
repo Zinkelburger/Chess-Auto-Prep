@@ -1,18 +1,9 @@
-/// Immutable bundle of a generated repertoire tree and **all** artifacts
-/// derived from it.
+/// Generated tree with its shared position and trap indexes.
 ///
-/// This is the single source of truth produced by [GenerationSessionController]
-/// the moment a tree is built. Every view (eval-tree graph, lines browser,
-/// traps browser) reads from one instance, so they can never disagree about
-/// the tree, its transposition map, or its traps.
-///
-/// Derived state is computed once, here, never inside widget lifecycle
-/// callbacks.
+/// Derived state is computed once when the generation session adopts a tree;
+/// position and line views use the same tree, FEN map and trap index.
 library;
 
-import '../features/eval_tree/adapters/eval_tree_snapshot_adapter.dart';
-import '../features/eval_tree/models/eval_tree_snapshot.dart';
-import '../features/eval_tree/services/eval_tree_line_metrics.dart';
 import '../features/traps/services/trap_index_service.dart';
 import '../chess_core/generation/build_tree_node.dart';
 import '../services/generation/fen_map.dart';
@@ -31,12 +22,6 @@ class GeneratedRepertoire {
   /// Transposition table over the tree (canonical-FEN → first-expanded node).
   final FenMap fenMap;
 
-  /// Flattened, display-ready snapshot for the eval-tree graph.
-  final EvalTreeSnapshot snapshot;
-
-  /// Per-line metric cache derived from [snapshot].
-  final EvalTreeLineMetricsCache metricsCache;
-
   /// Trap index built from the in-memory tree (O(1) by FEN, O(n) per line).
   final TrapIndexService traps;
 
@@ -44,17 +29,14 @@ class GeneratedRepertoire {
   final TreeBuildConfig? config;
 
   /// On-demand expectimax probes rooted at positions [tree] never reached.
-  /// Part of the [fenMap] — the expectimax pane finds them there — but not
-  /// of the graph snapshot or the trap index, which describe the repertoire
-  /// the build chose.
+  /// Part of the [fenMap] used by position views, but not the trap index,
+  /// which describes the repertoire the build chose.
   final List<BuildTree> probes;
 
   const GeneratedRepertoire({
     required this.tree,
     required this.playAsWhite,
     required this.fenMap,
-    required this.snapshot,
-    required this.metricsCache,
     required this.traps,
     this.config,
     this.probes = const [],
@@ -65,7 +47,7 @@ class GeneratedRepertoire {
 
   /// The same repertoire with a different probe set.
   ///
-  /// [snapshot], [metricsCache] and [traps] describe [tree] alone, so only
+  /// [traps] describes [tree] alone, so only
   /// [fenMap] needs rebuilding when the separate probes change. The caller
   /// must use [fromTree] instead if it changed the main tree's evals or
   /// grafted new children into it.
@@ -74,8 +56,6 @@ class GeneratedRepertoire {
       tree: tree,
       playAsWhite: playAsWhite,
       fenMap: _mapOver(tree, newProbes),
-      snapshot: snapshot,
-      metricsCache: metricsCache,
       traps: traps,
       config: config,
       probes: List.unmodifiable(newProbes),
@@ -109,11 +89,6 @@ class GeneratedRepertoire {
     List<BuildTree> probes = const [],
   }) {
     final fenMap = _mapOver(tree, probes);
-    final snapshot = EvalTreeSnapshotAdapter.fromBuildTree(
-      tree,
-      playAsWhite: playAsWhite,
-    );
-    final metricsCache = EvalTreeLineMetricsCache.fromSnapshot(snapshot);
     final extracted = TrapExtractor(
       playAsWhite: playAsWhite,
       findabilityPRef: config != null ? pRefForElo(config.maiaElo) : null,
@@ -124,8 +99,6 @@ class GeneratedRepertoire {
       tree: tree,
       playAsWhite: playAsWhite,
       fenMap: fenMap,
-      snapshot: snapshot,
-      metricsCache: metricsCache,
       traps: traps,
       config: config,
       probes: List.unmodifiable(probes),

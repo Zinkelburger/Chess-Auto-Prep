@@ -349,29 +349,9 @@ abstract final class AppColors {
   static const chartAreaWhite = ink;
   static const chartAreaBlack = Color(0xFF080808);
 
-  // ── Eval-tree node fills (Repertoire → Tree tab) ─────────────────────────
-  // Muted, desaturated fills hand-tuned so white node labels stay legible;
-  // classification helpers live in lib/features/eval_tree/tree_colors.dart.
-
-  static const treeNodeOurMoveRepertoire = Color(0xFF3D5245);
-  static const treeNodeOurMove = Color(0xFF354840);
-  static const treeNodeOpponentMove = Color(0xFF3A4248);
-  static const treeNodeBlunder = Color(0xFF6E4545);
-  static const treeNodeBigMistake = Color(0xFF6E4F3D);
-  static const treeNodeMistake = Color(0xFF6E5A3D);
-  static const treeNodeInaccuracy = Color(0xFF6E6640);
-  static const treeNodeNeutral = Color(0xFF424242);
-
-  /// Accent stroke/glyph marking repertoire moves inside the eval tree.
-  static const treeNodeAccentRepertoire = Color(0xFF8A9E9A);
-
   // ── Tactics mistake severity (?? / ? / ?! / custom) ─────────────────────
   //
-  // Deliberately the same three hues as the move classification above, which
-  // are in turn the ones every chess site uses: blue inaccuracy, amber
-  // mistake, red blunder. Severity is the one place hue carries meaning the
-  // reader already knows, so a "2" in the blunder column and a `??` node in
-  // the tree agree on what red means.
+  // Match PGN move classification: blue inaccuracy, amber mistake, red blunder.
 
   static const mistakeBlunder = nagBlunder;
   static const mistakeMistake = moveClassMistake;
