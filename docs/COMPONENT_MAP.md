@@ -87,14 +87,35 @@ from its `ViewerCollectionController`; autoplay steps its `PgnViewerHandle`
 directly. Reading-mode position callbacks remain explicit because the opening
 tree can have a different cursor from the game reader.
 `ViewerReadingController` also dispatches external board/step commands. The
-screen supplies the current Book/reference reader explicitly when appropriate;
+screen supplies the current Book comparison reader explicitly when appropriate;
 fullscreen supplies the primary reader. Without that argument, commands use the
 existing game/tree/Solitaire rules. `PgnPaneRouter` and its callback dispatch are
-retired; there is no retained active-reader state. Home/End on a reference reader
+retired; there is no retained active-reader state. Home/End on the Book reader
 remain direct ply jumps, preserving its ephemeral variations. Fullscreen keeps
 that existing reader subtree mounted but hidden and unfocusable; both keyboard
-and button movement target the primary game, and leaving restores the reference
+and button movement target the primary game, and leaving restores the Book
 pane's cursor.
+
+`PgnWorkspace` owns only fixed panel identities and immutable titles: Game,
+Books, Evaluation graph, Tree, Collection and Filter. Database explorer selects
+the existing Tree tab's database source. Closing, reopening, reordering and
+navigation-history restoration use those identities; Filter has an explicit
+pane branch. Main document PGN/SCID opening and collection/database operations
+remain separate from these tabs.
+
+The former custom database-picker/reference-tab component is retired. The
+tracked Dart import/export/part inventory at `24a8f3fa` covered 1,825 files and
+23 application/tool/driver/Widgetbook/plugin roots, including conditional URIs,
+with no missing local edges. That inventory found the two widgets imported only
+by the Viewer screen (plus the picker's exclusive test); imports alone did not
+prove the component dormant. Its control flow did: the nullable picker tab ID
+was never assigned a value, its unreachable picker callback was the only caller
+of the database opener, and both custom-tab creation calls were inside that
+closed cycle. Workspace selection and navigation history could only select
+already registered titles. Removal deletes the five screen maps, custom-title
+allocation, two widgets and reference-only action branches without replacing
+them. Live Book cursor ownership, Filters, fixed database Tree and collection
+operations remain covered by their existing callers and tests.
 
 The shared annotation panel flushes pending prose before a glyph action emits a
 save. A same-target rebuild does not replace a pending draft just because focus
@@ -1988,7 +2009,7 @@ Toggled through **Actions → Edit PGN**. When active:
 - **Save status and annotation panel**: PGN Viewer keeps autosave controls in Actions/settings without a persistent status label; failed autosaves expose Save to retry. Study shows a quiet, fixed-width status beside the file title: **Autosave on · Saved**, **Saving…**, or **Not saved** on failure. There are no success popups or animated indicators, and saving does not insert a toolbar or shift the board. Hover reveals the file path or failure details. Manual saving reports **Autosave off · Saved** / **Unsaved changes** and keeps **Save** available; pasted games say **Not saved to a file** and offer **Save as…**. Failed viewer autosaves expose **Save** for explicit retry; uncertain acknowledgements require reviewing the recovery copy and reopening the source. The shared Notes panel labels its target move; NAG buttons retain move-quality colors. Emptying an existing comment field keeps the stored comment until the explicit Delete comment action is confirmed, allowing replacement text without a popup while typing. Submitting an empty inline comment asks before removal. Branch deletion always confirms the count of moves and prose comments across all nested variations; chapter deletion and bulk clearing also show affected counts, including chapter introductions and variation starting comments. Confirmed removals follow the host's normal save setting.
 - **Context menu**: Right-click in edit mode shows Comment, Annotate, Promote (variation), Delete — with promote/delete gated by `protectOriginal`.
 - **Keyboard**: `Escape` exits edit mode.
-- **Persistence**: User-added moves and variations persist in both reading and edit mode; Edit PGN exposes annotation controls. **Settings → Game viewer → Autosave PGN edits** defaults on. Turning it off keeps edits in memory across game navigation until **Save**; closing the file, replacing the collection, or closing the window offers Save / Discard / Cancel. Solitaire guesses and read-only reference readers remain temporary. Saves patch changed games into the source file, preserve unrelated games and file preambles, and retain unsaved status on failure. Pending comments flush on Save and when finishing editing, before the annotation panel is removed; repainting waits until the widget tree unlocks. NAGs saved via `buildGameMovetext()` (the whole tree, so sidelines and the game comment survive) → `persistMoveComments()` → file write. NAGs serialize as `$N` tokens after the SAN in standard PGN format.
+- **Persistence**: User-added moves and variations persist in both reading and edit mode; Edit PGN exposes annotation controls. **Settings → Game viewer → Autosave PGN edits** defaults on. Turning it off keeps edits in memory across game navigation until **Save**; closing the file, replacing the collection, or closing the window offers Save / Discard / Cancel. Solitaire guesses and read-only Book comparisons remain temporary. Saves patch changed games into the source file, preserve unrelated games and file preambles, and retain unsaved status on failure. Pending comments flush on Save and when finishing editing, before the annotation panel is removed; repainting waits until the widget tree unlocks. NAGs saved via `buildGameMovetext()` (the whole tree, so sidelines and the game comment survive) → `persistMoveComments()` → file write. NAGs serialize as `$N` tokens after the SAN in standard PGN format.
 
 Key files: `pgn_comment_utils.dart` (`buildGameMovetext`, the one serializer for a parsed game), `pgn_viewer_widget.dart` (`editMode`), `pgn/pgn_annotation_panel.dart`, `pgn/pgn_viewer_widget_annotations.dart`, `pgn_viewer_screen.dart` (`_editMode`, `_buildEditModeBar`).
 

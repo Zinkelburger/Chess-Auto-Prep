@@ -7,7 +7,6 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
   bool get _canReturnToFilters;
   void _returnToFilters();
   bool get _onLineTab;
-  bool get _onReferenceTab;
   bool get _viewingStudy;
   set _singleGameFocus(bool value);
   GameViewPreferences get _viewPreferences;
@@ -156,7 +155,7 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
               enabled: !_document.editor.state.busy,
               onRun: () => unawaited(_savePgn()),
             ),
-          if (!solitaire && !_onReferenceTab)
+          if (!solitaire)
             AppMenuEntry(
               icon: Icons.edit_outlined,
               label: _editMode ? 'Finish editing' : 'Edit',
@@ -225,12 +224,8 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
               ),
               AppMenuEntry(
                 icon: Icons.library_add_outlined,
-                label: _viewingStudy && !_onReferenceTab
-                    ? 'Edit study'
-                    : 'Add to Study',
-                onRun: _viewingStudy && !_onReferenceTab
-                    ? _editInStudy
-                    : _addCurrentGameToStudy,
+                label: _viewingStudy ? 'Edit study' : 'Add to Study',
+                onRun: _viewingStudy ? _editInStudy : _addCurrentGameToStudy,
               ),
             ],
           ),
@@ -275,10 +270,7 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
         ? null
         : (_onLineTab ? _lineWidgetController : _pgnWidgetController)
               .applyReadingOption,
-    onFullscreen:
-        _document.collection.visibleGames.isNotEmpty &&
-            !_onLineTab &&
-            !_onReferenceTab
+    onFullscreen: _document.collection.visibleGames.isNotEmpty && !_onLineTab
         ? _document.presentation.toggleFullScreen
         : null,
     embedded: true,

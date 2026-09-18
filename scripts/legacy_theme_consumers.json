@@ -168,8 +168,6 @@
   "lib/widgets/pgn/movetext_primitives.dart": "widgets; renewal milestone 6",
   "lib/widgets/pgn/pgn_annotation_panel.dart": "widgets; renewal milestone 6",
   "lib/widgets/pgn/pgn_collection_panel.dart": "widgets; renewal milestone 6",
-  "lib/widgets/pgn/pgn_database_panel.dart": "widgets; renewal milestone 6",
-  "lib/widgets/pgn/pgn_database_picker.dart": "widgets; renewal milestone 6",
   "lib/widgets/pgn/pgn_game_filter_workspace.dart": "widgets; renewal milestone 6",
   "lib/widgets/pgn/pgn_movetext_view.dart": "widgets; renewal milestone 6",
   "lib/widgets/pgn/pgn_opening_label.dart": "widgets; renewal milestone 6",
