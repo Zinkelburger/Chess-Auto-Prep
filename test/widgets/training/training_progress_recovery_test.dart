@@ -391,6 +391,39 @@ void main() {
     expect(session.reviewMap['A']!.excluded, isTrue);
   });
 
+  for (final replacement in ['B', 'ABA', 'reload']) {
+    testWidgets('checkbox draft rejects $replacement before a frame', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: TrainerBrowser(session: session)),
+        ),
+      );
+      await tester.tap(find.text('Mark lines I know'));
+      await tester.pump();
+      await tester.tap(find.text('Line A'));
+      await tester.pump();
+      final save = tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Save'))
+          .onPressed!;
+      await tester.runAsync(() async {
+        if (replacement != 'reload') {
+          session.setStudySource(_meta('/b.pgn'));
+          await session.loadRepertoire();
+          if (replacement == 'ABA') session.setStudySource(_meta('/a.pgn'));
+        }
+        await session.loadRepertoire();
+      });
+      save();
+      await tester.pump();
+      expect(reviews.attempted, 0);
+      expect(session.reviewMap, isEmpty);
+      expect(find.text('Save'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets(
     'bulk failure leaves browser for localized durable reload, and failed reload stays actionable',
     (tester) async {

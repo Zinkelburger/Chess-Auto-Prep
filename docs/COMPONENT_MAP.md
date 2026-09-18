@@ -1545,8 +1545,9 @@ remain incomplete. A successful durable review read clears the block (optional
 presentation work may still fail); a failed read does not. Reload does not replay
 the edit. Abandoned failed completion/rating outcomes also require reconciliation.
 Source changes invalidate retained row commands and visible errors remain with
-their captured source generation. The existing Read handoff's relative cache
-path remains a separate repair pending integration.
+their captured source generation. Checkbox drafts also retain their original
+line-list identity and cannot save after source replacement or reload. Read opens
+explicit unsaved Viewer content; it cannot overwrite the training source.
 
 `AppDependencies` owns one `TrainingSettingsController`. Settings panels submit
 immutable field patches and share committed values, pending drafts and visible

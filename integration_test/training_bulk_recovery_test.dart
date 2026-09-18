@@ -24,7 +24,12 @@ void main() {
     'partial bulk save offers durable reload without replaying history',
     (tester) async {
       final root = await AppPaths.studiesDirectory(create: true);
-      final source = File(p.join(root.path, 'Bulk recovery.pgn'));
+      final source = File(
+        p.join(
+          root.path,
+          'Bulk recovery ${DateTime.now().microsecondsSinceEpoch}.pgn',
+        ),
+      );
       const content = '[Event "Bulk recovery"]\n[Result "*"]\n\n1. e4 *\n';
       await source.writeAsString(content);
       final history = await AppPaths.documentsFile(

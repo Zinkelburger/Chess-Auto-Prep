@@ -93,6 +93,7 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
   bool _selecting = false;
   bool _savingSelection = false;
   final Set<String> _checked = {};
+  List<RepertoireLine>? _selectionLines;
 
   /// Type-to-filter over whichever list is showing. Deliberately *not* part
   /// of the selection scope: "mark known" keeps applying to the whole
@@ -127,6 +128,7 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
   void _enterSelection() {
     if (!mounted) return;
     setState(() {
+      _selectionLines = session.lines;
       _selecting = true;
       _savingSelection = false;
       _checked
@@ -142,6 +144,10 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
 
   Future<void> _saveSelection() async {
     if (!mounted || _savingSelection) return;
+    if (!identical(_selectionLines, session.lines)) {
+      setState(() => _selecting = false);
+      return;
+    }
     setState(() => _savingSelection = true);
     try {
       await session.applyLearnedSelection(
