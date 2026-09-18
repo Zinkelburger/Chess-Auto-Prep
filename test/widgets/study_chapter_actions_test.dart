@@ -2,6 +2,7 @@
 library;
 
 import 'package:chess_auto_prep/core/app_state.dart';
+import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
 import 'package:chess_auto_prep/design_system/theme/app_theme.dart';
 import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
 import 'package:chess_auto_prep/features/studies/controllers/study_controller.dart';
@@ -11,6 +12,8 @@ import 'package:chess_auto_prep/features/studies/repositories/study_import_repos
 import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/screens/study_screen.dart';
 import 'package:chess_auto_prep/widgets/study/study_chapter_actions.dart';
+import 'package:chess_auto_prep/widgets/study/study_picker_bar.dart';
+import 'package:chess_auto_prep/features/documents/widgets/document_save_panel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -25,6 +28,17 @@ import '../support/study_fixture.dart';
 class _UnusedImports implements StudyImportRepository, StudyImportJobs {
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _NamedStudyLibrary extends MemoryStudyLibrary {
+  @override
+  Future<List<RepertoireMetadata>> list() async => [
+    RepertoireMetadata(
+      filePath: '/main.pgn',
+      name: 'main',
+      lastModified: DateTime(2026),
+    ),
+  ];
 }
 
 void main() {
@@ -48,19 +62,33 @@ void main() {
         .setMockMethodCallHandler(SystemChannels.platform, null);
   });
 
-  Future<StudyController> host(WidgetTester tester, bool compact) async {
-    tester.view.physicalSize = Size(compact ? 900 : 1500, 1100);
+  Future<StudyController> host(
+    WidgetTester tester,
+    bool compact, {
+    double? width,
+    bool named = false,
+    bool uncertainSave = false,
+    double scale = 1,
+  }) async {
+    tester.view.physicalSize = Size(width ?? (compact ? 900 : 1500), 1100);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final store = Store()
       ..current = snapshot('[Event "First"]\n\n1. e4 {First note} *');
     store.onSave = (before, content) async {
+      if (uncertainSave) {
+        return PgnWriteUncertain(
+          error: StateError('acknowledgement lost'),
+          before: before,
+          observed: null,
+        );
+      }
       final after = store.current = snapshot(content, path: before.path);
       return PgnSaved(before: before, after: after);
     };
     final study = StudyController(
-      library: MemoryStudyLibrary(),
+      library: named ? _NamedStudyLibrary() : MemoryStudyLibrary(),
       documents: store,
       decode: (content, name, path) async =>
           StudyDocument.fromPgn(content, name: name, filePath: path),
@@ -98,6 +126,12 @@ void main() {
           theme: AppTheme.dark(),
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: TextScaler.linear(scale)),
+            child: child!,
+          ),
           home: const StudyScreen(),
         ),
       ),
@@ -112,6 +146,69 @@ void main() {
     await tester.tap(find.text(action));
     await tester.pumpAndSettle();
   }
+
+  for (final scale in [1.0, 1.5]) {
+    testWidgets('750px Study switch and rename at scale $scale', (
+      tester,
+    ) async {
+      final study = await host(
+        tester,
+        true,
+        width: 750,
+        named: true,
+        scale: scale,
+      );
+      expect(study.title.canRename, isTrue);
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.byTooltip('Switch study'));
+      await tester.pumpAndSettle();
+      expect(find.text('Switch study'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Rename study').last);
+      await tester.pumpAndSettle();
+      final editor = find.descendant(
+        of: find.byType(StudyPickerBar),
+        matching: find.byType(TextField),
+      );
+      await tester.enterText(editor, 'Renamed study');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(study.title.name, 'Renamed study');
+      expect(tester.takeException(), isNull);
+      await study.flushSave();
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
+  testWidgets('750px recovery preserves warning and keyboard access', (
+    tester,
+  ) async {
+    final study = await host(tester, true, width: 750, uncertainSave: true);
+    final button = find.byKey(const ValueKey('study-save-recovery'));
+    expect(tester.widget(button), isA<IconButton>());
+    expect(tester.widget<IconButton>(button).tooltip, 'Save and recovery…');
+    expect(
+      find.descendant(of: button, matching: find.byIcon(Icons.save_outlined)),
+      findsOneWidget,
+    );
+    await study.save();
+    await tester.pumpAndSettle();
+    expect(study.state.uncertain, isTrue);
+    final warning = find.descendant(
+      of: button,
+      matching: find.byIcon(Icons.warning_amber),
+    );
+    expect(warning, findsOneWidget);
+    Focus.of(tester.element(warning)).requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.byType(DocumentSavePanel), findsOneWidget);
+    expect(study.state.uncertain, isTrue);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   for (final compact in [false, true]) {
     final layout = compact ? 'compact' : 'wide';
