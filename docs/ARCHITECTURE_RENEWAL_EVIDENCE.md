@@ -3346,3 +3346,82 @@ was stopped. Analyze/lint passes with 64 existing infos, no warnings/errors and
 45 checker cases. Combined integration over `f600070c` passes **92 tests** and
 analyze/lint; the retirement-manifest merge keeps both branches' retired symbols.
 Whole Generation, Builder and the renewal remain Partial.
+
+
+### Chapter read/create ownership — 2026-09-18
+
+Production `d010bd5b` replaces ChapterStore and picker/Builder creation choreography
+with the existing injected catalog and the app-selected PgnDocumentStore.
+The catalog validates names, preserves friendly case-insensitive collision
+feedback, inherits color when needed, and performs authoritative exclusive
+creation. Failed color reads fail creation rather than guessing. Only PgnSaved
+supplies an acknowledged path for selection; failed or uncertain results never
+select or automatically retry. The pure chapter header has one canonical home.
+
+Builder's sibling cache, request counter and refresh fanout are deleted. Its
+existing breadcrumb reads fresh siblings on demand, captures the current document
+generation before awaiting, rejects overlapping menus and validates that same
+capture before presenting or dispatching. Picker reads/course enrichment and
+creation use one request identity; Builder outline/load continuations validate
+its existing document generation. Controlled A/B/A and pre-frame replacement
+checks caught and repaired stale-menu and stale-selection paths. Progressive
+course reads, retry, selected chapter and original color semantics remain.
+
+The complete 25-file app scope is **11,620 → 11,608 lines (−12)**. Widgetbook's
+catalog fake adds 14, making the combined 11,967 → 11,969 (**+2**). The chapter
+replacement itself removes three lines across that full scope; a discovered
+isolate-capture defect requires five more. Its top-level preparation function
+captures only immutable request/date values, avoiding accidental capture of a
+document store and callbacks; both existing import callers reuse it. No new
+controller, dependency bag, writer or forwarding facade is introduced. The
+estimated 40–90-line reduction was not achieved; clearer ownership does not
+justify reporting a material code-size win.
+
+Independent exact-commit review approves the implementation and fixture repairs.
+The final combined caller run passes **202 tests**; Linux native checks pass
+**five journeys** across document-store failure and chapter creation, including
+collision and uncertain post-install publication with no replay. Earlier runs
+failed because of the real isolate capture and then fixture composition/real-time
+pumping; the corrected combined run covers those callers. Analyze/lint passes
+with 64 baseline infos, no warnings/errors and 45 architecture checker cases.
+The actual headless Builder creates and adopts Sicilian, opens its fresh sibling
+picker and shows the chapter list. Implementer, reviewer and coordinator inspect
+[the breadcrumb](images/architecture-renewal-chapter-breadcrumb.png) and
+[the list](images/architecture-renewal-chapter-list.png); preview is stopped.
+Evidence-only commit `3576744a` contains those screenshots. Whole catalog,
+Builder and renewal remain Partial.
+
+Combined integration over `c7351f23` passes **162 tests** across the actual
+Builder/main, chapter, Outline, import and Generation consumers, plus analyze/lint.
+The retirement manifest preserves both branches’ entries; feature debt falls
+from 1,279 to 1,276 exact entries. At `74a59d8c`, all library Dart totals
+**226,995 lines**, still 8,038 (+3.7%) above September 16. Against `fa7f309e`,
+handwritten library Dart adds 1,775 and deletes 14,284 (**−12,509**), with
+generated localization +22 separate. Unused-code retirement still accounts for
+10,594 of those removed lines and cannot certify simpler active consumers.
+
+### Remaining chapter mutation regressions — 2026-09-18
+
+These are reproduced defects, not implemented fixes or passing migration gates.
+Two separately backed-up test branches preserve intentionally failing baseline
+assertions; they are **not integrated into main**:
+
+- `codex/chapter-delete-safety` at `e778e629`, based on `3acf6c3f`: the actual
+  picker confirmation deletes a changed or equal-text replacement at the old
+  path. The old inode stays alive elsewhere; real storage is only delayed, not
+  mocked. Three existing tests pass and both new preservation assertions fail
+  at the missing replacement. Independent review validates the reproduction.
+- `codex/chapter-relocation-safety` at `cadce9fd`, also based on `3acf6c3f`:
+  five real-filesystem/reference assertions fail for destination clobber,
+  equal-text source replacement, incomplete reference migration, unrecovered
+  post-move reference failure and late training writes recreating the old key.
+  Independent review validates all five.
+
+Both checkpoints pass analyze/lint. A proposed generalization of the directory
+journal is not admitted: it could repair existing rows but cannot reject future
+path-only writes from already active training. Lock ordering alone does not
+solve stale writes or path reuse. Define source-identity/admission and recovery
+semantics through the existing persistence owners before implementing that full
+replacement; preserve captured-snapshot deletion and destination protection as
+explicit safety obligations. No rename facade, redirect cache or second journal
+was added to make the unresolved contract appear complete.

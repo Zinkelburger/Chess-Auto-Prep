@@ -254,26 +254,27 @@ merges (57 on the first-parent history). Commit count is activity, not completio
 At that snapshot, six enforced and 17 unfinished features included zero complete
 features. The current inventory above separately records later deletions.
 
-The same measurement at integrated checkpoint `3acf6c3f` is:
+The same measurement at reviewed integration checkpoint `74a59d8c` is:
 
 | Tracked scope | September 16 | Current checkpoint | Change from September 16 |
 |---|---:|---:|---:|
-| All library Dart, including generated code | 218,957 | 227,007 | +8,050 (+3.7%) |
+| All library Dart, including generated code | 218,957 | 226,995 | +8,038 (+3.7%) |
 | Viewer screen | 1,909 | 1,954 | +45 |
-| Builder screen | 1,191 | 1,458 | +267 |
+| Builder screen | 1,191 | 1,467 | +276 |
 | Study screen | 880 | 1,049 | +169 |
 | Generation session controller | 1,321 | 1,447 | +126 |
 
-All-library code is down 9,984 lines from the reviewed `a6238ff5` snapshot,
+All-library code is down 9,996 lines from the reviewed `a6238ff5` snapshot,
 but none of these four consumers is smaller than September 16. Legacy
-`services/` still holds 42,509 lines and `widgets/` 49,955. Riverpod's production
+`services/` still holds 42,507 lines and `widgets/` 49,958. Riverpod's production
 imports and package dependency are now deleted; the current inventory is six
 enforced and 15 unfinished feature directories, with none complete. The two
 removed feature directories contained unused code, not graduated workflows.
 
 Against the separate simplification baseline `fa7f309e`, the completed batch
-removes 12,497 handwritten production lines, with generated localization +22
-reported separately. Of the removals, 10,594 lines come from unused analysis,
+removes 12,509 handwritten library lines, with generated localization +22
+reported separately. The latest chapter Widgetbook fixture adds 14 lines, outside
+that library total. Of the removals, 10,594 lines come from unused analysis,
 eval-tree and other presentation retirement. These unrelated deletions cannot
 satisfy another workflow's simplicity gate. Its screen and entire helper/owner
 graph must improve together. The current decision is **continue bounded
@@ -446,7 +447,8 @@ product owner to choose implementation details.
 | Obsolete eval-tree display retired (`5bcea12e`) | Live generation bundles retain only consumed tree/FEN/trap/config/probe data | Twelve unused feature files, nine private theme tokens and eager snapshot/metrics derivation deleted; complete 14-file production scope removes 3,363 lines. Independent review, 132 focused tests including native artifact reopen/resume/cancel paths, and analyze/lint pass. Retained tests assert the live tree and serialization contracts. This removes an unused feature, not an active workflow graduation. |
 | Remaining unused presentation retired | Existing live people, training, lines, board and engine surfaces retain their owners | Fourteen unreachable dialogs/panels/helpers deleted with their two exclusively owned tests: −2,154 production lines, no replacement code. Independent tracked-entrypoint/caller and implementation reviews pass. Active algorithms and rendering helpers remain; this is retirement, not credit toward another workflow’s simplicity gate. |
 | Generation run/job ownership consolidated (`b034067f`) | The existing session registers and settles its job directly; progress owns the clock and one notification schedule | Deletes screen-driven job creation, duplicate UI throttling, four runtime suppliers, two stable exporter suppliers and four Jobs-panel command callbacks. Complete 18-file scope shrinks by 54 handwritten lines; independent review, focused/native tests and inspected Pause/Resume/Cancel screenshots pass. Ordinary job statistics now share the 250 ms UI budget; lifecycle updates remain immediate. Whole Generation remains Partial. |
-| Catalog chapter workflow remains open | One shared chapter mutation boundary must replace picker/Builder/outline duplication | The competing-create and disposed-picker defects are repaired (`69ad9189`, net +2 production lines); this is safety work, not migration completion. The cutover must retire `ChapterStore` and legacy picker ownership with all callers; preserve progressive course reads and explicit retry. The temporary catalog adapter and legacy Library organizer still block whole-catalog completion. The audited splitter race is repaired in `7e09cf81` through captured-snapshot quarantine and explicit partial-output reporting (306 added handwritten lines for safety, not simplification). Existing-chapter rename/delete/line transfers and complete catalog retirement remain open. |
+| Chapter read/create consolidated (`d010bd5b`) | Existing catalog handles reads and exclusive creation through the app-selected document store; consumers accept only acknowledged writes | Deletes `ChapterStore`, its duplicate results, the Builder sibling cache and refresh fanout. Progressive course reads and captured selection guards survive A/B/A navigation, delayed creation, collisions and uncertainty. Complete scope: app −12 lines, Widgetbook fixture +14, combined +2 after a necessary isolate-capture repair. Ownership is clearer; this is not a substantial size reduction. Independent review, caller/native tests and desktop evidence pass. |
+| Catalog remaining mutations are open | Captured document identity, recoverable namespace changes and training-reference ownership must agree before rename/move/delete can be complete | Splitter safety is repaired (`7e09cf81`, +306 handwritten lines). Independent baseline regressions now prove replacement deletion, rename clobber and incomplete/late training-reference updates. Do not add a rename journal facade before resolving stale training writes and path reuse; the proposed wider rewrite is not admitted. Existing-chapter mutation, line transfers, the temporary catalog adapter and legacy Library organizer still block whole-catalog completion. |
 | Complete the next domain | One domain's commands, consumers, design-system controls and legacy retirement finish together | Apply the same ownership/consumer review before expanding. Singular/plural repertoire consolidation follows actual remaining responsibilities, not another directory-only move. |
 
 The active plan contains decisions, remaining work and acceptance contracts.
@@ -1497,10 +1499,10 @@ inventory in milestone 0 and retain evidence for every migrated writer.
 
 | Data | Current representation and ownership evidence | Rewrite requirement |
 |------|-----------------------------------------------|---------------------|
-| Repertoires and chapters | Documents `repertoires/` folders with chapter PGNs; `ChapterStore` creates files with `createOnly`. Studies use multi-chapter PGNs in Documents `studies/`. | Keep user-authored text, annotations and stable references; separate user-visible grouping from physical storage decisions. |
+| Repertoires and chapters | Documents `repertoires/` folders with chapter PGNs; the injected catalog creates through the selected document store; only `PgnSaved` authorizes adoption. Studies use multi-chapter PGNs in Documents `studies/`. | Keep user-authored text, annotations and stable references; separate user-visible grouping from physical storage decisions. |
 | User/source games | Support `app_games.db`, with collection-scoped games and position indexes. Some tactics source games have no remaining standalone PGN copy. Player-analysis PGN generations also have an authoritative manifest. | Classify authority per collection; never treat the whole database or Support directory as disposable merely because some indexes can be rebuilt. |
-| Analysis/build artifacts | Chapter-adjacent tree, partial-tree, expectimax and trap JSON, plus a model-games PGN companion, are owned by `GenerationArtifactStore`. | Track document revision, run/config identity and publication state. Expensive saved analyses and resumable work need an explicit retention policy; user edits to a companion PGN cannot be silently discarded as cache. |
-| Training state | Review/progress/history CSV files and their document/line references are covered by existing migration and concurrency protections. | Preserve scheduling/history and reference identity through chapter rename, move, split and import. Inventory all newer stores as well as legacy CSVs. |
+| Analysis/build artifacts | Versioned analysis bundles and model games use `GenerationArtifactRepository`; legacy chapter-adjacent artifacts remain accessible through read-only recovery. | Track document revision, run/config identity and publication state. Expensive saved analyses and resumable work need an explicit retention policy; user edits to a companion PGN cannot be silently discarded as cache. |
+| Training state | Review/progress/history CSV and attempt JSONL stores retain path references. Directory migration has recovery; chapter-file relocation and late-write identity remain incomplete. | Preserve scheduling/history and reference identity through chapter rename, move, split and import. Inventory all newer stores as well as legacy CSVs. |
 | Recovery and upgrades | Atomic-write journals/backups, quarantined files, PGN recovery snapshots, SQL `game_trash`, and schema-upgrade backups serve different recovery purposes. | Define retention, restore and user-export behavior for each; do not equate temporary atomic replacement with a permanent version history. |
 
 The shared atomic writer already supports exclusive creation, expected-content
@@ -1550,7 +1552,7 @@ code references: [storage operations](../lib/services/storage/io_storage_service
 [atomic writer](../lib/utils/atomic_file.dart),
 [Builder workspace](../lib/features/repertoires/controllers/builder_workspace_controller.dart),
 [undo writer](../lib/features/repertoires/controllers/repertoire_writer.dart),
-[chapter creation](../lib/features/repertoire/services/chapter_store.dart),
+[chapter creation](../lib/infrastructure/repertoires/legacy_repertoire_catalog_repository.dart),
 [game store](../lib/services/game_store/game_store.dart),
 [generation artifacts](../lib/infrastructure/generation/storage_generation_artifact_repository.dart) and
 [schema guards/backups](../lib/services/storage/schema_guard.dart).
