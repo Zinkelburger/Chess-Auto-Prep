@@ -4297,7 +4297,9 @@ architecture. Current feature/debt data reports 6 enforced, 14 unfinished,
 0 complete and 1,233 exact debt entries. Source/package searches find no
 Riverpod dependency or production import. Milestones 6–7 remain Not started.
 
-**Midpoint decision: hold the evaluation-settings cutover for redesign.** The
+**Historical midpoint decision: hold the evaluation-settings cutover for redesign.**
+The resolution is recorded [below](#evaluation-settings-ownership-completed-after-redesign);
+the failures here describe the incomplete checkpoint, not the final source. The
 private `codex/eval-settings-ownership` checkpoint `2a585ef2`, based on
 `8ccfe557`, adds 337 handwritten production lines before app composition,
 job configuration capture and conditional deletion are wired. Its estimate
@@ -4307,8 +4309,8 @@ The actual partial diff already exceeds it: UI +249, download controllers
 handling and proposed conditional-retry bookkeeping need review before further
 implementation; automatic growth-budget increases are not the remedy.
 
-The checkpoint is backed up only, **not integrated into main**. Owner/model
-checks pass 13 cases; the new UI check passes two and fails one because loading
+At that midpoint the checkpoint was backed up only, **not integrated into main**.
+Owner/model checks passed 13 cases; the new UI check passes two and fails one because loading
 notifies Provider during widget build. Download tests are not run. Whole-tree
 analysis fails (25 errors, 1 warning, 66 infos), including the intentionally
 unfinished app/caller wiring; lint rejects three stale debt entries. These are
@@ -4326,3 +4328,85 @@ semantics before selecting an API. These are design requirements, not implemente
 behavior or permission to add another owner/retry framework. The source branch
 must pass independent correctness, complexity and combined behavior review
 before integration. Full renewal remains Partial.
+
+
+## Evaluation settings ownership completed after redesign
+
+Source `d22d9202` completes the responsibility held at `2a585ef2`; it does not
+complete Settings or the architecture renewal. The original +100–300 production
+line allowance remains unchanged. The complete evaluation scope is
+**14,074→14,365 (+291 handwritten)** against `8ccfe557`, with no generated growth.
+An independently reproduced Library disposal repair adds **6** separately.
+All library Dart is now **228,149 / 996 files**, including unchanged generated
+localization **5,361**: handwritten **222,788**, still **3,831 above September 16**.
+Exact debt is **1,229**, theme consumers **181**, feature status **6 enforced,
+14 unfinished, 0 complete**. This cutover earns safety/ownership completion,
+not net-reduction or feature-graduation credit.
+
+The measured scope includes app dependencies/runtime settings/main; Generation
+session; Databases and Settings screens; Builder screen and its three parts;
+Planner data source/screen; section owner/configuration/state/storage contract
+and preferences adapter; both download controllers; their five settings/card/
+dialog widgets; evaluation-source controller/section; all seven generation-form
+files; and the old settings model plus its two canonical replacements. That is
+34 baseline files, 36 historical paths and 35 surviving files. Count physical
+lines including blanks/comments; include unchanged consumers and new files.
+The Library screen is separate. The all-library `git diff --numstat 8ccfe557 d22d9202 -- lib` delta is
+**+996/−699 = +297**.
+
+The final contract has one application-owned writer for the same seven persisted
+keys, using the existing section queue and committed/draft state. Both existing
+download owners receive that exact writer; app shutdown drains admitted work
+before disposing settings. One admitted operation per resource rejects overlap;
+pause/close cancel and await transfer/import settlement. Job and Planner commands
+capture confirmed settings before async work. Unknown preferences refuse those
+commands; later edits cannot rewrite the admitted operation's configuration.
+
+Deletion conditionally clears only the selected directory it captured, verifies
+persistence, then removes files. Failed clearing retains files and rethrows to
+the download owner. Settings Retry cannot replay an unconditional deletion or
+resurrect a deleted selection: it resolves the surviving failed edit when its
+queued action executes. Failed selection B and unrelated failed edits survive
+clearing A. Enabling a selection respects failed user intent without borrowing a
+later pending command's path. The existing queue implements this ordering;
+there is no additional retry registry, coordinator or settings owner.
+
+The redesign removed duplicate UI error/status rendering, leaf initial-load
+calls, download-only listener relays and optional card owner overrides. Each
+settings surface renders one existing status component. Download owners retain
+artifact failures and expose explicit metadata retry; a failed prepare cannot
+start a transfer. Dialog completion validates its captured owner and target.
+The old settings file and all three `.instance` APIs are deleted and rejected by
+retirement lint; searches across production, tests, integration and Widgetbook
+find no remaining callers. Independent implementation reviews covered these
+contracts and repaired UI error/loading and queued-selection interleavings.
+
+**Validation:** 240 tests across 25 owner, resource, composition, Generation,
+Planner and UI files pass with zero failures/skips. After the native run exposed
+an inherited Library bug, the final three-file lifecycle/caller run passes
+11 tests (10 overlap that union; **241 distinct focused tests overall**).
+Its first attempt exposed an incomplete Library test host; it now supplies the
+actual outline factory, and still exercises mount/unmount before opening a
+folder followed by the retained read/train/build journey. The source repair
+constructs the existing outline in `initState`, so disposal never performs its
+first Provider lookup. Databases also rejects late refresh before context access.
+
+All **three Linux native tests pass**: a real read-only preferences file preserves
+confirmed settings and visibly retains a failed edit; repairing permissions and
+pressing Retry persists it; a fresh owner reloads the value. Existing appearance
+failure/retry and creation-draft/restart journeys also pass. The initial native
+run failed on the inherited Library disposal lookup; its full stack identified
+the cause, the fix was independently reviewed, and the test was not weakened.
+The [inspected failure screenshot](images/renewal-eval-settings-failure.png)
+shows one persistent message and Retry without overflow. Runs use the private
+display and disposable profile, with synthetic resource fixtures and no user data.
+No real evaluation dump is downloaded and no preview remains running.
+
+Analyze/lint passes with **64 pre-existing infos, no warnings/errors**, all
+45 architecture-checker tests, and retirement/debt/theme/mutation checks. Logs:
+`/tmp/eval-settings-combined-tests.log`, `/tmp/eval-settings-lifecycle-final.log`,
+`/tmp/eval-settings-native-final.log`, `/tmp/eval-settings-handoff-gates.log`.
+Preferences are serialized within the app, not a cross-process CAS transaction.
+Windows/macOS native checks, credential migration and whole-renewal exit gates
+remain open. The next simplification must remove code from its own complete live
+workflow; this safety growth cannot satisfy that gate.
