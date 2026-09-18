@@ -2621,17 +2621,17 @@ release smoke testing. No release or update is triggered by these tests.
 
 #### Layout (repertoire builder zones)
 
+Builder uses the screen's wide/compact workspace layouts. The unused configurable
+Edit context layout, arrangement sheet, model, descriptors and preference writer
+are retired; no production route constructed that subtree. The existing Viewer
+opening-tree divider remains shared. This removes 1,124 dormant production lines
+and does not change active editor, document or save ownership.
+
 | File | Purpose |
 |------|---------|
 | `layout/board_zone.dart` | Board wrapper; app-bar trap navigation via `BoardZoneControls` |
 | `layout/edit_main_zone.dart` | PGN editor column shell (clipboard + view-in-lines adapters) |
-| `layout/edit_context_zone.dart` | Edit context column: FilterChip visibility toggles; user-arrangeable **columns** (horizontal, draggable dividers) each with a **vertical stack** of panels (draggable dividers). Default layout: col1 = Browse+Engine+Expectimax+Tree stacked, col2 = Lines. **Arrange panes** sheet + long-press chip → assign column. Layout persisted via [EditContextLayoutPrefs] (`edit_context.layout_v1`). Panel shells use [AutomaticKeepAliveClientMixin] but **rebuild slot content** each parent update (tree/generation props must not freeze). Expectimax uses [ExpectimaxPanelHost] (built-tree values only, same as dock). `selectedViewsNotifier` mirrors visible set. |
-| `layout/edit_context_tabs.dart` | `EditContextTabSpec`, `kEditContextTabs` chip descriptors |
-| `layout/edit_context_split_handle.dart` | Draggable horizontal/vertical pane dividers |
-| `layout/edit_context_layout_sheet.dart` | Bottom sheet: reorder stacks, move views between columns |
-| `models/edit_context_layout.dart` | `EditContextLayout` / `EditContextColumnLayout` column+stack model |
-| `services/edit_context_layout_prefs.dart` | SharedPreferences persistence for edit context layout |
-| `models/repertoire_mode.dart` | `EditContextView` enum (edit context panels) |
+| `layout/edit_context_split_handle.dart` | Draggable divider retained by the PGN Viewer opening-tree panel |
 | `layout/bottom_pane.dart` | VS Code-style resizable, collapsible bottom pane with tabs (Findings/Jobs); collapsed by default, opens at max height (60%) to minimise board area, auto-opens on audit/generation start, drag-resizable, badge counts |
 | `layout/repertoire_status_bar.dart` | Bottom metrics bar (badges open bottom pane tabs) |
 | `layout/empty_state_placeholder.dart` | Shared empty states |
@@ -2865,7 +2865,6 @@ release smoke testing. No release or update is triggered by these tests.
 | `test/services/training/training_session_controller_test.dart` | Repertoire trainer: `loadRepertoire` happy/error paths, due-queue ordering, `setIdle`, `isCorrectUserMove` SAN/UCI edge cases, drill/learn/replay phase transitions, session statistics, move-progress streaks, dispose safety (in-memory service fakes) |
 | `test/features/tactics/services/tactics_engine_test.dart` | `checkMoveAtIndex`, SAN normalization, mate-in-1 from mid-game FEN; `buildTrainableLine` fallback + Maia agree/disagree/low-confidence paths with mock evaluator |
 | `test/services/eval/test_*.dart` | Eval provider chain (helpers) |
-| `test/widgets/layout/edit_context_zone_test.dart` | Context zone multi-panel chips |
 | `test/widgets/position_analysis_widget_test.dart` | Analysis widget |
 | `test/widgets/pgn_tree_games_list_test.dart` | Opening-tree games list: expanded PV, expand-all off preview vs open |
 | `test/screens/main_screen_test.dart` | Main screen smoke |

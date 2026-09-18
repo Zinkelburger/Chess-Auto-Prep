@@ -32,7 +32,13 @@
     "lib/services/study_import/",
     "lib/features/settings/controllers/settings_providers.dart",
     "lib/features/documents/widgets/stored_game_scope.dart",
-    "lib/features/settings/widgets/display_settings_scope.dart"
+    "lib/features/settings/widgets/display_settings_scope.dart",
+    "lib/widgets/layout/edit_context_zone.dart",
+    "lib/widgets/layout/edit_context_layout_sheet.dart",
+    "lib/widgets/layout/edit_context_tabs.dart",
+    "lib/models/edit_context_layout.dart",
+    "lib/models/repertoire_mode.dart",
+    "lib/services/edit_context_layout_prefs.dart"
   ],
   "symbols": [
     "PgnBatchWriter",
@@ -62,6 +68,14 @@
     "repertoireCatalogRepositoryProvider",
     "appearanceSettingsProvider",
     "repertoireBooksSettingsProvider",
-    "appSettingsRepositoryProvider"
+    "appSettingsRepositoryProvider",
+    "EditContextZone",
+    "EditContextLayout",
+    "EditContextColumnLayout",
+    "EditContextLayoutPrefs",
+    "EditContextView",
+    "EditContextTabSpec",
+    "kEditContextTabs",
+    "showEditContextLayoutSheet"
   ]
 }
