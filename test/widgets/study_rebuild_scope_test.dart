@@ -76,6 +76,47 @@ void main() {
     },
   );
 
+  testWidgets('compact chapter menu retains its target before the next frame', (
+    tester,
+  ) async {
+    final study = memoryStudy();
+    addTearDown(study.dispose);
+    study.addChapter('Second');
+    study.selectChapter(0);
+    int? copied;
+    await pumpRuntimeWidget(
+      tester,
+      settings,
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: StudySidePane(
+            study: study,
+            compact: true,
+            onEngineLine: (_, _) {},
+            onAddChapter: () {},
+            onPickChapter: () {},
+            onManageChapters: () {},
+            onChapterAction: (action, index) {
+              if (action == ChapterAction.copyPgn) copied = index;
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byTooltip('Chapter actions'));
+    await tester.pumpAndSettle();
+    study.selectChapter(1);
+    // No rebuild between the selection change and the open menu's callback.
+    await tester.tap(find.text('Copy chapter PGN'));
+    await tester.pumpAndSettle();
+    expect(copied, 0);
+    expect(study.chapterIndex, 1);
+    expect(tester.takeException(), isNull);
+    await pumpRuntimeWidget(tester, settings, const SizedBox.shrink());
+  });
+
   testWidgets('cursor, prose, glyphs and shapes update only their consumers', (
     tester,
   ) async {
@@ -89,14 +130,6 @@ void main() {
     addTearDown(focus.dispose);
     study.playSan('e4');
     study.playSan('e5');
-    final actions = StudyChapterActions(
-      onEdit: (_) {},
-      onSetStartingPosition: (_) {},
-      onCopyPgn: (_) {},
-      onClearAnnotations: (_) {},
-      onClearVariations: (_) {},
-      onDelete: (_) {},
-    );
     await pumpRuntimeWidget(
       tester,
       settings,
@@ -118,7 +151,7 @@ void main() {
                 child: StudyChapterSidebar(
                   study: study,
                   onAddChapter: () {},
-                  actions: actions,
+                  onChapterAction: (_, _) {},
                 ),
               ),
               Expanded(
@@ -136,7 +169,7 @@ void main() {
                   onAddChapter: () {},
                   onPickChapter: () {},
                   onManageChapters: () {},
-                  actions: actions,
+                  onChapterAction: (_, _) {},
                 ),
               ),
             ],
