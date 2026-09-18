@@ -364,12 +364,12 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
                 await _workspaceNavigation.maybePop();
                 if (mounted) app.switchToStudyEdit(path: path);
               } on StudyImportRejected catch (error) {
-                if (mounted)
-                  showAppSnackBar(
-                    context,
-                    studyImportFailureLabel(labels, error.failure),
-                    isError: true,
-                  );
+                if (!mounted) return;
+                showAppSnackBar(
+                  context,
+                  studyImportFailureLabel(labels, error.failure),
+                  isError: true,
+                );
               }
             },
           ),
