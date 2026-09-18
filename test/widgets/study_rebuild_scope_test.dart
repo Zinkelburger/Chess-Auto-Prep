@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/design_system/theme/app_theme.dart';
 import 'package:chess_auto_prep/app/runtime_settings.dart';
 import '../support/runtime_settings.dart';
 import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
@@ -83,6 +84,145 @@ void main() {
       expect(find.text('Second'), findsNothing);
       expect(tester.takeException(), isNull);
       await pumpRuntimeWidget(tester, settings, const SizedBox.shrink());
+    },
+  );
+
+  for (final inline in [false, true]) {
+    testWidgets(
+      '${inline ? 'manager' : 'sidebar'} reveals distant chapter after search at 200%',
+      (tester) async {
+        final study = memoryStudy();
+        addTearDown(study.dispose);
+        for (var i = 1; i <= 100; i++) {
+          study.addChapter('Chapter $i');
+        }
+        study.selectChapter(0);
+        await pumpRuntimeWidget(
+          tester,
+          settings,
+          MaterialApp(
+            theme: AppTheme.light(),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: MediaQuery(
+              data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+              child: Scaffold(
+                body: SizedBox(
+                  width: inline ? 520 : 240,
+                  height: 580,
+                  child: StudyChapterSidebar(
+                    study: study,
+                    inlineActions: inline,
+                    onAddChapter: inline ? null : () {},
+                    onChapterAction: (_, _) {},
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        study.selectChapter(80);
+        await tester.pumpAndSettle();
+        expect(find.text('Chapter 80').hitTestable(), findsOneWidget);
+        await tester.enterText(find.byType(TextField), 'Chapter 90');
+        await tester.pumpAndSettle();
+        expect(
+          find
+              .byWidgetPredicate((w) => w is Text && w.data == 'Chapter 90')
+              .hitTestable(),
+          findsOneWidget,
+        );
+        expect(find.byType(ReorderableListView), findsNothing);
+        expect(find.byType(ReorderableDragStartListener), findsNothing);
+        await tester.tap(find.byTooltip('Clear search'));
+        await tester.pumpAndSettle();
+        expect(find.text('Chapter 80').hitTestable(), findsOneWidget);
+        expect(find.byType(ReorderableListView), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await pumpRuntimeWidget(tester, settings, const SizedBox.shrink());
+      },
+    );
+  }
+
+  testWidgets(
+    'retained list commands follow chapter keys and reject stale order',
+    (tester) async {
+      final study = memoryStudy();
+      addTearDown(study.dispose);
+      study.renameChapter(0, 'First');
+      study.addChapter('Second');
+      study.addChapter('Third');
+      study.selectChapter(0);
+      await pumpRuntimeWidget(
+        tester,
+        settings,
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: StudyChapterSidebar(
+              study: study,
+              inlineActions: true,
+              onChapterAction: (_, _) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final tap = tester
+          .widget<InkWell>(
+            find
+                .ancestor(
+                  of: find.text('Second'),
+                  matching: find.byType(InkWell),
+                )
+                .first,
+          )
+          .onTap!;
+      final reorder = tester
+          .widget<ReorderableListView>(find.byType(ReorderableListView))
+          .onReorderItem!;
+      study.reorderChapter(1, 2);
+      tap();
+      expect(study.chapter.name, 'Second');
+      reorder(0, 1);
+      expect(study.chapterList.chapters.map((c) => c.name), [
+        'First',
+        'Third',
+        'Second',
+      ]);
+      await tester.pumpAndSettle();
+      final currentReorder = tester
+          .widget<ReorderableListView>(find.byType(ReorderableListView))
+          .onReorderItem!;
+      currentReorder(0, 1);
+      expect(study.chapterList.chapters.map((c) => c.name), [
+        'Third',
+        'First',
+        'Second',
+      ]);
+      await study.saveCopy('/studies/Original.pgn');
+      await study.newStudy('Replacement');
+      expect(study.title.name, 'Replacement');
+      study.addChapter('Replacement second');
+      study.addChapter('Replacement third');
+      study.selectChapter(0);
+      tap();
+      reorder(0, 1);
+      expect(study.chapterIndex, 0);
+      expect(study.chapterList.chapters.map((c) => c.name), [
+        'Chapter 1',
+        'Replacement second',
+        'Replacement third',
+      ]);
+      await pumpRuntimeWidget(tester, settings, const SizedBox.shrink());
+      tap();
+      currentReorder(0, 1);
+      expect(study.chapterIndex, 0);
+      expect(study.chapter.name, 'Chapter 1');
+      await study.flushSave();
+      expect(tester.takeException(), isNull);
     },
   );
 

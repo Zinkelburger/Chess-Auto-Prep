@@ -103,12 +103,20 @@ class _StudyChapterSidebarState extends State<StudyChapterSidebar> {
     });
   }
 
+  int _indexOf(Object chapterKey) => mounted
+      ? widget.study.chapterList.chapters.indexWhere(
+          (chapter) => chapter.key == chapterKey,
+        )
+      : -1;
+
   void _act(ChapterAction action, Object chapterKey) {
-    if (!mounted) return;
-    final index = widget.study.chapterList.chapters.indexWhere(
-      (chapter) => chapter.key == chapterKey,
-    );
+    final index = _indexOf(chapterKey);
     if (index >= 0) widget.onChapterAction(action, index);
+  }
+
+  void _select(Object chapterKey) {
+    final index = _indexOf(chapterKey);
+    if (index >= 0) widget.study.selectChapter(index);
   }
 
   @override
@@ -122,7 +130,8 @@ class _StudyChapterSidebarState extends State<StudyChapterSidebar> {
   Widget _buildList(BuildContext context) {
     final theme = Theme.of(context);
     final l10n = AppLocalizations.of(context);
-    final chapters = widget.study.chapterList.chapters;
+    final list = widget.study.chapterList;
+    final chapters = list.chapters;
     final visible = _visibleIndices();
     _revealActive(visible);
 
@@ -193,7 +202,13 @@ class _StudyChapterSidebarState extends State<StudyChapterSidebar> {
                   buildDefaultDragHandles: false,
                   // onReorderItem, unlike the deprecated onReorder, already
                   // accounts for the dragged row being lifted out of the list.
-                  onReorderItem: widget.study.reorderChapter,
+                  onReorderItem: (oldIndex, newIndex) {
+                    if (!mounted ||
+                        !identical(widget.study.chapterList, list)) {
+                      return;
+                    }
+                    widget.study.reorderChapter(oldIndex, newIndex);
+                  },
                   itemBuilder: (context, row) => _buildRow(
                     row,
                     key: ObjectKey(chapters[row].key),
@@ -221,7 +236,7 @@ class _StudyChapterSidebarState extends State<StudyChapterSidebar> {
 
     return InkWell(
       key: key,
-      onTap: () => widget.study.selectChapter(index),
+      onTap: () => _select(chapter.key),
       child: Container(
         height: _rowHeight,
         padding: const EdgeInsets.only(left: 8),
