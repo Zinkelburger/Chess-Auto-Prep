@@ -3800,3 +3800,63 @@ one publication gate. Wider Training safety/ownership completion remains open.
 Library Dart totals **225,754**: +6,797 (+3.1%) against September 16 and −11,237
 against the growth review. Against fa7f309e, handwritten reduction is **13,973**,
 generated localization +245 separately. No feature graduation.
+
+
+### Trainer browser binding and partial progress recovery — 2026-09-18
+
+Final `22e28fa3` (production `5e122390`) against `f8b94ba9` completes the browser
+binding together with the safety repair its actual workflow exposed. Browser
+receives the existing TrainingSessionController, retaining only navigation
+callbacks and local search/sort/checkbox state. Twenty forwarded values/callbacks,
+the screen's bulk-save handler and duplicate chapter matching are removed. Existing
+session and ReviewProgressStore remain the owners; no new notifier, queue, facade
+or persistence adapter is introduced.
+
+A baseline test against `a5b3a393` reproduced a real failure: failed bulk CSV saving
+already changed in-memory learned state, so the same Save could return zero as if
+successful. The repaired command captures every source batch before awaiting,
+serializes through the existing outcome queue, and publishes only after all
+schedule/history/header stages acknowledge. Exclusion follows the same admission
+and acknowledgement policy. A partial failure blocks progress until a successful
+durable load. Reload does not retry history or claim atomic multi-file persistence.
+Rating/completion still use their existing captured resumable outcomes; abandoning
+an unresolved failure requires reload before another progress edit.
+
+Independent review repaired pending-header record identity, unrelated-source
+mirror blocking, failure after abandoned rating/completion, source-load admission,
+and retained checkbox drafts. Header settlement compares captured entry and owner
+identities, and drains only the new bulk command's source paths after any existing
+flush. Captured session generation suppresses old errors after A/B/A or disposal;
+current line/list identity rejects stale callbacks even before the next frame.
+A failed new-source load never authorizes old-source edits. These guards do not
+establish native filesystem identity across source rename or replacement; that
+larger training-reference contract remains open.
+
+The exact seven-file union (screen, browser, cards, session, chapter scope,
+progress store and selector panel) grows **4,440→4,576 (+136 handwritten)**:
+binding −49, necessary safety +185. The complete library diff is +471/−335
+handwritten; generated localization +19 and ARB +4 are separate. **The workflow's
+net-reduction gate is unmet.** Clearer binding and passing safety checks do not
+turn this into a simplification pass or authorize broad rewrite expansion.
+Do not offset it with unrelated Read or unused-code deletions.
+
+**273 focused tests and three Linux native journeys pass**, with analyze/lint
+63 existing infos, zero warnings/errors and 45 checker cases. Native tests cover
+partial CSV success/history failure → Reload → explicit new edit; ordinary line
+completion/reload; and Trainer Read → edited Save copy → return with original
+sources untouched. An actual disposable app used a history-path directory to
+force the same partial failure. The inspected
+[partial-save panel](images/renewal-trainer-bulk-partial.png) offers Reload saved
+progress without blind Retry. After restoring the path, the
+[reloaded browser](images/renewal-trainer-bulk-reloaded.png) shows one learned and
+one untrained line, with original PGN bytes unchanged and no history replay.
+The preview is stopped. Earlier fixture failures (root-zone async pumping,
+loading-state setup and an ambiguous native row finder) were corrected; final
+combined runs pass. Exact production review approved `5e122390`; the final commit
+adds only the two screenshots.
+
+Library Dart is **225,909**: +6,952 (+3.2%) against September 16, and −11,082
+against the growth-review snapshot. Against fa7f309e, handwritten reduction is
+**13,837**, generated +264 separately. Unused/dormant deletion still accounts for
+12,154 removed lines; zero features have graduated. Study appearance closure is
+private until its full shared consumer graph and legacy-boundary removal pass.
