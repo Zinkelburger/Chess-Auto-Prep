@@ -2,6 +2,9 @@
 #if defined(__linux__)
 #define _GNU_SOURCE
 #endif
+#if defined(__APPLE__)
+#define _DARWIN_C_SOURCE
+#endif
 #define _POSIX_C_SOURCE 200809L
 #else
 #ifndef _WIN32_WINNT
@@ -24,6 +27,9 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#if defined(__APPLE__)
+#include <sys/stdio.h>
+#endif
 #if defined(__linux__)
 #include <sys/syscall.h>
 #include <linux/fs.h>
@@ -237,12 +243,14 @@ CAP_EXPORT int32_t cap_sync_directory(const char *path) {
 #endif
 }
 
-/* Linux namespace claim is exclusive even when an external creator races
- * the last validation. Other hosts must pass their own adoption gates. */
+/* Exclusive namespace move; unsupported filesystems fail without a replacing
+ * fallback. Native-host validation is still required on macOS and Windows. */
 CAP_EXPORT int32_t cap_move_directory_new(const char *source, const char *destination) {
 #if defined(__linux__)
   return syscall(SYS_renameat2, AT_FDCWD, source, AT_FDCWD, destination,
                  RENAME_NOREPLACE) == 0 ? 0 : errno;
+#elif defined(__APPLE__)
+  return renamex_np(source, destination, RENAME_EXCL) == 0 ? 0 : errno;
 #elif defined(_WIN32)
   wchar_t *from = wide_path(source), *to = wide_path(destination);
   if (!from || !to) { free(from); free(to); return ERROR_INVALID_NAME; }
