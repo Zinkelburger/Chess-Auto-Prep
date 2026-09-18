@@ -50,8 +50,9 @@ class LegacyRepertoireCatalogRepository implements RepertoireCatalogRepository {
         'Verified chapter deletion is unavailable on this host.',
       );
     }
-    if (!p.isAbsolute(path))
+    if (!p.isAbsolute(path)) {
       throw ArgumentError('Chapter paths must be absolute.');
+    }
     return storage.managedFileLocation(path);
   }
 

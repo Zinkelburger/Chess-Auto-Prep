@@ -53,8 +53,9 @@ void main() {
             flushDirectory: (path) async {
               if (path == root.path) {
                 sourceFlushes++;
-                if (outcome == 'uncertain')
+                if (outcome == 'uncertain') {
                   throw const FileSystemException('lost move acknowledgement');
+                }
               }
               await syncDirectory(path);
             },
