@@ -1,10 +1,10 @@
 # Architecture renewal evidence record
 
-Historical implementation evidence, tested commits and limitations. The
-[active renewal plan](ARCHITECTURE_RENEWAL.md) owns current decisions, scope and
-acceptance gates. This record is not a second plan: older sequencing and package
-choices do not override the active plan. A passing checkpoint does not certify
-the whole workflow or the current checkout.
+**Closed record of the first, in-place renewal attempt (Sept 16–18, 2026).**
+Do not extend it. The [current plan](ARCHITECTURE_RENEWAL.md) replaces that
+approach with a fresh app in `lib/v2/` and keeps status in its own table.
+Section links below that point at the old plan refer to its version at commit
+`449d5428`. Nothing here overrides the current plan.
 
 ### Builder native history and private graph cutover (2026-09-17)
 
@@ -29,7 +29,7 @@ unverified.
 ## Execution record — 2026-09-16
 
 Historical evidence and decisions follow. Earlier temporary-bridge and
-checkpoint sequencing is superseded by the [current execution order](ARCHITECTURE_RENEWAL.md#current-execution-order-complete-replacements);
+checkpoint sequencing is superseded by the current execution order (old plan at `449d5428`);
 recorded test results retain only their original scope and limitations.
 
 The product owner explicitly authorized the **whole renewal and end-to-end
@@ -4281,7 +4281,7 @@ remaining whole-renewal exit gates were not run or claimed by this batch.
 
 Independent inspection of tracked Git blobs reproduces the review's exact
 `e477dc58`→`a6238ff5` table and the updated `8ccfe557` table in the
-[plan](ARCHITECTURE_RENEWAL.md#what-the-code-establishes). Use
+old plan at `449d5428` ("What the code establishes"). Use
 `git ls-tree -r --name-only REF lib/`, filter `.dart`, and count physical lines
 from `git cat-file --batch`; include comments, blanks and generated files.
 No concurrent worktree is included in main's totals. The only generated Dart

@@ -6,7 +6,7 @@
 |----------|---------|
 | **This file** | Current implementation — screens, services, widgets, tests |
 | [`FUTURE_FEATURES.md`](FUTURE_FEATURES.md) | Backlog only — not yet built or incomplete |
-| [`ARCHITECTURE_RENEWAL.md`](ARCHITECTURE_RENEWAL.md) | Planned rewrite architecture, safety contracts and gated migration; not current implementation |
+| [`ARCHITECTURE_RENEWAL.md`](ARCHITECTURE_RENEWAL.md) | Planned fresh app in `lib/v2/`: rules, data-safety contracts and order of work; not current implementation |
 | [`ALGORITHM.md`](ALGORITHM.md) | Flutter expectimax / tree-generation pipeline |
 | [`../tree_builder/ALGORITHM.md`](../tree_builder/ALGORITHM.md) | C `tree_builder` CLI pipeline (incl. db-explorer) |
 | [`tree-display-architecture.md`](tree-display-architecture.md) | Eval-tree graph performance principles |

@@ -134,14 +134,11 @@ Other editors' persisted drafts, clean workspace/session restoration, archive
 purging, builder-draft checks and job shutdown coordination are still pending.
 Legacy unjournaled trash adoption, remaining settings/writers, transactional
 splitting of existing chapters, remaining localization, legacy appearance migration/accessibility and full slice
-gates remain unfinished. The staged rewrite, shared PGN mutation API, UI design
-principles, storage preservation gates and milestone sequence live in
-[ARCHITECTURE_RENEWAL.md](ARCHITECTURE_RENEWAL.md). That document is the canonical
-implementation plan; this file retains the feature backlog. Update milestone
-status there and feature status here when implementation changes. Start with
-[the independent current-code safety prerequisite](ARCHITECTURE_RENEWAL.md#safety-prerequisite-on-current-code)
-and inventory; follow the plan's default/fallback decisions and requirement IDs.
-Design components are built on demand inside the first complete slice.
+gates remain unfinished in the old app. The rewrite now happens as a fresh app
+in `lib/v2/`; its rules, PGN mutation contract, data-safety tests and order of
+work live in [ARCHITECTURE_RENEWAL.md](ARCHITECTURE_RENEWAL.md). The old app is
+frozen apart from data-loss, crash and release fixes. This file retains the
+feature backlog; update step status there and feature status here.
 
 ---
 
@@ -153,7 +150,7 @@ Design components are built on demand inside the first complete slice.
 |------|--------|-------|
 | Worker crash recovery | **Done** | Dead workers fail in-flight evals, leave the pool, and respawn up to the last `ensureWorkers` target. `EngineConnection.done` signals unexpected process exit. |
 | App backgrounding (`paused` / `hidden`) | **Done** | `MainScreen` suspends on `paused`/`hidden`/`detached` (skips transient `inactive`); resumes on `resumed` when the current mode uses an interactive engine |
-| Analysis presentation update coalescing (~200 ms trial) | **Not started** | Periodically publish latest snapshots before UI state; preserve terminal events and avoid continuous-stream debounce starvation. See [runtime-state contract](ARCHITECTURE_RENEWAL.md#runtime-state-and-large-documents). |
+| Analysis presentation update coalescing (~200 ms trial) | **Not started** | Periodically publish latest snapshots before UI state; preserve terminal events and avoid continuous-stream debounce starvation. See [runtime-state contract](ARCHITECTURE_RENEWAL.md#engines-and-background-work). |
 | Document / tab visibility awareness | **Not started** | Engine runs when user is not on engine-relevant panels |
 | Default 1 worker for interactive analysis | **Deferred** | Still uses full `EngineSettings.workers` for interactive |
 | Inline PGN viewer engine unified with lifecycle | **Deferred** | Spec recommends keeping separate; still a separate worker path |
@@ -164,7 +161,7 @@ Design components are built on demand inside the first complete slice.
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Preserve mode toolbar in material pickers | **Partial** | Player Analysis now embeds its picker. Repertoire library, Builder and Trainer now retain nested pickers/configuration beneath Actions / View / Settings. Route/input retention and deferred handoffs are implemented; full session restoration, deep links, branch memory/engine visibility and frame profiling remain under the [persistent-shell contract](ARCHITECTURE_RENEWAL.md#persistent-shell-and-reusable-panels). |
+| Preserve mode toolbar in material pickers | **Partial** | Player Analysis now embeds its picker. Repertoire library, Builder and Trainer now retain nested pickers/configuration beneath Actions / View / Settings. Route/input retention and deferred handoffs are implemented; full session restoration, deep links, branch memory/engine visibility and frame profiling remain under the [persistent-shell contract](ARCHITECTURE_RENEWAL.md#interface). |
 | Bound simple lists and forms | **Partial** | Player Analysis caps its picker at 1040px; Settings and Databases already cap forms. Repertoire/chapter lists are capped at 920px and the library organizer at 1040px. `TournamentsScreen` group cards still fill the window; bound these, while retaining room for multi-column player tables and board workspaces. |
 | Preserve navigation in planning workflows | **Partial** | Players & prep now keeps people and groups under a persistent mode bar. `BuildConfigScreen` and `PlanBuildScreen` still replace it with route-specific controls; planner boards/tables benefit from width, but question/review forms should have a readable cap. |
 | My games UI within Tactics | **Not started** | Keep the workflow in Tactics; improve download status, catalog/filtering and opening-review navigation, reusing helpers with Viewer and Player analysis. |
@@ -172,7 +169,7 @@ Design components are built on demand inside the first complete slice.
 | Audit follow-ups in Builder | **Partial** | Guarded run lifecycle, reliable partial resume, Priority/search and source warnings implemented. Still needed: saved-report staleness detection after line edits and explicit whole-repertoire chapter aggregation. Keep review beside the source lines and board. |
 | Repertoire organization follow-ups | **Partial** | Standalone Repertoires and shared creation are implemented. Existing outline moves chapters into folders and reorders lines. Arbitrary sibling chapter ordering, cross-repertoire dragging and importing directly into an existing folder remain follow-ups. |
 | Ultrawide four-zone layout (≥ 1600 px) | **Not started** | `kWideBreakpoint` exists; no fourth column |
-| Draggable zone dividers | **Not started** | Fixed flex ratios only (`RepertoireLayout`). Trial a shared package-backed splitter with keyboard, minimum-size and restoration checks; see [panel contract](ARCHITECTURE_RENEWAL.md#persistent-shell-and-reusable-panels). |
+| Draggable zone dividers | **Not started** | Fixed flex ratios only (`RepertoireLayout`). Trial a shared package-backed splitter with keyboard, minimum-size and restoration checks; see [panel contract](ARCHITECTURE_RENEWAL.md#interface). |
 | Eval bar docked on board (Lichess-style) | **Not started** | Engine output lives in context panel / analysis dock, not under board |
 | Dedicated **Expectimax toggle** on board toolbar | **Not started** | Existing position generation commands remain; the unused engine bolt widget did not implement this capability. |
 | Repertoire keyboard shortcuts (`RepertoireShortcuts`) | **Done** | Letter shortcuts E/X/G/A/I/F/L/T/N/P/D with text-field guards; no digit bindings — see COMPONENT_MAP |
@@ -188,7 +185,7 @@ Design components are built on demand inside the first complete slice.
 | Broader historical file fixtures | **Partial** | Frozen saved-games schema fixture, data-integrity and eval migrations are gated. Add fixtures whenever custom PGN/CSV/JSON formats change; no blanket compatibility promise. |
 | One namespaced Documents root / relocatable data home | **Deferred** | Existing named folders and root-level legacy files remain addressable. A future move needs copy/verify/switch migration and external-path handling. |
 | Windows bulk data outside roaming profiles | **Deferred** | Existing support databases use AppData/Roaming. New update payloads use local cache; moving old databases requires a separate migration. |
-| OS credential vault | **Not started** | OAuth/PAT tokens currently use SharedPreferences. Use the [credential migration gate](ARCHITECTURE_RENEWAL.md#settings-and-credentials) before migrating Accounts UI; verify native storage and preserve accounts across failures. |
+| OS credential vault | **Not started** | OAuth/PAT tokens currently use SharedPreferences. Use the [credential migration gate](ARCHITECTURE_RENEWAL.md#known-hard-problems) before migrating Accounts UI; verify native storage and preserve accounts across failures. |
 | Additional auto-update formats and cleanup | **Partial** | Windows Setup, deb/rpm and marked Linux portable bundles supported. Flatpak/Windows ZIP/macOS use manual updates; install logs, downloaded releases and previous portable bundles need a retention UI. |
 | Native update smoke matrix | **Partial** | Linux portable helper tests and Windows helper tests with disposable fake programs are gated. Test actual Windows Setup and Linux authorization/cancellation before publishing. |
 
@@ -196,11 +193,11 @@ Design components are built on demand inside the first complete slice.
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Shared settings repository | **Not started** | Persistence lives on `EngineSettings`, `EvalDatabaseSettings`, `TrainingSettings` separately. Migrate through one owner per key with typed sections, per-job effective settings and failure/restart tests; see [settings contract](ARCHITECTURE_RENEWAL.md#settings-and-credentials). |
+| Shared settings repository | **Not started** | Persistence lives on `EngineSettings`, `EvalDatabaseSettings`, `TrainingSettings` separately. Migrate through one owner per key with typed sections, per-job effective settings and failure/restart tests; see [settings contract](ARCHITECTURE_RENEWAL.md#settings). |
 | **Accounts** section (Lichess OAuth UI, disconnect, Chess.com username) | **Not started** | `LichessAuthService` exists; settings screen has no account panel (login via `LichessDbInfoIcon` elsewhere) |
 | **Training** settings in global settings | **Not started** | Training settings only in trainer UI |
 | **Display** settings (board theme, piece set, coordinates, default Edit/Analyze mode) | **Not started** | |
-| Shared `AppTextStyles` + gradual UI token migration | **Partial** | `AppTextStyles` / `PgnTextStyles` + `ThemeData.textTheme` landed; many legacy `Colors.grey` / hard-coded `fontSize` call sites remain. Migrated components use [typed theme roles and retirement gates](ARCHITECTURE_RENEWAL.md#visual-direction-a-calm-responsive-dark-workspace). |
+| Shared `AppTextStyles` + gradual UI token migration | **Partial** | `AppTextStyles` / `PgnTextStyles` + `ThemeData.textTheme` landed; many legacy `Colors.grey` / hard-coded `fontSize` call sites remain. Migrated components use [typed theme roles and retirement gates](ARCHITECTURE_RENEWAL.md#interface). |
 | Stockfish binary path picker + validation | **Not started** | Auto-detect only |
 | ChessDB.cn API quota display / toggle | **Not started** | |
 | Queue engine setting changes during generation + toast | **Not started** | |
@@ -348,8 +345,8 @@ These remain **undecided**; pick one before implementing dependent UI:
 
 ## Implementation priority
 
-For the rewrite, follow the gated sequence in
-[Architecture renewal](ARCHITECTURE_RENEWAL.md#milestones-and-exit-gates).
+For the rewrite, follow the steps in
+[Architecture renewal](ARCHITECTURE_RENEWAL.md#order-of-work).
 For smaller maintenance tasks, choose from the incomplete entries above after
 checking current code. The previous standalone priority list was removed
 because it presented completed engine recovery work as unbuilt scope.

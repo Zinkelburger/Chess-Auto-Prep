@@ -17,7 +17,7 @@
 - `lib/app/` constructs dependencies. `lib/infrastructure/` adapts external
   systems to injected feature contracts. Controllers never import storage,
   infrastructure or widgets. Domain models/repository contracts stay pure Dart.
-  See [the renewal dependency rules](../ARCHITECTURE_RENEWAL.md#target-layout-and-dependency-rules).
+  The rewrite in `lib/v2/` has its own layout; see [the renewal plan](../ARCHITECTURE_RENEWAL.md#layout).
 - Unmigrated code retains its existing `core/`, `models/`, `services/` and
   `widgets/` locations until its owning workflow migrates. Do not add new
   catch-all shared layers or move files without changing ownership.
@@ -48,7 +48,6 @@
   Flutter lookup/listening. Riverpod and the generic stored-game/display scopes
   are retired and mechanically rejected. Keep actual
   tree-local Flutter UI scopes; do not add a second generic dependency container.
-  See the [maintainability gate](../ARCHITECTURE_RENEWAL.md#maintainability-correction-and-next-cutovers).
 - A `ChangeNotifier` service that launches fire-and-forget work must mix in
   `SafeChangeNotifier` (`lib/utils/safe_change_notifier.dart`) to avoid notifying
   after disposal.
