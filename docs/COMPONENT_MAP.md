@@ -531,6 +531,14 @@ recovery remain unfinished.
 
 #### Shared document save interaction
 
+App composition selects one `PgnDocumentStore` for the document, Study and
+Generation factories. Those factories require that exact store; only
+`createPlatformDocumentStore` chooses the native Linux or remaining legacy host
+adapter. `StoragePgnCollectionRepository` adds collection patch/recovery duties:
+patch observes a snapshot, computes the text replacement, then saves through the
+same injected store. Its separate `storage.updateFile` patch writer is deleted.
+Collection paths are absolute for either selected adapter.
+
 `features/documents/controllers/document_save_session.dart` owns a loaded
 snapshot, current draft and explicit save/reload transitions over injected
 `PgnDocumentStore`. It has no Flutter, provider, filesystem or global-service

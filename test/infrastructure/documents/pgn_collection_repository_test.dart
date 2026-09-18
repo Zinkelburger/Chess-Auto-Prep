@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:chess_auto_prep/infrastructure/documents/legacy_pgn_document_store.dart';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
@@ -5,6 +7,38 @@ import 'package:chess_auto_prep/infrastructure/documents/native_pgn_document_sto
 import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_collection_repository.dart';
 import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
 import 'package:chess_auto_prep/utils/atomic_file.dart';
+
+// Exercise the platform-selected legacy adapter without a second patch writer.
+class _ObservedStorage extends IOStorageService {
+  _ObservedStorage({required super.documentsRoot});
+  Future<void> Function()? beforeSave;
+  bool loseAcknowledgement = false;
+  String? expected;
+
+  @override
+  Future<String> updateFile(
+    String path,
+    FutureOr<String> Function(String?) update,
+  ) => throw StateError('Collection patch bypassed its selected store');
+
+  @override
+  Future<void> writeFile(
+    String path,
+    String content, {
+    bool createOnly = false,
+    String? expectedContent,
+  }) async {
+    expected = expectedContent;
+    await beforeSave?.call();
+    await super.writeFile(
+      path,
+      content,
+      createOnly: createOnly,
+      expectedContent: expectedContent,
+    );
+    if (loseAcknowledgement) throw StateError('Acknowledgement lost');
+  }
+}
 
 void main() {
   late Directory root;
@@ -85,6 +119,48 @@ void main() {
         isA<PgnConflict>(),
       );
       expect(await file.readAsString(), content);
+    },
+  );
+  test(
+    'selected legacy store rejects changes after the observed snapshot',
+    () async {
+      final observed = _ObservedStorage(documentsRoot: root);
+      const external = '$content\n; edited externally';
+      observed.beforeSave = () async {
+        await file.writeAsString(external);
+      };
+      final repository = StoragePgnCollectionRepository(
+        observed,
+        documents: LegacyPgnDocumentStore(observed),
+      );
+      final result = await repository.patch(file.path, {
+        first: '$first\n{mine}',
+      });
+      expect(result, isA<PgnConflict>());
+      expect(observed.expected, content);
+      expect((result as PgnConflict).current?.content, external);
+      expect(await file.readAsString(), external);
+    },
+  );
+
+  test(
+    'selected legacy acknowledgement loss retains before and observed bytes',
+    () async {
+      final observed = _ObservedStorage(documentsRoot: root)
+        ..loseAcknowledgement = true;
+      final repository = StoragePgnCollectionRepository(
+        observed,
+        documents: LegacyPgnDocumentStore(observed),
+      );
+      final result = await repository.patch(file.path, {
+        first: '$first\n{mine}',
+      });
+      expect(result, isA<PgnWriteUncertain>());
+      final uncertain = result as PgnWriteUncertain;
+      expect(uncertain.before?.content, content);
+      expect(observed.expected, content);
+      expect(uncertain.observed?.content, contains('{mine}'));
+      expect(await file.readAsString(), uncertain.observed?.content);
     },
   );
 }

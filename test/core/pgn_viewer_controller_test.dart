@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/infrastructure/documents/legacy_pgn_document_store.dart';
 import 'package:chess_auto_prep/models/pgn_game_entry.dart';
 import 'package:chess_auto_prep/app/runtime_settings.dart';
 import 'package:chess_auto_prep/app/engine_runtime.dart';
@@ -101,6 +102,7 @@ class _GatedOpeningController extends ViewerDocumentController {
         ),
         collectionRepository: StoragePgnCollectionRepository(
           StorageFactory.instance,
+          documents: LegacyPgnDocumentStore(StorageFactory.instance),
         ),
         pgnWidgetController: PgnViewerWidgetController(),
         analysisController: _FakeAnalysisController(),
@@ -205,6 +207,7 @@ ViewerDocumentController _makeController({
     ),
     collectionRepository: StoragePgnCollectionRepository(
       StorageFactory.instance,
+      documents: LegacyPgnDocumentStore(StorageFactory.instance),
     ),
     pgnWidgetController: handle ?? PgnViewerWidgetController(),
     schedulePostFrame: schedulePostFrame,

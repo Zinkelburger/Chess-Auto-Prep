@@ -1,11 +1,14 @@
 library;
 
+import 'package:chess_auto_prep/utils/atomic_file.dart';
+import 'package:chess_auto_prep/infrastructure/documents/legacy_pgn_document_store.dart';
+
 import 'package:chess_auto_prep/app/viewer_dependencies.dart';
 
 /// What the viewer is allowed to do to a PGN file the reader owns.
 ///
 /// A save patches the games it changed into the file as it currently stands
-/// (`doPersistMetadata` → `patchPgnDocument` under `updateFile`). It used to
+/// (`doPersistMetadata` → observed snapshot → patch → validated save). It used to
 /// rewrite the whole file from the collection held in memory, and then
 /// anything the load dropped, or any game a save re-serialized lossily, was
 /// deleted from the reader's own file — by a star, a comment edit, or an
@@ -85,12 +88,15 @@ class _MemoryStorage implements StorageService {
     bool createOnly = false,
     String? expectedContent,
   }) async {
+    await writeGate?.future;
+    if ((createOnly && files.containsKey(path)) ||
+        (expectedContent != null && files[path] != expectedContent)) {
+      throw AtomicWriteConflict(path);
+    }
     writeBehindOurBack(path, content);
   }
 
-  /// Read-modify-write, as the real one does under a lock. The viewer's save
-  /// goes through here now: it patches the games it changed into whatever the
-  /// file currently holds rather than rewriting the file from memory.
+  /// Storage read-modify-write for callers outside the document store.
   @override
   Future<String> updateFile(
     String path,
@@ -211,6 +217,7 @@ Future<ViewerDocumentController> _openTheFile(_MemoryStorage storage) async {
     ),
     collectionRepository: StoragePgnCollectionRepository(
       StorageFactory.instance,
+      documents: LegacyPgnDocumentStore(StorageFactory.instance),
     ),
     pgnWidgetController: PgnViewerWidgetController(),
     analysisController: _FakeAnalysisController(),
@@ -537,6 +544,7 @@ void main() {
       ),
       collectionRepository: StoragePgnCollectionRepository(
         StorageFactory.instance,
+        documents: LegacyPgnDocumentStore(StorageFactory.instance),
       ),
       pgnWidgetController: PgnViewerWidgetController(),
       analysisController: _FakeAnalysisController(),

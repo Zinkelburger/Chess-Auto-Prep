@@ -3728,3 +3728,37 @@ browser work remains outside main pending truthful bulk-save failure recovery
 and native Read-line parity; a smaller diff alone does not pass its workflow gate.
 Combined Study/settings integration passes 53 affected tests and analyze/lint;
 the retirement manifest retains both independently deleted owners.
+
+
+### Selected document store and one collection patch writer — 2026-09-18
+
+`654898bf` against `d05f1d82` requires the selected PgnDocumentStore in the
+collection repository and six collection/Study/Generation factories. All actual
+production callers already supplied the same nonnull store. The platform factory
+remains the sole Native-versus-Legacy choice; the legitimate AppDependencies test
+override still selects through that factory when absent. No platform adapter or
+verification claim changed. Collection patching always observes a snapshot,
+computes the patch, then saves through the same store. The alternate
+StorageService.updateFile writer and its independent receipt creation are gone.
+Existing open/save result normalization handles unexpected adapter failures.
+
+Four changed production files shrink **473→438 (−35)**; including unchanged main
+composition, Legacy adapter and collection interface gives **965→930**. No new
+owner, API hierarchy or helper. Eight existing test fixtures now choose their
+adapter explicitly; fake storage implements the real delayed compare-and-swap
+semantics instead of bypassing them. Review removed a now-redundant patch override
+in the delayed notification fixture, leaving one gate/count per actual save.
+Two added real-I/O Legacy cases prove changed-content conflict and lost-
+acknowledgement before/observed receipts, forbidding the removed updateFile path.
+Native equal-byte replacement and retained Viewer save/recovery behavior remain
+covered. This is consolidation, not a newly verified legacy identity protocol.
+
+**143 distinct tests pass** across 11 affected files: the first batch passed 142
+actual tests but failed to load a mistakenly named screen test; the corrected
+screen path and repaired notification fixture then pass six tests (five repeated).
+Final analyze/lint passes with 63 existing infos, no warnings/errors and 45 checker
+cases. Independent review approves production ownership and fixture semantics.
+No visible layout/behavior changes require a new preview. Final library total is
+**225,716**, +6,759 (+3.1%) from September 16 and −11,275 from the growth review.
+Against fa7f309e, handwritten reduction is **14,011**, generated localization
++245 separately. No feature graduation; whole renewal remains Partial.

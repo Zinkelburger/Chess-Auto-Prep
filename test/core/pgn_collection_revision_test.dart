@@ -1,3 +1,5 @@
+import 'package:chess_auto_prep/utils/atomic_file.dart';
+import 'package:chess_auto_prep/infrastructure/documents/legacy_pgn_document_store.dart';
 import 'package:chess_auto_prep/models/pgn_game_entry.dart';
 import 'package:chess_auto_prep/app/runtime_settings.dart';
 import 'package:chess_auto_prep/app/engine_runtime.dart';
@@ -39,6 +41,19 @@ class _MemoryStorage extends IOStorageService {
   _MemoryStorage(this.content);
 
   String content;
+
+  @override
+  Future<void> writeFile(
+    String path,
+    String next, {
+    bool createOnly = false,
+    String? expectedContent,
+  }) async {
+    if (createOnly || (expectedContent != null && expectedContent != content)) {
+      throw AtomicWriteConflict(path);
+    }
+    content = next;
+  }
 
   @override
   Future<String> updateFile(
@@ -106,6 +121,7 @@ void main() {
       ),
       collectionRepository: StoragePgnCollectionRepository(
         StorageFactory.instance,
+        documents: LegacyPgnDocumentStore(StorageFactory.instance),
       ),
       pgnWidgetController: PgnViewerWidgetController(),
       analysisController: analysis,
