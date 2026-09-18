@@ -3358,7 +3358,7 @@ creation. Failed color reads fail creation rather than guessing. Only PgnSaved
 supplies an acknowledged path for selection; failed or uncertain results never
 select or automatically retry. The pure chapter header has one canonical home.
 
-Builder's sibling cache, request counter and refresh fanout are deleted. Its
+Builder's sibling cache and refresh fanout are deleted. Its
 existing breadcrumb reads fresh siblings on demand, captures the current document
 generation before awaiting, rejects overlapping menus and validates that same
 capture before presenting or dispatching. Picker reads/course enrichment and
