@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/features/bughouse/controllers/bughouse_controller.dart';
 import 'package:chess_auto_prep/features/bughouse/services/bughouse_engine.dart';
 import 'package:chess_auto_prep/features/bughouse/services/bughouse_engine_report.dart';
@@ -49,6 +50,8 @@ void main() {
     engine.failNextSearch = failure;
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: SizedBox(
             height: 600,

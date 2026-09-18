@@ -2,6 +2,7 @@
 /// the standard start, and participant settings in Engine controls.
 library;
 
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/app/runtime_settings.dart';
 import 'package:chess_auto_prep/app/engine_runtime.dart';
 import '../../support/runtime_settings.dart';
@@ -38,6 +39,8 @@ Future<void> _openDialog(
   });
   await tester.pumpWidget(
     MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Builder(
         builder: (context) => Scaffold(
           body: Center(

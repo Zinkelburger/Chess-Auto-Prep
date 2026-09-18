@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/models/game_outcome.dart';
 import 'package:chess_auto_prep/widgets/match_games_table.dart';
 import 'dart:io';
@@ -77,6 +78,8 @@ void main() {
       ChangeNotifierProvider<AppState>.value(
         value: appState,
         child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           // `showAppSnackBar` sets an explicit width, which Material asserts
           // is only legal for a floating snackbar — the real app's theme says
           // so, and a bare MaterialApp here would not.
