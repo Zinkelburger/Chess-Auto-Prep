@@ -815,4 +815,237 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get generationRecoveryDeletedRepertoire =>
       'Deleted chapter files can be recovered here. If the entire repertoire was deleted, restore its folder from library recovery first.';
+
+  @override
+  String studyImportJob(String name) {
+    return 'Import: $name';
+  }
+
+  @override
+  String get studyImportStarting => 'Starting…';
+
+  @override
+  String get studyImportCancelling => 'Cancelling…';
+
+  @override
+  String studyImportFetching(int game, int total) {
+    return 'Fetching game $game/$total';
+  }
+
+  @override
+  String studyImportWaiting(int game, int seconds, int total) {
+    return 'Game $game/$total · next in ${seconds}s';
+  }
+
+  @override
+  String studyImportRetrying(int game, int seconds, int total) {
+    return 'Rate-limited — retrying game $game/$total in ${seconds}s';
+  }
+
+  @override
+  String studyImportDownloaded(int count) {
+    return 'Downloaded $count';
+  }
+
+  @override
+  String studyImportSkipped(String id) {
+    return 'Skipped game $id';
+  }
+
+  @override
+  String studyImportChapters(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count chapters',
+      one: '1 chapter',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get studyImportClosed => 'The study importer is closed.';
+
+  @override
+  String get studyImportAlreadyRunning =>
+      'A collection download is already running.';
+
+  @override
+  String get studyImportEmpty => 'No games found in that collection.';
+
+  @override
+  String get studyImportInvalidIds => 'Collection game IDs must be numeric.';
+
+  @override
+  String get studyImportStartupFailed =>
+      'Could not start the collection download. Try again.';
+
+  @override
+  String get studyImportDownloadFailed =>
+      'Collection download stopped. Downloaded games remain cached.';
+
+  @override
+  String get studyImportThrottled =>
+      'chessgames.com is refusing requests. Downloaded games are cached — start the same collection again later to resume.';
+
+  @override
+  String get studyImportPublicationFailed =>
+      'Downloaded games could not be saved. Review the downloaded content or try again later.';
+
+  @override
+  String get studyImportPublicationUncertain =>
+      'The study save could not be confirmed. Review the destination before retrying.';
+
+  @override
+  String get studyImportNameCollisions =>
+      'No free study name was found after 100 attempts. Choose another destination for the downloaded games.';
+
+  @override
+  String studyImportProgress(int done, int total) {
+    return 'Importing $done/$total';
+  }
+
+  @override
+  String get studyImportStop => 'Stop the download (keeps what has arrived)';
+
+  @override
+  String get studyImportReview => 'Review downloaded study';
+
+  @override
+  String studyImportBackground(int count, int minutes) {
+    return 'Downloading $count games (~$minutes min). chessgames.com is slow on purpose — keep working, it runs in the background.';
+  }
+
+  @override
+  String studyImportComplete(int count, int failed, String name) {
+    return 'Imported $count games into “$name” ($failed unavailable).';
+  }
+
+  @override
+  String studyImportStopped(int count, String name) {
+    return 'Stopped the download. Saved $count chapters into “$name”.';
+  }
+
+  @override
+  String studyImportNoContent(int failed) {
+    return 'No study was saved ($failed games unavailable).';
+  }
+
+  @override
+  String get studyImportOpen => 'Open';
+
+  @override
+  String get studyImportLichessOffline =>
+      'Lichess did not respond (rate-limited or offline). Try again shortly.';
+
+  @override
+  String get studyImportLichessLogin =>
+      'Study not found. If it is private or unlisted, log into Lichess first (Settings → Accounts), then try again.';
+
+  @override
+  String get studyImportLichessScope =>
+      'Study not found. If it is private, log out and back in to grant study access.';
+
+  @override
+  String get studyImportLichessRejected =>
+      'Lichess rejected the request. Log out and back in under Settings → Accounts, then try again.';
+
+  @override
+  String studyImportLichessUserMissing(String name) {
+    return 'No public studies found for “$name”.';
+  }
+
+  @override
+  String studyImportLichessHttp(int status) {
+    return 'Lichess returned HTTP $status.';
+  }
+
+  @override
+  String get studyImportLichessEmpty =>
+      'That study is empty — nothing to import.';
+
+  @override
+  String get studyImportUnresolved =>
+      'Review the previous downloaded study before starting another import.';
+
+  @override
+  String get studyOpenFailed =>
+      'Could not open that study. Your current study is unchanged.';
+
+  @override
+  String get studyImportReviewAction => 'Review';
+
+  @override
+  String get studyImportPgnFailed =>
+      'Could not import that PGN. Your study is unchanged.';
+
+  @override
+  String get studyListRetry => 'Could not load studies. Retry';
+
+  @override
+  String studyImportAdded(int count) {
+    return 'Added $count chapters.';
+  }
+
+  @override
+  String get studyImportApplyFailed =>
+      'Could not finish the import. Your existing work is preserved.';
+
+  @override
+  String get studyImportNotAccepted =>
+      'The import was not accepted. Resolve the active import or study change, then retry. Your download is kept in this dialog.';
+
+  @override
+  String builderCopyNeedsVerification(String destination) {
+    return 'Copy needs verification: $destination. The draft is retained; this append will not be repeated.';
+  }
+
+  @override
+  String get builderInspectCopy => 'Inspect copy';
+
+  @override
+  String get builderLineSaveFailed => 'Line edits are retained. Saving failed.';
+
+  @override
+  String get builderSourceChanged =>
+      'The source changed or is missing. Restored edits are a scratch line; save them to an explicit destination.';
+
+  @override
+  String get builderSaveDraftCopy => 'Save draft as a new line…';
+
+  @override
+  String get builderRetainedDraftsTooltip => 'Retained Builder drafts';
+
+  @override
+  String get builderScratch => 'Scratch';
+
+  @override
+  String get builderDraftRetained =>
+      'The draft is retained. Choose a destination and try saving it again.';
+
+  @override
+  String builderRetainedDraftCount(int count) {
+    return 'Retained drafts ($count)';
+  }
+
+  @override
+  String get builderCopyInspectionFailed =>
+      'Destination could not be inspected. The copy intent and draft are retained.';
+
+  @override
+  String get builderVerifyCopy => 'Verify the saved copy';
+
+  @override
+  String get builderVerifyCopyExplanation =>
+      'Confirm only if the intended line is present in this observed file. Keeping the draft does not repeat the append.';
+
+  @override
+  String get builderKeepDraft => 'Keep draft';
+
+  @override
+  String get builderCopyPresent => 'Copy is present';
+
+  @override
+  String get builderCopyRetained =>
+      'The copy and draft are retained. Inspect the destination before trying again.';
 }

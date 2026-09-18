@@ -8,7 +8,7 @@
 /// import path derives a name and stamps it in here.
 library;
 
-import '../../utils/pgn_utils.dart';
+import '../../../utils/pgn_utils.dart';
 
 /// Replace (or insert) [gameText]'s `[Event]` tag with [event].
 String withEventHeader(String gameText, String event) {

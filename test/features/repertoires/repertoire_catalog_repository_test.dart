@@ -35,6 +35,8 @@ void main() {
       final bytes = File(created.chapterPath).readAsBytesSync();
       final entries = await repository.listRepertoires();
       expect(entries.single.name, 'Caro');
+      final chapters = await repository.listChapters(entries.single.filePath);
+      expect(chapters.single.filePath, created.chapterPath);
       await repository.rename(entries.single, 'Caro-Kann');
       final renamed = (await repository.listRepertoires()).single;
       expect(renamed.name, 'Caro-Kann');

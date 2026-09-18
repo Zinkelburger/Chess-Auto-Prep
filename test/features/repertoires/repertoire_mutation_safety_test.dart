@@ -5,7 +5,7 @@ import '../../support/repertoire_dependencies.dart';
 import 'dart:async';
 import 'dart:io';
 
-import 'package:chess_auto_prep/features/repertoires/controllers/repertoire_controller.dart';
+import 'package:chess_auto_prep/features/repertoires/controllers/builder_workspace_controller.dart';
 import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
 import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
@@ -20,7 +20,7 @@ void main() {
   late GatedRepertoireDecoder decoder;
   late Directory directory;
   late File file;
-  late RepertoireController controller;
+  late BuilderWorkspaceController controller;
   late StorageService storage;
   late _InterleavingStorage gateway;
 
@@ -34,18 +34,18 @@ void main() {
     );
     gateway = _InterleavingStorage(storage, () async {});
     decoder = GatedRepertoireDecoder();
-    controller = testRepertoireController(
+    controller = testBuilderWorkspace(
       decoder: decoder,
       documents: DocumentRepertoireRepository(LegacyPgnDocumentStore(gateway)),
     );
-    await controller.setRepertoire(
+    await controller.document.setRepertoire(
       RepertoireMetadata(
         name: 'Chapter',
         filePath: file.path,
         lastModified: DateTime(2026),
       ),
     );
-    controller.loadMoveHistory(['e4', 'e5']);
+    controller.board.loadMoveHistory(['e4', 'e5']);
   });
 
   tearDown(() async {
@@ -65,18 +65,18 @@ void main() {
       final Future<Object?> operation;
       switch (action) {
         case 'color':
-          operation = controller.setRepertoireColor(false);
+          operation = controller.document.setRepertoireColor(false);
         case 'root':
-          operation = controller.setRootPosition();
+          operation = controller.document.setRootPosition();
         default:
-          operation = controller.importPgnContent(
+          operation = controller.document.importPgnContent(
             '[Event "Import"]\n\n1. d4 d5 *',
           );
       }
       await expectLater(operation, throwsA(isA<AtomicWriteConflict>()));
       expect(await file.readAsString(), newer);
-      expect(controller.isRepertoireWhite, isTrue);
-      expect(controller.rootMoves, isEmpty);
+      expect(controller.document.isRepertoireWhite, isTrue);
+      expect(controller.document.rootMoves, isEmpty);
     });
   }
 
@@ -88,18 +88,18 @@ void main() {
         final Future<Object?> operation;
         switch (action) {
           case 'color':
-            operation = controller.setRepertoireColor(false);
+            operation = controller.document.setRepertoireColor(false);
           case 'root':
-            operation = controller.setRootPosition();
+            operation = controller.document.setRootPosition();
           default:
-            operation = controller.importPgnContent(
+            operation = controller.document.importPgnContent(
               '[Event "Import"]\n\n1. d4 d5 *',
             );
         }
         await expectLater(operation, throwsStateError);
         expect(await file.exists(), isFalse);
-        expect(controller.rootMoves, isEmpty);
-        expect(controller.isRepertoireWhite, isTrue);
+        expect(controller.document.rootMoves, isEmpty);
+        expect(controller.document.isRepertoireWhite, isTrue);
       },
     );
   }
@@ -110,13 +110,13 @@ void main() {
       final newer = original.replaceFirst('e5', 'e5 {keep this annotation}');
       await file.writeAsString(newer);
       await controller.writer.addMoveAtPosition(
-        fen: controller.fen,
+        fen: controller.board.fen,
         san: 'Nf3',
         pathFromRoot: ['e4', 'e5'],
       );
       expect(await controller.writer.undo(), isTrue);
       expect(await file.readAsString(), newer);
-      expect(controller.repertoirePgn, newer);
+      expect(controller.document.repertoirePgn, newer);
     },
   );
 
@@ -203,11 +203,8 @@ void main() {
       final editor = _PausedRepository(LegacyPgnDocumentStore(gateway));
       controller.dispose();
       decoder = GatedRepertoireDecoder();
-      controller = testRepertoireController(
-        decoder: decoder,
-        documents: editor,
-      );
-      await controller.setRepertoire(
+      controller = testBuilderWorkspace(decoder: decoder, documents: editor);
+      await controller.document.setRepertoire(
         RepertoireMetadata(
           name: 'Chapter',
           filePath: file.path,
@@ -223,7 +220,7 @@ void main() {
       );
       final rejected = expectLater(append, throwsStateError);
       await editor.committed.future;
-      final switched = controller.setRepertoire(
+      final switched = controller.document.setRepertoire(
         RepertoireMetadata(
           name: 'Other',
           filePath: other.path,
@@ -235,7 +232,7 @@ void main() {
       await switched;
       expect(await file.readAsString(), contains('Nf3'));
       expect(await other.readAsString(), original);
-      expect(controller.repertoirePgn, original);
+      expect(controller.document.repertoirePgn, original);
       expect(writer.canUndo, isFalse);
     },
   );
@@ -249,41 +246,41 @@ void main() {
         );
         controller.dispose();
         decoder = GatedRepertoireDecoder();
-        controller = testRepertoireController(
+        controller = testBuilderWorkspace(
           decoder: decoder,
           documents: repository,
         );
-        await controller.setRepertoire(
+        await controller.document.setRepertoire(
           RepertoireMetadata(
             name: 'First',
             filePath: file.path,
             lastModified: DateTime(2026),
           ),
         );
-        final line = controller.repertoireLines.single;
+        final line = controller.document.repertoireLines.single;
         final deletion = bulk
-            ? controller.deleteLines([line])
-            : controller.deleteLine(line);
+            ? controller.document.deleteLines([line])
+            : controller.document.deleteLine(line);
         await repository.committed.future;
         final other = File(p.join(directory.path, 'other.pgn'));
         await other.writeAsString(original);
-        final switched = controller.setRepertoire(
+        final switched = controller.document.setRepertoire(
           RepertoireMetadata(
             name: 'Other',
             filePath: other.path,
             lastModified: DateTime(2026),
           ),
         );
-        expect(controller.isLoading, isTrue);
+        expect(controller.document.isLoading, isTrue);
         repository.resume.complete();
         await deletion;
         await switched;
-        controller.loadPgnLine(controller.repertoireLines.single);
-        final tree = controller.tree;
-        final selected = controller.selectedPgnLine;
-        expect(controller.tree, same(tree));
-        expect(controller.selectedPgnLine, same(selected));
-        expect(controller.currentRepertoire!.filePath, other.path);
+        controller.selectLine(controller.document.repertoireLines.single);
+        final tree = controller.board.tree;
+        final selected = controller.document.selectedPgnLine;
+        expect(controller.board.tree, same(tree));
+        expect(controller.document.selectedPgnLine, same(selected));
+        expect(controller.document.currentRepertoire!.filePath, other.path);
         expect(await other.readAsString(), original);
         expect(
           await file.readAsString(),
@@ -297,10 +294,10 @@ void main() {
     const pgn =
         '// Color: White\n\n[Event "Transposition"]\n\n1. Nf3 d5 2. g3 Nf6 *\n';
     await file.writeAsString(pgn);
-    await controller.loadRepertoire();
-    controller.loadMoveHistory(['g3', 'd5', 'Nf3']);
+    await controller.document.loadRepertoire();
+    controller.board.loadMoveHistory(['g3', 'd5', 'Nf3']);
     await controller.writer.addMoveAtPosition(
-      fen: controller.fen,
+      fen: controller.board.fen,
       san: 'Nf6',
       pathFromRoot: ['g3', 'd5', 'Nf3'],
     );
@@ -314,7 +311,11 @@ void main() {
     await add();
     expect(controller.writer.canUndo, isFalse);
     expect(await file.readAsString(), newer);
-    expect(controller.repertoireLines.single.moves, ['e4', 'e5', 'Nf3']);
+    expect(controller.document.repertoireLines.single.moves, [
+      'e4',
+      'e5',
+      'Nf3',
+    ]);
   });
 
   test(
@@ -322,10 +323,10 @@ void main() {
     () async {
       final newer = original.replaceFirst('e5', 'e5 {external annotation}');
       await file.writeAsString(newer);
-      controller.deleteAtPath(const TreePath([0, 0]));
-      expect(controller.moveHistory, ['e4']);
+      controller.deleteDraftBranch(const TreePath([0, 0]));
+      expect(controller.board.moveHistory, ['e4']);
       expect(await controller.writer.undo(), isTrue);
-      expect(controller.moveHistory, ['e4', 'e5']);
+      expect(controller.board.moveHistory, ['e4', 'e5']);
       expect(await file.readAsString(), newer);
     },
   );
@@ -333,13 +334,13 @@ void main() {
   test(
     'DATA-03: successive scratch deletion undos restore the editable tree',
     () async {
-      controller.loadMoveHistory(['e4', 'e5', 'Nf3']);
-      controller.deleteAtPath(const TreePath([0, 0, 0]));
-      controller.deleteAtPath(const TreePath([0, 0]));
+      controller.board.loadMoveHistory(['e4', 'e5', 'Nf3']);
+      controller.deleteDraftBranch(const TreePath([0, 0, 0]));
+      controller.deleteDraftBranch(const TreePath([0, 0]));
       expect(await controller.writer.undo(), isTrue);
-      expect(controller.moveHistory, ['e4', 'e5']);
+      expect(controller.board.moveHistory, ['e4', 'e5']);
       expect(await controller.writer.undo(), isTrue);
-      expect(controller.moveHistory, ['e4', 'e5', 'Nf3']);
+      expect(controller.board.moveHistory, ['e4', 'e5', 'Nf3']);
       expect(await file.readAsString(), original);
     },
   );
@@ -347,21 +348,21 @@ void main() {
   test(
     'DATA-03: fileless batches have distinct logical per-move undo',
     () async {
-      final memory = testRepertoireController(
+      final memory = testBuilderWorkspace(
         documents: DocumentRepertoireRepository(
           LegacyPgnDocumentStore(gateway),
         ),
       );
       addTearDown(memory.dispose);
-      await memory.restoreRepertoireFromPgn(original);
+      await memory.document.restoreRepertoireFromPgn(original);
       await memory.writer.addMovesAtPosition(
         pathFromRoot: ['e4', 'e5'],
         sans: ['Nf3', 'Nc6'],
       );
       expect(await memory.writer.undo(), isTrue);
-      expect(memory.repertoireLines.single.moves, ['e4', 'e5', 'Nf3']);
+      expect(memory.document.repertoireLines.single.moves, ['e4', 'e5', 'Nf3']);
       expect(await memory.writer.undo(), isTrue);
-      expect(memory.repertoirePgn, original);
+      expect(memory.document.repertoirePgn, original);
       expect(await file.readAsString(), original);
     },
   );
@@ -404,30 +405,30 @@ void main() {
     'failed chapter switch retains destination, board and saved undo',
     () async {
       await add(['Nf3']);
-      controller.loadPgnLine(controller.repertoireLines.single);
-      controller.goToEnd();
-      final board = controller.tree;
-      final fen = controller.fen;
-      final line = controller.selectedPgnLine;
-      final color = controller.isRepertoireWhite;
-      final root = controller.rootMoves;
+      controller.selectLine(controller.document.repertoireLines.single);
+      controller.board.goToEnd();
+      final board = controller.board.tree;
+      final fen = controller.board.fen;
+      final line = controller.document.selectedPgnLine;
+      final color = controller.document.isRepertoireWhite;
+      final root = controller.document.rootMoves;
       final other = File(p.join(directory.path, 'other.pgn'));
       await other.writeAsString(original);
       decoder.afterBuild = () async => throw StateError('decode interrupted');
-      await controller.setRepertoire(
+      await controller.document.setRepertoire(
         RepertoireMetadata(
           name: 'Other',
           filePath: other.path,
           lastModified: DateTime(2026),
         ),
       );
-      expect(controller.loadError, isNotNull);
-      expect(controller.currentRepertoire!.filePath, file.path);
-      expect(controller.tree, same(board));
-      expect(controller.fen, fen);
-      expect(controller.selectedPgnLine, same(line));
-      expect(controller.isRepertoireWhite, color);
-      expect(controller.rootMoves, root);
+      expect(controller.document.loadError, isNotNull);
+      expect(controller.document.currentRepertoire!.filePath, file.path);
+      expect(controller.board.tree, same(board));
+      expect(controller.board.fen, fen);
+      expect(controller.document.selectedPgnLine, same(line));
+      expect(controller.document.isRepertoireWhite, color);
+      expect(controller.document.rootMoves, root);
       expect(controller.writer.canUndo, isTrue);
       decoder.afterBuild = null;
       expect(await controller.writer.undo(), isTrue);
@@ -437,16 +438,16 @@ void main() {
   );
 
   test('failed reload preserves a scratch deletion undo receipt', () async {
-    controller.loadMoveSequence(['e4', 'e5', 'Nf3']);
-    controller.deleteAtPath(const TreePath([0, 0]));
-    final board = controller.tree;
+    controller.composeMoves(['e4', 'e5', 'Nf3']);
+    controller.deleteDraftBranch(const TreePath([0, 0]));
+    final board = controller.board.tree;
     decoder.afterBuild = () async => throw StateError('decode interrupted');
-    await controller.loadRepertoire();
-    expect(controller.tree, same(board));
+    await controller.document.loadRepertoire();
+    expect(controller.board.tree, same(board));
     expect(controller.writer.canUndo, isTrue);
     expect(await controller.writer.undo(), isTrue);
-    controller.goToEnd();
-    expect(controller.moveHistory, ['e4', 'e5', 'Nf3']);
+    controller.board.goToEnd();
+    expect(controller.board.moveHistory, ['e4', 'e5', 'Nf3']);
     expect(await file.readAsString(), original);
   });
 
@@ -458,7 +459,7 @@ void main() {
       sans: ['Nf3'],
     );
     final rejection = expectLater(operation, throwsStateError);
-    await controller.setRepertoire(
+    await controller.document.setRepertoire(
       RepertoireMetadata(
         name: 'Other',
         filePath: other.path,

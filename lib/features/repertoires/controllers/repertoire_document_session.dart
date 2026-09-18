@@ -20,6 +20,20 @@ import '../models/repertoire_metadata.dart';
 import '../repositories/repertoire_decoder.dart';
 import '../repositories/repertoire_document_repository.dart';
 
+String? _readContent(PgnOpenResult result) => switch (result) {
+  PgnOpened(:final snapshot) => snapshot.content,
+  PgnMissing() => null,
+  PgnReadFailed(:final error) => throw error,
+};
+
+/// One not-yet-started line write. Replacements share its completion and retain
+/// only the latest PGN; active writes are never modified.
+class _PendingLineSave {
+  _PendingLineSave(this.content);
+  String content;
+  late final Future<bool> result;
+}
+
 class RepertoireDocumentSession {
   RepertoireDocumentSession({
     required this.documents,
@@ -53,6 +67,8 @@ class RepertoireDocumentSession {
 
   String? _repertoirePgn;
   String? get repertoirePgn => _repertoirePgn;
+  PgnRevision? _sourceRevision;
+  PgnRevision? get sourceRevision => _sourceRevision;
 
   OpeningTree? _openingTree;
   OpeningGraph? _openingGraph;
@@ -112,6 +128,24 @@ class RepertoireDocumentSession {
     onChanged();
   }
 
+  Future<bool> renameLine(RepertoireLine line, String title) async {
+    final filePath = _repertoireFilePath;
+    if (_disposed || filePath == null) return false;
+    final original = line.fullPgn;
+    final generation = _loadGeneration;
+    final result = await runDocumentMutation(
+      () => documents.updateLineContent(
+        filePath,
+        line.id,
+        withEventTitle(original, title),
+        expectedContent: original,
+      ),
+    );
+    if (result == null) return false;
+    if (isCurrent(generation)) await loadRepertoire();
+    return true;
+  }
+
   /// Deletes a line from the repertoire file and reloads.
   Future<bool> deleteLine(RepertoireLine line) async {
     final filePath = _repertoireFilePath;
@@ -164,22 +198,15 @@ class RepertoireDocumentSession {
     return removed;
   }
 
-  void Function()? _pendingLineSave;
   Future<void> _lineSaveTail = Future.value();
+  final Map<(String, String, int), _PendingLineSave> _pendingLineSaves = {};
   Object? _lineSaveFailure;
+  int _lineSaveRevision = 0;
 
-  /// The editor supplies its debounce flusher, or null once it is saved.
-  /// Keeping this callback separate from persistence lets core await pending
-  /// edits without depending on a widget or its lifecycle.
-  void setPendingLineSave(void Function()? flush) => _pendingLineSave = flush;
-
-  /// All Builder writes and their acknowledgements share the editor queue.
-  /// Flush a pending debounce before joining it; flushing inside the queued
-  /// callback would deadlock on the save it schedules behind itself.
   Future<T> runDocumentMutation<T>(Future<T> Function() action) {
-    final flush = _pendingLineSave;
-    _pendingLineSave = null;
-    flush?.call();
+    // A command is an ordering barrier: later edits cannot replace work queued
+    // before that command, even when their captured line destination matches.
+    _pendingLineSaves.clear();
     final result = _lineSaveTail.then((_) {
       if (_disposed) throw StateError('The document session is closed.');
       if (_lineSaveFailure != null) {
@@ -198,18 +225,10 @@ class RepertoireDocumentSession {
 
   /// Await pending document edits without consuming a failure on a close retry.
   Future<void> flushDocumentForClose() => _flushPendingLineSaves();
-  Object get closeRevision => (
-    _repertoireFilePath,
-    _loadGeneration,
-    _lineSaveTail,
-    _lineSaveFailure,
-    _pendingLineSave,
-  );
+  Object get closeRevision =>
+      (_repertoireFilePath, _loadGeneration, _lineSaveTail, _lineSaveFailure);
 
   Future<void> _flushPendingLineSaves() async {
-    final flush = _pendingLineSave;
-    _pendingLineSave = null;
-    flush?.call();
     await _lineSaveTail;
     final failure = _lineSaveFailure;
     if (failure != null) {
@@ -217,8 +236,7 @@ class RepertoireDocumentSession {
     }
   }
 
-  /// Capture a save destination before a debounced editor edit can outlive
-  /// its chapter. A completed save may update the open chapter only if the
+  /// Capture a save destination before an editor edit can outlive its chapter. A completed save may update the open chapter only if the
   /// same load generation is still displayed.
   Future<bool> Function(String)? get selectedLineSaver {
     final selected = _selectedPgnLine;
@@ -254,24 +272,37 @@ class RepertoireDocumentSession {
     if (_disposed) {
       return Future.error(StateError('The document session is closed.'));
     }
-    final result = _lineSaveTail.then(
-      (_) => _persistLineContent(
-        newPgn,
+    final key = (filePath, lineId, generation);
+    final pending = _pendingLineSaves[key];
+    if (pending != null) {
+      pending.content = newPgn;
+      return pending.result;
+    }
+    final request = _PendingLineSave(newPgn);
+    _pendingLineSaves[key] = request;
+    request.result = _lineSaveTail.then((_) {
+      if (identical(_pendingLineSaves[key], request)) {
+        _pendingLineSaves.remove(key);
+      }
+      return _persistLineContent(
+        request.content,
         filePath: filePath,
         lineId: lineId,
         generation: generation,
         originals: originals,
-      ),
-    );
-    _lineSaveTail = result.then<void>(
+      );
+    });
+    _lineSaveTail = request.result.then<void>(
       (saved) {
+        _lineSaveRevision++;
         _lineSaveFailure = saved ? null : 'The original line is unavailable.';
       },
       onError: (Object error, StackTrace _) {
+        _lineSaveRevision++;
         _lineSaveFailure = error;
       },
     );
-    return result;
+    return request.result;
   }
 
   Future<bool> _persistLineContent(
@@ -316,6 +347,7 @@ class RepertoireDocumentSession {
       // external changes to other games that the line transaction preserved.
       final acknowledgedLines = _lineOriginals;
       _applyLoaded(loaded);
+      _sourceRevision = saved.snapshot?.revision;
       // Existing editor callbacks share these acknowledgements. Keep their
       // target preconditions across a refresh (including move-derived ids).
       for (final line in loaded.lines) {
@@ -384,11 +416,12 @@ class RepertoireDocumentSession {
         if (!isCurrent(generation)) return;
         final current = await documents.read(path);
         if (!isCurrent(generation)) return;
-        if (!current.exists) {
+        final content = _readContent(current);
+        if (content == null) {
           throw StateError('The published chapter is no longer available.');
         }
         final loaded = await decoder.build(
-          current.pgn,
+          content,
           fallbackIsWhite: _isRepertoireWhite,
         );
         if (!isCurrent(generation)) return;
@@ -455,6 +488,7 @@ class RepertoireDocumentSession {
   }) {
     if (updatedPgnContent != null) {
       _repertoirePgn = updatedPgnContent;
+      _sourceRevision = null;
     }
 
     final startFen = startingFen() ?? kStandardStartFen;
@@ -530,7 +564,8 @@ class RepertoireDocumentSession {
       final read = await documents.read(filePath);
       if (!isCurrent(generation)) return;
 
-      if (!read.exists) {
+      final content = _readContent(read);
+      if (content == null) {
         _currentRepertoire = repertoire;
         _applyLoaded(LoadedRepertoire.missing);
         _resetTree();
@@ -538,13 +573,14 @@ class RepertoireDocumentSession {
       }
 
       final loaded = await decoder.build(
-        read.pgn,
+        content,
         fallbackIsWhite: _isRepertoireWhite,
       );
       if (!isCurrent(generation)) return;
 
       _currentRepertoire = repertoire;
       _applyLoaded(loaded);
+      _sourceRevision = (read as PgnOpened).snapshot.revision;
       _resetTree();
       onNavigateToRoot();
     } catch (e) {
@@ -602,6 +638,7 @@ class RepertoireDocumentSession {
   Map<String, String> _lineOriginals = {};
 
   void _applyLoaded(LoadedRepertoire loaded) {
+    _sourceRevision = null;
     _lineOriginals = {for (final line in loaded.lines) line.id: line.fullPgn};
     _repertoirePgn = loaded.pgn;
     // Ownership crosses the decoder boundary once; retaining/mutating a
@@ -637,7 +674,7 @@ class RepertoireDocumentSession {
 
     final colorLabel = isWhite ? 'White' : 'Black';
     await runDocumentMutation(() async {
-      final existing = (await documents.read(filePath)).pgn;
+      final existing = _readContent(await documents.read(filePath));
       if (existing == null) {
         throw StateError('The selected chapter is unavailable.');
       }
@@ -662,7 +699,7 @@ class RepertoireDocumentSession {
       startingFen: startingFen() ?? kStandardStartFen,
     );
     await runDocumentMutation(() async {
-      final existing = (await documents.read(filePath)).pgn;
+      final existing = _readContent(await documents.read(filePath));
       if (existing == null) {
         throw StateError('The selected chapter is unavailable.');
       }
@@ -675,6 +712,30 @@ class RepertoireDocumentSession {
     _rootMoves = moveText;
     onChanged();
   }
+
+  /// An explicit copy preserves the editable tree and never replaces its
+  /// original game. This independent destination can resolve a failed source
+  /// save, so it waits for the queue without requiring that source to recover.
+  Future<PgnWriteResult> appendDraftTo(String filePath, String pgn) {
+    _pendingLineSaves.clear();
+    final result = _lineSaveTail.then((_) {
+      if (_disposed) throw StateError('The document session is closed.');
+      return documents.appendPgn(filePath, pgn);
+    });
+    _lineSaveTail = result.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    return result;
+  }
+
+  /// Called only after the corresponding failed draft was durably copied to
+  /// the user's explicit destination. Newer failed edits remain unresolved.
+  void resolveCopiedLineFailure(int revision) {
+    if (revision == _lineSaveRevision) _lineSaveFailure = null;
+  }
+
+  int get lineSaveRevision => _lineSaveRevision;
 
   /// Imports PGN content into the current repertoire file.
   Future<int> importPgnContent(String pgnContent) async {
@@ -690,7 +751,7 @@ class RepertoireDocumentSession {
     final gameCount = expanded.gameCount;
 
     await runDocumentMutation(() async {
-      final existing = (await documents.read(filePath)).pgn;
+      final existing = _readContent(await documents.read(filePath));
       if (existing == null) {
         throw StateError('The selected chapter is unavailable.');
       }
@@ -711,6 +772,15 @@ class RepertoireDocumentSession {
     }
 
     return gameCount > 0 ? gameCount : 1;
+  }
+
+  /// A newer workspace edit supersedes a pending read without resetting the
+  /// current document or board. Already-started writes retain their own queue.
+  void cancelPendingLoad() {
+    if (_disposed || !_isLoading) return;
+    _loadGeneration++;
+    _requestedRepertoire = _currentRepertoire;
+    _setLoading(false);
   }
 
   /// Returns a Future that completes when the current load finishes.
@@ -745,7 +815,6 @@ class RepertoireDocumentSession {
     if (_disposed) return;
     _disposed = true;
     _loadGeneration++;
-    _pendingLineSave = null;
     _isLoading = false;
     for (final completer in _loadCompleters) {
       completer.complete();

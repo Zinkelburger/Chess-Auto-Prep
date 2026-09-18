@@ -6,6 +6,7 @@ import '../models/repertoire_recovery_entry.dart';
 abstract interface class RepertoireCatalogRepository {
   bool get supportsRecovery;
   Future<List<RepertoireMetadata>> listRepertoires();
+  Future<List<RepertoireMetadata>> listChapters(String folderPath);
   Future<List<RepertoireMetadata>> listStudies();
   Future<List<RepertoireRecoveryEntry>> listRecovery();
   Future<void> restore(String id, {String? name});

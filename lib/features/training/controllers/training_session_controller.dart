@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
-import '../../repertoires/controllers/repertoire_controller.dart';
+import '../../repertoires/controllers/repertoire_board_controller.dart';
 import '../../../models/line_status.dart';
 import '../../../models/repertoire_line.dart';
 import '../../repertoires/models/repertoire_metadata.dart';
@@ -72,7 +72,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   /// The quiz itself: opponent moves play, the user answers theirs.
   late final DrillPhase drill;
 
-  final RepertoireController session;
+  final RepertoireBoardController session;
 
   // -- Data --
   RepertoireMetadata? repertoire;

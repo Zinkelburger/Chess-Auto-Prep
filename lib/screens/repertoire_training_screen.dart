@@ -7,9 +7,7 @@ import '../app/training_dependencies.dart';
 import '../features/training/models/training_configuration.dart';
 import '../features/training/repositories/training_settings_repository.dart';
 
-import '../features/repertoires/controllers/repertoire_controller.dart';
-import '../features/repertoires/repositories/repertoire_document_repository.dart';
-import '../features/repertoires/repositories/repertoire_decoder.dart';
+import '../features/repertoires/controllers/repertoire_board_controller.dart';
 
 import '../app/legacy_theme_boundary.dart';
 
@@ -97,10 +95,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
     _training = createTrainingSession(
       artifacts: context.read<GenerationArtifacts>().repository,
       configuration: context.read<TrainingSettingsRepository>(),
-      session: RepertoireController(
-        documents: context.read<RepertoireDocumentRepository>(),
-        decoder: context.read<RepertoireDecoder>(),
-      ),
+      session: RepertoireBoardController(),
     );
     _training.onLineStarted = () {
       _pgnRevealedLineId = null;

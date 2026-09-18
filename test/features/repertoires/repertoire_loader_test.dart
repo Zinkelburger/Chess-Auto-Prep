@@ -7,6 +7,8 @@
 /// casing, where the block may live) and what a partly broken PGN yields.
 library;
 
+import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
+
 import 'package:chess_auto_prep/infrastructure/repertoires/document_repertoire_repository.dart';
 import 'package:chess_auto_prep/infrastructure/documents/legacy_pgn_document_store.dart';
 
@@ -173,8 +175,11 @@ void main() {
       final loader = DocumentRepertoireRepository(
         LegacyPgnDocumentStore(storage),
       );
-      expect(await loader.read('/gone.pgn'), (exists: false, pgn: null));
-      expect(await loader.read('/empty.pgn'), (exists: true, pgn: ''));
+      expect(await loader.read('/gone.pgn'), isA<PgnMissing>());
+      expect(
+        (await loader.read('/empty.pgn') as PgnOpened).snapshot.content,
+        '',
+      );
     });
   });
 

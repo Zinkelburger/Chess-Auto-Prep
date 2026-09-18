@@ -11,14 +11,14 @@ import 'package:flutter/material.dart';
 
 import '../../features/audit/controllers/audit_session_controller.dart';
 import '../../core/generation_session_controller.dart';
-import '../../features/repertoires/controllers/repertoire_controller.dart';
+import '../../features/repertoires/controllers/builder_workspace_controller.dart';
 import '../../services/jobs/repertoire_job.dart';
 import '../../utils/app_messages.dart';
 import '../generation/snapshot_export_dialog.dart';
 import 'jobs_panel.dart';
 
 class JobsTabContent extends StatelessWidget {
-  final RepertoireController controller;
+  final BuilderWorkspaceController controller;
   final GenerationSessionController generationController;
   final AuditSessionController auditController;
   final JobManager jobManager;
@@ -56,8 +56,9 @@ class JobsTabContent extends StatelessWidget {
         onOpenCoverageDialog: onOpenCoverageDialog,
         onPauseAudit: auditController.pause,
         onResumeAudit: auditController.resume,
-        onCancelAudit: () =>
-            auditController.cancel(controller.currentRepertoire?.filePath),
+        onCancelAudit: () => auditController.cancel(
+          controller.document.currentRepertoire?.filePath,
+        ),
         onPauseGeneration: gc.pauseBuild,
         onResumeGeneration: gc.resumeBuild,
         onCancelGeneration: gc.cancelBuild,

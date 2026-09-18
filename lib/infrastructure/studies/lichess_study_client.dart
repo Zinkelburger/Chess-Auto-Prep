@@ -10,14 +10,13 @@ library;
 
 import 'dart:convert';
 
-import '../chess_api_urls.dart';
-import '../lichess_api_client.dart';
-import '../lichess_auth_service.dart';
+import '../../services/chess_api_urls.dart';
+import 'package:http/http.dart' as http;
 import '../../chess_core/pgn/pgn_text.dart'
     show splitPgnIntoGames, extractHeaders;
-import 'chapter_naming.dart';
-import 'import_source.dart';
-import 'study_import_exception.dart';
+import '../../features/studies/models/chapter_naming.dart';
+import '../../features/studies/models/import_source.dart';
+import '../../features/studies/models/study_import_exception.dart';
 
 /// Export options. Comments and variations are the point of a study; clocks
 /// are noise in an opening file.
@@ -33,9 +32,13 @@ typedef FetchedStudy = ({String pgn, String name});
 
 /// Download [source] as PGN, with chapter names already normalised.
 ///
-/// Throws [StudyImportException] with a message fit for a SnackBar when the
+/// Throws [StudyImportException] with typed failure data when the
 /// study is missing, private, or the request fails outright.
-Future<FetchedStudy> fetchLichessStudy(ImportSource source) async {
+Future<FetchedStudy> fetchLichessStudy(
+  ImportSource source, {
+  required Future<http.Response?> Function(Uri) get,
+  required bool loggedIn,
+}) async {
   final url = switch (source) {
     LichessStudySource(:final studyId, :final chapterId) => lichessStudyPgnUrl(
       studyId,
@@ -49,27 +52,32 @@ Future<FetchedStudy> fetchLichessStudy(ImportSource source) async {
     _ => throw ArgumentError('Not a Lichess source: $source'),
   };
 
-  final response = await LichessApiClient.instance.get(
-    url,
-    extraHeaders: {'Accept': 'application/x-chess-pgn'},
-  );
+  final response = await get(url);
 
   if (response == null) {
-    throw const StudyImportException(
-      'Lichess did not respond (rate-limited or offline). Try again shortly.',
-    );
+    throw const StudyImportException(StudySourceFailure.offline);
   }
   if (response.statusCode == 404) {
-    throw StudyImportException(_notFoundMessage(source));
+    throw switch (source) {
+      LichessUserStudiesSource(:final username) => StudyImportException(
+        StudySourceFailure.userMissing,
+        username: username,
+      ),
+      _ => StudyImportException(
+        loggedIn
+            ? StudySourceFailure.scopeRequired
+            : StudySourceFailure.loginRequired,
+      ),
+    };
   }
   if (response.statusCode == 401 || response.statusCode == 403) {
-    throw const StudyImportException(
-      'Lichess rejected the request. Log out and back in under Settings → '
-      'Accounts, then try again.',
-    );
+    throw const StudyImportException(StudySourceFailure.rejected);
   }
   if (response.statusCode != 200) {
-    throw StudyImportException('Lichess returned HTTP ${response.statusCode}.');
+    throw StudyImportException(
+      StudySourceFailure.http,
+      statusCode: response.statusCode,
+    );
   }
 
   // Lichess sends UTF-8; `response.body` would decode it as latin-1 unless the
@@ -78,9 +86,7 @@ Future<FetchedStudy> fetchLichessStudy(ImportSource source) async {
     allowMalformed: true,
   ).convert(response.bodyBytes);
   if (pgn.trim().isEmpty) {
-    throw const StudyImportException(
-      'That study is empty — nothing to import.',
-    );
+    throw const StudyImportException(StudySourceFailure.empty);
   }
 
   final fallbackName = switch (source) {
@@ -90,22 +96,6 @@ Future<FetchedStudy> fetchLichessStudy(ImportSource source) async {
   };
   final split = splitLichessStudyName(pgn);
   return (pgn: split.pgn, name: split.studyName ?? fallbackName);
-}
-
-String _notFoundMessage(ImportSource source) {
-  if (source is LichessUserStudiesSource) {
-    return 'No public studies found for "${source.username}".';
-  }
-  final auth = LichessAuthService.instance;
-  if (!auth.isLoggedIn) {
-    return 'Study not found. If it is private or unlisted, log into Lichess '
-        'first (Settings → Accounts), then try again.';
-  }
-  // Lichess answers "private study, insufficient scope" with a plain 404, so a
-  // logged-in miss is most often a token minted before we asked for
-  // `study:read`.
-  return 'Study not found. If it is private, your Lichess login predates '
-      'study access — log out and back in to grant it.';
 }
 
 // ── Chapter naming ───────────────────────────────────────────────────────

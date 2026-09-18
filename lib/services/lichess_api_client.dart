@@ -14,6 +14,7 @@
 library;
 
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -44,8 +45,8 @@ class LichessApiClient {
   ///
   /// Owns its own [http.Client] and rate-limit state.  Call [close] when
   /// done to release the TCP connection pool.
-  LichessApiClient.withToken(String? token)
-    : _httpClient = http.Client(),
+  LichessApiClient.withToken(String? token, {http.Client? client})
+    : _httpClient = client ?? http.Client(),
       _authToken = token,
       _useAuthService = false;
 
@@ -64,6 +65,36 @@ class LichessApiClient {
   // ── State ───────────────────────────────────────────────────────────
 
   final http.Client _httpClient;
+  final _closing = Completer<void>();
+  bool _closed = false;
+
+  void _checkOpen() {
+    if (_closed) throw StateError('Lichess client is closed');
+  }
+
+  Future<T> _whileOpen<T>(Future<T> operation) async {
+    _checkOpen();
+    final result = await Future.any([
+      operation,
+      _closing.future.then<T>(
+        (_) => throw StateError('Lichess client is closed'),
+      ),
+    ]);
+    _checkOpen();
+    return result;
+  }
+
+  Future<void> _delay(Duration duration) async {
+    _checkOpen();
+    final elapsed = Completer<void>();
+    final timer = Timer(duration, elapsed.complete);
+    try {
+      await _whileOpen(elapsed.future);
+    } finally {
+      timer.cancel();
+    }
+  }
+
   final String? _authToken;
   final bool _useAuthService;
 
@@ -126,6 +157,7 @@ class LichessApiClient {
   // ── Rate-limit gate ─────────────────────────────────────────────────
 
   Future<_SlotWait> _waitForSlot() async {
+    _checkOpen();
     var backoffMs = 0;
     var politenessMs = 0;
 
@@ -137,7 +169,7 @@ class LichessApiClient {
       if (kDebugMode) {
         debugPrint('[LichessAPI] Backoff active — waiting ${wait.inSeconds}s');
       }
-      await Future<void>.delayed(wait);
+      await _delay(wait);
     }
 
     // Polite inter-request delay.
@@ -145,7 +177,7 @@ class LichessApiClient {
     if (gap < politenessDelay) {
       final wait = politenessDelay - gap;
       politenessMs = wait.inMilliseconds;
-      await Future<void>.delayed(wait);
+      await _delay(wait);
     }
     _lastRequestTime = DateTime.now();
     return (backoffMs: backoffMs, politenessMs: politenessMs);
@@ -215,11 +247,12 @@ class LichessApiClient {
 
       try {
         final headerSw = Stopwatch()..start();
-        final headers = await _resolveHeaders(extraHeaders);
+        final headers = await _whileOpen(_resolveHeaders(extraHeaders));
         final headerMs = headerSw.elapsedMilliseconds;
 
         final netSw = Stopwatch()..start();
-        final response = await send(headers);
+        _checkOpen();
+        final response = await _whileOpen(send(headers));
         final netMs = netSw.elapsedMilliseconds;
         _profile(
           '$method attempt=${attempt + 1}/$totalAttempts '
@@ -243,6 +276,7 @@ class LichessApiClient {
         _profile('$method done total=${opSw.elapsedMilliseconds}ms');
         return response;
       } catch (e) {
+        if (_closed) rethrow;
         _profile(
           '$method error attempt=${attempt + 1}/$totalAttempts '
           'elapsed=${attemptSw.elapsedMilliseconds}ms err=$e',
@@ -251,7 +285,7 @@ class LichessApiClient {
           debugPrint('[LichessAPI] $method error (attempt ${attempt + 1}): $e');
         }
         if (attempt < maxRetries) {
-          await Future<void>.delayed(_transientRetryDelay);
+          await _delay(_transientRetryDelay);
           _profile(
             '$method retry sleep=${_transientRetryDelay.inMilliseconds}ms',
           );
@@ -403,5 +437,10 @@ class LichessApiClient {
   ///
   /// Only needed for isolate instances.  The main-thread singleton should
   /// not be closed.
-  void close() => _httpClient.close();
+  void close() {
+    if (_closed) return;
+    _closed = true;
+    _closing.complete();
+    _httpClient.close();
+  }
 }

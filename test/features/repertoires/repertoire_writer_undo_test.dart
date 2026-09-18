@@ -8,7 +8,7 @@ import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chess_auto_prep/features/repertoires/controllers/repertoire_controller.dart';
+import 'package:chess_auto_prep/features/repertoires/controllers/builder_workspace_controller.dart';
 import 'package:chess_auto_prep/features/repertoires/controllers/repertoire_writer.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_suggestion_service.dart';
 import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
@@ -18,7 +18,7 @@ void main() {
   group('RepertoireWriter undo', () {
     late Directory tempDir;
     late String filePath;
-    late RepertoireController controller;
+    late BuilderWorkspaceController controller;
     late RepertoireWriter writer;
 
     setUp(() async {
@@ -41,8 +41,8 @@ void main() {
 1. e4 e5
 ''');
 
-      controller = testRepertoireController();
-      await controller.setRepertoire(
+      controller = testBuilderWorkspace();
+      await controller.document.setRepertoire(
         RepertoireMetadata(
           name: 'Test',
           filePath: filePath,
@@ -61,27 +61,34 @@ void main() {
     });
 
     test('undo reverses addMoveAtPosition on disk and in memory', () async {
-      controller.loadMoveHistory(['e4', 'e5']);
+      controller.board.loadMoveHistory(['e4', 'e5']);
       final before = await File(filePath).readAsString();
 
       await writer.addMoveAtPosition(
-        fen: controller.fen,
+        fen: controller.board.fen,
         san: 'Nf3',
         pathFromRoot: ['e4', 'e5'],
       );
-      controller.playMove('Nf3');
+      controller.board.playMove('Nf3');
 
       expect(writer.canUndo, isTrue);
       expect(await File(filePath).readAsString(), contains('Nf3'));
-      expect(controller.repertoireLines.first.moves, ['e4', 'e5', 'Nf3']);
+      expect(controller.document.repertoireLines.first.moves, [
+        'e4',
+        'e5',
+        'Nf3',
+      ]);
 
       final undone = await writer.undo();
       expect(undone, isTrue);
       expect(writer.canUndo, isFalse);
       expect(await File(filePath).readAsString(), before);
-      expect(controller.repertoireLines.first.moves, ['e4', 'e5']);
-      expect(controller.currentMoveSequence, ['e4', 'e5']);
-      expect(controller.openingGraph!.hasMove(controller.fen, 'Nf3'), isFalse);
+      expect(controller.document.repertoireLines.first.moves, ['e4', 'e5']);
+      expect(controller.board.currentMoveSequence, ['e4', 'e5']);
+      expect(
+        controller.document.openingGraph!.hasMove(controller.board.fen, 'Nf3'),
+        isFalse,
+      );
     });
 
     test('undo returns false when stack is empty', () async {
@@ -93,22 +100,22 @@ void main() {
       'draft undo cannot restore into a newly adopted equal-looking board',
       () async {
         final persisted = await File(filePath).readAsString();
-        controller.loadMoveHistory(['e4', 'e5']);
-        controller.deleteAtPath(const TreePath([0, 0]));
-        controller.loadMoveHistory(['e4']);
-        final adopted = controller.tree;
+        controller.board.loadMoveHistory(['e4', 'e5']);
+        controller.deleteDraftBranch(const TreePath([0, 0]));
+        controller.board.loadMoveHistory(['e4']);
+        final adopted = controller.board.tree;
         await expectLater(writer.undo(), throwsStateError);
-        expect(controller.tree, same(adopted));
-        expect(controller.moveHistory, ['e4']);
+        expect(controller.board.tree, same(adopted));
+        expect(controller.board.moveHistory, ['e4']);
         expect(await File(filePath).readAsString(), persisted);
       },
     );
 
     test('duplicate add does not push undo entry', () async {
-      controller.loadMoveHistory(['e4']);
+      controller.board.loadMoveHistory(['e4']);
 
       await writer.addMoveAtPosition(
-        fen: controller.fen,
+        fen: controller.board.fen,
         san: 'e5',
         pathFromRoot: ['e4'],
       );
@@ -117,7 +124,7 @@ void main() {
     });
 
     test('undo stack keeps only last 20 operations', () async {
-      controller.loadMoveHistory(['e4', 'e5']);
+      controller.board.loadMoveHistory(['e4', 'e5']);
 
       const movesToAdd = [
         'Nf3',
@@ -145,11 +152,11 @@ void main() {
 
       for (final san in movesToAdd) {
         await writer.addMoveAtPosition(
-          fen: controller.fen,
+          fen: controller.board.fen,
           san: san,
-          pathFromRoot: controller.currentMoveSequence,
+          pathFromRoot: controller.board.currentMoveSequence,
         );
-        controller.playMove(san);
+        controller.board.playMove(san);
       }
 
       for (var i = 0; i < 20; i++) {
@@ -160,7 +167,7 @@ void main() {
     });
 
     test('acceptSuggestion undo removes moves one at a time', () async {
-      controller.loadMoveHistory(['e4', 'e5']);
+      controller.board.loadMoveHistory(['e4', 'e5']);
 
       const suggestion = SuggestedLine(
         gap: GapCandidate(
@@ -178,7 +185,7 @@ void main() {
       );
 
       await writer.acceptSuggestion(suggestion);
-      expect(controller.repertoireLines.first.moves, [
+      expect(controller.document.repertoireLines.first.moves, [
         'e4',
         'e5',
         'Nf3',
@@ -187,34 +194,39 @@ void main() {
       expect(writer.canUndo, isTrue);
 
       expect(await writer.undo(), isTrue);
-      expect(controller.repertoireLines.first.moves, ['e4', 'e5', 'Nf3']);
-      expect(controller.currentMoveSequence, ['e4', 'e5', 'Nf3']);
+      expect(controller.document.repertoireLines.first.moves, [
+        'e4',
+        'e5',
+        'Nf3',
+      ]);
+      expect(controller.board.currentMoveSequence, ['e4', 'e5', 'Nf3']);
 
       expect(await writer.undo(), isTrue);
-      expect(controller.repertoireLines.first.moves, ['e4', 'e5']);
-      expect(controller.currentMoveSequence, ['e4', 'e5']);
+      expect(controller.document.repertoireLines.first.moves, ['e4', 'e5']);
+      expect(controller.board.currentMoveSequence, ['e4', 'e5']);
       expect(writer.canUndo, isFalse);
     });
 
     test('clearUndoStack on loadRepertoire', () async {
-      controller.loadMoveHistory(['e4', 'e5']);
+      controller.board.loadMoveHistory(['e4', 'e5']);
       await writer.addMoveAtPosition(
-        fen: controller.fen,
+        fen: controller.board.fen,
         san: 'Nf3',
         pathFromRoot: ['e4', 'e5'],
       );
       expect(writer.canUndo, isTrue);
 
-      await controller.loadRepertoire();
+      await controller.document.loadRepertoire();
       expect(writer.canUndo, isFalse);
     });
 
     test(
       'a file-backed malformed receipt never invents undo from memory',
       () async {
-        controller.loadMoveHistory(['e4', 'e5']);
+        controller.board.loadMoveHistory(['e4', 'e5']);
         final noSnapshots = RepertoireWriter(
-          controller,
+          document: controller.document,
+          board: controller.board,
           documents: _NoSnapshotRepository(
             LegacyPgnDocumentStore(StorageFactory.instance),
           ),
@@ -230,7 +242,7 @@ void main() {
         // The deliberately broken adapter committed already. Keep its result
         // on disk for recovery, without claiming the stale session can undo it.
         expect(await File(filePath).readAsString(), contains('Bb5'));
-        expect(controller.repertoireLines.first.moves, ['e4', 'e5']);
+        expect(controller.document.repertoireLines.first.moves, ['e4', 'e5']);
       },
     );
   });

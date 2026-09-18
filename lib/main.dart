@@ -1,3 +1,9 @@
+import 'app/builder_lifetime.dart';
+import 'features/studies/repositories/study_import_repository.dart';
+import 'features/studies/widgets/study_save_button.dart'
+    show chooseStudyCopyDestination;
+import 'features/studies/widgets/study_import_close_guard.dart';
+import 'features/studies/controllers/study_import_controller.dart';
 import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
 import 'app/engine_runtime.dart';
 import 'app/runtime_settings.dart';
@@ -237,6 +243,14 @@ class ChessAutoPrepApp extends StatelessWidget {
                 createRepertoireDocuments(documents: documents),
           ),
           Provider<RepertoireDecoder>(create: (_) => createRepertoireDecoder()),
+          Provider<BuilderLifetime>(
+            create: (ctx) => BuilderLifetime(
+              documents: ctx.read<RepertoireDocumentRepository>(),
+              decoder: ctx.read<RepertoireDecoder>(),
+              store: createBuilderRecoveryStore(),
+            ),
+            dispose: (_, lifetime) => lifetime.dispose(),
+          ),
           Provider<PgnCollectionRepository>(
             create: (_) => createPgnCollectionRepository(documents: documents),
           ),
@@ -287,6 +301,15 @@ class ChessAutoPrepApp extends StatelessWidget {
           ChangeNotifierProvider<StudyController>(
             create: (_) => createStudyController(documents: documents),
           ),
+          Provider<StudyImportRepository>(
+            create: (_) => createStudyImportRepository(documents: documents),
+          ),
+          ChangeNotifierProvider<StudyImportController>(
+            create: (context) => createStudyImportController(
+              documents: documents,
+              repository: context.read<StudyImportRepository>(),
+            ),
+          ),
           ChangeNotifierProvider<
             WorkspaceRecoveryController<StudyWorkspaceSnapshot>
           >(
@@ -316,36 +339,49 @@ class ChessAutoPrepApp extends StatelessWidget {
           },
           home: Builder(
             builder: (context) => AppUpdateHost(
-              child: StudyCloseGuard(
-                study: context.read<StudyController>(),
-                child: WorkspaceRecoveryHost<StudyWorkspaceSnapshot>(
-                  id: 'study',
-                  workspaceName: AppLocalizations.of(
-                    context,
-                  ).studyWorkspaceName,
-                  title: (snapshot) => snapshot.name,
-                  path: (snapshot) => snapshot.path,
-                  recovery: context
-                      .read<
-                        WorkspaceRecoveryController<StudyWorkspaceSnapshot>
-                      >(),
-                  onRestored: () =>
-                      context.read<AppState>().setMode(AppMode.study),
-                  child: WorkspaceRecoveryHost<PgnWorkspaceSnapshot>(
-                    id: 'pgn',
+              child: StudyImportCloseGuard(
+                importer: context.read<StudyImportController>(),
+                chooseCopyDestination: (context) => chooseStudyCopyDestination(
+                  context,
+                  context.read<StudyController>(),
+                ),
+                child: StudyCloseGuard(
+                  study: context.read<StudyController>(),
+                  child: WorkspaceRecoveryHost<StudyWorkspaceSnapshot>(
+                    id: 'study',
                     workspaceName: AppLocalizations.of(
                       context,
-                    ).pgnWorkspaceName,
-                    title: (snapshot) => snapshot.path.isEmpty
-                        ? AppLocalizations.of(context).untitledPgnWorkspace
-                        : p.basename(snapshot.path),
+                    ).studyWorkspaceName,
+                    title: (snapshot) => snapshot.name,
                     path: (snapshot) => snapshot.path,
-                    recovery: context.read<PgnViewerLifetime>().recovery,
+                    recovery: context
+                        .read<
+                          WorkspaceRecoveryController<StudyWorkspaceSnapshot>
+                        >(),
                     onRestored: () =>
-                        context.read<AppState>().setMode(AppMode.pgnViewer),
-                    child: PgnViewerCloseHost(
-                      lifetime: context.read<PgnViewerLifetime>(),
-                      child: const MainScreen(),
+                        context.read<AppState>().setMode(AppMode.study),
+                    child: WorkspaceRecoveryHost<PgnWorkspaceSnapshot>(
+                      id: 'pgn',
+                      workspaceName: AppLocalizations.of(
+                        context,
+                      ).pgnWorkspaceName,
+                      title: (snapshot) => snapshot.path.isEmpty
+                          ? AppLocalizations.of(context).untitledPgnWorkspace
+                          : p.basename(snapshot.path),
+                      path: (snapshot) => snapshot.path,
+                      recovery: context.read<PgnViewerLifetime>().recovery,
+                      onRestored: () =>
+                          context.read<AppState>().setMode(AppMode.pgnViewer),
+                      child: PgnViewerCloseHost(
+                        lifetime: context.read<PgnViewerLifetime>(),
+                        child: BuilderWorkspaceHost(
+                          lifetime: context.read<BuilderLifetime>(),
+                          onRestored: () => context.read<AppState>().setMode(
+                            AppMode.repertoire,
+                          ),
+                          child: const MainScreen(),
+                        ),
+                      ),
                     ),
                   ),
                 ),

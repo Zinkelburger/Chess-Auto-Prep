@@ -1,3 +1,11 @@
+import '../features/studies/repositories/study_import_repository.dart';
+import 'package:flutter/widgets.dart';
+import '../l10n/generated/app_localizations.dart';
+import '../features/studies/controllers/study_import_controller.dart';
+import '../infrastructure/studies/storage_study_import_repository.dart';
+import 'study_import_jobs.dart';
+import '../services/jobs/repertoire_job.dart';
+import '../services/lichess_auth_service.dart';
 import 'package:chess_auto_prep/infrastructure/studies/study_recovery_codec.dart';
 import 'package:chess_auto_prep/features/studies/models/study_workspace_snapshot.dart';
 import 'dart:io';
@@ -28,3 +36,36 @@ WorkspaceRecoveryStore<StudyWorkspaceSnapshot> createStudyRecoveryStore() =>
         p.join((await AppPaths.supportDirectory()).path, 'study-recovery-v1'),
       ),
     );
+
+/// Downloads belong to the application, not the Study route. A null platform
+/// selection preserves the Windows/macOS storage adapter until their native
+/// document commit protocols pass the platform adoption gates.
+StudyImportRepository createStudyImportRepository({
+  required PgnDocumentStore? documents,
+}) {
+  final storage = StorageFactory.instance;
+  final store = documents ?? LegacyPgnDocumentStore(storage);
+  return StorageStudyImportRepository(
+    library: LegacyStudyLibraryRepository(storage, store),
+    documents: store,
+    cacheDirectory: () => AppPaths.chessgamesCacheDirectory(create: true),
+    authHeaders: () => LichessAuthService.instance.getHeaders(),
+  );
+}
+
+StudyImportController createStudyImportController({
+  required PgnDocumentStore? documents,
+  required StudyImportRepository repository,
+}) => StudyImportController(
+  documents: documents ?? LegacyPgnDocumentStore(StorageFactory.instance),
+  repository: repository,
+  jobs: RepertoireStudyImportJobs(
+    JobManager.instance,
+    () => lookupAppLocalizations(
+      basicLocaleListResolution(
+        WidgetsBinding.instance.platformDispatcher.locales,
+        AppLocalizations.supportedLocales,
+      ),
+    ),
+  ),
+);

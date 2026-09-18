@@ -120,7 +120,7 @@ def violations(relative: str, source: str, *, include_retirements: bool = True) 
     executable = without_comments(source)
     if relative.startswith('lib/') and relative != 'lib/chess_core/pgn/pgn_parser.dart' and re.search(r'\bPgnGame\.parsePgn\s*\(', executable):
         errors.append(f'{relative}: single-game parsing must use chess_core/pgn/pgn_parser.dart')
-    if relative in ('lib/features/repertoires/controllers/repertoire_controller.dart', 'lib/features/repertoires/controllers/repertoire_writer.dart'):
+    if relative in ('lib/features/repertoires/controllers/builder_workspace_controller.dart', 'lib/features/repertoires/controllers/repertoire_writer.dart'):
         for uri in dependency_uris(without_comments(source)):
             if uri.startswith(('dart:io', 'dart:isolate')) or any(part in uri for part in ('infrastructure/', 'services/storage/', 'repertoire_file_editor.dart')):
                 errors.append(f'{relative}: Builder document access must use injected contracts: {uri}')

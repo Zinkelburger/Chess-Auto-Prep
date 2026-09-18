@@ -2710,3 +2710,106 @@ permissions and using Refresh removed the error and revealed the formerly
 inaccessible source in the same dialog. The preview used the disposable driver
 profile and was stopped before final checks. Analyze/lint pass with 63 existing
 infos, no warnings/errors; 44 architecture checks pass with unchanged debt.
+
+### Builder workspace retirement and independent review — 2026-09-18
+
+The Builder branch at `a7352bb2` deletes the 284-line `RepertoireController`
+facade and moves its production callers to the existing document, board and
+writer owners or the app-owned workspace. `BuilderLifetime` owns durable draft
+recovery before the route mounts. Widget autosave timers are removed; document
+saves admit one active write and the latest pending content per line, preserving
+ordering barriers around document commands. A recovered source needs native
+revision, whole-source text and line identity evidence before autosave can
+reattach. Missing/replaced sources remain editable detached drafts.
+
+Independent review reproduced and repaired three races before integration:
+source autosave could remove a draft still required by an unresolved copy;
+selecting a retained outline row bypassed the native reattachment check; and a
+late chapter load could replace a recovered scratch draft. Repairs reuse the
+existing draft invariant, shared attachment validation and intent invalidation.
+Copy/open/initial-folder selection now use the injected catalog's chapter
+listing; direct `StorageFactory` access is removed from the Builder screen and
+parts. A listing failure retains the draft, and retry performs the actual append.
+
+Branch evidence: 327 broad focused tests before the final scratch-intent fix,
+63 final recovery/load tests, three Linux native restart cases, and 44 final
+catalog/localization/screen tests pass. Analyze/lint pass with 64 informational
+messages and no warnings/errors. The parent reviewed the repairs and combined
+the app-owned close/recovery hosts with the Study and Viewer hosts. The
+[restored Builder](images/renewal-builder-restored.png) and
+[restart recovery](images/renewal-builder-restart-recovery.png) use disposable
+profiles; native replacement-to-outline-to-edit coverage verifies detachment.
+
+This completes the named facade retirement and recovery responsibility, not the
+whole Builder feature or its maintainability gate. Against `29fbb4b0`, the branch
+adds 1,828 and deletes 852 handwritten production Dart lines: **net +976**, with
+144 generated localization lines counted separately. Remaining legacy chapter
+creation, UI coordination and theme work are not certified by these checks.
+
+### Study import/publication review repair — 2026-09-18
+
+Independent review of `3f3521bb` found that the app-owned collection importer
+had retained native publication outcomes, but completed Lichess downloads still
+used a duplicate editor create path without recovery. Scoped Lichess cancellation
+also abandoned its caller while the old retry timer continued. The repair at
+`92b799ee` gives completed Lichess downloads, collection downloads and Builder
+study exports one admitted publication command and removes
+`StudyController.createStudyFromPgn` with both consumers. The existing
+`DocumentSaveSession` retains uncertain bytes/path; the editor remains the owner
+of append and explicit document adoption. No new owner/interface files were added.
+
+Rejected URL submissions remain in their existing dialog. Retry reuses the
+resolved payload with the current append/delay options. Failed append keeps its
+dirty chapters in the same editor instead of inviting a duplicate append;
+unexpected unconsumed failures keep the downloaded payload. Superseded adoption
+reports the actual publication result, never the unrelated current study title.
+The URL dialog receives its repository directly from composition. Its transport
+uses the injected HTTP client and cancels Lichess backoff/retry timers on close.
+
+Validation: 234 focused Study/import/storage/UI and shared Explorer tests pass;
+two Linux native tests pass (exclusive collection publication and Study native
+conflict/reload/copy). Analyze/lint pass with 63 pre-existing informational
+messages and no errors/warnings; all 43 architecture checks pass and exact
+boundary debt falls from 1459 to 1457 for the complete Study branch. New coverage
+includes uncertainty review, failed append retention, stale adoption, admission
+retry without refetch, changed append selection, exact headerless PGN bytes,
+Lichess cancellation during a 429 backoff, and 480×640 at 200% text. A real
+headless app was inspected at 1280×720 and stopped after capturing the
+[URL import dialog](images/renewal-study-url-import.png). No live website request
+or user data was required. These checks do not certify Windows/macOS native
+publication or the whole Study theme.
+
+Maintainability remains **Partial**. Compared with main `29fbb4b0`, the complete
+branch adds 941 handwritten production Dart lines, including localization
+helpers and excluding generated accessors/ARB; Study screen grows
+926→1049, URL dialog 434→479 and Builder screen 1315→1345. The review repair alone
+adds 155 handwritten production Dart lines over `3f3521bb`. Retirement and ownership improved:
+one publication authority replaces the duplicate create path and all old
+`services/study_import/` files are gone. This is a safety/capability closure,
+not evidence of an overall code-size or consumer-complexity reduction. The
+planned consumer simplification and full Study design-system cutover remain open.
+
+### Combined safety/recovery integration verification — 2026-09-18
+
+The parent reviewed the repair diffs and reconciled Builder/Study application
+lifetimes, the Builder publication consumer, localization and retirement guards
+with retained Generation recovery. At code snapshot `4b6c5f1a`, the full local
+suite passes **6,557 tests, 12 skips, zero failures**. After the final Study
+feedback formatting correction at `7c3c85e2`, the real Linux app passes all seven
+startup/navigation tests and the native cross-mode document-close test. The
+headless runner uses disposable data. No Windows/macOS or release gate is claimed.
+Final analyze/lint passes with 64 informational messages, zero errors/warnings,
+44 architecture regression checks and 1,457 remaining exact debt entries.
+
+The native command initially expired waiting for the busy checkout; its process
+exited before one retry after the full suite completed. Environment diagnosis
+also exposed a false driver-wiring failure: `grep -q` closed a pipe early under
+`pipefail` although the committed installer existed. Draining the producer's
+output fixes that check, and `doctor --quiet` passes. This tooling repair is not
+credited toward either production-code reduction trial.
+
+Plan/component links to the removed Builder facade were corrected. The three
+updated documentation files contain 165 resolving local links/anchors. These
+combined checks supplement the branch-specific native/failure evidence above;
+they do not turn safety additions into a maintainability pass. Provider and
+Viewer trials are assessed separately against their own complete scopes.

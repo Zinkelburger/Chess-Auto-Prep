@@ -13,12 +13,45 @@ class DocumentRepertoireRepository implements RepertoireDocumentRepository {
   final PgnDocumentStore documents;
 
   @override
-  Future<({bool exists, String? pgn})> read(String path) async {
-    return switch (await documents.open(path)) {
-      PgnOpened(:final snapshot) => (exists: true, pgn: snapshot.content),
-      PgnMissing() => (exists: false, pgn: null),
-      PgnReadFailed(:final error) => throw error,
-    };
+  Future<PgnOpenResult> read(String path) => documents.open(path);
+
+  @override
+  Future<PgnWriteResult> appendPgn(String path, String capturedPgn) async {
+    if (capturedPgn.trim().isEmpty) {
+      return const PgnWriteFailed(
+        FormatException('An appended draft is empty'),
+      );
+    }
+    final PgnSnapshot before;
+    try {
+      before = await _openRequired(path);
+    } catch (error) {
+      return PgnWriteFailed(error);
+    }
+    // Preserve the original text and the captured annotation/header payload.
+    // This is append intent, not a whole-document replacement from a stale UI.
+    final updated = '${before.content}\n\n$capturedPgn\n';
+    try {
+      final result = await documents.save(before, updated);
+      if (result is PgnSaved &&
+          (result.before?.revision != before.revision ||
+              result.before?.content != before.content ||
+              result.after.path != before.path ||
+              result.after.revision.documentId != before.revision.documentId ||
+              result.after.content != updated)) {
+        return PgnWriteUncertain(
+          error: StateError('Invalid append acknowledgement'),
+          before: before,
+          observed: result.after,
+          recoveryPath: result.recoveryPath,
+        );
+      }
+      // Keep uncertainty and installation evidence intact for the workspace.
+      // Decoded-text equality cannot authorize clearing or repeating a draft.
+      return result;
+    } catch (error) {
+      return PgnWriteUncertain(error: error, before: before, observed: null);
+    }
   }
 
   Future<PgnSnapshot> _openRequired(String path) async {
@@ -185,8 +218,22 @@ class DocumentRepertoireRepository implements RepertoireDocumentRepository {
     // Return the exact game a subsequent read will observe, including headers
     // retained by the merge; future saves advance only from this receipt.
     final savedGame = splitRepertoireDocument(updated).games[index];
-    _requireSaved(path, await documents.save(before, updated));
-    return (documentPgn: updated, linePgn: savedGame, lineIndex: index);
+    final snapshot = _requireSaved(
+      path,
+      await documents.save(before, updated),
+      expected: before,
+    );
+    if (snapshot.path != path ||
+        snapshot.content != updated ||
+        snapshot.revision.documentId != before.revision.documentId) {
+      throw StateError('Invalid line save acknowledgement');
+    }
+    return (
+      documentPgn: updated,
+      snapshot: snapshot,
+      linePgn: savedGame,
+      lineIndex: index,
+    );
   }
 
   @override
