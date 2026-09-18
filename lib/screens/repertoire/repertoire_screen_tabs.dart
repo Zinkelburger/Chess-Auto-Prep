@@ -360,21 +360,18 @@ mixin _RepertoireTabContent
   }
 
   Widget _buildTrapsContent() {
-    return TrapsTabContent(
+    return TrapsBrowser(
       traps: _trapSession.traps,
-      trapIndex: _trapSession.index,
+      metrics: _trapSession.index?.metrics,
       currentMoveSequence: _controller.board.currentMoveSequence,
       repertoireLineMoves: _controller.document.repertoireLines
           .map((l) => l.moves)
           .toList(),
       boardPreview: _boardPreview,
-      hasRepertoire: _repertoireFilePath != null,
       onTrapSelected: _showTrapLine,
       onTrapMoveSelected: (trap, ply) => _showTrapLine(trap, ply: ply),
       onStartTour: ({TrapLineInfo? startTrap}) =>
           _trapSession.openTour(startTrap: startTrap),
-      onDiscoverTraps: _discoverTrapsFromRepertoire,
-      onOpenGeneration: _openGenerateTab,
     );
   }
 

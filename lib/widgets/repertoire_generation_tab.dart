@@ -71,10 +71,10 @@ class RepertoireGenerationTab extends StatefulWidget {
 
   @override
   State<RepertoireGenerationTab> createState() =>
-      RepertoireGenerationTabState();
+      _RepertoireGenerationTabState();
 }
 
-class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
+class _RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   /// Ranking of the finished build's lines, rebuilt whenever the tree
   /// changes. Null until there is a completed tree to slice.
   RepertoireSlicer? _slicer;
@@ -125,58 +125,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     if (oldPath != newPath) {
       _savedPartialTree = null;
       unawaited(_checkForPartialTree());
-    }
-  }
-
-  // ── DB Explorer seeding ──────────────────────────────────────────────
-
-  /// Pre-configure DB Explorer mode with the given PGN file paths and
-  /// minimum game count.  Called by [RepertoireScreen] when the user
-  /// triggers "Generate repertoire from games" elsewhere in the app.
-  ///
-  /// Retries across frames while the config form mounts, and only
-  /// auto-starts after the seed has actually been applied — a missed seed
-  /// must never launch a build with a stale configuration.
-  void seedDbExplorer({
-    required List<String> pgnPaths,
-    int minGames = 1,
-    bool autoStart = false,
-  }) {
-    _seedWhenFormReady(
-      pgnPaths: pgnPaths,
-      minGames: minGames,
-      autoStart: autoStart,
-      triesLeft: 5,
-    );
-  }
-
-  void _seedWhenFormReady({
-    required List<String> pgnPaths,
-    required int minGames,
-    required bool autoStart,
-    required int triesLeft,
-  }) {
-    if (!mounted) return;
-    final form = _configFormKey.currentState;
-    if (form == null) {
-      if (triesLeft <= 0) return;
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _seedWhenFormReady(
-          pgnPaths: pgnPaths,
-          minGames: minGames,
-          autoStart: autoStart,
-          triesLeft: triesLeft - 1,
-        ),
-      );
-      return;
-    }
-    form.seedDbExplorer(pgnPaths: pgnPaths, minGames: minGames);
-    if (autoStart) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && !widget.generationController.isGenerating) {
-          unawaited(_startTreeBuild());
-        }
-      });
     }
   }
 

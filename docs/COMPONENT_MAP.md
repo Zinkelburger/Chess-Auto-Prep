@@ -1169,7 +1169,7 @@ RepertoireScreen (composition root — wires controllers to widgets)
   ├─ Compact (<960px):
   │     Column: Board (flex 4) | ToolsColumn (flex 5): PGN | Chapters | Database | Engine
   │
-  ├─ Inline config (in Jobs tab): Actions ▾ → Generate from here… opens Database → Engine evals; outline chapter menu → RepertoireGenerationTab;
+  ├─ Actions ▾ → Generate from here… opens Database → Engine evals; its build action and the outline chapter menu open BuildConfigScreen → RepertoireGenerationTab;
   │     Audit button / chapter menu → AuditConfigPanel
   ├─ RepertoireStatusBar (clickable badges → toggle bottom pane tabs)
   └─ optional TrapWalkthrough overlay
@@ -1212,7 +1212,7 @@ The quiz uses `services/eco_trie.dart` to identify opening forks and `services/p
 
 **Findings tab UX:** Category filter chips (Blunders/Inaccuracies/Missing/Weak/Dead Ends) with counts — multi-select toggles. Findings are sorted by reach probability (cumulative likelihood of the line occurring). The visible count is capped (default 20) and user-configurable via an inline text field in the status row; as findings are dismissed, lower-probability ones surface automatically. Each finding tile shows its reach probability right-aligned (e.g. "12.3%"). When capped, the status row reads "Top [N] of M · X% – Y% reach". Bulk dismiss via right-click context menu: dismiss similar, dismiss at depth, dismiss all of type. Keyboard: ↓/↑ to cycle findings (board navigates within full repertoire tree), dismiss through the row menu — navigation is routed through `RepertoireShortcuts` at the screen level (active when the Findings tab is open in the bottom pane), delegating to `AuditFindingsPanelState.selectNext()` / `selectPrevious()` / `dismissSelected()` via `GlobalKey`; ↑/↓ also work when the findings panel has focus. Selected finding is highlighted. Timestamp shows when saved results were generated.
 
-**Line metrics view (outline column):** The old `RepertoireLinesBrowser` (search/filter/sort, coverage/ease/coherence columns, gap buttons) plus the Lines/Traps segmented toggle, reached from the outline header's metrics button; "Back to chapters" returns to the outline. The Traps view shows `TrapsBrowser` (default sort: Eval Drop, also Most Common/Trap%/Surplus) with mini board preview, per-reply stats with classification badges, and expandable detail cards. `BoardPreviewController` is threaded through; a `FloatingBoardPreview` overlay is mounted in the view's `Stack`.
+**Line metrics view (outline column):** The old `RepertoireLinesBrowser` (search/filter/sort, coverage/ease/coherence columns, gap buttons) plus the Lines/Traps segmented toggle, reached from the outline header's metrics button; "Back to chapters" returns to the outline. The screen composes `TrapsBrowser` directly when the existing trap session has traps (default sort: Eval Drop, also Most Common/Trap%/Surplus) with mini board preview, per-reply stats with classification badges, and expandable detail cards. `BoardPreviewController` is threaded through; a `FloatingBoardPreview` overlay is mounted in the view's `Stack`.
 
 **Database tab:** The Repertoire source shows `OpeningTreeWidget`, an interactive opening tree explorer built from the repertoire's PGN lines via the same `OpeningTreeBuilder` as the PGN viewer (Actions → Tree). Course-style `*` games fold RAVs in; frequency shows as **paths** (including variations) when there is no W/D/L. The cursor is FEN-keyed: a different move order that reaches a known position still shows that position's continuations, and a position the PGN never reached still lists legal moves that transpose into book (marked `≈`). Navigates with back/forward and syncs with the board via `RepertoireController.userSelectedTreeMove` (plays from the board cursor so the user's move order is kept). When no opening tree is available (empty repertoire), shows an empty-state message.
 
@@ -1324,7 +1324,7 @@ stored as links (plain `zip -r` packed Stockfish/Maia/Flutter three times).
 GenerationSessionController (owns TreeBuildService + CoherenceService)
   ← RepertoireGenerationTab reports lifecycle (markGenerating, onTreeBuilt, onTreeReset)
   ← Screen/JobsPanel call pauseBuild/resumeBuild/cancelBuild/finishNow directly
-  ← Config shown inline in Jobs tab (no dialog to pop); controller tracks progress stats
+  ← BuildConfigScreen hosts manual configuration; it closes when a run starts.
 
 RepertoireGenerationTab (config UI + build orchestration)
   → controller.cancelBuild() → drain owned partial staging before cleanup
@@ -1357,6 +1357,8 @@ RepertoireGenerationTab (config UI + build orchestration)
 Everything else is in the **Advanced** dialog (`AdvancedSettingsDialog`), ten focused sections in build order: Opponent model · Move choice · Search tuning · Master games · ChessDB book · Verification · Coverage & line order · Chapters · Explanatory variations · PGN source filters. Both layers edit the same controllers, so they cannot disagree.
 
 A section whose knobs cannot apply to the current build source renders one sentence saying why instead of a card of greyed-out controls (`AdvancedSection.unavailable`); it keeps its table-of-contents entry so it stays findable. ChessDB book, Verification and PGN source filters use this. The main form's `PgnSourcesPanel` is simply absent unless the source is My PGN files — the attached files live in `PgnSourcesController`, so they survive a round trip through another build source.
+
+The Builder opens configuration explicitly. The form keeps its existing initial-config/last-config precedence, validation and presets; opening it does not start a run. There is no external PGN-seeding handoff or frame-polling seed API. The obsolete Viewer-generation handoff had no producer, and the former empty-traps discovery branch could not render inside the nonempty-traps view. Manual Build and Cut behavior is unchanged; this retirement does not close the separate stale-source admission risks in those commands.
 
 **Where the form's sub-editor state lives.** The three sub-editors are views over controllers `GenerationConfigFormState` owns — `EvalSourcesController`, `SkeletonPlanController`, `PgnSourcesController` — not `GlobalKey`-addressed widget state. Each of their widgets sits behind an expander or a build-source switch, so none is guaranteed to be mounted when the form seeds it (`_applyInitialConfig`) or reads it back (`toConfig`); owning the state lets the widgets be built conditionally and removes the post-frame seeding hop. `EvalSourcesController` pairs `applyConfig` with `applyTo`, the two halves of the config round trip, in one file.
 
@@ -2072,30 +2074,6 @@ Guess one side's moves of the loaded game; the game unfolds as you get them righ
 
 Key files: `lib/features/documents/models/solitaire_script.dart` (`SolitaireStep`, `SolitaireScript`, `buildSolitaireScript`), `lib/features/documents/models/solitaire_reveal.dart`, `lib/features/documents/controllers/solitaire_controller.dart` (cursor over the script, hints, countdown, score, `SolitaireGuess`), `lib/features/documents/controllers/viewer_solitaire_session.dart` (`SolitaireSetup`, board glue, guess routing, note injection), `lib/features/documents/repositories/pgn_viewer_handle.dart` (the widget surface core may touch), `lib/features/documents/controllers/viewer_reading_controller.dart` (selected-game lifecycle, `onViewerGameLoaded`), `lib/widgets/pgn/solitaire_status_widgets.dart` (setup strip, status bar, completion banner), `lib/widgets/game_nav_bar.dart` (Hint/Reveal chips), `lib/screens/pgn_viewer_screen.dart` (confirm-on-leave, `H`/`R`/Enter/Esc bindings, analyse action), `lib/widgets/pgn/pgn_movetext_view.dart` + `pgn_movetext_variations.dart` (reveal-aware rendering), `lib/models/solitaire_trophy.dart`, `lib/services/solitaire_trophy_service.dart`, `lib/services/solitaire_trophy_detector.dart`, `lib/widgets/solitaire_trophy_cabinet.dart`.
 
-### Generate repertoire from PGN viewer games
-
-Toolbar ⋮ menu → "Generate repertoire from games":
-
-```
-PgnViewerScreen._generateRepertoireFromGames
-  → dialog: user enters repertoire name + color (loop on rename)
-  → name sanitised (filesystem-unsafe chars stripped; apostrophes preserved)
-  → if name already exists → _showDuplicateNameDialog:
-      • "Use Existing & Re-seed" → overwrites {name}_raw_games.pgn,
-        opens existing repertoire in builder (no new .pgn created)
-      • "Pick Different Name" → loops back to name dialog
-      • "Cancel" → aborts
-  → (new name) saves filteredGames PGN to {name}_raw_games.pgn in repertoires/
-  → creates empty {name}.pgn repertoire (header only)
-  → AppState.switchToBuilderWithGeneration(repertoirePath, pgnPaths)
-  → RepertoireScreen._onAppStateChanged consumes pendingGenerationPgnPaths
-    (initState skips selection-screen push when pending data exists)
-  → opens generate mode + waits for repertoire loading to finish via
-    controller listener before seeding RepertoireGenerationTabState.seedDbExplorer
-    (pgnPaths, minGames: 1, autoStart: true)
-  → build starts automatically in DB Explorer mode
-```
-
 ### PGN import UX (multi-source panel)
 
 The `PgnSourcesPanel` extends beyond the single-import `pgn_import_dialog.dart`
@@ -2287,7 +2265,7 @@ outside this responsibility.
 
 | File | Purpose | Public API / state |
 |------|---------|-------------------|
-| `app_state.dart` | Global app mode, usernames, board position, builder↔trainer↔study pending handoffs (`pendingTrainStudyPath` = "Train" in Study mode, `pendingStudyPath` = "Edit study" in the Trainer); **tactics auto-fetch preferences** (`tacticsAutoFetch`, `lichessLastFetch`, `chesscomLastFetch`) persisted via SharedPreferences; `AppMode.usesInteractiveEngine` names which IndexedStack children keep an engine pane | `setMode`, `switchToBuilder`/`switchToTrainer`/`switchToStudyTraining`/`switchToStudyEdit`/`switchToBuilderWithGeneration`, `setRepertoireGenerating`, `setTacticsAutoFetch`, `setLichessLastFetch`/`setChesscomLastFetch`, `notifyListeners` |
+| `app_state.dart` | Global app mode, usernames, board position, builder↔trainer↔study pending handoffs (`pendingTrainStudyPath` = "Train" in Study mode, `pendingStudyPath` = "Edit study" in the Trainer); **tactics auto-fetch preferences** (`tacticsAutoFetch`, `lichessLastFetch`, `chesscomLastFetch`) persisted via SharedPreferences; `AppMode.usesInteractiveEngine` names which IndexedStack children keep an engine pane | `setMode`, `switchToBuilder`/`switchToTrainer`/`switchToStudyTraining`/`switchToStudyEdit`, `setRepertoireGenerating`, `setTacticsAutoFetch`, `setLichessLastFetch`/`setChesscomLastFetch`, `notifyListeners` |
 | `generation_session_controller.dart` | **Generation session** — owns `TreeBuildService` + `CoherenceService`; pipeline, pause/resume/cancel/finishNow and probes; injected publication owner stages and commits source output, then selects the matching artifact generation. Captures artifact runs before builds/probes, drains partial staging and closes run capabilities. Disposal releases waits and drains owned commands. | `startBuild`, `pauseBuild`, `resumeBuild`, `cancelBuild`, `discardBuild`, `finishNow`, `onTreeBuilt`, `clearTree`, `loadSavedTreeFor`, `skipMasterGamesDownload`, `progress`, `snapshots`, `current` |
 | `expectimax_database.dart` | In-memory `GeneratedRepertoire` and probe trees; loads through injected `readSaved`, lands probes and records engine PVs. Loads replace prior analysis; full builds retain probes and supersede pending loads. Main-tree mutations refresh derived artifacts; probe-only changes reuse them. The session owns notifications and repository publication. | `publish`, `clear`, `dropTree`, `load` → `ExpectimaxLoadOutcome`, `addBoundedProbe`, `landProbe`, `recordEnginePv`; `enginePvProbe` |
 | `master_games_wait.dart` | `MasterGamesWait` — parks a run on the master-games download (start or join a sync, mirror its status, release on finish / "start now without them" / cancel); `MasterGamesSync` is the service slice it needs | `park`, `stopWaiting`, `decline`, `isWaiting`, `declined` |
@@ -2565,7 +2543,7 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `repertoire_training_screen.dart` | Repertoire and study trainer: a stable board beside the source picker, chapter/line browser or current lesson; Learn and Review respect the selected chapter and session size. Read opens the canonical PGN Viewer. The settings gear follows the global mode switcher; Skip is visible, and Line actions include persistent exclusion. The browser restores excluded lines without discarding review history. Keyboard: Space acknowledges the next learning step, arrows skip lines, `/` focuses move input, Escape returns to the browser. |
 | `analysis_screen.dart` | Game weakness / position analysis |
 | `study_screen.dart` | **Composition root** for Study mode — wires `StudyController` to `StudyBoardPane`, `StudySidePane`, `StudyPickerBar`, `StudyChapterSidebar`; keyboard, import/export, train/browse handoffs stay on the screen |
-| `pgn_viewer_screen.dart` | Standalone PGN + `InlineEngineBar`; surfaces `loadFile` errors via SnackBar and empty-state text; ⋮ menu with "Generate repertoire from games"; solitaire mode toggle + feedback overlay + progress bar; keyboard: arrows, Home/End, Enter, Space, Escape, Ctrl/Cmd+V paste, F11 fullscreen; caches `AppState` so dispose does not `context.read` |
+| `pgn_viewer_screen.dart` | Standalone PGN + `InlineEngineBar`; surfaces `loadFile` errors via SnackBar and empty-state text; solitaire mode toggle + feedback overlay + progress bar; keyboard: arrows, Home/End, Enter, Space, Escape, Ctrl/Cmd+V paste, F11 fullscreen; caches `AppState` so dispose does not `context.read` |
 | `player_selection_screen.dart` | Embedded player pick for analysis, with a bounded list and direct per-player actions: cached game-sets from chess.com / lichess downloads, PGN-file imports, and **opponent lists** (`OpponentListImportDialog` → one merged player per opponent, sourced from every account listed, tagged with the event as `group`; batch download with per-person progress, skip-existing, failures reported not swallowed); search matches name, platform and group |
 | `settings_screen.dart` | Flat settings sections with keyword search, direct preferences, embedded databases and contextual forms. See the complete Settings control map above. |
 
@@ -2781,7 +2759,7 @@ and does not change active editor, document or save ownership.
 | `features/repertoire/widgets/repertoire_board_pane.dart` | Board + preview overlay + generation dim |
 | `features/repertoire/widgets/repertoire_shortcuts.dart` | `RepertoireShortcuts` — `CallbackShortcuts` (Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+V paste FEN) + `Focus.onKeyEvent` for arrow/Escape bindings; suppresses shortcuts while a text field is focused (`isTextInputFocused()` in `lib/utils/keyboard_shortcut_utils.dart`) |
 | `features/repertoire/widgets/repertoire_toolbar.dart` | App bar: repertoire/chapter breadcrumb title; Actions → view picker → gear. |
-| `generation/generation_config_form.dart` | `GenerationConfigForm` — settings form (controllers, build mode, advanced thresholds, eval sources); prominent **Engine resources** section (threads, hash MB, logical core count) when Stockfish is used; `toConfig({startFen, playAsWhite})`, `validateBeforeStart()`, `seedDbExplorer()`, optional `initialConfig`; DB Explorer mode shows `PgnSourcesPanel` + tuning fields; owns `EvalSourcesController` / `SkeletonPlanController` / `PgnSourcesController`, which hold the three sub-editors' state |
+| `generation/generation_config_form.dart` | `GenerationConfigForm` — settings form (controllers, build mode, advanced thresholds, eval sources); prominent **Engine resources** section (threads, hash MB, logical core count) when Stockfish is used; `toConfig({startFen, playAsWhite})`, `validateBeforeStart()`, optional `initialConfig`; DB Explorer mode shows `PgnSourcesPanel` + tuning fields; owns `EvalSourcesController` / `SkeletonPlanController` / `PgnSourcesController`, which hold the three sub-editors' state |
 | `generation/eval_sources_controller.dart` | `EvalSourcesController` — the eval lookup chain's settings (local ChessDB file, ChessDB API quota/concurrency, subtree skip, depth floor) plus today's API spend; `applyConfig` ↔ `applyTo` are the two halves of the config round trip |
 | `generation/skeleton_plan_controller.dart` | `SkeletonPlanController` + `kStructureVetoes` — the typed lines and active vetoes behind `SkeletonPlanCard`; `loadPlan` / `currentPlan(playAsWhite:)` |
 | `repertoire_generation_tab.dart` | Configuration UI; embeds `GenerationConfigForm` via `GlobalKey`; submits a `GenerationRequest` with captured job label, source/root and config plus the publication/adoption callback the controller awaits. `GenerationSessionController` owns run ordering and the pause/cancel partial-save context |

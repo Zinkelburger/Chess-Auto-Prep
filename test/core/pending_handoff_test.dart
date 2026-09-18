@@ -130,23 +130,6 @@ void main() {
       expect(handoff.repertoirePath, '/r.pgn');
       expect(handoff.lineId, 'L1');
       expect(handoff.moveSequence, ['e4', 'e5']);
-      expect(handoff.generationPgnPaths, isNull);
-    });
-
-    test('switchToBuilderWithGeneration carries the PGN paths and no line', () {
-      final state = AppState()
-        ..switchToBuilderWithGeneration(
-          repertoirePath: '/r.pgn',
-          pgnPaths: const ['/a.pgn', '/b.pgn'],
-        );
-      final handoff = state.takeHandoff<OpenBuilder>()!;
-      expect(handoff.generationPgnPaths, ['/a.pgn', '/b.pgn']);
-      expect(
-        handoff.lineId,
-        isNull,
-        reason: 'the old API had to null this field by hand',
-      );
-      expect(handoff.moveSequence, isNull);
     });
 
     test('switchToPgnViewer carries the optional slice FEN', () {
