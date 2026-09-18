@@ -126,7 +126,6 @@ void main() {
     VoidCallback? onStart,
     VoidCallback? onPause,
     VoidCallback? onOpeningReview,
-    VoidCallback? onMasterPractice,
     List<OpeningReviewEntry> repeated = const [],
     void Function(OpeningReviewEntry)? onFixEntry,
     int masterGameCount = 0,

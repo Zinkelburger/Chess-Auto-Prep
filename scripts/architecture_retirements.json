@@ -89,7 +89,10 @@
     "lib/features/traps/widgets/trap_move_indicator.dart",
     "lib/widgets/pgn/comment_prose_spans.dart",
     "lib/widgets/engine/engine_toggle_button.dart",
-    "lib/features/repertoire/services/chapter_store.dart"
+    "lib/features/repertoire/services/chapter_store.dart",
+    "lib/features/master_games/controllers/master_practice_controller.dart",
+    "lib/features/master_games/services/master_practice_review.dart",
+    "lib/features/master_games/widgets/master_practice_dialog.dart"
   ],
   "symbols": [
     "PgnBatchWriter",
@@ -191,6 +194,14 @@
     "onResumeGeneration",
     "onCancelGeneration",
     "onFinishNowGeneration",
-    "ChapterStore"
+    "ChapterStore",
+    "MasterPracticeController",
+    "MasterPracticeReport",
+    "MasterKeyGame",
+    "MasterPracticeEntry",
+    "MasterPracticeReview",
+    "MasterPracticeReviewer",
+    "MasterPracticeDialog",
+    "showMasterPracticeReview"
   ]
 }

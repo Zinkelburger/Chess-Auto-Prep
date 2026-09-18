@@ -2438,22 +2438,17 @@ Viewer with a game index, so the viewer's own Prev/Next then walks the match.
 | **widgets/tournament_list_pane.dart** | The history rail: every saved run, newest first, grouped by day, each row carrying its score; filter box appears past six runs |
 | **lib/widgets/crosstable_view.dart**, **lib/widgets/match_games_table.dart**, **widgets/tournament_detail_pane.dart** | Head-to-head score and W/D/L counts, optional rating statistics, game lengths in moves, and a persisted final-position thumbnail toggle. `services/tournament_game_positions.dart` replays PGN mainlines off the UI thread, including older saved matches |
 
-### `lib/features/master_games/`
+### Retired master-practice review
 
-Your own games against the local TWIC corpus. The database's `book` table
-answers "what did masters play from this position" for the first fifteen
-moves, so walking one of your games through it finds the first move masters
-never played — who left theory, where, what masters play there instead, and
-the strongest and most recent games that did. Branch points are grouped like
-the opening review, so the one you keep walking into rises to the top. Master
-games are opened in the PGN Viewer by writing them to an ordinary PGN
-collection, so playing through them is not reimplemented.
+The disconnected master-practice comparison dialog, controller and review
+algorithm/models are retired, along with their four exclusive tests/fixtures.
+No application, tool, driver, plugin or Widgetbook entrypoint reached this
+three-file subtree; the earlier claim that Home Openings launched it was stale.
+This removes 1,163 production lines without a replacement. It retires an unused
+feature rather than marking a migrated feature complete.
 
-| File | Purpose |
-|------|---------|
-| **services/master_practice_review.dart** | The walk: one report per game (branch position, first unseen move, who played it, the masters' alternatives, the last agreed book row), grouped into entries by position + move with the key games attached — the strongest game per master move and the latest game of the most popular one |
-| **controllers/master_practice_controller.dart** | Runs the review over the home column's window, holds the selection, and writes an entry's key games out as `master-practice.pgn` for the viewer |
-| **widgets/master_practice_dialog.dart** | The dialog: sections for *you left first*, *your opponents left first* and *stayed in master practice*, a detail pane with the branch position (played move and the masters' moves drawn on it), the moves table with counts and scores, the games to open, and your own games at that point. Opened from the Openings block on the home column |
+The live master-games database/service, opening explorer, Games opening review,
+and generation's master-book coverage, selection and improvement algorithms remain.
 
 ### `lib/features/holes/`
 
@@ -2843,8 +2838,6 @@ and does not change active editor, document or save ownership.
 | `test/features/coverage/coverage_result_test.dart` | `CoverageResult.findNextGap` / `findBiggestGap` gap ordering |
 | `test/features/traps/trap_index_service_test.dart` | FEN index, line traps |
 | `test/features/traps/trap_navigation_buttons_test.dart` | Trap jump UI |
-| `test/features/master_games/master_practice_review_test.dart` | Your games vs the master book: who left first, book depth, grouping by branch point, key games, cancellation |
-| `test/features/master_games/master_practice_dialog_test.dart` | The dialog against a real database: sections, the detail pane's moves and games, the hand-offs to the viewer, narrow-window layout |
 | `test/services/master_games/master_games_query_test.dart` | Browse filters, as clauses and against a real database |
 | `test/services/master_games/classical_counts_test.dart` | The book's classical-only split: import, the classical-only view, the rebuild in one go and in chunks, cancellation, completeness |
 | `test/services/explorer_game_opener_test.dart` | Explorer games into the collection: local and Lichess sources, the ply at the position, no duplicates |
