@@ -74,16 +74,6 @@ mixin _GenerationConfigIo
     _showSkeleton = !config.skeletonPlan.isEmpty;
   }
 
-  /// Pre-configure DB Explorer mode with the given PGN file paths and
-  /// minimum game count.
-  void seedDbExplorer({required List<String> pgnPaths, int minGames = 1}) {
-    setState(() {
-      _buildMode = BuildMode.dbExplorer;
-      _dbMinGamesCtrl.text = minGames.toString();
-    });
-    _pgnSources.seedFromPaths(pgnPaths);
-  }
-
   void setMaxPly(int maxPly) {
     _maxPlyCtrl.text = maxPly.toString();
   }

@@ -74,7 +74,6 @@
   "lib/features/traps/widgets/trap_summary_header.dart": "traps; renewal milestone 6",
   "lib/features/traps/widgets/trap_tour_bar.dart": "traps; renewal milestone 6",
   "lib/features/traps/widgets/traps_browser.dart": "traps; renewal milestone 6",
-  "lib/features/traps/widgets/traps_tab_content.dart": "traps; renewal milestone 6",
   "lib/features/updates/widgets/app_updates.dart": "updates; renewal milestone 6",
   "lib/models/board_annotation.dart": "models; renewal milestone 6",
   "lib/screens/analysis_screen.dart": "screens; renewal milestone 6",

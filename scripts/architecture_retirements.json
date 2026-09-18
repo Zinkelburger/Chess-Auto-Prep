@@ -97,7 +97,8 @@
     "lib/widgets/pgn/pgn_database_panel.dart",
     "lib/features/settings/controllers/settings_section_controller.dart",
     "lib/widgets/study/chapter_manager_dialog.dart",
-    "lib/theme/pgn_text_styles.dart"
+    "lib/theme/pgn_text_styles.dart",
+    "lib/features/traps/widgets/traps_tab_content.dart"
   ],
   "symbols": [
     "PgnBatchWriter",
@@ -216,6 +217,13 @@
     "indexPgnDatabase",
     "SettingsSectionController",
     "showChapterManagerDialog",
-    "_ChapterManagerDialog"
+    "_ChapterManagerDialog",
+    "switchToBuilderWithGeneration",
+    "generationPgnPaths",
+    "seedDbExplorer",
+    "RepertoireGenerationTabState",
+    "TrapsTabContent",
+    "_seedGenerationWhenReady",
+    "_seedGenerationAfterLoad"
   ]
 }

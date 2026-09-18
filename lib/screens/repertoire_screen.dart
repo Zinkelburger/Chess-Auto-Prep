@@ -75,7 +75,7 @@ import '../features/audit/widgets/audit_findings_panel.dart';
 import '../features/audit/widgets/ephemeral_finding_bar.dart';
 import '../features/traps/widgets/trap_navigation_buttons.dart';
 import '../features/traps/widgets/trap_tour_bar.dart';
-import '../features/traps/widgets/traps_tab_content.dart';
+import '../features/traps/widgets/traps_browser.dart';
 import '../widgets/engine/floating_board_preview.dart';
 import '../features/repertoire/controllers/repertoire_layout_prefs.dart';
 import '../features/repertoire/widgets/repertoire_workspace_panel.dart';
@@ -142,8 +142,6 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
         publication: context.read<GenerationPublicationFactory>()(),
         artifacts: context.read<GenerationArtifacts>(),
       );
-  final GlobalKey<RepertoireGenerationTabState> _generationTabKey =
-      GlobalKey<RepertoireGenerationTabState>();
   late final AuditSessionController _auditController = AuditSessionController(
     service: RepertoireAuditService(pool: context.read<StockfishPool>()),
     prepareEngine: () => context.read<EngineLifecycle>().enterGeneration(1),
@@ -301,7 +299,6 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
           startSignal: _generationController,
           hasStarted: () => _generationController.isGenerating,
           child: RepertoireGenerationTab(
-            key: _generationTabKey,
             cutOnly: cutOnly,
             initialConfig: initialConfig,
             fen: _controller.board.fen,
@@ -412,39 +409,6 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
     _configRouteOpen = false;
     if (!mounted) return;
     _reclaimFocus();
-  }
-
-  void _discoverTrapsFromRepertoire() {
-    final path = _repertoireFilePath;
-    if (path == null) return;
-    unawaited(_openLineBuildDialog());
-    _seedGenerationWhenReady(pgnPaths: [path]);
-  }
-
-  /// Seeds the DB-explorer source on the generation form once its route is on
-  /// screen. The form lives in a pushed route now, so its state is not
-  /// reachable in the same frame the push is requested — hence the retries,
-  /// the same shape [RepertoireGenerationTabState] already uses internally to
-  /// wait for its own form.
-  void _seedGenerationWhenReady({
-    required List<String> pgnPaths,
-    bool autoStart = false,
-    int triesLeft = 5,
-  }) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final tab = _generationTabKey.currentState;
-      if (tab == null) {
-        if (triesLeft <= 0) return;
-        _seedGenerationWhenReady(
-          pgnPaths: pgnPaths,
-          autoStart: autoStart,
-          triesLeft: triesLeft - 1,
-        );
-        return;
-      }
-      tab.seedDbExplorer(pgnPaths: pgnPaths, autoStart: autoStart);
-    });
   }
 
   void _openAuditDialog({bool forceConfig = false}) {
@@ -587,9 +551,6 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     if (handoff.moveSequence != null) {
       unawaited(_openMovesAfterLoad(handoff.moveSequence!));
     }
-    if (handoff.generationPgnPaths != null) {
-      unawaited(_seedGenerationAfterLoad(handoff.generationPgnPaths!));
-    }
   }
 
   /// Navigate the board to a SAN sequence once the repertoire is loaded
@@ -609,13 +570,6 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     if (line != null) {
       _controller.selectLine(line);
     }
-  }
-
-  Future<void> _seedGenerationAfterLoad(List<String> pgnPaths) async {
-    await _controller.document.awaitLoaded();
-    if (!mounted) return;
-    unawaited(_openLineBuildDialog());
-    _seedGenerationWhenReady(pgnPaths: pgnPaths, autoStart: true);
   }
 
   void _onTrapsChanged() {
