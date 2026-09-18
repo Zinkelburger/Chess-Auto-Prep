@@ -3646,3 +3646,42 @@ library changes are +2,265/−16,067 (**−13,802**), with generated localizatio
 +135 separately. Unused/dormant retirement accounts for 12,154 removed lines;
 it does not establish whole-workflow maintainability. Feature graduation remains
 zero and the renewal remains Partial.
+
+
+### Settings admission and notification consolidation — 2026-09-18
+
+`e6016121` against `a5b3a393` removes the private SettingsSectionController.
+Tracked callers show it was instantiated only by SectionSettingsOwner; its
+pure-Dart/stream interface had no independent consumer. The existing owner now
+contains that same serialized read/edit/retry state machine and directly notifies
+its existing listeners. Three typed public owners, immutable configurations,
+settings storage boundary and runtime/control APIs are unchanged. No new owner,
+result, callback bag, compatibility shim or dependency mechanism is introduced.
+
+The action path loses one forwarding object and the synchronous stream-to-notifier
+relay. Stream creation, subscription cancellation and duplicate disposed state
+are gone; SafeChangeNotifier owns disposal. The existing queue tail is installed
+before notifications, so listener-submitted edits remain serialized. Already
+admitted writes settle after disposal without notification; new writes reject.
+Failed draft reconciliation, independent-field updates and explicit retry retain
+their previous semantics. This is a responsibility consolidation, not a claim
+that the old relay had a confirmed correctness defect.
+
+The complete changed production scope is the owner/controller pair, **244→211
+lines (−33)**. Including unchanged EngineSettings, BulkAnalysisSettings,
+BoardDisplaySettings, SettingsSectionStatus and RuntimeSettings yields the
+seven-file ownership/status/composition scope **487→454**. No code was moved
+into another helper or consumer. Two new behavior tests cover disposal during
+two admitted writes and an edit submitted by a notification listener; both pass
+on the baseline, alongside its eight existing tests. Final **66 tests pass**
+across owner, typed settings, control panels, runtime, engine lifecycle/budget
+and Settings screen. Analyze/lint passes; final retirement/doc lint passes.
+Independent review approves the actual state machine and exact e6016121.
+No control layout or visible behavior changes, so no new preview is required.
+
+The retirement manifest forbids the old controller path and symbol. Final
+library Dart totals **225,782**, +6,825 (+3.1%) against September 16 and −11,209
+against the growth-review snapshot. Handwritten changes against fa7f309e are
+**−13,835**; generated localization remains +135. Unused/dormant retirement stays
+12,154 lines: this additional 33-line reduction belongs to active settings
+ownership. Whole renewal and feature graduation remain Partial/unproven.

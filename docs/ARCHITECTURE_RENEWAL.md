@@ -254,17 +254,17 @@ merges (57 on the first-parent history). Commit count is activity, not completio
 At that snapshot, six enforced and 17 unfinished features included zero complete
 features. The current inventory above separately records later deletions.
 
-The same measurement at reviewed integration checkpoint `ad281842` is:
+The same measurement at reviewed settings checkpoint `e6016121` is:
 
 | Tracked scope | September 16 | Current checkpoint | Change from September 16 |
 |---|---:|---:|---:|
-| All library Dart, including generated code | 218,957 | 225,815 | +6,858 (+3.1%) |
+| All library Dart, including generated code | 218,957 | 225,782 | +6,825 (+3.1%) |
 | Viewer screen | 1,909 | 1,867 | −42 |
 | Builder screen | 1,191 | 1,468 | +277 |
 | Study screen | 880 | 1,050 | +170 |
 | Generation session controller | 1,321 | 1,447 | +126 |
 
-All-library code is down 11,176 lines from the reviewed `a6238ff5` snapshot,
+All-library code is down 11,209 lines from the reviewed `a6238ff5` snapshot,
 with Viewer now 42 lines below September 16; the other three consumers remain
 larger. Legacy `services/` still holds 42,560 lines and `widgets/` 49,667. Riverpod's production
 imports and package dependency are now deleted; the current inventory is six
@@ -272,7 +272,7 @@ enforced and 14 unfinished feature directories, with none complete. The three
 removed feature directories contained unused code, not graduated workflows.
 
 Against the separate simplification baseline `fa7f309e`, the completed batch
-removes 13,802 handwritten library lines, with generated localization +135
+removes 13,835 handwritten library lines, with generated localization +135
 reported separately. Chapter read/create and deletion Widgetbook changes add 22 lines, outside
 that library total. Of the removals, 12,154 lines come from unused analysis,
 eval-tree and other presentation/custom-tab retirement. These unrelated deletions cannot
@@ -439,6 +439,7 @@ product owner to choose implementation details.
 | Reviewed safety/recovery cutovers | Builder durable workspace, native recovery identity and bounded autosave; Study app-owned import/publication; Generation retained-output recovery | Named old owners/callers removed and independent repairs reviewed. These are safety/retirement results with production growth; keep their evidence separate from the two required net-reduction trials. |
 | Composition trial passed (`e1286ced`) | Constructors plus Provider throughout catalog/settings/app presentation | Riverpod owners/bindings/dependency and generic stored-game/display scopes deleted; −48 handwritten production lines against `fa7f309e`, independently reviewed with lifecycle/settings parity. |
 | Bounded Viewer trial passed (`e1286ced`); wider consumer work remains open | Shared leave approval and existing collection/reader owners replace duplicate prompts and five suppliers | −32 handwritten production lines against `4ebb3a36`; native approval never discards early and screen discard validates click-time revision. Both trials together pass 6,569 tests with 12 skips and no failures. This permits the next bounded deletion, not whole-Viewer graduation. |
+| Settings admission/notification consolidated (`e6016121`) | Existing section owner directly serializes read/edit/retry and publishes state for the three typed settings owners | Deletes the private SettingsSectionController, synchronous stream relay, subscription and duplicate disposal state. Whole declared owner/status/composition scope 487→454 lines (−33), no new owner/API and no consumer changes. Independent review plus 66 owner/runtime/control tests pass, including admitted writes after disposal and listener-submitted edits. This completes the redundant settings relay’s retirement, not whole Settings graduation. |
 | Document contracts reviewed; retain justified boundaries | The 17 current contracts cover publication/recovery, worker cancellation, storage, engines, readers and native windows | Read-only audit found no substantial redundant contract: `DocumentSaveActions` has three production implementations; decoder/filter substitutes exercise real failure and stale-result ordering. A trivial path-helper forwarder is routine cleanup, not a reason to create another architectural workstream. |
 | Builder editor and orphan layout retired (`1c0514f2`, `2ead1e6c`) | Builder directly composes its existing editor; unused layout implementations are deleted | Nine files removed, net −1,887 production lines across both reviewed scopes. Existing clipboard, annotation, title, branch undo, editor identity and Viewer splitter retained. Independent review, focused/native checks and compact/wide screenshots pass. Whole Builder renewal remains Partial. |
 | Training completion consolidated (`e4468ea6`) | Existing session owns finish → persistence → tally → advance; results widget only renders and sends commands | Deleted widget scheduling, the 17-field forwarding constructor, rating wrapper and duplicate completion panel; complete six-file scope removes 146 production lines. Attempt identity, ordered captured writes, one invalidation path and reload ordering preserve completion through retry/source changes. Independent review, focused tests, Linux native persistence/reload and inspected screenshots pass. Whole Training remains Partial. |
