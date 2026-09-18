@@ -1516,7 +1516,7 @@ limits rather than promise that atomic writes alone eliminate every loss mode.
 Implementation evidence lives in [DATA_INTEGRITY.md](DATA_INTEGRITY.md). Starting
 code references: [storage operations](../lib/services/storage/io_storage_service.dart),
 [atomic writer](../lib/utils/atomic_file.dart),
-[repertoire controller](../lib/features/repertoires/controllers/repertoire_controller.dart),
+[Builder workspace](../lib/features/repertoires/controllers/builder_workspace_controller.dart),
 [undo writer](../lib/features/repertoires/controllers/repertoire_writer.dart),
 [chapter creation](../lib/features/repertoire/services/chapter_store.dart),
 [game store](../lib/services/game_store/game_store.dart),

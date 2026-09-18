@@ -2788,3 +2788,28 @@ one publication authority replaces the duplicate create path and all old
 `services/study_import/` files are gone. This is a safety/capability closure,
 not evidence of an overall code-size or consumer-complexity reduction. The
 planned consumer simplification and full Study design-system cutover remain open.
+
+### Combined safety/recovery integration verification — 2026-09-18
+
+The parent reviewed the repair diffs and reconciled Builder/Study application
+lifetimes, the Builder publication consumer, localization and retirement guards
+with retained Generation recovery. At code snapshot `4b6c5f1a`, the full local
+suite passes **6,557 tests, 12 skips, zero failures**. After the final Study
+feedback formatting correction at `7c3c85e2`, the real Linux app passes all seven
+startup/navigation tests and the native cross-mode document-close test. The
+headless runner uses disposable data. No Windows/macOS or release gate is claimed.
+Final analyze/lint passes with 64 informational messages, zero errors/warnings,
+44 architecture regression checks and 1,457 remaining exact debt entries.
+
+The native command initially expired waiting for the busy checkout; its process
+exited before one retry after the full suite completed. Environment diagnosis
+also exposed a false driver-wiring failure: `grep -q` closed a pipe early under
+`pipefail` although the committed installer existed. Draining the producer's
+output fixes that check, and `doctor --quiet` passes. This tooling repair is not
+credited toward either production-code reduction trial.
+
+Plan/component links to the removed Builder facade were corrected. The three
+updated documentation files contain 165 resolving local links/anchors. These
+combined checks supplement the branch-specific native/failure evidence above;
+they do not turn safety additions into a maintainability pass. Provider and
+Viewer trials are assessed separately against their own complete scopes.

@@ -1982,16 +1982,17 @@ Used by:
 | File | Responsibility |
 |------|----------------|
 | `controllers/repertoire_board_controller.dart` | Pure board, cursor, immutable projections, editing commands and adoption-bound draft undo receipts; no Flutter or I/O |
-| `controllers/repertoire_controller.dart` | Injected document/decoder coordination, selected line, opening-graph synchronization and Flutter notifications |
-| `controllers/repertoire_document_session.dart` | Destination, load epochs, complete parsed document state and serialized pending edits; failed handoffs retain the current workspace |
+| `controllers/builder_workspace_controller.dart` | Draft/copy intent, source reattachment, active board edits and recovery capture; no forwarding facade |
+| `controllers/repertoire_document_session.dart` | Destination, load epochs, selected line, private opening graph and bounded serialized pending edits; failed handoffs retain the current document |
 | `controllers/repertoire_writer.dart` | Serialized append/undo with document preconditions and session guards |
 | `models/repertoire_authoring.dart` | Pure line construction/rebuilding, PGN numbering and prefix matching |
 
 Shared cursor navigation lives in `chess_core/moves/move_navigation.dart`.
 Course header interpretation and variation expansion live in `chess_core/pgn/`.
 The original libraries are retired, and tests mirror the new ownership paths.
-Durable scratch recovery, private opening-graph ownership and legacy screen
-migration remain pending.
+Durable scratch recovery belongs to the app-owned `BuilderLifetime`; opening
+graphs expose immutable projections. Remaining legacy screen coordination and
+chapter creation are still pending.
 
 ### `lib/features/documents/` Viewer workspace
 
