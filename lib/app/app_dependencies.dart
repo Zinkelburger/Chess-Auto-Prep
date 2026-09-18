@@ -177,7 +177,7 @@ PgnDocumentStore createPlatformDocumentStore() {
 }
 
 PgnCollectionRepository createPgnCollectionRepository({
-  required PgnDocumentStore? documents,
+  required PgnDocumentStore documents,
 }) => StoragePgnCollectionRepository(
   StorageFactory.instance,
   documents: documents,

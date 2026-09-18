@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/infrastructure/documents/legacy_pgn_document_store.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -56,7 +57,7 @@ class _Preferences extends SharedPreferencesViewerRepository {
 }
 
 class _DelayedRepository extends StoragePgnCollectionRepository {
-  _DelayedRepository(super.storage);
+  _DelayedRepository(super.storage, {required super.documents});
 
   Completer<void>? saveGate;
   int writes = 0;
@@ -70,15 +71,6 @@ class _DelayedRepository extends StoragePgnCollectionRepository {
   Future<PgnWriteResult> save(PgnSnapshot baseline, String content) async {
     await _waitForSave();
     return super.save(baseline, content);
-  }
-
-  @override
-  Future<PgnWriteResult> patch(
-    String path,
-    Map<String, String> replacements,
-  ) async {
-    await _waitForSave();
-    return super.patch(path, replacements);
   }
 }
 
@@ -168,7 +160,10 @@ void main() {
     );
     StorageFactory.instanceForTest = storage;
     preferences = _Preferences();
-    repository = _DelayedRepository(storage);
+    repository = _DelayedRepository(
+      storage,
+      documents: LegacyPgnDocumentStore(storage),
+    );
     lifetime = PgnViewerLifetime(
       pool: engines.pool,
       lifecycle: engines.lifecycle,
