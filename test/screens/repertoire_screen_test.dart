@@ -477,115 +477,140 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  for (final returnToA in [false, true]) {
-    testWidgets(
-      'Cut configuration rejects delete admission after delayed creation'
-      '${returnToA ? ' then ABA' : ''}',
-      (tester) async {
-        final path = _writeRepertoire(tester);
-        final originalA = File(path).readAsStringSync();
-        final documents = _DeleteAdmissionRepository();
-        final catalog = _ChapterCatalog(File(path).parent.path)
-          ..chapterCreation = Completer<PgnWriteResult>();
-        await _pumpScreen(
-          tester,
-          repertoirePath: path,
-          catalog: catalog,
-          documents: documents,
-          size: const Size(950, 1200),
-        );
-        final document = tester
-            .element(find.byType(RepertoireScreen))
-            .read<BuilderLifetime>()
-            .workspace
-            .document;
-        final chapterA = document.currentRepertoire!;
-        final generationA = document.loadGeneration;
-        final droppedKey = document.repertoireLines.single.moves.join(' ');
+  for (final startBuild in [false, true]) {
+    for (final returnToA in [false, true]) {
+      testWidgets(
+        '${startBuild ? 'Build' : 'Cut'} configuration rejects admission after delayed creation'
+        '${returnToA ? ' then ABA' : ''}',
+        (tester) async {
+          final path = _writeRepertoire(tester);
+          final originalA = File(path).readAsStringSync();
+          final documents = _DeleteAdmissionRepository();
+          final catalog = _ChapterCatalog(File(path).parent.path)
+            ..chapterCreation = Completer<PgnWriteResult>();
+          await _pumpScreen(
+            tester,
+            repertoirePath: path,
+            catalog: catalog,
+            documents: documents,
+            size: const Size(950, 1200),
+          );
+          final document = tester
+              .element(find.byType(RepertoireScreen))
+              .read<BuilderLifetime>()
+              .workspace
+              .document;
+          final chapterA = document.currentRepertoire!;
+          final generationA = document.loadGeneration;
+          final droppedKey = document.repertoireLines.single.moves.join(' ');
 
-        // A real chapter-creation completion can change the document after
-        // its name dialog closes and while a configuration route is open.
-        await tester.tap(find.byTooltip('Switch chapter'));
-        await _settleUntil(tester, find.text('Add chapter').hitTestable());
-        await tester.tap(find.text('Add chapter'));
-        await _settleUntil(tester, find.text('Create').hitTestable());
-        await tester.enterText(find.byType(TextField).last, 'Other');
-        await tester.tap(find.text('Create'));
-        await _settle(tester, cycles: 8);
-        expect(catalog.creations, 1);
-        expect(document.currentRepertoire?.filePath, path);
-
-        await tester.tap(find.text('Actions'));
-        await _settleUntil(
-          tester,
-          find.text('Generate from here…').hitTestable(),
-        );
-        await tester.tap(find.text('Generate from here…'));
-        await _settleUntil(
-          tester,
-          find.byKey(const ValueKey('generation-actions')).hitTestable(),
-        );
-        await tester.tap(find.byKey(const ValueKey('generation-actions')));
-        await _settleUntil(tester, find.text('Cut lines…').hitTestable());
-        await tester.tap(find.text('Cut lines…'));
-        await _settleUntil(tester, find.byTooltip('Close').hitTestable());
-        final configuration = tester.widget<RepertoireGenerationTab>(
-          find.byType(RepertoireGenerationTab),
-        );
-        expect(configuration.cutOnly, isTrue);
-        expect(configuration.currentRepertoire?.filePath, path);
-        expect(configuration.existingLineMoves.map((m) => m.join(' ')), [
-          droppedKey,
-        ]);
-
-        final otherPath = '${File(path).parent.path}/Other.pgn';
-        final originalB = originalA.replaceFirst(
-          'Italian Game',
-          'Other chapter',
-        );
-        File(otherPath).writeAsStringSync(originalB);
-        catalog.chapterCreation!.complete(
-          PgnSaved(
-            before: null,
-            after: LegacyPgnDocumentStore.snapshot(otherPath, originalB),
-          ),
-        );
-        await _settle(tester);
-        expect(document.isLoading, isFalse);
-        expect(document.currentRepertoire?.filePath, otherPath);
-        expect(document.loadGeneration, greaterThan(generationA));
-        if (returnToA) {
-          unawaited(document.setRepertoire(chapterA));
-          await _settle(tester);
+          // A real chapter-creation completion can change the document after
+          // its name dialog closes and while a configuration route is open.
+          await tester.tap(find.byTooltip('Switch chapter'));
+          await _settleUntil(tester, find.text('Add chapter').hitTestable());
+          await tester.tap(find.text('Add chapter'));
+          await _settleUntil(tester, find.text('Create').hitTestable());
+          await tester.enterText(find.byType(TextField).last, 'Other');
+          await tester.tap(find.text('Create'));
+          await _settle(tester, cycles: 8);
+          expect(catalog.creations, 1);
           expect(document.currentRepertoire?.filePath, path);
-          expect(document.loadGeneration, greaterThan(generationA + 1));
-        }
-        expect(find.byType(RepertoireGenerationTab), findsOneWidget);
 
-        // This is the real route's command, with its original plan's key.
-        // No generated-tree ranking fixture is needed to test its admission.
-        var completed = false;
-        final cut = configuration.onTrimLines!({droppedKey});
-        unawaited(cut.then((_) => completed = true));
-        await _settle(tester);
-        expect(completed, isTrue);
-        await cut;
-        expect(File(otherPath).readAsStringSync(), originalB);
-        expect(File(path).readAsStringSync(), originalA);
-        expect(
-          document.currentRepertoire?.filePath,
-          returnToA ? path : otherPath,
-        );
-        expect(tester.takeException(), isNull);
-        expect(
-          documents.deletions,
-          isEmpty,
-          reason:
-              'The retained A configuration must not admit deletion '
-              'against the newly loaded document, even when its path returns to A.',
-        );
-      },
-    );
+          await tester.tap(find.text('Actions'));
+          await _settleUntil(
+            tester,
+            find.text('Generate from here…').hitTestable(),
+          );
+          await tester.tap(find.text('Generate from here…'));
+          await _settleUntil(
+            tester,
+            find.byKey(const ValueKey('generation-actions')).hitTestable(),
+          );
+          if (startBuild) {
+            await tester.tap(find.byKey(const ValueKey('generation-actions')));
+            await _settleUntil(
+              tester,
+              find
+                  .byKey(const ValueKey('build-chessdb-repertoire'))
+                  .hitTestable(),
+            );
+            await tester.tap(
+              find.byKey(const ValueKey('build-chessdb-repertoire')),
+            );
+          } else {
+            await tester.tap(find.byKey(const ValueKey('generation-actions')));
+            await _settleUntil(tester, find.text('Cut lines…').hitTestable());
+            await tester.tap(find.text('Cut lines…'));
+          }
+          await _settleUntil(tester, find.byTooltip('Close').hitTestable());
+          final configuration = tester.widget<RepertoireGenerationTab>(
+            find.byType(RepertoireGenerationTab),
+          );
+          expect(configuration.cutOnly, !startBuild);
+          expect(configuration.currentRepertoire?.filePath, path);
+          expect(configuration.existingLineMoves.map((m) => m.join(' ')), [
+            droppedKey,
+          ]);
+
+          final otherPath = '${File(path).parent.path}/Other.pgn';
+          final originalB = originalA.replaceFirst(
+            'Italian Game',
+            'Other chapter',
+          );
+          File(otherPath).writeAsStringSync(originalB);
+          catalog.chapterCreation!.complete(
+            PgnSaved(
+              before: null,
+              after: LegacyPgnDocumentStore.snapshot(otherPath, originalB),
+            ),
+          );
+          await _settle(tester);
+          expect(document.isLoading, isFalse);
+          expect(document.currentRepertoire?.filePath, otherPath);
+          expect(document.loadGeneration, greaterThan(generationA));
+          if (returnToA) {
+            unawaited(document.setRepertoire(chapterA));
+            await _settle(tester);
+            expect(document.currentRepertoire?.filePath, path);
+            expect(document.loadGeneration, greaterThan(generationA + 1));
+          }
+          expect(find.byType(RepertoireGenerationTab), findsOneWidget);
+
+          if (startBuild) {
+            final controller = configuration.generationController;
+            final lastConfig = controller.lastConfig;
+            await tester.tap(find.text('Generate Repertoire'));
+            await tester.pump();
+            expect(controller.currentJob, isNull);
+            expect(controller.isGenerating, isFalse);
+            expect(controller.lastConfig, same(lastConfig));
+            expect(
+              find.text(
+                'The chapter changed. Close this configuration and open it again.',
+              ),
+              findsOneWidget,
+            );
+          } else {
+            // The actual route command rejects before the repository boundary.
+            expect(await configuration.onTrimLines!({droppedKey}), isNull);
+          }
+          expect(File(otherPath).readAsStringSync(), originalB);
+          expect(File(path).readAsStringSync(), originalA);
+          expect(
+            document.currentRepertoire?.filePath,
+            returnToA ? path : otherPath,
+          );
+          expect(tester.takeException(), isNull);
+          expect(
+            documents.deletions,
+            isEmpty,
+            reason:
+                'The retained A configuration must not admit deletion '
+                'against the newly loaded document, even when its path returns to A.',
+          );
+        },
+      );
+    }
   }
 
   testWidgets('inline chapter creation rejects case-insensitive duplicate', (

@@ -286,81 +286,114 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
     TreeBuildConfig? initialConfig,
   }) async {
     if (_configRouteOpen) return;
-    _configRouteOpen = true;
-    await _workspaceNavigation.push(
-      LegacyPageRoute<void>(
-        builder: (_) => BuildConfigScreen(
-          repertoireName: _configRouteTitle,
-          title: cutOnly
-              ? 'Cut lines'
-              : initialConfig?.isChessDbBook == true
-              ? 'Build ChessDB repertoire'
-              : 'Build planned lines',
-          startSignal: _generationController,
-          hasStarted: () => _generationController.isGenerating,
-          child: RepertoireGenerationTab(
-            cutOnly: cutOnly,
-            initialConfig: initialConfig,
-            fen: _controller.board.fen,
-            isWhiteRepertoire: _controller.document.isRepertoireWhite,
-            currentRepertoire: _controller.document.currentRepertoire,
-            currentMoveSequence: _controller.board.currentMoveSequence,
-            repertoireStartFen:
-                _controller.board.startingFen ?? kStandardStartFen,
-            generationController: _generationController,
-            existingLineMoves: [
-              for (final line in _controller.document.repertoireLines)
-                line.moves,
-            ],
-            onTrimLines: (droppedKeys) => _controller.document.deleteLines([
-              for (final line in _controller.document.repertoireLines)
-                // Match on the same identity the export writes with, so a
-                // line the user added by hand is never caught by a cut of
-                // the generated ones.
+    final document = _controller.document;
+    final repertoire = document.currentRepertoire;
+    var admittedGeneration = document.loadGeneration;
+    final title = _configRouteTitle;
+    final fen = _controller.board.fen;
+    final isWhite = document.isRepertoireWhite;
+    final moves = List<String>.unmodifiable(
+      _controller.board.currentMoveSequence,
+    );
+    final startFen = _controller.board.startingFen ?? kStandardStartFen;
+    final lineMoves = List<List<String>>.unmodifiable([
+      for (final line in document.repertoireLines)
+        List<String>.unmodifiable(line.moves),
+    ]);
+    bool sourceIsCurrent() =>
+        mounted &&
+        document.isCurrent(admittedGeneration) &&
+        !document.isLoading &&
+        document.loadError == null &&
+        document.repertoirePgn != null &&
+        document.currentRepertoire?.filePath == repertoire?.filePath;
+    if (!sourceIsCurrent()) return;
+    late final Route<void> route;
+    bool isCurrent() => route.isCurrent && sourceIsCurrent();
+    route = LegacyPageRoute<void>(
+      builder: (_) => BuildConfigScreen(
+        repertoireName: title,
+        title: cutOnly
+            ? 'Cut lines'
+            : initialConfig?.isChessDbBook == true
+            ? 'Build ChessDB repertoire'
+            : 'Build planned lines',
+        startSignal: _generationController,
+        hasStarted: () => _generationController.isGenerating,
+        child: RepertoireGenerationTab(
+          cutOnly: cutOnly,
+          initialConfig: initialConfig,
+          fen: fen,
+          isWhiteRepertoire: isWhite,
+          currentRepertoire: repertoire,
+          currentMoveSequence: moves,
+          repertoireStartFen: startFen,
+          generationController: _generationController,
+          existingLineMoves: lineMoves,
+          onTrimLines: (droppedKeys) async {
+            if (!isCurrent()) return null;
+            final result = await document.deleteLines([
+              for (final line in document.repertoireLines)
                 if (droppedKeys.contains(line.moves.join(' '))) line,
-            ]),
-            createPublicationReceiver: () =>
-                _controller.document.publishedDocumentReceiver,
-            onCreateStudy: (name, pgn) async {
-              final importer = context.read<StudyImportController>();
-              final app = context.read<AppState>();
-              final labels = AppLocalizations.of(context);
-              try {
-                final result = await importer.publishStudy(
-                  name: name,
-                  pgn: pgn,
-                );
-                if (!mounted) return;
-                final path = result.studyPath;
-                if (path == null) {
-                  showAppSnackBar(
-                    context,
-                    studyImportFailureLabel(
-                      labels,
-                      result.failure ?? StudyImportFailure.publication,
-                    ),
-                    isError: true,
-                    actionLabel: labels.studyImportReviewAction,
-                    onAction: () => app.setMode(AppMode.study),
-                  );
-                  return;
-                }
-                await _workspaceNavigation.maybePop();
-                if (mounted) app.switchToStudyEdit(path: path);
-              } on StudyImportRejected catch (error) {
-                if (!mounted) return;
+            ], expectedGeneration: admittedGeneration);
+            if (result == null) return null;
+            final refreshed = result.refreshedGeneration;
+            if (refreshed != null && document.isCurrent(refreshed)) {
+              admittedGeneration = refreshed;
+            }
+            return (
+              removed: result.removed,
+              remainingMoves: !isCurrent() || result.remainingLines == null
+                  ? null
+                  : List<List<String>>.unmodifiable([
+                      for (final line in result.remainingLines!)
+                        List<String>.unmodifiable(line.moves),
+                    ]),
+            );
+          },
+          createPublicationReceiver: () =>
+              isCurrent() ? document.publishedDocumentReceiver : null,
+          onCreateStudy: (name, pgn) async {
+            final importer = context.read<StudyImportController>();
+            final app = context.read<AppState>();
+            final labels = AppLocalizations.of(context);
+            try {
+              final result = await importer.publishStudy(name: name, pgn: pgn);
+              if (!mounted) return;
+              final path = result.studyPath;
+              if (path == null) {
                 showAppSnackBar(
                   context,
-                  studyImportFailureLabel(labels, error.failure),
+                  studyImportFailureLabel(
+                    labels,
+                    result.failure ?? StudyImportFailure.publication,
+                  ),
                   isError: true,
+                  actionLabel: labels.studyImportReviewAction,
+                  onAction: () => app.setMode(AppMode.study),
                 );
+                return;
               }
-            },
-          ),
+              await _workspaceNavigation.maybePop();
+              if (mounted) app.switchToStudyEdit(path: path);
+            } on StudyImportRejected catch (error) {
+              if (!mounted) return;
+              showAppSnackBar(
+                context,
+                studyImportFailureLabel(labels, error.failure),
+                isError: true,
+              );
+            }
+          },
         ),
       ),
     );
-    _configRouteOpen = false;
+    _configRouteOpen = true;
+    try {
+      await _workspaceNavigation.push(route);
+    } finally {
+      _configRouteOpen = false;
+    }
     if (!mounted) return;
     if (_generationController.isGenerating) _openBottomPane(BottomPaneTab.jobs);
     _reclaimFocus();

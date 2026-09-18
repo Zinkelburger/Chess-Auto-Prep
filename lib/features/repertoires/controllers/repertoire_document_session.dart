@@ -172,30 +172,59 @@ class RepertoireDocumentSession {
 
   /// Deletes several lines in one pass and reloads once.
   ///
-  /// Returns how many were removed. Lines with no recorded position in the
-  /// file are skipped rather than guessed at by id.
-  Future<int> deleteLines(Iterable<RepertoireLine> lines) async {
+  /// Returns null for rejected admission. An acknowledged removal includes
+  /// remaining lines only after its own successful, still-current refresh.
+  /// Lines with no recorded file position are skipped rather than guessed.
+  Future<
+    ({
+      int removed,
+      int? refreshedGeneration,
+      List<RepertoireLine>? remainingLines,
+    })?
+  >
+  deleteLines(
+    Iterable<RepertoireLine> lines, {
+    required int expectedGeneration,
+  }) async {
+    final repertoire = _currentRepertoire;
     final filePath = _repertoireFilePath;
-    if (_disposed || filePath == null) return 0;
+    if (!isCurrent(expectedGeneration) ||
+        _isLoading ||
+        _loadError != null ||
+        _repertoirePgn == null ||
+        repertoire == null ||
+        filePath == null) {
+      return null;
+    }
 
-    final generation = _loadGeneration;
     final indexes = {
       for (final line in lines)
         if (line.gameIndex >= 0) line.gameIndex: line.fullPgn,
     };
-    if (indexes.isEmpty) return 0;
+    if (indexes.isEmpty) {
+      return (removed: 0, refreshedGeneration: null, remainingLines: _lines);
+    }
 
     final removed = await runDocumentMutation(
       () => documents.deleteLinesAt(filePath, indexes),
     );
-    if (removed == 0) return 0;
-    if (!isCurrent(generation) || _currentRepertoire?.filePath != filePath) {
-      return removed;
+    if (removed > 0 && isCurrent(expectedGeneration)) onClearSelectionAndTree();
+    if (!isCurrent(expectedGeneration)) {
+      return (
+        removed: removed,
+        refreshedGeneration: null,
+        remainingLines: null,
+      );
     }
-
-    onClearSelectionAndTree();
-    await loadRepertoire();
-    return removed;
+    // A nonempty request returning zero can mean the source disappeared.
+    // Only this exact successful load can renew the caller's admission.
+    final refreshed = await _loadRepertoire(repertoire);
+    final applied = refreshed != null && isCurrent(refreshed);
+    return (
+      removed: removed,
+      refreshedGeneration: applied ? refreshed : null,
+      remainingLines: applied ? _lines : null,
+    );
   }
 
   Future<void> _lineSaveTail = Future.value();
@@ -548,8 +577,8 @@ class RepertoireDocumentSession {
 
   RepertoireMetadata? _requestedRepertoire;
 
-  Future<void> _loadRepertoire(RepertoireMetadata repertoire) async {
-    if (_disposed) return;
+  Future<int?> _loadRepertoire(RepertoireMetadata repertoire) async {
+    if (_disposed) return null;
     _requestedRepertoire = repertoire;
     final generation = ++_loadGeneration;
     final filePath = repertoire.filePath;
@@ -557,35 +586,37 @@ class RepertoireDocumentSession {
     _loadError = null;
     _setLoading(true);
 
+    var appliedLoad = false;
     try {
       // Flush before reading, not when the widget receives the replacement
       // tree. A same-file reload or a quick A → B → A must read saved edits.
       await _flushPendingLineSaves();
-      if (!isCurrent(generation)) return;
+      if (!isCurrent(generation)) return null;
       final read = await documents.read(filePath);
-      if (!isCurrent(generation)) return;
+      if (!isCurrent(generation)) return null;
 
       final content = _readContent(read);
       if (content == null) {
         _currentRepertoire = repertoire;
         _applyLoaded(LoadedRepertoire.missing);
         _resetTree();
-        return;
+        return null;
       }
 
       final loaded = await decoder.build(
         content,
         fallbackIsWhite: _isRepertoireWhite,
       );
-      if (!isCurrent(generation)) return;
+      if (!isCurrent(generation)) return null;
 
       _currentRepertoire = repertoire;
       _applyLoaded(loaded);
       _sourceRevision = (read as PgnOpened).snapshot.revision;
       _resetTree();
       onNavigateToRoot();
+      appliedLoad = true;
     } catch (e) {
-      if (!isCurrent(generation)) return;
+      if (!isCurrent(generation)) return null;
       _requestedRepertoire = _currentRepertoire ?? repertoire;
       _loadError = 'Failed to load repertoire: $e';
     } finally {
@@ -593,6 +624,7 @@ class RepertoireDocumentSession {
         _setLoading(false);
       }
     }
+    return appliedLoad && isCurrent(generation) ? generation : null;
   }
 
   /// Restores repertoire state from a PGN snapshot (used by undo).

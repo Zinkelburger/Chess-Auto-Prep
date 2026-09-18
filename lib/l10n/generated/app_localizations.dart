@@ -3267,6 +3267,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Use position'**
   String get boardUsePosition;
+
+  /// Builder generation configuration admission and cut recovery feedback.
+  ///
+  /// In en, this message translates to:
+  /// **'The chapter changed. Close this configuration and open it again.'**
+  String get generationSourceChanged;
+
+  /// Builder generation configuration admission and cut recovery feedback.
+  ///
+  /// In en, this message translates to:
+  /// **'Reload the chapter and reopen this configuration before making further changes.'**
+  String get generationConfigurationRefreshRequired;
+
+  /// Builder generation configuration admission and cut recovery feedback.
+  ///
+  /// In en, this message translates to:
+  /// **'The cut could not be confirmed. Reload the chapter before making further changes.'**
+  String get generationCutUnconfirmed;
+
+  /// Acknowledged cut count when the original chapter view cannot be refreshed.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0{The chapter could not be refreshed. Reload it and reopen this configuration before making further changes.} =1{Removed 1 line, but this configuration could not be refreshed. Reload the chapter before making further changes.} other{Removed {count} lines, but this configuration could not be refreshed. Reload the chapter before making further changes.}}'**
+  String generationCutRefreshRequired(int count);
 }
 
 class _AppLocalizationsDelegate
