@@ -4410,3 +4410,72 @@ Preferences are serialized within the app, not a cross-process CAS transaction.
 Windows/macOS native checks, credential migration and whole-renewal exit gates
 remain open. The next simplification must remove code from its own complete live
 workflow; this safety growth cannot satisfy that gate.
+
+
+## Training settings state-machine consolidation
+
+Source `8ea60830`, based on `779cae0d`, removes **314 handwritten production
+lines (+142/−456)** with no generated changes or new production files. The
+complete declared 40-file envelope falls **6,641→6,327**, with 39 files surviving.
+It contains all `features/training/`, all `features/settings/{controllers,models}/`,
+the shared settings storage contract, app dependencies/runtime/training composition,
+both preferences adapters, the Trainer screen and its settings panel. Every
+changed production file is inside this scope; no dormant or unrelated deletion
+subsidizes the result. Whole library Dart is **227,835 lines / 995 files**, of
+which **5,361** are generated; handwritten code is still **3,517 above September 16**.
+Exact debt remains **1,229**, theme consumers **181**, and feature status remains
+**6 enforced, 14 unfinished, 0 complete**.
+
+**Design and review.** Parallel audits compared live Builder line-list forwarding,
+Generation enrichment ownership, Solitaire controls and Training settings. The
+chosen responsibility had two implementations of the same admitted-edit queue,
+read-back confirmation, failed draft and retry rules. The design fixed nullable
+removal, existing storage keys/migration, app-owned initial load, focused text
+editing and the sitting boundary before parallel model/UI work. It required net
+production reduction across all consumers, with no growth allowance. An independent
+review checked the actual final caller graph and found no outstanding issues.
+
+**Final shape.** Panels capture changed persisted fields → the existing
+`SectionSettingsOwner` admits and confirms edits → the existing scalar preferences
+adapter persists them. Training's concrete owner is now 12 lines, down from 192;
+it selects its configuration type and defaults, without a second queue or relay.
+The redundant Training repository/storage interfaces, patch type, field enum,
+stream subscription and storage write switch are gone; retirement lint rejects
+those APIs. Owner instances remain one per section: the reduction is one shared
+state-machine implementation, not combining unrelated preferences into one object.
+`TrainingConfiguration` retains immutable committed/draft values and creates
+separate mutable snapshots for editing and active sittings.
+
+The shared scalar contract now distinguishes an absent edit from an explicit null.
+Null removes optional training depth and checks the platform acknowledgement;
+other settings retain their normalized nonnullable defaults. Training's adapter
+keeps its existing default-cap migration, with its completion flag written last.
+Panels do not initiate loads during construction. App composition loads the
+selected owner, disposes only its own default and leaves injected overrides to
+their caller. Owner replacement detaches old UI listeners. Active and auto-next
+lines continue using their captured committed settings; failed drafts never
+become runtime configuration.
+
+**Checks.** All **305 focused tests pass**, with no failures/skips: Training owner,
+source, progress, phases, run and widgets; engine/bulk/display/evaluation settings;
+shared settings controls and composition; main-screen integration. Added cases
+exercise explicit-null merging/removal, false removal acknowledgement after a
+partial write, unrelated edits followed by retry, interrupted migration and its
+flag, scalar corruption, focused drafts, owner replacement and initial-load Retry.
+The first analyzer run caught a test-only `TextFormField.focusNode` access; using
+its actual focus scope repaired the fixture without weakening assertions.
+
+The Linux native completion/settings journey also passes. Through the real UI,
+clearing the depth limit removes the preference while the current sitting and its
+next puzzle retain depth 10. Stopping the sitting adopts the new full-line setting;
+a fresh owner reloads it from disk. Both puzzle results still persist exactly once
+and survive source reload. The [inspected settings screenshot](images/renewal-training-shared-settings.png)
+shows the saved-next-sitting status and whole-line control without overflow.
+This uses a private display and disposable profile, with no user data or live
+preview left running. Final analyze/lint passes with **64 pre-existing infos,
+no warnings/errors**, 45 architecture-checker cases and all retirement/debt/theme,
+mutation and rule gates. Logs: `/tmp/training-settings-combined-tests.log`,
+`/tmp/training-settings-native.log`, `/tmp/training-settings-final-gates.log`.
+Local documentation links resolve. Windows/macOS native checks and the remaining
+Training/source-identity and whole-renewal gates stay open; this is a completed
+settings simplification, not whole-feature graduation.
