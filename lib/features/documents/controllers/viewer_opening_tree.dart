@@ -14,6 +14,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
 import '../repositories/viewer_opening_repository.dart';
+import 'viewer_collection_controller.dart';
 import '../repositories/viewer_computation.dart';
 import '../../../models/opening_tree.dart';
 import '../../../models/pgn_game_entry.dart';
@@ -27,13 +28,11 @@ class ViewerOpeningTree {
     required this.repository,
     required this.isActive,
     required this.onChanged,
-    required this.filteredGames,
-    required this.allGames,
+    required this.collection,
     required this.fenIndex,
     required this.currentFen,
     required this.applyPosition,
     this.onReclaimFocus,
-    this.gameStartFen,
   });
 
   final ViewerOpeningRepository repository;
@@ -47,20 +46,13 @@ class ViewerOpeningTree {
   /// Notify listeners (the controller's `notifyListeners`).
   final VoidCallback onChanged;
 
-  /// Current filtered/sorted games (the tree is built from these).
-  final List<PgnGameEntry> Function() filteredGames;
-
-  /// All loaded games (for FEN-index → filtered-index mapping).
-  final List<PgnGameEntry> Function() allGames;
+  final ViewerCollectionController collection;
 
   /// Precomputed FEN → allGames-indices map, or null while building.
   final Map<String, List<int>>? Function() fenIndex;
 
   /// Current board FEN (used as a sync fallback on first open).
   final String Function() currentFen;
-
-  /// Current game setup, used when its selected variation is absent.
-  final String? Function()? gameStartFen;
 
   /// Push a board position derived from the tree cursor.
   final void Function(Position) applyPosition;
@@ -196,7 +188,7 @@ class ViewerOpeningTree {
     _leftForGame = false;
     onChanged();
     if (openingTree == null) {
-      if (filteredGames().isNotEmpty) await rebuild();
+      if (collection.visibleGames.isNotEmpty) await rebuild();
       if (_active && showOpeningTree) onReclaimFocus?.call();
       return;
     }
@@ -212,7 +204,7 @@ class ViewerOpeningTree {
     final generation = ++_generation;
     final boardFen = currentFen();
     _cursorStartFen = openingTree?.cursorRoot.fen ?? _cursorStartFen;
-    if (filteredGames().isEmpty) {
+    if (collection.visibleGames.isEmpty) {
       openingTree = null;
       buildingTree = false;
       treeBuildProcessed = 0;
@@ -223,12 +215,12 @@ class ViewerOpeningTree {
     }
     buildingTree = true;
     treeBuildProcessed = 0;
-    treeBuildTotal = filteredGames().length;
+    treeBuildTotal = collection.visibleGames.length;
     _positionGameCache.clear();
     onChanged();
 
     try {
-      final games = List<PgnGameEntry>.of(filteredGames());
+      final games = List<PgnGameEntry>.of(collection.visibleGames);
       final variations = includeVariations;
       final task = _task = repository.buildTree(
         [
@@ -357,7 +349,7 @@ class ViewerOpeningTree {
     if (tree == null) return;
     tree.reset();
     if (!tree.navigateToFen(fallbackFen ?? currentFen())) {
-      final start = gameStartFen?.call();
+      final start = collection.selectedGame?.headers['FEN'];
       if (start == null || !tree.navigateToFen(start)) tree.reset();
     }
     treeCurrentMoveSequence = tree.currentMovePath;
@@ -386,7 +378,7 @@ class ViewerOpeningTree {
     final fen = normalizeFen(tree.currentFen);
     return _positionGameCache.putIfAbsent(fen, () {
       _trimPositionCache();
-      final filtered = filteredGames();
+      final filtered = collection.visibleGames;
       final mainlineIndex = _mainlineIndex;
       if (!includeVariations && mainlineIndex != null) {
         return _filteredIndicesOf(filtered, {
@@ -437,7 +429,7 @@ class ViewerOpeningTree {
     List<int> allIndices,
   ) {
     if (allIndices.isEmpty) return const [];
-    final all = allGames();
+    final all = collection.games;
     final entryToFiltered = {for (final (i, game) in filtered.indexed) game: i};
     return [
       for (final ai in allIndices)

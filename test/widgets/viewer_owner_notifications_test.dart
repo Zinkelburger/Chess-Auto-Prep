@@ -15,6 +15,7 @@ import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_collection_
 import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_library_repository.dart';
 import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/screens/pgn_viewer_screen.dart';
+import 'package:chess_auto_prep/widgets/pgn/pgn_annotation_panel.dart';
 import 'package:chess_auto_prep/services/games_library/game_filter.dart'
     show dedupKeyForHeaders;
 import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
@@ -143,8 +144,10 @@ void main() {
   late RuntimeSettings runtimeSettings;
   late AppState app;
   late AppHistory history;
+  var lifetimeClosed = false;
 
   setUp(() {
+    lifetimeClosed = false;
     SharedPreferences.setMockInitialValues({
       'game_view.auto_save': false,
       'pgn_viewer.auto_detect_openings': false,
@@ -192,7 +195,7 @@ void main() {
     if (statGate != null && !statGate.isCompleted) statGate.complete();
     final gate = repository.saveGate;
     if (gate != null && !gate.isCompleted) gate.complete();
-    await lifetime.shutdown();
+    if (!lifetimeClosed) await lifetime.shutdown();
     history.dispose();
     app.dispose();
     StorageFactory.instanceForTest = null;
@@ -231,8 +234,132 @@ void main() {
     final gate = repository.saveGate;
     if (gate != null && !gate.isCompleted) gate.complete();
     await pumpRuntimeWidget(tester, runtimeSettings, const SizedBox.shrink());
-    await tester.runAsync(lifetime.shutdown);
+    var closed = false;
+    final shutdown = lifetime.shutdown().whenComplete(() => closed = true);
+    await _until(tester, () => closed, 'Viewer shutdown');
+    await shutdown;
+    lifetimeClosed = true;
   }
+
+  testWidgets(
+    'an edit after the approval click prevents discarding the newer draft',
+    (tester) async {
+      try {
+        await mount(tester);
+        app.switchToPgnViewer(path: path);
+        await _until(
+          tester,
+          () =>
+              lifetime.document.filePath == path &&
+              !lifetime.document.isLoading &&
+              lifetime.reader.mainLineLength == 4,
+          'loaded first game',
+        );
+        final document = lifetime.document;
+        document.editor.setAutoSave(false);
+        final game = document.collection.games.first;
+        document.persistMoveCommentsFor(
+          game,
+          '1. e4 {Earlier draft} e5 2. Nf3 Nc6 *',
+        );
+        await tester.pump();
+        await tester.tap(
+          find.byTooltip('Open games — recent files, browse, or paste'),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Close file — back to the start screen'));
+        await tester.pumpAndSettle();
+        final discard = tester.widget<TextButton>(
+          find.widgetWithText(TextButton, 'Close without saving'),
+        );
+        // Complete the click synchronously, then edit before the awaiting screen
+        // continuation runs. Its approval names only the previous revision.
+        discard.onPressed!();
+        document.persistMoveCommentsFor(
+          game,
+          '1. e4 {Newer retained draft} e5 2. Nf3 Nc6 *',
+        );
+        await tester.pumpAndSettle();
+        expect(document.filePath, path);
+        expect(document.editor.hasUnsavedChanges, isTrue);
+        expect(game.pgnText, contains('Newer retained draft'));
+        expect(repository.writes, 0);
+        expect(tester.takeException(), isNull);
+      } finally {
+        await finish(tester);
+      }
+    },
+  );
+
+  testWidgets(
+    'a comment typed during close autosave still requires resolution',
+    (tester) async {
+      try {
+        await mount(tester);
+        app.switchToPgnViewer(path: path);
+        await _until(
+          tester,
+          () =>
+              lifetime.document.filePath == path &&
+              !lifetime.document.isLoading &&
+              lifetime.reader.mainLineLength == 4,
+          'loaded first game',
+        );
+        lifetime.reader.goForward();
+        await tester.pump();
+        await tester.tap(find.text('Actions'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Edit'));
+        await tester.pumpAndSettle();
+        expect(find.byType(PgnAnnotationPanel), findsOneWidget);
+        await tester.tap(
+          find.byTooltip('Open games — recent files, browse, or paste'),
+        );
+        await tester.pumpAndSettle();
+        final document = lifetime.document;
+        final game = document.collection.games.first;
+        repository.saveGate = Completer<void>();
+        document.editor.setAutoSave(true);
+        document.persistMoveCommentsFor(
+          game,
+          '1. e4 {Earlier autosave} e5 2. Nf3 Nc6 *',
+        );
+        await tester.tap(find.text('Close file — back to the start screen'));
+        await _until(
+          tester,
+          () => repository.writes == 1,
+          'blocked close autosave',
+        );
+        await tester.enterText(
+          find
+              .descendant(
+                of: find.byType(PgnAnnotationPanel),
+                matching: find.byType(TextField),
+              )
+              .first,
+          'Typed while autosave waited',
+        );
+        expect(game.pgnText, isNot(contains('Typed while autosave waited')));
+        document.editor.setAutoSave(false);
+        repository.saveGate!.complete();
+        await _until(
+          tester,
+          () => !document.editor.state.busy,
+          'completed earlier autosave',
+        );
+        expect(document.filePath, path);
+        expect(find.byType(AlertDialog), findsOneWidget);
+        expect(game.pgnText, contains('Typed while autosave waited'));
+        expect(document.editor.hasUnsavedChanges, isTrue);
+        await tester.tap(find.text('Cancel'));
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(document.filePath, path);
+        expect(tester.takeException(), isNull);
+      } finally {
+        await finish(tester);
+      }
+    },
+  );
 
   testWidgets('leave dialog follows editor busy and saved notifications', (
     tester,

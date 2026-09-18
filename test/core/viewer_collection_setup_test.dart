@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/features/documents/controllers/viewer_collection_controller.dart';
 import 'package:chess_auto_prep/app/viewer_dependencies.dart';
 import 'package:chess_auto_prep/features/documents/controllers/viewer_opening_tree.dart';
 import 'package:chess_auto_prep/features/documents/controllers/viewer_game_controller.dart';
@@ -78,16 +79,17 @@ void main() {
     'setup chapter navigation, return, rebuild, and sorted matches',
     () async {
       var games = [entry('1. e4 e5 *'), entry(chapter)];
+      final collection = ViewerCollectionController()
+        ..adopt(games)
+        ..select(1);
       Position board = Chess.fromSetup(Setup.parseFen(setupFen));
       final viewer = ViewerOpeningTree(
         repository: createViewerOpenings(),
         isActive: () => true,
         onChanged: () {},
-        filteredGames: () => games,
-        allGames: () => games,
+        collection: collection,
         fenIndex: () => null,
         currentFen: () => board.fen,
-        gameStartFen: () => setupFen,
         applyPosition: (position) => board = position,
       );
       await viewer.enter();
@@ -106,9 +108,17 @@ void main() {
       await viewer.rebuild();
       expect(normalizeFen(board.fen), normalizeFen(kingFen));
       games = games.reversed.toList();
+      collection.adopt(games);
+      collection.select(
+        games.indexWhere((game) => game.headers['FEN'] == setupFen),
+      );
       viewer.clearCache();
       expect(viewer.gamesAtTreePosition(), [0]);
       games = games.reversed.toList();
+      collection.adopt(games);
+      collection.select(
+        games.indexWhere((game) => game.headers['FEN'] == setupFen),
+      );
       viewer.clearCache();
       viewer.setIncludeVariations(true);
       while (viewer.buildingTree) {
@@ -119,6 +129,10 @@ void main() {
       viewer.goBack();
       expect(normalizeFen(board.fen), normalizeFen(pawnFen));
       games = games.reversed.toList();
+      collection.adopt(games);
+      collection.select(
+        games.indexWhere((game) => game.headers['FEN'] == setupFen),
+      );
       viewer.clearCache();
       expect(viewer.gamesAtTreePosition(), [0]);
       viewer.resetToStart();
@@ -145,8 +159,7 @@ void main() {
       repository: createViewerOpenings(),
       isActive: () => true,
       onChanged: () {},
-      filteredGames: () => games,
-      allGames: () => games,
+      collection: ViewerCollectionController()..adopt(games),
       fenIndex: () => null,
       currentFen: () => board.fen,
       applyPosition: (position) => board = position,

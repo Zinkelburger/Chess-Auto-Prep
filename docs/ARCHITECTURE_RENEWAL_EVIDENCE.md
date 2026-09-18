@@ -2890,3 +2890,43 @@ passes. Analyze/lint passes with 64 infos, no warnings/errors, 45 architecture
 checker cases and the 1,457-entry debt ledger. This establishes the bounded
 composition trial's reduction, simpler ownership and behavioral parity. The
 separate Viewer trial must also pass before renewal expands to another workflow.
+
+### Viewer leave/navigation simplification trial — 2026-09-18
+
+Implementation `cb08f1fb` combines the duplicate screen/native leave prompts in
+existing `document_save_dialog.dart`. The concrete choice contains the revision
+captured at the button click. The screen validates that revision and its current
+navigation before discarding; native close records approval without discarding,
+because another participant may still cancel. Both subscribe to the existing
+save-action state stream, eliminating the separate workspace-listener argument.
+Clean checks include annotations flushed while capturing a revision and after
+awaited autosave, so pending prose cannot silently escape close protection.
+
+`ViewerOpeningTree` directly reads its existing collection owner and autoplay
+steps its existing reader handle. Five suppliers that projected those same
+owners disappear; genuine live opening-tree cursor callbacks remain. There are
+no new production owners, interfaces, files, forwarding facades or compatibility
+constructors. Component documentation describes the final dependencies.
+
+The complete measured scope includes the Viewer screen and both parts, reading,
+opening-tree and playback owners, save-state predicate, both dialog helpers,
+native guard and app lifetime: **4,565 → 4,532 lines**, **113 added / 146 deleted,
+net -33** against `af228c85`. This passes the bounded net-deletion check; it does
+not certify the whole Viewer consumer architecture. Wider screen orchestration,
+legacy surfaces and remaining architecture debt stay open.
+
+After merging main `fa7f309e`, 53 focused tests pass, including actual reader
+comments typed during a blocked autosave, an edit after the approval click,
+click-time annotation flushing, native clean-state annotation flushing and a
+later close participant cancelling without losing the approved PGN draft.
+Analyze/lint pass with 66 informational findings and no errors or warnings.
+Both Linux native journeys pass: cross-mode application close and Viewer
+navigation, save baselines, copy and reopen. Independent review found the
+post-autosave pending-comment gap; its repair and controlled widget regression
+are included. The first new widget run reached the safety assertions but its
+cleanup used `pumpAndSettle` against a blinking text caret; bounded transition
+pumping fixed that test-only timeout, and the complete focused run passes.
+The real headless app's [shared leave dialog](images/renewal-viewer-leave-approval.png)
+was inspected at 1280×720 after editing a selected move with autosave disabled.
+Save, Save a copy, Cancel and Close without saving remain visible; Cancel
+returns to the retained annotation. The disposable preview was stopped.

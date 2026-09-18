@@ -4,6 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:chess_auto_prep/features/documents/controllers/document_save_session.dart';
 import 'package:chess_auto_prep/features/documents/models/document_save_state.dart';
 import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
+import 'package:chess_auto_prep/features/documents/widgets/document_save_dialog.dart';
+import 'package:chess_auto_prep/features/documents/widgets/pgn_close_guard.dart';
+import 'package:chess_auto_prep/features/documents/widgets/document_close_scope.dart';
+import 'package:chess_auto_prep/features/documents/controllers/document_close_coordinator.dart';
 import 'package:chess_auto_prep/features/repertoires/models/repertoire_creation.dart';
 import 'package:chess_auto_prep/features/repertoires/widgets/repertoire_creation_screen.dart';
 
@@ -13,6 +17,95 @@ import 'package:chess_auto_prep/design_system/theme/app_theme.dart';
 import '../../support/scripted_document_store.dart';
 
 void main() {
+  testWidgets(
+    'native close checks clean state after capturing pending annotations',
+    (tester) async {
+      final store = Store();
+      final session = DocumentSaveSession.opened(store, store.current);
+      final coordinator = DocumentCloseCoordinator();
+      addTearDown(session.dispose);
+      addTearDown(coordinator.dispose);
+      var pendingAnnotation = true;
+      await tester.pumpWidget(
+        DocumentCloseScope(
+          coordinator: coordinator,
+          child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: PgnCloseGuard(
+              actions: session,
+              revision: () {
+                if (pendingAnnotation) {
+                  pendingAnnotation = false;
+                  session.edit('Annotation captured during native close');
+                }
+                return session.state.content;
+              },
+              flush: () async {},
+              chooseCopyDestination: (_) async => null,
+              child: const Scaffold(),
+            ),
+          ),
+        ),
+      );
+      final closing = coordinator.prepareClose();
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect((await closing).disposition, DocumentCloseDisposition.cancelled);
+      expect(session.state.content, 'Annotation captured during native close');
+      expect(session.state.dirty, isTrue);
+      expect(store.saves, isEmpty);
+    },
+  );
+
+  testWidgets(
+    'capturing approval cannot silently close an annotation flushed at the click',
+    (tester) async {
+      final store = Store();
+      final session = DocumentSaveSession.opened(store, store.current);
+      addTearDown(session.dispose);
+      late BuildContext host;
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Builder(
+            builder: (context) {
+              host = context;
+              return const Scaffold();
+            },
+          ),
+        ),
+      );
+      var pendingAnnotation = true;
+      final approval = showDocumentLeaveDialog(
+        host,
+        session: session,
+        revision: () {
+          if (pendingAnnotation) {
+            pendingAnnotation = false;
+            session.edit('Annotation flushed at approval');
+          }
+          return session.state.content;
+        },
+        chooseCopyDestination: (_) async => null,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Close'));
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(find.text('Close without saving'), findsOneWidget);
+      expect(session.state.content, 'Annotation flushed at approval');
+      expect(store.saves, isEmpty);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(await approval, isNull);
+      expect(session.state.dirty, isTrue);
+    },
+  );
+
   testWidgets(
     'conflict actions preserve draft, return editor focus and save a copy exclusively',
     (tester) async {

@@ -1,9 +1,10 @@
-/// Owns Viewer playback timing and drives navigation through injected callbacks.
+/// Owns Viewer playback timing and drives navigation through its injected reader handle.
 library;
 
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import '../repositories/pgn_viewer_handle.dart';
 
 class AutoPlayEngine {
   /// Pause before the first ply after Play is pressed, so the press itself
@@ -15,8 +16,7 @@ class AutoPlayEngine {
 
   AutoPlayEngine({
     required this.isActive,
-    required this.currentFen,
-    required this.goForward,
+    required this.handle,
     required this.hasNextGame,
     required this.nextGame,
     required this.onChanged,
@@ -26,11 +26,7 @@ class AutoPlayEngine {
   /// Whether the owning view is still mounted/active.
   final bool Function() isActive;
 
-  /// Current board FEN (used to detect "no more moves").
-  final String? Function() currentFen;
-
-  /// Advance one ply on the board.
-  final VoidCallback goForward;
+  final PgnViewerHandle handle;
 
   /// Whether a following game exists to roll over to.
   final bool Function() hasNextGame;
@@ -87,15 +83,15 @@ class AutoPlayEngine {
   void _step() {
     if (_disposed || !isActive() || !isPlaying) return;
     final run = _run;
-    final fenBefore = currentFen();
+    final fenBefore = handle.currentFen;
     if (fenBefore == null) return;
     _lastStepTime = DateTime.now();
 
-    goForward();
+    handle.goForward();
 
     void checkAfterForward() {
       if (_disposed || !isActive() || !isPlaying || run != _run) return;
-      final fenAfter = currentFen();
+      final fenAfter = handle.currentFen;
       if (fenAfter == fenBefore) {
         if (autoNextGame && hasNextGame()) {
           nextGame();

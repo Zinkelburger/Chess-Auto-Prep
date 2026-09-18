@@ -20,9 +20,7 @@ import '../design_system/components/name_entry_dialog.dart';
 import '../features/documents/controllers/document_save_session.dart';
 import '../features/documents/models/pgn_document.dart';
 import '../features/documents/widgets/document_save_dialog.dart';
-import '../features/documents/widgets/document_save_panel.dart';
 import '../l10n/generated/app_localizations.dart';
-import '../design_system/theme/app_spacing.dart';
 import 'package:dartchess/dartchess.dart'
     show Chess, Setup, PgnGame, PgnNodeData, Position;
 import 'package:file_picker/file_picker.dart';
@@ -888,60 +886,31 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   }
 
   Future<bool> _confirmLeavePgn() async {
+    final navigation = _navigationRestoreEpoch;
     _pgnWidgetController.flushPendingComments();
-    bool resolved() =>
-        !_document.editor.state.dirty &&
-        !_document.editor.state.uncertain &&
-        _document.editor.state.retainedDrafts.isEmpty &&
-        !_document.editor.state.busy;
-    if (resolved()) return true;
-    if (_document.editor.autoSave &&
+    final editor = _document.editor;
+    if (!editor.state.needsResolution) return true;
+    if (editor.autoSave &&
         _document.filePath != null &&
-        !_document.editor.needsSaveRecovery) {
-      await _document.editor.flushPendingMetadata();
-      if (resolved()) return true;
+        !editor.needsSaveRecovery) {
+      await editor.flushPendingMetadata();
+      if (!_isCurrentNavigation(navigation)) return false;
+      _pgnWidgetController.flushPendingComments();
+      if (!editor.state.needsResolution) return true;
     }
-    if (!mounted) return false;
-    final choice = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => ListenableBuilder(
-        listenable: _document.changes,
-        builder: (context, _) => AlertDialog(
-          title: Text(AppLocalizations.of(context).documentCollectionSaveTitle),
-          scrollable: true,
-          content: SizedBox(
-            width: AppSpacing.formWidth,
-            child: DocumentSavePanel(
-              session: _document.editor,
-              chooseCopyDestination: _chooseCopyDestination,
-              focusEditor: () => Navigator.pop(dialogContext),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text(AppLocalizations.of(context).cancel),
-            ),
-            if (!resolved())
-              TextButton(
-                onPressed: _document.editor.state.busy
-                    ? null
-                    : () => Navigator.pop(dialogContext, 'discard'),
-                child: Text(AppLocalizations.of(context).closeWithoutSaving),
-              ),
-            if (resolved())
-              FilledButton(
-                onPressed: () => Navigator.pop(dialogContext, 'saved'),
-                child: Text(
-                  AppLocalizations.of(context).closeDocumentInspection,
-                ),
-              ),
-          ],
-        ),
-      ),
+    if (!mounted || !_isCurrentNavigation(navigation)) return false;
+    final choice = await showDocumentLeaveDialog(
+      context,
+      session: editor,
+      revision: () => widget.lifetime.closeRevision,
+      chooseCopyDestination: _chooseCopyDestination,
     );
-    if (!mounted || choice == null) return false;
-    if (choice == 'discard') _document.editor.discardChanges();
+    if (!_isCurrentNavigation(navigation) ||
+        choice == null ||
+        choice.revision != widget.lifetime.closeRevision) {
+      return false;
+    }
+    if (choice.discard) editor.discardChanges();
     return true;
   }
 
