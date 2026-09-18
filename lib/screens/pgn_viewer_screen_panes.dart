@@ -24,6 +24,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
   bool get _lineTabVisited;
   void _showLinePosition(Position position);
   void _onGamePosition(Position position);
+  Position? get _gamePanePosition;
   LiveExplorerService get _explorer;
   ExplorerMove? get _explorerHoverMove;
   void _setExplorerHover(ExplorerMove? move);
@@ -43,10 +44,18 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
   }
 
   Widget _buildFullScreenView(ThemeData theme) {
+    final coversReference =
+        _onLineTab ||
+        _onReferenceTab ||
+        _tabController.index == PgnWorkspace.filters;
     return FullscreenGameView(
-      position: _document.reading.currentPosition,
+      position: coversReference
+          ? _gamePanePosition ?? _document.reading.currentPosition
+          : _document.reading.currentPosition,
       boardFlipped: _document.presentation.boardFlipped,
-      recentMoveSquares: _boardRecentMoveSquares,
+      recentMoveSquares: coversReference
+          ? _pgnWidgetController.recentMoveSquares
+          : _boardRecentMoveSquares,
       gameLabel: _document.collection.visibleGames.isNotEmpty
           ? _document
                 .collection
@@ -58,20 +67,14 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
       isAutoPlaying: _document.reading.playback.isPlaying,
       autoPlayDelaySec: _document.reading.playback.delaySec,
       autoNextGame: _document.reading.playback.autoNextGame,
-      onBoardMove: (san) {
-        _document.reading.playback.stop();
-        _pgnWidgetController.addEphemeralMove(san);
-      },
+      onBoardMove: (san) =>
+          _document.reading.onBoardMove(san, reader: _pgnWidgetController),
       onPrev: _document.reading.prevGame,
       onNext: _document.reading.nextGame,
-      onGoBack: () {
-        _document.reading.playback.stop();
-        _pgnWidgetController.goBack();
-      },
-      onGoForward: () {
-        _document.reading.playback.stop();
-        _pgnWidgetController.goForward();
-      },
+      onGoBack: () =>
+          _document.reading.navigateBack(reader: _pgnWidgetController),
+      onGoForward: () =>
+          _document.reading.navigateForward(reader: _pgnWidgetController),
       onToggleAutoPlay: _document.reading.toggleAutoPlay,
       onExit: _document.presentation.exitFullScreen,
       onSetSpeed: _document.reading.playback.setSpeed,

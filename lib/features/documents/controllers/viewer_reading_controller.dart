@@ -367,7 +367,9 @@ class ViewerReadingController extends ChangeNotifier with SafeChangeNotifier {
     tree.toggle();
   }
 
-  // ── Unified navigation (mode-aware) ──
+  // An explicit reader belongs to the visible reference pane (or fullscreen
+  // game). Otherwise navigation follows the current game/tree/Solitaire mode.
+  // Capture it at the command, never retain a second active-reader state.
 
   // Solitaire allows browsing the revealed region: the PGN widget caps all
   // mainline navigation at the revealed frontier, so back/forward/home/end
@@ -377,27 +379,33 @@ class ViewerReadingController extends ChangeNotifier with SafeChangeNotifier {
   // Solitaire is checked before the tree throughout: entering solitaire
   // leaves the tree, but a stale tree flag must never win over a session.
 
-  void navigateBack() {
+  void navigateBack({PgnViewerHandle? reader}) {
     playback.stop();
-    if (!solitaire.isActive && tree.showOpeningTree) {
+    if (reader != null) {
+      reader.goBack();
+    } else if (!solitaire.isActive && tree.showOpeningTree) {
       tree.goBack();
     } else {
       handle.goBack();
     }
   }
 
-  void navigateForward() {
+  void navigateForward({PgnViewerHandle? reader}) {
     playback.stop();
-    if (!solitaire.isActive && tree.showOpeningTree) {
+    if (reader != null) {
+      reader.goForward();
+    } else if (!solitaire.isActive && tree.showOpeningTree) {
       tree.goForward();
     } else {
       handle.goForward();
     }
   }
 
-  void navigateToStart() {
+  void navigateToStart({PgnViewerHandle? reader}) {
     playback.stop();
-    if (solitaire.isActive) {
+    if (reader != null) {
+      reader.goToMainLineIndex(0);
+    } else if (solitaire.isActive) {
       handle.goToMainLineIndex(0);
     } else if (tree.showOpeningTree) {
       tree.resetToStart();
@@ -418,9 +426,11 @@ class ViewerReadingController extends ChangeNotifier with SafeChangeNotifier {
     handle.goToMainLineIndex(ply.clamp(0, len < 0 ? 0 : len));
   }
 
-  void navigateToEnd() {
+  void navigateToEnd({PgnViewerHandle? reader}) {
     playback.stop();
-    if (solitaire.isActive) {
+    if (reader != null) {
+      reader.goToMainLineIndex(reader.mainLineLength);
+    } else if (solitaire.isActive) {
       // Back to the guessing frontier (the widget caps at revealedPly).
       handle.goToMainLineIndex(solitaire.controller.revealedPly);
     } else if (tree.showOpeningTree) {
@@ -436,13 +446,15 @@ class ViewerReadingController extends ChangeNotifier with SafeChangeNotifier {
   }
 
   /// Handle a board move in the current mode context.
-  void onBoardMove(String san) {
-    if (tree.showOpeningTree) {
+  void onBoardMove(String san, {PgnViewerHandle? reader}) {
+    playback.stop();
+    if (reader != null) {
+      reader.addEphemeralMove(san);
+    } else if (tree.showOpeningTree) {
       tree.onMoveSelected(san);
     } else if (solitaire.isActive) {
       solitaire.handleBoardMove(san);
     } else {
-      playback.stop();
       handle.addEphemeralMove(san);
     }
   }

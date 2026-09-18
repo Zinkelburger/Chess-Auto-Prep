@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/features/games/services/my_repertoire_settings.dart';
 import 'package:chess_auto_prep/app/runtime_settings.dart';
 import 'package:chess_auto_prep/app/engine_runtime.dart';
 import '../support/runtime_settings.dart';
@@ -24,6 +25,7 @@ import 'package:chess_auto_prep/features/documents/widgets/document_close_scope.
 import 'package:chess_auto_prep/core/app_state.dart';
 import 'package:chess_auto_prep/core/app_history.dart';
 import 'package:chess_auto_prep/widgets/pgn_viewer_widget.dart';
+import 'package:chess_auto_prep/widgets/chess_board_widget.dart';
 import 'package:chess_auto_prep/screens/pgn_viewer_screen.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_opening_label.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_annotation_panel.dart';
@@ -116,6 +118,132 @@ void main() {
       store: MemoryWorkspaceRecoveryStore<PgnWorkspaceSnapshot>(),
     );
     addTearDown(lifetime.shutdown);
+  });
+
+  testWidgets('Book keyboard navigation leaves the hidden game at its cursor', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final folder = Directory.systemTemp.createTempSync('viewer-book-routing-');
+    addTearDown(() => folder.deleteSync(recursive: true));
+    final app = AppState()..setMode(AppMode.pgnViewer);
+    addTearDown(app.dispose);
+    await pumpRuntimeWidget(
+      tester,
+      _engineFixtureSettings ??= testRuntimeSettings(),
+      ChangeNotifierProvider.value(
+        value: app,
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: PgnViewerCloseHost(
+            lifetime: lifetime,
+            child: PgnViewerScreen(lifetime: lifetime),
+          ),
+        ),
+      ),
+    );
+    await _settleReader(tester);
+    File('${folder.path}/Main.pgn').writeAsStringSync(
+      '[Event "Prepared line"]\n[Result "*"]\n\n1. d4 d5 2. c4 e6 *',
+    );
+    await MyRepertoireSettings.instance.setPaths(
+      white: true,
+      paths: [folder.path],
+    );
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await _settleReader(tester);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await _settleReader(tester);
+    final gamePly = lifetime.reader.mainLineIndex;
+    expect(gamePly, 1);
+    await tester.tap(find.text('Actions'));
+    await _settleReader(tester);
+    await tester.tap(find.text('Compare against my books'));
+    await _settleReader(tester);
+    final bookWidget = find.byWidgetPredicate(
+      (widget) => widget is PgnViewerWidget && widget.bookFormatting,
+    );
+    for (var i = 0; i < 40 && bookWidget.evaluate().isEmpty; i++) {
+      await _settleReader(tester);
+    }
+    expect(bookWidget, findsOneWidget);
+    final book = tester.widget<PgnViewerWidget>(bookWidget).controller!;
+    await tester.sendKeyEvent(LogicalKeyboardKey.home);
+    await _settleReader(tester);
+    expect(book.mainLineIndex, 0);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await _settleReader(tester);
+    expect(book.mainLineIndex, 1);
+    await tester.sendKeyEvent(LogicalKeyboardKey.end);
+    await _settleReader(tester);
+    expect(book.mainLineIndex, 4);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await _settleReader(tester);
+    expect(book.mainLineIndex, 3);
+    expect(lifetime.reader.mainLineIndex, gamePly);
+    expect(lifetime.document.editor.hasUnsavedChanges, isFalse);
+    // Native window changes can enter fullscreen with a reference tab selected.
+    await lifetime.document.presentation.toggleFullScreen();
+    await _settleReader(tester);
+    expect(lifetime.document.presentation.isFullScreen, isTrue);
+    expect(lifetime.reader.mainLineLength, 2);
+    expect(book.mainLineIndex, 3);
+    expect(
+      tester
+          .widget<ChessBoardWidget>(find.byType(ChessBoardWidget))
+          .position
+          .fen,
+      lifetime.reader.currentFen,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await _settleReader(tester);
+    expect(lifetime.reader.mainLineIndex, gamePly + 1);
+    expect(book.mainLineIndex, 3);
+    expect(
+      tester
+          .widget<ChessBoardWidget>(find.byType(ChessBoardWidget))
+          .position
+          .fen,
+      lifetime.reader.currentFen,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await _settleReader(tester);
+    expect(lifetime.reader.mainLineIndex, gamePly);
+    expect(book.mainLineIndex, 3);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await _settleReader(tester);
+    expect(lifetime.document.presentation.isFullScreen, isFalse);
+    expect(bookWidget, findsOneWidget);
+    expect(book.mainLineIndex, 3);
+    expect(
+      tester
+          .widget<ChessBoardWidget>(find.byType(ChessBoardWidget))
+          .position
+          .fen,
+      book.currentFen,
+    );
+    await tester.tap(find.byTooltip('Game').first);
+    await _settleReader(tester);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await _settleReader(tester);
+    expect(lifetime.reader.mainLineIndex, gamePly + 1);
+    expect(book.mainLineIndex, 3);
+    expect(tester.takeException(), isNull);
+    await pumpRuntimeWidget(
+      tester,
+      _engineFixtureSettings!,
+      const SizedBox.shrink(),
+    );
+    await tester.runAsync(lifetime.shutdown);
+    await _settleReader(tester);
+    await tester.runAsync(
+      () => MyRepertoireSettings.instance.setPaths(white: true, paths: []),
+    );
   });
 
   testWidgets(

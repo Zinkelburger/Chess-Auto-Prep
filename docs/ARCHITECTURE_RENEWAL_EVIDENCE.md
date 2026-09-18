@@ -3039,3 +3039,39 @@ attempt is not a pass. Independent review verified the failure and repair eviden
 Analyze/lint passes with 64 infos, no warnings/errors and 45 checker cases. Shared
 chapter mutation ownership, the temporary catalog adapter and Library organizer
 remain explicit work in the active plan.
+
+### Viewer movement consolidation — 2026-09-18
+
+Implementation `0f23a5a4` removes the sole-consumer `PgnPaneRouter`; keyboard,
+board and fullscreen commands use the existing reading owner with an explicit
+reader where required. No new owner, callback supplier or stored selection was
+introduced. Across the reading owner, router, screen and pane part, the complete
+production scope falls from 3,620 to 3,576 lines: **−44** (67 added / 111 deleted)
+against `8c0537d3`. The retirement gate rejects the old file and class.
+
+The initial native regression exposed an inherited defect: fullscreen unmounted
+the reader, so its navigation handle silently did nothing. The existing Scaffold
+now stays mounted with hidden focus and tickers excluded. Fullscreen commands
+use the primary reader; when covering a reference pane, the board reads the
+already-owned primary position. Ordinary Game/tree/Solitaire board and move-trail
+projections remain unchanged. Reference fullscreen coverage uses the existing
+presentation command; normal Book/Line fullscreen availability is unchanged.
+
+Independent review accepted the exact commit. The initial 108-test batch passed
+before the lifetime repair; the final 12 affected owner/screen tests pass and
+check autoplay interruption, primary/reference isolation, actual fullscreen
+board FEN and restored Book cursor. Exact-commit Linux native coverage passes
+one journey: F11, arrow buttons and keys move the game, Escape retains its
+cursor, and saved content survives reopening. Analyze/lint passes with 64 infos,
+no warnings/errors, 45 checker cases and unchanged 1,457-entry debt ledger.
+Initial fixture setup/compilation failures and the pre-repair native failure are
+not counted as successful runs. Whole Viewer renewal remains Partial.
+
+The merged tree with chapter safety `69ad9189` passes analyze/lint and ten
+combined Viewer/real-file chapter widget tests. The first command incorrectly
+combined focused test paths with the analyze/lint step list and was rejected
+before running; corrected separate gate and test invocations pass. All 116
+local documentation file targets checked exist. Against the pre-trial baseline
+`fa7f309e`, this integrated batch removes 2,009 handwritten production lines,
+including the separately identified two-line chapter safety addition; generated
+code is unchanged. Overall app size is still above the September 16 baseline.
