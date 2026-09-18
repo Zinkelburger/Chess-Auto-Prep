@@ -1,4 +1,11 @@
 import 'dart:io';
+import 'dart:ui' as ui;
+import 'package:chess_auto_prep/widgets/layout/bottom_pane.dart';
+import 'package:chess_auto_prep/widgets/layout/jobs_panel.dart';
+import 'package:chess_auto_prep/widgets/generation/snapshot_export_dialog.dart';
+import 'package:flutter/rendering.dart';
+import 'package:chess_auto_prep/features/repertoire/widgets/repertoire_board_pane.dart';
+import 'package:chess_auto_prep/features/repertoire/widgets/repertoire_outline_controls.dart';
 import 'package:chess_auto_prep/chess_core/moves/move_tree_snapshot.dart';
 import 'package:chess_auto_prep/core/app_state.dart';
 import 'package:chess_auto_prep/services/storage/app_paths.dart';
@@ -20,6 +27,19 @@ Future<void> ready(WidgetTester tester, Finder finder) async {
   }
   expect(finder, findsWidgets);
   await tester.pump(const Duration(milliseconds: 300));
+}
+
+Future<void> captureLayout(String name) async {
+  final view = RendererBinding.instance.renderViews.first;
+  final ratio = view.flutterView.devicePixelRatio;
+  final image = await (view.debugLayer! as OffsetLayer).toImage(
+    Offset.zero & Size(view.size.width * ratio, view.size.height * ratio),
+  );
+  final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+  image.dispose();
+  await File(
+    '/tmp/renewal-builder-$name.png',
+  ).writeAsBytes(bytes!.buffer.asUint8List());
 }
 
 void main() {
@@ -96,6 +116,66 @@ void main() {
       expect(owner.board.tree.commentAt(cursor), 'Keep this annotation');
       expect(owner.board.tree.nodeAt(cursor)!.nags, [1]);
       expect(owner.board.tree.identity, isNot(same(annotated.identity)));
+      final retainedTree = owner.board.tree;
+      final retainedPath = owner.board.path;
+      final preview = tester
+          .widget<RepertoireBoardPane>(find.byType(RepertoireBoardPane))
+          .boardPreview;
+      await tester.tap(find.byTooltip('Hide chapters'));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byType(RepertoireOutlineStrip), findsOneWidget);
+      await tester.tap(find.byType(RepertoireOutlineStrip));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byTooltip('Hide chapters'), findsOneWidget);
+      await tester.drag(
+        find.byType(RepertoireOutlineResizeHandle),
+        const Offset(50, 0),
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byTooltip('Hide analysis panel'));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byTooltip('Show analysis panel'), findsOneWidget);
+      await tester.tap(find.byTooltip('Show analysis panel'));
+      await tester.pump(const Duration(milliseconds: 300));
+      await captureLayout('wide-layout');
+      // Idle jobs have no status badge. Open the existing panel owner as a
+      // native fixture; actual running-job button actions are widget-tested.
+      tester
+          .widget<BottomPane>(find.byType(BottomPane))
+          .controller
+          .open(BottomPaneTab.jobs);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byType(JobsPanel), findsOneWidget);
+      expect(find.text('No active jobs'), findsOneWidget);
+      final export = showSnapshotExportDialog(
+        tester.element(find.byType(JobsPanel)),
+        suggestedName: 'Native snapshot',
+        canVerify: true,
+        verifyDepth: 18,
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.enterText(find.byType(TextField).last, 'Kept until close');
+      await tester.pump();
+      await captureLayout('snapshot-dialog');
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel').last);
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(await export, isNull);
+      expect(tester.takeException(), isNull);
+      tester.widget<BottomPane>(find.byType(BottomPane)).controller.close();
+      await tester.pump(const Duration(milliseconds: 300));
+      tester.view.physicalSize = const Size(900, 1000);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('PGN'), findsOneWidget);
+      expect(find.byType(RepertoireOutlineResizeHandle), findsNothing);
+      expect(owner.board.tree, same(retainedTree));
+      expect(owner.board.path, retainedPath);
+      expect(
+        tester
+            .widget<RepertoireBoardPane>(find.byType(RepertoireBoardPane))
+            .boardPreview,
+        same(preview),
+      );
+      await captureLayout('compact-layout');
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

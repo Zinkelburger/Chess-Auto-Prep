@@ -4110,8 +4110,168 @@ Start case also passes, and its screenshot exactly matches the inspected image.
 Final analyze/lint retains the same 64 infos, no warnings/errors; logs are
 `/tmp/renewal-source-admission-exact-{native,gates}.log`.
 
-Current library Dart is **228,281**, down 8,710 from the reviewed snapshot and
-still 9,324 (+4.3%) above September 16. Native identity before the mutation's
+At the admission checkpoint, library Dart was **228,281**, down 8,710 from the
+reviewed snapshot and still 9,324 (+4.3%) above September 16. Native identity before the mutation's
 initial read, remaining catalog/training writers, whole-feature consumer
 simplicity and all feature graduations remain open. These results close the
 named admission responsibility, not whole Builder, Generation or renewal.
+
+## Builder layout responsibility retirement (`011bc833`)
+
+The starting commit is `dff71ee3`. The complete production scope is the Builder
+screen and its three parts, `RepertoireLayoutPrefs`, the old/new outline controls,
+`RepertoireWorkspacePanel`, `RepertoireToolbar`, `RepertoireBoardPane` and the
+retired `BoardZone` file: **4,167→3,912 lines (−255 handwritten)**. Generated code
+is unchanged. The screen stays at 1,459 lines and its layout part shrinks by 11;
+newly named controls are included in the total, not treated as free code.
+
+Builder now constructs the existing `RepertoireBoardPane` inside the same
+cursor-scoped listener. The toolbar places its existing trap navigation directly.
+Deleting the 59-line `BoardZone`/`BoardZoneControls` file and one net toolbar line
+removes **60 lines of live forwarding**. The other **195 lines** remove dormant
+expanded-panel/header/right-panel-resize branches and unused Lines-width
+preferences, simplify their callers and correct stale descriptions. That dormant
+portion does not count as another workflow's simplification credit.
+
+The outline strip and its resize handle expose only their actual commands. The
+notation surface retains its clipping, border and child constraints. Analysis
+collapse is named for the actual dock while retaining the existing stored
+`repertoire.lines_panel_collapsed` key. No owner, state mirror, framework or
+compatibility shim was added. The retired paths and public wrapper APIs are in
+the unconditional retirement manifest. Four obsolete theme-debt entries are
+removed; the renamed controls retain their existing debt classification.
+
+Independent exact-source review passes. **56 focused tests pass**, zero
+failures/skips: layout preferences, actual outline controls and the complete
+Builder screen suite. The replacement resize test crosses both limits and checks
+that the outline follows the pointer again after either limit; synthetic tests
+for the unreachable right panel and expanded tabs are removed. Existing screen
+checks retain wide/compact, persistence, annotations, trap preview/tour and
+source-admission coverage. Log: `/tmp/renewal-layout-tests.log`.
+
+The first test attempt found one missed renamed setter at a screen caller; it
+was fixed before the passing run. Initial analyze/lint passed with two new style
+infos; `011bc833` repairs those with a constant tooltip and a null-aware toolbar
+collection element. Combined final native and analyzer evidence is recorded with
+the batch below. Whole Builder and the renewal remain Partial.
+
+## Jobs ownership and dialog lifetime (`65ccc3bc`)
+
+From `dff71ee3`, the complete eleven-file graph is the Builder screen/three
+parts, `JobsTabContent`, `JobsPanel`, `AuditSessionController`,
+`GenerationSessionController`, `JobManager`, `SnapshotExportDialog` and
+`BottomPane`: **6,069→6,026 lines (−43 handwritten)**, generated unchanged.
+
+The existing JobsPanel owns its merged listener and concrete export interaction.
+It receives the three existing owners and navigation commands, with no
+BuilderWorkspace dependency or pause/resume/cancel/export forwarding callbacks.
+Audit cancellation uses the audit owner's captured source, including queued and
+fileless runs. `JobsTabContent` and its path/API are deleted and mechanically
+retired. This removes **67 lines** from the live graph.
+
+Actual-control tests exposed a baseline dialog use-after-dispose during its
+closing animation. The existing dialog now owns its text controller in State
+and releases it at disposal: **+22 safety lines**, admitted before coding.
+Independent review then identified two adjacent command races, reproduced on
+checkpoint `27b59527`: cancellation during a name lookup popped the underlying
+page, and repeated Enter started two lookups. Capturing the existing route and
+checking it plus the existing busy flag adds **two safety lines** and rejects
+both continuations without a new owner, counter or interface.
+
+The baseline disposal test fails on `dff71ee3` and passes after repair; the two
+command cases fail on `27b59527` and pass on `65ccc3bc`. Logs:
+`/tmp/builder-jobs-export-baseline-red.log`,
+`/tmp/builder-jobs-command-lifetime-red.log` and
+`/tmp/builder-jobs-final-tests.log`. **82 focused tests pass**, zero failures or
+skips, across Jobs controls, audit session, generation session, job display and
+registry, snapshot owner and snapshot generation. Seven real widget cases
+exercise listening, owner replacement/disposal, controls, export choice/busy/
+cancel/failure and the reproduced route races. Analyze/lint passes with the
+existing 64 infos, no warnings/errors. Exact independent review passes.
+
+This completes the forwarding retirement and named dialog repairs; it does not
+claim to resolve export destination identity or the whole engine/jobs domain.
+
+## Generation form state consolidation (`ff3db250`)
+
+From `dff71ee3`, the complete ten-file scope contains all seven form files,
+`TreeBuildConfig`, `RepertoireGenerationTab` and `PlanBuildScreen`:
+**5,943→5,812 lines (−131 handwritten)**. Three existing form files change;
+generated Dart and ARB are unchanged. There is no new public API or owner.
+
+The form no longer stores 18 non-rendered TextEditingControllers and three
+non-rendered booleans. Inherited settings stay in its existing typed config;
+only rendered edits have mutable form controls. This removes seeding,
+text-to-number round trips and redundant boolean normalization. Existing
+`_NumSpec` range validation is shared by typed inherited values and editable
+input, preserving inherited invalid-value rejection and Pure-mode exemptions.
+Defaults, seed magnitude, clamps, trimming, global settings overrides, preset
+replacement and mode-specific normalization remain covered. When both kinds of
+input are invalid, editable errors intentionally appear first; this ordering
+change was reviewed before acceptance and is explicitly tested.
+
+**49 form tests pass**. The same 48 unchanged-behavior cases also pass against
+detached baseline `dff71ee3`, including full serialized unseeded defaults for all
+four modes and both colors, seventeen inherited constraints, non-finite values,
+preset replacement, visible edits and mode switches. Logs:
+`/tmp/generation-config-mirrors-all-form-tests.log` and
+`/tmp/generation-config-mirrors-baseline-verified.log`. An initial unsupported
+runner exclusion flag was a setup failure, not a product regression.
+
+The caller batch passed 68 cases but initially failed nine Planner fixtures
+because their MaterialApp hosts lacked localization. Adding the existing app
+localization delegates and supported locales to those three test hosts fixes
+all nine without production changes or weakened assertions. Final analyze/lint
+passes with 64 existing infos and no warnings/errors. Independent exact-source
+review passes. This replaces the hidden form-state round trip; Generation's
+broader run/storage lifetime remains Partial.
+
+## Combined consumer consolidation (`eaefa33a`)
+
+The three reviewed units merge without production conflicts. The sole conflict,
+retirement metadata, is resolved as the deduplicated union of both path/symbol
+lists. Independent comparison against all three reviewed source commits confirms
+that their production changes and retirements are preserved.
+
+The complete union of the declared graphs is **13,349→12,920 handwritten
+production lines (−429)**; shared screen files are counted once. Generated code
+is unchanged. This comprises 258 lines removed from live forwarding/config
+coordination, 195 from dormant layout branches and associated wiring/comments,
+and 24 added for reproduced dialog safety. It neither credits dormant deletion
+to another workflow nor hides the safety growth.
+
+**223 combined tests pass, zero failures/skips**, in sixteen files covering the
+three units and their actual Builder/Planner callers. This union includes the
+individual 56/82/49 and caller suites above; do not add those overlapping counts.
+Log: `/tmp/renewal-consumer-consolidation-tests.log`.
+
+Library Dart totals **227,852 lines / 995 files**: 9,139 below review snapshot
+`a6238ff5`, still 8,895 (+4.1%) above September 16. Viewer is 1,875 lines, Builder
+1,459, Study 1,101 and Generation session 1,447. Legacy services remain 42,560
+lines and widgets 49,712. Six feature directories are enforced, fourteen remain
+unfinished and none is complete. Exact architecture debt falls by four to 1,233;
+legacy-theme consumers remain 181. No milestone or whole-feature graduation is
+claimed by this bounded batch.
+
+The extended existing `integration_test/builder_projection_test.dart` passes as
+one Linux native journey. It retains real edit/annotation/save/mode/reload checks
+and additionally exercises outline collapse/expand/drag, analysis collapse,
+wide→compact transition, and identical board tree/path/preview ownership. With
+no active job, the fixture opens the existing bottom-pane owner directly and
+renders the actual idle Jobs panel. It then opens the concrete export dialog,
+types and cancels through its closing animation; this is deliberately **not** a
+claim of native running-job export. Widget tests exercise that actual button
+path. Native log: `/tmp/renewal-consumer-consolidation-native.log`.
+
+Inspected native screenshots show intact board, notation and controls in
+[wide layout](images/renewal-builder-wide-layout.png),
+[compact layout](images/renewal-builder-compact-layout.png) and the
+[snapshot dialog](images/renewal-builder-snapshot-dialog.png). Checks use the
+bounded runner's private display and disposable profile; no visible user app or
+user databases are used. No preview remains running.
+
+Final combined analyze/lint passes: **64 pre-existing infos, no warnings/errors**,
+45 architecture-checker cases, all retirement/debt/theme and mutation gates.
+Log: `/tmp/renewal-consumer-consolidation-gates.log`. Local links in the plan,
+evidence record and component map resolve. Windows/macOS native behavior and the
+remaining whole-renewal exit gates were not run or claimed by this batch.
