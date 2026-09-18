@@ -215,15 +215,15 @@ class PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final colors = Theme.of(context).colorScheme;
     final enabled = widget.targetKey != null;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
       decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
-        ),
-        color: Theme.of(context).colorScheme.surface,
+        border: Border(top: BorderSide(color: colors.outlineVariant)),
+        color: colors.surface,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -238,17 +238,13 @@ class PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
                 height: 28,
                 child: Row(
                   children: [
-                    Icon(
-                      Icons.notes,
-                      size: 16,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                    Icon(Icons.notes, size: 16, color: colors.onSurfaceVariant),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         _hasComment && !_expanded
                             ? widget.comment.replaceAll('\n', ' ')
-                            : AppLocalizations.of(context).pgnComment,
+                            : l10n.pgnComment,
                         style: AppTypography.secondary(context),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -256,8 +252,8 @@ class PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
                     ),
                     Tooltip(
                       message: _expanded
-                          ? AppLocalizations.of(context).pgnCollapseComment
-                          : AppLocalizations.of(context).pgnEditComment,
+                          ? l10n.pgnCollapseComment
+                          : l10n.pgnEditComment,
                       child: Icon(
                         _expanded ? Icons.expand_less : Icons.expand_more,
                         size: 18,
@@ -269,10 +265,10 @@ class PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
             )
           else
             Text(
-              AppLocalizations.of(context).pgnComment,
+              l10n.pgnComment,
               style: AppTypography.bodyStrong(
                 context,
-              ).copyWith(color: Theme.of(context).colorScheme.onSurface),
+              ).copyWith(color: colors.onSurface),
             ),
           if (!widget.compact || _expanded) ...[
             const SizedBox(height: 8),
@@ -306,17 +302,17 @@ class PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
                 Expanded(
                   child: Text(
                     _blankReplacement
-                        ? AppLocalizations.of(context).pgnCommentKept
-                        : AppLocalizations.of(context).pgnCommentLabel,
+                        ? l10n.pgnCommentKept
+                        : l10n.pgnCommentLabel,
                     style: _blankReplacement
                         ? AppTypography.caption(context)
-                        : AppTypography.bodyStrong(context).copyWith(
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
+                        : AppTypography.bodyStrong(
+                            context,
+                          ).copyWith(color: colors.onSurface),
                   ),
                 ),
                 IconButton(
-                  tooltip: AppLocalizations.of(context).pgnDeleteComment,
+                  tooltip: l10n.pgnDeleteComment,
                   visualDensity: VisualDensity.compact,
                   icon: const Icon(Icons.delete_outline, size: 18),
                   onPressed: enabled && _hasComment ? _deleteComment : null,
@@ -332,36 +328,27 @@ class PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
               minLines: 2,
               maxLines: 4,
               style: AppTypography.body(context),
-              cursorColor: Theme.of(context).colorScheme.onSurface,
+              cursorColor: colors.onSurface,
               decoration: InputDecoration(
                 isDense: true,
-                hintText: enabled
-                    ? null
-                    : AppLocalizations.of(context).pgnSelectMoveNotes,
+                hintText: enabled ? null : l10n.pgnSelectMoveNotes,
                 filled: true,
-                fillColor: Theme.of(context).colorScheme.surfaceContainer,
+                fillColor: colors.surfaceContainer,
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 10,
                   vertical: 8,
                 ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(6),
-                  borderSide: BorderSide(
-                    color: Theme.of(context).colorScheme.onSurface,
-                  ),
+                  borderSide: BorderSide(color: colors.onSurface),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(6),
-                  borderSide: BorderSide(
-                    color: Theme.of(context).colorScheme.onSurface,
-                    width: 2,
-                  ),
+                  borderSide: BorderSide(color: colors.onSurface, width: 2),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(6),
-                  borderSide: BorderSide(
-                    color: Theme.of(context).colorScheme.onSurface,
-                  ),
+                  borderSide: BorderSide(color: colors.onSurface),
                 ),
               ),
             ),

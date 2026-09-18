@@ -93,6 +93,7 @@ class _PositionSetupPanelState extends State<PositionSetupPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
     final error = _editor.validationError;
 
@@ -101,21 +102,21 @@ class _PositionSetupPanelState extends State<PositionSetupPanel> {
       mainAxisSize: MainAxisSize.min,
       children: [
         // ── Side to move + board shortcuts ─────────────────────────
-        // The panel is the narrow half of the editor dialog (~380px), and
-        // a SegmentedButton will not shrink its own labels, so scale it
-        // down rather than overflow.
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.centerLeft,
-          child: SegmentedButton<Side>(
+        LayoutBuilder(
+          builder: (context, constraints) => SegmentedButton<Side>(
+            direction:
+                constraints.maxWidth <
+                    MediaQuery.textScalerOf(context).scale(360)
+                ? Axis.vertical
+                : Axis.horizontal,
             segments: [
               ButtonSegment(
                 value: Side.white,
-                label: Text(AppLocalizations.of(context).boardWhiteToMove),
+                label: Text(l10n.boardWhiteToMove),
               ),
               ButtonSegment(
                 value: Side.black,
-                label: Text(AppLocalizations.of(context).boardBlackToMove),
+                label: Text(l10n.boardBlackToMove),
               ),
             ],
             selected: {_editor.turn},
@@ -133,56 +134,45 @@ class _PositionSetupPanelState extends State<PositionSetupPanel> {
           children: [
             OutlinedButton.icon(
               icon: const Icon(Icons.replay, size: 16),
-              label: Text(AppLocalizations.of(context).boardStartPosition),
+              label: Text(l10n.boardStartPosition),
               onPressed: _editor.setStartPosition,
             ),
             OutlinedButton.icon(
               icon: const Icon(Icons.clear, size: 16),
-              label: Text(AppLocalizations.of(context).boardClear),
+              label: Text(l10n.boardClear),
               onPressed: _editor.clear,
             ),
             OutlinedButton.icon(
               icon: const Icon(Icons.swap_vert, size: 16),
-              label: Text(AppLocalizations.of(context).studyFlipBoard),
+              label: Text(l10n.studyFlipBoard),
               onPressed: _editor.toggleFlip,
             ),
           ],
         ),
         const SizedBox(height: 8),
-        Text(
-          AppLocalizations.of(context).boardSetupHelp,
-          style: AppTypography.caption(context),
-        ),
+        Text(l10n.boardSetupHelp, style: AppTypography.caption(context)),
         const SizedBox(height: 12),
 
         // ── Castling rights ────────────────────────────────────────
         ExpansionTile(
-          title: Text(AppLocalizations.of(context).boardAdvanced),
-          subtitle: Text(AppLocalizations.of(context).boardCastlingEnPassant),
+          title: Text(l10n.boardAdvanced),
+          subtitle: Text(l10n.boardCastlingEnPassant),
           initiallyExpanded: widget.advancedInitiallyExpanded,
           tilePadding: EdgeInsets.zero,
           childrenPadding: const EdgeInsets.only(bottom: 12),
           expandedCrossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              AppLocalizations.of(context).boardCastling,
-              style: theme.textTheme.labelLarge,
-            ),
+            Text(l10n.boardCastling, style: theme.textTheme.labelLarge),
             Row(
               children: [
                 _castleBox(
-                  AppLocalizations.of(
-                    context,
-                  ).boardCastleSide(AppLocalizations.of(context).white, 'O-O'),
+                  l10n.boardCastleSide(l10n.white, 'O-O'),
                   _editor.whiteKingside,
                   _editor.whiteKingsideAllowed,
                   _editor.setWhiteKingside,
                 ),
                 _castleBox(
-                  AppLocalizations.of(context).boardCastleSide(
-                    AppLocalizations.of(context).white,
-                    'O-O-O',
-                  ),
+                  l10n.boardCastleSide(l10n.white, 'O-O-O'),
                   _editor.whiteQueenside,
                   _editor.whiteQueensideAllowed,
                   _editor.setWhiteQueenside,
@@ -192,18 +182,13 @@ class _PositionSetupPanelState extends State<PositionSetupPanel> {
             Row(
               children: [
                 _castleBox(
-                  AppLocalizations.of(
-                    context,
-                  ).boardCastleSide(AppLocalizations.of(context).black, 'O-O'),
+                  l10n.boardCastleSide(l10n.black, 'O-O'),
                   _editor.blackKingside,
                   _editor.blackKingsideAllowed,
                   _editor.setBlackKingside,
                 ),
                 _castleBox(
-                  AppLocalizations.of(context).boardCastleSide(
-                    AppLocalizations.of(context).black,
-                    'O-O-O',
-                  ),
+                  l10n.boardCastleSide(l10n.black, 'O-O-O'),
                   _editor.blackQueenside,
                   _editor.blackQueensideAllowed,
                   _editor.setBlackQueenside,
@@ -216,10 +201,7 @@ class _PositionSetupPanelState extends State<PositionSetupPanel> {
               const SizedBox(height: 8),
               Row(
                 children: [
-                  Text(
-                    AppLocalizations.of(context).boardEnPassant,
-                    style: theme.textTheme.labelLarge,
-                  ),
+                  Text(l10n.boardEnPassant, style: theme.textTheme.labelLarge),
                   const SizedBox(width: 12),
                   SizedBox(
                     width: 120,
@@ -227,10 +209,7 @@ class _PositionSetupPanelState extends State<PositionSetupPanel> {
                       value: _editor.epSquare,
                       compact: true,
                       items: [
-                        ChoiceItem(
-                          value: null,
-                          label: AppLocalizations.of(context).boardNoEnPassant,
-                        ),
+                        ChoiceItem(value: null, label: l10n.boardNoEnPassant),
                         for (final sq in _editor.epCandidates)
                           ChoiceItem(value: sq, label: sq.name),
                       ],
@@ -253,9 +232,7 @@ class _PositionSetupPanelState extends State<PositionSetupPanel> {
           decoration: InputDecoration(
             labelText: 'FEN',
             errorText: _fenError,
-            helperText: _editor.hasUnappliedFen
-                ? AppLocalizations.of(context).boardFenPending
-                : null,
+            helperText: _editor.hasUnappliedFen ? l10n.boardFenPending : null,
             helperMaxLines: 2,
             errorMaxLines: 2,
             border: const OutlineInputBorder(),
@@ -264,14 +241,14 @@ class _PositionSetupPanelState extends State<PositionSetupPanel> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 CopyButton.icon(
-                  tooltip: AppLocalizations.of(context).boardCopyFen,
+                  tooltip: l10n.boardCopyFen,
                   iconSize: 16,
-                  snackBarMessage: AppLocalizations.of(context).boardFenCopied,
+                  snackBarMessage: l10n.boardFenCopied,
                   text: () => _editor.fen,
                 ),
                 IconButton(
                   icon: const Icon(Icons.content_paste, size: 16),
-                  tooltip: AppLocalizations.of(context).boardPasteFen,
+                  tooltip: l10n.boardPasteFen,
                   onPressed: () async {
                     final editor = _editor;
                     final data = await Clipboard.getData('text/plain');
@@ -300,12 +277,12 @@ class _PositionSetupPanelState extends State<PositionSetupPanel> {
               onPressed: _editor.hasUnappliedFen
                   ? () => _applyFenInput(_fenCtrl.text)
                   : null,
-              child: Text(AppLocalizations.of(context).boardApplyFen),
+              child: Text(l10n.boardApplyFen),
             ),
             if (_editor.hasUnappliedFen)
               TextButton(
                 onPressed: _editor.discardFenDraft,
-                child: Text(AppLocalizations.of(context).boardDiscardFen),
+                child: Text(l10n.boardDiscardFen),
               ),
           ],
         ),

@@ -143,9 +143,10 @@ class _NewChapterDialogState extends State<_NewChapterDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return AlertDialog(
       scrollable: true,
-      title: Text(AppLocalizations.of(context).studyNewChapter),
+      title: Text(l10n.studyNewChapter),
       content: SizedBox(
         width: 480,
         child: Column(
@@ -156,9 +157,9 @@ class _NewChapterDialogState extends State<_NewChapterDialog> {
               controller: _name,
               autofocus: true,
               decoration: InputDecoration(
-                labelText: AppLocalizations.of(context).studyName,
+                labelText: l10n.studyName,
                 hintText: _source == _Source.pgn
-                    ? AppLocalizations.of(context).studyChapterNameFromPgn
+                    ? l10n.studyChapterNameFromPgn
                     : widget.defaultName,
                 isDense: true,
                 border: const OutlineInputBorder(),
@@ -167,7 +168,7 @@ class _NewChapterDialogState extends State<_NewChapterDialog> {
             ),
             const SizedBox(height: 16),
             Text(
-              AppLocalizations.of(context).studyChapterStartFrom,
+              l10n.studyChapterStartFrom,
               style: AppTypography.caption(context),
             ),
             const SizedBox(height: 6),
@@ -176,18 +177,13 @@ class _NewChapterDialogState extends State<_NewChapterDialog> {
               segments: [
                 ButtonSegment(
                   value: _Source.initial,
-                  label: Text(
-                    AppLocalizations.of(context).studyInitialPosition,
-                  ),
+                  label: Text(l10n.studyInitialPosition),
                 ),
                 ButtonSegment(
                   value: _Source.fen,
-                  label: Text(AppLocalizations.of(context).studyPosition),
+                  label: Text(l10n.studyPosition),
                 ),
-                ButtonSegment(
-                  value: _Source.pgn,
-                  label: Text(AppLocalizations.of(context).studyPgn),
-                ),
+                ButtonSegment(value: _Source.pgn, label: Text(l10n.studyPgn)),
               ],
               selected: {_source},
               onSelectionChanged: (s) => setState(() {
@@ -206,7 +202,7 @@ class _NewChapterDialogState extends State<_NewChapterDialog> {
                       controller: _fen,
                       style: AppTypography.mono(context),
                       decoration: InputDecoration(
-                        labelText: AppLocalizations.of(context).studyFen,
+                        labelText: l10n.studyFen,
                         isDense: true,
                         border: const OutlineInputBorder(),
                       ),
@@ -216,7 +212,7 @@ class _NewChapterDialogState extends State<_NewChapterDialog> {
                   const SizedBox(width: 8),
                   OutlinedButton(
                     onPressed: _setUpBoard,
-                    child: Text(AppLocalizations.of(context).studySetupBoard),
+                    child: Text(l10n.studySetupBoard),
                   ),
                 ],
               ),
@@ -226,7 +222,7 @@ class _NewChapterDialogState extends State<_NewChapterDialog> {
                 maxLines: 10,
                 style: AppTypography.mono(context),
                 decoration: InputDecoration(
-                  hintText: AppLocalizations.of(context).studyPasteChaptersHint,
+                  hintText: l10n.studyPasteChaptersHint,
                   isDense: true,
                   border: const OutlineInputBorder(),
                 ),
@@ -234,28 +230,17 @@ class _NewChapterDialogState extends State<_NewChapterDialog> {
               ),
             },
             const SizedBox(height: 16),
-            Text(
-              AppLocalizations.of(context).studyOrientation,
-              style: AppTypography.caption(context),
-            ),
+            Text(l10n.studyOrientation, style: AppTypography.caption(context)),
             const SizedBox(height: 6),
             SegmentedButton<Side?>(
               showSelectedIcon: false,
               segments: [
                 ButtonSegment(
                   value: null,
-                  label: Text(
-                    AppLocalizations.of(context).studyAutomaticOrientation,
-                  ),
+                  label: Text(l10n.studyAutomaticOrientation),
                 ),
-                ButtonSegment(
-                  value: Side.white,
-                  label: Text(AppLocalizations.of(context).white),
-                ),
-                ButtonSegment(
-                  value: Side.black,
-                  label: Text(AppLocalizations.of(context).black),
-                ),
+                ButtonSegment(value: Side.white, label: Text(l10n.white)),
+                ButtonSegment(value: Side.black, label: Text(l10n.black)),
               ],
               selected: {_orientation},
               onSelectionChanged: (s) =>
@@ -276,12 +261,9 @@ class _NewChapterDialogState extends State<_NewChapterDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: Text(AppLocalizations.of(context).cancel),
+          child: Text(l10n.cancel),
         ),
-        ElevatedButton(
-          onPressed: _submit,
-          child: Text(AppLocalizations.of(context).studyCreate),
-        ),
+        ElevatedButton(onPressed: _submit, child: Text(l10n.studyCreate)),
       ],
     );
   }

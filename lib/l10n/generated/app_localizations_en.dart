@@ -1999,4 +1999,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String engineAppearanceDepthStatus(int depth, String nodes) {
     return 'Depth $depth · $nodes nodes';
   }
+
+  @override
+  String get boardSetupTitle => 'Set up position';
+
+  @override
+  String get boardUsePosition => 'Use position';
 }

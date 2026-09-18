@@ -1,7 +1,11 @@
 {
   "trainingReloadProgress": "Reload saved progress",
-  "@trainingReloadProgress": {"description": "Recovery action after a possibly partial training progress write."},
-  "@trainingProgressPartial": {"description": "Explains partial progress persistence without promising replay or rollback."},
+  "@trainingReloadProgress": {
+    "description": "Recovery action after a possibly partial training progress write."
+  },
+  "@trainingProgressPartial": {
+    "description": "Explains partial progress persistence without promising replay or rollback."
+  },
   "trainingProgressPartial": "Training progress may be partly saved. Reload saved progress before training again. History and PGN updates may be incomplete. Reloading does not retry the changes.",
   "@@locale": "en",
   "cancel": "Cancel",
@@ -2608,5 +2612,13 @@
   },
   "@engineNoticeBusyBody": {
     "description": "Engine analysis control or status: engineNoticeBusyBody"
+  },
+  "boardSetupTitle": "Set up position",
+  "@boardSetupTitle": {
+    "description": "Study and PGN control: boardSetupTitle"
+  },
+  "boardUsePosition": "Use position",
+  "@boardUsePosition": {
+    "description": "Study and PGN control: boardUsePosition"
   }
 }

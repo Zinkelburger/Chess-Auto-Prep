@@ -106,6 +106,7 @@ class _CopyButtonState extends State<CopyButton> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final icon = Icon(
       _copied ? Icons.check : widget.icon,
       size: widget.iconSize ?? (widget.dense ? 16 : 18),
@@ -116,9 +117,7 @@ class _CopyButtonState extends State<CopyButton> {
       return IconButton(
         onPressed: widget.enabled ? _copy : null,
         icon: icon,
-        tooltip: _copied
-            ? AppLocalizations.of(context).copyDone
-            : widget.tooltip,
+        tooltip: _copied ? l10n.copyDone : widget.tooltip,
         padding: widget.dense ? EdgeInsets.zero : null,
         visualDensity: widget.dense ? VisualDensity.compact : null,
         color: widget.foreground,
@@ -126,9 +125,7 @@ class _CopyButtonState extends State<CopyButton> {
     }
 
     final label = Text(
-      _copied
-          ? AppLocalizations.of(context).copyDone
-          : (widget.label ?? AppLocalizations.of(context).copyAction),
+      _copied ? l10n.copyDone : (widget.label ?? l10n.copyAction),
       style: AppTypography.caption(context).copyWith(color: widget.foreground),
     );
     final button = TextButton.icon(

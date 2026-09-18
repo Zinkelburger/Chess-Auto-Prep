@@ -646,6 +646,16 @@ cancels backoff/retry timers on closure and rejects pending/future requests.
 The import dialog is scrollable at enlarged text sizes; the rest of the legacy
 Study presentation remains outside this completed import-safety responsibility.
 
+Study appearance follows the application's committed Dark/Light/System setting,
+including its engine controls, PGN editor, dialogs and board-coordinate chrome.
+The Study branch no longer installs `LegacyThemeBoundary`. Theme changes evict
+rendered PGN rows while retaining document identity, cursor, scroll and drafts.
+Board pigments and annotation hues retain their chess meaning; annotation ink
+is adjusted for ordinary, hovered and selected surfaces. Shared choice rows use
+the active text scale for layout and keyboard scrolling, and board setup stacks
+its side-to-move choices instead of shrinking enlarged labels. This appearance
+closure does not certify Study's remaining persistence or typed-diagnostic debt.
+
 #### Study document projections
 
 `StudyController` privately owns the mutable `StudyDocument` and `MoveTree`.

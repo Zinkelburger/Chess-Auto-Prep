@@ -6,6 +6,7 @@ library;
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
+import '../../l10n/generated/app_localizations.dart';
 
 import '../../core/board_editor_controller.dart';
 import 'board_editor_panel.dart';
@@ -15,19 +16,15 @@ class BoardEditorDialog extends StatefulWidget {
   final String? initialFen;
 
   /// Label for the confirm button.
-  final String actionLabel;
+  final String? actionLabel;
 
-  const BoardEditorDialog({
-    super.key,
-    this.initialFen,
-    this.actionLabel = 'Use position',
-  });
+  const BoardEditorDialog({super.key, this.initialFen, this.actionLabel});
 
   /// Show the editor; resolves to the chosen [Position] or `null`.
   static Future<Position?> show(
     BuildContext context, {
     String? initialFen,
-    String actionLabel = 'Use position',
+    String? actionLabel,
   }) {
     return showDialog<Position>(
       context: context,
@@ -68,13 +65,13 @@ class _BoardEditorDialogState extends State<BoardEditorDialog> {
               Row(
                 children: [
                   Text(
-                    'Set up position',
+                    AppLocalizations.of(context).boardSetupTitle,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const Spacer(),
                   IconButton(
                     icon: const Icon(Icons.close),
-                    tooltip: 'Cancel',
+                    tooltip: AppLocalizations.of(context).cancel,
                     onPressed: () => Navigator.pop(context),
                   ),
                 ],
@@ -83,7 +80,9 @@ class _BoardEditorDialogState extends State<BoardEditorDialog> {
               Expanded(
                 child: BoardEditorPanel(
                   controller: _controller,
-                  actionLabel: widget.actionLabel,
+                  actionLabel:
+                      widget.actionLabel ??
+                      AppLocalizations.of(context).boardUsePosition,
                   onAction: (position) {
                     if (!mounted) return;
                     Navigator.pop(context, position);

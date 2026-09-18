@@ -485,6 +485,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     // Stretch: the movetext box fills the pane it is given.  Left to size
     // itself it was exactly as wide as its longest row, which put a lone
     // "1. e4" in a black strip with empty pane either side.
@@ -496,7 +497,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
             child: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceContainerLow,
+                color: colors.surfaceContainerLow,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Column(
@@ -510,7 +511,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                           Icon(
                             Icons.warning_amber_rounded,
                             size: 14,
-                            color: Theme.of(context).colorScheme.tertiary,
+                            color: colors.tertiary,
                           ),
                           const SizedBox(width: 6),
                           Expanded(
@@ -520,17 +521,14 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                               overflow: TextOverflow.ellipsis,
                               style: AppTypography.caption(context).copyWith(
                                 fontWeight: FontWeight.w700,
-                                color: Theme.of(context).colorScheme.tertiary,
+                                color: colors.tertiary,
                               ),
                             ),
                           ),
                         ],
                       ),
                     ),
-                    Divider(
-                      height: 1,
-                      color: Theme.of(context).colorScheme.outlineVariant,
-                    ),
+                    Divider(height: 1, color: colors.outlineVariant),
                     const SizedBox(height: 4),
                   ] else if (_showTitleField) ...[
                     Row(
@@ -538,7 +536,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                         Icon(
                           Icons.drive_file_rename_outline,
                           size: 15,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          color: colors.onSurfaceVariant,
                         ),
                         const SizedBox(width: 6),
                         Expanded(
@@ -549,9 +547,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                                 context,
                               ).pgnLineTitle,
                               hintStyle: AppTypography.body(context).copyWith(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurfaceVariant,
+                                color: colors.onSurfaceVariant,
                                 fontWeight: FontWeight.w600,
                               ),
                               border: InputBorder.none,
@@ -562,7 +558,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                             ),
                             style: AppTypography.body(context).copyWith(
                               fontWeight: FontWeight.w600,
-                              color: Theme.of(context).colorScheme.onSurface,
+                              color: colors.onSurface,
                             ),
                             onChanged: (title) {
                               widget.onTitleChanged?.call(title);
@@ -572,10 +568,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                         ),
                       ],
                     ),
-                    Divider(
-                      height: 1,
-                      color: Theme.of(context).colorScheme.outlineVariant,
-                    ),
+                    Divider(height: 1, color: colors.outlineVariant),
                     const SizedBox(height: 4),
                   ],
                   Expanded(child: _buildMovesDisplay()),

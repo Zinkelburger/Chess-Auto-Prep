@@ -110,9 +110,10 @@ class _EditChapterDialogState extends State<_EditChapterDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final mono = AppTypography.mono(context);
     return AlertDialog(
-      title: Text(AppLocalizations.of(context).studyEditChapter),
+      title: Text(l10n.studyEditChapter),
       content: SizedBox(
         width: 480,
         child: SingleChildScrollView(
@@ -124,7 +125,7 @@ class _EditChapterDialogState extends State<_EditChapterDialog> {
                 controller: _name,
                 autofocus: true,
                 decoration: InputDecoration(
-                  labelText: AppLocalizations.of(context).studyName,
+                  labelText: l10n.studyName,
                   isDense: true,
                   border: const OutlineInputBorder(),
                 ),
@@ -133,31 +134,22 @@ class _EditChapterDialogState extends State<_EditChapterDialog> {
               ),
               const SizedBox(height: 16),
               Text(
-                AppLocalizations.of(context).studyOrientation,
+                l10n.studyOrientation,
                 style: AppTypography.caption(context),
               ),
               const SizedBox(height: 6),
               SegmentedButton<Side>(
                 showSelectedIcon: false,
                 segments: [
-                  ButtonSegment(
-                    value: Side.white,
-                    label: Text(AppLocalizations.of(context).white),
-                  ),
-                  ButtonSegment(
-                    value: Side.black,
-                    label: Text(AppLocalizations.of(context).black),
-                  ),
+                  ButtonSegment(value: Side.white, label: Text(l10n.white)),
+                  ButtonSegment(value: Side.black, label: Text(l10n.black)),
                 ],
                 selected: {_orientation},
                 onSelectionChanged: (s) =>
                     setState(() => _orientation = s.single),
               ),
               const SizedBox(height: 16),
-              Text(
-                AppLocalizations.of(context).studyPgnTags,
-                style: AppTypography.caption(context),
-              ),
+              Text(l10n.studyPgnTags, style: AppTypography.caption(context)),
               const SizedBox(height: 6),
               for (final (i, tag) in _tags.indexed)
                 Padding(
@@ -170,7 +162,7 @@ class _EditChapterDialogState extends State<_EditChapterDialog> {
                           controller: tag.key,
                           style: mono,
                           decoration: InputDecoration(
-                            hintText: AppLocalizations.of(context).studyTag,
+                            hintText: l10n.studyTag,
                             isDense: true,
                             border: const OutlineInputBorder(),
                           ),
@@ -183,9 +175,7 @@ class _EditChapterDialogState extends State<_EditChapterDialog> {
                           controller: tag.value,
                           style: mono,
                           decoration: InputDecoration(
-                            hintText: AppLocalizations.of(
-                              context,
-                            ).studyTagValue,
+                            hintText: l10n.studyTagValue,
                             isDense: true,
                             border: const OutlineInputBorder(),
                           ),
@@ -193,7 +183,7 @@ class _EditChapterDialogState extends State<_EditChapterDialog> {
                       ),
                       IconButton(
                         icon: const Icon(Icons.close, size: 16),
-                        tooltip: AppLocalizations.of(context).studyRemoveTag,
+                        tooltip: l10n.studyRemoveTag,
                         visualDensity: VisualDensity.compact,
                         onPressed: () {
                           final removed = _tags.removeAt(i);
@@ -209,7 +199,7 @@ class _EditChapterDialogState extends State<_EditChapterDialog> {
                 ),
               TextButton.icon(
                 icon: const Icon(Icons.add, size: 16),
-                label: Text(AppLocalizations.of(context).studyAddTag),
+                label: Text(l10n.studyAddTag),
                 onPressed: () => setState(() => _tags.add(_TagRow('', ''))),
               ),
               if (_error != null) ...[
@@ -228,12 +218,9 @@ class _EditChapterDialogState extends State<_EditChapterDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: Text(AppLocalizations.of(context).cancel),
+          child: Text(l10n.cancel),
         ),
-        ElevatedButton(
-          onPressed: _submit,
-          child: Text(AppLocalizations.of(context).saveChanges),
-        ),
+        ElevatedButton(onPressed: _submit, child: Text(l10n.saveChanges)),
       ],
     );
   }

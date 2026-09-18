@@ -3255,6 +3255,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Depth {depth} · {nodes} nodes'**
   String engineAppearanceDepthStatus(int depth, String nodes);
+
+  /// Study and PGN control: boardSetupTitle
+  ///
+  /// In en, this message translates to:
+  /// **'Set up position'**
+  String get boardSetupTitle;
+
+  /// Study and PGN control: boardUsePosition
+  ///
+  /// In en, this message translates to:
+  /// **'Use position'**
+  String get boardUsePosition;
 }
 
 class _AppLocalizationsDelegate

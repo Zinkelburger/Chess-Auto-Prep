@@ -153,6 +153,7 @@ class GlyphButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Tooltip(
       message: name,
       waitDuration: const Duration(milliseconds: 400),
@@ -166,9 +167,7 @@ class GlyphButton extends StatelessWidget {
             color: isActive ? color.withValues(alpha: 0.2) : null,
             borderRadius: BorderRadius.circular(5),
             border: Border.all(
-              color: isActive
-                  ? color.withValues(alpha: 0.7)
-                  : Theme.of(context).colorScheme.outline,
+              color: isActive ? color.withValues(alpha: 0.7) : colors.outline,
             ),
           ),
           child: Text(
@@ -178,17 +177,17 @@ class GlyphButton extends StatelessWidget {
               fontWeight: FontWeight.bold,
               fontFamily: AppTypography.monoFamily,
               color: onTap == null
-                  ? Theme.of(context).colorScheme.onSurfaceVariant
+                  ? colors.onSurfaceVariant
                   : (isActive
                         ? PgnTextStyles.annotationInk(
                             context,
                             color,
                             background: Color.alphaBlend(
                               color.withValues(alpha: 0.2),
-                              Theme.of(context).colorScheme.surface,
+                              colors.surface,
                             ),
                           )
-                        : Theme.of(context).colorScheme.onSurface),
+                        : colors.onSurface),
             ),
           ),
         ),

@@ -246,8 +246,13 @@ class _StudyScreenState extends State<StudyScreen> {
     if (name == null) return;
     try {
       await _study.newStudy(name);
-    } on ArgumentError catch (e) {
-      if (mounted) showAppSnackBar(context, e.message as String, isError: true);
+    } on ArgumentError {
+      if (mounted)
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context).studyNameExists,
+          isError: true,
+        );
     }
   }
 
@@ -844,6 +849,7 @@ class _StudyScreenState extends State<StudyScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return BoardKeyboardScope(
       moveInputKey: _moveInputKey,
       bindings: () => _keyBindings,
@@ -910,63 +916,63 @@ class _StudyScreenState extends State<StudyScreen> {
               builder: (context, hasFile) => AppOverflowMenu(
                 entries: [
                   AppMenuEntry(
-                    heading: AppLocalizations.of(context).studyWorkspaceName,
-                    label: AppLocalizations.of(context).studyNewStudy,
+                    heading: l10n.studyWorkspaceName,
+                    label: l10n.studyNewStudy,
                     icon: Icons.library_add_outlined,
                     onRun: () => unawaited(_newStudy()),
                   ),
                   AppMenuEntry(
-                    heading: AppLocalizations.of(context).importAction,
-                    label: AppLocalizations.of(context).studyFromUrl,
+                    heading: l10n.importAction,
+                    label: l10n.studyFromUrl,
                     icon: Icons.link,
                     onRun: () => unawaited(_importFromUrl()),
                   ),
                   AppMenuEntry(
-                    label: AppLocalizations.of(context).studyPgnFileChapters,
+                    label: l10n.studyPgnFileChapters,
                     icon: Icons.description_outlined,
                     onRun: () => unawaited(_importPgn()),
                   ),
                   if (hasFile) ...[
                     AppMenuEntry(
-                      heading: AppLocalizations.of(context).studyExportHeading,
-                      label: AppLocalizations.of(context).studyCopyPgn,
+                      heading: l10n.studyExportHeading,
+                      label: l10n.studyCopyPgn,
                       icon: Icons.copy,
                       onRun: () => unawaited(_exportPgn()),
                     ),
                     AppMenuEntry(
-                      label: AppLocalizations.of(context).studySavePgnAs,
+                      label: l10n.studySavePgnAs,
                       icon: Icons.description_outlined,
                       onRun: () => unawaited(_saveStudyAs()),
                     ),
                   ],
                   AppMenuEntry(
-                    heading: AppLocalizations.of(context).studyTrainHeading,
-                    label: AppLocalizations.of(context).studyTrainChapter,
+                    heading: l10n.studyTrainHeading,
+                    label: l10n.studyTrainChapter,
                     icon: Icons.school_outlined,
                     onRun: () => _train(wholeStudy: false),
                   ),
                   AppMenuEntry(
-                    label: AppLocalizations.of(context).studyTrainAll,
+                    label: l10n.studyTrainAll,
                     icon: Icons.school_outlined,
                     onRun: () => _train(wholeStudy: true),
                   ),
                   AppMenuEntry(
-                    heading: AppLocalizations.of(context).studyBoardHeading,
-                    label: AppLocalizations.of(context).studyFlipBoard,
+                    heading: l10n.studyBoardHeading,
+                    label: l10n.studyFlipBoard,
                     icon: Icons.swap_vert,
                     onRun: _study.toggleFlipped,
                   ),
                   AppMenuEntry(
-                    heading: AppLocalizations.of(context).studyExploreHeading,
-                    label: AppLocalizations.of(context).studyBrowsePgn,
+                    heading: l10n.studyExploreHeading,
+                    label: l10n.studyBrowsePgn,
                     icon: Icons.open_in_new,
                     enabled: hasFile,
                     onRun: _browseInViewer,
                   ),
                   if (hasFile)
                     AppMenuEntry(
-                      heading: AppLocalizations.of(context).studyManageHeading,
-                      label: AppLocalizations.of(context).studyDeleteMenu,
+                      heading: l10n.studyManageHeading,
+                      label: l10n.studyDeleteMenu,
                       icon: Icons.delete_outline,
                       onRun: () => unawaited(_deleteCurrentStudy()),
                     ),

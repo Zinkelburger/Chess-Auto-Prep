@@ -157,11 +157,12 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final studies = _studies;
     final filtered = _filtered;
 
     return AlertDialog(
-      title: Text(widget.title ?? AppLocalizations.of(context).studyAddLine),
+      title: Text(widget.title ?? l10n.studyAddLine),
       content: SizedBox(
         width: 420,
         height: 420,
@@ -172,7 +173,7 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
               TextButton.icon(
                 onPressed: _loadStudies,
                 icon: const Icon(Icons.refresh),
-                label: Text(AppLocalizations.of(context).studyListRetry),
+                label: Text(l10n.studyListRetry),
               ),
             if (widget.selectionSummary != null)
               Padding(
@@ -183,7 +184,7 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
               TextField(
                 controller: _chapterCtrl,
                 decoration: InputDecoration(
-                  labelText: AppLocalizations.of(context).studyChapterName,
+                  labelText: l10n.studyChapterName,
                   isDense: true,
                 ),
               ),
@@ -191,14 +192,14 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
             FilledButton.icon(
               onPressed: studies == null ? null : _createNew,
               icon: const Icon(Icons.add),
-              label: Text(AppLocalizations.of(context).studyAddNewStudy),
+              label: Text(l10n.studyAddNewStudy),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _searchCtrl,
               autofocus: true,
               decoration: InputDecoration(
-                labelText: AppLocalizations.of(context).studySearchExisting,
+                labelText: l10n.studySearchExisting,
                 prefixIcon: const Icon(Icons.search, size: 18),
                 isDense: true,
               ),
@@ -223,12 +224,8 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
                             padding: const EdgeInsets.all(24),
                             child: Text(
                               studies.isEmpty
-                                  ? AppLocalizations.of(
-                                      context,
-                                    ).studyNoStudiesToAdd
-                                  : AppLocalizations.of(
-                                      context,
-                                    ).studyNoStudiesMatch,
+                                  ? l10n.studyNoStudiesToAdd
+                                  : l10n.studyNoStudiesMatch,
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 color: Theme.of(
@@ -247,12 +244,8 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
                             title: Text(s.name),
                             subtitle: Text(
                               _isPreferred(s)
-                                  ? AppLocalizations.of(
-                                      context,
-                                    ).studyPreferredChapterCount(s.gameCount)
-                                  : AppLocalizations.of(
-                                      context,
-                                    ).studyChapterCount(s.gameCount),
+                                  ? l10n.studyPreferredChapterCount(s.gameCount)
+                                  : l10n.studyChapterCount(s.gameCount),
                               style: AppTypography.caption(context),
                             ),
                             onTap: () => _pickExisting(s),
@@ -266,7 +259,7 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: Text(AppLocalizations.of(context).cancel),
+          child: Text(l10n.cancel),
         ),
       ],
     );

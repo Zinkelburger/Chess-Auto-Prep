@@ -68,9 +68,13 @@ class _StudyPickerBarState extends State<StudyPickerBar> {
     }
     try {
       await widget.study.renameStudy(safe);
-    } on ArgumentError catch (e) {
+    } on ArgumentError {
       if (mounted) {
-        showAppSnackBar(context, e.message as String, isError: true);
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context).studyNameExists,
+          isError: true,
+        );
       }
     }
   }

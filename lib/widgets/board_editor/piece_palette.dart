@@ -74,6 +74,7 @@ class SparePieceRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return LayoutBuilder(
       builder: (context, constraints) {
         final height = heightFor(constraints.maxWidth);
@@ -82,8 +83,8 @@ class SparePieceRow extends StatelessWidget {
           height: height,
           decoration: BoxDecoration(
             color: Theme.of(context).brightness == Brightness.light
-                ? Theme.of(context).colorScheme.surfaceContainer
-                : Theme.of(context).colorScheme.surfaceContainerHigh,
+                ? colors.surfaceContainer
+                : colors.surfaceContainerHigh,
             borderRadius: BorderRadius.circular(6),
           ),
           clipBehavior: Clip.antiAlias,
@@ -97,7 +98,7 @@ class SparePieceRow extends StatelessWidget {
                   child: Icon(
                     Icons.pan_tool_alt_outlined,
                     size: height * 0.5,
-                    color: Theme.of(context).colorScheme.onSurface,
+                    color: colors.onSurface,
                   ),
                 ),
               ),
@@ -119,7 +120,7 @@ class SparePieceRow extends StatelessWidget {
                   child: Icon(
                     Icons.delete_outline,
                     size: height * 0.5,
-                    color: Theme.of(context).colorScheme.onSurface,
+                    color: colors.onSurface,
                   ),
                 ),
               ),
@@ -146,23 +147,22 @@ class _SparePiece extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final brush = PieceBrush(piece);
     final selected = tool == brush;
-    final name = AppLocalizations.of(context).boardPieceName(
-      piece.color == Side.white
-          ? AppLocalizations.of(context).white
-          : AppLocalizations.of(context).black,
+    final name = l10n.boardPieceName(
+      piece.color == Side.white ? l10n.white : l10n.black,
       {
-        Role.pawn: AppLocalizations.of(context).boardPiecePawn,
-        Role.knight: AppLocalizations.of(context).boardPieceKnight,
-        Role.bishop: AppLocalizations.of(context).boardPieceBishop,
-        Role.rook: AppLocalizations.of(context).boardPieceRook,
-        Role.queen: AppLocalizations.of(context).boardPieceQueen,
-        Role.king: AppLocalizations.of(context).boardPieceKing,
+        Role.pawn: l10n.boardPiecePawn,
+        Role.knight: l10n.boardPieceKnight,
+        Role.bishop: l10n.boardPieceBishop,
+        Role.rook: l10n.boardPieceRook,
+        Role.queen: l10n.boardPieceQueen,
+        Role.king: l10n.boardPieceKing,
       }[piece.role]!,
     );
     return _SpareSlot(
-      tooltip: AppLocalizations.of(context).boardSpareHelp(name),
+      tooltip: l10n.boardSpareHelp(name),
       selected: selected,
       // Click: take the piece in hand, or put it down again.
       onTap: () => onSelect(selected ? const PointerTool() : brush),

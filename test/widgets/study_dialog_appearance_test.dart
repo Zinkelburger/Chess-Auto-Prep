@@ -4,6 +4,9 @@ import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.
 import 'package:chess_auto_prep/features/studies/models/study_projection.dart';
 import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/models/move_tree.dart';
+import 'package:chess_auto_prep/widgets/board_editor/board_editor_dialog.dart';
+import 'package:chess_auto_prep/widgets/board_editor/position_setup_panel.dart';
+import 'package:chess_auto_prep/widgets/common/choice_field.dart';
 import 'package:chess_auto_prep/widgets/pgn/add_to_study_dialog.dart';
 import 'package:chess_auto_prep/widgets/study/edit_chapter_dialog.dart';
 import 'package:chess_auto_prep/widgets/study/new_chapter_dialog.dart';
@@ -12,6 +15,87 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets(
+    'nested setup preserves full size choices and FEN draft across appearance',
+    (tester) async {
+      tester.view.physicalSize = const Size(750, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final appearance = ValueNotifier(AppTheme.dark());
+      addTearDown(appearance.dispose);
+      await tester.pumpWidget(
+        ValueListenableBuilder<ThemeData>(
+          valueListenable: appearance,
+          builder: (context, theme, _) => MaterialApp(
+            theme: theme,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: const TextScaler.linear(2)),
+              child: child!,
+            ),
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => TextButton(
+                  onPressed: () => BoardEditorDialog.show(
+                    context,
+                    initialFen: '4k3/8/8/4p3/8/8/8/4K3 w - - 0 2',
+                  ),
+                  child: const Text('Setup'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Setup'));
+      await tester.pumpAndSettle();
+      final controls = find.byType(PositionSetupPanel);
+      final sideControl = find.descendant(
+        of: controls,
+        matching: find.byType(SegmentedButton<Side>),
+      );
+      await tester.ensureVisible(sideControl);
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<SegmentedButton<Side>>(sideControl).direction,
+        Axis.vertical,
+      );
+      expect(
+        find.ancestor(of: sideControl, matching: find.byType(FittedBox)),
+        findsNothing,
+      );
+      await tester.ensureVisible(find.text('Advanced position settings'));
+      await tester.tap(find.text('Advanced position settings'));
+      await tester.pumpAndSettle();
+      final ep = find.byType(ChoiceField<Square?>);
+      await tester.ensureVisible(ep);
+      await tester.tap(ep);
+      await tester.pumpAndSettle();
+      expect(find.text('e6'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.text('e6'));
+      await tester.pumpAndSettle();
+      final fen = find.widgetWithText(TextField, 'FEN');
+      await tester.ensureVisible(fen);
+      await tester.enterText(fen, 'unfinished FEN');
+      final controller = tester.widget<TextField>(fen).controller;
+      final state = tester.state(controls);
+      appearance.value = AppTheme.light();
+      await tester.pumpAndSettle();
+      expect(tester.state(controls), same(state));
+      expect(tester.widget<TextField>(fen).controller, same(controller));
+      expect(controller!.text, 'unfinished FEN');
+      expect(Theme.of(tester.element(controls)).brightness, Brightness.light);
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.byTooltip('Cancel'));
+      await tester.pumpAndSettle();
+    },
+  );
+
   for (final light in [false, true]) {
     for (final kind in ['new', 'edit', 'add']) {
       testWidgets(

@@ -283,7 +283,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           child: PgnViewerScreen(lifetime: context.read<PgnViewerLifetime>()),
         );
       case AppMode.study:
-        return const LegacyThemeBoundary(child: StudyScreen());
+        return const StudyScreen();
       case AppMode.engineTournament:
         return const LegacyThemeBoundary(child: EngineTournamentScreen());
       case AppMode.bughouse:

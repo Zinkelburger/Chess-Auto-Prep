@@ -23,28 +23,27 @@ class PgnSaveStatus extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final failed = error != null && dirty;
     final String label;
     final String explanation;
     if (failed) {
-      label = AppLocalizations.of(context).generationRecoveryNotSaved;
+      label = l10n.generationRecoveryNotSaved;
       explanation = error!;
     } else if (filePath == null) {
-      label = AppLocalizations.of(context).pgnNotSavedFile;
-      explanation = AppLocalizations.of(context).pgnChooseSaveFile;
+      label = l10n.pgnNotSavedFile;
+      explanation = l10n.pgnChooseSaveFile;
     } else if (saving || (autoSave && dirty)) {
-      label = AppLocalizations.of(context).documentSaving;
-      explanation = AppLocalizations.of(context).pgnSavingPath(filePath!);
+      label = l10n.documentSaving;
+      explanation = l10n.pgnSavingPath(filePath!);
     } else if (dirty) {
-      label = AppLocalizations.of(context).documentDirty;
-      explanation = AppLocalizations.of(context).pgnManualSavePath(filePath!);
+      label = l10n.documentDirty;
+      explanation = l10n.pgnManualSavePath(filePath!);
     } else {
-      label = autoSave
-          ? AppLocalizations.of(context).pgnAutoSaved
-          : AppLocalizations.of(context).pgnManualSaved;
+      label = autoSave ? l10n.pgnAutoSaved : l10n.pgnManualSaved;
       explanation = autoSave
-          ? AppLocalizations.of(context).pgnAutoSavePath(filePath!)
-          : AppLocalizations.of(context).pgnNeedsManualSavePath(filePath!);
+          ? l10n.pgnAutoSavePath(filePath!)
+          : l10n.pgnNeedsManualSavePath(filePath!);
     }
     return SizedBox(
       width: 150,

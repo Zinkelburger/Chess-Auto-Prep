@@ -68,11 +68,12 @@ class _PgnCommentEditorState extends State<PgnCommentEditor> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHigh,
+        color: colors.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(6),
       ),
       child: Row(
@@ -84,7 +85,7 @@ class _PgnCommentEditorState extends State<PgnCommentEditor> {
               maxLines: null,
               style: AppTypography.secondary(
                 context,
-              ).copyWith(color: Theme.of(context).colorScheme.onSurface),
+              ).copyWith(color: colors.onSurface),
               decoration: const InputDecoration(
                 isDense: true,
                 contentPadding: EdgeInsets.symmetric(
@@ -99,22 +100,14 @@ class _PgnCommentEditorState extends State<PgnCommentEditor> {
           ),
           IconButton(
             onPressed: _save,
-            icon: Icon(
-              Icons.check,
-              size: 18,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
+            icon: Icon(Icons.check, size: 18, color: colors.onSurfaceVariant),
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
             tooltip: AppLocalizations.of(context).pgnSaveComment,
           ),
           IconButton(
             onPressed: widget.onCancel,
-            icon: Icon(
-              Icons.close,
-              size: 18,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
+            icon: Icon(Icons.close, size: 18, color: colors.onSurfaceVariant),
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
             tooltip: AppLocalizations.of(context).cancel,

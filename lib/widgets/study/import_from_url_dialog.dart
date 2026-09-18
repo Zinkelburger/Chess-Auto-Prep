@@ -225,9 +225,10 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return AlertDialog(
       scrollable: true,
-      title: Text(AppLocalizations.of(context).studyImportFromUrl),
+      title: Text(l10n.studyImportFromUrl),
       content: SizedBox(
         width: 520,
         child: Column(
@@ -235,7 +236,7 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              AppLocalizations.of(context).studyImportSupportedUrls,
+              l10n.studyImportSupportedUrls,
               style: AppTypography.caption(context),
             ),
             const SizedBox(height: 12),
@@ -246,7 +247,7 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
               onChanged: _onUrlChanged,
               onSubmitted: (_) => _import(),
               decoration: InputDecoration(
-                labelText: AppLocalizations.of(context).studyUrl,
+                labelText: l10n.studyUrl,
                 border: const OutlineInputBorder(),
                 isDense: true,
               ),
@@ -255,12 +256,12 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
             _statusLine(),
             const Divider(height: 24),
             AppCheckbox(
-              label: AppLocalizations.of(context).studyImportAppend,
+              label: l10n.studyImportAppend,
               value: _canAppend && _appendToCurrent,
               enabled: _canAppend && !_busy,
               disabledReason: widget.canAppend
-                  ? AppLocalizations.of(context).studyImportCollectionSeparate
-                  : AppLocalizations.of(context).studyImportNoOpenStudy,
+                  ? l10n.studyImportCollectionSeparate
+                  : l10n.studyImportNoOpenStudy,
               onChanged: (v) => setState(() => _appendToCurrent = v),
             ),
             const SizedBox(height: 12),
@@ -268,7 +269,7 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
               children: [
                 Expanded(
                   child: Text(
-                    AppLocalizations.of(context).studyImportDelay,
+                    l10n.studyImportDelay,
                     style: AppTypography.body(context),
                   ),
                 ),
@@ -290,7 +291,7 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
             ),
             const SizedBox(height: 6),
             Text(
-              AppLocalizations.of(context).studyImportDelayHelp,
+              l10n.studyImportDelayHelp,
               style: AppTypography.caption(context),
             ),
           ],
@@ -299,7 +300,7 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
       actions: [
         TextButton(
           onPressed: _busy ? null : () => Navigator.pop(context),
-          child: Text(AppLocalizations.of(context).cancel),
+          child: Text(l10n.cancel),
         ),
         FilledButton(
           onPressed: _source == null || _busy ? null : _import,
@@ -309,7 +310,7 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : Text(AppLocalizations.of(context).importAction),
+              : Text(l10n.importAction),
         ),
       ],
     );
@@ -418,9 +419,10 @@ class _PasteGameIdsDialogState extends State<_PasteGameIdsDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return AlertDialog(
       scrollable: true,
-      title: Text(AppLocalizations.of(context).studyImportCollectionBlocked),
+      title: Text(l10n.studyImportCollectionBlocked),
       content: SizedBox(
         width: 520,
         child: Column(
@@ -428,7 +430,7 @@ class _PasteGameIdsDialogState extends State<_PasteGameIdsDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              AppLocalizations.of(context).studyImportPasteIdsHelp,
+              l10n.studyImportPasteIdsHelp,
               style: AppTypography.body(context),
             ),
             const SizedBox(height: 12),
@@ -440,9 +442,7 @@ class _PasteGameIdsDialogState extends State<_PasteGameIdsDialog> {
                   '?cid=${widget.cid}',
                 ),
                 icon: const Icon(Icons.open_in_new, size: 16),
-                label: Text(
-                  AppLocalizations.of(context).studyImportOpenCollection,
-                ),
+                label: Text(l10n.studyImportOpenCollection),
               ),
             ),
             const SizedBox(height: 12),
@@ -454,7 +454,7 @@ class _PasteGameIdsDialogState extends State<_PasteGameIdsDialog> {
               onChanged: _onChanged,
               style: AppTypography.mono(context),
               decoration: InputDecoration(
-                hintText: AppLocalizations.of(context).studyImportPasteIdsHint,
+                hintText: l10n.studyImportPasteIdsHint,
                 border: const OutlineInputBorder(),
                 isDense: true,
               ),
@@ -466,10 +466,8 @@ class _PasteGameIdsDialogState extends State<_PasteGameIdsDialog> {
                 alignment: Alignment.centerLeft,
                 child: Text(
                   _ids.isEmpty
-                      ? AppLocalizations.of(context).studyImportNoIds
-                      : AppLocalizations.of(
-                          context,
-                        ).studyImportGamesFound(_ids.length),
+                      ? l10n.studyImportNoIds
+                      : l10n.studyImportGamesFound(_ids.length),
                   style: AppTypography.caption(context).copyWith(
                     color: _ids.isEmpty
                         ? Theme.of(context).colorScheme.onSurfaceVariant
@@ -484,14 +482,14 @@ class _PasteGameIdsDialogState extends State<_PasteGameIdsDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: Text(AppLocalizations.of(context).cancel),
+          child: Text(l10n.cancel),
         ),
         FilledButton(
           onPressed: _ids.isEmpty ? null : () => Navigator.pop(context, _ids),
           child: Text(
             _ids.isEmpty
-                ? AppLocalizations.of(context).studyDownload
-                : AppLocalizations.of(context).studyDownloadCount(_ids.length),
+                ? l10n.studyDownload
+                : l10n.studyDownloadCount(_ids.length),
           ),
         ),
       ],
