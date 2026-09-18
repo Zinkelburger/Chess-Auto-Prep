@@ -254,14 +254,32 @@ merges (57 on the first-parent history). Commit count is activity, not completio
 At that snapshot, six enforced and 17 unfinished features included zero complete
 features. The current inventory above separately records later deletions.
 
-At the later reviewed deletion checkpoint `5bcea12e`, all library Dart totals
-**228,887 lines**, still 9,930 (4.5%) above September 16. The Viewer screen is
-1,954 lines, Builder 1,459, Study 1,049 and Generation session controller 1,455.
-These active consumers have not all become smaller. The completed simplification
-batch against `fa7f309e` removes 10,595 production lines, including 8,440 lines
-from unused analysis/eval-tree retirement. Those unrelated deletions cannot
-satisfy the same-workflow simplicity gate for Builder, Study or Generation.
-Their next cutovers must account for the screen and its entire helper/owner graph.
+The same measurement at integrated checkpoint `3acf6c3f` is:
+
+| Tracked scope | September 16 | Current checkpoint | Change from September 16 |
+|---|---:|---:|---:|
+| All library Dart, including generated code | 218,957 | 227,007 | +8,050 (+3.7%) |
+| Viewer screen | 1,909 | 1,954 | +45 |
+| Builder screen | 1,191 | 1,458 | +267 |
+| Study screen | 880 | 1,049 | +169 |
+| Generation session controller | 1,321 | 1,447 | +126 |
+
+All-library code is down 9,984 lines from the reviewed `a6238ff5` snapshot,
+but none of these four consumers is smaller than September 16. Legacy
+`services/` still holds 42,509 lines and `widgets/` 49,955. Riverpod's production
+imports and package dependency are now deleted; the current inventory is six
+enforced and 15 unfinished feature directories, with none complete. The two
+removed feature directories contained unused code, not graduated workflows.
+
+Against the separate simplification baseline `fa7f309e`, the completed batch
+removes 12,497 handwritten production lines, with generated localization +22
+reported separately. Of the removals, 10,594 lines come from unused analysis,
+eval-tree and other presentation retirement. These unrelated deletions cannot
+satisfy another workflow's simplicity gate. Its screen and entire helper/owner
+graph must improve together. The current decision is **continue bounded
+consolidation**, not expand a broad rewrite or declare the architecture simpler
+overall. New safety findings need their own complete contract and evidence;
+their implementation growth cannot count as a simplification pass.
 
 The criticism needs three qualifications, not a dismissal:
 
@@ -276,7 +294,8 @@ The criticism needs three qualifications, not a dismissal:
   `PgnCollectionDecoder` isolates heavy decoding and has delayed/failure fakes.
   Those are meaningful boundaries. File length and one production implementation
   do not establish that an interface is wasteful.
-- Provider imports occur in 45 production files and Riverpod imports in seven.
+- At the original review snapshot, Provider imports occurred in 45 production
+  files and Riverpod imports in seven; the latter are now retired.
   Constructor injection is ordinary dependency passing, not a third container.
   Four InheritedWidget subclasses and one InheritedNotifier subclass also exist;
   a UI protocol scope is not automatically a competing dependency framework.
