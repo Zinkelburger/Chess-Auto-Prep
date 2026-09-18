@@ -176,7 +176,7 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
           children: [
             Text(
               san,
-              style: PgnTextStyles.branchChip.copyWith(
+              style: PgnTextStyles.branchChip(context).copyWith(
                 color: color,
                 fontWeight: emphasized ? FontWeight.w600 : FontWeight.w500,
               ),

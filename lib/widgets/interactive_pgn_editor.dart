@@ -13,9 +13,8 @@ import 'package:chess_auto_prep/utils/pgn_nags.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
-import '../theme/app_text_styles.dart';
-import '../theme/pgn_text_styles.dart';
+import '../design_system/theme/app_typography.dart';
+import 'pgn/pgn_text_styles.dart';
 import 'package:chess_auto_prep/models/move_tree.dart';
 import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 import '../chess_core/moves/move_tree_view.dart';
@@ -141,6 +140,14 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   void initState() {
     super.initState();
     _titleController.text = widget.lineTitle ?? '';
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Rows retain resolved text styles, but appearance changes must not reset
+    // the document index, cursor, viewport or in-progress comment draft.
+    _rowWidgets.clear();
   }
 
   @override
@@ -478,7 +485,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
             child: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: AppColors.pgnSurface,
+                color: Theme.of(context).colorScheme.surfaceContainerLow,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Column(
@@ -489,10 +496,10 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                       padding: const EdgeInsets.symmetric(vertical: 3),
                       child: Row(
                         children: [
-                          const Icon(
+                          Icon(
                             Icons.warning_amber_rounded,
                             size: 14,
-                            color: AppColors.warning,
+                            color: Theme.of(context).colorScheme.tertiary,
                           ),
                           const SizedBox(width: 6),
                           Expanded(
@@ -500,45 +507,52 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                               widget.ephemeralTitle!,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w700,
-                                color: AppColors.warning,
+                                color: Theme.of(context).colorScheme.tertiary,
                               ),
                             ),
                           ),
                         ],
                       ),
                     ),
-                    const Divider(height: 1, color: AppColors.divider),
+                    Divider(
+                      height: 1,
+                      color: Theme.of(context).colorScheme.outlineVariant,
+                    ),
                     const SizedBox(height: 4),
                   ] else if (_showTitleField) ...[
                     Row(
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.drive_file_rename_outline,
                           size: 15,
-                          color: AppColors.onSurfaceMuted,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                         const SizedBox(width: 6),
                         Expanded(
                           child: TextField(
                             controller: _titleController,
-                            decoration: const InputDecoration(
+                            decoration: InputDecoration(
                               hintText: 'Line title',
                               hintStyle: TextStyle(
-                                color: AppColors.onSurfaceMuted,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
                               ),
                               border: InputBorder.none,
                               isDense: true,
-                              contentPadding: EdgeInsets.symmetric(vertical: 4),
+                              contentPadding: const EdgeInsets.symmetric(
+                                vertical: 4,
+                              ),
                             ),
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
-                              color: AppColors.inkSoft,
+                              color: Theme.of(context).colorScheme.onSurface,
                             ),
                             onChanged: (title) {
                               widget.onTitleChanged?.call(title);
@@ -548,7 +562,10 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                         ),
                       ],
                     ),
-                    const Divider(height: 1, color: AppColors.divider),
+                    Divider(
+                      height: 1,
+                      color: Theme.of(context).colorScheme.outlineVariant,
+                    ),
                     const SizedBox(height: 4),
                   ],
                   Expanded(child: _buildMovesDisplay()),
@@ -606,11 +623,11 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
   Widget _buildMovesDisplay() {
     if (widget.tree.isEmpty && widget.tree.rootComment == null) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 18),
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 18),
         child: Text(
           'Play a move or select a saved line.',
-          style: AppTextStyles.muted,
+          style: AppTypography.secondary(context),
         ),
       );
     }
@@ -668,7 +685,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
             spans.add(
               TextSpan(
                 text: '${move.number}${move.white ? '.' : '...'}\u00a0',
-                style: PgnTextStyles.moveNumberAt(row.depth),
+                style: PgnTextStyles.moveNumberAt(context, row.depth),
               ),
             );
           }
@@ -688,13 +705,16 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
           spans.add(const TextSpan(text: ' '));
         }
         child = Text.rich(
-          TextSpan(style: PgnTextStyles.rowRootAt(row.depth), children: spans),
+          TextSpan(
+            style: PgnTextStyles.rowRootAt(context, row.depth),
+            children: spans,
+          ),
         );
       case MoveTextComment():
         child = Text.rich(
           TextSpan(
             text: '${row.text} ',
-            style: PgnTextStyles.commentAt(row.depth),
+            style: PgnTextStyles.commentAt(context, row.depth),
           ),
         );
       case MoveTextInlineEditor():
@@ -732,7 +752,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
           child: Icon(
             start ? Icons.flag : Icons.sports_score,
             size: 13,
-            color: AppColors.accent,
+            color: Theme.of(context).colorScheme.primary,
           ),
         ),
       ),
@@ -809,9 +829,13 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   }) {
     // Moves keep the same size and weight across annotations and depth;
     // selection changes ink only, with a pill marking the current move.
-    final base = PgnTextStyles.moveAt(depth, ephemeral: node.isEphemeral);
+    final base = PgnTextStyles.moveAt(
+      context,
+      depth,
+      ephemeral: node.isEphemeral,
+    );
     final sanStyle = isSelected
-        ? base.copyWith(color: AppColors.pgnMoveCurrentFg)
+        ? base.copyWith(color: Theme.of(context).colorScheme.onPrimaryContainer)
         : base;
     return KeyedSubtree(
       key: isSelected ? _selectedMoveKey : null,
@@ -820,16 +844,19 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
         nagSuffix: nagSuffix,
         sanStyle: sanStyle,
         nagStyle: PgnTextStyles.nagAt(
+          context,
           depth,
           moveStyle: sanStyle,
           nags: node.nags,
         ),
         decoration: PgnMoveDecorations.resolve(
+          context,
           selected: isSelected,
           isEphemeral: node.isEphemeral,
           onContextPath: isOnCtxPath,
         ),
         hoverDecoration: PgnMoveDecorations.resolve(
+          context,
           selected: isSelected,
           isEphemeral: node.isEphemeral,
           hovered: true,

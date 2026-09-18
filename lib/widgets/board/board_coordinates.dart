@@ -12,7 +12,7 @@ import 'package:chess_auto_prep/features/settings/models/board_display_configura
 import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
-import '../../theme/app_text_styles.dart';
+import '../../design_system/theme/app_typography.dart';
 
 /// Squares narrower than this are a thumbnail, and a thumbnail carries no
 /// coordinates whatever the preference says (lila's mini boards are bare too).
@@ -77,6 +77,7 @@ List<CoordinateLabel> coordinateLabels({
   required BoardCoordinates mode,
   required bool flipped,
   required double squareSize,
+  required Color outsideInk,
   double margin = 0,
 }) {
   if (mode == BoardCoordinates.none || squareSize < kMinCoordinateSquare) {
@@ -150,7 +151,7 @@ List<CoordinateLabel> coordinateLabels({
               margin,
             ),
             alignment: Alignment.center,
-            color: AppColors.onSurfaceMuted,
+            color: outsideInk,
             fontSize: size,
           ),
         );
@@ -161,7 +162,7 @@ List<CoordinateLabel> coordinateLabels({
             text: rankAt(row),
             cell: Rect.fromLTWH(-margin, row * squareSize, margin, squareSize),
             alignment: Alignment.center,
-            color: AppColors.onSurfaceMuted,
+            color: outsideInk,
             fontSize: size,
           ),
         );
@@ -178,6 +179,7 @@ class BoardCoordinatesPainter extends CustomPainter {
     required this.mode,
     required this.flipped,
     required this.squareSize,
+    required this.outsideInk,
     this.margin = 0,
     this.origin = Offset.zero,
   });
@@ -185,6 +187,7 @@ class BoardCoordinatesPainter extends CustomPainter {
   final BoardCoordinates mode;
   final bool flipped;
   final double squareSize;
+  final Color outsideInk;
   final double margin;
   final Offset origin;
 
@@ -197,6 +200,7 @@ class BoardCoordinatesPainter extends CustomPainter {
       mode: mode,
       flipped: flipped,
       squareSize: squareSize,
+      outsideInk: outsideInk,
       margin: margin,
     );
     if (labels.isEmpty) return;
@@ -210,7 +214,7 @@ class BoardCoordinatesPainter extends CustomPainter {
           style: TextStyle(
             fontSize: label.fontSize,
             fontWeight: FontWeight.w600,
-            fontFamily: AppTextStyles.uiFamily,
+            fontFamily: AppTypography.uiFamily,
             color: label.color,
           ),
         ),
@@ -236,6 +240,7 @@ class BoardCoordinatesPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant BoardCoordinatesPainter old) =>
+      outsideInk != old.outsideInk ||
       mode != old.mode ||
       flipped != old.flipped ||
       squareSize != old.squareSize ||

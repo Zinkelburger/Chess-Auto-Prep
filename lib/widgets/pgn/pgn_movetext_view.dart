@@ -18,8 +18,7 @@ import '../../features/documents/models/solitaire_reveal.dart';
 import '../../chess_core/moves/move_tree_view.dart';
 import 'package:chess_auto_prep/chess_core/analysis/move_eval.dart'
     show MoveClassification, classifyMove, cpToWinningChance, initialWinChance;
-import '../../theme/app_colors.dart';
-import '../../theme/pgn_text_styles.dart';
+import 'pgn_text_styles.dart';
 import 'comment_editor.dart';
 import 'comment_diagram.dart';
 import '../../utils/course_comment_spacing.dart';
@@ -60,7 +59,6 @@ part 'pgn_movetext_variations.dart';
 
 // Also used by the prose-preview chips in the comment renderer.
 const _kReservedBorder = PgnMoveDecorations.idle;
-final _kHoverDecoration = PgnMoveDecorations.hover;
 
 class PgnMovetextView extends StatefulWidget {
   /// The parsed game (for game-level comments before any move).
@@ -331,14 +329,16 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
             row.end,
           ),
           ViewerVariationRow() => _buildVariationRow(
+            context,
             widget,
             row,
             onToggleBranch: _toggleBranch,
           ),
           ViewerFrontierRow() => RichText(
             text: TextSpan(
-              style: PgnTextStyles.rowRootAt(0),
+              style: PgnTextStyles.rowRootAt(context, 0),
               children: _buildInlineVariationAtPly(
+                context,
                 widget,
                 row.ply,
                 nodeVisible: (n) => _visible(n, row.ply),
@@ -364,7 +364,8 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
             decoration: BoxDecoration(
               border: Border(
                 left: BorderSide(
-                  color: nagColor(
+                  color: PgnTextStyles.nagInk(
+                    context,
                     note.classification.nag ?? 0,
                   ).withValues(alpha: .55),
                   width: 2,
@@ -448,7 +449,7 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
 
     // Root style for RichText runs of mainline moves; comments/variations
     // use their own styles via [PgnTextStyles].
-    final baseStyle = PgnTextStyles.rowRootAt(0);
+    final baseStyle = PgnTextStyles.rowRootAt(context, 0);
 
     void flushSpans() {
       if (spans.isNotEmpty) {
@@ -478,7 +479,7 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
     void emitComment(String raw, {Position? anchorPos, int anchorPly = 0}) {
       // Measured facts first, on their own row: a generated line annotates
       // every move, and interleaving that with prose would bury both.
-      final metrics = _metricsSpans(raw);
+      final metrics = _metricsSpans(context, raw);
       if (metrics.isNotEmpty) {
         emitFullWidthRow(
           RichText(text: TextSpan(children: List.of(metrics))),
@@ -486,6 +487,7 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
         );
       }
       final rendered = _renderComment(
+        context,
         view,
         raw,
         anchorPos: anchorPos,
@@ -499,7 +501,7 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
           _readableProse(
             RichText(
               text: TextSpan(
-                style: PgnTextStyles.commentAt(0),
+                style: PgnTextStyles.commentAt(context, 0),
                 children: List.of(rendered.spans),
               ),
             ),
@@ -521,7 +523,8 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
           decoration: BoxDecoration(
             border: Border(
               left: BorderSide(
-                color: nagColor(
+                color: PgnTextStyles.nagInk(
+                  context,
                   note.classification.nag ?? 0,
                 ).withValues(alpha: 0.55),
                 width: 2,
@@ -534,8 +537,8 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
             children: [
               RichText(
                 text: TextSpan(
-                  style: PgnTextStyles.commentAt(0),
-                  children: _evalNoteSpans(note),
+                  style: PgnTextStyles.commentAt(context, 0),
+                  children: _evalNoteSpans(context, note),
                 ),
               ),
             ],
@@ -549,6 +552,7 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
       if (!_inline(ply)) return;
       spans.addAll(
         _buildInlineVariationAtPly(
+          context,
           view,
           ply,
           nodeVisible: (n) => _visible(n, ply),
@@ -614,7 +618,10 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
 
       if (isWhiteTurn) {
         spans.add(
-          TextSpan(text: '$moveNumber. ', style: PgnTextStyles.moveNumberAt(0)),
+          TextSpan(
+            text: '$moveNumber. ',
+            style: PgnTextStyles.moveNumberAt(context, 0),
+          ),
         );
         forceBlackEllipsis = false;
       } else if (forceBlackEllipsis || (i == 0 && !view.startingWhiteTurn)) {
@@ -622,7 +629,7 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
         spans.add(
           TextSpan(
             text: '$moveNumber... ',
-            style: PgnTextStyles.moveNumberAt(0),
+            style: PgnTextStyles.moveNumberAt(context, 0),
           ),
         );
         forceBlackEllipsis = false;
@@ -638,8 +645,11 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
       // The current move keeps the mainline's weight and size; only the pill
       // changes, so navigating never reflows the wrapped movetext.
       final moveStyle = isCurrentMove
-          ? PgnTextStyles.moveAt(0).copyWith(color: AppColors.pgnMoveCurrentFg)
-          : PgnTextStyles.moveAt(0);
+          ? PgnTextStyles.moveAt(
+              context,
+              0,
+            ).copyWith(color: Theme.of(context).colorScheme.onPrimaryContainer)
+          : PgnTextStyles.moveAt(context, 0);
 
       // Build SAN + NAG text (always shown — annotations survive view mode).
       // Every NAG, not just the six editable quality glyphs: `⩲`, `∞`, `→` and
@@ -659,9 +669,18 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
             san: san,
             nagSuffix: nagSuffix,
             sanStyle: moveStyle,
-            nagStyle: PgnTextStyles.nagAt(0, moveStyle: moveStyle, nags: nags),
-            decoration: PgnMoveDecorations.resolve(selected: isCurrentMove),
+            nagStyle: PgnTextStyles.nagAt(
+              context,
+              0,
+              moveStyle: moveStyle,
+              nags: nags,
+            ),
+            decoration: PgnMoveDecorations.resolve(
+              context,
+              selected: isCurrentMove,
+            ),
             hoverDecoration: PgnMoveDecorations.resolve(
+              context,
               selected: isCurrentMove,
               hovered: true,
             ),

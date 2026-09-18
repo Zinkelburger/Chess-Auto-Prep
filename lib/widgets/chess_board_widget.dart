@@ -176,6 +176,9 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
                     coordinates == BoardCoordinates.everySquare)
                   CustomPaint(
                     painter: BoardCoordinatesPainter(
+                      outsideInk: Theme.of(
+                        context,
+                      ).colorScheme.onSurfaceVariant,
                       mode: coordinates,
                       flipped: widget.flipped,
                       squareSize: squareSize,
@@ -222,6 +225,7 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
               Positioned.fill(
                 child: CustomPaint(
                   painter: BoardCoordinatesPainter(
+                    outsideInk: Theme.of(context).colorScheme.onSurfaceVariant,
                     mode: coordinates,
                     flipped: widget.flipped,
                     squareSize: squareSize,

@@ -8,7 +8,6 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../../theme/app_colors.dart';
 import '../../design_system/components/confirm_dialog.dart';
 
 class PgnCommentEditor extends StatefulWidget {
@@ -71,7 +70,7 @@ class _PgnCommentEditorState extends State<PgnCommentEditor> {
       margin: const EdgeInsets.symmetric(vertical: 4),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: AppColors.surfaceInset,
+        color: Theme.of(context).colorScheme.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(6),
       ),
       child: Row(
@@ -81,7 +80,10 @@ class _PgnCommentEditorState extends State<PgnCommentEditor> {
               controller: _controller,
               autofocus: true,
               maxLines: null,
-              style: const TextStyle(fontSize: 13, color: AppColors.ink),
+              style: TextStyle(
+                fontSize: 13,
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
               decoration: const InputDecoration(
                 isDense: true,
                 contentPadding: EdgeInsets.symmetric(
@@ -96,10 +98,10 @@ class _PgnCommentEditorState extends State<PgnCommentEditor> {
           ),
           IconButton(
             onPressed: _save,
-            icon: const Icon(
+            icon: Icon(
               Icons.check,
               size: 18,
-              color: AppColors.onSurfaceSoft,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
@@ -107,10 +109,10 @@ class _PgnCommentEditorState extends State<PgnCommentEditor> {
           ),
           IconButton(
             onPressed: widget.onCancel,
-            icon: const Icon(
+            icon: Icon(
               Icons.close,
               size: 18,
-              color: AppColors.onSurfaceMuted,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,

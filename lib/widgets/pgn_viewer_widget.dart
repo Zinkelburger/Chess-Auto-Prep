@@ -22,7 +22,7 @@ import 'package:chess_auto_prep/utils/chess_utils.dart'
         recentMoveTrailSquares;
 import 'package:chess_auto_prep/chess_core/moves/move_tree_view.dart';
 import 'package:chess_auto_prep/theme/app_colors.dart';
-import 'package:chess_auto_prep/theme/pgn_text_styles.dart';
+import 'package:chess_auto_prep/widgets/pgn/pgn_text_styles.dart';
 import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
     show commentProse, joinComments, mergeCommentProse;
 import 'package:chess_auto_prep/widgets/info_hint.dart';

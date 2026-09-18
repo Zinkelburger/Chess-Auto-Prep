@@ -9,7 +9,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/board_editor_controller.dart';
 import '../common/choice_field.dart';
-import '../../theme/app_text_styles.dart';
+import '../../design_system/theme/app_typography.dart';
 import '../copy_button.dart';
 import '../labeled_toggle.dart';
 
@@ -146,7 +146,7 @@ class _PositionSetupPanelState extends State<PositionSetupPanel> {
           'Drag pieces where you want them, or click a spare piece and '
           'paint it onto squares. Right-click clears a square; with a '
           'piece in hand it switches the colour.',
-          style: AppTextStyles.forTheme(context, AppTextStyles.caption),
+          style: AppTypography.caption(context),
         ),
         const SizedBox(height: 12),
 
@@ -223,7 +223,7 @@ class _PositionSetupPanelState extends State<PositionSetupPanel> {
         // ── FEN in/out ─────────────────────────────────────────────
         TextField(
           controller: _fenCtrl,
-          style: AppTextStyles.forTheme(context, AppTextStyles.mono),
+          style: AppTypography.mono(context),
           minLines: 2,
           maxLines: 4,
           decoration: InputDecoration(

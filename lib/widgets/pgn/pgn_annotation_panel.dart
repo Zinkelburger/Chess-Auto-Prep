@@ -10,8 +10,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../theme/app_text_styles.dart';
-import '../../theme/app_colors.dart';
+import '../../design_system/theme/app_typography.dart';
 import 'movetext_primitives.dart' show GlyphButton;
 import '../../design_system/components/confirm_dialog.dart';
 
@@ -217,9 +216,11 @@ class PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
 
     return Container(
       padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: AppColors.divider)),
-        color: AppColors.surface,
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+        ),
+        color: Theme.of(context).colorScheme.surface,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -234,10 +235,10 @@ class PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
                 height: 28,
                 child: Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.notes,
                       size: 16,
-                      color: AppColors.onSurfaceMuted,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -245,7 +246,7 @@ class PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
                         _hasComment && !_expanded
                             ? widget.comment.replaceAll('\n', ' ')
                             : 'Comment',
-                        style: AppTextStyles.muted,
+                        style: AppTypography.secondary(context),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -264,7 +265,9 @@ class PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
           else
             Text(
               'Comment',
-              style: AppTextStyles.bodyStrong.copyWith(color: AppColors.ink),
+              style: AppTypography.bodyStrong(
+                context,
+              ).copyWith(color: Theme.of(context).colorScheme.onSurface),
             ),
           if (!widget.compact || _expanded) ...[
             const SizedBox(height: 8),
@@ -301,9 +304,9 @@ class PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
                         ? 'Comment kept until deleted'
                         : 'Comment:',
                     style: _blankReplacement
-                        ? AppTextStyles.caption
-                        : AppTextStyles.bodyStrong.copyWith(
-                            color: Colors.white,
+                        ? AppTypography.caption(context)
+                        : AppTypography.bodyStrong(context).copyWith(
+                            color: Theme.of(context).colorScheme.onSurface,
                           ),
                   ),
                 ),
@@ -323,28 +326,35 @@ class PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
               onChanged: _onTextChanged,
               minLines: 2,
               maxLines: 4,
-              style: AppTextStyles.body,
-              cursorColor: AppColors.ink,
+              style: AppTypography.body(context),
+              cursorColor: Theme.of(context).colorScheme.onSurface,
               decoration: InputDecoration(
                 isDense: true,
                 hintText: enabled ? null : 'Select a move to add notes',
                 filled: true,
-                fillColor: AppColors.surfaceElevated,
+                fillColor: Theme.of(context).colorScheme.surfaceContainer,
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 10,
                   vertical: 8,
                 ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(6),
-                  borderSide: const BorderSide(color: Colors.white),
+                  borderSide: BorderSide(
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(6),
-                  borderSide: const BorderSide(color: Colors.white, width: 2),
+                  borderSide: BorderSide(
+                    color: Theme.of(context).colorScheme.onSurface,
+                    width: 2,
+                  ),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(6),
-                  borderSide: const BorderSide(color: Colors.white),
+                  borderSide: BorderSide(
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
                 ),
               ),
             ),

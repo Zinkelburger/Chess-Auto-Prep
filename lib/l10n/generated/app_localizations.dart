@@ -1911,6 +1911,144 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Done'**
   String get studyChaptersDone;
+
+  /// Study chapter dialog label: Use this position
+  ///
+  /// In en, this message translates to:
+  /// **'Use this position'**
+  String get studyUsePosition;
+
+  /// Study chapter dialog label: That is not a valid FEN.
+  ///
+  /// In en, this message translates to:
+  /// **'That is not a valid FEN.'**
+  String get studyInvalidFen;
+
+  /// Study chapter dialog label: Paste at least one game.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste at least one game.'**
+  String get studyPasteGameRequired;
+
+  /// Study chapter dialog label: Name
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get studyName;
+
+  /// Study chapter dialog label: From the PGN when left blank
+  ///
+  /// In en, this message translates to:
+  /// **'From the PGN when left blank'**
+  String get studyChapterNameFromPgn;
+
+  /// Study chapter dialog label: Start from
+  ///
+  /// In en, this message translates to:
+  /// **'Start from'**
+  String get studyChapterStartFrom;
+
+  /// Study chapter dialog label: Initial position
+  ///
+  /// In en, this message translates to:
+  /// **'Initial position'**
+  String get studyInitialPosition;
+
+  /// Study chapter dialog label: Position
+  ///
+  /// In en, this message translates to:
+  /// **'Position'**
+  String get studyPosition;
+
+  /// Study chapter dialog label: PGN
+  ///
+  /// In en, this message translates to:
+  /// **'PGN'**
+  String get studyPgn;
+
+  /// Study chapter dialog label: FEN
+  ///
+  /// In en, this message translates to:
+  /// **'FEN'**
+  String get studyFen;
+
+  /// Study chapter dialog label: Set up board…
+  ///
+  /// In en, this message translates to:
+  /// **'Set up board…'**
+  String get studySetupBoard;
+
+  /// Study chapter dialog label: Paste PGN. Each game becomes a chapter.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste PGN. Each game becomes a chapter.'**
+  String get studyPasteChaptersHint;
+
+  /// Study chapter dialog label: Orientation
+  ///
+  /// In en, this message translates to:
+  /// **'Orientation'**
+  String get studyOrientation;
+
+  /// Study chapter dialog label: Automatic
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic'**
+  String get studyAutomaticOrientation;
+
+  /// Study chapter dialog label: Create
+  ///
+  /// In en, this message translates to:
+  /// **'Create'**
+  String get studyCreate;
+
+  /// Study chapter dialog label: A chapter needs a name.
+  ///
+  /// In en, this message translates to:
+  /// **'A chapter needs a name.'**
+  String get studyChapterNameRequired;
+
+  /// Study chapter dialog label: PGN tags
+  ///
+  /// In en, this message translates to:
+  /// **'PGN tags'**
+  String get studyPgnTags;
+
+  /// Study chapter dialog label: Tag
+  ///
+  /// In en, this message translates to:
+  /// **'Tag'**
+  String get studyTag;
+
+  /// Study chapter dialog label: Value
+  ///
+  /// In en, this message translates to:
+  /// **'Value'**
+  String get studyTagValue;
+
+  /// Study chapter dialog label: Remove tag
+  ///
+  /// In en, this message translates to:
+  /// **'Remove tag'**
+  String get studyRemoveTag;
+
+  /// Study chapter dialog label: Add tag
+  ///
+  /// In en, this message translates to:
+  /// **'Add tag'**
+  String get studyAddTag;
+
+  /// No description provided for @studyInvalidTagName.
+  ///
+  /// In en, this message translates to:
+  /// **'Tag names are letters and digits: \"{tag}\".'**
+  String studyInvalidTagName(String tag);
+
+  /// No description provided for @studyOwnedTag.
+  ///
+  /// In en, this message translates to:
+  /// **'{tag} is written by the study; edit it above.'**
+  String studyOwnedTag(String tag);
 }
 
 class _AppLocalizationsDelegate

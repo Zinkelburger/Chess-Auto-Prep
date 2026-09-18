@@ -1503,5 +1503,105 @@
   "studyChaptersDone": "Done",
   "@studyChaptersDone": {
     "description": "Study chapter list control: studyChaptersDone"
+  },
+  "studyUsePosition": "Use this position",
+  "studyInvalidFen": "That is not a valid FEN.",
+  "studyPasteGameRequired": "Paste at least one game.",
+  "studyName": "Name",
+  "studyChapterNameFromPgn": "From the PGN when left blank",
+  "studyChapterStartFrom": "Start from",
+  "studyInitialPosition": "Initial position",
+  "studyPosition": "Position",
+  "studyPgn": "PGN",
+  "studyFen": "FEN",
+  "studySetupBoard": "Set up board…",
+  "studyPasteChaptersHint": "Paste PGN. Each game becomes a chapter.",
+  "studyOrientation": "Orientation",
+  "studyAutomaticOrientation": "Automatic",
+  "studyCreate": "Create",
+  "studyChapterNameRequired": "A chapter needs a name.",
+  "studyPgnTags": "PGN tags",
+  "studyTag": "Tag",
+  "studyTagValue": "Value",
+  "studyRemoveTag": "Remove tag",
+  "studyAddTag": "Add tag",
+  "studyInvalidTagName": "Tag names are letters and digits: \"{tag}\".",
+  "@studyInvalidTagName": {
+    "placeholders": {
+      "tag": {
+        "type": "String"
+      }
+    }
+  },
+  "studyOwnedTag": "{tag} is written by the study; edit it above.",
+  "@studyOwnedTag": {
+    "placeholders": {
+      "tag": {
+        "type": "String"
+      }
+    }
+  },
+  "@studyUsePosition": {
+    "description": "Study chapter dialog label: Use this position"
+  },
+  "@studyInvalidFen": {
+    "description": "Study chapter dialog label: That is not a valid FEN."
+  },
+  "@studyPasteGameRequired": {
+    "description": "Study chapter dialog label: Paste at least one game."
+  },
+  "@studyName": {
+    "description": "Study chapter dialog label: Name"
+  },
+  "@studyChapterNameFromPgn": {
+    "description": "Study chapter dialog label: From the PGN when left blank"
+  },
+  "@studyChapterStartFrom": {
+    "description": "Study chapter dialog label: Start from"
+  },
+  "@studyInitialPosition": {
+    "description": "Study chapter dialog label: Initial position"
+  },
+  "@studyPosition": {
+    "description": "Study chapter dialog label: Position"
+  },
+  "@studyPgn": {
+    "description": "Study chapter dialog label: PGN"
+  },
+  "@studyFen": {
+    "description": "Study chapter dialog label: FEN"
+  },
+  "@studySetupBoard": {
+    "description": "Study chapter dialog label: Set up board…"
+  },
+  "@studyPasteChaptersHint": {
+    "description": "Study chapter dialog label: Paste PGN. Each game becomes a chapter."
+  },
+  "@studyOrientation": {
+    "description": "Study chapter dialog label: Orientation"
+  },
+  "@studyAutomaticOrientation": {
+    "description": "Study chapter dialog label: Automatic"
+  },
+  "@studyCreate": {
+    "description": "Study chapter dialog label: Create"
+  },
+  "@studyChapterNameRequired": {
+    "description": "Study chapter dialog label: A chapter needs a name."
+  },
+  "@studyPgnTags": {
+    "description": "Study chapter dialog label: PGN tags"
+  },
+  "@studyTag": {
+    "description": "Study chapter dialog label: Tag"
+  },
+  "@studyTagValue": {
+    "description": "Study chapter dialog label: Value"
+  },
+  "@studyRemoveTag": {
+    "description": "Study chapter dialog label: Remove tag"
+  },
+  "@studyAddTag": {
+    "description": "Study chapter dialog label: Add tag"
   }
 }

@@ -167,7 +167,6 @@
     "lib/features/bughouse/services/windows_loader_check.dart: forbidden dependency dart:io",
     "lib/features/bughouse/widgets/bughouse_analysis_panel.dart: forbidden dependency ../../../theme/app_colors.dart",
     "lib/features/bughouse/widgets/bughouse_analysis_panel.dart: forbidden dependency ../../../theme/app_text_styles.dart",
-    "lib/features/bughouse/widgets/bughouse_analysis_panel.dart: forbidden dependency ../../../theme/pgn_text_styles.dart",
     "lib/features/bughouse/widgets/bughouse_analysis_panel.dart: global singleton access bypasses injection: SchedulerBinding.instance.addPostFrameCallback((_) {",
     "lib/features/bughouse/widgets/bughouse_analysis_panel.dart: widget bypasses active theme/typography: ).copyWith(color: AppColors.ink, fontWeight: FontWeight.w600),",
     "lib/features/bughouse/widgets/bughouse_analysis_panel.dart: widget bypasses active theme/typography: ? [const Text('\u2014', style: AppTextStyles.muted)]",

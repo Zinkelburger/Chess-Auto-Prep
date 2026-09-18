@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_text_styles.dart';
+import '../design_system/theme/app_typography.dart';
 import '../utils/app_messages.dart';
 
 /// A button that copies something, and says so.
@@ -124,7 +124,7 @@ class _CopyButtonState extends State<CopyButton> {
 
     final label = Text(
       _copied ? 'Copied' : widget.label,
-      style: AppTextStyles.caption.copyWith(color: widget.foreground),
+      style: AppTypography.caption(context).copyWith(color: widget.foreground),
     );
     final button = TextButton.icon(
       onPressed: widget.enabled ? _copy : null,

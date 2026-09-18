@@ -20,8 +20,7 @@ import '../../features/studies/repositories/study_import_repository.dart';
 import '../../features/studies/models/import_source.dart';
 import '../../features/studies/controllers/study_import_controller.dart';
 import '../../features/studies/models/study_import_exception.dart';
-import '../../theme/app_colors.dart';
-import '../../theme/app_text_styles.dart';
+import '../../design_system/theme/app_typography.dart';
 import '../labeled_toggle.dart';
 
 /// What the user asked for, resolved and ready to apply.
@@ -235,11 +234,11 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'lichess.org/study/<id>  —  one study, all chapters\n'
               'lichess.org/study/by/<user>  —  every public study of theirs\n'
               'chessgames.com/perl/chesscollection?cid=<id>  —  a collection',
-              style: AppTextStyles.caption,
+              style: AppTypography.caption(context),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -270,10 +269,10 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
             const SizedBox(height: 12),
             Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
                     'Seconds between requests (chessgames.com)',
-                    style: AppTextStyles.body,
+                    style: AppTypography.body(context),
                   ),
                 ),
                 SizedBox(
@@ -293,11 +292,11 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
               ],
             ),
             const SizedBox(height: 6),
-            const Text(
+            Text(
               'chessgames.com bans fast downloads: 2–3 s apart gets blocked '
               'after ~20 games, 22 s apart sustains 60. At 22 s a 60-game '
               'collection takes about 25 minutes, running in the background.',
-              style: AppTextStyles.caption,
+              style: AppTypography.caption(context),
             ),
           ],
         ),
@@ -327,20 +326,23 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
     final Color color;
     final source = _source;
     if (_error != null) {
-      (text, color) = (_error!, AppColors.danger);
+      (text, color) = (_error!, Theme.of(context).colorScheme.error);
     } else if (_busy) {
-      (text, color) = ('Contacting the server…', AppColors.onSurfaceMuted);
+      (text, color) = (
+        'Contacting the server…',
+        Theme.of(context).colorScheme.onSurfaceVariant,
+      );
     } else if (source != null) {
-      (text, color) = (source.label, AppColors.success);
+      (text, color) = (source.label, Theme.of(context).colorScheme.tertiary);
     } else if (_urlController.text.trim().isEmpty) {
       (text, color) = (
         'Paste a link to see what will be imported.',
-        AppColors.onSurfaceMuted,
+        Theme.of(context).colorScheme.onSurfaceVariant,
       );
     } else {
       (text, color) = (
         'Not a Lichess study or chessgames.com collection link.',
-        AppColors.warning,
+        Theme.of(context).colorScheme.tertiary,
       );
     }
 
@@ -348,7 +350,10 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
       constraints: const BoxConstraints(minHeight: 34),
       child: Align(
         alignment: Alignment.centerLeft,
-        child: Text(text, style: AppTextStyles.caption.copyWith(color: color)),
+        child: Text(
+          text,
+          style: AppTypography.caption(context).copyWith(color: color),
+        ),
       ),
     );
   }
@@ -407,12 +412,12 @@ class _PasteGameIdsDialogState extends State<_PasteGameIdsDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'chessgames.com served a bot check instead of the collection. '
               'Downloading the games still works — it just needs the list.\n\n'
               'Open the collection in a browser, select all (Ctrl+A) and copy, '
               'or save the page source, then paste it below.',
-              style: AppTextStyles.body,
+              style: AppTypography.body(context),
             ),
             const SizedBox(height: 12),
             Align(
@@ -434,7 +439,7 @@ class _PasteGameIdsDialogState extends State<_PasteGameIdsDialog> {
               maxLines: 10,
               onChanged: _onChanged,
               style: const TextStyle(
-                fontFamily: AppTextStyles.monoFamily,
+                fontFamily: AppTypography.monoFamily,
                 fontSize: 12,
               ),
               decoration: const InputDecoration(
@@ -453,10 +458,10 @@ class _PasteGameIdsDialogState extends State<_PasteGameIdsDialog> {
                       ? 'No game ids found yet.'
                       : '${_ids.length} game${_ids.length == 1 ? '' : 's'} '
                             'found.',
-                  style: AppTextStyles.caption.copyWith(
+                  style: AppTypography.caption(context).copyWith(
                     color: _ids.isEmpty
-                        ? AppColors.onSurfaceMuted
-                        : AppColors.success,
+                        ? Theme.of(context).colorScheme.onSurfaceVariant
+                        : Theme.of(context).colorScheme.tertiary,
                   ),
                 ),
               ),

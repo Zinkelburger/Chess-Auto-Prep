@@ -7,7 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
-import '../../../theme/pgn_text_styles.dart';
+import '../../../widgets/pgn/pgn_text_styles.dart';
 import '../../../widgets/copy_button.dart';
 import '../controllers/bughouse_controller.dart';
 import '../models/bughouse_engine_settings.dart';
@@ -572,7 +572,7 @@ class _MoveToken extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
           child: Text.rich(
-            style: PgnTextStyles.moveAt(1).copyWith(height: 1.4),
+            style: PgnTextStyles.moveAt(context, 1).copyWith(height: 1.4),
             TextSpan(
               children: [
                 TextSpan(
@@ -581,7 +581,7 @@ class _MoveToken extends StatelessWidget {
                 ),
                 TextSpan(
                   text: san,
-                  style: PgnTextStyles.moveAt(1).copyWith(
+                  style: PgnTextStyles.moveAt(context, 1).copyWith(
                     height: 1.4,
                     color: AppColors.ink,
                     fontWeight: FontWeight.w600,
@@ -1023,6 +1023,7 @@ class _ScenarioTable extends StatelessWidget {
             Text(
               row.best == null ? 'No move available' : _moves(row.best!),
               style: PgnTextStyles.moveAt(
+                context,
                 1,
               ).copyWith(color: AppColors.ink, fontWeight: FontWeight.w600),
             ),

@@ -1,4 +1,5 @@
 import '../../support/runtime_settings.dart';
+import 'package:chess_auto_prep/design_system/theme/app_theme.dart';
 import 'package:provider/provider.dart';
 import 'package:chess_auto_prep/features/settings/controllers/board_display_settings.dart';
 import 'package:chess_auto_prep/features/settings/models/board_display_configuration.dart';
@@ -22,6 +23,7 @@ void main() {
     double squareSize = sq,
     double margin = 0,
   }) => coordinateLabels(
+    outsideInk: AppColors.onSurfaceMuted,
     mode: mode,
     flipped: flipped,
     squareSize: squareSize,
@@ -217,6 +219,41 @@ void main() {
         const Size(400, 400),
       );
     });
+
+    testWidgets(
+      'outside coordinate ink follows appearance without moving pieces',
+      (tester) async {
+        Widget themed(ThemeData theme) => MaterialApp(
+          theme: theme,
+          home: const Scaffold(
+            body: SizedBox(
+              width: 400,
+              height: 400,
+              child: ChessBoardWidget(
+                position: Chess.initial,
+                coordinates: BoardCoordinates.outside,
+                enableUserMoves: false,
+              ),
+            ),
+          ),
+        );
+        BoardCoordinatesPainter painter() => tester
+            .widgetList<CustomPaint>(find.byType(CustomPaint))
+            .map((paint) => paint.painter)
+            .whereType<BoardCoordinatesPainter>()
+            .single;
+        await tester.pumpWidget(themed(AppTheme.dark()));
+        final dark = painter();
+        final origins = pieceOrigins(tester);
+        expect(dark.outsideInk, AppTheme.dark().colorScheme.onSurfaceVariant);
+        await tester.pumpWidget(themed(AppTheme.light()));
+        await tester.pumpAndSettle();
+        final light = painter();
+        expect(light.outsideInk, AppTheme.light().colorScheme.onSurfaceVariant);
+        expect(light.shouldRepaint(dark), isTrue);
+        expect(pieceOrigins(tester), origins);
+      },
+    );
 
     testWidgets('follows the Display preference when no mode is given', (
       tester,

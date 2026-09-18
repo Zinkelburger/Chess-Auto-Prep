@@ -9,7 +9,7 @@ import '../../features/training/models/training_phase.dart';
 import '../../features/training/controllers/training_session_controller.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
-import '../../theme/pgn_text_styles.dart';
+import '../pgn/pgn_text_styles.dart';
 import '../pgn/pgn_movetext_view.dart';
 import '../../utils/app_shortcuts.dart';
 import '../../utils/pgn_comment_utils.dart' show filterDisplayComment;
@@ -176,7 +176,7 @@ class TrainingPhasePanel extends StatelessWidget {
               ? SingleChildScrollView(
                   child: Text(
                     filterDisplayComment(currentAnnotation!),
-                    style: PgnTextStyles.comment,
+                    style: PgnTextStyles.comment(context),
                   ),
                 )
               : const SizedBox.shrink(),

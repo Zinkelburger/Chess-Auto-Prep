@@ -18,8 +18,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../theme/app_colors.dart';
-import '../../theme/app_text_styles.dart';
+import '../../design_system/theme/app_typography.dart';
 import '../../design_system/components/list_search_field.dart';
 
 /// One row of a [ChoiceField].
@@ -295,8 +294,7 @@ class _ChoiceFieldState<T> extends State<ChoiceField<T>> {
 
   @override
   Widget build(BuildContext context) {
-    final style =
-        widget.style ?? AppTextStyles.forTheme(context, AppTextStyles.body);
+    final style = widget.style ?? AppTypography.body(context);
     // Desktop text fields gain focus on mouse-down, opening the list before
     // the arrow's mouse-up. Toggle from the state before that focus change.
     final arrow = Listener(
@@ -393,7 +391,7 @@ class _ChoiceFieldState<T> extends State<ChoiceField<T>> {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         child: Text(
           widget.items.isEmpty ? 'Nothing to choose from' : widget.emptyMessage,
-          style: AppTextStyles.forTheme(context, AppTextStyles.caption),
+          style: AppTypography.caption(context),
         ),
       );
     } else {
@@ -453,7 +451,7 @@ class _ChoiceFieldState<T> extends State<ChoiceField<T>> {
         onTap: () => _pick(item),
         child: Container(
           color: highlighted
-              ? AppColors.accent.withValues(alpha: 0.14)
+              ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.14)
               : Colors.transparent,
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Row(
@@ -475,22 +473,18 @@ class _ChoiceFieldState<T> extends State<ChoiceField<T>> {
                       item.label,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.forTheme(context, AppTextStyles.body)
-                          .copyWith(
-                            fontWeight: isSelected
-                                ? FontWeight.w600
-                                : FontWeight.w400,
-                          ),
+                      style: AppTypography.body(context).copyWith(
+                        fontWeight: isSelected
+                            ? FontWeight.w600
+                            : FontWeight.w400,
+                      ),
                     ),
                     if (item.subtitle != null)
                       Text(
                         item.subtitle!,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: AppTextStyles.forTheme(
-                          context,
-                          AppTextStyles.caption,
-                        ),
+                        style: AppTypography.caption(context),
                       ),
                   ],
                 ),

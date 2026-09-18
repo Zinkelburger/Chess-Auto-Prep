@@ -14,7 +14,6 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/board_editor_controller.dart';
-import '../../theme/app_colors.dart';
 import '../common/piece_image.dart';
 
 /// Both strips stacked, for editors that keep their palette beside the
@@ -83,7 +82,7 @@ class SparePieceRow extends StatelessWidget {
           decoration: BoxDecoration(
             color: Theme.of(context).brightness == Brightness.light
                 ? Theme.of(context).colorScheme.surfaceContainer
-                : AppColors.surfaceInset,
+                : Theme.of(context).colorScheme.surfaceContainerHigh,
             borderRadius: BorderRadius.circular(6),
           ),
           clipBehavior: Clip.antiAlias,
@@ -198,7 +197,7 @@ class _SpareSlot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final primary = Theme.of(context).colorScheme.primary;
-    final tint = danger ? AppColors.danger : primary;
+    final tint = danger ? Theme.of(context).colorScheme.error : primary;
     return Semantics(
       button: true,
       selected: selected,

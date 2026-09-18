@@ -1143,4 +1143,78 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get studyChaptersDone => 'Done';
+
+  @override
+  String get studyUsePosition => 'Use this position';
+
+  @override
+  String get studyInvalidFen => 'That is not a valid FEN.';
+
+  @override
+  String get studyPasteGameRequired => 'Paste at least one game.';
+
+  @override
+  String get studyName => 'Name';
+
+  @override
+  String get studyChapterNameFromPgn => 'From the PGN when left blank';
+
+  @override
+  String get studyChapterStartFrom => 'Start from';
+
+  @override
+  String get studyInitialPosition => 'Initial position';
+
+  @override
+  String get studyPosition => 'Position';
+
+  @override
+  String get studyPgn => 'PGN';
+
+  @override
+  String get studyFen => 'FEN';
+
+  @override
+  String get studySetupBoard => 'Set up board…';
+
+  @override
+  String get studyPasteChaptersHint =>
+      'Paste PGN. Each game becomes a chapter.';
+
+  @override
+  String get studyOrientation => 'Orientation';
+
+  @override
+  String get studyAutomaticOrientation => 'Automatic';
+
+  @override
+  String get studyCreate => 'Create';
+
+  @override
+  String get studyChapterNameRequired => 'A chapter needs a name.';
+
+  @override
+  String get studyPgnTags => 'PGN tags';
+
+  @override
+  String get studyTag => 'Tag';
+
+  @override
+  String get studyTagValue => 'Value';
+
+  @override
+  String get studyRemoveTag => 'Remove tag';
+
+  @override
+  String get studyAddTag => 'Add tag';
+
+  @override
+  String studyInvalidTagName(String tag) {
+    return 'Tag names are letters and digits: \"$tag\".';
+  }
+
+  @override
+  String studyOwnedTag(String tag) {
+    return '$tag is written by the study; edit it above.';
+  }
 }

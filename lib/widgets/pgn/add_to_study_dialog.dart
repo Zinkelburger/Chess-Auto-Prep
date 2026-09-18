@@ -8,7 +8,6 @@ import '../../l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 
 import '../../features/repertoires/models/repertoire_metadata.dart';
-import '../../theme/app_colors.dart';
 import '../../design_system/components/name_entry_dialog.dart';
 import '../study/study_name_dialog.dart' show sanitizeStudyName;
 
@@ -226,8 +225,10 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
                                   ? 'No studies yet. Use Add new study to create one.'
                                   : 'No studies match your search.',
                               textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                color: AppColors.onSurfaceMuted,
+                              style: TextStyle(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
                               ),
                             ),
                           ),

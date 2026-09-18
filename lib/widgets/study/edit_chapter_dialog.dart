@@ -5,10 +5,11 @@ library;
 
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
+import '../../l10n/generated/app_localizations.dart';
 
 import '../../features/studies/models/study_document.dart';
 import '../../features/studies/models/study_projection.dart';
-import '../../theme/app_text_styles.dart';
+import '../../design_system/theme/app_typography.dart';
 
 /// The edited fields.  [headers] is the complete replacement tag set.
 class ChapterEdit {
@@ -79,7 +80,9 @@ class _EditChapterDialogState extends State<_EditChapterDialog> {
   void _submit() {
     final name = _name.text.trim();
     if (name.isEmpty) {
-      setState(() => _error = 'A chapter needs a name.');
+      setState(
+        () => _error = AppLocalizations.of(context).studyChapterNameRequired,
+      );
       return;
     }
     final headers = <String, String>{};
@@ -87,11 +90,15 @@ class _EditChapterDialogState extends State<_EditChapterDialog> {
       final key = tag.key.text.trim();
       if (key.isEmpty) continue;
       if (!RegExp(r'^[A-Za-z][A-Za-z0-9_]*$').hasMatch(key)) {
-        setState(() => _error = 'Tag names are letters and digits: "$key".');
+        setState(
+          () => _error = AppLocalizations.of(context).studyInvalidTagName(key),
+        );
         return;
       }
       if (StudyChapter.ownedHeaders.contains(key)) {
-        setState(() => _error = '$key is written by the study; edit it above.');
+        setState(
+          () => _error = AppLocalizations.of(context).studyOwnedTag(key),
+        );
         return;
       }
       headers[key] = tag.value.text.trim();
@@ -103,9 +110,9 @@ class _EditChapterDialogState extends State<_EditChapterDialog> {
 
   @override
   Widget build(BuildContext context) {
-    const mono = TextStyle(fontFamily: AppTextStyles.monoFamily, fontSize: 12);
+    const mono = TextStyle(fontFamily: AppTypography.monoFamily, fontSize: 12);
     return AlertDialog(
-      title: const Text('Edit chapter'),
+      title: Text(AppLocalizations.of(context).studyEditChapter),
       content: SizedBox(
         width: 480,
         child: SingleChildScrollView(
@@ -116,29 +123,41 @@ class _EditChapterDialogState extends State<_EditChapterDialog> {
               TextField(
                 controller: _name,
                 autofocus: true,
-                decoration: const InputDecoration(
-                  labelText: 'Name',
+                decoration: InputDecoration(
+                  labelText: AppLocalizations.of(context).studyName,
                   isDense: true,
-                  border: OutlineInputBorder(),
+                  border: const OutlineInputBorder(),
                 ),
                 onChanged: (_) => setState(() => _error = null),
                 onSubmitted: (_) => _submit(),
               ),
               const SizedBox(height: 16),
-              const Text('Orientation', style: AppTextStyles.caption),
+              Text(
+                AppLocalizations.of(context).studyOrientation,
+                style: AppTypography.caption(context),
+              ),
               const SizedBox(height: 6),
               SegmentedButton<Side>(
                 showSelectedIcon: false,
-                segments: const [
-                  ButtonSegment(value: Side.white, label: Text('White')),
-                  ButtonSegment(value: Side.black, label: Text('Black')),
+                segments: [
+                  ButtonSegment(
+                    value: Side.white,
+                    label: Text(AppLocalizations.of(context).white),
+                  ),
+                  ButtonSegment(
+                    value: Side.black,
+                    label: Text(AppLocalizations.of(context).black),
+                  ),
                 ],
                 selected: {_orientation},
                 onSelectionChanged: (s) =>
                     setState(() => _orientation = s.single),
               ),
               const SizedBox(height: 16),
-              const Text('PGN tags', style: AppTextStyles.caption),
+              Text(
+                AppLocalizations.of(context).studyPgnTags,
+                style: AppTypography.caption(context),
+              ),
               const SizedBox(height: 6),
               for (final (i, tag) in _tags.indexed)
                 Padding(
@@ -150,10 +169,10 @@ class _EditChapterDialogState extends State<_EditChapterDialog> {
                         child: TextField(
                           controller: tag.key,
                           style: mono,
-                          decoration: const InputDecoration(
-                            hintText: 'Tag',
+                          decoration: InputDecoration(
+                            hintText: AppLocalizations.of(context).studyTag,
                             isDense: true,
-                            border: OutlineInputBorder(),
+                            border: const OutlineInputBorder(),
                           ),
                           onChanged: (_) => setState(() => _error = null),
                         ),
@@ -163,16 +182,18 @@ class _EditChapterDialogState extends State<_EditChapterDialog> {
                         child: TextField(
                           controller: tag.value,
                           style: mono,
-                          decoration: const InputDecoration(
-                            hintText: 'Value',
+                          decoration: InputDecoration(
+                            hintText: AppLocalizations.of(
+                              context,
+                            ).studyTagValue,
                             isDense: true,
-                            border: OutlineInputBorder(),
+                            border: const OutlineInputBorder(),
                           ),
                         ),
                       ),
                       IconButton(
                         icon: const Icon(Icons.close, size: 16),
-                        tooltip: 'Remove tag',
+                        tooltip: AppLocalizations.of(context).studyRemoveTag,
                         visualDensity: VisualDensity.compact,
                         onPressed: () {
                           final removed = _tags.removeAt(i);
@@ -188,7 +209,7 @@ class _EditChapterDialogState extends State<_EditChapterDialog> {
                 ),
               TextButton.icon(
                 icon: const Icon(Icons.add, size: 16),
-                label: const Text('Add tag'),
+                label: Text(AppLocalizations.of(context).studyAddTag),
                 onPressed: () => setState(() => _tags.add(_TagRow('', ''))),
               ),
               if (_error != null) ...[
@@ -208,9 +229,12 @@ class _EditChapterDialogState extends State<_EditChapterDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(AppLocalizations.of(context).cancel),
         ),
-        ElevatedButton(onPressed: _submit, child: const Text('Save')),
+        ElevatedButton(
+          onPressed: _submit,
+          child: Text(AppLocalizations.of(context).saveChanges),
+        ),
       ],
     );
   }

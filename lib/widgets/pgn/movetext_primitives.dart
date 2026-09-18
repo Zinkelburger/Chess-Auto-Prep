@@ -6,9 +6,9 @@
 library;
 
 import '../../utils/pgn_nags.dart';
+import 'pgn_text_styles.dart';
 import 'package:flutter/material.dart';
-import '../../theme/app_text_styles.dart';
-import '../../theme/app_colors.dart';
+import '../../design_system/theme/app_typography.dart';
 import 'package:chess_auto_prep/features/settings/widgets/san_display.dart';
 
 /// Borderless move states shared by the editor, mainline and sidelines.
@@ -20,22 +20,19 @@ abstract final class PgnMoveDecorations {
     border: Border.fromBorderSide(BorderSide(color: Colors.transparent)),
   );
 
-  static final hover = idle.copyWith(color: AppColors.pgnMoveHoverBg);
-  static final current = idle.copyWith(color: AppColors.pgnMoveCurrentBg);
-  static final ephemeral = idle.copyWith(color: AppColors.pgnEphemeralBg);
-  static final contextPath = idle.copyWith(
-    color: AppColors.pgnMoveCurrentBg.withValues(alpha: 0.35),
-  );
-
-  static BoxDecoration resolve({
+  static BoxDecoration resolve(
+    BuildContext context, {
     bool selected = false,
     bool hovered = false,
     bool isEphemeral = false,
     bool onContextPath = false,
   }) {
-    if (selected) return isEphemeral ? ephemeral : current;
-    if (hovered) return hover;
-    return onContextPath ? contextPath : idle;
+    final colors = Theme.of(context).colorScheme;
+    if (selected) return idle.copyWith(color: colors.primaryContainer);
+    if (hovered) return idle.copyWith(color: colors.surfaceContainerHighest);
+    return onContextPath
+        ? idle.copyWith(color: colors.primaryContainer.withValues(alpha: 0.35))
+        : idle;
   }
 }
 
@@ -172,7 +169,7 @@ class GlyphButton extends StatelessWidget {
             border: Border.all(
               color: isActive
                   ? color.withValues(alpha: 0.7)
-                  : AppColors.outline,
+                  : Theme.of(context).colorScheme.outline,
             ),
           ),
           child: Text(
@@ -180,10 +177,19 @@ class GlyphButton extends StatelessWidget {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.bold,
-              fontFamily: AppTextStyles.monoFamily,
+              fontFamily: AppTypography.monoFamily,
               color: onTap == null
-                  ? AppColors.onSurfaceDisabled
-                  : (isActive ? color : AppColors.ink),
+                  ? Theme.of(context).colorScheme.onSurfaceVariant
+                  : (isActive
+                        ? PgnTextStyles.annotationInk(
+                            context,
+                            color,
+                            background: Color.alphaBlend(
+                              color.withValues(alpha: 0.2),
+                              Theme.of(context).colorScheme.surface,
+                            ),
+                          )
+                        : Theme.of(context).colorScheme.onSurface),
             ),
           ),
         ),

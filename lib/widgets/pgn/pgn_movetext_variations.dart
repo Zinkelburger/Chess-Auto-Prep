@@ -14,6 +14,7 @@ const _kMaxInlineVariationPlies = 4;
 /// aside. Structural variations use whitespace + a gutter instead, which
 /// avoids the wall of nested brackets found in raw PGN dumps.
 List<InlineSpan>? _buildInlineVariationAtPly(
+  BuildContext context,
   PgnMovetextView view,
   int ply, {
   bool Function(MoveNodeView node)? nodeVisible,
@@ -21,7 +22,7 @@ List<InlineSpan>? _buildInlineVariationAtPly(
   final line = _inlineVariationNodes(view, ply, nodeVisible: nodeVisible);
   if (line == null) return null;
   final spans = <InlineSpan>[
-    TextSpan(text: '(', style: PgnTextStyles.parenthesisAt(1)),
+    TextSpan(text: '(', style: PgnTextStyles.parenthesisAt(context, 1)),
   ];
   var coords = _coordsAtPly(view, ply);
   for (var i = 0; i < line.length; i++) {
@@ -29,25 +30,27 @@ List<InlineSpan>? _buildInlineVariationAtPly(
       spans.add(
         TextSpan(
           text: '${coords.moveNumber}. ',
-          style: PgnTextStyles.moveNumberAt(1),
+          style: PgnTextStyles.moveNumberAt(context, 1),
         ),
       );
     } else if (i == 0) {
       spans.add(
         TextSpan(
           text: '${coords.moveNumber}... ',
-          style: PgnTextStyles.moveNumberAt(1),
+          style: PgnTextStyles.moveNumberAt(context, 1),
         ),
       );
     }
-    spans.add(_variationMoveSpan(view, line[i], 1, ply));
+    spans.add(_variationMoveSpan(context, view, line[i], 1, ply));
     if (i < line.length - 1) spans.add(const TextSpan(text: ' '));
     coords = (
       moveNumber: coords.isWhite ? coords.moveNumber : coords.moveNumber + 1,
       isWhite: !coords.isWhite,
     );
   }
-  spans.add(TextSpan(text: ') ', style: PgnTextStyles.parenthesisAt(1)));
+  spans.add(
+    TextSpan(text: ') ', style: PgnTextStyles.parenthesisAt(context, 1)),
+  );
   return spans;
 }
 
@@ -100,9 +103,15 @@ bool _isRepeatedProseReference(
     node.san == view.moveHistory[ply].san &&
     filterDisplayComment(node.comment ?? '').isNotEmpty;
 
-Widget _buildProseReference(PgnMovetextView view, MoveNodeView node, int ply) {
+Widget _buildProseReference(
+  BuildContext context,
+  PgnMovetextView view,
+  MoveNodeView node,
+  int ply,
+) {
   final coords = _coordsAtPly(view, ply);
   final rendered = _renderProseComment(
+    context,
     view,
     '${coords.moveNumber}${coords.isWhite ? '.' : '...'}${node.san} ${node.comment}',
     anchorPos: _posAt(_buildPrefixPositions(view), ply),
@@ -114,11 +123,14 @@ Widget _buildProseReference(PgnMovetextView view, MoveNodeView node, int ply) {
 }
 
 Widget _buildVariationRow(
+  BuildContext context,
   PgnMovetextView view,
   ViewerVariationRow row, {
   required ValueChanged<int> onToggleBranch,
 }) {
-  if (row.proseReference) return _buildProseReference(view, row.root, row.ply);
+  if (row.proseReference) {
+    return _buildProseReference(context, view, row.root, row.ply);
+  }
   final root = row.root;
   final ply = row.ply;
   final branchPly = row.branchPly;
@@ -164,7 +176,10 @@ Widget _buildVariationRow(
   var firstRun = row.first;
   final run = <InlineSpan>[
     if (leadingLabel != null)
-      TextSpan(text: leadingLabel, style: PgnTextStyles.metricsAt(depth)),
+      TextSpan(
+        text: leadingLabel,
+        style: PgnTextStyles.metricsAt(context, depth),
+      ),
   ];
   void flush() {
     if (run.isEmpty) return;
@@ -174,7 +189,7 @@ Widget _buildVariationRow(
         child: moveRow(
           Text.rich(
             TextSpan(
-              style: PgnTextStyles.rowRootAt(depth),
+              style: PgnTextStyles.rowRootAt(context, depth),
               children: List.of(run),
             ),
           ),
@@ -193,6 +208,7 @@ Widget _buildVariationRow(
       if (introduction != null && introduction.trim().isNotEmpty) {
         flush();
         final prose = _renderComment(
+          context,
           view,
           introduction,
           anchorPly: index,
@@ -206,7 +222,7 @@ Widget _buildVariationRow(
                 prose.block ??
                     Text.rich(
                       TextSpan(
-                        style: PgnTextStyles.commentAt(depth),
+                        style: PgnTextStyles.commentAt(context, depth),
                         children: prose.spans,
                       ),
                     ),
@@ -220,6 +236,7 @@ Widget _buildVariationRow(
       final rendered = comment == null
           ? (block: null, spans: <InlineSpan>[])
           : _renderComment(
+              context,
               view,
               comment,
               anchorPos: node.positionOrNull,
@@ -228,7 +245,7 @@ Widget _buildVariationRow(
             );
       final metrics = comment == null
           ? <InlineSpan>[]
-          : _metricsSpans(comment, depth: depth);
+          : _metricsSpans(context, comment, depth: depth);
       final annotated = rendered.block != null || rendered.spans.isNotEmpty;
       if (annotated) flush();
       final passageStart = children.length;
@@ -237,12 +254,13 @@ Widget _buildVariationRow(
           run.add(
             TextSpan(
               text: '${pos.moveNumber}${pos.isWhite ? '.' : '...'} ',
-              style: PgnTextStyles.moveNumberAt(depth),
+              style: PgnTextStyles.moveNumberAt(context, depth),
             ),
           );
         }
         run.add(
           _variationMoveSpan(
+            context,
             view,
             node,
             depth,
@@ -270,7 +288,7 @@ Widget _buildVariationRow(
               rendered.block ??
                   Text.rich(
                     TextSpan(
-                      style: PgnTextStyles.commentAt(depth),
+                      style: PgnTextStyles.commentAt(context, depth),
                       children: rendered.spans,
                     ),
                   ),
@@ -308,23 +326,24 @@ Widget _buildVariationRow(
                       if (leadingLabel != null)
                         TextSpan(
                           text: leadingLabel,
-                          style: PgnTextStyles.metricsAt(depth),
+                          style: PgnTextStyles.metricsAt(context, depth),
                         ),
                       TextSpan(
                         text:
                             '${coords.moveNumber}${coords.isWhite ? '.' : '...'} ',
-                        style: PgnTextStyles.moveNumberAt(depth),
+                        style: PgnTextStyles.moveNumberAt(context, depth),
                       ),
                       TextSpan(
                         text: root.san,
-                        style: PgnTextStyles.moveAt(depth),
+                        style: PgnTextStyles.moveAt(context, depth),
                       ),
                       if (allNagSuffix(root.nags).isNotEmpty)
                         TextSpan(
                           text: allNagSuffix(root.nags),
                           style: PgnTextStyles.nagAt(
+                            context,
                             depth,
-                            moveStyle: PgnTextStyles.moveAt(depth),
+                            moveStyle: PgnTextStyles.moveAt(context, depth),
                             nags: root.nags,
                           ),
                         ),
@@ -350,6 +369,7 @@ Widget _buildVariationRow(
 
 /// A tappable SAN chip inside a sideline row.
 InlineSpan _variationMoveSpan(
+  BuildContext context,
   PgnMovetextView view,
   MoveNodeView node,
   int depth,
@@ -363,9 +383,13 @@ InlineSpan _variationMoveSpan(
   // sideline is there.
   final nagSuffix = allNagSuffix(node.nags);
 
-  final base = PgnTextStyles.moveAt(depth, ephemeral: node.isEphemeral);
+  final base = PgnTextStyles.moveAt(
+    context,
+    depth,
+    ephemeral: node.isEphemeral,
+  );
   final sanStyle = isCurrentNode
-      ? base.copyWith(color: AppColors.pgnMoveCurrentFg)
+      ? base.copyWith(color: Theme.of(context).colorScheme.onPrimaryContainer)
       : base;
 
   return WidgetSpan(
@@ -377,15 +401,18 @@ InlineSpan _variationMoveSpan(
       nagSuffix: nagSuffix,
       sanStyle: sanStyle,
       nagStyle: PgnTextStyles.nagAt(
+        context,
         depth,
         moveStyle: sanStyle,
         nags: node.nags,
       ),
       decoration: PgnMoveDecorations.resolve(
+        context,
         selected: isCurrentNode,
         isEphemeral: node.isEphemeral,
       ),
       hoverDecoration: PgnMoveDecorations.resolve(
+        context,
         selected: isCurrentNode,
         isEphemeral: node.isEphemeral,
         hovered: true,
