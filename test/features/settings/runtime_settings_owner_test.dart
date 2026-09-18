@@ -220,6 +220,61 @@ void main() {
     },
   );
   test(
+    'admitted edits settle after disposal without notifying or admitting new edits',
+    () async {
+      final storage = MemorySettingsSection(EngineConfiguration());
+      final owner = EngineSettings(storage);
+      await owner.ensureLoaded();
+      var notifications = 0;
+      owner.addListener(() => notifications++);
+      final gate = Completer<void>();
+      storage.writeGate = gate.future;
+      final first = owner.edit({'engine_settings.depth': 22});
+      final second = owner.edit({'engine_settings.multi_pv': 6});
+      await Future<void>.delayed(Duration.zero);
+      expect(storage.writes, hasLength(1));
+      owner.dispose();
+      final atDisposal = notifications;
+      await expectLater(
+        owner.edit({'engine_settings.depth': 30}),
+        throwsStateError,
+      );
+      gate.complete();
+      await Future.wait([first, second]);
+      expect(notifications, atDisposal);
+      expect(storage.writes, hasLength(2));
+      final restarted = EngineSettings(storage);
+      addTearDown(restarted.dispose);
+      await restarted.ensureLoaded();
+      expect(restarted.depth, 22);
+      expect(restarted.multiPv, 6);
+    },
+  );
+  test(
+    'an edit submitted by a listener queues behind the active save',
+    () async {
+      final storage = MemorySettingsSection(EngineConfiguration());
+      final owner = EngineSettings(storage);
+      addTearDown(owner.dispose);
+      await owner.ensureLoaded();
+      Future<void>? followup;
+      owner.addListener(() {
+        if (followup == null && owner.state.phase == SettingsPhase.saving) {
+          followup = owner.edit({'engine_settings.multi_pv': 6});
+        }
+      });
+      await owner.edit({'engine_settings.depth': 22});
+      expect(followup, isNotNull);
+      await followup;
+      expect(owner.depth, 22);
+      expect(owner.multiPv, 6);
+      expect(storage.writes.map((patch) => patch.changes.keys.single), [
+        'engine_settings.depth',
+        'engine_settings.multi_pv',
+      ]);
+    },
+  );
+  test(
     'board failed draft never changes effective settings before retry',
     () async {
       final storage = MemorySettingsSection(BoardDisplayConfiguration());

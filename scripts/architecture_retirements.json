@@ -94,7 +94,8 @@
     "lib/features/master_games/services/master_practice_review.dart",
     "lib/features/master_games/widgets/master_practice_dialog.dart",
     "lib/widgets/pgn/pgn_database_picker.dart",
-    "lib/widgets/pgn/pgn_database_panel.dart"
+    "lib/widgets/pgn/pgn_database_panel.dart",
+    "lib/features/settings/controllers/settings_section_controller.dart"
   ],
   "symbols": [
     "PgnBatchWriter",
@@ -210,6 +211,7 @@
     "PgnDatabasePanel",
     "PgnDatabasePanelController",
     "DatabaseIndex",
-    "indexPgnDatabase"
+    "indexPgnDatabase",
+    "SettingsSectionController"
   ]
 }

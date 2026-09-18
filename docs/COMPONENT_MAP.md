@@ -2256,8 +2256,11 @@ outside this responsibility.
 
 `app/runtime_settings.dart` constructs one application-scoped owner per section.
 Immutable configurations live in `features/settings/models/`;
-`controllers/settings_section_controller.dart` serializes field edits against
-fresh storage, confirms writes by rereading, and retains failed drafts for retry.
+the existing `controllers/section_settings_owner.dart` directly serializes field
+edits against fresh storage, confirms writes by rereading, and retains failed
+drafts for retry. The private forwarding controller and stream relay are retired.
+The same owner handles admission, state, notifications and disposal: admitted
+writes settle after disposal without notifying, while new edits are rejected.
 `infrastructure/settings/preferences_section_storage.dart` preserves existing
 keys and migrations, including worker/thread settings and `tactics_import.depth`.
 Normal and inline controls share loading, saving, failure and retry state.
