@@ -95,6 +95,7 @@ class _ChapterListBodyState extends State<ChapterListBody> {
   }
 
   Future<void> _loadChapters() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       _loadError = null;
@@ -415,12 +416,13 @@ class _ChapterListBodyState extends State<ChapterListBody> {
           validateSafeFileName(value) ??
           (_nameTaken(value) ? 'A chapter named "$value" exists' : null),
     );
-    if (name == null) return;
+    if (name == null || !mounted) return;
 
     try {
       final storage = StorageFactory.instance;
+      final folder = _dirPath;
       final color = await _repertoireColor();
-      final path = storage.chapterFilePath(_dirPath, name);
+      final path = storage.chapterFilePath(folder, name);
       if (await storage.fileExists(path)) {
         if (mounted) {
           showAppSnackBar(
@@ -435,7 +437,7 @@ class _ChapterListBodyState extends State<ChapterListBody> {
           '// $name\n'
           '// Color: $color\n'
           '// Created on ${DateTime.now().toString().split('.')[0]}\n\n';
-      await storage.writeFile(path, header);
+      await storage.writeFile(path, header, createOnly: true);
 
       final created = RepertoireMetadata(
         filePath: path,

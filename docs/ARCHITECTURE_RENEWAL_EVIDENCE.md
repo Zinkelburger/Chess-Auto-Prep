@@ -3022,3 +3022,20 @@ were inspected again during integration, and 126 local documentation link target
 exist. The earlier 6,569-test full-suite result belongs to `e1286ced`; these focused
 and native checks cover the subsequent Builder deletions. Whole renewal remains
 Partial and total application size remains above the September 16 baseline.
+
+### Chapter picker safety repair — 2026-09-18
+
+Against `8c0537d3`, native file-backed widget regressions reproduced a competing
+PGN being replaced between the picker's existence check and write, plus successful
+rename/delete operations being reported as failures when the disposed picker tried
+to refresh. Creation now requests the existing exclusive-write primitive and
+captures its folder before awaiting; a closed picker starts no new creation and
+does not refresh. This is a two-line net production safety repair, with no new
+owner or abstraction, not catalog migration completion. All three regressions fail
+on the baseline and pass with the repair; the combined five-test batch also retains
+light/dark narrow-pane readability. The initial regression fixture's fake-zone wait
+stalled and was corrected before the completed red/green runs; that interrupted
+attempt is not a pass. Independent review verified the failure and repair evidence.
+Analyze/lint passes with 64 infos, no warnings/errors and 45 checker cases. Shared
+chapter mutation ownership, the temporary catalog adapter and Library organizer
+remain explicit work in the active plan.
