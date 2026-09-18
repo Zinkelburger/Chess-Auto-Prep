@@ -6,6 +6,7 @@ import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
 import 'package:chess_auto_prep/features/repertoire/services/chapter_splitter.dart';
 import 'package:chess_auto_prep/infrastructure/documents/native_pgn_document_store.dart';
 import 'dart:io';
+import 'dart:async';
 
 import 'package:chess_auto_prep/features/repertoire/controllers/repertoire_outline_controller.dart';
 import 'package:chess_auto_prep/features/repertoire/models/repertoire_outline.dart';
@@ -24,6 +25,18 @@ String _game(String event, String moves) =>
     '[Event "$event"]\n[Result "*"]\n\n$moves *\n';
 
 class _FailingDestinations extends NativePgnDocumentStore {
+  Completer<PgnQuarantineResult>? deletion;
+  final deletionEntered = Completer<void>();
+  @override
+  Future<PgnQuarantineResult> quarantine(
+    PgnSnapshot before, {
+    String? allowedRoot,
+  }) {
+    if (!deletionEntered.isCompleted) deletionEntered.complete();
+    return deletion?.future ??
+        super.quarantine(before, allowedRoot: allowedRoot);
+  }
+
   bool fail = false;
   int creates = 0;
   @override
@@ -290,6 +303,68 @@ void main() {
     expect(find.text('Nh6 idea'), findsOneWidget);
     expect(find.text('Main line'), findsNothing);
   });
+
+  for (final returnToA in [false, true]) {
+    testWidgets(
+      'Outline admitted failure identifies old chapter after root ${returnToA ? "A B A" : "A B"}',
+      (tester) async {
+        await tester.runAsync(() async {
+          documents.deletion = Completer<PgnQuarantineResult>();
+          await pump(tester);
+          await rightClick(tester, find.text('Advance'));
+          await tester.tap(find.text('Delete chapter…'));
+          for (
+            var i = 0;
+            i < 200 && find.byType(AlertDialog).evaluate().isEmpty;
+            i++
+          ) {
+            await Future<void>.delayed(const Duration(milliseconds: 10));
+            await tester.pump();
+          }
+          await tester.tap(find.text('Delete'));
+          await documents.deletionEntered.future;
+          final other = Directory(p.join(tmp.path, 'Other'))..createSync();
+          await controller.open(
+            rootPath: other.path,
+            activeChapterPath: null,
+            isWhite: true,
+          );
+          if (returnToA) {
+            await controller.open(
+              rootPath: root,
+              activeChapterPath: p.join(root, 'Advance.pgn'),
+              isWhite: false,
+            );
+          }
+          documents.deletion!.complete(
+            PgnQuarantineFailed(StateError('refused')),
+          );
+          for (
+            var i = 0;
+            i < 200 && find.byType(SnackBar).evaluate().isEmpty;
+            i++
+          ) {
+            await Future<void>.delayed(const Duration(milliseconds: 10));
+            await tester.pump();
+          }
+          final message = find.textContaining(
+            'The chapter could not be moved to recovery.',
+          );
+          expect(message, findsOneWidget);
+          expect(
+            tester.widget<Text>(message).data,
+            contains(p.join(root, 'Advance.pgn')),
+          );
+          expect(
+            tester.widget<Text>(message).data,
+            isNot(contains(other.path)),
+          );
+          expect(File(p.join(root, 'Advance.pgn')).existsSync(), isTrue);
+          expect(controller.rootPath, returnToA ? root : other.path);
+        });
+      },
+    );
+  }
 
   for (final sameText in [false, true]) {
     testWidgets(
