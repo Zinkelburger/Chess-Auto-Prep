@@ -3007,3 +3007,18 @@ visually inspected: the editor retains bounded height and the live Engine tab
 remains separate. Only disposable driver data was used; the preview was stopped.
 Independent review accepted the exact production commit and its simpler binding
 graph. Whole Builder renewal remains Partial.
+
+Combined integration `fe76fc0c` preserves both independently reviewed deletions
+and the full union of nine retired paths. Against `e8355200`, Builder removes
+1,887 production lines (21 added / 1,908 deleted); including the two earlier
+trials, the delta against `fa7f309e` is **−1,967 handwritten production lines**
+(389 added / 2,356 deleted), generated unchanged. The merged tree passes
+analyze/lint (64 infos, no warnings/errors), 37 focused Builder/Viewer tests and
+both Linux native annotation/reload and receipt-backed undo journeys. The first
+focused command named a nonexistent Viewer test file: its 23 actual tests passed
+but the command failed to load that path. The corrected 14-test Viewer leaf run
+passes; the invocation error is not counted as a successful run. Both screenshots
+were inspected again during integration, and 126 local documentation link targets
+exist. The earlier 6,569-test full-suite result belongs to `e1286ced`; these focused
+and native checks cover the subsequent Builder deletions. Whole renewal remains
+Partial and total application size remains above the September 16 baseline.
