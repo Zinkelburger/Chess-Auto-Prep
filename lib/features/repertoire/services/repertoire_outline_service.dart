@@ -23,7 +23,8 @@ import '../../../services/storage/storage_service.dart';
 import '../../../utils/safe_file_name.dart';
 import '../models/repertoire_outline.dart';
 import 'chapter_splitter.dart';
-import 'chapter_store.dart';
+import '../../repertoires/repositories/repertoire_catalog_repository.dart';
+import '../../documents/models/pgn_document.dart';
 import 'review_progress_repointer.dart';
 
 /// Why a structural edit was refused, in words the user can act on.
@@ -49,12 +50,11 @@ class RepertoireOutlineService {
   RepertoireOutlineService({
     StorageService? storage,
     RepertoireService? repertoire,
-    ChapterStore? chapters,
+    required this._catalog,
     required this._splitter,
     ReviewProgressRepointer? repointer,
   }) : _storage = storage ?? StorageFactory.instance,
        _repertoire = repertoire ?? RepertoireService(storage: storage),
-       _chapters = chapters ?? ChapterStore(storage: storage),
        _repointer =
            repointer ??
            ReviewProgressRepointer(
@@ -63,7 +63,7 @@ class RepertoireOutlineService {
 
   final StorageService _storage;
   final RepertoireService _repertoire;
-  final ChapterStore _chapters;
+  final RepertoireCatalogRepository _catalog;
   final ChapterSplitter _splitter;
   final ReviewProgressRepointer _repointer;
 
@@ -87,7 +87,7 @@ class RepertoireOutlineService {
   }) async {
     final (subdirs, chapters) = await (
       _storage.listSubdirectories(folderPath),
-      _storage.listChapters(folderPath),
+      _catalog.listChapters(folderPath),
     ).wait;
     chapters.sort(
       (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
@@ -207,28 +207,26 @@ class RepertoireOutlineService {
     required String name,
     required bool isWhite,
   }) async {
-    final result = await _chapters.create(
+    final result = await _catalog.createChapter(
       folderPath: folderPath,
       name: _validName(name),
       isWhite: isWhite,
     );
-    final chapter = result.chapter;
-    if (chapter == null) {
-      final failure = result.failure!;
-      throw switch (failure) {
-        ChapterCreationFailure.nameTaken => OutlineNameTakenException(
-          failure.message,
-        ),
-        ChapterCreationFailure.writeFailed => OutlineEditException(
-          failure.message,
-        ),
-      };
-    }
-    return OutlineChapter(
-      path: chapter.filePath,
-      name: chapter.name,
-      lines: const [],
-    );
+    return switch (result) {
+      PgnSaved(:final after) => OutlineChapter(
+        path: after.path,
+        name: name,
+        lines: const [],
+      ),
+      PgnNameCollision() => throw const OutlineNameTakenException(
+        'That chapter already exists.',
+      ),
+      PgnWriteUncertain(:final recoveryPath) => throw OutlineEditException(
+        'Chapter creation needs verification: ${p.join(folderPath, "$name.pgn")}.'
+        '${recoveryPath == null ? "" : " Recovery: $recoveryPath."} Do not retry.',
+      ),
+      _ => throw const OutlineEditException('Could not create chapter.'),
+    };
   }
 
   /// Renames the chapter file, keeping it in the same folder. Returns the new

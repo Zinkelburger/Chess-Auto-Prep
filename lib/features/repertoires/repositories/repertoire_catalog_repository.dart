@@ -1,3 +1,5 @@
+import '../../documents/models/pgn_document.dart';
+import '../../training/models/chapter_layout.dart' show ChapterSummary;
 import '../models/repertoire_creation.dart';
 import '../models/repertoire_metadata.dart';
 import '../models/repertoire_recovery_entry.dart';
@@ -7,6 +9,16 @@ abstract interface class RepertoireCatalogRepository {
   bool get supportsRecovery;
   Future<List<RepertoireMetadata>> listRepertoires();
   Future<List<RepertoireMetadata>> listChapters(String folderPath);
+  Future<List<ChapterSummary>> chapterSections(String path);
+
+  /// Exclusively creates an empty chapter. Null color inherits the first
+  /// available color header in this folder, or White when none exists.
+  /// Read failures are failures, never permission to guess the color.
+  Future<PgnWriteResult> createChapter({
+    required String folderPath,
+    required String name,
+    bool? isWhite,
+  });
   Future<List<RepertoireMetadata>> listStudies();
   Future<List<RepertoireRecoveryEntry>> listRecovery();
   Future<void> restore(String id, {String? name});

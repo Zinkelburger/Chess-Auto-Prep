@@ -1,3 +1,6 @@
+import 'package:path/path.dart' as p;
+import '../../repertoires/repositories/repertoire_catalog_repository.dart';
+import '../../../utils/app_messages.dart';
 import 'package:flutter/material.dart';
 
 import '../../../l10n/generated/app_localizations.dart';
@@ -237,13 +240,12 @@ class RepertoireToolbarTitle extends StatelessWidget {
 /// "Add chapter" and "View all chapters" actions. This makes the folder →
 /// chapter hierarchy visible at all times and turns chapter switching into a
 /// single click instead of a full-screen detour.
-class RepertoireBreadcrumbTitle extends StatelessWidget {
+class RepertoireBreadcrumbTitle extends StatefulWidget {
   const RepertoireBreadcrumbTitle({
     super.key,
-    required this.repertoireName,
-    required this.chapterName,
-    required this.chapters,
-    required this.currentChapterPath,
+    required this.chapter,
+    required this.catalog,
+    required this.isCurrent,
     this.onSwitchRepertoire,
     required this.onSelectChapter,
     this.onAddChapter,
@@ -251,23 +253,29 @@ class RepertoireBreadcrumbTitle extends StatelessWidget {
     this.enabled = true,
   });
 
-  final String repertoireName;
-  final String chapterName;
-  final List<RepertoireMetadata> chapters;
-  final String? currentChapterPath;
+  final RepertoireMetadata chapter;
+  final RepertoireCatalogRepository catalog;
+  final bool Function() isCurrent;
   final VoidCallback? onSwitchRepertoire;
   final ValueChanged<RepertoireMetadata> onSelectChapter;
   final VoidCallback? onAddChapter;
   final VoidCallback? onViewChapters;
   final bool enabled;
 
+  @override
+  State<RepertoireBreadcrumbTitle> createState() =>
+      _RepertoireBreadcrumbTitleState();
+}
+
+class _RepertoireBreadcrumbTitleState extends State<RepertoireBreadcrumbTitle> {
+  bool _opening = false;
   static const _addValue = '__add_chapter__';
   static const _viewAllValue = '__view_chapters__';
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final repTap = enabled ? onSwitchRepertoire : null;
+    final repTap = widget.enabled ? widget.onSwitchRepertoire : null;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -296,7 +304,7 @@ class RepertoireBreadcrumbTitle extends StatelessWidget {
                       vertical: 2,
                     ),
                     child: Text(
-                      repertoireName,
+                      p.basename(p.dirname(widget.chapter.filePath)),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.titleMedium,
@@ -325,7 +333,7 @@ class RepertoireBreadcrumbTitle extends StatelessWidget {
         children: [
           Flexible(
             child: Text(
-              chapterName,
+              widget.chapter.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.titleMedium?.copyWith(
@@ -336,13 +344,13 @@ class RepertoireBreadcrumbTitle extends StatelessWidget {
           Icon(
             Icons.arrow_drop_down,
             size: 20,
-            color: enabled ? AppColors.onSurfaceMuted : Colors.grey[700],
+            color: widget.enabled ? AppColors.onSurfaceMuted : Colors.grey[700],
           ),
         ],
       ),
     );
 
-    if (!enabled) return child;
+    if (!widget.enabled || _opening) return child;
 
     // A searchable dialog rather than a popup menu: a real repertoire runs to
     // dozens of chapters, and a menu has nowhere to put a text box. The two
@@ -352,57 +360,79 @@ class RepertoireBreadcrumbTitle extends StatelessWidget {
       waitDuration: const Duration(milliseconds: 600),
       child: InkWell(
         borderRadius: BorderRadius.circular(4),
-        onTap: () => _openChapterPicker(context),
+        onTap: _openChapterPicker,
         child: child,
       ),
     );
   }
 
-  Future<void> _openChapterPicker(BuildContext context) async {
-    final picked = await showSearchablePicker<String>(
-      context: context,
-      title: 'Switch chapter',
-      searchHint: 'Search chapters',
-      selected: currentChapterPath,
-      items: [
-        for (final c in chapters)
-          PickerItem(
-            value: c.filePath,
-            label: c.name,
-            subtitle: '${c.gameCount} line${c.gameCount == 1 ? '' : 's'}',
-            icon: Icons.bookmark_outline,
-            // The counts are noise to type against; chapters are found by
-            // name.
-            searchText: c.name,
+  Future<void> _openChapterPicker() async {
+    final isCurrent = widget.isCurrent;
+    final onSelect = widget.onSelectChapter;
+    final onAdd = widget.onAddChapter;
+    final onView = widget.onViewChapters;
+    if (_opening || !widget.enabled || !isCurrent()) return;
+    setState(() => _opening = true);
+    try {
+      final chapters = await widget.catalog.listChapters(
+        p.dirname(widget.chapter.filePath),
+      );
+      if (!mounted || !widget.enabled || !isCurrent()) return;
+      final picked = await showSearchablePicker<String>(
+        context: context,
+        title: 'Switch chapter',
+        searchHint: 'Search chapters',
+        selected: widget.chapter.filePath,
+        items: [
+          for (final c in chapters)
+            PickerItem(
+              value: c.filePath,
+              label: c.name,
+              subtitle: '${c.gameCount} line${c.gameCount == 1 ? '' : 's'}',
+              icon: Icons.bookmark_outline,
+              // The counts are noise to type against; chapters are found by
+              // name.
+              searchText: c.name,
+            ),
+          const PickerItem(
+            value: _addValue,
+            label: 'Add chapter',
+            icon: Icons.add,
           ),
-        const PickerItem(
-          value: _addValue,
-          label: 'Add chapter',
-          icon: Icons.add,
-        ),
-        const PickerItem(
-          value: _viewAllValue,
-          label: 'View all chapters',
-          icon: Icons.list_alt,
-        ),
-      ],
-      emptyMessage: 'This repertoire has no chapters yet.',
-    );
+          const PickerItem(
+            value: _viewAllValue,
+            label: 'View all chapters',
+            icon: Icons.list_alt,
+          ),
+        ],
+        emptyMessage: 'This repertoire has no chapters yet.',
+      );
 
-    if (picked == null) return;
-    if (picked == _addValue) {
-      onAddChapter?.call();
-      return;
-    }
-    if (picked == _viewAllValue) {
-      onViewChapters?.call();
-      return;
-    }
-    for (final c in chapters) {
-      if (c.filePath == picked) {
-        onSelectChapter(c);
+      if (picked == null || !mounted || !widget.enabled || !isCurrent()) return;
+      if (picked == _addValue) {
+        onAdd?.call();
         return;
       }
+      if (picked == _viewAllValue) {
+        onView?.call();
+        return;
+      }
+      for (final c in chapters) {
+        if (c.filePath == picked) {
+          onSelect(c);
+          return;
+        }
+      }
+    } catch (error) {
+      if (mounted && isCurrent()) {
+        showAppSnackBar(
+          context,
+          'Could not load chapters. $error',
+          isError: true,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _opening = false);
     }
   }
 }

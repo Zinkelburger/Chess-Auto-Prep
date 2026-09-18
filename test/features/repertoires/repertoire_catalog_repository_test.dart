@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/infrastructure/documents/native_pgn_document_store.dart';
 import 'dart:io';
 
 import 'package:chess_auto_prep/features/repertoires/models/repertoire_creation.dart';
@@ -13,6 +14,7 @@ void main() {
     root = Directory.systemTemp.createTempSync('catalog-contract-');
     Directory('${root.path}/repertoires').createSync();
     repository = LegacyRepertoireCatalogRepository(
+      documents: NativePgnDocumentStore(),
       IOStorageService(
         documentsRoot: root,
         supportRoot: root,

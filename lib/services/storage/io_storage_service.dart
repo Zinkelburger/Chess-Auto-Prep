@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:isolate';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
@@ -77,7 +76,7 @@ class IOStorageService implements StorageService {
       );
     }
     final now = createdAt ?? DateTime.now();
-    final plan = await Isolate.run(() => planRepertoireImport(request, now));
+    final plan = await prepareRepertoireImport(request, now);
     return (await _publications()).publish(
       plan,
       createDocument: createDocument,

@@ -104,7 +104,7 @@ class _AppDependenciesState extends State<AppDependencies> {
 
   late final _defaultCatalog = LegacyRepertoireCatalogRepository(
     StorageFactory.instance,
-    documents: widget.documentStore,
+    documents: widget.documentStore ?? createPlatformDocumentStore(),
   );
 
   @override

@@ -4,7 +4,6 @@
 library;
 
 import 'dart:io';
-import 'dart:isolate';
 import 'package:path/path.dart' as p;
 import '../features/documents/models/pgn_document.dart';
 import '../features/documents/repositories/pgn_document_store.dart';
@@ -63,7 +62,7 @@ Future<RepertoireCreationResult> createRepertoire({
     );
   }
   final date = createdAt ?? DateTime.now();
-  final plan = await Isolate.run(() => planRepertoireImport(request, date));
+  final plan = await prepareRepertoireImport(request, date);
   final dirPath = await store.repertoireDirectoryPath(name);
   for (final chapter in plan.chapters.entries) {
     await create(p.join(dirPath, chapter.key), chapter.value);

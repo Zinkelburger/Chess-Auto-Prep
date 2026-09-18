@@ -3,6 +3,8 @@
 /// what is already in the app, with "New empty repertoire…" at its foot.
 library;
 
+import 'package:chess_auto_prep/infrastructure/documents/native_pgn_document_store.dart';
+
 import 'package:provider/provider.dart';
 import 'package:chess_auto_prep/features/repertoires/controllers/repertoire_catalog_controller.dart';
 import 'package:chess_auto_prep/infrastructure/repertoires/legacy_repertoire_catalog_repository.dart';
@@ -130,7 +132,10 @@ void main() {
     await tester.pumpWidget(
       ChangeNotifierProvider(
         create: (_) => RepertoireCatalogController(
-          LegacyRepertoireCatalogRepository(storage),
+          LegacyRepertoireCatalogRepository(
+            storage,
+            documents: NativePgnDocumentStore(),
+          ),
         ),
         child: MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,

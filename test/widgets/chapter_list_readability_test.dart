@@ -1,3 +1,7 @@
+import 'package:provider/provider.dart';
+import 'package:chess_auto_prep/features/repertoires/repositories/repertoire_catalog_repository.dart';
+import 'package:chess_auto_prep/infrastructure/repertoires/legacy_repertoire_catalog_repository.dart';
+import 'package:chess_auto_prep/infrastructure/documents/legacy_pgn_document_store.dart';
 import 'dart:io';
 
 import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
@@ -37,6 +41,13 @@ void main() {
         ChapterPick? picked;
         await tester.pumpWidget(
           MaterialApp(
+            builder: (context, child) => Provider<RepertoireCatalogRepository>(
+              create: (_) => LegacyRepertoireCatalogRepository(
+                StorageFactory.instance,
+                documents: LegacyPgnDocumentStore(StorageFactory.instance),
+              ),
+              child: child!,
+            ),
             theme: brightness == Brightness.dark
                 ? AppTheme.dark()
                 : AppTheme.light(),

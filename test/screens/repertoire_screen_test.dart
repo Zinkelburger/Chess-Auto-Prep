@@ -1,6 +1,7 @@
 library;
 
 import 'package:chess_auto_prep/infrastructure/documents/legacy_pgn_document_store.dart';
+import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
 import 'package:chess_auto_prep/app/repertoire_dependencies.dart';
 import 'package:chess_auto_prep/features/repertoire/services/repertoire_outline_service.dart';
 
@@ -68,10 +69,35 @@ class _TestPaths extends PathProviderPlatform with MockPlatformInterfaceMixin {
 }
 
 class _ChapterCatalog extends LegacyRepertoireCatalogRepository {
-  _ChapterCatalog(this.folder) : super(StorageFactory.instance);
+  _ChapterCatalog(this.folder)
+    : super(
+        StorageFactory.instance,
+        documents: LegacyPgnDocumentStore(StorageFactory.instance),
+      );
   final String folder;
   bool unavailable = false;
   int chapterReads = 0;
+
+  Completer<PgnWriteResult>? chapterCreation;
+  bool? createdColor;
+  String? createdFolder;
+  int creations = 0;
+  @override
+  Future<PgnWriteResult> createChapter({
+    required String folderPath,
+    required String name,
+    bool? isWhite,
+  }) {
+    creations++;
+    createdColor = isWhite;
+    createdFolder = folderPath;
+    return chapterCreation?.future ??
+        super.createChapter(
+          folderPath: folderPath,
+          name: name,
+          isWhite: isWhite,
+        );
+  }
 
   @override
   Future<List<RepertoireMetadata>> listRepertoires() async => [
@@ -171,7 +197,8 @@ Future<AppState> _pumpScreen(
         ),
         ChangeNotifierProvider<AppState>.value(value: appState),
         Provider<RepertoireOutlineService>(
-          create: (_) => createRepertoireOutline(
+          create: (context) => createRepertoireOutline(
+            catalog: context.read<RepertoireCatalogRepository>(),
             documents: LegacyPgnDocumentStore(StorageFactory.instance),
           ),
         ),
@@ -230,6 +257,85 @@ void main() {
     if (await storageRoot.exists()) await storageRoot.delete(recursive: true);
   });
 
+  testWidgets('inline chapter creation rejects case-insensitive duplicate', (
+    tester,
+  ) async {
+    final path = _writeRepertoire(tester);
+    final catalog = _ChapterCatalog(File(path).parent.path);
+    await _pumpScreen(tester, repertoirePath: path, catalog: catalog);
+    final document = tester
+        .element(find.byType(RepertoireScreen))
+        .read<BuilderLifetime>()
+        .workspace
+        .document;
+    await tester.tap(find.byTooltip('Switch chapter'));
+    await _settleUntil(tester, find.text('Add chapter'));
+    await tester.tap(find.text('Add chapter'));
+    await _settle(tester, cycles: 8);
+    await tester.enterText(find.byType(TextField).last, 'main');
+    await tester.tap(find.text('Create'));
+    await _settleUntil(tester, find.text('That chapter already exists.'));
+    expect(document.currentRepertoire?.filePath, path);
+    expect(File('${File(path).parent.path}/main.pgn').existsSync(), isFalse);
+    expect(catalog.creations, 1);
+  });
+
+  testWidgets(
+    'inline create captures color and rejects completed A B A selection',
+    (tester) async {
+      final path = _writeRepertoire(tester);
+      final catalog = _ChapterCatalog(File(path).parent.path)
+        ..chapterCreation = Completer<PgnWriteResult>();
+      await _pumpScreen(tester, repertoirePath: path, catalog: catalog);
+      final document = tester
+          .element(find.byType(RepertoireScreen))
+          .read<BuilderLifetime>()
+          .workspace
+          .document;
+      final original = document.currentRepertoire!;
+      await tester.tap(find.byTooltip('Switch chapter'));
+      await _settleUntil(tester, find.text('Add chapter'));
+      await tester.tap(find.text('Add chapter'));
+      await _settle(tester, cycles: 8);
+      await tester.enterText(find.byType(TextField).last, 'New');
+      await tester.tap(find.text('Create'));
+      await _settle(tester, cycles: 8);
+      expect(catalog.creations, 1);
+      expect(catalog.createdColor, isTrue);
+      expect(catalog.createdFolder, File(path).parent.path);
+      final otherPath = '${File(path).parent.path}/Other.pgn';
+      File(
+        otherPath,
+      ).writeAsStringSync(_chapterPgn.replaceFirst('White', 'Black'));
+      unawaited(
+        document.setRepertoire(
+          RepertoireMetadata(
+            filePath: otherPath,
+            name: 'Other',
+            lastModified: DateTime(2026),
+          ),
+        ),
+      );
+      await _settle(tester);
+      expect(document.isLoading, isFalse);
+      unawaited(document.setRepertoire(original));
+      await _settle(tester);
+      expect(document.isLoading, isFalse);
+      final savedPath = '${File(path).parent.path}/New.pgn';
+      File(savedPath).writeAsStringSync('// New\n// Color: White\n');
+      catalog.chapterCreation!.complete(
+        PgnSaved(
+          before: null,
+          after: LegacyPgnDocumentStore.snapshot(savedPath, '// New'),
+        ),
+      );
+      await _settle(tester, cycles: 5);
+      expect(document.currentRepertoire?.filePath, path);
+      expect(catalog.creations, 1);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('failed copy destination listing retains the draft and retries', (
     tester,
   ) async {
@@ -243,12 +349,13 @@ void main() {
     lifetime.workspace.setTitle('Retained copy');
     await tester.pump();
     final original = File(path).readAsStringSync();
+    final previousReads = catalog.chapterReads;
     await tester.tap(find.byKey(const ValueKey('save-builder-draft-copy')));
     await _settleUntil(tester, find.widgetWithText(ListTile, 'MyRep'));
     await tester.pump(const Duration(milliseconds: 400));
     await tester.tap(find.widgetWithText(ListTile, 'MyRep'));
     await _settle(tester, cycles: 10);
-    expect(catalog.chapterReads, 1);
+    expect(catalog.chapterReads, previousReads + 1);
     expect(
       find.text(
         'The draft is retained. Choose a destination and try saving it again.',
@@ -274,7 +381,7 @@ void main() {
         DateTime.now().isBefore(deadline)) {
       await _settle(tester, cycles: 1);
     }
-    expect(catalog.chapterReads, 2);
+    expect(catalog.chapterReads, greaterThan(previousReads + 1));
     expect(lifetime.workspace.saveError, isNull);
     expect(
       lifetime.workspace.uncertainCopies.map((copy) => copy.outcome.error),

@@ -68,7 +68,10 @@ void main() {
               create: (_) => createGenerationArtifacts(documents: documents),
             ),
             Provider<RepertoireOutlineService>(
-              create: (_) => createRepertoireOutline(documents: documents),
+              create: (_) => createRepertoireOutline(
+                documents: documents,
+                catalog: FixtureRepertoireRepository(CatalogScenario.populated),
+              ),
             ),
             Provider<RepertoireDocumentRepository>(
               create: (_) => createRepertoireDocuments(documents: documents),

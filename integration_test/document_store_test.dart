@@ -23,6 +23,7 @@ void main() {
     (tester) async {
       final name = 'Uncertain ${DateTime.now().microsecondsSinceEpoch}';
       final repository = LegacyRepertoireCatalogRepository(
+        documents: NativePgnDocumentStore(),
         IOStorageService(
           repertoirePublicationHook: (step) async {
             if (step == RepertoirePublicationStep.installed) {
