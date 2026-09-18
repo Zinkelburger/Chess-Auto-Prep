@@ -86,13 +86,28 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
     headers: headers,
     settings: () => settings,
     repertoireId: () => repertoireId,
-    onError: (failure) {
-      if (_disposed) return;
+    onError: _progressErrorHandler(),
+  );
+
+  void Function(Object) _progressErrorHandler() {
+    final generation = _loadGeneration;
+    return (failure) {
+      if (_disposed ||
+          generation != _loadGeneration ||
+          isLoading ||
+          progress.editBusy ||
+          progress.requiresReload) {
+        return;
+      }
       _retryFailure = progress.flushHeaders;
       error = 'Could not mirror training progress: $failure';
       notifyListeners();
-    },
-  );
+    };
+  }
+
+  bool get progressNeedsReload => progress.requiresReload;
+  bool get _canEditProgress =>
+      !_disposed && !isLoading && error == null && !progress.editsBlocked;
 
   Map<String, RepertoireReviewEntry> get reviewMap => progress.byLine;
   Map<String, RepertoireMoveProgress> get moveProgressMap =>
@@ -307,7 +322,11 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   Future<void> Function()? _retryFailure;
 
   Future<void> retryFailure() async {
-    if (completionBusy) return;
+    if (completionBusy || progress.editBusy) return;
+    if (progressNeedsReload) {
+      await loadRepertoire();
+      return;
+    }
     final retry = _retryFailure;
     _retryFailure = null;
     error = null;
@@ -325,6 +344,9 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   }
 
   void _cancelSourceWork() {
+    lines = [];
+    dueQueue = [];
+    isLoading = true;
     _retryFailure = null;
     error = null;
     _adoptConfiguration();
@@ -500,6 +522,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
       }
       lines = loaded.lines;
       session.setPositionFromFen(loaded.lines.first.startPosition.fen);
+      progress.onError = _progressErrorHandler();
       progress.adopt(
         byLine: loaded.reviewByLine,
         moveProgress: loaded.moveProgress,
@@ -528,6 +551,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
         unawaited(_loadPlayability(filePath, loaded.lines, generation));
       }
 
+      isLoading = false;
       // Land on the line browser; only jump straight into a line when the
       // caller asked for one (e.g. "Train this line" from the Builder).
       if (startLineId != null) {
@@ -727,7 +751,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   void startReviewSession() => _startSession(TrainingIntent.review);
 
   void _startSession(TrainingIntent intent) {
-    if (_uncommittedResult) return;
+    if (!_canEditProgress || _uncommittedResult) return;
     _adoptConfiguration();
     dueQueue = _buildQueue();
     run.begin(dueQueue, intent);
@@ -774,8 +798,10 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
     TrainingIntent? intent,
     bool keepRunScope = false,
   }) {
-    if (_uncommittedResult ||
+    if (!_canEditProgress ||
+        _uncommittedResult ||
         line == null ||
+        !lines.any((current) => identical(current, line)) ||
         (reviewMap[line.id]?.excluded ?? false)) {
       return;
     }
@@ -912,16 +938,32 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   }
 
   Future<void> setLineExcluded(RepertoireLine line, bool excluded) async {
-    if (_uncommittedResult) return;
-    final saved = progress.setExcluded(line, excluded);
-    if (excluded && currentLine?.id == line.id) {
-      learn.cancelPending();
-      rebuildQueueAndAdvance();
-    } else {
-      dueQueue = _buildQueue();
-      notifyListeners();
+    if (!_canEditProgress ||
+        _uncommittedResult ||
+        !lines.any((current) => identical(current, line))) {
+      return;
     }
-    await saved;
+    final generation = _loadGeneration;
+    if (excluded && currentLine?.id == line.id) learn.cancelPending();
+    try {
+      await progress.setExcluded(line, excluded);
+      if (_disposed || generation != _loadGeneration) return;
+      if (excluded && currentLine?.id == line.id) {
+        rebuildQueueAndAdvance();
+      } else {
+        dueQueue = _buildQueue();
+        notifyListeners();
+      }
+    } catch (failure) {
+      _progressEditFailed(failure, generation);
+    }
+  }
+
+  void _progressEditFailed(Object failure, int generation) {
+    if (_disposed || generation != _loadGeneration) return;
+    _retryFailure = null;
+    error = 'Could not save training progress: $failure';
+    notifyListeners();
   }
 
   /// Restart the current line from the beginning (learn phase again if the
@@ -975,6 +1017,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   /// The user played [move]. Records the attempt, then hands the answer to
   /// whichever phase is asking: the learn quiz, the replay, or the drill.
   Future<void> handleUserMove(CompletedMove move) async {
+    if (!_canEditProgress) return;
     if (!waitingForUser || currentLine == null) return;
 
     final attemptLine = currentLine!;
@@ -1017,7 +1060,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   /// Finishing, persisting and advancing are one session-owned transition.
   /// A mounted results widget is never required to commit an automatic result.
   void _finishLine() {
-    if (_disposed ||
+    if (!_canEditProgress ||
         currentLine == null ||
         runComplete ||
         _completionGeneration == _lineGeneration) {
@@ -1069,14 +1112,14 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
       phase == TrainingPhase.finished &&
       !completionCommitted;
   bool get canAdvance =>
-      !_disposed &&
+      _canEditProgress &&
       !completionBusy &&
       !runComplete &&
       currentLine != null &&
       (phase != TrainingPhase.finished || completionCommitted);
 
   bool get canRate =>
-      !_disposed &&
+      _canEditProgress &&
       !runComplete &&
       currentLine != null &&
       phase == TrainingPhase.finished &&
@@ -1111,13 +1154,14 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
 
   Future<void> _commitCompletion(ReviewRating? rating) async {
     final line = currentLine;
-    if (_disposed ||
+    if (!_canEditProgress ||
         line == null ||
         runComplete ||
         _completionGeneration == _lineGeneration) {
       return;
     }
     final generation = _lineGeneration;
+    final sourceGeneration = _loadGeneration;
     _completionGeneration = generation;
     final attempt = Object();
     final hadMistake = lineHadMistake;
@@ -1149,7 +1193,9 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
           );
         }
       } catch (failure) {
-        if (!_disposed && generation == _lineGeneration) {
+        if (progressNeedsReload) {
+          _progressEditFailed(failure, sourceGeneration);
+        } else if (!_disposed && generation == _lineGeneration) {
           _retryFailure = persist;
           error =
               'Could not save ${rating == null ? 'completion' : 'rating'}: $failure';
@@ -1222,23 +1268,37 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   Future<int> applyLearnedSelection(
     Set<String> checkedLineIds, {
     Set<String>? within,
-  }) => progress.applyLearnedSelection(
-    lines,
-    checkedLineIds,
-    within: within,
-    // Repaint as soon as the in-memory state is right, before the writes —
-    // marking a whole course learned should not feel like it hangs.
-    onApplied: () {
-      dueQueue = _buildQueue();
-      notifyListeners();
-    },
-  );
+  }) async {
+    if (!_canEditProgress || currentLine != null) {
+      throw StateError('Training progress is unavailable for bulk editing');
+    }
+    final generation = _loadGeneration;
+    try {
+      final changed = await progress.applyLearnedSelection(
+        lines,
+        checkedLineIds,
+        within: within,
+      );
+      if (!_disposed && generation == _loadGeneration) {
+        dueQueue = _buildQueue();
+        notifyListeners();
+      }
+      return changed;
+    } catch (failure) {
+      _progressEditFailed(failure, generation);
+      rethrow;
+    }
+  }
 
   void updateMoveProgress(
     RepertoireLine line,
     int moveIndex, {
     required bool wasCorrect,
-  }) => progress.recordMove(line, moveIndex, wasCorrect: wasCorrect);
+  }) {
+    if (_canEditProgress && lines.any((current) => identical(current, line))) {
+      progress.recordMove(line, moveIndex, wasCorrect: wasCorrect);
+    }
+  }
 
   double moveDifficulty(RepertoireLine line, int moveIndex) =>
       progress.moveDifficulty(line, moveIndex);

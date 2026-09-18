@@ -94,6 +94,18 @@ abstract class AppLocalizations {
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[Locale('en')];
 
+  /// Recovery action after a possibly partial training progress write.
+  ///
+  /// In en, this message translates to:
+  /// **'Reload saved progress'**
+  String get trainingReloadProgress;
+
+  /// Explains partial progress persistence without promising replay or rollback.
+  ///
+  /// In en, this message translates to:
+  /// **'Training progress may be partly saved. Reload saved progress before training again. History and PGN updates may be incomplete. Reloading does not retry the changes.'**
+  String get trainingProgressPartial;
+
   /// Study and PGN control: cancel
   ///
   /// In en, this message translates to:

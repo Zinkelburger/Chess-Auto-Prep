@@ -408,14 +408,13 @@ void main() {
       expect(repertoire.headerUpdates, isEmpty);
     });
 
-    test('repaints before writing to disk', () async {
-      final order = <String>[];
+    test('publishes learned state after acknowledged persistence', () async {
       review.saved = [];
-      await store.applyLearnedSelection(lines, {
-        'A',
-      }, onApplied: () => order.add('repaint'));
-      order.add('written');
-      expect(order, ['repaint', 'written']);
+      final saving = store.applyLearnedSelection(lines, {'A'});
+      expect(store.byLine['A']?.isNew ?? true, isTrue);
+      await saving;
+      expect(store.byLine['A']!.isNew, isFalse);
+      expect(review.saved, isNotEmpty);
     });
   });
 

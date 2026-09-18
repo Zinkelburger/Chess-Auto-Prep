@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
+import '../../l10n/generated/app_localizations.dart';
 
 /// Bootstrap UI when no repertoire is loaded or training cannot start yet.
 class RepertoireSelectorPanel extends StatelessWidget {
   final bool isLoading;
   final String loadingStatus;
   final String? error;
+  final bool progressNeedsReload;
   final bool hasLines;
   final bool canStartTraining;
   final VoidCallback onSelectRepertoire;
@@ -22,6 +24,7 @@ class RepertoireSelectorPanel extends StatelessWidget {
     required this.isLoading,
     this.loadingStatus = 'Loading repertoire…',
     this.error,
+    this.progressNeedsReload = false,
     required this.hasLines,
     required this.canStartTraining,
     required this.onSelectRepertoire,
@@ -45,14 +48,19 @@ class RepertoireSelectorPanel extends StatelessWidget {
       );
     }
 
-    if (error != null) {
+    if (error != null || progressNeedsReload) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const Icon(Icons.error_outline, size: 64, color: AppColors.danger),
             const SizedBox(height: 12),
-            Text(error!, textAlign: TextAlign.center),
+            Text(
+              progressNeedsReload
+                  ? AppLocalizations.of(context).trainingProgressPartial
+                  : error!,
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 12),
             Wrap(
               spacing: 8,
@@ -60,7 +68,14 @@ class RepertoireSelectorPanel extends StatelessWidget {
               alignment: WrapAlignment.center,
               children: [
                 if (onRetry != null)
-                  FilledButton(onPressed: onRetry, child: const Text('Retry')),
+                  FilledButton(
+                    onPressed: onRetry,
+                    child: Text(
+                      progressNeedsReload
+                          ? AppLocalizations.of(context).trainingReloadProgress
+                          : 'Retry',
+                    ),
+                  ),
                 if (onOpenInBuilder != null)
                   FilledButton(
                     onPressed: onOpenInBuilder,

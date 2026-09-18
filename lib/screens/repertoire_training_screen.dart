@@ -542,11 +542,13 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
 
     if (_training.isLoading ||
         _training.error != null ||
+        _training.progressNeedsReload ||
         _training.lines.isEmpty) {
       return RepertoireSelectorPanel(
         isLoading: _training.isLoading,
         loadingStatus: _training.loadingStatus,
         error: _training.error,
+        progressNeedsReload: _training.progressNeedsReload,
         onRetry: () => unawaited(_training.retryFailure()),
         hasLines: _training.lines.isNotEmpty,
         canStartTraining: false,
@@ -598,26 +600,10 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
         ),
         Expanded(
           child: TrainerBrowser(
-            title: _training.repertoire!.name,
-            subtitle: _browserSubtitle(),
-            lines: _training.lines,
-            reviewMap: _training.reviewMap,
-            chapterOf: _training.chapterOf,
-            activeChapter: _training.activeChapter,
-            onChapterSelected: _training.setActiveChapter,
-            ungroupedChapter: TrainingSessionController.ungroupedChapter,
+            session: _training,
             onBrowseChapters: _training.sourceIsStudy ? null : _chooseChapter,
-            onLearn: _training.startLearnSession,
-            onReview: _training.startReviewSession,
-            learnBatchSize: _sessionCap(_training.settings.newLinesPerSession),
-            reviewBatchSize: _sessionCap(_training.settings.reviewsPerSession),
-            onTrainLine: (line) => _training.startLine(line),
             onPreviewLine: _previewLine,
             onReadLines: _readLines,
-            onApplyLearnedSelection: _applyLearnedSelection,
-            introEnabled: _training.settings.skipToFirstComment,
-            onExcludeLine: (line, excluded) =>
-                unawaited(_training.setLineExcluded(line, excluded)),
           ),
         ),
       ],
@@ -628,10 +614,6 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
   /// by definition, so it never advertises a batch.
   int _sessionCap(int setting) =>
       _training.repetitionMode == RepetitionMode.linear ? 0 : setting;
-
-  String? _browserSubtitle() => _training.sourceIsStudy
-      ? null
-      : '${_training.sourceIsBlack ? 'Black' : 'White'} repertoire';
 
   /// Trainer settings as a dialog — the landing page has no tab bar, and
   /// knobs belong behind one labelled entry point either way.
@@ -867,13 +849,6 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
       ),
       historyLabel: 'Read ${source.name}',
     );
-  }
-
-  Future<void> _applyLearnedSelection(
-    Set<String> checkedLineIds,
-    Set<String> scope,
-  ) async {
-    await _training.applyLearnedSelection(checkedLineIds, within: scope);
   }
 
   Widget _buildPgnTab() {

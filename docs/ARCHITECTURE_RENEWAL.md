@@ -254,26 +254,26 @@ merges (57 on the first-parent history). Commit count is activity, not completio
 At that snapshot, six enforced and 17 unfinished features included zero complete
 features. The current inventory above separately records later deletions.
 
-The same measurement at Trainer reading-handoff checkpoint `accadd1f`, including
-reviewed document-store, settings and Study chapter-list consolidation, is:
+The same measurement at Trainer bulk-recovery checkpoint `22e28fa3`, including
+reviewed reading-handoff, document-store, settings and Study consolidation, is:
 
 | Tracked scope | September 16 | Current checkpoint | Change from September 16 |
 |---|---:|---:|---:|
-| All library Dart, including generated code | 218,957 | 225,754 | +6,797 (+3.1%) |
+| All library Dart, including generated code | 218,957 | 225,909 | +6,952 (+3.2%) |
 | Viewer screen | 1,909 | 1,875 | −34 |
 | Builder screen | 1,191 | 1,468 | +277 |
 | Study screen | 880 | 1,072 | +192 |
 | Generation session controller | 1,321 | 1,447 | +126 |
 
-All-library code is down 11,237 lines from the reviewed `a6238ff5` snapshot,
+All-library code is down 11,082 lines from the reviewed `a6238ff5` snapshot,
 with Viewer now 34 lines below September 16; the other three consumers remain
-larger. Legacy `services/` still holds 42,560 lines and `widgets/` 49,504. Riverpod's production
+larger. Legacy `services/` still holds 42,560 lines and `widgets/` 49,506. Riverpod's production
 imports and package dependency are now deleted; the current inventory is six
 enforced and 14 unfinished feature directories, with none complete. The three
 removed feature directories contained unused code, not graduated workflows.
 
 Against the separate simplification baseline `fa7f309e`, the completed batch
-removes 13,973 handwritten library lines, with generated localization +245
+removes 13,837 handwritten library lines, with generated localization +264
 reported separately. Chapter read/create and deletion Widgetbook changes add 22 lines, outside
 that library total. Of the removals, 12,154 lines come from unused analysis,
 eval-tree and other presentation/custom-tab retirement. These unrelated deletions cannot
@@ -444,7 +444,8 @@ product owner to choose implementation details.
 | Reviewed safety/recovery cutovers | Builder durable workspace, native recovery identity and bounded autosave; Study app-owned import/publication; Generation retained-output recovery | Named old owners/callers removed and independent repairs reviewed. These are safety/retirement results with production growth; keep their evidence separate from the two required net-reduction trials. |
 | Composition trial passed (`e1286ced`) | Constructors plus Provider throughout catalog/settings/app presentation | Riverpod owners/bindings/dependency and generic stored-game/display scopes deleted; −48 handwritten production lines against `fa7f309e`, independently reviewed with lifecycle/settings parity. |
 | Bounded Viewer trial passed (`e1286ced`); wider consumer work remains open | Shared leave approval and existing collection/reader owners replace duplicate prompts and five suppliers | −32 handwritten production lines against `4ebb3a36`; native approval never discards early and screen discard validates click-time revision. Both trials together pass 6,569 tests with 12 skips and no failures. This permits the next bounded deletion, not whole-Viewer graduation. |
-| Trainer reading handoff repaired (`accadd1f`) | Existing Viewer loads captured PGN content and owns edits/copy/close | Deletes the relative temporary-file writer that produced an unreadable Viewer path. Existing immutable handoff carries ordered content/title/index/ply; collection metadata restores its title through navigation. Five-file scope 4,404→4,442 (+38 handwritten): correctness growth, not a simplification pass. Independent review, 45 focused tests and actual Linux Read/edit/Save-copy/return pass; original sources remain unchanged. Browser ownership/bulk-save closure remains separate. |
+| Trainer reading handoff repaired (`accadd1f`) | Existing Viewer loads captured PGN content and owns edits/copy/close | Deletes the relative temporary-file writer that produced an unreadable Viewer path. Existing immutable handoff carries ordered content/title/index/ply; collection metadata restores its title through navigation. Five-file scope 4,404→4,442 (+38 handwritten): correctness growth, not a simplification pass. Independent review, 45 focused tests and actual Linux Read/edit/Save-copy/return pass; original sources remain unchanged. Browser ownership/bulk-save repair is recorded separately below. |
+| Trainer browser binding and bulk recovery repaired (`22e28fa3`); reduction gate unmet | Browser uses the existing session directly; one existing progress queue owns admitted bulk/exclusion writes and durable reload after partial failure | Deletes 20-value/callback forwarding and duplicate chapter matching (−49 lines), but necessary partial-save/source-lifetime repair adds 185. Complete seven-file scope 4,440→4,576 (+136 handwritten); generated +19 separately. Independent review, 273 focused tests, three Linux native journeys and inspected recovery/reload screenshots pass. This is a correctness repair with clearer binding, **not a simplification pass**; it does not authorize broader extraction. No new progress owner or queue; stable filesystem source identity remains open. |
 | Document-store selection consolidated (`654898bf`) | Collection, Study and Generation require the one store chosen by app composition | Deletes six consumer-level fallback selections and the collection’s alternate patch writer. Four-file scope 473→438 (−35 handwritten); seven-file composition/store/contract scope 965→930. Explicit adapter fixtures, real legacy conflict/uncertain receipts and native identity checks pass with affected Viewer/Study/main tests. Platform selection and unverified-host limitations remain unchanged. |
 | Study chapter list consolidated (`c832d248`) | Sidebar and manager share the existing list and screen commands | Deletes the duplicate manager, search/reorder state and delete-confirmation implementation. Whole five-file scope 1,785→1,644 (−141 handwritten), including screen growth of 22 lines; generated localization +110 separately. Independent review, 43 focused tests, two Linux native journeys and inspected wide/manager/search screenshots pass. Captured chapter identity and projection guards reject stale selection/reorder. Three legacy-theme consumers retired; the app’s wider Study dark boundary and whole-feature completion remain open. |
 | Settings admission/notification consolidated (`e6016121`) | Existing section owner directly serializes read/edit/retry and publishes state for the three typed settings owners | Deletes the private SettingsSectionController, synchronous stream relay, subscription and duplicate disposal state. Whole declared owner/status/composition scope 487→454 lines (−33), no new owner/API and no consumer changes. Independent review plus 66 owner/runtime/control tests pass, including admitted writes after disposal and listener-submitted edits. This completes the redundant settings relay’s retirement, not whole Settings graduation. |

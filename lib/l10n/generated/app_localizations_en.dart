@@ -9,6 +9,13 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get trainingReloadProgress => 'Reload saved progress';
+
+  @override
+  String get trainingProgressPartial =>
+      'Training progress may be partly saved. Reload saved progress before training again. History and PGN updates may be incomplete. Reloading does not retry the changes.';
+
+  @override
   String get cancel => 'Cancel';
 
   @override

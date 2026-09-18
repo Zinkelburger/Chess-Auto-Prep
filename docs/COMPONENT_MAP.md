@@ -1521,7 +1521,7 @@ Training session, phases, chapter scope and review progress have canonical
 owners under `features/training/`; the old `services/training/` libraries and
 `models/training_settings.dart` are removed. Models no longer persist themselves.
 Epoch guards reject stale source, layout, settings and rating completions.
-Outcome persistence resumes failed stages without repeating confirmed history
+Line-completion persistence resumes failed stages without repeating confirmed history
 appends or tallying twice. The existing error panel retries the pending action;
 failed header mirrors remain queued. This retry state is in memory; crash-resume
 remains a separate requirement.
@@ -1538,6 +1538,24 @@ waits for admitted writes to settle before reading progress. Cancelling a line
 ends its retry admission and releases retry snapshots; admitted writes finish,
 while generation checks suppress old tally/error/advancement. The redundant
 rating-button wrapper and all-caught-up panel are retired.
+
+`TrainerBrowser` receives the existing session directly for chapter scope,
+Learn/Review, per-line practice and bulk-known commands. The screen retains
+only navigation callbacks; browser-local search, sort and checkbox selection
+stay in the widget. Its chapter inventory includes read-only model games even
+when those chapters contain no trainable lines. Bulk-known and exclusion edits
+share the existing progress write queue and publish only after acknowledgement.
+Bulk proposals capture every selected source before waiting; their previous PGN
+mirrors must drain before newer schedules are written. Unrelated failed mirrors
+do not block another source. A partial edit failure offers **Reload saved progress**,
+never a blind retry: committed schedules may survive while history/PGN mirrors
+remain incomplete. A successful durable review read clears the block (optional
+presentation work may still fail); a failed read does not. Reload does not replay
+the edit. Abandoned failed completion/rating outcomes also require reconciliation.
+Source changes invalidate retained row commands and visible errors remain with
+their captured source generation. Checkbox drafts also retain their original
+line-list identity and cannot save after source replacement or reload. Read opens
+explicit unsaved Viewer content; it cannot overwrite the training source.
 
 `AppDependencies` owns one `TrainingSettingsController`. Settings panels submit
 immutable field patches and share committed values, pending drafts and visible
