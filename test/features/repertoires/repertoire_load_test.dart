@@ -1,9 +1,9 @@
 /// Characterisation tests for the repertoire *load* path.
 ///
-/// These pin the behaviour of `loadRepertoire` / `awaitLoaded` before the
+/// These pin the behaviour of `loadRepertoire` / `setRepertoire` before the
 /// persistence mixin is broken out into a real collaborator: what a missing
 /// file leaves behind, what a read failure reports, which state a *superseded*
-/// load is allowed to touch, and when `awaitLoaded()` is released.
+/// load is allowed to touch, and when each captured load command completes.
 library;
 
 import '../../support/repertoire_dependencies.dart';
@@ -238,14 +238,7 @@ void main() {
     });
   });
 
-  group('awaitLoaded', () {
-    test('resolves immediately when no load is in flight', () async {
-      final controller = testBuilderWorkspace();
-      await controller.document.awaitLoaded().timeout(
-        const Duration(seconds: 1),
-      );
-    });
-
+  group('load command completion', () {
     test('is held open for the duration of a load', () async {
       storage.files['/a.pgn'] = _whitePgn;
       final gate = Completer<void>();
@@ -257,7 +250,7 @@ void main() {
       expect(controller.document.isLoading, isTrue);
 
       var released = false;
-      unawaited(controller.document.awaitLoaded().then((_) => released = true));
+      unawaited(load.then((_) => released = true));
       await pumpEventQueue();
       expect(released, isFalse, reason: 'the load has not finished yet');
 
@@ -270,38 +263,41 @@ void main() {
       expect(controller.document.repertoireLines, hasLength(1));
     });
 
-    test('a superseded load does not release the waiters early', () async {
-      storage.files['/a.pgn'] = _whitePgn;
-      storage.files['/b.pgn'] = _blackPgn;
-      final gateA = Completer<void>();
-      final gateB = Completer<void>();
-      storage.readGates['/a.pgn'] = gateA;
-      storage.readGates['/b.pgn'] = gateB;
-      final controller = testBuilderWorkspace();
+    test(
+      'a superseded load does not complete the newer load command',
+      () async {
+        storage.files['/a.pgn'] = _whitePgn;
+        storage.files['/b.pgn'] = _blackPgn;
+        final gateA = Completer<void>();
+        final gateB = Completer<void>();
+        storage.readGates['/a.pgn'] = gateA;
+        storage.readGates['/b.pgn'] = gateB;
+        final controller = testBuilderWorkspace();
 
-      final loadA = controller.document.setRepertoire(_meta('/a.pgn'));
-      await pumpEventQueue();
-      final loadB = controller.document.setRepertoire(_meta('/b.pgn'));
-      await pumpEventQueue();
+        final loadA = controller.document.setRepertoire(_meta('/a.pgn'));
+        await pumpEventQueue();
+        final loadB = controller.document.setRepertoire(_meta('/b.pgn'));
+        await pumpEventQueue();
 
-      var released = false;
-      unawaited(controller.document.awaitLoaded().then((_) => released = true));
+        var released = false;
+        unawaited(loadB.then((_) => released = true));
 
-      // A loses the race and must not clear `isLoading` out from under B.
-      gateA.complete();
-      await loadA;
-      await pumpEventQueue();
-      expect(released, isFalse);
-      expect(controller.document.isLoading, isTrue);
+        // A loses the race and must not clear `isLoading` out from under B.
+        gateA.complete();
+        await loadA;
+        await pumpEventQueue();
+        expect(released, isFalse);
+        expect(controller.document.isLoading, isTrue);
 
-      gateB.complete();
-      await loadB;
-      await pumpEventQueue();
+        gateB.complete();
+        await loadB;
+        await pumpEventQueue();
 
-      expect(released, isTrue);
-      expect(controller.document.isLoading, isFalse);
-      expect(controller.document.repertoirePgn, contains('1. d4'));
-    });
+        expect(released, isTrue);
+        expect(controller.document.isLoading, isFalse);
+        expect(controller.document.repertoirePgn, contains('1. d4'));
+      },
+    );
   });
 
   group('metadata comment upsert', () {
@@ -528,29 +524,33 @@ void main() {
       expect(controller.document.repertoireLines.single.moves, ['c4', 'e5']);
     });
 
-    test('the restore releases the waiters of the discarded load', () async {
-      storage.files['/a.pgn'] = _whitePgn;
-      final gateA = Completer<void>();
-      storage.readGates['/a.pgn'] = gateA;
-      final controller = testBuilderWorkspace();
+    test(
+      'restore clears loading while the discarded command settles independently',
+      () async {
+        storage.files['/a.pgn'] = _whitePgn;
+        final gateA = Completer<void>();
+        storage.readGates['/a.pgn'] = gateA;
+        final controller = testBuilderWorkspace();
 
-      final loadA = controller.document.setRepertoire(_meta('/a.pgn'));
-      await pumpEventQueue();
-      var released = false;
-      unawaited(controller.document.awaitLoaded().then((_) => released = true));
+        final loadA = controller.document.setRepertoire(_meta('/a.pgn'));
+        await pumpEventQueue();
+        var released = false;
+        unawaited(loadA.then((_) => released = true));
 
-      await controller.document.restoreRepertoireFromPgn(_restoredPgn);
-      await pumpEventQueue();
+        await controller.document.restoreRepertoireFromPgn(_restoredPgn);
+        await pumpEventQueue();
 
-      // The load can no longer clear `isLoading` — it lost the epoch — so the
-      // restore owes the waiters their completion.
-      expect(released, isTrue);
-      expect(controller.document.isLoading, isFalse);
+        // The restored document is ready even while the superseded I/O remains
+        // pending; completing that I/O must not replace it.
+        expect(released, isFalse);
+        expect(controller.document.isLoading, isFalse);
 
-      gateA.complete();
-      await loadA;
-      expect(controller.document.isLoading, isFalse);
-    });
+        gateA.complete();
+        await loadA;
+        expect(released, isTrue);
+        expect(controller.document.isLoading, isFalse);
+      },
+    );
 
     test('a restore with no load in flight does not touch isLoading', () async {
       final controller = testBuilderWorkspace();

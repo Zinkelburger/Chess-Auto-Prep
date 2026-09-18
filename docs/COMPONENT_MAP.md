@@ -530,7 +530,12 @@ deep-link routing, retained-branch memory budgets, nested interactive-engine
 visibility and frame profiling are still open renewal gates.
 
 Builder's `RepertoireDocumentSession` owns destination, decoded lines, metadata,
-load epochs and queued edits independently of the Flutter host. Failed source
+load epochs and queued edits independently of the Flutter host. Builder line/move
+handoffs await their own load command and validate its generation, destination
+and readable content before navigating. Superseded, failed, missing-source or
+inactive-mode requests cannot apply to a later chapter; ready same-source
+requests remain immediate. There is no shared load waiter or separate line/move
+continuation. Failed source
 switches retain the current board, selected line and undo; the mounted editor
 shows a dismissible error banner. Failed queued edits block later switches and
 close attempts until resolved. Tests inject document/decoder contracts instead

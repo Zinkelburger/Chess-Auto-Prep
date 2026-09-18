@@ -206,23 +206,24 @@ void main() {
     },
   );
 
-  test('dispose releases waiters and prevents late adoption', () async {
-    await session.setRepertoire(metadata('/a'));
-    final gate = documents.readGate = Completer<void>();
-    final entered = documents.readStarted = Completer<void>();
-    final loading = session.setRepertoire(metadata('/b'));
-    final waiting = session.awaitLoaded();
-    await entered.future;
-    session.dispose();
-    await waiting;
-    final before = changes;
-    gate.complete();
-    await loading;
-    expect(changes, before);
-    expect(resets, 1);
-    expect(session.currentRepertoire!.filePath, '/a');
-    expect(session.isLoading, isFalse);
-  });
+  test(
+    'dispose prevents late adoption while the captured load settles',
+    () async {
+      await session.setRepertoire(metadata('/a'));
+      final gate = documents.readGate = Completer<void>();
+      final entered = documents.readStarted = Completer<void>();
+      final loading = session.setRepertoire(metadata('/b'));
+      await entered.future;
+      session.dispose();
+      final before = changes;
+      gate.complete();
+      await loading;
+      expect(changes, before);
+      expect(resets, 1);
+      expect(session.currentRepertoire!.filePath, '/a');
+      expect(session.isLoading, isFalse);
+    },
+  );
 
   test(
     'retained save callback cannot create new work after disposal',
