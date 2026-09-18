@@ -666,16 +666,17 @@ class _StudyScreenState extends State<StudyScreen> {
     context.read<AppState>().switchToStudyTraining(path: path, lineId: lineId);
   }
 
-  /// The chapter-row menu, shared by the sidebar, the compact chapter bar
-  /// and the chapter manager.
-  StudyChapterActions get _chapterActions => StudyChapterActions(
-    onEdit: (i) => unawaited(_editChapterAt(i)),
-    onSetStartingPosition: (i) => unawaited(_setStartingPositionAt(i)),
-    onCopyPgn: (i) => unawaited(_copyChapterPgnAt(i)),
-    onClearAnnotations: (i) => unawaited(_clearAnnotationsAt(i)),
-    onClearVariations: (i) => unawaited(_clearVariationsAt(i)),
-    onDelete: (i) => unawaited(_deleteChapterAt(i)),
-  );
+  void _onChapterAction(ChapterAction action, int index) {
+    if (!mounted) return;
+    unawaited(switch (action) {
+      ChapterAction.edit => _editChapterAt(index),
+      ChapterAction.setStartingPosition => _setStartingPositionAt(index),
+      ChapterAction.copyPgn => _copyChapterPgnAt(index),
+      ChapterAction.clearAnnotations => _clearAnnotationsAt(index),
+      ChapterAction.clearVariations => _clearVariationsAt(index),
+      ChapterAction.delete => _deleteChapterAt(index),
+    });
+  }
 
   /// The Edit↔Browse toggle: reopen this study as a game collection in the
   /// PGN viewer, parked on the same chapter. The viewer's own toggle comes
@@ -953,7 +954,7 @@ class _StudyScreenState extends State<StudyScreen> {
               onAddChapter: () => unawaited(_newChapter()),
               onPickChapter: () => unawaited(_pickChapter()),
               onManageChapters: () => unawaited(_manageChapters()),
-              actions: _chapterActions,
+              onChapterAction: _onChapterAction,
             );
             // Wide: Lichess study layout — chapters | board | moves. Compact
             // keeps the stacked two-pane layout with the chapter bar in the
@@ -973,7 +974,7 @@ class _StudyScreenState extends State<StudyScreen> {
                         child: StudyChapterSidebar(
                           study: _study,
                           onAddChapter: () => unawaited(_newChapter()),
-                          actions: _chapterActions,
+                          onChapterAction: _onChapterAction,
                         ),
                       ),
                       Container(width: 1, color: AppColors.outline),

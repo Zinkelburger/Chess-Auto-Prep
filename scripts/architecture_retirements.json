@@ -191,6 +191,7 @@
     "onResumeGeneration",
     "onCancelGeneration",
     "onFinishNowGeneration",
-    "ChapterStore"
+    "ChapterStore",
+    "StudyChapterActions"
   ]
 }
