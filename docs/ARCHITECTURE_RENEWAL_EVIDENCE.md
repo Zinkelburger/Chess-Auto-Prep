@@ -3685,3 +3685,46 @@ against the growth-review snapshot. Handwritten changes against fa7f309e are
 **−13,835**; generated localization remains +135. Unused/dormant retirement stays
 12,154 lines: this additional 33-line reduction belongs to active settings
 ownership. Whole renewal and feature graduation remain Partial/unproven.
+
+
+### Growth audit and shared Study chapter list — 2026-09-18
+
+The committed September 16/growth-review comparison reproduces exactly at `e477dc58`
+and `a6238ff5`: 218,957→236,991 tracked library Dart lines. Independent tracked-blob
+counts at `ea1b7547` give 225,782. These include comments, blanks and generated
+Dart; generated localization is respectively 0, 2,272 and 2,982 lines. Provider
+consolidation is already complete, but milestone 6/7 and whole-feature graduation
+remain open. Two small passed simplification trials do not establish overall
+maintainability. Every subsequent simplification must pass the same complete-
+scope reduction, ownership and parity review; unrelated deletion gives no credit.
+
+Study source `3fb4c491`, final evidence `c832d248`, consolidates the sidebar and
+manager into the existing StudyChapterSidebar. Deletes the 221-line manager
+and duplicate search/reorder/confirmation implementation. The screen composes
+the bounded dialog using its existing action handlers; no new controller or
+forwarding owner. Selection resolves the captured chapter identity, and reorder
+rejects a changed projection or disposed widget. Search, inline Edit/Delete,
+active-row reveal, Done/Escape and continued selection within the manager remain.
+
+Full five-file scope **1,785→1,644 (−141 handwritten)** includes screen growth
+**1,050→1,072 (+22)**. Generated localization adds 110 and ARB adds 53 separately.
+Independent source/evidence review approves the final result. **43 focused tests**
+cover chapter behavior, stale callbacks, disposal, light/dark components and
+200% scaling with 100 chapters; **two Linux native journeys** cover restart
+recovery and large documents. Analyze/lint passes (63 existing infos, no warnings
+or errors, 45 checker cases). Earlier fixture/finder failures were corrected and
+the final batch rerun; no tests skipped. The actual-app
+[wide list](images/renewal-study-chapter-list-wide.png),
+[manager](images/renewal-study-chapter-list-manager.png) and
+[filtered list](images/renewal-study-chapter-list-filtered.png) were inspected;
+the disposable preview is stopped. Three legacy-theme entries are removed
+(208→205); the wider Study dark boundary remains necessary.
+
+Combined library Dart is **225,751**: +6,794 (+3.1%) against September 16 and
+−11,240 against the growth review. Against fa7f309e, handwritten reduction is
+**13,976**, generated localization +245 separately. Unused/dormant retirement
+still accounts for 12,154 removed lines. Zero features have graduated. Training
+browser work remains outside main pending truthful bulk-save failure recovery
+and native Read-line parity; a smaller diff alone does not pass its workflow gate.
+Combined Study/settings integration passes 53 affected tests and analyze/lint;
+the retirement manifest retains both independently deleted owners.

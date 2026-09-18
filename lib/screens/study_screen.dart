@@ -28,7 +28,6 @@ import '../chess_core/moves/tree_path.dart';
 import '../chess_core/pgn/repertoire_line_ids.dart';
 import '../chess_core/pgn/mainline_lexer.dart' as pgn;
 import '../features/studies/controllers/study_import_controller.dart';
-import '../theme/app_colors.dart';
 import '../utils/app_messages.dart';
 import '../utils/app_shortcuts.dart';
 import '../utils/keyboard_shortcut_utils.dart';
@@ -43,7 +42,6 @@ import '../widgets/pgn/pgn_save_status.dart';
 import '../widgets/common/searchable_picker_dialog.dart';
 import '../widgets/engine/inline_engine_bar.dart';
 import '../widgets/pgn/pgn_annotation_panel.dart';
-import '../widgets/study/chapter_manager_dialog.dart';
 import '../widgets/study/edit_chapter_dialog.dart';
 import '../widgets/study/import_from_url_dialog.dart';
 import '../widgets/study/new_chapter_dialog.dart';
@@ -708,10 +706,34 @@ class _StudyScreenState extends State<StudyScreen> {
   }
 
   Future<void> _manageChapters() async {
-    await showChapterManagerDialog(
-      context,
-      study: _study,
-      editChapter: _editChapterAt,
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        child: SizedBox(
+          width: 520,
+          height: 600,
+          child: Column(
+            children: [
+              Expanded(
+                child: StudyChapterSidebar(
+                  study: _study,
+                  inlineActions: true,
+                  onChapterAction: _onChapterAction,
+                ),
+              ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: Text(
+                    AppLocalizations.of(dialogContext).studyChaptersDone,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -977,9 +999,9 @@ class _StudyScreenState extends State<StudyScreen> {
                           onChapterAction: _onChapterAction,
                         ),
                       ),
-                      Container(width: 1, color: AppColors.outline),
+                      const VerticalDivider(width: 1, thickness: 1),
                       Expanded(flex: 5, child: board),
-                      Container(width: 1, color: AppColors.outline),
+                      const VerticalDivider(width: 1, thickness: 1),
                       Expanded(flex: 4, child: side),
                     ],
                   );
