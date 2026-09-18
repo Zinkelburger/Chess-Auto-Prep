@@ -239,17 +239,17 @@ comments and blanks, in tracked `lib/**/*.dart` files. Generated Dart is include
 in this historical comparison; individual cutovers report it separately. These
 are measurements, not implementation-size targets.
 
-| Tracked scope | Sept 16 `e477dc58` | Review `a6238ff5` | Main `8ea60830` | Main versus Sept 16 |
+| Tracked scope | Sept 16 `e477dc58` | Review `a6238ff5` | Main `78bf01f0` | Main versus Sept 16 |
 |---|---:|---:|---:|---:|
-| All library Dart | 218,957 / 890 files | 236,991 / 1,055 files | 227,835 / 995 files | +8,878 (+4.1%) |
+| All library Dart | 218,957 / 890 files | 236,991 / 1,055 files | 227,716 / 994 files | +8,759 (+4.0%) |
 | Viewer screen | 1,909 | 1,977 | 1,875 | −34 |
 | Builder screen | 1,191 | 1,333 | 1,478 | +287 |
 | Study screen | 880 | 926 | 1,101 | +221 |
-| Generation session controller | 1,321 | 1,455 | 1,453 | +132 |
+| Generation session controller | 1,321 | 1,455 | 1,414 | +93 |
 
-Main is 9,156 lines smaller than the review snapshot; only Viewer among these
+Main is 9,275 lines smaller than the review snapshot; only Viewer among these
 four consumers is smaller than September 16. Legacy `services/` still holds
-42,706 lines and `widgets/` 49,824. Riverpod's production imports and package
+42,626 lines and `widgets/` 49,824. Riverpod's production imports and package
 dependency are deleted. Six feature directories are enforced, fourteen are
 unfinished and none is complete; three unused directories were removed, not
 graduated. Milestones 6–7 remain Not started. Structural enforcement is not
@@ -266,7 +266,9 @@ through `8ccfe557` removes 14,144 handwritten library lines, with generated
 localization +2,514 reported separately. The subsequent evaluation-settings
 cutover and Library lifecycle repair add 297 handwritten lines: safety work,
 not simplification credit. Training settings consolidation (`8ea60830`) then
-removes 314 handwritten lines from its own live workflow. Chapter read/create
+removes 314 handwritten lines from its own live workflow. Course enrichment
+consolidation (`78bf01f0`) removes another 119 from its complete caller/probe/
+composer graph. Chapter read/create
 and deletion Widgetbook changes add 22 lines, outside that library total. Of
 the removals, 12,154 lines come from the prior unused analysis,
 eval-tree and other presentation/custom-tab retirement. These unrelated deletions cannot
@@ -439,7 +441,7 @@ product owner to choose implementation details.
 
 | Order | Final result | Required removals and evidence |
 |---|---|---|
-| Next: course-enrichment consolidation | Existing CourseBuilder owns its sequential enrichment passes and returns their results directly | Reviewed candidate: retire the sole-consumer EnrichmentRunner, its count map/reset lifecycle, and session summary mirrors. Keep existing probes, cancellation, best-effort failure handling and source-availability timing. Full caller/probe/composer scope is 4,396 baseline lines; expected reduction 100–140, to be measured before integration. Design review, preserved behavior tests and independent implementation review remain required; this is not implemented. |
+| Course enrichment consolidated (`78bf01f0`) | Existing CourseBuilder runs its sequential enrichment passes and returns its course and immutable counts to the session | Full caller/probe/composer scope 4,396→4,277 (−119 handwritten), generated unchanged. Deletes EnrichmentRunner, its count map/reset and session summary mirrors; no replacement owner. Preserves pass order, live sources, fatal preparation, best-effort engine failures and publication/cancellation behavior. Independent review and validation evidence are recorded [here](ARCHITECTURE_RENEWAL_EVIDENCE.md#course-enrichment-consolidation). Whole Generation remains Partial. |
 | Training settings consolidated (`8ea60830`) | Existing shared section owner and scalar storage implement Training settings; app composition loads the one writer | Complete 40-file scope 6,641→6,327 (−314 handwritten), generated unchanged. Deletes the duplicate queue/retry/stream implementation, enum/patch/storage-contract types and write switch; no new owner or compatibility API. Nullable removal, migration, concurrent edits, focused drafts and frozen sitting configuration retain parity. Independent review, 305 focused tests, the Linux training/settings journey and analyze/lint pass. Whole Training remains Partial. See [evidence](ARCHITECTURE_RENEWAL_EVIDENCE.md#training-settings-state-machine-consolidation). |
 | Evaluation settings/resource ownership completed (`d22d9202`) | One app-owned settings writer and the existing two download owners replace global instances; runtime commands capture confirmed settings | Deletes the old settings model and all three singleton APIs with production caller cutover and retirement gates. Redesign resolves the midpoint hold within the original +300 envelope: complete 34→35-file scope 14,074→14,365 (+291 handwritten); separate Library disposal repair +6. This is safety/capability growth, not a simplification pass. Independent review, 240 combined tests, 11 final lifecycle/caller tests (10 overlap), three Linux native tests and analyze/lint pass. Whole Settings remains Partial. See [completion evidence](ARCHITECTURE_RENEWAL_EVIDENCE.md#evaluation-settings-ownership-completed-after-redesign). |
 | Builder layout retirement (`011bc833`) | Screen uses the actual board pane and live outline/analysis layout APIs | Whole ten-file scope 4,167→3,912 (−255 handwritten): 60 lines of live board/toolbar forwarding and 195 of dormant branches, unused preferences and their wiring/documentation. No new owner or visual design. Exact source review and 56 focused tests pass; combined native evidence is in the evidence record. |

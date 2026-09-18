@@ -4479,3 +4479,62 @@ mutation and rule gates. Logs: `/tmp/training-settings-combined-tests.log`,
 Local documentation links resolve. Windows/macOS native checks and the remaining
 Training/source-identity and whole-renewal gates stay open; this is a completed
 settings simplification, not whole-feature graduation.
+
+## Course enrichment consolidation
+
+Source `78bf01f0`, based on `a4c00606`, removes **119 handwritten production
+lines (+97/−216)**, with no generated changes or new production files. The
+complete 12-file caller/probe/composer scope falls **4,396→4,277** (11 surviving
+files). It includes `core/generation_{session_controller,session_types,run_summary}.dart`,
+`services/generation/engine_tail.dart`, and the course builder, retired runner,
+refutation prober, master improvements, model-game selector, composer, chapter
+titles and opening namer. All changed production files are inside this scope.
+The session controller itself falls **1,453→1,414**; the builder grows **319→365**
+as it absorbs the runner's live work, while the 126-line runner disappears.
+No dormant or unrelated deletion subsidizes this reduction.
+
+The final path is session → existing course builder → existing probes/composer →
+local course/count result → publication → summary. Previously the session also
+constructed a runner with config/warmup callbacks, maintained its count-map reset
+lifecycle and mirrored outline, note and count values. Those retained fields and
+forwarding APIs are deleted; counts now derive from the pass results. Retirement
+lint rejects the runner path and its three types. No replacement owner or
+compatibility export is introduced. The pure summary module retains its count
+record alias; it does not import the engine-bearing builder just to share a type.
+
+Design review fixed pass order and failure semantics before parallel production
+and test work. Refutations, alternatives, engine tails and improvements still run
+in that order. Disabled, engine-free and cancelled passes skip preparation;
+preparation errors fail export. Engine startup and probe failures remain best
+effort, allowing later passes to run. A cold pool uses the captured config's
+thread budget, and each pass/model selection reads the same live database
+suppliers as before. Publication acknowledgement precedes Builder adoption;
+uncertain writes, receipt-reconciliation notes and cancellation after saving
+retain their previous outcomes. Independent production/test review found no
+outstanding issues.
+
+**Checks.** All **243 distinct focused tests pass** (31 publication/course/summary/
+artifact cases plus 228 course/probe/verifier/session/publication cases, with 16
+course-builder cases overlapping). The final 31-case run repeats after analyzer
+repairs to test-only constructor/braces; no behavioral assertion was weakened.
+The Linux native admission/publication suite passes **both cases** on a private
+display and disposable profile: changed/ABA sources are rejected, and the actual
+configuration route's controller/receipt receiver publishes a bounded completed
+tree while preserving the old PGN and refreshing the open document. The positive
+case calls `startBuild` directly; it does not certify a positive Start-button
+click, native enrichment probes or network generation. Four-pass algorithm/output
+coverage uses the existing fake engine boundary and real probes/composer.
+
+Final analyze/lint passes: **64 pre-existing infos, no warnings/errors**, all 45
+architecture-checker tests and the retirement/debt/theme/mutation/rule gates.
+The first analyzer run found an unused optional test constructor parameter and
+two new brace-style infos, repaired before the passing run. Logs are
+`/tmp/course-enrichment-{tests,publication-tests,native,gates}.log`.
+Updated local documentation links resolve. No live preview remains.
+
+Whole library Dart is **227,716 lines / 994 files**, including **5,361 generated**
+lines. Handwritten code is still **3,398 above September 16**. This reduction
+establishes a simpler enrichment responsibility, not a simpler whole Generation
+feature: its controller remains 93 lines above that historical baseline. Feature
+status remains **6 enforced, 14 unfinished, 0 complete**; milestones 6–7 are still
+not started. Windows/macOS native checks and whole-renewal acceptance remain open.
