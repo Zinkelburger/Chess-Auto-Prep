@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'dart:async';
 
 import 'package:chess_auto_prep/features/documents/repositories/pgn_collection_filter.dart';
@@ -50,6 +51,8 @@ Future<void> _open(
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(
     MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       theme: ThemeData.dark(),
       home: Scaffold(
         body: PgnGameFilterWorkspace(
@@ -587,6 +590,8 @@ void main() {
     var searching = true;
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: StatefulBuilder(
           builder: (context, setState) => Scaffold(
             appBar: AppBar(
