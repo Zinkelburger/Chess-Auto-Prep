@@ -2944,3 +2944,18 @@ Neither result certifies the whole Viewer or the whole renewal. Total `lib/`
 Dart is still 239,402 lines versus 218,957 at `e477dc58`; added recovery work
 and generated localization remain separately accounted for. The actual shared
 leave-dialog screenshot was also inspected during integration.
+
+### Orphaned Builder layout retirement — 2026-09-18
+
+Revision `2ead1e6c` deletes the unreferenced Edit Context zone, layout sheet,
+tab descriptors, layout model, view enum and preference adapter: **0 added /
+1,124 deleted production lines**, generated unchanged, against `e8355200`.
+Its only constructions were in its two owned tests, which retire separately
+(228 test lines). Current Builder compact/wide layouts already compose their
+own editor, outline and reference panes. The Viewer-used split handle and its
+real consumer remain byte-identical; no owner, preference data or runtime
+behavior is migrated. Six retired paths/eight symbols are guarded and two
+obsolete theme-ledger entries are removed. Independent implementation review,
+50 existing Builder/Viewer tests, analyze/lint (64 infos, no warnings/errors)
+and 45 architecture-checker cases pass. This is dead-code retirement; live
+command-flow simplification is separately measured by the direct-editor cutover.
