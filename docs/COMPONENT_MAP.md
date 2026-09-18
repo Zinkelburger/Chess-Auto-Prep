@@ -100,22 +100,13 @@ pane's cursor.
 Books, Evaluation graph, Tree, Collection and Filter. Database explorer selects
 the existing Tree tab's database source. Closing, reopening, reordering and
 navigation-history restoration use those identities; Filter has an explicit
-pane branch. Main document PGN/SCID opening and collection/database operations
+pane branch. Main document PGN/TXT opening, SCID export and collection/database operations
 remain separate from these tabs.
 
-The former custom database-picker/reference-tab component is retired. The
-tracked Dart import/export/part inventory at `24a8f3fa` covered 1,825 files and
-23 application/tool/driver/Widgetbook/plugin roots, including conditional URIs,
-with no missing local edges. That inventory found the two widgets imported only
-by the Viewer screen (plus the picker's exclusive test); imports alone did not
-prove the component dormant. Its control flow did: the nullable picker tab ID
-was never assigned a value, its unreachable picker callback was the only caller
-of the database opener, and both custom-tab creation calls were inside that
-closed cycle. Workspace selection and navigation history could only select
-already registered titles. Removal deletes the five screen maps, custom-title
-allocation, two widgets and reference-only action branches without replacing
-them. Live Book cursor ownership, Filters, fixed database Tree and collection
-operations remain covered by their existing callers and tests.
+The custom database-picker/reference-tab component, its five screen maps,
+custom-title allocation and reference-only action branches are retired. Live
+Book cursor ownership, Filters, fixed database Tree and collection operations
+remain with their existing owners.
 
 The shared annotation panel flushes pending prose before a glyph action emits a
 save. A same-target rebuild does not replace a pending draft just because focus
