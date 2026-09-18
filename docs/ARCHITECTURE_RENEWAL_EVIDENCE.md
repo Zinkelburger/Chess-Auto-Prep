@@ -4538,3 +4538,83 @@ establishes a simpler enrichment responsibility, not a simpler whole Generation
 feature: its controller remains 93 lines above that historical baseline. Feature
 status remains **6 enforced, 14 unfinished, 0 complete**; milestones 6–7 are still
 not started. Windows/macOS native checks and whole-renewal acceptance remain open.
+
+## Builder line-table and Viewer collection-load consolidation
+
+Source `e64320ce`, based on `142b45cc`, completes two separately reviewed
+responsibilities. The discovery review rejected Study's remaining small callback
+moves: its save queue and projection caches still serve distinct correctness and
+large-document requirements. Neither admitted change introduces a new owner,
+interface, callback holder or compatibility export.
+
+**Builder.** The existing browser owns filtering, sorting, indexes and scrolling
+and now renders its own list/header. The sole-consumer `LinesListPanel` and private
+`_TableHeader` forwarded 22 and four inputs respectively without owning state.
+Their constructors/fields/call-site bindings are deleted; existing row/header
+cells, coverage prompt and all filtering/metric algorithms remain. Independent
+review caught a lazy-delegate capture difference; the renderer now captures its
+list, widget and three index maps together, preserving the old snapshot's row
+count, values and callbacks after parent replacement. A focused regression
+exercises that retained delegate. No dormant dialog, navigation-stack or theme
+code was removed for size credit. Removing the deleted widget's theme-ledger
+entry is not a theme migration; its colors remain in the browser.
+
+The complete 13-file graph contains the Builder screen and its three parts,
+`repertoire_lines_browser.dart`, the deleted panel, `line_item_row.dart`,
+`line_table_layout.dart`, `line_filter_controls.dart`, `line_metrics_panel.dart`,
+`lines_filter_helpers.dart`, `coverage_helpers.dart` and `line_metrics_helpers.dart`.
+It falls **5,324→5,219 (−105 handwritten lines)**; browser growth **420→630**
+includes all moved rendering, while the 315-line panel disappears.
+
+**Viewer.** The document owner now handles request admission → repository read →
+decode/stat → replacement authorization → adoption/restoration. The injected
+repository and isolate decoder remain the external boundaries. The private load
+controller, success/failure wrappers and intermediate result translation
+are deleted. There was one underlying request epoch before and after: it moves
+from the loader into the existing adopting owner, removing proxy/dispose wiring
+and the extra request invalidation. File/text/close/recovery invalidation, error
+messages, leading banners, captured baseline/mtime, post-read draft protection
+and saved-filter/reading restoration retain their contracts. Disposed/inactive
+lifetimes reject before I/O; synchronous close during loading notification also
+invalidates the request before opening a file.
+
+Its complete 14-file graph contains document/retired-load/collection/reading/filter
+controllers, the decoded collection model, repository/decoder contracts and both
+adapters, Viewer lifetime and the Viewer screen with app-bar/panes parts.
+It falls **5,308→5,207 (−101 handwritten lines)**. The document grows
+**936→956**, while the 95-line loader and 26 model/import lines disappear.
+All original read/decode safety cases move to tests of the actual adopting owner.
+
+**Checks.** All **163 focused tests pass**: 72 Builder browser/layout/filter/metric/
+screen cases and 91 Viewer load/revision/restoration/selection cases. Five new
+browser tests exercise actual header/row actions, debounce/reset, retained lazy
+delegates, coverage prompts and delete confirmation/cancellation. All nine old
+loader cases move to the actual document owner, with six additional metadata,
+lifetime, reentrant-listener and dirty-draft cases. No failures or skips remain.
+Independent source/test review approved both final implementations.
+
+All **three Linux native journeys pass** on private displays and disposable
+profiles: Builder annotations/save/reload/layout plus real metrics search/reset;
+Viewer file-order sorting/navigation/reopen; and saved-filter/selected-game
+restoration and clearing without changing PGN bytes. The inspected
+[Builder metrics screenshot](images/renewal-builder-line-metrics.png) shows the
+retained list/header/filter layout. No visible user session or real databases
+were used, and no preview remains running. Final analyze/lint passes with
+**64 pre-existing infos, no warnings/errors**, all 45 architecture-checker cases
+and the retirement/debt/theme/mutation/rule gates. Logs:
+`/tmp/browser-consolidation-tests.log`, `/tmp/viewer-load-consolidation-tests.log`,
+`/tmp/browser-load-consolidation-{gates,native}.log`. Updated document/image links
+resolve. The active plan removes 26 redundant historical result rows whose source
+commits already have detailed evidence here; unmet reduction and completion gates
+remain explicit.
+
+Together these changes remove **206 handwritten production lines (+311/−517)**,
+with no generated changes or new production files. Whole library Dart is now
+**227,510 lines / 992 files**, including **5,361 generated** lines. Handwritten
+code remains **3,192 above September 16**. Exact architecture debt remains 1,229;
+theme-ledger paths fall 181→180 only because the forwarding widget was deleted.
+
+Both changes simplify their own complete workflow scopes; no unrelated deletion
+subsidizes either result. Whole Builder/Viewer and the renewal remain Partial.
+Feature status remains six enforced, fourteen unfinished and zero complete;
+Windows/macOS native acceptance and milestones 6–7 remain open.
