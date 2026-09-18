@@ -2930,3 +2930,17 @@ The real headless app's [shared leave dialog](images/renewal-viewer-leave-approv
 was inspected at 1280×720 after editing a selected move with autosave disabled.
 Save, Save a copy, Cancel and Close without saving remain visible; Cancel
 returns to the retained annotation. The disposable preview was stopped.
+
+Combined Provider/Viewer revision `e1286ced` passes **6,569 tests, 12 skipped,
+zero failures**, analyze/lint (64 infos, no warnings/errors, 45 checker cases),
+and both Linux native close and Viewer edit-context journeys. Independent
+review approved the merge. An explicit mounted check and braces remove the two
+new analyzer infos; the final Viewer delta against `4ebb3a36` is therefore
+114 added / 146 deleted, **net −32**, with the complete scope at 4,533 lines.
+Together the trials remove **80 handwritten production lines** against
+`fa7f309e`, with no generated-code change. They pass the binding reduction,
+clarity and parity gates and authorize the reviewed Builder wrapper deletion.
+Neither result certifies the whole Viewer or the whole renewal. Total `lib/`
+Dart is still 239,402 lines versus 218,957 at `e477dc58`; added recovery work
+and generated localization remain separately accounted for. The actual shared
+leave-dialog screenshot was also inspected during integration.
