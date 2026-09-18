@@ -11,7 +11,13 @@ String repertoireFailureMessage(
   required String fallback,
 }) => switch (error) {
   RepertoireExistsException(:final name) => messages.repertoireExists(name),
-  RepertoireCreationUncertain() => messages.creationUncertain,
+  RepertoireCreationUncertain(:final createdPaths, :final pathsToInspect) => [
+    messages.creationUncertain,
+    if (createdPaths.isNotEmpty)
+      messages.createdChapterPaths(createdPaths.join('\n')),
+    if (pathsToInspect.isNotEmpty)
+      messages.chapterPathsToInspect(pathsToInspect.join('\n')),
+  ].join('\n\n'),
   RepertoirePreparationFailed() => messages.preparationFailed,
   RepertoireRecoveryRequired() => messages.recoveryRequired,
   _ => fallback,

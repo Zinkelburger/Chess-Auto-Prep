@@ -1,5 +1,5 @@
 import 'dart:io';
-import '../../features/documents/models/pgn_document.dart';
+import '../documents/legacy_pgn_document_store.dart';
 import '../../features/repertoires/models/repertoire_recovery_entry.dart';
 import '../../services/storage/io_storage_service.dart';
 import '../../features/documents/repositories/pgn_document_store.dart';
@@ -57,25 +57,7 @@ class LegacyRepertoireCatalogRepository implements RepertoireCatalogRepository {
       gameCount: request.gameCount,
       chapterName: request.chapterName,
       splitChapters: request.splitChapters,
-      createDocument: documents == null
-          ? null
-          : (path, content) async {
-              final result = await documents.create(path, content);
-              switch (result) {
-                case PgnSaved():
-                  return;
-                case PgnNameCollision():
-                  throw RepertoireExistsException(request.name);
-                case PgnWriteFailed(:final error):
-                  throw error;
-                case PgnWriteUncertain():
-                  throw const RepertoireCreationUncertain();
-                case PgnConflict():
-                  throw StateError(
-                    'Document destination changed; reload the library.',
-                  );
-              }
-            },
+      documents: documents ?? LegacyPgnDocumentStore(_storage),
     );
   }
 

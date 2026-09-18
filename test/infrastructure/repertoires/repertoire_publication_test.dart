@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/infrastructure/documents/native_pgn_document_store.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -38,6 +39,9 @@ void main() {
     IOStorageService io, {
     String name = 'Course',
   }) => createRepertoire(
+    documents: NativePgnDocumentStore(
+      guardOperation: io.guardDocumentOperation,
+    ),
     storage: io,
     name: name,
     color: 'Black',

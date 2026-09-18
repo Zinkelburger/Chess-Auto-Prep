@@ -924,6 +924,7 @@ class _RepertoireOutlinePanelState extends State<RepertoireOutlinePanel> {
     )) {
       return;
     }
+    if (!mounted) return;
     _report(await _c.splitChapter(chapter.path));
   }
 
@@ -1116,6 +1117,36 @@ class _RepertoireOutlinePanelState extends State<RepertoireOutlinePanel> {
   void _report(OutlineEditOutcome outcome) {
     if (!mounted) return;
     if (!outcome.ok) {
+      final split = outcome.splitFailure;
+      if (split != null &&
+          (split.createdPaths.isNotEmpty || split.pathsToInspect.isNotEmpty)) {
+        unawaited(
+          showDialog<void>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Review chapter split'),
+              content: SingleChildScrollView(
+                child: SelectableText(
+                  [
+                    split.message,
+                    if (split.createdPaths.isNotEmpty)
+                      'Saved chapters:\n${split.createdPaths.join('\n')}',
+                    if (split.pathsToInspect.isNotEmpty)
+                      'Paths to inspect (not all writes are confirmed):\n${split.pathsToInspect.join('\n')}',
+                  ].join('\n\n'),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Close'),
+                ),
+              ],
+            ),
+          ),
+        );
+        return;
+      }
       showAppSnackBar(context, outcome.error!, isError: true);
       return;
     }

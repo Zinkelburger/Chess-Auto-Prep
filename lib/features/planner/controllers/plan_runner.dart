@@ -50,8 +50,7 @@ class PlanChapterProgress {
 }
 
 class PlanRunner extends ChangeNotifier with SafeChangeNotifier {
-  PlanRunner({required this.generation, RepertoireOutlineService? outline})
-    : _outline = outline ?? RepertoireOutlineService();
+  PlanRunner({required this.generation, required this._outline});
 
   final GenerationSessionController generation;
   final RepertoireOutlineService _outline;

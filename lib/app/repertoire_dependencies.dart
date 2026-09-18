@@ -1,3 +1,5 @@
+import '../features/repertoire/services/chapter_splitter.dart';
+import '../features/repertoire/services/repertoire_outline_service.dart';
 import '../features/documents/repositories/pgn_document_store.dart';
 import '../features/repertoires/repositories/repertoire_decoder.dart';
 import '../features/repertoires/repositories/repertoire_document_repository.dart';
@@ -15,3 +17,13 @@ RepertoireDocumentRepository createRepertoireDocuments({
 );
 
 RepertoireDecoder createRepertoireDecoder() => const IsolateRepertoireDecoder();
+
+RepertoireOutlineService createRepertoireOutline({
+  required PgnDocumentStore documents,
+}) {
+  final storage = StorageFactory.instance;
+  return RepertoireOutlineService(
+    storage: storage,
+    splitter: ChapterSplitter(storage: storage, documents: documents),
+  );
+}

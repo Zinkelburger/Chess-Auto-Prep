@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/features/repertoire/services/repertoire_outline_service.dart';
 import '../support/repertoire_dependencies.dart';
 import 'package:chess_auto_prep/app/builder_lifetime.dart';
 import 'package:chess_auto_prep/app/generation_dependencies.dart';
@@ -65,6 +66,9 @@ void main() {
           providers: [
             Provider<GenerationArtifacts>(
               create: (_) => createGenerationArtifacts(documents: documents),
+            ),
+            Provider<RepertoireOutlineService>(
+              create: (_) => createRepertoireOutline(documents: documents),
             ),
             Provider<RepertoireDocumentRepository>(
               create: (_) => createRepertoireDocuments(documents: documents),

@@ -54,7 +54,7 @@ void main() {
       final file = File(p.join(folder.path, 'Main.pgn'));
       await file.writeAsString(_original);
       final documents = _InterleavingDocuments(
-        createPlatformDocumentStore()!,
+        createPlatformDocumentStore(),
         file.path,
       );
       final repository = DocumentRepertoireRepository(documents);

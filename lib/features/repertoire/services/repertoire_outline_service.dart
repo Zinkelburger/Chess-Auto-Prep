@@ -29,7 +29,8 @@ import 'review_progress_repointer.dart';
 /// Why a structural edit was refused, in words the user can act on.
 class OutlineEditException implements Exception {
   final String message;
-  const OutlineEditException(this.message);
+  const OutlineEditException(this.message, {this.splitFailure});
+  final ChapterSplitException? splitFailure;
   @override
   String toString() => message;
 }
@@ -49,7 +50,7 @@ class RepertoireOutlineService {
     StorageService? storage,
     RepertoireService? repertoire,
     ChapterStore? chapters,
-    ChapterSplitter? splitter,
+    required this._splitter,
     ReviewProgressRepointer? repointer,
   }) : _storage = storage ?? StorageFactory.instance,
        _repertoire = repertoire ?? RepertoireService(storage: storage),
@@ -58,13 +59,6 @@ class RepertoireOutlineService {
            repointer ??
            ReviewProgressRepointer(
              review: RepertoireReviewService(storage: storage),
-           ),
-       _splitter =
-           splitter ??
-           ChapterSplitter(
-             storage: storage,
-             repertoire: repertoire,
-             repointer: repointer,
            );
 
   final StorageService _storage;
@@ -287,17 +281,16 @@ class RepertoireOutlineService {
     String chapterPath, {
     required bool isWhite,
   }) async {
-    final ChapterSplitResult result;
     try {
-      result = await _splitter.split(chapterPath, isWhite: isWhite);
+      return await _splitter.split(chapterPath, isWhite: isWhite);
     } on ChapterSplitException catch (e) {
-      throw OutlineEditException(e.message);
+      throw OutlineEditException(e.message, splitFailure: e);
+    } finally {
+      // A partial split leaves its acknowledged destinations in this folder.
+      _lineCache.removeWhere(
+        (path, _) => p.equals(p.dirname(path), p.dirname(chapterPath)),
+      );
     }
-    _lineCache.remove(chapterPath);
-    for (final path in result.createdPaths) {
-      _lineCache.remove(path);
-    }
-    return result;
   }
 
   // ── Folders ────────────────────────────────────────────────────────────

@@ -1761,6 +1761,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The copy and draft are retained. Inspect the destination before trying again.'**
   String get builderCopyRetained;
+
+  /// Confirmed chapter files retained after a partial import
+  ///
+  /// In en, this message translates to:
+  /// **'Saved chapters:\n{paths}'**
+  String createdChapterPaths(String paths);
+
+  /// Candidate and recovery paths after an interrupted chapter operation
+  ///
+  /// In en, this message translates to:
+  /// **'Paths to inspect (writes may be unconfirmed):\n{paths}'**
+  String chapterPathsToInspect(String paths);
 }
 
 class _AppLocalizationsDelegate
