@@ -252,6 +252,62 @@ void main() {
     );
   });
 
+  for (final duplicateSubmit in [false, true]) {
+    testWidgets(
+      duplicateSubmit
+          ? 'snapshot keyboard submit does not start a second pending lookup'
+          : 'canceled snapshot lookup cannot pop the underlying route',
+      (tester) async {
+        await pump(tester);
+        final navigator = Navigator.of(tester.element(find.byType(JobsPanel)));
+        unawaited(
+          navigator.push<void>(
+            MaterialPageRoute(
+              builder: (_) => const Scaffold(body: Text('Keep this page')),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final pending = Completer<void>();
+        var checks = 0;
+        storage.beforeExists = (_) async {
+          checks++;
+          await pending.future;
+        };
+        addTearDown(() {
+          if (!pending.isCompleted) pending.complete();
+        });
+        final result = showSnapshotExportDialog(
+          tester.element(find.text('Keep this page')),
+          suggestedName: 'Pending copy',
+          canVerify: false,
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(FilledButton, 'Export'));
+        await tester.pump();
+        expect(checks, 1);
+        if (duplicateSubmit) {
+          await tester.testTextInput.receiveAction(TextInputAction.done);
+          await tester.pump();
+          expect(
+            checks,
+            1,
+            reason:
+                'A second keyboard submit must not overlap the first lookup.',
+          );
+        }
+        await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+        // The dialog's State remains mounted during its reverse animation.
+        await tester.pump();
+        pending.complete();
+        await tester.pumpAndSettle();
+        expect(await result, isNull);
+        expect(find.text('Keep this page'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets('snapshot input remains alive through the closing animation', (
     tester,
   ) async {

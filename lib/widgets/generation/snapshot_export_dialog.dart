@@ -60,6 +60,8 @@ class _SnapshotExportDialogState extends State<_SnapshotExportDialog> {
   }
 
   Future<void> submit() async {
+    final route = ModalRoute.of(context);
+    if (checking || route?.isCurrent != true) return;
     final name = nameController.text.trim();
     if (name.isEmpty) {
       setState(() => nameError = 'Please enter a name');
@@ -69,7 +71,7 @@ class _SnapshotExportDialogState extends State<_SnapshotExportDialog> {
     final storage = StorageFactory.instance;
     final path = await storage.repertoireFilePath(name);
     final exists = await storage.fileExists(path);
-    if (!mounted) return;
+    if (!mounted || route?.isCurrent != true) return;
     if (exists) {
       setState(() {
         checking = false;

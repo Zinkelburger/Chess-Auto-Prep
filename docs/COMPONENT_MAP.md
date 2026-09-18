@@ -1329,6 +1329,9 @@ hosts the existing snapshot-export dialog; only navigation to configuration
 stays with the screen. `JobsTabContent` and its command-forwarding callbacks
 are retired. Audit cancellation persists progress using the audit session's
 captured source, including resumed/queued runs; an idle cancel remains a no-op.
+Snapshot-export input stays alive through the closing transition. A cancelled
+dialog cannot act on a late lookup, and pending keyboard submissions do not
+start another lookup.
 
 ### Tree generation (expectimax pipeline)
 
