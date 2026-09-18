@@ -1,11 +1,9 @@
 import 'dart:async';
 
 import 'package:chess_auto_prep/features/games/services/my_repertoire_settings.dart';
-import 'package:chess_auto_prep/features/settings/controllers/settings_providers.dart';
 import 'package:chess_auto_prep/features/settings/models/repertoire_books.dart';
 import 'package:chess_auto_prep/features/settings/models/settings_state.dart';
 import 'package:chess_auto_prep/infrastructure/settings/shared_preferences_app_settings_repository.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -268,23 +266,15 @@ void main() {
     },
   );
 
-  test('injected provider and legacy adapter observe the same owner', () async {
-    final settings = SharedPreferencesAppSettingsRepository(
-      books: MemoryBooks(),
-    );
-    final container = ProviderContainer(
-      overrides: [appSettingsRepositoryProvider.overrideWithValue(settings)],
-    );
-    addTearDown(container.dispose);
-    final subscription = container.listen(
-      repertoireBooksSettingsProvider,
-      (_, _) {},
-    );
-    addTearDown(subscription.close);
+  test('book subscribers receive the confirmed section state', () async {
+    final disk = MemoryBooks();
+    final settings = SharedPreferencesAppSettingsRepository(books: disk);
     await settings.repertoireBooks.ensureLoaded();
+    final states = <Object>[];
+    final subscription = settings.repertoireBooks.changes.listen(states.add);
     await settings.repertoireBooks.addPath(BookSide.black, '/B');
-    await Future<void>.delayed(Duration.zero);
-    final state = container.read(repertoireBooksSettingsProvider).requireValue;
-    expect(state.committed!.black, ['/B']);
+    expect(settings.repertoireBooks.state.committed!.black, ['/B']);
+    expect(states, isNotEmpty);
+    await subscription.cancel();
   });
 }

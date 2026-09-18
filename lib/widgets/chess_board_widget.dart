@@ -1,4 +1,5 @@
-import 'package:chess_auto_prep/features/settings/widgets/display_settings_scope.dart';
+import 'package:provider/provider.dart';
+import 'package:chess_auto_prep/features/settings/controllers/board_display_settings.dart';
 import 'package:chess_auto_prep/features/settings/models/board_display_configuration.dart';
 import 'dart:math' as math;
 
@@ -96,7 +97,9 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final display = DisplaySettingsScope.of(context);
+    final display =
+        (context.watch<BoardDisplaySettings?>()?.committed ??
+        BoardDisplayConfiguration());
     final coordinates = widget.coordinates ?? display.coordinates;
     return LayoutBuilder(
       builder: (context, constraints) {

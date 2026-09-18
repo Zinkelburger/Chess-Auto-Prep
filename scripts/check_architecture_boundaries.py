@@ -45,6 +45,9 @@ def retirement_violations(relative: str, source: str, retirements: dict) -> list
     errors = []
     executable = without_comments(source)
     dependencies = [(uri, project_target(relative, uri)) for uri in dependency_uris(executable)]
+    for uri, _ in dependencies:
+        if uri.startswith(('package:flutter_riverpod/', 'package:riverpod/')):
+            errors.append(f'{relative}: retired Riverpod dependency {uri}; use constructor injection and Provider')
     for path in retirements['paths']:
         def retired(target):
             return target == path or path.endswith('/') and target.startswith(path)

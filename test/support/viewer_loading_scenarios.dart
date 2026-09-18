@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chess_auto_prep/features/documents/repositories/stored_game_repository.dart';
-import 'package:chess_auto_prep/features/documents/widgets/stored_game_scope.dart';
+import 'package:provider/provider.dart';
 import 'package:chess_auto_prep/widgets/pgn_viewer_widget.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_annotation_panel.dart';
 
@@ -81,8 +81,8 @@ void viewerLoadingScenarios() {
         Future<void> show(String id) => tester.pumpWidget(
           MaterialApp(
             home: Scaffold(
-              body: StoredGameScope(
-                repository: archive,
+              body: Provider<StoredGameRepository>.value(
+                value: archive,
                 child: PgnViewerWidget(
                   gameId: id,
                   controller: control,
@@ -157,8 +157,8 @@ void viewerLoadingScenarios() {
     Future<void> show(DelayedGameArchive archive) => tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: StoredGameScope(
-            repository: archive,
+          body: Provider<StoredGameRepository>.value(
+            value: archive,
             child: PgnViewerWidget(gameId: 'same', controller: control),
           ),
         ),

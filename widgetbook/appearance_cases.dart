@@ -1,9 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:widgetbook/widgetbook.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:provider/provider.dart';
 import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
-import 'package:chess_auto_prep/features/settings/controllers/settings_providers.dart';
 import 'package:chess_auto_prep/features/settings/models/app_appearance.dart';
 import 'package:chess_auto_prep/features/settings/widgets/appearance_settings.dart';
 import 'package:chess_auto_prep/features/settings/models/settings_state.dart';
@@ -98,8 +97,14 @@ class _AppearanceFixtureState extends State<_AppearanceFixture> {
   }
 
   @override
-  Widget build(BuildContext context) => ProviderScope(
-    overrides: [appSettingsRepositoryProvider.overrideWithValue(repository)],
+  Widget build(BuildContext context) => MultiProvider(
+    providers: [
+      Provider<AppearanceRepository>.value(value: repository.appearance),
+      StreamProvider<SettingsState<AppAppearance>>.value(
+        value: repository.appearance.changes,
+        initialData: repository.appearance.state,
+      ),
+    ],
     child: Localizations(
       locale: const Locale('en'),
       delegates: AppLocalizations.localizationsDelegates,

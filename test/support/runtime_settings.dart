@@ -9,11 +9,10 @@ import 'scripted_engine.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
-import 'package:chess_auto_prep/features/settings/widgets/display_settings_scope.dart';
+import 'package:chess_auto_prep/features/settings/controllers/board_display_settings.dart';
 import 'package:chess_auto_prep/app/runtime_settings.dart';
 import 'package:chess_auto_prep/features/settings/controllers/engine_settings.dart';
 import 'package:chess_auto_prep/features/settings/controllers/bulk_analysis_settings.dart';
-import 'package:chess_auto_prep/features/settings/controllers/board_display_settings.dart';
 import 'package:chess_auto_prep/features/settings/models/engine_configuration.dart';
 import 'package:chess_auto_prep/features/settings/models/bulk_analysis_configuration.dart';
 import 'package:chess_auto_prep/features/settings/models/board_display_configuration.dart';
@@ -82,7 +81,7 @@ Future<void> pumpRuntimeWidget(
           value: settings.display,
         ),
       ],
-      child: DisplaySettingsScope(settings: settings.display, child: child),
+      child: child,
     ),
   );
 }

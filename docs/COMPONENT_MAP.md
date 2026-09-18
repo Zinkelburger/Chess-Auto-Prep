@@ -175,8 +175,9 @@ can still recreate a stale path after a move; full writer migration is pending.
 ### Typed settings ownership (first section)
 
 `features/settings/{models,repositories,controllers}` provides the injected
-`AppSettingsRepository`, immutable committed/draft state and a section-scoped
-Riverpod subscription. `infrastructure/settings/` owns the two existing
+`AppSettingsRepository` and immutable committed/draft section state.
+Appearance uses a Provider stream subscription, seeded from current state before
+loading; subscription disposal leaves the borrowed repository alive. `infrastructure/settings/` owns the two existing
 `my_repertoire_*_paths` keys. It serializes field changes, reads the latest
 platform values, verifies writes by rereading, and keeps failed drafts for
 explicit retry. Games' `MyRepertoireSettings` is a temporary ChangeNotifier
@@ -663,7 +664,7 @@ cannot publish into a newer selection; closing the reader revokes its requests.
 Missing/unavailable source games can use an explicitly supplied solution PGN.
 
 `features/documents/repositories/stored_game_repository.dart` is the injected
-source-game contract. `AppDependencies` provides `StoredGameScope` for readers
+source-game contract. `AppDependencies` provides `Provider<StoredGameRepository>` for readers
 and tactics copy/add-to-study actions, using the indexed
 `infrastructure/documents/archive_stored_game_repository.dart` adapter. Its
 connection opener is injected at app startup; the adapter borrows the shared
@@ -684,7 +685,7 @@ nested moves from surviving a changed document. Duplicate equal-SAN siblings are
 matched by occurrence, never merged into one identity. Validation and application
 are iterative, including deep variations.
 
-Riverpod/legacy bridge retirement, undo receipts, bulk/decode allocation and
+Legacy bridge retirement, undo receipts, bulk/decode allocation and
 native frame measurements remain unfinished. Viewer uses the shared bounded
 viewport; collection/widget orchestration migration remains unfinished.
 Builder still owns legacy storage/session collaborators and needs the remaining
@@ -808,12 +809,14 @@ The catalog now lives in `lib/features/repertoires/`: `models/`, `controllers/`,
 `RepertoireCatalogRepository` contract, using the explicit
 `LegacyRepertoireCatalogRepository` adapter in `lib/infrastructure/repertoires/`.
 The catalog contract also lists a folder's chapters for Builder open/copy
-selection. `AppDependencies` exposes that same repository through Provider;
-listing failures retain the draft and surface localized feedback. The adapter
-is the catalog's only storage/creation caller. The manual Riverpod
-controller owns immutable list/action state, rejects overlapping commands,
-coalesces refresh, ignores stale reads, and keeps a submitted commit alive
-when its last listener leaves. Failed reloads retain the last good snapshot;
+selection through that same Provider-injected repository. Listing failures
+retain the draft and surface localized feedback.
+The adapter is the catalog's only storage/creation caller. One constructor-injected
+`RepertoireCatalogController`, owned by the app Provider, keeps independent library
+and trainer read snapshots. It rejects overlapping mutations across both kinds,
+coalesces refresh, invalidates both kinds' stale reads on mutation, and retains a
+submitted commit when its last route/listener leaves. Re-entry explicitly refreshes
+the retained snapshot; studies are read only after the trainer requests them. Failed reloads retain the last good snapshot;
 a reload failure after a confirmed write is not reported as a failed write.
 The list and create/import/paste forms submit domain requests. Form controllers
 and search text remain widget-local. Catalog tests override the domain contract;
@@ -2153,8 +2156,9 @@ Committed engine changes apply to the next search or job. Board requests capture
 configuration before queuing; pool provisioning and crash recovery retain their
 captured configuration. A running review keeps its depth/core settings across
 accounts. Board-display changes apply after successful persistence.
-`DisplaySettingsScope.of(context)` returns immutable committed configuration;
-bare board previews receive immutable defaults, never a fallback settings writer.
+Boards and SAN presenters observe the Provider-owned `BoardDisplaySettings`
+directly and render its committed configuration; bare previews receive immutable
+defaults, never a fallback settings writer.
 The three owners are `features/settings/controllers/engine_settings.dart`,
 `bulk_analysis_settings.dart` and `board_display_settings.dart`; their old
 `models/` singleton files are deleted.

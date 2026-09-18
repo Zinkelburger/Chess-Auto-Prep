@@ -10,7 +10,7 @@ import 'package:dartchess/dartchess.dart';
 import '../features/documents/controllers/viewer_game_load_controller.dart';
 import '../features/documents/models/viewer_game_load_state.dart';
 import '../features/documents/repositories/stored_game_repository.dart';
-import '../features/documents/widgets/stored_game_scope.dart';
+import 'package:provider/provider.dart';
 import 'package:chess_auto_prep/utils/app_messages.dart';
 import 'package:chess_auto_prep/utils/pgn_date_utils.dart';
 import 'package:chess_auto_prep/utils/chess_utils.dart'
@@ -424,7 +424,7 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _scopedGames = StoredGameScope.maybeOf(context);
+    _scopedGames = context.watch<StoredGameRepository?>();
     if (_bindLoader()) unawaited(_loadGame());
   }
 

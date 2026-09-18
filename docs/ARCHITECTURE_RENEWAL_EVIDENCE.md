@@ -2813,3 +2813,69 @@ updated documentation files contain 165 resolving local links/anchors. These
 combined checks supplement the branch-specific native/failure evidence above;
 they do not turn safety additions into a maintainability pass. Provider and
 Viewer trials are assessed separately against their own complete scopes.
+
+
+### Provider composition retirement (2026-09-18)
+
+One app-owned `RepertoireCatalogController` replaces the two Riverpod family
+owners. Two private read snapshots preserve library/trainer data and failures;
+mutations reject overlap across both kinds and invalidate their older reads.
+The owner survives route/listener loss; route re-entry explicitly refreshes.
+Settings retain their existing repository as the only writer. Appearance's
+Provider stream subscribes before `ensureLoaded`, seeds current state, and
+cancels its subscription when the injected repository lifetime changes. The
+borrowed repository is not disposed. Theme rendering selects committed values;
+failed drafts stay visible in Appearance without changing the committed theme.
+
+All seven production Riverpod imports, its dependency and three transitive
+packages are removed. The three old settings-provider/stored-game/display-scope
+files are deleted. Stored-game readers and tactics use the existing Provider
+repository; board, SAN and reserve presenters observe the existing display
+owner directly, retaining immutable defaults in bare previews. The checker
+rejects retired scope/provider symbols and Riverpod imports/exports.
+
+Action trace before: create form → Riverpod family lookup → notifier build/ref
+repository lookup → repository write → keepAlive → per-family refresh → watched
+provider state. After: create form → constructor-injected app catalog command →
+repository write → refresh requested read snapshots → Provider notification.
+The catalog command now blocks competing writes from the other view as well.
+Appearance no longer wraps the typed SettingsState in a second public AsyncValue;
+boards no longer subscribe to a duplicate scope over the same mutable owner.
+
+Independent review caught two initial-read timing gaps: entering the trainer
+while a library mutation was pending, and a trainer read invalidated by a later
+failed library mutation. Controlled tests preserve the requested read in both
+orders while proving a failed mutation is not retried. Repository override tests
+also prove stale catalog results are rejected, synchronous appearance emissions
+are observed, and replaced subscriptions are canceled. These corrections belong
+to the same replacement, not a later cleanup task.
+
+Measured against `a6238ff5`, the complete 15-file handwritten production scope
+falls from 4,926 to 4,881 physical lines (254 added, 299 deleted, net −45).
+All handwritten `lib/` Dart falls from 234,719 to 234,674; generated production
+files are unchanged. Excluding comments and blank lines, the same scope falls
+from 4,037 to 4,019 (−18), so the reduction is not comment deletion or line
+compression. Function-typed callback declarations remain 9; no new supplier
+callbacks were added. Catalog mutation ownership falls from two to one, and
+lookup mechanisms fall from Provider/Riverpod/two generic scopes to Provider.
+The measure includes full affected consumers, not only the three deleted files.
+
+Validation: the initial 75-test catalog/settings/board/localization batch and
+37-test Provider/Viewer/bughouse batch pass. The subsequent 20-test catalog and
+Provider batch includes the independent review regression and passes. Linux
+native catalog journeys pass 2 tests and native Viewer journeys pass 12 tests;
+these preceded the final failed-mutation read-resumption correction, which is
+covered by the subsequent controlled tests. Analyze/lint passes with the 63
+pre-existing infos and no warnings/errors; 45 architecture checker cases pass
+with the unchanged 1,459-entry debt ledger. Whole-application and non-Linux
+certification are not claimed for this bounded composition replacement.
+
+Fresh headless Linux evidence shows the same filtered catalog in
+[Dark](images/renewal-provider-catalog-dark.png), the persisted
+[Appearance selection](images/renewal-provider-appearance.png), and the retained
+[Light catalog](images/renewal-provider-catalog-light.png). The search text and
+results survive the appearance change and settings navigation. All three images
+were inspected; only disposable driver data was used, and the preview was stopped.
+The independent reviewer accepted the corrected lifecycle and smaller ownership
+graph before integration; final merge checks must retain Builder's shared catalog
+repository binding and its `listChapters` contract.

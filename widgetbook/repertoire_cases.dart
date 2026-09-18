@@ -11,7 +11,7 @@ import 'package:chess_auto_prep/features/repertoires/widgets/repertoire_list_bod
 import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/widgets/pgn_import_dialog.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:provider/provider.dart';
 import 'package:widgetbook/widgetbook.dart';
 
 List<WidgetbookNode> repertoireCases() => [
@@ -155,10 +155,8 @@ class CatalogFixture extends StatefulWidget {
 class _CatalogFixtureState extends State<CatalogFixture> {
   late final repository = FixtureRepertoireRepository(widget.scenario);
   @override
-  Widget build(BuildContext context) => ProviderScope(
-    overrides: [
-      repertoireCatalogRepositoryProvider.overrideWithValue(repository),
-    ],
+  Widget build(BuildContext context) => ChangeNotifierProvider(
+    create: (_) => RepertoireCatalogController(repository),
     child: Scaffold(
       body: RepertoireListBody(
         onSelected: (_) {},

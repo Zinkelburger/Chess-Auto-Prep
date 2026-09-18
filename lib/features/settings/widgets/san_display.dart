@@ -6,7 +6,8 @@
 /// parsed back — the move box, a copied PGN — ever sees a glyph.
 library;
 
-import 'package:chess_auto_prep/features/settings/widgets/display_settings_scope.dart';
+import 'package:provider/provider.dart';
+import 'package:chess_auto_prep/features/settings/controllers/board_display_settings.dart';
 import 'package:chess_auto_prep/features/settings/models/board_display_configuration.dart';
 
 import 'package:flutter/widgets.dart';
@@ -41,7 +42,10 @@ String figurineSan(String san) {
 }
 
 bool _usesFigurines(BuildContext context) =>
-    DisplaySettingsScope.of(context).pieceNotation == PieceNotation.figurines;
+    (context.watch<BoardDisplaySettings?>()?.committed ??
+            BoardDisplayConfiguration())
+        .pieceNotation ==
+    PieceNotation.figurines;
 
 /// [san] under the piece-notation preference in effect for [context].
 String displaySan(BuildContext context, String san) =>

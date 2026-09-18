@@ -1,6 +1,5 @@
 import 'dart:async';
 import '../app/legacy_theme_boundary.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../features/repertoires/controllers/repertoire_catalog_controller.dart';
 import '../design_system/layout/workspace_navigation_controller.dart';
 import '../design_system/layout/workspace_shell.dart';
@@ -26,16 +25,15 @@ import '../features/repertoires/widgets/repertoire_list_body.dart';
 
 /// Material management independent of an editor, engine or training session.
 /// Structural edits use the same controller and Undo as the builder outline.
-class RepertoireLibraryScreen extends ConsumerStatefulWidget {
+class RepertoireLibraryScreen extends StatefulWidget {
   const RepertoireLibraryScreen({super.key});
 
   @override
-  ConsumerState<RepertoireLibraryScreen> createState() =>
+  State<RepertoireLibraryScreen> createState() =>
       _RepertoireLibraryScreenState();
 }
 
-class _RepertoireLibraryScreenState
-    extends ConsumerState<RepertoireLibraryScreen> {
+class _RepertoireLibraryScreenState extends State<RepertoireLibraryScreen> {
   late final RepertoireOutlineController _outline = RepertoireOutlineController(
     onActiveChapterMoved: (path) {
       if (!mounted) return;
@@ -48,7 +46,7 @@ class _RepertoireLibraryScreenState
   final _workspaceNavigation = WorkspaceNavigationController();
 
   void _refreshCatalog() =>
-      unawaited(ref.read(repertoireCatalogProvider(false).notifier).refresh());
+      unawaited(context.read<RepertoireCatalogController>().refresh());
   int _openEpoch = 0;
 
   @override

@@ -1,5 +1,6 @@
 import '../support/runtime_settings.dart';
-import 'package:chess_auto_prep/features/settings/widgets/display_settings_scope.dart';
+import 'package:provider/provider.dart';
+import 'package:chess_auto_prep/features/settings/controllers/board_display_settings.dart';
 import 'package:chess_auto_prep/features/settings/models/board_display_configuration.dart';
 import 'package:chess_auto_prep/widgets/board/board_square_painter.dart';
 import 'package:chess_auto_prep/widgets/chess_board_widget.dart';
@@ -55,8 +56,8 @@ void main() {
     await settings.ensureLoaded();
     String? played;
     await tester.pumpWidget(
-      DisplaySettingsScope(
-        settings: settings,
+      ChangeNotifierProvider<BoardDisplaySettings>.value(
+        value: settings,
         child: MaterialApp(
           home: Center(
             child: SizedBox.square(

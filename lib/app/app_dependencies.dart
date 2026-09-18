@@ -9,14 +9,14 @@ import 'runtime_settings.dart';
 import '../features/settings/controllers/engine_settings.dart';
 import '../features/settings/controllers/bulk_analysis_settings.dart';
 import '../features/settings/controllers/board_display_settings.dart';
-import '../features/settings/widgets/display_settings_scope.dart';
+import '../features/settings/models/app_appearance.dart';
+import '../features/settings/models/settings_state.dart';
 import 'dart:io';
-import 'package:provider/provider.dart' as legacy_provider;
+import 'package:provider/provider.dart';
 import 'training_dependencies.dart';
 import '../features/training/repositories/training_settings_repository.dart';
 
 import 'package:flutter/widgets.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../features/documents/repositories/desktop_fullscreen_port.dart';
@@ -27,10 +27,8 @@ import '../features/documents/repositories/pgn_document_store.dart';
 import '../features/documents/repositories/pgn_library_repository.dart';
 import '../features/documents/repositories/stored_game_repository.dart';
 import '../features/documents/repositories/viewer_preferences_repository.dart';
-import '../features/documents/widgets/stored_game_scope.dart';
 import '../features/repertoires/controllers/repertoire_catalog_controller.dart';
 import '../features/repertoires/repositories/repertoire_catalog_repository.dart';
-import '../features/settings/controllers/settings_providers.dart';
 import '../features/settings/repositories/app_settings_repository.dart';
 import '../infrastructure/desktop/window_fullscreen_adapter.dart';
 import '../infrastructure/documents/archive_stored_game_repository.dart';
@@ -47,8 +45,7 @@ import '../services/game_store/game_store_service.dart';
 import '../services/storage/io_storage_service.dart';
 import '../services/storage/storage_factory.dart';
 
-/// Composition root for migrated features. Legacy Provider owners remain under
-/// this scope until their own feature migrates; they never own catalog state.
+/// App-owned dependencies use constructors and one Provider tree.
 class AppDependencies extends StatefulWidget {
   const AppDependencies({
     super.key,
@@ -110,53 +107,59 @@ class _AppDependenciesState extends State<AppDependencies> {
   );
 
   @override
-  Widget build(BuildContext context) => ProviderScope(
-    retry: (count, error) => null,
-    overrides: [
-      appSettingsRepositoryProvider.overrideWithValue(
-        widget.settings ?? SharedPreferencesAppSettingsRepository.instance,
+  Widget build(BuildContext context) => MultiProvider(
+    providers: [
+      Provider<RepertoireCatalogRepository>.value(
+        value: widget.repertoireCatalog ?? _defaultCatalog,
       ),
-      repertoireCatalogRepositoryProvider.overrideWithValue(
-        widget.repertoireCatalog ?? _defaultCatalog,
-      ),
-    ],
-    child: StoredGameScope(
-      repository: widget.storedGames ?? _storedGames,
-      child: legacy_provider.Provider<TrainingSettingsRepository>.value(
-        value: widget.trainingSettings ?? _trainingSettings,
-        child: legacy_provider.MultiProvider(
-          providers: [
-            legacy_provider.Provider<RepertoireCatalogRepository>.value(
-              value: widget.repertoireCatalog ?? _defaultCatalog,
-            ),
-            legacy_provider.Provider<BoardEngine>.value(value: _engines.board),
-            legacy_provider.Provider<StockfishPool>.value(value: _engines.pool),
-            legacy_provider.Provider<EngineSearchBudget>.value(
-              value: _engines.budget,
-            ),
-            legacy_provider.ChangeNotifierProvider<EngineLifecycle>.value(
-              value: _engines.lifecycle,
-            ),
-            legacy_provider.Provider<GenerationLease>.value(
-              value: _engines.lease,
-            ),
-            legacy_provider.ChangeNotifierProvider<EngineSettings>.value(
-              value: _runtime.engine,
-            ),
-            legacy_provider.ChangeNotifierProvider<BulkAnalysisSettings>.value(
-              value: _runtime.bulk,
-            ),
-            legacy_provider.ChangeNotifierProvider<BoardDisplaySettings>.value(
-              value: _runtime.display,
-            ),
-          ],
-          child: DisplaySettingsScope(
-            settings: _runtime.display,
-            child: widget.child,
-          ),
+      ChangeNotifierProvider(
+        key: ObjectKey(widget.repertoireCatalog ?? _defaultCatalog),
+        create: (context) => RepertoireCatalogController(
+          context.read<RepertoireCatalogRepository>(),
         ),
       ),
-    ),
+      Provider<AppearanceRepository>.value(
+        value:
+            (widget.settings ?? SharedPreferencesAppSettingsRepository.instance)
+                .appearance,
+      ),
+      StreamProvider<SettingsState<AppAppearance>>(
+        key: ObjectKey(
+          (widget.settings ?? SharedPreferencesAppSettingsRepository.instance)
+              .appearance,
+        ),
+        initialData:
+            (widget.settings ?? SharedPreferencesAppSettingsRepository.instance)
+                .appearance
+                .state,
+        create: (context) {
+          final appearance = context.read<AppearanceRepository>();
+          return Stream.multi((controller) {
+            final subscription = appearance.changes.listen(controller.addSync);
+            controller.addSync(appearance.state);
+            controller.onCancel = subscription.cancel;
+            unawaited(appearance.ensureLoaded().catchError((Object _) {}));
+          });
+        },
+      ),
+      Provider<StoredGameRepository>.value(
+        value: widget.storedGames ?? _storedGames,
+      ),
+      Provider<TrainingSettingsRepository>.value(
+        value: widget.trainingSettings ?? _trainingSettings,
+      ),
+      Provider<BoardEngine>.value(value: _engines.board),
+      Provider<StockfishPool>.value(value: _engines.pool),
+      Provider<EngineSearchBudget>.value(value: _engines.budget),
+      ChangeNotifierProvider<EngineLifecycle>.value(value: _engines.lifecycle),
+      Provider<GenerationLease>.value(value: _engines.lease),
+      ChangeNotifierProvider<EngineSettings>.value(value: _runtime.engine),
+      ChangeNotifierProvider<BulkAnalysisSettings>.value(value: _runtime.bulk),
+      ChangeNotifierProvider<BoardDisplaySettings>.value(
+        value: _runtime.display,
+      ),
+    ],
+    child: widget.child,
   );
 }
 
