@@ -2766,3 +2766,13 @@ covered by the subsequent controlled tests. Analyze/lint passes with the 63
 pre-existing infos and no warnings/errors; 45 architecture checker cases pass
 with the unchanged 1,459-entry debt ledger. Whole-application and non-Linux
 certification are not claimed for this bounded composition replacement.
+
+Fresh headless Linux evidence shows the same filtered catalog in
+[Dark](images/renewal-provider-catalog-dark.png), the persisted
+[Appearance selection](images/renewal-provider-appearance.png), and the retained
+[Light catalog](images/renewal-provider-catalog-light.png). The search text and
+results survive the appearance change and settings navigation. All three images
+were inspected; only disposable driver data was used, and the preview was stopped.
+The independent reviewer accepted the corrected lifecycle and smaller ownership
+graph before integration; final merge checks must retain Builder's shared catalog
+repository binding and its `listChapters` contract.
