@@ -1,3 +1,6 @@
+import 'package:provider/provider.dart';
+import 'package:chess_auto_prep/features/repertoires/repositories/repertoire_catalog_repository.dart';
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/infrastructure/repertoires/legacy_repertoire_catalog_repository.dart';
 import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
 import 'package:chess_auto_prep/features/repertoire/services/chapter_splitter.dart';
@@ -35,6 +38,7 @@ void main() {
   late String root;
   late RepertoireOutlineController controller;
   late _FailingDestinations documents;
+  late LegacyRepertoireCatalogRepository catalog;
 
   setUp(() async {
     tmp = Directory.systemTemp.createTempSync('outline_panel_test');
@@ -55,12 +59,11 @@ void main() {
       repertoiresRoot: Directory(root),
     );
     documents = _FailingDestinations();
+    catalog = LegacyRepertoireCatalogRepository(storage, documents: documents);
     controller = RepertoireOutlineController(
+      catalog: catalog,
       service: RepertoireOutlineService(
-        catalog: LegacyRepertoireCatalogRepository(
-          storage,
-          documents: NativePgnDocumentStore(),
-        ),
+        catalog: catalog,
         storage: storage,
         splitter: ChapterSplitter(documents: documents, storage: storage),
       ),
@@ -139,6 +142,13 @@ void main() {
   }) async {
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: (context, child) =>
+            Provider<RepertoireCatalogRepository>.value(
+              value: catalog,
+              child: child!,
+            ),
         // The panel is desktop-first: with a mouse, a drag starts on the
         // first movement. Widget tests default to Android, where a press
         // is needed first.
@@ -280,6 +290,76 @@ void main() {
     expect(find.text('Nh6 idea'), findsOneWidget);
     expect(find.text('Main line'), findsNothing);
   });
+
+  for (final sameText in [false, true]) {
+    testWidgets(
+      'Outline confirmation preserves ${sameText ? "equal-text" : "changed"} replacement',
+      (tester) async {
+        await tester.runAsync(() async {
+          await pump(tester);
+          await rightClick(tester, find.text('Advance'));
+          await tester.tap(find.text('Delete chapter…'));
+          for (
+            var i = 0;
+            i < 200 && find.byType(AlertDialog).evaluate().isEmpty;
+            i++
+          ) {
+            await Future<void>.delayed(const Duration(milliseconds: 10));
+            await tester.pump();
+          }
+          expect(find.text('Delete chapter "Advance"?'), findsOneWidget);
+          final file = File(p.join(root, 'Advance.pgn'));
+          final original = file.readAsStringSync();
+          file.renameSync(p.join(tmp.path, 'retained.pgn'));
+          final replacement = sameText
+              ? original
+              : _game('New writer', '1. d4 d5');
+          file.writeAsStringSync(replacement);
+          await tester.tap(find.text('Delete'));
+          await untilOutline(tester, (o) => o.findChapter(file.path) != null);
+          for (
+            var i = 0;
+            i < 200 && find.byType(SnackBar).evaluate().isEmpty;
+            i++
+          ) {
+            await Future<void>.delayed(const Duration(milliseconds: 10));
+            await tester.pump();
+          }
+          expect(find.textContaining('Nothing was removed'), findsOneWidget);
+          expect(file.readAsStringSync(), replacement);
+          expect(controller.activeChapterPath, file.path);
+          expect(controller.isChapterOpen(file.path), isTrue);
+        });
+      },
+    );
+  }
+
+  testWidgets(
+    'Outline confirmation cannot authorize after active selection A B A',
+    (tester) async {
+      await tester.runAsync(() async {
+        await pump(tester);
+        await rightClick(tester, find.text('Advance'));
+        await tester.tap(find.text('Delete chapter…'));
+        for (
+          var i = 0;
+          i < 200 && find.byType(AlertDialog).evaluate().isEmpty;
+          i++
+        ) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+          await tester.pump();
+        }
+        final active = p.join(root, 'Advance.pgn');
+        controller.setActiveChapter(p.join(root, 'Sidelines', 'Exchange.pgn'));
+        controller.setActiveChapter(active);
+        await tester.tap(find.text('Delete'));
+        await tester.pumpAndSettle();
+        expect(File(active).existsSync(), isTrue);
+        expect(controller.activeChapterPath, active);
+        expect(find.byType(SnackBar), findsNothing);
+      });
+    },
+  );
 
   testWidgets('right-click → Rename renames the chapter file', (tester) async {
     // Everything after the first frame runs in real async: the rename is

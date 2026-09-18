@@ -235,6 +235,18 @@ class FileMutationService {
     await _requireSafeDirectoryTree(directory, allowedRoot: allowedRoot);
   }
 
+  /// Validate a managed file and all parent links before presenting a mutation.
+  /// The mutation itself must repeat validation while holding its file lock.
+  Future<void> validateManagedFilePath(
+    File file, {
+    required Directory allowedRoot,
+  }) async {
+    await _requireSafeTarget(file, allowedRoot: allowedRoot);
+    if (!p.equals(p.absolute(file.parent.path), p.absolute(allowedRoot.path))) {
+      await _requireSafeDirectoryTree(file.parent, allowedRoot: allowedRoot);
+    }
+  }
+
   Future<void> _requireSafeTarget(
     FileSystemEntity target, {
     required Directory allowedRoot,

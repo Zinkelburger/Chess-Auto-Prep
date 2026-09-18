@@ -1383,5 +1383,72 @@
         "type": "String"
       }
     }
+  },
+  "@chapterDeleteConfirm": {
+    "description": "Manual chapter deletion recovery confirmation"
+  },
+  "chapterDeleteConfirm": "The chapter will be removed from this folder and kept in recovery storage.",
+  "chapterDeleteUnsupported": "Verified chapter deletion is unavailable on this device.",
+  "@chapterDeleteUnsupported": {
+    "description": "Verified manual chapter deletion: chapterDeleteUnsupported"
+  },
+  "chapterDeleteReadFailed": "Could not verify this chapter for deletion. Only files in managed app folders can be removed.",
+  "@chapterDeleteReadFailed": {
+    "description": "Verified manual chapter deletion: chapterDeleteReadFailed"
+  },
+  "chapterDeleteMissing": "This chapter is no longer available. Nothing was removed.",
+  "@chapterDeleteMissing": {
+    "description": "Verified manual chapter deletion: chapterDeleteMissing"
+  },
+  "chapterDeleteConflict": "The chapter changed since deletion was requested. Nothing was removed. Reload it before trying again.",
+  "@chapterDeleteConflict": {
+    "description": "Verified manual chapter deletion: chapterDeleteConflict"
+  },
+  "chapterDeleteFailed": "The chapter could not be moved to recovery.",
+  "@chapterDeleteFailed": {
+    "description": "Verified manual chapter deletion: chapterDeleteFailed"
+  },
+  "chapterDeleteSaved": "Chapter moved to recovery:\n{path}",
+  "@chapterDeleteSaved": {
+    "description": "Verified manual chapter deletion: chapterDeleteSaved",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "chapterDeleteUncertain": "Deletion could not be confirmed. Check these locations before taking another action; do not retry automatically:\n{paths}",
+  "@chapterDeleteUncertain": {
+    "description": "Verified manual chapter deletion: chapterDeleteUncertain",
+    "placeholders": {
+      "paths": {
+        "type": "String"
+      }
+    }
+  },
+  "chapterDeleteReview": "Review chapter deletion",
+  "@chapterDeleteReview": {
+    "description": "Title for uncertain manual chapter deletion inspection"
+  },
+  "chapterDeleteTitle": "Delete chapter \"{name}\"?",
+  "@chapterDeleteTitle": {
+    "description": "Confirmation title for removing a chapter",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "chapterDeleteContext": "{path}\n{message}",
+  "@chapterDeleteContext": {
+    "description": "Deletion result identifies the originally requested chapter even after navigation",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      },
+      "message": {
+        "type": "String"
+      }
+    }
   }
 }

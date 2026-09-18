@@ -11,6 +11,12 @@ abstract interface class RepertoireCatalogRepository {
   Future<List<RepertoireMetadata>> listChapters(String folderPath);
   Future<List<ChapterSummary>> chapterSections(String path);
 
+  /// Capture only a verified, managed chapter before asking for deletion.
+  Future<PgnOpenResult> prepareChapterDeletion(String path);
+
+  /// Remove only the captured native object; uncertainty is not acknowledgement.
+  Future<PgnQuarantineResult> deleteChapter(PgnSnapshot baseline);
+
   /// Exclusively creates an empty chapter. Null color inherits the first
   /// available color header in this folder, or White when none exists.
   /// Read failures are failures, never permission to guess the color.

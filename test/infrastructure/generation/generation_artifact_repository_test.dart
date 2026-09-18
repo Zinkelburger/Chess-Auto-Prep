@@ -38,8 +38,10 @@ class _Documents implements PgnDocumentStore {
   @override
   bool get supportsQuarantine => delegate.supportsQuarantine;
   @override
-  Future<PgnQuarantineResult> quarantine(PgnSnapshot baseline) =>
-      delegate.quarantine(baseline);
+  Future<PgnQuarantineResult> quarantine(
+    PgnSnapshot baseline, {
+    String? allowedRoot,
+  }) => delegate.quarantine(baseline, allowedRoot: allowedRoot);
   bool uncertain = false;
   int pointerWrites = 0;
   Future<void> Function(String)? beforeOpen;

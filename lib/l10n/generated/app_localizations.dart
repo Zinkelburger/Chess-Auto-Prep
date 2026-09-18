@@ -1773,6 +1773,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Paths to inspect (writes may be unconfirmed):\n{paths}'**
   String chapterPathsToInspect(String paths);
+
+  /// Manual chapter deletion recovery confirmation
+  ///
+  /// In en, this message translates to:
+  /// **'The chapter will be removed from this folder and kept in recovery storage.'**
+  String get chapterDeleteConfirm;
+
+  /// Verified manual chapter deletion: chapterDeleteUnsupported
+  ///
+  /// In en, this message translates to:
+  /// **'Verified chapter deletion is unavailable on this device.'**
+  String get chapterDeleteUnsupported;
+
+  /// Verified manual chapter deletion: chapterDeleteReadFailed
+  ///
+  /// In en, this message translates to:
+  /// **'Could not verify this chapter for deletion. Only files in managed app folders can be removed.'**
+  String get chapterDeleteReadFailed;
+
+  /// Verified manual chapter deletion: chapterDeleteMissing
+  ///
+  /// In en, this message translates to:
+  /// **'This chapter is no longer available. Nothing was removed.'**
+  String get chapterDeleteMissing;
+
+  /// Verified manual chapter deletion: chapterDeleteConflict
+  ///
+  /// In en, this message translates to:
+  /// **'The chapter changed since deletion was requested. Nothing was removed. Reload it before trying again.'**
+  String get chapterDeleteConflict;
+
+  /// Verified manual chapter deletion: chapterDeleteFailed
+  ///
+  /// In en, this message translates to:
+  /// **'The chapter could not be moved to recovery.'**
+  String get chapterDeleteFailed;
+
+  /// Verified manual chapter deletion: chapterDeleteSaved
+  ///
+  /// In en, this message translates to:
+  /// **'Chapter moved to recovery:\n{path}'**
+  String chapterDeleteSaved(String path);
+
+  /// Verified manual chapter deletion: chapterDeleteUncertain
+  ///
+  /// In en, this message translates to:
+  /// **'Deletion could not be confirmed. Check these locations before taking another action; do not retry automatically:\n{paths}'**
+  String chapterDeleteUncertain(String paths);
+
+  /// Title for uncertain manual chapter deletion inspection
+  ///
+  /// In en, this message translates to:
+  /// **'Review chapter deletion'**
+  String get chapterDeleteReview;
+
+  /// Confirmation title for removing a chapter
+  ///
+  /// In en, this message translates to:
+  /// **'Delete chapter \"{name}\"?'**
+  String chapterDeleteTitle(String name);
+
+  /// Deletion result identifies the originally requested chapter even after navigation
+  ///
+  /// In en, this message translates to:
+  /// **'{path}\n{message}'**
+  String chapterDeleteContext(String path, String message);
 }
 
 class _AppLocalizationsDelegate

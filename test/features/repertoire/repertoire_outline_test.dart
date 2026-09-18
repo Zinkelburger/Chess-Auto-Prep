@@ -1,6 +1,7 @@
 import 'package:chess_auto_prep/infrastructure/repertoires/legacy_repertoire_catalog_repository.dart';
 import 'package:chess_auto_prep/infrastructure/documents/native_pgn_document_store.dart';
 import 'dart:async';
+import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
 import 'dart:io';
 
 import 'package:chess_auto_prep/features/repertoire/controllers/repertoire_outline_controller.dart';
@@ -91,12 +92,41 @@ class _ControlledRepointer extends ReviewProgressRepointer {
   }
 }
 
+class _ControlledCatalog extends LegacyRepertoireCatalogRepository {
+  _ControlledCatalog(super.storage, {required super.documents});
+  Completer<void>? hold;
+  final entered = Completer<void>();
+  bool throws = false;
+  bool uncertain = false;
+  int deletions = 0;
+  @override
+  Future<PgnQuarantineResult> deleteChapter(PgnSnapshot baseline) async {
+    deletions++;
+    if (!entered.isCompleted) entered.complete();
+    await hold?.future;
+    if (throws) throw StateError('unexpected adapter failure');
+    final result = await super.deleteChapter(baseline);
+    if (uncertain && result is PgnQuarantined) {
+      return PgnQuarantineUncertain(
+        error: StateError('acknowledgement lost'),
+        before: baseline,
+        quarantinePath: result.retained.path,
+        recoveryPath: result.recoveryPath,
+        observedSource: null,
+        observedQuarantine: result.retained,
+      );
+    }
+    return result;
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late Directory tmp;
   late String root;
   late RepertoireOutlineService service;
+  late _ControlledCatalog catalog;
   late _CsvStorage csv;
   late _ControlledRepointer repointer;
 
@@ -122,11 +152,9 @@ void main() {
     repointer = _ControlledRepointer(
       review: RepertoireReviewService(storage: csv),
     );
+    catalog = _ControlledCatalog(storage, documents: NativePgnDocumentStore());
     service = RepertoireOutlineService(
-      catalog: LegacyRepertoireCatalogRepository(
-        storage,
-        documents: NativePgnDocumentStore(),
-      ),
+      catalog: catalog,
       storage: storage,
       repointer: repointer,
       splitter: ChapterSplitter(
@@ -366,6 +394,7 @@ void main() {
     test('opens, reveals the active chapter, follows a rename', () async {
       String? followed;
       final c = RepertoireOutlineController(
+        catalog: catalog,
         service: service,
         onActiveChapterMoved: (path) => followed = path,
       );
@@ -384,7 +413,7 @@ void main() {
     });
 
     test('reports refusals as outcomes, not exceptions', () async {
-      final c = RepertoireOutlineController(service: service);
+      final c = RepertoireOutlineController(catalog: catalog, service: service);
       await c.open(rootPath: root, activeChapterPath: null, isWhite: false);
       final out = await c.createChapter(folderPath: root, name: 'Advance');
       expect(out.ok, isFalse);
@@ -406,6 +435,7 @@ void main() {
 
         String? followed = 'unset';
         final c = RepertoireOutlineController(
+          catalog: catalog,
           service: service,
           onActiveChapterMoved: (path) => followed = path,
         );
@@ -441,6 +471,7 @@ void main() {
         repointer.fail = true;
         String? active;
         final c = RepertoireOutlineController(
+          catalog: catalog,
           service: service,
           onActiveChapterMoved: (path) => active = path,
         );
@@ -471,7 +502,7 @@ void main() {
         ].join('\n'),
       );
       repointer.hold = Completer<void>();
-      final c = RepertoireOutlineController(service: service);
+      final c = RepertoireOutlineController(catalog: catalog, service: service);
       addTearDown(c.dispose);
       await c.open(rootPath: root, activeChapterPath: course, isWhite: false);
       final first = c.splitChapter(course);
@@ -491,7 +522,7 @@ void main() {
     });
 
     test('splitting a chapter with no course chapters is refused', () async {
-      final c = RepertoireOutlineController(service: service);
+      final c = RepertoireOutlineController(catalog: catalog, service: service);
       await c.open(rootPath: root, activeChapterPath: null, isWhite: false);
       final out = await c.splitChapter(p.join(root, 'Advance.pgn'));
       expect(out.ok, isFalse);
@@ -503,6 +534,7 @@ void main() {
       final exchange = p.join(root, 'Sidelines', 'Exchange.pgn');
       var reloads = 0;
       final c = RepertoireOutlineController(
+        catalog: catalog,
         service: service,
         onActiveChapterMoved: (_) => reloads++,
       );
@@ -538,7 +570,7 @@ void main() {
 
     test('dropping a line back where it was says nothing', () async {
       final advance = p.join(root, 'Advance.pgn');
-      final c = RepertoireOutlineController(service: service);
+      final c = RepertoireOutlineController(catalog: catalog, service: service);
       await c.open(rootPath: root, activeChapterPath: null, isWhite: false);
       final out = await c.moveLines(
         fromChapterPath: advance,
@@ -553,7 +585,7 @@ void main() {
 
     test('deleting lines is undoable', () async {
       final advance = p.join(root, 'Advance.pgn');
-      final c = RepertoireOutlineController(service: service);
+      final c = RepertoireOutlineController(catalog: catalog, service: service);
       await c.open(rootPath: root, activeChapterPath: null, isWhite: false);
       final out = await c.deleteLines(advance, {0});
       expect(out.message, 'Deleted "Main line".');
@@ -566,9 +598,9 @@ void main() {
       ]);
     });
 
-    test('a chapter made from lines is undone back to nothing', () async {
+    test('undo returns moved lines and retains the created chapter', () async {
       final advance = p.join(root, 'Advance.pgn');
-      final c = RepertoireOutlineController(service: service);
+      final c = RepertoireOutlineController(catalog: catalog, service: service);
       await c.open(rootPath: root, activeChapterPath: advance, isWhite: false);
       final out = await c.createChapterWithLines(
         folderPath: p.join(root, 'Sidelines'),
@@ -577,20 +609,71 @@ void main() {
         gameIndexes: {1},
       );
       expect(out.ok, isTrue);
-      expect(out.message, 'Made "Qb6" from 1 line.');
+      expect(
+        out.message,
+        'Made "Qb6" from 1 line. Undo returns the lines and keeps the chapter.',
+      );
       final made = p.join(root, 'Sidelines', 'Qb6.pgn');
       expect(c.outline!.findChapter(made)!.lines!.single.name, 'Qb6 line');
       expect(c.outline!.findChapter(advance)!.lineCount, 1);
 
       final back = await out.undo!();
       expect(back.ok, isTrue);
-      expect(File(made).existsSync(), isFalse);
+      expect(File(made).existsSync(), isTrue);
+      expect(c.outline!.findChapter(made)!.lineCount, 0);
       expect(c.outline!.findChapter(advance)!.lineCount, 2);
     });
 
+    for (final addLine in [false, true]) {
+      test(
+        'undo retains ${addLine ? 'later lines' : 'header-only edits'} without a cached-count delete',
+        () async {
+          final source = p.join(root, 'Advance.pgn');
+          final c = RepertoireOutlineController(
+            catalog: catalog,
+            service: service,
+          );
+          await c.open(
+            rootPath: root,
+            activeChapterPath: source,
+            isWhite: false,
+          );
+          final made = p.join(root, 'Retained.pgn');
+          final result = await c.createChapterWithLines(
+            folderPath: root,
+            name: 'Retained',
+            fromChapterPath: source,
+            gameIndexes: {1},
+          );
+          expect(result.ok, isTrue);
+          final added = addLine
+              ? _game('Later addition', '1. d4 d5')
+              : '// Later header annotation\n';
+          final file = File(made);
+          final previous = file.readAsStringSync();
+          file.writeAsStringSync(
+            addLine ? '$previous\n$added' : '$added$previous',
+          );
+          // Deliberately do not refresh: the old cached line count matches the
+          // created chapter and used to authorize deleting these later edits.
+          final undone = await result.undo!();
+          expect(undone.ok, isTrue);
+          expect(undone.message, contains('kept "Retained"'));
+          expect(file.existsSync(), isTrue);
+          expect(
+            file.readAsStringSync(),
+            contains(addLine ? 'Later addition' : 'Later header annotation'),
+          );
+          expect(c.outline!.findChapter(source)!.lineCount, 2);
+          expect(c.outline!.findChapter(made)!.lineCount, addLine ? 1 : 0);
+          c.dispose();
+        },
+      );
+    }
+
     test('moving a chapter is undoable', () async {
       final advance = p.join(root, 'Advance.pgn');
-      final c = RepertoireOutlineController(service: service);
+      final c = RepertoireOutlineController(catalog: catalog, service: service);
       await c.open(rootPath: root, activeChapterPath: null, isWhite: false);
       final out = await c.moveChapter(advance, p.join(root, 'Sidelines'));
       expect(out.message, 'Moved "Advance" to "Sidelines".');
@@ -603,15 +686,118 @@ void main() {
       expect(File(advance).existsSync(), isTrue);
     });
 
+    test(
+      'delete shares admission with create and split, releases after thrown failure',
+      () async {
+        final active = p.join(root, 'Advance.pgn');
+        final c = RepertoireOutlineController(
+          catalog: catalog,
+          service: service,
+        );
+        addTearDown(c.dispose);
+        await c.open(rootPath: root, activeChapterPath: active, isWhite: false);
+        final before =
+            (await catalog.prepareChapterDeletion(active) as PgnOpened)
+                .snapshot;
+        catalog.hold = Completer<void>();
+        catalog.throws = true;
+        final removal = c.deleteChapter(before);
+        final failed = expectLater(removal, throwsStateError);
+        await catalog.entered.future;
+        expect(
+          (await c.createChapter(folderPath: root, name: 'Blocked')).ok,
+          isFalse,
+        );
+        expect((await c.splitChapter(active)).ok, isFalse);
+        expect(await c.deleteChapter(before), isA<PgnQuarantineFailed>());
+        expect(catalog.deletions, 1);
+        catalog.hold!.complete();
+        await failed;
+        expect(File(active).existsSync(), isTrue);
+        expect(
+          (await c.createChapter(folderPath: root, name: 'After')).ok,
+          isTrue,
+        );
+      },
+    );
+
+    test(
+      'uncertain deletion refreshes observed rows without closing or following',
+      () async {
+        final active = p.join(root, 'Advance.pgn');
+        final followed = <String?>[];
+        final c = RepertoireOutlineController(
+          catalog: catalog,
+          service: service,
+          onActiveChapterMoved: followed.add,
+        );
+        addTearDown(c.dispose);
+        await c.open(rootPath: root, activeChapterPath: active, isWhite: false);
+        final before =
+            (await catalog.prepareChapterDeletion(active) as PgnOpened)
+                .snapshot;
+        catalog.uncertain = true;
+        final outcome = await c.deleteChapter(before);
+        expect(outcome, isA<PgnQuarantineUncertain>());
+        expect(File(active).existsSync(), isFalse);
+        expect(c.outline!.findChapter(active), isNull);
+        expect(c.activeChapterPath, active);
+        expect(c.isChapterOpen(active), isTrue);
+        expect(followed, isEmpty);
+        // Recreating the source shows fresh content, not the cached old chapter.
+        File(active).writeAsStringSync(_game('Replacement', '1. d4 d5'));
+        await c.refresh();
+        expect(
+          c.outline!.findChapter(active)!.lines!.single.name,
+          'Replacement',
+        );
+        expect(
+          (await c.createChapter(folderPath: root, name: 'After')).ok,
+          isTrue,
+        );
+      },
+    );
+
+    test(
+      'acknowledged old deletion cannot clear active selection after A B A',
+      () async {
+        final active = p.join(root, 'Advance.pgn');
+        final followed = <String?>[];
+        final c = RepertoireOutlineController(
+          catalog: catalog,
+          service: service,
+          onActiveChapterMoved: followed.add,
+        );
+        addTearDown(c.dispose);
+        await c.open(rootPath: root, activeChapterPath: active, isWhite: false);
+        final before =
+            (await catalog.prepareChapterDeletion(active) as PgnOpened)
+                .snapshot;
+        catalog.hold = Completer<void>();
+        final removal = c.deleteChapter(before);
+        await catalog.entered.future;
+        c.setActiveChapter(p.join(root, 'Sidelines', 'Exchange.pgn'));
+        c.setActiveChapter(active);
+        catalog.hold!.complete();
+        expect(await removal, isA<PgnQuarantined>());
+        expect(c.activeChapterPath, active);
+        expect(c.isChapterOpen(active), isTrue);
+        expect(followed, isEmpty);
+      },
+    );
+
     test('deleting the active chapter clears it', () async {
       String? followed = 'unset';
       final c = RepertoireOutlineController(
+        catalog: catalog,
         service: service,
         onActiveChapterMoved: (path) => followed = path,
       );
       final active = p.join(root, 'Advance.pgn');
       await c.open(rootPath: root, activeChapterPath: active, isWhite: false);
-      await c.deleteChapter(active);
+      await c.deleteChapter(
+        ((await catalog.prepareChapterDeletion(active)) as PgnOpened).snapshot,
+      );
       expect(followed, isNull);
       expect(c.activeChapterPath, isNull);
       expect(c.outline!.chapters, isEmpty);

@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'package:path/path.dart' as p;
+import '../../services/storage/file_mutation_service.dart';
 import '../../features/documents/models/pgn_document.dart';
 import '../../features/training/models/chapter_layout.dart' show ChapterSummary;
 import '../../chess_core/pgn/pgn_text.dart' show extractRepertoireColor;
@@ -38,6 +40,51 @@ class LegacyRepertoireCatalogRepository implements RepertoireCatalogRepository {
   @override
   Future<List<ChapterSummary>> chapterSections(String path) =>
       RepertoireService(storage: _storage).courseChaptersInFile(path);
+
+  Future<({Directory root, String path})> _chapterDeletionLocation(
+    String path,
+  ) {
+    final storage = _storage;
+    if (!documents.supportsQuarantine || storage is! IOStorageService) {
+      throw UnsupportedError(
+        'Verified chapter deletion is unavailable on this host.',
+      );
+    }
+    if (!p.isAbsolute(path))
+      throw ArgumentError('Chapter paths must be absolute.');
+    return storage.managedFileLocation(path);
+  }
+
+  @override
+  Future<PgnOpenResult> prepareChapterDeletion(String path) async {
+    try {
+      final location = await _chapterDeletionLocation(path);
+      final result = await documents.open(path);
+      if (result case PgnOpened(:final snapshot)) {
+        if (snapshot.path != location.path) {
+          throw const UnsafeFileMutation(
+            'Chapter deletion refuses symbolic-link aliases.',
+          );
+        }
+      }
+      return result;
+    } catch (error) {
+      return PgnReadFailed(error);
+    }
+  }
+
+  @override
+  Future<PgnQuarantineResult> deleteChapter(PgnSnapshot baseline) async {
+    try {
+      final location = await _chapterDeletionLocation(baseline.path);
+      return await documents.quarantine(
+        baseline,
+        allowedRoot: location.root.path,
+      );
+    } catch (error) {
+      return PgnQuarantineFailed(error);
+    }
+  }
 
   @override
   Future<PgnWriteResult> createChapter({

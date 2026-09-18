@@ -128,7 +128,10 @@ class _ControlledDocuments extends NativePgnDocumentStore {
   }
 
   @override
-  Future<PgnQuarantineResult> quarantine(PgnSnapshot baseline) async {
+  Future<PgnQuarantineResult> quarantine(
+    PgnSnapshot baseline, {
+    String? allowedRoot,
+  }) async {
     if (uncertainSource) {
       return PgnQuarantineUncertain(
         error: StateError('quarantine ack lost'),
@@ -139,7 +142,7 @@ class _ControlledDocuments extends NativePgnDocumentStore {
         observedQuarantine: null,
       );
     }
-    return super.quarantine(baseline);
+    return super.quarantine(baseline, allowedRoot: allowedRoot);
   }
 }
 

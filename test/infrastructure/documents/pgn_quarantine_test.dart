@@ -206,47 +206,86 @@ void main() {
     expect(occupied.readAsStringSync(), changed);
   });
 
-  test('repertoire rename waits for guarded quarantine to finish', () async {
-    final library = Directory(p.join(root.path, 'repertoires'))..createSync();
-    final folder = Directory(p.join(library.path, 'Course'))..createSync();
-    file = File(p.join(folder.path, 'Main.pgn'))..writeAsStringSync(original);
-    final storage = IOStorageService(
-      documentsRoot: root,
-      supportRoot: root,
-      repertoiresRoot: library,
-    );
-    final entered = Completer<void>();
-    final release = Completer<void>();
-    var armed = false;
-    final store = NativePgnDocumentStore(
-      guardOperation: storage.guardDocumentOperation,
-      observe: (path) async {
-        if (armed && path == file.path && !entered.isCompleted) {
-          entered.complete();
-          await release.future;
-        }
-        return observeFile(path);
+  test(
+    'absent managed root does not block or create for external documents',
+    () async {
+      final missing = Directory(p.join(root.path, 'not-created'));
+      final storage = IOStorageService(
+        documentsRoot: missing,
+        supportRoot: missing,
+      );
+      final store = NativePgnDocumentStore(
+        guardOperation: storage.guardDocumentOperation,
+      );
+      final before = await baseline(store);
+      expect(await store.save(before, changed), isA<PgnSaved>());
+      expect(file.readAsStringSync(), changed);
+      expect(missing.existsSync(), isFalse);
+    },
+  );
+
+  for (final alias in [false, true]) {
+    test(
+      'repertoire rename waits for guarded quarantine (root alias: $alias)',
+      () async {
+        final library = Directory(p.join(root.path, 'repertoires'))
+          ..createSync();
+        final folder = Directory(p.join(library.path, 'Course'))..createSync();
+        file = File(p.join(folder.path, 'Main.pgn'))
+          ..writeAsStringSync(original);
+        final configured = alias
+            ? Directory(
+                (Link(
+                  p.join(root.path, 'library-alias'),
+                )..createSync(library.path)).path,
+              )
+            : library;
+        final storage = IOStorageService(
+          documentsRoot: root,
+          supportRoot: root,
+          repertoiresRoot: configured,
+        );
+        final entered = Completer<void>();
+        final release = Completer<void>();
+        var armed = false;
+        final store = NativePgnDocumentStore(
+          guardOperation: storage.guardDocumentOperation,
+          observe: (path) async {
+            if (armed && path == file.path && !entered.isCompleted) {
+              entered.complete();
+              await release.future;
+            }
+            return observeFile(path);
+          },
+        );
+        final before =
+            (await store.open(p.join(configured.path, 'Course', 'Main.pgn'))
+                    as PgnOpened)
+                .snapshot;
+        expect(before.path, file.path);
+        armed = true;
+        final removal = store.quarantine(before);
+        await entered.future;
+        var renamed = false;
+        final rename = storage
+            .renameRepertoireDirectory(
+              p.join(configured.path, 'Course'),
+              'Renamed',
+            )
+            .then((_) {
+              renamed = true;
+            });
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        expect(renamed, isFalse);
+        release.complete();
+        expect(await removal, isA<PgnQuarantined>());
+        await rename;
+        expect(Directory(p.join(library.path, 'Renamed')).existsSync(), isTrue);
+        expect(
+          File(p.join(library.path, 'Renamed', 'Main.pgn')).existsSync(),
+          isFalse,
+        );
       },
     );
-    final before = await baseline(store);
-    armed = true;
-    final removal = store.quarantine(before);
-    await entered.future;
-    var renamed = false;
-    final rename = storage
-        .renameRepertoireDirectory(folder.path, 'Renamed')
-        .then((_) {
-          renamed = true;
-        });
-    await Future<void>.delayed(const Duration(milliseconds: 20));
-    expect(renamed, isFalse);
-    release.complete();
-    expect(await removal, isA<PgnQuarantined>());
-    await rename;
-    expect(Directory(p.join(library.path, 'Renamed')).existsSync(), isTrue);
-    expect(
-      File(p.join(library.path, 'Renamed', 'Main.pgn')).existsSync(),
-      isFalse,
-    );
-  });
+  }
 }

@@ -263,11 +263,6 @@ class RepertoireOutlineService {
     return newPath;
   }
 
-  Future<void> deleteChapter(String chapterPath) async {
-    await _storage.deleteFile(chapterPath);
-    _lineCache.remove(chapterPath);
-  }
-
   /// Promotes the `[White]` course chapters inside [chapterPath] to real
   /// chapter files beside it — what an imported Chessable-style course needs
   /// before the builder's structure means anything.

@@ -1058,4 +1058,51 @@ class AppLocalizationsEn extends AppLocalizations {
   String chapterPathsToInspect(String paths) {
     return 'Paths to inspect (writes may be unconfirmed):\n$paths';
   }
+
+  @override
+  String get chapterDeleteConfirm =>
+      'The chapter will be removed from this folder and kept in recovery storage.';
+
+  @override
+  String get chapterDeleteUnsupported =>
+      'Verified chapter deletion is unavailable on this device.';
+
+  @override
+  String get chapterDeleteReadFailed =>
+      'Could not verify this chapter for deletion. Only files in managed app folders can be removed.';
+
+  @override
+  String get chapterDeleteMissing =>
+      'This chapter is no longer available. Nothing was removed.';
+
+  @override
+  String get chapterDeleteConflict =>
+      'The chapter changed since deletion was requested. Nothing was removed. Reload it before trying again.';
+
+  @override
+  String get chapterDeleteFailed =>
+      'The chapter could not be moved to recovery.';
+
+  @override
+  String chapterDeleteSaved(String path) {
+    return 'Chapter moved to recovery:\n$path';
+  }
+
+  @override
+  String chapterDeleteUncertain(String paths) {
+    return 'Deletion could not be confirmed. Check these locations before taking another action; do not retry automatically:\n$paths';
+  }
+
+  @override
+  String get chapterDeleteReview => 'Review chapter deletion';
+
+  @override
+  String chapterDeleteTitle(String name) {
+    return 'Delete chapter \"$name\"?';
+  }
+
+  @override
+  String chapterDeleteContext(String path, String message) {
+    return '$path\n$message';
+  }
 }

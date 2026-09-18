@@ -1,3 +1,6 @@
+import 'package:flutter/material.dart';
+import '../../../utils/app_messages.dart';
+import '../../documents/models/pgn_document.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../../utils/safe_file_name.dart';
 import '../models/repertoire_creation.dart';
@@ -33,3 +36,62 @@ String? repertoireNameProblem(AppLocalizations messages, String name) =>
       FileNameProblem.systemReserved => messages.nameSystemReserved,
       FileNameProblem.tooLong => messages.nameTooLong(120),
     };
+
+/// Resolve the existing document result at the chapter UI boundary.
+String chapterDeletionMessage(AppLocalizations messages, Object result) =>
+    switch (result) {
+      PgnReadFailed(error: UnsupportedError()) ||
+      PgnQuarantineFailed(
+        error: UnsupportedError(),
+      ) => messages.chapterDeleteUnsupported,
+      PgnMissing() => messages.chapterDeleteMissing,
+      PgnReadFailed() => messages.chapterDeleteReadFailed,
+      PgnQuarantined(:final retained) => messages.chapterDeleteSaved(
+        retained.path,
+      ),
+      PgnQuarantineConflict() => messages.chapterDeleteConflict,
+      PgnQuarantineUncertain(
+        :final before,
+        :final quarantinePath,
+        :final recoveryPath,
+      ) =>
+        messages.chapterDeleteUncertain(
+          {before.path, quarantinePath, recoveryPath}.join('\n'),
+        ),
+      _ => messages.chapterDeleteFailed,
+    };
+
+/// Uncertain deletion needs selectable recovery evidence, not a retry action.
+Future<void> showChapterDeletionResult(
+  BuildContext context,
+  Object result, {
+  required String chapterPath,
+}) async {
+  final messages = AppLocalizations.of(context);
+  final message = messages.chapterDeleteContext(
+    chapterPath,
+    chapterDeletionMessage(messages, result),
+  );
+  if (result is PgnQuarantineUncertain) {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(messages.chapterDeleteReview),
+        content: SelectableText(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(messages.closeDocumentInspection),
+          ),
+        ],
+      ),
+    );
+  } else {
+    showAppSnackBar(
+      context,
+      message,
+      isError: result is! PgnQuarantined,
+      requiresAttention: true,
+    );
+  }
+}

@@ -1,8 +1,13 @@
+import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
+import 'package:chess_auto_prep/features/documents/repositories/pgn_document_store.dart';
+import 'package:chess_auto_prep/infrastructure/documents/native_pgn_document_store.dart';
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:chess_auto_prep/features/repertoires/repositories/repertoire_catalog_repository.dart';
 import 'package:chess_auto_prep/infrastructure/repertoires/legacy_repertoire_catalog_repository.dart';
 import 'package:chess_auto_prep/infrastructure/documents/legacy_pgn_document_store.dart';
 import 'dart:async';
+import 'package:document_file_io/document_file_io.dart';
 import 'dart:io';
 
 import 'package:chess_auto_prep/design_system/theme/app_theme.dart';
@@ -64,6 +69,28 @@ class _ControlledStorage extends IOStorageService {
   Future<void> deleteFile(String path) => _mutate(() => super.deleteFile(path));
 }
 
+class _ControlledDocuments extends NativePgnDocumentStore {
+  bool hold = false;
+  final entered = Completer<void>();
+  final allow = Completer<void>();
+  final finished = Completer<void>();
+  int calls = 0;
+  @override
+  Future<PgnQuarantineResult> quarantine(
+    PgnSnapshot baseline, {
+    String? allowedRoot,
+  }) async {
+    calls++;
+    if (!entered.isCompleted) entered.complete();
+    if (hold) await allow.future;
+    try {
+      return await super.quarantine(baseline, allowedRoot: allowedRoot);
+    } finally {
+      if (!finished.isCompleted) finished.complete();
+    }
+  }
+}
+
 Future<void> _until(WidgetTester tester, bool Function() ready) async {
   for (var i = 0; i < 200 && !ready(); i++) {
     await tester.runAsync(
@@ -78,12 +105,14 @@ void main() {
   late Directory root;
   late Directory folder;
   late _ControlledStorage storage;
+  late _ControlledDocuments documents;
   ChapterPick? selected;
 
   setUp(() {
     root = Directory.systemTemp.createTempSync('chapter-mutation-');
     folder = Directory(p.join(root.path, 'Course'))..createSync();
     storage = _ControlledStorage(root);
+    documents = _ControlledDocuments();
     StorageFactory.instanceForTest = storage;
     selected = null;
   });
@@ -93,13 +122,18 @@ void main() {
     root.deleteSync(recursive: true);
   });
 
-  Future<void> open(WidgetTester tester) async {
+  Future<void> open(
+    WidgetTester tester, {
+    PgnDocumentStore? documentStore,
+  }) async {
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         builder: (context, child) => Provider<RepertoireCatalogRepository>(
           create: (_) => LegacyRepertoireCatalogRepository(
             StorageFactory.instance,
-            documents: LegacyPgnDocumentStore(StorageFactory.instance),
+            documents: documentStore ?? documents,
           ),
           child: child!,
         ),
@@ -123,7 +157,7 @@ void main() {
     tester,
   ) async {
     storage.competingCreate = true;
-    await open(tester);
+    await open(tester, documentStore: LegacyPgnDocumentStore(storage));
     await tester.tap(find.text('Add chapter'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'Main');
@@ -142,6 +176,64 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets(
+    'uncertain native deletion shows selectable recovery and refreshes list without selecting',
+    (tester) async {
+      final original = File(p.join(folder.path, 'Main.pgn'))
+        ..writeAsStringSync(_competingPgn);
+      var postMoveFlushes = 0;
+      final native = NativePgnDocumentStore(
+        guardOperation: storage.guardDocumentOperation,
+        flushDirectory: (path) async {
+          if (path == folder.path) {
+            postMoveFlushes++;
+            throw const FileSystemException('directory acknowledgement lost');
+          }
+          await syncDirectory(path);
+        },
+      );
+      await open(tester, documentStore: native);
+      await tester.tap(find.byTooltip('Delete chapter'));
+      await _until(
+        tester,
+        () => find.text('Delete chapter "Main"?').evaluate().isNotEmpty,
+      );
+      await tester.tap(find.text('Delete'));
+      await _until(
+        tester,
+        () => find.text('Review chapter deletion').evaluate().isNotEmpty,
+      );
+      expect(original.existsSync(), isFalse);
+      expect(postMoveFlushes, 1);
+      expect(selected, isNull);
+      final evidence = tester
+          .widget<SelectableText>(find.byType(SelectableText))
+          .data!;
+      expect(evidence, contains(original.path));
+      expect(evidence, contains('.cap-pgn-history'));
+      expect(find.text('Retry'), findsNothing);
+      await tester.tap(find.text('Close'));
+      await _until(tester, () => find.text('Main').evaluate().isEmpty);
+      expect(find.byTooltip('Delete chapter'), findsNothing);
+      expect(postMoveFlushes, 1);
+    },
+  );
+
+  testWidgets('cancel leaves chapter and sends no deletion', (tester) async {
+    final original = File(p.join(folder.path, 'Main.pgn'))
+      ..writeAsStringSync(_competingPgn);
+    await open(tester);
+    await tester.tap(find.byTooltip('Delete chapter'));
+    await _until(
+      tester,
+      () => find.text('Delete chapter "Main"?').evaluate().isNotEmpty,
+    );
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(documents.calls, 0);
+    expect(original.readAsStringSync(), _competingPgn);
+  });
+
   for (final equalText in [false, true]) {
     testWidgets(
       'delete confirmation preserves a ${equalText ? 'same-text' : 'changed'} replacement',
@@ -150,7 +242,10 @@ void main() {
           ..writeAsStringSync(_competingPgn);
         await open(tester);
         await tester.tap(find.byTooltip('Delete chapter'));
-        await tester.pumpAndSettle();
+        await _until(
+          tester,
+          () => find.text('Delete chapter "Main"?').evaluate().isNotEmpty,
+        );
         expect(find.text('Delete chapter "Main"?'), findsOneWidget);
 
         // Keep the old inode alive, making even equal-text replacement a
@@ -159,9 +254,7 @@ void main() {
         final replacementText = equalText ? _competingPgn : '1. c4 e5 *\n';
         original.writeAsStringSync(replacementText);
         await tester.tap(find.text('Delete'));
-        await _until(tester, () => storage.mutationStarted.isCompleted);
-        storage.allowMutation.complete();
-        await _until(tester, () => storage.mutationFinished.isCompleted);
+        await _until(tester, () => documents.finished.isCompleted);
         expect(tester.takeException(), isNull);
         expect(retained.readAsStringSync(), _competingPgn);
         expect(
@@ -181,23 +274,41 @@ void main() {
     ) async {
       final original = File(p.join(folder.path, 'Main.pgn'))
         ..writeAsStringSync(_competingPgn);
+      documents.hold = !rename;
       await open(tester);
       await tester.tap(
         find.byTooltip(rename ? 'Rename chapter' : 'Delete chapter'),
       );
-      await tester.pumpAndSettle();
+      await _until(
+        tester,
+        () => find.byType(AlertDialog).evaluate().isNotEmpty,
+      );
       if (rename) {
         await tester.enterText(find.byType(TextField).last, 'Renamed');
       }
       await tester.tap(find.text(rename ? 'Rename' : 'Delete'));
-      await _until(tester, () => storage.mutationStarted.isCompleted);
+      await _until(
+        tester,
+        () => rename
+            ? storage.mutationStarted.isCompleted
+            : documents.entered.isCompleted,
+      );
       await tester.pumpWidget(const SizedBox());
       final messages = <String?>[];
       final previousPrint = debugPrint;
       debugPrint = (message, {wrapWidth}) => messages.add(message);
       try {
-        storage.allowMutation.complete();
-        await _until(tester, () => storage.mutationFinished.isCompleted);
+        if (rename) {
+          storage.allowMutation.complete();
+        } else {
+          documents.allow.complete();
+        }
+        await _until(
+          tester,
+          () => rename
+              ? storage.mutationFinished.isCompleted
+              : documents.finished.isCompleted,
+        );
         await tester.pump();
         expect(original.existsSync(), isFalse);
         if (rename) {
