@@ -58,6 +58,62 @@ void main() {
   tearDown(() => root.delete(recursive: true));
 
   test(
+    'an inaccessible sibling preserves healthy orphan discovery and retries',
+    () async {
+      final healthy = Directory(
+        p.join(root.path, 'Healthy', '.cap-generation', 'Deleted.pgn', 'run'),
+      );
+      final locked = Directory(p.join(root.path, 'Locked'));
+      await healthy.create(recursive: true);
+      await Directory(
+        p.join(locked.path, '.cap-generation', 'Other.pgn', 'run'),
+      ).create(recursive: true);
+      await File(p.join(healthy.path, 'course.pgn')).writeAsString('1. e4 *');
+      expect((await Process.run('chmod', ['000', locked.path])).exitCode, 0);
+      try {
+        final repository = reopen();
+        final partial = await repository.listRecoverySources();
+        expect(partial.entries.map((e) => e.label), ['Healthy/Deleted.pgn']);
+        expect(partial.failures.keys, [locked.path]);
+        expect(
+          partial.failures.values.single.kind,
+          GenerationArtifactFailureKind.enumerate,
+        );
+        final entries = await repository.listRecovery(
+          partial.entries.single.path,
+        );
+        final snapshot = await repository.readRecovery(
+          entries.entries.singleWhere((e) => !e.legacy),
+        );
+        expect(
+          snapshot.files
+              .singleWhere((f) => f.kind == GenerationRecoveryFileKind.course)
+              .text,
+          '1. e4 *',
+        );
+      } finally {
+        expect((await Process.run('chmod', ['700', locked.path])).exitCode, 0);
+      }
+      final retried = await reopen().listRecoverySources();
+      expect(retried.entries.map((e) => e.label), [
+        'Healthy/Deleted.pgn',
+        'Locked/Other.pgn',
+      ]);
+      expect(retried.failures, isEmpty);
+      expect((await Process.run('chmod', ['000', root.path])).exitCode, 0);
+      try {
+        await expectLater(
+          reopen().listRecoverySources(),
+          throwsA(isA<GenerationArtifactFailure>()),
+        );
+      } finally {
+        expect((await Process.run('chmod', ['700', root.path])).exitCode, 0);
+      }
+    },
+    skip: !Platform.isLinux,
+  );
+
+  test(
     'orphan chapter namespaces remain discoverable without trusting manifest source paths',
     () async {
       final repository = reopen();
@@ -66,8 +122,10 @@ void main() {
       repository.close(run);
       await File(path).delete();
       final sources = await repository.listRecoverySources();
-      expect(sources.single.path, path);
-      final entries = await repository.listRecovery(sources.single.path);
+      expect(sources.entries.single.path, path);
+      final entries = await repository.listRecovery(
+        sources.entries.single.path,
+      );
       final retained = entries.entries.singleWhere((e) => !e.legacy);
       expect(retained.path, p.dirname(proposal.manifestPath));
       final snapshot = await repository.readRecovery(retained);
@@ -90,9 +148,10 @@ void main() {
       );
       await hidden.create(recursive: true);
       await Link(p.join(root.path, 'linked')).create(hidden.parent.parent.path);
-      expect((await repository.listRecoverySources()).map((s) => s.path), [
-        path,
-      ]);
+      expect(
+        (await repository.listRecoverySources()).entries.map((s) => s.path),
+        [path],
+      );
     },
   );
 

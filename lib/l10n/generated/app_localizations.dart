@@ -1399,7 +1399,7 @@ abstract class AppLocalizations {
   /// Recovery namespace enumeration failed; explicit refresh remains available.
   ///
   /// In en, this message translates to:
-  /// **'Retained outputs could not be listed. Older files remain accessible. Try refreshing.'**
+  /// **'This folder could not be inspected. Available outputs remain accessible. Try refreshing.'**
   String get generationRecoveryListFailed;
 
   /// Generation recovery source selection.

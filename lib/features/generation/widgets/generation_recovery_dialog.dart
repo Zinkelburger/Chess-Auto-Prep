@@ -146,9 +146,13 @@ class _GenerationRecoveryDialogState extends State<GenerationRecoveryDialog> {
                         if (_controller.chapterPath == null) ...[
                           Text(l10n.generationRecoveryDeletedRepertoire),
                           if (_controller.sources case final sources?) ...[
-                            if (sources.isEmpty)
+                            for (final failure in sources.failures.entries) ...[
+                              SelectableText(failure.key),
+                              _failure(failure.value, l10n),
+                            ],
+                            if (sources.entries.isEmpty)
                               Text(l10n.generationRecoveryNoSources),
-                            for (final source in sources)
+                            for (final source in sources.entries)
                               ListTile(
                                 key: ValueKey(
                                   'recovery-source-${source.label}',

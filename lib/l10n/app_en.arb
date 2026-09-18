@@ -1008,7 +1008,7 @@
   "@generationRecoveryIntegrityMatches": {
     "description": "Read-only generation output recovery."
   },
-  "generationRecoveryListFailed": "Retained outputs could not be listed. Older files remain accessible. Try refreshing.",
+  "generationRecoveryListFailed": "This folder could not be inspected. Available outputs remain accessible. Try refreshing.",
   "@generationRecoveryListFailed": {
     "description": "Recovery namespace enumeration failed; explicit refresh remains available."
   },

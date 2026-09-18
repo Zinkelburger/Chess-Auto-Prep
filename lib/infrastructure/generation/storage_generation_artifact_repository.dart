@@ -215,60 +215,74 @@ class StorageGenerationArtifactRepository
       );
 
   @override
-  Future<List<GenerationRecoverySourceEntry>> listRecoverySources() async {
+  Future<GenerationRecoverySources> listRecoverySources() async {
     final root = await recoveryRoot?.call();
-    if (root == null) return const [];
-    final found = <GenerationRecoverySourceEntry>[];
-    Future<void> walk(String directory) async {
+    if (root == null) return GenerationRecoverySources(const []);
+    GenerationArtifactFailure failure(Object error) =>
+        GenerationArtifactFailure(
+          '$error',
+          kind: GenerationArtifactFailureKind.enumerate,
+        );
+    Future<GenerationRecoverySources> walk(String directory) async {
       final before = await observeDirectory(directory);
-      if (before.status == 1) return;
+      if (before.status == 1) return GenerationRecoverySources(const []);
       if (before.status != 0) {
         throw StateError('Unsafe recovery directory $directory');
       }
+      final found = <GenerationRecoverySourceEntry>[];
+      final failures = <String, GenerationArtifactFailure>{};
       await for (final entity in Directory(
         directory,
       ).list(followLinks: false)) {
         if (entity is! Directory) continue;
         final name = p.basename(entity.path);
-        if (name == '.cap-generation') {
-          final namespace = await observeDirectory(entity.path);
-          if (namespace.status != 0) {
-            throw StateError('Unsafe generation namespace');
+        try {
+          if (name == '.cap-generation') {
+            final namespace = await observeDirectory(entity.path);
+            if (namespace.status != 0) {
+              throw StateError('Unsafe generation namespace');
+            }
+            final entries = <GenerationRecoverySourceEntry>[];
+            await for (final chapter in Directory(
+              entity.path,
+            ).list(followLinks: false)) {
+              if (chapter is! Directory) continue;
+              final source = p.join(directory, p.basename(chapter.path));
+              entries.add(
+                GenerationRecoverySourceEntry(
+                  path: source,
+                  label: p.relative(source, from: root),
+                ),
+              );
+            }
+            final after = await observeDirectory(entity.path);
+            if (after.status != 0 || after.identity != namespace.identity) {
+              throw StateError('Generation namespace changed while listing');
+            }
+            found.addAll(entries);
+          } else if (!name.startsWith('.')) {
+            final child = await walk(entity.path);
+            found.addAll(child.entries);
+            failures.addAll(child.failures);
           }
-          await for (final chapter in Directory(
-            entity.path,
-          ).list(followLinks: false)) {
-            if (chapter is! Directory) continue;
-            final source = p.join(directory, p.basename(chapter.path));
-            found.add(
-              GenerationRecoverySourceEntry(
-                path: source,
-                label: p.relative(source, from: root),
-              ),
-            );
-          }
-          if ((await observeDirectory(entity.path)).identity !=
-              namespace.identity) {
-            throw StateError('Generation namespace changed while listing');
-          }
-        } else if (!name.startsWith('.')) {
-          await walk(entity.path);
+        } catch (error) {
+          failures[entity.path] = failure(error);
         }
       }
-      if ((await observeDirectory(directory)).identity != before.identity) {
+      final after = await observeDirectory(directory);
+      if (after.status != 0 || after.identity != before.identity) {
         throw StateError('Recovery directory changed while listing');
       }
+      return GenerationRecoverySources(found, failures: failures);
     }
 
     try {
-      await walk(root);
-      found.sort((a, b) => a.label.compareTo(b.label));
-      return found;
+      final result = await walk(root);
+      final sorted = result.entries.toList()
+        ..sort((a, b) => a.label.compareTo(b.label));
+      return GenerationRecoverySources(sorted, failures: result.failures);
     } catch (error) {
-      throw GenerationArtifactFailure(
-        '$error',
-        kind: GenerationArtifactFailureKind.enumerate,
-      );
+      throw failure(error);
     }
   }
 

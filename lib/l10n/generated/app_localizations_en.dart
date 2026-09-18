@@ -803,7 +803,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get generationRecoveryListFailed =>
-      'Retained outputs could not be listed. Older files remain accessible. Try refreshing.';
+      'This folder could not be inspected. Available outputs remain accessible. Try refreshing.';
 
   @override
   String get generationRecoveryAllSources => 'All retained chapter outputs';

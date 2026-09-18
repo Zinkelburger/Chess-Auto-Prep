@@ -30,6 +30,18 @@ enum GenerationRecoveryIntegrity { unrecorded, matches, changed }
 
 enum GenerationRecoveryReceipt { absent, recorded, unreadable }
 
+/// Verified sibling observations survive an inaccessible subtree. A root
+/// identity failure is fatal and never produces a partial discovery result.
+class GenerationRecoverySources {
+  GenerationRecoverySources(
+    Iterable<GenerationRecoverySourceEntry> entries, {
+    Map<String, GenerationArtifactFailure> failures = const {},
+  }) : entries = List.unmodifiable(entries),
+       failures = Map.unmodifiable(failures);
+  final List<GenerationRecoverySourceEntry> entries;
+  final Map<String, GenerationArtifactFailure> failures;
+}
+
 /// A chapter namespace discovered under the configured repertoire root.
 /// The path comes from that namespace, never the manifest's source field.
 class GenerationRecoverySourceEntry {

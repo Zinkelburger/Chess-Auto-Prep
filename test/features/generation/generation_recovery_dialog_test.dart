@@ -68,6 +68,77 @@ Future<void> _waitRecovery(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets(
+    'partial source discovery keeps healthy recovery usable and Refresh retries',
+    (tester) async {
+      final root = Directory.systemTemp.createTempSync(
+        'recovery-partial-list-',
+      );
+      final healthy = Directory(
+        p.join(root.path, 'Healthy', '.cap-generation', 'Deleted.pgn', 'run'),
+      )..createSync(recursive: true);
+      final locked = Directory(p.join(root.path, 'Locked'));
+      Directory(
+        p.join(locked.path, '.cap-generation', 'Other.pgn', 'run'),
+      ).createSync(recursive: true);
+      File(p.join(healthy.path, 'course.pgn')).writeAsStringSync('1. e4 *');
+      addTearDown(() {
+        Process.runSync('chmod', ['700', locked.path]);
+        root.deleteSync(recursive: true);
+      });
+      tester.view.physicalSize = const Size(1200, 950);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      expect(Process.runSync('chmod', ['000', locked.path]).exitCode, 0);
+      final artifacts = GenerationArtifacts(
+        StorageGenerationArtifactRepository(
+          storage: IOStorageService(documentsRoot: root, supportRoot: root),
+          documents: NativePgnDocumentStore(),
+          recoveryRoot: () async => root.path,
+        ),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: GenerationRecoveryDialog(
+            artifacts: artifacts,
+            chooseExportDestination: (_) async => null,
+          ),
+        ),
+      );
+      await _waitRecovery(tester);
+      expect(find.text(locked.path), findsOneWidget);
+      expect(find.textContaining('could not be inspected'), findsOneWidget);
+      final healthySource = find.byKey(
+        const ValueKey('recovery-source-Healthy/Deleted.pgn'),
+      );
+      await tester.ensureVisible(healthySource);
+      await tester.tap(healthySource);
+      await _waitRecovery(tester);
+      await tester.ensureVisible(find.byKey(const Key('recovery-all-sources')));
+      await tester.tap(find.byKey(const Key('recovery-all-sources')));
+      await _waitRecovery(tester);
+      expect(Process.runSync('chmod', ['700', locked.path]).exitCode, 0);
+      await tester.ensureVisible(find.text('Refresh'));
+      await tester.tap(find.text('Refresh'));
+      await _waitRecovery(tester);
+      expect(find.textContaining('could not be inspected'), findsNothing);
+      expect(
+        find.byKey(const ValueKey('recovery-source-Healthy/Deleted.pgn')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('recovery-source-Locked/Other.pgn')),
+        findsOneWidget,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+    skip: !Platform.isLinux,
+  );
+
   for (final compact in [false, true]) {
     testWidgets(
       'retained PGN is discoverable, readable and exportable at ${compact ? "200 percent narrow" : "desktop"}',
@@ -173,7 +244,7 @@ void main() {
         );
         await _waitRecovery(tester);
         await show(
-          find.textContaining('Retained outputs could not be listed'),
+          find.textContaining('This folder could not be inspected'),
           160,
         );
         Link(namespace.path).deleteSync();

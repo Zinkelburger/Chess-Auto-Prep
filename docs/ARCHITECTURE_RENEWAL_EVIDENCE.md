@@ -2691,3 +2691,22 @@ model-games companion, its seven-test native legacy recovery file passes,
 including exact edited/BOM PGN export. All 107 local links in the affected plan,
 evidence, component map and generation README resolve; `git diff --check` passes.
 No full-suite, release, engine-performance or non-Linux gate is claimed.
+
+
+Independent review found that an unreadable descendant directory aborted source
+recovery for every healthy sibling. The same repository now returns verified
+source entries plus typed per-directory discovery failures; its existing
+controller/dialog show those failures and retry through Refresh. Observations
+from a failing or changed subtree are discarded, while a root failure or root
+identity change rejects the complete listing. No extra owner, interface or
+browser was introduced. Native Linux permission-denied fixtures verify healthy
+orphan inspection, retry after permissions recover, and fatal root failure; a
+production dialog test verifies the visible failure, healthy selection and
+Refresh clearing the failure. This corrective batch passes 24 focused tests.
+
+The fresh headless [partial discovery view](images/renewal-generation-recovery-partial-list.png)
+shows the inaccessible folder alongside healthy deleted-chapter sources. Restoring
+permissions and using Refresh removed the error and revealed the formerly
+inaccessible source in the same dialog. The preview used the disposable driver
+profile and was stopped before final checks. Analyze/lint pass with 63 existing
+infos, no warnings/errors; 44 architecture checks pass with unchanged debt.

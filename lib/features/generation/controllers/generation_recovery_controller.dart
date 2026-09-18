@@ -10,7 +10,7 @@ class GenerationRecoveryController extends ChangeNotifier
     with SafeChangeNotifier {
   GenerationRecoveryController(this.artifacts);
   final GenerationArtifacts artifacts;
-  List<GenerationRecoverySourceEntry>? sources;
+  GenerationRecoverySources? sources;
   String? chapterPath;
   GenerationRecoveryCatalog? catalog;
   GenerationRecoveryEntry? selected;
