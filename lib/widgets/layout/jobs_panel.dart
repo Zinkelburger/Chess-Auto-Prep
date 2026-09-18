@@ -27,10 +27,6 @@ class JobsPanel extends StatelessWidget {
   final VoidCallback? onOpenGenerationDialog;
   final VoidCallback? onOpenAuditDialog;
   final VoidCallback? onOpenCoverageDialog;
-  final VoidCallback? onPauseGeneration;
-  final VoidCallback? onResumeGeneration;
-  final VoidCallback? onCancelGeneration;
-  final VoidCallback? onFinishNowGeneration;
   final VoidCallback? onExportLinesGeneration;
   final VoidCallback? onPauseAudit;
   final VoidCallback? onResumeAudit;
@@ -44,10 +40,6 @@ class JobsPanel extends StatelessWidget {
     this.onOpenGenerationDialog,
     this.onOpenAuditDialog,
     this.onOpenCoverageDialog,
-    this.onPauseGeneration,
-    this.onResumeGeneration,
-    this.onCancelGeneration,
-    this.onFinishNowGeneration,
     this.onExportLinesGeneration,
     this.onPauseAudit,
     this.onResumeAudit,
@@ -239,9 +231,9 @@ class JobsPanel extends StatelessWidget {
       alwaysShowControls: true,
       // Pause only where the pipeline honors it; the remaining phases are
       // short synchronous passes that would ignore the request.
-      onPause: cancelling || !phase.isPausable ? null : onPauseGeneration,
-      onResume: onResumeGeneration,
-      onCancel: onCancelGeneration,
+      onPause: cancelling || !phase.isPausable ? null : gc.pauseBuild,
+      onResume: gc.resumeBuild,
+      onCancel: gc.cancelBuild,
       extraActions: [
         if (onExportLinesGeneration != null)
           Tooltip(
@@ -261,20 +253,19 @@ class JobsPanel extends StatelessWidget {
               ),
             ),
           ),
-        if (onFinishNowGeneration != null)
-          Tooltip(
-            message: extrasEnabled
-                ? 'Stop exploring and build lines from '
-                      'what\'s been found so far'
-                : extrasDisabledMessage,
-            child: TextButton(
-              onPressed: extrasEnabled ? onFinishNowGeneration : null,
-              child: const Text(
-                'Finish Now',
-                style: TextStyle(fontSize: 12, color: AppColors.warning),
-              ),
+        Tooltip(
+          message: extrasEnabled
+              ? 'Stop exploring and build lines from '
+                    'what\'s been found so far'
+              : extrasDisabledMessage,
+          child: TextButton(
+            onPressed: extrasEnabled ? gc.finishNow : null,
+            child: const Text(
+              'Finish Now',
+              style: TextStyle(fontSize: 12, color: AppColors.warning),
             ),
           ),
+        ),
       ],
     );
   }

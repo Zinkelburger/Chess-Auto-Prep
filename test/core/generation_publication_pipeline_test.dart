@@ -84,7 +84,9 @@ void main() {
           );
         };
       }
+      final jobs = JobManager();
       final controller = GenerationSessionController(
+        jobs: jobs,
         enginePool: engines.pool,
         publication: GenerationPublicationController(
           documents: documents,
@@ -97,16 +99,10 @@ void main() {
         engineLifecycle: lifecycle,
       );
       addTearDown(controller.dispose);
-      final job = RepertoireJob(
-        id: 'pipeline',
-        type: JobType.generation,
-        label: 'Generate',
-      );
-      addTearDown(job.dispose);
-      controller.currentJob = job;
       final saved = <PgnSnapshot>[];
       await controller.startBuild(
         GenerationRequest(
+          jobLabel: 'Test generation',
           config: const TreeBuildConfig(
             startFen: kStandardStartFen,
             playAsWhite: true,
@@ -135,6 +131,8 @@ void main() {
       );
       expect(controller.isGenerating, isFalse);
       expect(documents.saves, hasLength(1));
+      final job = jobs.jobs.single;
+      addTearDown(job.dispose);
       if (conflict) {
         expect(job.status, JobStatus.failed);
         expect(controller.lastError, contains('manifest.json'));

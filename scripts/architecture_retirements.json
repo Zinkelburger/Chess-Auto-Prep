@@ -151,6 +151,14 @@
     "EvalTreeDetailsPane",
     "EvalTreeNodeChip",
     "EvalTreeToolbar",
-    "EvalTreeViewport"
+    "EvalTreeViewport",
+    "expectimaxProbeLabel",
+    "shouldCoalesceRebuild",
+    "_genRebuildThrottle",
+    "_kGenRebuildInterval",
+    "onPauseGeneration",
+    "onResumeGeneration",
+    "onCancelGeneration",
+    "onFinishNowGeneration"
   ]
 }

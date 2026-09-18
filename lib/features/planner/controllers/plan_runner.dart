@@ -226,6 +226,7 @@ class PlanRunner extends ChangeNotifier with SafeChangeNotifier {
         throw StateError('Path is not playable: ${point.moves}');
       }
       final request = GenerationRequest(
+        jobLabel: item.chapter.name,
         config: config.copyWith(
           startFen: fen,
           playAsWhite: isWhite,

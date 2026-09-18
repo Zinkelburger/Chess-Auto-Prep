@@ -31,6 +31,7 @@ void main() {
 
     test('a fresh build has no tree, no known lines, and exports', () {
       const request = GenerationRequest(
+        jobLabel: 'Test generation',
         config: TreeBuildConfig(startFen: 'x', playAsWhite: true),
         repertoireFilePath: '/r.pgn',
         buildRootFen: 'x',
@@ -101,6 +102,7 @@ void main() {
     );
 
     GenerationRequest resuming(BuildTree tree) => GenerationRequest(
+      jobLabel: 'Test generation',
       config: const TreeBuildConfig(startFen: afterE4, playAsWhite: true),
       repertoireFilePath: '/r.pgn',
       buildRootFen: afterE4,
@@ -112,6 +114,7 @@ void main() {
 
     test('a fresh build uses the caller\'s prefix', () {
       const request = GenerationRequest(
+        jobLabel: 'Test generation',
         config: TreeBuildConfig(startFen: 'x', playAsWhite: true),
         repertoireFilePath: '/r.pgn',
         buildRootFen: 'x',

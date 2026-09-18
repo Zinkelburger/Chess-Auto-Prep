@@ -98,19 +98,10 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
       _lastRunWasPositionGeneration = ctrl.isExpectimaxProbe;
     }
 
-    if (ctrl.isGenerating && ctrl.currentJob == null) {
-      final probe = ctrl.isExpectimaxProbe;
-      ctrl.currentJob = _jobManager.createJob(
-        type: JobType.generation,
-        label: probe
-            ? 'Expectimax · ${ctrl.expectimaxProbeLabel}'
-            : _controller.document.currentRepertoire?.name ?? 'Generation',
-        subtreeFen: _controller.board.fen,
-      );
-      ctrl.currentJob!.updateStatus(JobStatus.running);
-      // A probe reports inside the expectimax pane that started it; the
-      // Jobs pane is still there for anyone who wants the tile.
-      if (!probe) _openBottomPane(BottomPaneTab.jobs);
+    if (ctrl.isGenerating &&
+        !_generationRouter.wasGenerating &&
+        !ctrl.isExpectimaxProbe) {
+      _openBottomPane(BottomPaneTab.jobs);
     }
 
     context.read<AppState>().setRepertoireGenerating(ctrl.isGenerating);
@@ -143,16 +134,7 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
       }
     }
 
-    if (actions.shouldCoalesceRebuild) {
-      _genRebuildThrottle ??= Timer(_kGenRebuildInterval, () {
-        _genRebuildThrottle = null;
-        if (mounted) setState(() {});
-      });
-    } else {
-      _genRebuildThrottle?.cancel();
-      _genRebuildThrottle = null;
-      setState(() {});
-    }
+    setState(() {});
   }
 
   void _onAuditChanged() {

@@ -47,8 +47,8 @@ class SnapshotExporter {
   final GenerationRequest? Function() _activeRequest;
   final TreeBuildConfig? Function() _activeConfig;
   final List<String> Function() _startMoveSequence;
-  final TreeBuildService Function() _buildService;
-  final GenerationProgress Function() _progress;
+  final TreeBuildService _buildService;
+  final GenerationProgress _progress;
 
   bool _exporting = false;
 
@@ -61,7 +61,7 @@ class SnapshotExporter {
   /// Suggested repertoire name for a snapshot export at the current depth.
   String nameSuggestion() {
     final path = _activeRequest()?.repertoireFilePath;
-    final depth = _progress().depth;
+    final depth = _progress.depth;
     final base = (path == null || path.isEmpty)
         ? 'Generated'
         : p.basenameWithoutExtension(path);
@@ -76,7 +76,7 @@ class SnapshotExporter {
     required String repertoireName,
     required bool verify,
   }) async {
-    final progress = _progress();
+    final progress = _progress;
     if (!_isGenerating() ||
         _cancelRequested() ||
         progress.phase != GenerationPhase.buildingTree) {
@@ -87,7 +87,7 @@ class SnapshotExporter {
     }
     final request = _activeRequest();
     final config = _activeConfig();
-    final tree = _buildService().currentTree;
+    final tree = _buildService.currentTree;
     if (request == null || config == null || tree == null) {
       return (false, 'Build state unavailable — try again in a moment.');
     }
@@ -100,7 +100,7 @@ class SnapshotExporter {
     // Verification shares the engine pool with the build, so exploration
     // pauses for its duration. Unverified exports never touch the run.
     final pausedForVerify = doVerify && !_isPaused();
-    final buildService = _buildService();
+    final buildService = _buildService;
 
     // Claimed before the first await: a second call arriving while the
     // storage checks below are in flight must see the slot taken, or both

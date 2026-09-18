@@ -69,6 +69,7 @@ import 'snapshot_exporter.dart';
 class GenerationSessionController extends ChangeNotifier
     with SafeChangeNotifier {
   GenerationSessionController({
+    required this._jobs,
     required GenerationPublicationController publication,
     required GenerationArtifacts artifacts,
     required StockfishPool enginePool,
@@ -84,6 +85,7 @@ class GenerationSessionController extends ChangeNotifier
 
   static const String _logName = 'GenerationSession';
 
+  final JobManager _jobs;
   final GenerationPublicationController _publication;
   GenerationSource? _publicationSource;
   GenerationArtifactRun? _artifactRun;
@@ -109,12 +111,13 @@ class GenerationSessionController extends ChangeNotifier
 
   /// Live BFS / phase stats. The Jobs panel reads this; the pipeline writes it.
   late final GenerationProgress progress = GenerationProgress(
-    notify: notifyListeners,
-    job: () => currentJob,
-    isRunning: () => _isGenerating,
-    isPaused: () => _isPaused,
-    elapsed: () => _pipelineSw,
+    notify: _publishProgress,
   );
+
+  void _publishProgress() {
+    _currentJob?.updateProgress(progress.jobProgress);
+    notifyListeners();
+  }
 
   /// Mid-run export of lines found so far, without ending the build.
   late final SnapshotExporter snapshots = SnapshotExporter(
@@ -126,8 +129,8 @@ class GenerationSessionController extends ChangeNotifier
     activeRequest: () => _activeRequest,
     activeConfig: () => activeConfig,
     startMoveSequence: () => _startMoveSequence,
-    buildService: () => buildService,
-    progress: () => progress,
+    buildService: buildService,
+    progress: progress,
   );
 
   /// Runs the best-effort post-build passes and keeps their counts.
@@ -149,8 +152,6 @@ class GenerationSessionController extends ChangeNotifier
     fenMap: () => _database.current?.fenMap,
   );
 
-  Stopwatch _pipelineSw = Stopwatch();
-
   bool _isGenerating = false;
   bool _isPaused = false;
   bool _cancelRequested = false;
@@ -170,7 +171,8 @@ class GenerationSessionController extends ChangeNotifier
   /// the line prefix and repertoire-root FEN.  Null when idle.
   GenerationRequest? _activeRequest;
 
-  RepertoireJob? currentJob;
+  RepertoireJob? _currentJob;
+  RepertoireJob? get currentJob => _currentJob;
 
   /// Config of the most recent run (kept after the run ends so the config
   /// form can restore the user's settings when it remounts).
@@ -228,6 +230,7 @@ class GenerationSessionController extends ChangeNotifier
   /// phases (ease/expectimax/selection/extraction) have no pause gate, so
   /// pausing there would free the engine while the pipeline keeps working.
   bool get canPause =>
+      !isDisposed &&
       _isGenerating &&
       !_isPaused &&
       !_cancelRequested &&
@@ -402,7 +405,7 @@ class GenerationSessionController extends ChangeNotifier
         analysis: analysis,
         extracted: extracted,
         config: config,
-        elapsed: _pipelineSw.elapsed,
+        elapsed: progress.elapsed,
         duplicatesSkipped: _duplicatesSkipped,
         courseOutline: lastCourseOutline,
         enrichment: _enrichmentCounts,
@@ -497,12 +500,10 @@ class GenerationSessionController extends ChangeNotifier
     _duplicatesSkipped = 0;
     _enrichment.reset();
     lastConfig = config;
-    progress.reset();
+    progress.begin();
     activeConfig = config;
     progress.maxPlyConfig = config.maxPly;
     progress.bestFirst = config.bestFirst;
-    _pipelineSw = Stopwatch()..start();
-    progress.startElapsedTicker();
 
     _startMoveSequence = List.unmodifiable(prefix);
     _startFen = existingTree?.root.fen ?? request.buildRootFen;
@@ -512,19 +513,19 @@ class GenerationSessionController extends ChangeNotifier
     // A full build replaces the tree; a probe adds to the database, and the
     // pane keeps showing it while the probe runs.
     if (!request.expectimaxOnly) _database.dropTree();
-    // Hosts listening for isGenerating create the Jobs-panel job here.
-    notifyListeners();
-    currentJob
-      ?..configSnapshot = Map<String, dynamic>.from(config.toJson())
-      ..updateStatus(JobStatus.running);
-
-    _seedResumeProgress(existingTree);
-    progress.setStatus(
-      existingTree != null
-          ? 'Phase 1: Resuming build...'
-          : 'Phase 1: Building tree...',
-      GenerationPhase.buildingTree,
+    _currentJob = _jobs.createJob(
+      type: JobType.generation,
+      label: request.jobLabel,
+      subtreeFen: _startFen,
+      configSnapshot: Map.unmodifiable(config.toJson()),
+      status: JobStatus.running,
     );
+    _seedResumeProgress(existingTree);
+    progress.status = existingTree != null
+        ? 'Phase 1: Resuming build...'
+        : 'Phase 1: Building tree...';
+    progress.phase = GenerationPhase.buildingTree;
+    progress.flushNotify();
   }
 
   /// Unwind the run: release the engine, settle the job tile, clear state.
@@ -575,8 +576,6 @@ class GenerationSessionController extends ChangeNotifier
     }
     // Release any dangling pause gate so nothing awaits it forever.
     buildService.resumeBuild();
-    progress.stopElapsedTicker();
-    _pipelineSw.stop();
     _finishNowRequested = false;
     final job = currentJob;
     if (job != null) {
@@ -599,7 +598,7 @@ class GenerationSessionController extends ChangeNotifier
           _cancelRequested ? JobStatus.cancelled : JobStatus.completed,
         );
       }
-      currentJob = null;
+      _currentJob = null;
     }
     _isGenerating = false;
     _isPaused = false;
@@ -607,7 +606,7 @@ class GenerationSessionController extends ChangeNotifier
     _discardRequested = false;
     _activeRequest = null;
     activeConfig = null;
-    progress.reset();
+    progress.finish();
     progress.flushNotify();
   }
 
@@ -1073,7 +1072,7 @@ class GenerationSessionController extends ChangeNotifier
     if (!canPause) return;
     buildService.pauseBuild();
     _isPaused = true;
-    _pipelineSw.stop();
+    progress.pause();
     currentJob?.updateStatus(JobStatus.paused);
     // A probe is not resumable from the Generate tab, so it leaves no
     // partial file for that tab to offer.
@@ -1084,9 +1083,9 @@ class GenerationSessionController extends ChangeNotifier
   }
 
   void resumeBuild() {
-    if (!_isPaused) return;
+    if (isDisposed || !_isPaused) return;
     _isPaused = false;
-    _pipelineSw.start();
+    progress.resume();
     currentJob?.updateStatus(JobStatus.running);
     progress.flushNotify();
     final cfg = activeConfig;
@@ -1132,7 +1131,7 @@ class GenerationSessionController extends ChangeNotifier
     if (!_discardRequested && !isExpectimaxProbe) unawaited(_savePartialTree());
     if (_isPaused) {
       _isPaused = false;
-      _pipelineSw.start();
+      progress.resume();
     }
     buildService.stopBuild();
     // A run parked on the master-games download has no BFS to stop; without
@@ -1164,7 +1163,7 @@ class GenerationSessionController extends ChangeNotifier
     _finishNowRequested = true;
     if (_isPaused) {
       _isPaused = false;
-      _pipelineSw.start();
+      progress.resume();
       currentJob?.updateStatus(JobStatus.running);
       buildService.resumeBuild();
     }
@@ -1196,13 +1195,6 @@ class GenerationSessionController extends ChangeNotifier
   /// Whether the run in flight is an on-demand expectimax probe rather than
   /// a full build.
   bool get isExpectimaxProbe => _activeRequest?.expectimaxOnly ?? false;
-
-  /// `1.e4 c5 2.Nf3` for the probe in flight (or the start position), for
-  /// job tiles and status chips.
-  String get expectimaxProbeLabel {
-    final moves = _activeRequest?.lineMovePrefix ?? const [];
-    return moves.isEmpty ? 'start position' : buildNumberedMovetext(moves);
-  }
 
   /// Load the expectimax database saved beside [repertoireFilePath]: the
   /// tree the last full build wrote and every probe since. Replaces
@@ -1418,7 +1410,7 @@ class GenerationSessionController extends ChangeNotifier
     await _persistDatabase();
 
     final added = landing.added;
-    final elapsed = formatCompactDuration(_pipelineSw.elapsed);
+    final elapsed = formatCompactDuration(progress.elapsed);
     final where = prefix.isEmpty
         ? 'the start position'
         : buildNumberedMovetext(prefix);

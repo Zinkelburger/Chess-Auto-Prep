@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/services/jobs/repertoire_job.dart';
 import 'package:chess_auto_prep/app/runtime_settings.dart';
 import 'package:chess_auto_prep/app/engine_runtime.dart';
 import '../../support/runtime_settings.dart';
@@ -27,6 +28,7 @@ void main() {
     'settings stay in the overlay and apply to both generation actions',
     (tester) async {
       final gen = GenerationSessionController(
+        jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
         artifacts: generationArtifactsFixture(),
@@ -144,6 +146,7 @@ void main() {
     tester,
   ) async {
     final gen = GenerationSessionController(
+      jobs: JobManager(),
       enginePool: engines.pool,
       engineLifecycle: engines.lifecycle,
       artifacts: generationArtifactsFixture(),
@@ -209,6 +212,7 @@ void main() {
     tester,
   ) async {
     final gen = GenerationSessionController(
+      jobs: JobManager(),
       enginePool: engines.pool,
       engineLifecycle: engines.lifecycle,
       artifacts: generationArtifactsFixture(),

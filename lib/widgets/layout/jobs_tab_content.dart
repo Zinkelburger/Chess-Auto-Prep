@@ -59,10 +59,6 @@ class JobsTabContent extends StatelessWidget {
         onCancelAudit: () => auditController.cancel(
           controller.document.currentRepertoire?.filePath,
         ),
-        onPauseGeneration: gc.pauseBuild,
-        onResumeGeneration: gc.resumeBuild,
-        onCancelGeneration: gc.cancelBuild,
-        onFinishNowGeneration: gc.finishNow,
         onExportLinesGeneration: () => _exportSnapshot(context, gc),
       ),
     );

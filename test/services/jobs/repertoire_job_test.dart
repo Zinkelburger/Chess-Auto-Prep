@@ -12,6 +12,31 @@ void main() {
     expect(JobStatus.paused.isTerminal, isFalse);
   });
 
+  test(
+    'registry observer sees the configured running job on first publication',
+    () {
+      final manager = JobManager();
+      addTearDown(manager.dispose);
+      var observed = 0;
+      manager.addListener(() {
+        observed++;
+        final job = manager.jobs.single;
+        expect(job.status, JobStatus.running);
+        expect(job.label, 'Captured chapter');
+        expect(job.subtreeFen, 'captured root');
+        expect(job.configSnapshot, {'maxPly': 3});
+      });
+      manager.createJob(
+        type: JobType.generation,
+        label: 'Captured chapter',
+        subtreeFen: 'captured root',
+        configSnapshot: {'maxPly': 3},
+        status: JobStatus.running,
+      );
+      expect(observed, 1);
+    },
+  );
+
   test('activeJob returns the newest running or paused job of a type', () {
     final manager = JobManager.instance;
     final older = manager.createJob(type: JobType.coverage, label: 'old');

@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/services/jobs/repertoire_job.dart';
 import 'package:chess_auto_prep/app/runtime_settings.dart';
 import 'package:chess_auto_prep/app/engine_runtime.dart';
 import '../../support/runtime_settings.dart';
@@ -150,6 +151,7 @@ void main() {
     TreeBuildService? build,
   }) {
     final value = GenerationSessionController(
+      jobs: JobManager(),
       publication: GenerationPublicationController(
         documents: documents,
         drafts: StorageGenerationDraftRepository(storage),
@@ -168,6 +170,7 @@ void main() {
     String? generation,
     TreeBuildConfig config = _config,
   }) => GenerationRequest(
+    jobLabel: 'Test generation',
     config: config,
     repertoireFilePath: path,
     buildRootFen: kStandardStartFen,

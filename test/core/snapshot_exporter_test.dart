@@ -76,13 +76,7 @@ class _Session {
   );
   int notifications = 0;
 
-  late final GenerationProgress progress = GenerationProgress(
-    notify: () {},
-    job: () => null,
-    isRunning: () => generating,
-    isPaused: () => paused,
-    elapsed: Stopwatch.new,
-  );
+  late final GenerationProgress progress = GenerationProgress(notify: () {});
 
   late final SnapshotExporter exporter = SnapshotExporter(
     pool: engines.pool,
@@ -93,8 +87,8 @@ class _Session {
     activeRequest: () => request,
     activeConfig: () => config,
     startMoveSequence: () => startMoves,
-    buildService: () => buildService,
-    progress: () => progress,
+    buildService: buildService,
+    progress: progress,
   );
 
   /// Put the session in the state a mid-BFS export finds it in.
@@ -106,6 +100,7 @@ class _Session {
     progress.phase = GenerationPhase.buildingTree;
     config = _headlessConfig(rankLinesByImportance: rankLinesByImportance);
     request = GenerationRequest(
+      jobLabel: 'Test generation',
       config: config!,
       repertoireFilePath: repertoirePath,
       buildRootFen: kStandardStartFen,

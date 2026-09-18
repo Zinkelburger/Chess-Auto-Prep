@@ -297,6 +297,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     if (mounted) setState(() => _savedPartialTree = null);
 
     final request = GenerationRequest(
+      jobLabel: widget.currentRepertoire?.name ?? 'Generation',
       config: config,
       repertoireFilePath: filePath,
       buildRootFen: widget.fen,
