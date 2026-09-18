@@ -1060,215 +1060,365 @@ abstract class AppLocalizations {
   /// **'Untitled PGN'**
   String get untitledPgnWorkspace;
 
-  /// Legacy generation artifact recovery
+  /// Read-only generation output recovery.
   ///
   /// In en, this message translates to:
-  /// **'Recover older analysis'**
-  String get legacyAnalysisTitle;
+  /// **'Recover generated outputs'**
+  String get generationRecoveryTitle;
 
-  /// Legacy generation artifact recovery
+  /// Read-only generation output recovery.
   ///
   /// In en, this message translates to:
-  /// **'Recover older analysis…'**
-  String get legacyAnalysisAction;
+  /// **'Recover generated outputs…'**
+  String get generationRecoveryAction;
 
   /// Legacy generation artifact recovery
   ///
   /// In en, this message translates to:
   /// **'These older files have no recorded source revision. Inspect or export them here; they do not replace the current chapter or its verified analysis. Original files stay unchanged.'**
-  String get legacyAnalysisProvenance;
+  String get generationRecoveryProvenance;
 
   /// Legacy generation artifact recovery
   ///
   /// In en, this message translates to:
   /// **'Saved tree'**
-  String get legacyAnalysisTree;
+  String get generationRecoveryTree;
 
   /// Legacy generation artifact recovery
   ///
   /// In en, this message translates to:
   /// **'Saved probes'**
-  String get legacyAnalysisProbes;
+  String get generationRecoveryProbes;
 
   /// Legacy generation artifact recovery
   ///
   /// In en, this message translates to:
   /// **'Saved traps'**
-  String get legacyAnalysisTraps;
+  String get generationRecoveryTraps;
 
   /// Legacy generation artifact recovery
   ///
   /// In en, this message translates to:
   /// **'Unfinished build'**
-  String get legacyAnalysisPartial;
+  String get generationRecoveryPartial;
 
   /// Legacy generation artifact recovery
   ///
   /// In en, this message translates to:
   /// **'Export original file…'**
-  String get legacyAnalysisExport;
+  String get generationRecoveryExport;
 
   /// Legacy generation artifact recovery
   ///
   /// In en, this message translates to:
   /// **'Choose a folder for the recovered file'**
-  String get legacyAnalysisExportDirectory;
+  String get generationRecoveryExportDirectory;
 
-  /// Legacy generation artifact recovery
+  /// Read-only generation output recovery.
   ///
   /// In en, this message translates to:
-  /// **'No older analysis files found beside this chapter.'**
-  String get legacyAnalysisEmpty;
+  /// **'No saved files were found in this output. Choose another retained output or refresh.'**
+  String get generationRecoveryEmpty;
 
   /// Legacy generation artifact recovery
   ///
   /// In en, this message translates to:
   /// **'Select a saved artifact to inspect its contents.'**
-  String get legacyAnalysisSelect;
+  String get generationRecoverySelect;
 
   /// Legacy generation artifact recovery
   ///
   /// In en, this message translates to:
   /// **'No saved entries'**
-  String get legacyAnalysisNoEntries;
+  String get generationRecoveryNoEntries;
 
   /// Legacy generation artifact recovery
   ///
   /// In en, this message translates to:
   /// **'Could not read this entry'**
-  String get legacyAnalysisUnreadable;
+  String get generationRecoveryUnreadable;
 
   /// Legacy generation artifact recovery
   ///
   /// In en, this message translates to:
   /// **'Automatic resume is unavailable: this unfinished build has no verifiable source revision. You can inspect its explored positions, export the original file, or start a fresh build from the chapter.'**
-  String get legacyAnalysisResumeUnavailable;
+  String get generationRecoveryResumeUnavailable;
 
   /// Legacy generation artifact recovery
   ///
   /// In en, this message translates to:
   /// **'Saved configuration'**
-  String get legacyAnalysisConfig;
+  String get generationRecoveryConfig;
 
   /// Legacy generation artifact recovery
   ///
   /// In en, this message translates to:
   /// **'Previous position'**
-  String get legacyAnalysisParent;
+  String get generationRecoveryParent;
 
   /// Legacy generation artifact recovery
   ///
   /// In en, this message translates to:
   /// **'Original file exported to {path}'**
-  String legacyAnalysisExported(String path);
+  String generationRecoveryExported(String path);
 
   /// Legacy generation artifact recovery
   ///
   /// In en, this message translates to:
   /// **'Entry {number}'**
-  String legacyAnalysisEntry(int number);
+  String generationRecoveryEntry(int number);
 
   /// Legacy generation artifact recovery
   ///
   /// In en, this message translates to:
   /// **'{nodes} saved nodes · depth {depth}'**
-  String legacyAnalysisNodes(int nodes, int depth);
+  String generationRecoveryNodes(int nodes, int depth);
 
   /// Legacy analysis recovery failure
   ///
   /// In en, this message translates to:
   /// **'Technical details'**
-  String get legacyAnalysisDiagnostics;
+  String get generationRecoveryDiagnostics;
 
-  /// Legacy analysis recovery failure
+  /// Read-only generation output recovery.
   ///
   /// In en, this message translates to:
-  /// **'Older analysis could not be loaded. Try refreshing.'**
-  String get legacyAnalysisLoadFailed;
+  /// **'Saved outputs could not be loaded. Try refreshing.'**
+  String get generationRecoveryLoadFailed;
 
   /// Legacy analysis recovery failure
   ///
   /// In en, this message translates to:
   /// **'This file could not be read safely. Other saved files remain available.'**
-  String get legacyAnalysisReadFailed;
+  String get generationRecoveryReadFailed;
 
   /// Legacy analysis recovery failure
   ///
   /// In en, this message translates to:
   /// **'This entry could not be decoded. You can still export its original file.'**
-  String get legacyAnalysisDecodeFailed;
+  String get generationRecoveryDecodeFailed;
 
   /// Legacy analysis recovery failure
   ///
   /// In en, this message translates to:
   /// **'A file already exists at that destination. Choose a different location; nothing was replaced.'**
-  String get legacyAnalysisCollision;
+  String get generationRecoveryCollision;
 
   /// Legacy analysis recovery failure
   ///
   /// In en, this message translates to:
   /// **'The original file could not be exported. Choose another location or try again.'**
-  String get legacyAnalysisExportFailed;
+  String get generationRecoveryExportFailed;
 
   /// Legacy analysis recovery failure
   ///
   /// In en, this message translates to:
   /// **'The export may have been saved, but completion could not be confirmed. Inspect the destination below before trying again.'**
-  String get legacyAnalysisExportUncertain;
+  String get generationRecoveryExportUncertain;
 
   /// Legacy analysis inspection
   ///
   /// In en, this message translates to:
   /// **'Destination: {path}'**
-  String legacyAnalysisDestination(String path);
+  String generationRecoveryDestination(String path);
 
   /// Legacy analysis inspection
   ///
   /// In en, this message translates to:
   /// **'Popular reply'**
-  String get legacyAnalysisPopularMove;
+  String get generationRecoveryPopularMove;
 
   /// Legacy analysis inspection
   ///
   /// In en, this message translates to:
   /// **'Best reply'**
-  String get legacyAnalysisBestMove;
+  String get generationRecoveryBestMove;
 
   /// Legacy analysis inspection
   ///
   /// In en, this message translates to:
   /// **'Move probability'**
-  String get legacyAnalysisProbability;
+  String get generationRecoveryProbability;
 
   /// Legacy analysis inspection
   ///
   /// In en, this message translates to:
   /// **'Evaluation gain'**
-  String get legacyAnalysisGain;
+  String get generationRecoveryGain;
 
   /// Legacy analysis inspection
   ///
   /// In en, this message translates to:
   /// **'Evaluation (side to move)'**
-  String get legacyAnalysisEvaluation;
+  String get generationRecoveryEvaluation;
 
   /// Legacy analysis inspection
   ///
   /// In en, this message translates to:
   /// **'Expected score'**
-  String get legacyAnalysisExpectedScore;
+  String get generationRecoveryExpectedScore;
 
   /// Legacy analysis inspection
   ///
   /// In en, this message translates to:
   /// **'Engine principal variation (UCI)'**
-  String get legacyAnalysisPv;
+  String get generationRecoveryPv;
 
   /// Legacy analysis inspection
   ///
   /// In en, this message translates to:
   /// **'Not saved'**
-  String get legacyAnalysisNotSaved;
+  String get generationRecoveryNotSaved;
+
+  /// Read-only generation output recovery.
+  ///
+  /// In en, this message translates to:
+  /// **'Inspect or export saved outputs. Recovery does not change the chapter, select analysis or resume a build. Original files stay unchanged.'**
+  String get generationRecoveryReadOnly;
+
+  /// Read-only generation output recovery.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose saved output'**
+  String get generationRecoveryChooseOutput;
+
+  /// Read-only generation output recovery.
+  ///
+  /// In en, this message translates to:
+  /// **'Older files beside this chapter'**
+  String get generationRecoveryLegacyFiles;
+
+  /// Read-only generation output recovery.
+  ///
+  /// In en, this message translates to:
+  /// **'Generated PGN proposal'**
+  String get generationRecoveryCourse;
+
+  /// Read-only generation output recovery.
+  ///
+  /// In en, this message translates to:
+  /// **'Model games'**
+  String get generationRecoveryModelGames;
+
+  /// Read-only generation output recovery.
+  ///
+  /// In en, this message translates to:
+  /// **'Run record'**
+  String get generationRecoveryManifest;
+
+  /// Read-only generation output recovery.
+  ///
+  /// In en, this message translates to:
+  /// **'Publication receipt'**
+  String get generationRecoveryReceipt;
+
+  /// Read-only generation output recovery.
+  ///
+  /// In en, this message translates to:
+  /// **'Recorded run'**
+  String get generationRecoveryRun;
+
+  /// Read-only generation output recovery.
+  ///
+  /// In en, this message translates to:
+  /// **'Recorded source'**
+  String get generationRecoverySource;
+
+  /// Read-only generation output recovery.
+  ///
+  /// In en, this message translates to:
+  /// **'The source revision was not recorded or could not be decoded.'**
+  String get generationRecoverySourceUnknown;
+
+  /// Read-only generation output recovery.
+  ///
+  /// In en, this message translates to:
+  /// **'The recorded source revision matches the chapter observed now. This alone does not verify the saved analysis.'**
+  String get generationRecoverySourceMatches;
+
+  /// Read-only generation output recovery.
+  ///
+  /// In en, this message translates to:
+  /// **'The recorded source differs from the chapter observed now.'**
+  String get generationRecoverySourceChanged;
+
+  /// Read-only generation output recovery.
+  ///
+  /// In en, this message translates to:
+  /// **'The current chapter could not be read, so its source revision could not be compared.'**
+  String get generationRecoverySourceUnavailable;
+
+  /// Read-only generation output recovery.
+  ///
+  /// In en, this message translates to:
+  /// **'The current selection record names this output. Recovery does not certify it as current analysis.'**
+  String get generationRecoverySelectionNames;
+
+  /// Read-only generation output recovery.
+  ///
+  /// In en, this message translates to:
+  /// **'No current selection evidence was found for this output. It may have been selected previously.'**
+  String get generationRecoverySelectionUnknown;
+
+  /// Read-only generation output recovery.
+  ///
+  /// In en, this message translates to:
+  /// **'No publication receipt was found. The PGN write may still have succeeded; inspect the chapter before generating again.'**
+  String get generationRecoveryReceiptAbsent;
+
+  /// Read-only generation output recovery.
+  ///
+  /// In en, this message translates to:
+  /// **'A publication receipt was recorded. It does not prove that this output is the current chapter.'**
+  String get generationRecoveryReceiptPresent;
+
+  /// Read-only generation output recovery.
+  ///
+  /// In en, this message translates to:
+  /// **'A publication receipt exists but could not be verified. The PGN write may have succeeded.'**
+  String get generationRecoveryReceiptUnreadable;
+
+  /// Read-only generation output recovery.
+  ///
+  /// In en, this message translates to:
+  /// **'Recovery does not resume retained builds. Use the normal generation flow only when its current source and saved configuration are validated.'**
+  String get generationRecoveryResumeRetained;
+
+  /// Read-only generation output recovery.
+  ///
+  /// In en, this message translates to:
+  /// **'This file differs from its recorded checksum. Inspect or export it as edited data.'**
+  String get generationRecoveryIntegrityChanged;
+
+  /// Read-only generation output recovery.
+  ///
+  /// In en, this message translates to:
+  /// **'This file matches the checksum in its run record; that record is not proof of publication.'**
+  String get generationRecoveryIntegrityMatches;
+
+  /// Recovery namespace enumeration failed; explicit refresh remains available.
+  ///
+  /// In en, this message translates to:
+  /// **'This folder could not be inspected. Available outputs remain accessible. Try refreshing.'**
+  String get generationRecoveryListFailed;
+
+  /// Generation recovery source selection.
+  ///
+  /// In en, this message translates to:
+  /// **'All retained chapter outputs'**
+  String get generationRecoveryAllSources;
+
+  /// Generation recovery source selection.
+  ///
+  /// In en, this message translates to:
+  /// **'No retained chapter namespaces were found in the repertoire library.'**
+  String get generationRecoveryNoSources;
+
+  /// Generation recovery source selection.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleted chapter files can be recovered here. If the entire repertoire was deleted, restore its folder from library recovery first.'**
+  String get generationRecoveryDeletedRepertoire;
 }
 
 class _AppLocalizationsDelegate

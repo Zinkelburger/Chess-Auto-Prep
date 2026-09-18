@@ -39,6 +39,14 @@ class BoundariesTest(unittest.TestCase):
                      'lib/services/eval/eval_canonicalize.dart'):
             self.assertTrue(violations(path, "export 'replacement.dart';"))
 
+    def test_legacy_only_recovery_owner_cannot_return(self):
+        for path in ('lib/features/generation/controllers/legacy_analysis_controller.dart',
+                     'lib/features/generation/widgets/legacy_analysis_dialog.dart'):
+            self.assertTrue(violations(path, "export 'generation_recovery.dart';"))
+        for source in ('class LegacyAnalysisController {}', 'repository.exportLegacy(snapshot);',
+                       'repository.readLegacy(path);', 'artifacts.inspectLegacy(path);'):
+            self.assertTrue(violations('lib/services/renamed_recovery.dart', source))
+
     def test_training_and_generation_owners_cannot_reintroduce_io(self):
         for feature in ('training', 'generation'):
             for layer in ('controllers', 'models', 'repositories'):

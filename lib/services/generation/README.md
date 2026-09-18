@@ -57,7 +57,7 @@ improves on 10...Nf6 (+0.35)` when the improvement probe backed that exact
 departure — and hangs our mainline off it as a variation; if the opponent
 departed, `{Outside the repertoire — prepared here: …}`. The same movetext is
 emitted a second time as real games (`ComposedCourse.modelGamePgns`) and the
-session controller writes it to `<repertoire>_model_games.pgn` beside the
+publication repository retains it as `model_games.pgn` in an immutable run directory for the
 course, for the PGN viewer; the in-course chapter stays the study copy.
 
 **Nothing writes prose comments.** A generated comment nobody asked for is

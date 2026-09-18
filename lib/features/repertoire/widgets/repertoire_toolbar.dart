@@ -592,7 +592,7 @@ class RepertoireActionsMenu extends StatelessWidget {
         ),
       if (onRecoverAnalysis != null)
         AppMenuEntry(
-          label: AppLocalizations.of(context).legacyAnalysisAction,
+          label: AppLocalizations.of(context).generationRecoveryAction,
           icon: Icons.history,
           onRun: onRecoverAnalysis!,
         ),

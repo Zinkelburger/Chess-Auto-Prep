@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:isolate';
 
 import '../models/generation_artifacts.dart';
+import '../models/generation_recovery.dart';
 import '../repositories/generation_artifact_repository.dart';
 import '../../../chess_core/generation/build_tree_node.dart';
 import '../../../chess_core/generation/expectimax_probe_codec.dart';
@@ -17,20 +18,21 @@ typedef SavedExpectimaxDatabase = ({BuildTree? tree, List<BuildTree> probes});
 
 /// A detached, read-only inspection. Parsed values never enter the live
 /// generated database, resume path or repository publication protocol.
-class LegacyAnalysisInspection {
-  LegacyAnalysisInspection(this.snapshot, this.items);
-  final GenerationArtifactSnapshot snapshot;
-  final List<LegacyAnalysisItem> items;
+class GenerationRecoveryInspection {
+  GenerationRecoveryInspection(this.snapshot, this.items);
+  final GenerationRecoverySnapshot snapshot;
+  final List<GenerationRecoveryItem> items;
 }
 
-class LegacyAnalysisItem {
-  const LegacyAnalysisItem({
-    required this.kind,
+class GenerationRecoveryItem {
+  const GenerationRecoveryItem({
+    required this.file,
     this.tree,
     this.trap,
     this.error,
   });
-  final GenerationArtifactKind kind;
+  final GenerationRecoveryFile file;
+  GenerationRecoveryFileKind get kind => file.kind;
   final BuildTree? tree;
   final TrapLineInfo? trap;
   final GenerationArtifactFailure? error;
@@ -50,92 +52,89 @@ class GenerationArtifacts {
     return Isolate.run(() => encodeTreeJson(document, indent: indent));
   }
 
-  Future<LegacyAnalysisInspection> inspectLegacy(String path) async {
-    final snapshot = await repository.readLegacy(path);
+  Future<GenerationRecoveryInspection> inspectRecovery(
+    GenerationRecoveryEntry entry,
+  ) async {
+    final snapshot = await repository.readRecovery(entry);
     final items = await Isolate.run(() {
-      final items = <LegacyAnalysisItem>[
-        for (final entry in snapshot.readFailures.entries)
-          LegacyAnalysisItem(kind: entry.key, error: entry.value),
-      ];
-      for (final entry in snapshot.payloads.entries) {
+      final items = <GenerationRecoveryItem>[];
+      for (final file in snapshot.files) {
+        void failure(Object error) => items.add(
+          GenerationRecoveryItem(
+            file: file,
+            error: error is GenerationArtifactFailure
+                ? error
+                : GenerationArtifactFailure(
+                    '$error',
+                    kind: GenerationArtifactFailureKind.decode,
+                  ),
+          ),
+        );
         void decodeTree(String text) {
           try {
             items.add(
-              LegacyAnalysisItem(kind: entry.key, tree: deserializeTree(text)),
+              GenerationRecoveryItem(file: file, tree: deserializeTree(text)),
             );
           } catch (error) {
-            items.add(
-              LegacyAnalysisItem(
-                kind: entry.key,
-                error: GenerationArtifactFailure(
-                  '$error',
-                  kind: GenerationArtifactFailureKind.decode,
-                ),
-              ),
-            );
+            failure(error);
           }
         }
 
+        if (file.error case final error?) failure(error);
+        final text = file.text;
+        if (text == null) continue;
         try {
-          switch (entry.key) {
-            case GenerationArtifactKind.tree:
-            case GenerationArtifactKind.partial:
-              decodeTree(entry.value);
-            case GenerationArtifactKind.probes:
-              final data = jsonDecode(entry.value) as Map<String, dynamic>;
+          switch (file.kind) {
+            case GenerationRecoveryFileKind.tree:
+            case GenerationRecoveryFileKind.partial:
+              decodeTree(text);
+            case GenerationRecoveryFileKind.probes:
+              final data = jsonDecode(text) as Map<String, dynamic>;
               for (final probe in data['trees'] as List) {
                 if (probe is String) {
                   decodeTree(probe);
                 } else {
-                  items.add(
-                    LegacyAnalysisItem(
-                      kind: entry.key,
-                      error: const GenerationArtifactFailure(
-                        'Invalid saved probe entry',
-                        kind: GenerationArtifactFailureKind.decode,
-                      ),
-                    ),
-                  );
+                  failure(const FormatException('Invalid saved probe entry'));
                 }
               }
-            case GenerationArtifactKind.traps:
-              final data = jsonDecode(entry.value) as Map<String, dynamic>;
+            case GenerationRecoveryFileKind.traps:
+              final data = jsonDecode(text) as Map<String, dynamic>;
               for (final trap in data['traps'] as List) {
                 try {
                   items.add(
-                    LegacyAnalysisItem(
-                      kind: entry.key,
+                    GenerationRecoveryItem(
+                      file: file,
                       trap: TrapLineInfo.fromJson(trap as Map<String, dynamic>),
                     ),
                   );
                 } catch (error) {
-                  items.add(
-                    LegacyAnalysisItem(
-                      kind: entry.key,
-                      error: GenerationArtifactFailure(
-                        '$error',
-                        kind: GenerationArtifactFailureKind.decode,
-                      ),
-                    ),
-                  );
+                  failure(error);
                 }
               }
+            case GenerationRecoveryFileKind.course:
+            case GenerationRecoveryFileKind.modelGames:
+            case GenerationRecoveryFileKind.manifest:
+            case GenerationRecoveryFileKind.receipt:
+              items.add(GenerationRecoveryItem(file: file));
+          }
+          if (!items.any((item) => identical(item.file, file))) {
+            items.add(GenerationRecoveryItem(file: file));
           }
         } catch (error) {
-          items.add(
-            LegacyAnalysisItem(
-              kind: entry.key,
-              error: GenerationArtifactFailure(
-                '$error',
-                kind: GenerationArtifactFailureKind.decode,
-              ),
-            ),
-          );
+          failure(error);
         }
       }
       return items;
     });
-    return LegacyAnalysisInspection(snapshot, List.unmodifiable(items));
+    return GenerationRecoveryInspection(snapshot, [
+      for (final item in items)
+        GenerationRecoveryItem(
+          file: snapshot.files.singleWhere((file) => file.kind == item.kind),
+          tree: item.tree,
+          trap: item.trap,
+          error: item.error,
+        ),
+    ]);
   }
 
   Future<GenerationArtifactProposal> prepareBundle(

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 
-import '../features/generation/widgets/legacy_analysis_dialog.dart';
+import '../features/generation/widgets/generation_recovery_dialog.dart';
 import '../l10n/generated/app_localizations.dart';
 import '../features/generation/services/generation_artifacts.dart';
 import '../infrastructure/generation/storage_generation_artifact_repository.dart';
@@ -11,6 +11,7 @@ import '../features/generation/controllers/generation_publication_controller.dar
 import '../infrastructure/documents/legacy_pgn_document_store.dart';
 import '../infrastructure/generation/storage_generation_draft_repository.dart';
 import '../services/storage/storage_factory.dart';
+import '../services/storage/app_paths.dart';
 
 GenerationPublicationController createGenerationPublication({
   required PgnDocumentStore? documents,
@@ -29,6 +30,8 @@ GenerationArtifacts createGenerationArtifacts({
   return GenerationArtifacts(
     StorageGenerationArtifactRepository(
       storage: storage,
+      recoveryRoot: () async =>
+          (await AppPaths.repertoiresDirectory(create: false)).path,
       documents: documents ?? LegacyPgnDocumentStore(storage),
     ),
   );
@@ -36,24 +39,26 @@ GenerationArtifacts createGenerationArtifacts({
 
 /// Captures a chapter path for a read-only dialog; navigation cannot redirect
 /// an open recovery view or its eventual export to a different chapter.
-Future<void> showLegacyAnalysisRecovery(
+Future<void> showGenerationRecovery(
   BuildContext context, {
-  required String path,
+  String? path,
   required GenerationArtifacts artifacts,
 }) => showDialog<void>(
   context: context,
-  builder: (context) => LegacyAnalysisDialog(
+  builder: (context) => GenerationRecoveryDialog(
     path: path,
     artifacts: artifacts,
     chooseExportDestination: (kind) async {
       final directory = await FilePicker.getDirectoryPath(
-        dialogTitle: AppLocalizations.of(context).legacyAnalysisExportDirectory,
+        dialogTitle: AppLocalizations.of(
+          context,
+        ).generationRecoveryExportDirectory,
       );
       if (directory == null) return null;
       return p.join(
         directory,
-        '${p.basenameWithoutExtension(path)}-recovered-${kind.name}-'
-        '${DateTime.now().microsecondsSinceEpoch}.json',
+        '${path == null ? 'Generated' : p.basenameWithoutExtension(path)}-recovered-${kind.name}-'
+        '${DateTime.now().microsecondsSinceEpoch}.${kind.extension}',
       );
     },
   ),

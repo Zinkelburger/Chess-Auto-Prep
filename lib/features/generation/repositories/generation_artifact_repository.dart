@@ -1,21 +1,21 @@
 import '../../documents/models/pgn_document.dart';
 import '../models/generation_artifacts.dart';
+import '../models/generation_recovery.dart';
 import '../models/generation_publication.dart';
 
 abstract interface class GenerationArtifactRepository {
   Future<GenerationArtifactSnapshot> read(String path);
 
-  /// Legacy outputs have no source identity. Preview only, never a baseline
-  /// for authoritative publication or an automatically resumed build.
-  Future<GenerationArtifactSnapshot> readLegacy(String path);
-
-  /// Copy the captured original bytes to a new file; never replace a file or
-  /// select the legacy data as the chapter's current generation.
-  Future<void> exportLegacy(
-    GenerationArtifactSnapshot snapshot,
-    GenerationArtifactKind kind,
-    String destination,
+  /// Read-only recovery over retained proposals/history and legacy sidecars.
+  /// None of these observations can select a generation or authorize resume.
+  Future<GenerationRecoverySources> listRecoverySources();
+  Future<GenerationRecoveryCatalog> listRecovery(String path);
+  Future<GenerationRecoverySnapshot> readRecovery(
+    GenerationRecoveryEntry entry,
   );
+
+  /// Export captured bytes to an exclusively created destination.
+  Future<void> exportRecovery(GenerationRecoveryFile file, String destination);
 
   Future<GenerationArtifactRun> begin(
     String path,

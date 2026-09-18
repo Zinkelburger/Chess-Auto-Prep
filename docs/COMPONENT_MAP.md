@@ -2040,33 +2040,45 @@ APIs, `ExpectimaxDatabase.persist`, trap filesystem helpers and obsolete eval-tr
 loader/tab implementations are deleted. `ExpectimaxProbeCodec` only encodes and
 decodes probes.
 
-Builder → Actions → **Recover older analysis…** opens the production
-`LegacyAnalysisDialog`. Its `LegacyAnalysisController` loads existing
-`_tree.json`, `_expectimax.json`, `_traps.json` and `_partial_tree.json` through
-`GenerationArtifactRepository.readLegacy`; `GenerationArtifacts.inspectLegacy`
-uses the existing tree/trap codecs off the UI isolate. Users browse tree/probe
-branches, evaluations, FENs, saved configuration and trap details. Each unreadable
-file/entry has its own localized failure; healthy siblings remain accessible.
-Technical diagnostics are optional.
+Builder → Actions → **Recover generated outputs…** opens the single production
+`GenerationRecoveryDialog`, owned by `GenerationRecoveryController`.
+`GenerationArtifactRepository.listRecovery` catalogs retained run directories
+under `.cap-generation/<chapter>/` and the older JSON/model-games sidecar set. Empty/error Builder
+Actions opens the same dialog with an initial source chooser. `listRecoverySources`
+discovers namespaces under the configured repertoire root without following
+links or entering hidden trash/staging folders; a deleted chapter remains
+reachable. Entire deleted repertoires must first use library restore. Selecting an output
+lazily loads it through `readRecovery`; `GenerationArtifacts.inspectRecovery`
+uses the pure codecs off the UI isolate. There is no second browser or writer.
 
-Native reads capture exact bytes with file identity checks. **Export original
-file…** chooses a destination folder and exclusively creates a new file from
-those captured bytes, preserving BOM, compression and even undecodable content.
-It never replaces a destination, changes the source files or selects an artifact
-generation. The view keeps its captured chapter identity; stale loads and closed
-file pickers cannot redirect an export. Refresh/reopen reads the originals again.
+Recovery values are separate from authoritative artifact snapshots. The view
+shows recorded run/source/configuration, source-revision comparison, per-file
+checksum evidence and publication/selection records. A missing publication
+receipt does **not** mean the PGN write failed; an old artifact directory does
+**not** prove it was never selected. Even a matching recorded revision/checksum
+is not certification of current analysis. PGN proposals and model games are
+readable as text; tree/probe/trap/partial payloads use the existing semantic
+inspection. Run manifests and receipts remain inspectable/exportable.
 
-Legacy files lack source revision evidence. The recovery view labels that
-provenance explicitly and does not transfer them into verified current analysis,
-training or the chapter. Legacy automatic resume is unsupported; unfinished
-positions/configuration remain inspectable/exportable, and users can start a
-fresh build. This is recovery access, not a claim of automatic-resume parity or
-lossless conversion of analysis into PGN.
-PGN commit and artifact selection are separate transactions: if the PGN saves
-but cache selection fails, the job reports the saved PGN and retained proposal,
-fails completion, and rejects the old cache for the new source. A browser for
-immutable failed proposals/current-generation history, retention/garbage-collection
-policy and cross-file atomicity remain outside this cutover.
+The native repository reads only fixed filenames, never paths from a manifest.
+Directory identity checks reject replaced runs; unsafe and missing files have
+isolated typed failures. Enumeration failure leaves older sidecars accessible
+and offers Refresh. Native observations capture exact bytes before decoding.
+**Export original file…** exclusively creates a new PGN/JSON file from those
+immutable bytes, preserving BOM, compression, edits and undecodable content.
+It never replaces a destination, changes originals or selects analysis. Uncertain
+export displays the destination for inspection. Stale loads, closed pickers and
+chapter navigation cannot redirect the captured export.
+
+The former legacy-only dialog/controller, `readLegacy`, `exportLegacy` and
+`inspectLegacy` APIs are retired with all consumers on the final recovery flow.
+Legacy files still lack historical source evidence. Recovery does not adopt
+analysis, transfer it into training, or resume any output. The normal generation
+flow alone can resume a validated current partial. PGN commit and artifact
+selection remain separate transactions: a cache-selection failure after PGN
+commit reports the saved PGN and retained output, without replay. Automatic
+legacy resume, retention/garbage collection and cross-file atomicity remain
+outside this responsibility.
 
 ### `lib/core/`
 
