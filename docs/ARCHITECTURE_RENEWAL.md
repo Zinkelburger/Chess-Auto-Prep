@@ -254,28 +254,28 @@ merges (57 on the first-parent history). Commit count is activity, not completio
 At that snapshot, six enforced and 17 unfinished features included zero complete
 features. The current inventory above separately records later deletions.
 
-The same measurement at reviewed integration checkpoint `a783a9f1` is:
+The same measurement at reviewed integration checkpoint `ad281842` is:
 
 | Tracked scope | September 16 | Current checkpoint | Change from September 16 |
 |---|---:|---:|---:|
-| All library Dart, including generated code | 218,957 | 225,827 | +6,870 (+3.1%) |
-| Viewer screen | 1,909 | 1,954 | +45 |
-| Builder screen | 1,191 | 1,467 | +276 |
+| All library Dart, including generated code | 218,957 | 225,815 | +6,858 (+3.1%) |
+| Viewer screen | 1,909 | 1,867 | −42 |
+| Builder screen | 1,191 | 1,468 | +277 |
 | Study screen | 880 | 1,050 | +170 |
 | Generation session controller | 1,321 | 1,447 | +126 |
 
-All-library code is down 11,164 lines from the reviewed `a6238ff5` snapshot,
-but none of these four consumers is smaller than September 16. Legacy
-`services/` still holds 42,518 lines and `widgets/` 49,930. Riverpod's production
+All-library code is down 11,176 lines from the reviewed `a6238ff5` snapshot,
+with Viewer now 42 lines below September 16; the other three consumers remain
+larger. Legacy `services/` still holds 42,560 lines and `widgets/` 49,667. Riverpod's production
 imports and package dependency are now deleted; the current inventory is six
 enforced and 14 unfinished feature directories, with none complete. The three
 removed feature directories contained unused code, not graduated workflows.
 
 Against the separate simplification baseline `fa7f309e`, the completed batch
-removes 13,677 handwritten library lines, with generated localization +22
-reported separately. The latest chapter Widgetbook fixture adds 14 lines, outside
-that library total. Of the removals, 11,757 lines come from unused analysis,
-eval-tree and other presentation retirement. These unrelated deletions cannot
+removes 13,802 handwritten library lines, with generated localization +135
+reported separately. Chapter read/create and deletion Widgetbook changes add 22 lines, outside
+that library total. Of the removals, 12,154 lines come from unused analysis,
+eval-tree and other presentation/custom-tab retirement. These unrelated deletions cannot
 satisfy another workflow's simplicity gate. Its screen and entire helper/owner
 graph must improve together. The current decision is **continue bounded
 consolidation**, not expand a broad rewrite or declare the architecture simpler
@@ -450,7 +450,9 @@ product owner to choose implementation details.
 | Chapter read/create consolidated (`d010bd5b`) | Existing catalog handles reads and exclusive creation through the app-selected document store; consumers accept only acknowledged writes | Deletes `ChapterStore`, its duplicate results, the Builder sibling cache and refresh fanout. Progressive course reads and captured selection guards survive A/B/A navigation, delayed creation, collisions and uncertainty. Complete scope: app −12 lines, Widgetbook fixture +14, combined +2 after a necessary isolate-capture repair. Ownership is clearer; this is not a substantial size reduction. Independent review, caller/native tests and desktop evidence pass. |
 | Study chapter actions consolidated (`3ba80b27`) | Menus dispatch directly to the screen’s existing commands using the captured chapter identity | Deletes the six-callback holder: whole four-file scope −29 lines, including the compact-menu stale-target repair. Independent review, 29 focused tests and wide/900px compact desktop evidence pass. The observed 750px toolbar overflow is repaired separately (`78fb52cc`, +13 production lines): existing save/rename controls adapt to compact width, with 26 focused tests and inspected native evidence. This is layout correctness growth; it does not change this action-dispatch scope’s −29 result. Whole Study remains Partial. |
 | Unused master-practice review retired (`def67780`) | Existing live entrypoints retain their database, explorer and generation behavior | Three unreachable production files and four exclusive tests/fixtures removed: −1,163 production lines, no replacement. Independent tracked-entrypoint review and 71 live-caller tests pass, with two explicit opt-in skips. This retires an unused feature, not an active workflow. |
-| Catalog remaining mutations are open | Captured document identity, recoverable namespace changes and training-reference ownership must agree before rename/move/delete can be complete | Splitter safety is repaired (`7e09cf81`, +306 handwritten lines). Baseline regressions prove replacement deletion and incomplete/late training-reference updates. Destination clobber is repaired at the existing native move boundary (`e59c351b`, +19 Dart/C lines); source identity and full relocation remain open. Do not add a rename journal facade before resolving stale training writes and path reuse; the proposed wider rewrite is not admitted. Existing-chapter mutation, line transfers, the temporary catalog adapter and legacy Library organizer still block whole-catalog completion. |
+| Dormant Viewer custom tabs retired (`cab63c49`) | Fixed workspace tabs use immutable titles; the screen uses its live Book, filter and game owners directly | Deletes an unreachable picker/database/reference-tab cycle, five maps, custom ID/title allocation and two widgets. Whole seven-file graph −397 production lines, including 87 removed from the screen. Independent control-flow/caller review, 47 focused tests and three native journeys pass. This removes dormant machinery from active consumers; it is not whole-Viewer graduation. |
+| Captured manual chapter deletion repaired (`c92ee2e6`) | Existing catalog captures the selected document revision before confirmation and validates managed roots before native quarantine | Removes path-only deletion from picker/Outline and cached-count automatic Undo cleanup. Conflicts preserve replacements; uncertainty retains selectable evidence without retry or stale selection effects. Undo returns lines but keeps the created chapter. Independent review, 192 focused tests and six native journeys pass. +272 handwritten app lines, +8 Widgetbook and +113 generated localization: safety growth, not simplification. Verified manual deletion is Linux-only; unsupported hosts refuse before mutation. |
+| Catalog remaining mutations are open | Captured document identity, recoverable namespace changes and training-reference ownership must agree before rename/move/delete can be complete | Splitter safety is repaired (`7e09cf81`, +306 handwritten lines). Manual replacement deletion is repaired above; baseline regressions still prove incomplete/late training-reference updates. Destination clobber is repaired at the existing native move boundary (`e59c351b`, +19 Dart/C lines); source identity and full relocation remain open. Do not add a rename journal facade before resolving stale training writes and path reuse; the proposed wider rewrite is not admitted. Existing-chapter mutation, line transfers, the temporary catalog adapter and legacy Library organizer still block whole-catalog completion. |
 | Complete the next domain | One domain's commands, consumers, design-system controls and legacy retirement finish together | Apply the same ownership/consumer review before expanding. Singular/plural repertoire consolidation follows actual remaining responsibilities, not another directory-only move. |
 
 The active plan contains decisions, remaining work and acceptance contracts.

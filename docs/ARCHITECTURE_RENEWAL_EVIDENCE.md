@@ -3548,3 +3548,101 @@ The earlier 900px-only limitation is closed for these 750px interactions; no
 arbitrary-width or other-host verification is implied. Reviewed integration
 `a783a9f1` totals 225,827 library Dart lines, +6,870 (+3.1%) over September 16
 and −11,164 against the growth-review snapshot.
+
+
+### Captured manual chapter deletion — 2026-09-18
+
+`c92ee2e6` completes the picker/Outline manual deletion responsibility through
+existing owners. The catalog captures a native PgnSnapshot before confirmation,
+validates the actual configured managed root and passes that constraint to the
+selected document store. Quarantine repeats path validation under the existing
+mutation lock. Trusted configured root aliases retain canonical identity and the
+repertoire directory guard; aliases beneath the root and external files are
+refused. Missing unrelated managed roots do not create directories or block
+external document open/save. Generic splitter quarantine remains available.
+No new owner, result hierarchy, journal or storage fallback is introduced.
+
+The picker captures its existing request identity; Outline reuses edit admission
+and viewRevision. Confirmed results can change only their still-current view.
+Uncertain results invalidate/refresh observed rows without announcing removal or
+following a missing source. A still-mounted caller shows original-file results
+even after A→B→A navigation, preserving selectable recovery paths. Files remain
+under sibling `.cap-pgn-history`, not OS trash or repertoire-folder recovery.
+There is no chapter restore UI. Verified manual deletion is Linux-only;
+unsupported hosts refuse before mutation.
+
+The old path-only service forwarding method and cached-line-count Undo cleanup
+are deleted. **Move lines to a new chapter → Undo** returns the moved lines but
+keeps the chapter; both messages state that behavior. The retained file protects
+later file/header additions from automatic deletion. Index-based line transfer
+itself is not certified against arbitrary external replacement or reordering.
+Full relocation/source-identity and late training-reference writes remain open.
+
+Final handwritten scope is **15 library files, 7,170 → 7,442 (+272)**; two
+Widgetbook files add eight lines, ARB adds 67 and generated localization adds
+113 separately. This is safety growth, not a simplification pass. Original actual
+picker regressions failed for changed and equal-text replacement. Restoring the
+lexical-only guard also makes the new alias-lock test fail while native quarantine
+is held; the repaired production guard passes. Final **192 focused tests pass**,
+including policy, real native quarantine, duplicate admission/release, A/B/A,
+selectable uncertainty and existing mutation callers. Analyze/lint passes with
+64 existing infos, zero warnings/errors and 45 checker cases. Independent review
+approves exact c92ee2e6. Its last change adds only braces to a guard and fixture.
+
+Six Linux native journeys pass through real picker and Outline components:
+confirmed deletion, equal-text replacement conflict and post-move uncertainty
+for each. Actual main-app Library→Outline confirmation and replacement refusal
+were also inspected at 1280×720. Root reviewed the [confirmation](images/renewal-chapter-delete-confirmation.png)
+and [preserved replacement](images/renewal-chapter-delete-replacement.png)
+screenshots; preview is stopped. These results do not graduate the whole catalog.
+
+### Dormant Viewer custom-tab retirement — 2026-09-18
+
+`cab63c49` against `24a8f3fa` removes the custom database picker/reference-tab
+subsystem without adding a replacement. The tracked import/export/part inventory
+covers 1,825 Dart files, main plus 22 external non-test roots and conditional
+URIs, with no missing local edges. The imports still reach the two widgets;
+**control flow**, not that graph alone, proves them dormant: the nullable picker
+ID is never assigned a non-null value, the only database opener callback sits
+behind that impossible picker branch, and both custom-tab allocation calls are
+inside the same closed cycle. Workspace selection/history cannot invent titles.
+Root and an independent agent reviewed the exact callers and removed code.
+
+Deletes five screen maps, picker identity, custom ID/title allocation, database
+and reference-reader branches, two exclusive widgets and the picker's exclusive
+test. Existing PgnWorkspace has immutable fixed titles; Filters has an explicit
+pane branch. The full seven-file production graph is **3,608 → 3,211 (−397)**,
+35 added and 432 deleted. The Viewer screen falls **1,954 → 1,867 (−87)**.
+Live Book cursor/fullscreen behavior, filter origin/return, database Tree,
+collection operations, PGN/TXT opening, SCID export, copy, Add-to-Study and disposal
+retain their existing owners. This retires dormant machinery in active consumers,
+not a new capability or whole-Viewer completion.
+
+Fixed-tab tests retain reorder, background close, reopening and narrow overflow
+coverage previously exercised using artificial custom tabs. All **47 focused
+tests pass**; three Linux native journeys cover filters, fullscreen/presentation
+and collection order. Analyze/lint passes with 63 existing infos, no warnings/
+errors and 45 checker cases. Retirement adds two paths/five unique symbols;
+the unrelated player-selection database opener is retained. Theme consumers
+fall **210 → 208**; feature inventory/debt remain 20 directories and 1,244 entries.
+
+
+Final Viewer evidence commit `f1ff6df1` changes only component documentation and
+two screenshots; production remains the independently approved cab63c49.
+Root inspected the actual 1280×720 [fixed tabs and Filter](images/renewal-viewer-fixed-tabs.png)
+and [Books pane](images/renewal-viewer-books.png); the disposable preview is
+stopped. An attempted `.si5` last-file preference fixture was outside the live
+PGN/TXT picker contract, not SCID-opening parity evidence. That screenshot was
+excluded and preferences restored. The actual supported capability is SCID
+export, covered by the existing writer roundtrip tests; no decoder was added.
+
+Combined production integration `ad281842` passes **123 affected tests, zero
+failures**, plus analyze/lint (63 existing infos, zero warnings/errors, 45 checker
+cases). Final documentation lint and local-file links pass. The combined
+retirement manifest and native no-clobber implementation are preserved. All
+tracked library Dart totals **225,815 lines**: +6,858 (+3.1%) over September 16,
+−11,176 against the reviewed growth snapshot. Against `fa7f309e`, handwritten
+library changes are +2,265/−16,067 (**−13,802**), with generated localization
++135 separately. Unused/dormant retirement accounts for 12,154 removed lines;
+it does not establish whole-workflow maintainability. Feature graduation remains
+zero and the renewal remains Partial.

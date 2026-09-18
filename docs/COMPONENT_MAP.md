@@ -134,7 +134,8 @@ renders file listings before enriching them with catalog `chapterSections`
 (header-only course grouping), rejecting results from replaced folder requests.
 Picker creation inherits an available sibling color; unreadable color sources
 fail before creation. Builder and Outline capture their explicit color. Chapter
-rename/delete and Outline line transfers remain legacy migration work.
+rename/move and Outline line transfers remain legacy migration work; manual
+deletion uses captured native quarantine as described in the catalog section.
 
 `DocumentRepertoireRepository` adapts the shared `PgnDocumentStore` for chapter
 reads, line edits/deletion, imports, metadata replacement, append and undo.
@@ -163,10 +164,10 @@ added-move steps; a batch commits once. File-backed undo validates its expected
 content and advances only its proven predecessor after commit. Conflicts/failures
 retain history. Scratch-tree deletion undo remains independent of file mutation.
 The import dialog keeps its draft on conflict/read/write failure. Missing
-destinations fail rather than reporting success. Undo still uses S0's
-decoded-content provenance and explicit exact-result reconciliation after an
-uncertain acknowledgement; persistent native undo receipts and Builder draft
-recovery are not complete. See `test/features/repertoires/repertoire_mutation_safety_test.dart`,
+destinations fail rather than reporting success. Native append/undo uses validated before/after snapshot receipts; successive
+undo advances only a proven predecessor and retains unresolved history on
+conflict or uncertain acknowledgement. Builder workspace recovery is implemented;
+remaining catalog mutations and line transfers still need their own cutovers. See `test/features/repertoires/repertoire_mutation_safety_test.dart`,
 `test/features/repertoires/repertoire_line_save_switch_test.dart` and
 `test/infrastructure/repertoires/document_repertoire_repository_test.dart`.
 
