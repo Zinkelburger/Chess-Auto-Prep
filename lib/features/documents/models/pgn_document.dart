@@ -98,3 +98,49 @@ final class PgnWriteUncertain extends PgnWriteResult {
   final PgnRevision? installedRevision;
   final String? recoveryPath;
 }
+
+/// Quarantine is separate from replacement: its acknowledgement proves the
+/// captured source is absent and its exact native object remains recoverable.
+sealed class PgnQuarantineResult {
+  const PgnQuarantineResult();
+}
+
+final class PgnQuarantined extends PgnQuarantineResult {
+  const PgnQuarantined({
+    required this.before,
+    required this.retained,
+    required this.recoveryPath,
+  });
+  final PgnSnapshot before;
+  final PgnSnapshot retained;
+  final String recoveryPath;
+}
+
+final class PgnQuarantineConflict extends PgnQuarantineResult {
+  const PgnQuarantineConflict(this.current);
+  final PgnSnapshot? current;
+}
+
+final class PgnQuarantineFailed extends PgnQuarantineResult {
+  const PgnQuarantineFailed(this.error);
+  final Object error;
+}
+
+/// The move may have happened. Keep both recovery locations; neither absence
+/// nor equal decoded text authorizes retrying or reporting successful removal.
+final class PgnQuarantineUncertain extends PgnQuarantineResult {
+  const PgnQuarantineUncertain({
+    required this.error,
+    required this.before,
+    required this.quarantinePath,
+    required this.recoveryPath,
+    required this.observedSource,
+    required this.observedQuarantine,
+  });
+  final Object error;
+  final PgnSnapshot before;
+  final String quarantinePath;
+  final String recoveryPath;
+  final PgnSnapshot? observedSource;
+  final PgnSnapshot? observedQuarantine;
+}

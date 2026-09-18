@@ -7,6 +7,12 @@ import 'package:chess_auto_prep/models/pgn_game_entry.dart';
 import '../../support/scripted_document_store.dart';
 
 class Repository implements PgnCollectionRepository {
+  @override
+  bool get supportsQuarantine => false;
+  @override
+  Future<PgnQuarantineResult> quarantine(PgnSnapshot baseline) async =>
+      PgnQuarantineFailed(UnsupportedError('Unused in this fixture'));
+
   final writes = <Map<String, String>>[];
   final recoveries = <String>[];
   Future<PgnWriteResult> Function()? outcome;

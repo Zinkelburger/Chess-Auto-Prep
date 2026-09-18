@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import '../../features/documents/models/pgn_document.dart';
 import '../../features/documents/repositories/pgn_document_store.dart';
 import '../../utils/atomic_file.dart';
+import '../../services/storage/file_mutation_service.dart';
 import '../../utils/file_text_reader.dart';
 import '../../utils/pgn_compression.dart';
 
@@ -127,6 +128,120 @@ class NativePgnDocumentStore implements PgnDocumentStore {
       });
     } catch (error) {
       return PgnReadFailed(error);
+    }
+  }
+
+  @override
+  bool get supportsQuarantine => Platform.isLinux;
+
+  @override
+  Future<PgnQuarantineResult> quarantine(PgnSnapshot baseline) async {
+    if (!supportsQuarantine) {
+      return PgnQuarantineFailed(
+        UnsupportedError('Verified quarantine is unavailable'),
+      );
+    }
+    PgnQuarantineResult? completed;
+    try {
+      return await _guard(baseline.path, () async {
+        return completed = await _quarantineGuarded(baseline);
+      });
+    } catch (error) {
+      if (completed case final PgnQuarantined saved) {
+        return PgnQuarantineUncertain(
+          error: error,
+          before: saved.before,
+          quarantinePath: saved.retained.path,
+          recoveryPath: saved.recoveryPath,
+          observedSource: null,
+          observedQuarantine: saved.retained,
+        );
+      }
+      if (completed is PgnQuarantineUncertain) return completed!;
+      return PgnQuarantineFailed(error);
+    }
+  }
+
+  Future<PgnQuarantineResult> _quarantineGuarded(PgnSnapshot baseline) async {
+    String? destination;
+    String? recoveryPath;
+    var moveAttempted = false;
+    PgnSnapshot? retained;
+    String? canonical;
+    try {
+      canonical = await _path(baseline.path);
+      final source = canonical;
+      final parent = Directory(p.dirname(source));
+      final receipt = await FileMutationService.instance.quarantineFile(
+        File(source),
+        allowedRoot: parent,
+        quarantineRoot: Directory(p.join(parent.path, '.cap-pgn-history')),
+        beforeMove: (path) async {
+          destination = path;
+          final initial = await _observe(source);
+          if (initial.status == 1) throw const _Conflict(null);
+          final current = await _snapshot(source, initial);
+          if (current.revision != baseline.revision) throw _Conflict(current);
+          recoveryPath = await _preserve(source, initial);
+          // Preservation can await disk I/O. Revalidate immediately before the
+          // namespace move while retaining the same parent-directory mutex.
+          final latest = await _observe(source);
+          if (latest.status == 1) throw const _Conflict(null);
+          final checked = await _snapshot(source, latest);
+          if (checked.revision != baseline.revision) throw _Conflict(checked);
+        },
+        installNoReplace: (path) async {
+          moveAttempted = true;
+          try {
+            await movePathNoReplace(source, path);
+          } on NativeNameCollision {
+            moveAttempted = false;
+            rethrow;
+          }
+        },
+        afterMove: (path) async {
+          await _flushDirectory(p.dirname(source));
+          await _flushDirectory(p.dirname(path));
+          final removed = await _observe(source);
+          final saved = await _snapshot(path, await _observe(path));
+          if (removed.status != 1 ||
+              saved.revision.nativeIdentity !=
+                  baseline.revision.nativeIdentity ||
+              saved.revision.sha256 != baseline.revision.sha256) {
+            throw StateError(
+              'Quarantined document changed before acknowledgement',
+            );
+          }
+          retained = saved;
+        },
+      );
+      if (receipt == null) return const PgnQuarantineConflict(null);
+      return PgnQuarantined(
+        before: baseline,
+        retained: retained!,
+        recoveryPath: recoveryPath!,
+      );
+    } on _Conflict catch (conflict) {
+      return PgnQuarantineConflict(conflict.current);
+    } catch (error) {
+      if (!moveAttempted) return PgnQuarantineFailed(error);
+      Future<PgnSnapshot?> observed(String path) async {
+        try {
+          final value = await _observe(path);
+          return value.status == 0 ? await _snapshot(path, value) : null;
+        } catch (_) {
+          return null;
+        }
+      }
+
+      return PgnQuarantineUncertain(
+        error: error,
+        before: baseline,
+        quarantinePath: destination!,
+        recoveryPath: recoveryPath!,
+        observedSource: await observed(canonical!),
+        observedQuarantine: await observed(destination!),
+      );
     }
   }
 

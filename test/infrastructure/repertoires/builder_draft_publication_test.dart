@@ -13,6 +13,11 @@ import 'package:path/path.dart' as p;
 class _InterceptingStore implements PgnDocumentStore {
   _InterceptingStore(this.delegate, this.onSave);
   final PgnDocumentStore delegate;
+  @override
+  bool get supportsQuarantine => delegate.supportsQuarantine;
+  @override
+  Future<PgnQuarantineResult> quarantine(PgnSnapshot baseline) =>
+      delegate.quarantine(baseline);
   final Future<PgnWriteResult> Function(PgnSnapshot, String) onSave;
   @override
   Future<PgnOpenResult> open(String path) => delegate.open(path);

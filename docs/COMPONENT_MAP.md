@@ -912,6 +912,15 @@ BOM/line-ending changes from conflict checks. The native package
 hashes and codecs run off the UI isolate. Prior bytes are retained under each
 parent's `.cap-pgn-history/`; post-install failures require reconciliation.
 
+The same boundary exposes `supportsQuarantine` and `quarantine(snapshot)`.
+Linux validates the captured native revision inside `FileMutationService`'s
+existing parent lock, preserves raw baseline bytes, and moves the source into
+that recovery directory without replacing another destination. Success requires
+source absence, the retained identity/digest, and directory flushes; ambiguous
+post-move state retains both recovery paths and reports uncertainty. An external
+editor can race final validation and rename, so this is not identity-based
+filesystem compare-and-swap. Legacy adapters report unsupported before mutation.
+
 Linux new-repertoire creation uses the staged publication path below; the remaining
 chapter/editor/generation APIs and other operating systems retain their documented
 legacy adapters. This is partial adoption, not a repository-wide migration.
