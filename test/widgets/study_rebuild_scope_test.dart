@@ -6,7 +6,6 @@ import 'package:chess_auto_prep/widgets/chess_board_widget.dart';
 import 'package:chess_auto_prep/widgets/engine/inline_engine_bar.dart';
 import 'package:chess_auto_prep/widgets/interactive_pgn_editor.dart';
 import 'package:chess_auto_prep/widgets/study/study_board_pane.dart';
-import 'package:chess_auto_prep/widgets/study/chapter_manager_dialog.dart';
 import 'package:chess_auto_prep/widgets/study/study_chapter_actions.dart';
 import 'package:chess_auto_prep/widgets/study/study_chapter_sidebar.dart';
 import 'package:chess_auto_prep/widgets/study/study_picker_bar.dart';
@@ -42,13 +41,24 @@ void main() {
         tester,
         settings,
         MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Builder(
             builder: (context) => Scaffold(
               body: TextButton(
-                onPressed: () => showChapterManagerDialog(
-                  context,
-                  study: study,
-                  editChapter: (_) async {},
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (_) => Dialog(
+                    child: SizedBox(
+                      width: 520,
+                      height: 600,
+                      child: StudyChapterSidebar(
+                        study: study,
+                        inlineActions: true,
+                        onChapterAction: (_, _) {},
+                      ),
+                    ),
+                  ),
                 ),
                 child: const Text('Open manager'),
               ),

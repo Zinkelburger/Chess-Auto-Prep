@@ -1450,5 +1450,58 @@
         "type": "String"
       }
     }
+  },
+  "studyChapterListTitle": "Chapters ({count})",
+  "@studyChapterListTitle": {
+    "description": "Study chapter list control: studyChapterListTitle",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "studyNewChapter": "New chapter",
+  "@studyNewChapter": {
+    "description": "Study chapter list control: studyNewChapter"
+  },
+  "studySearchChapters": "Search chapters",
+  "@studySearchChapters": {
+    "description": "Study chapter list control: studySearchChapters"
+  },
+  "studyFilteredReorder": "Reordering is off while searching",
+  "@studyFilteredReorder": {
+    "description": "Study chapter list control: studyFilteredReorder"
+  },
+  "studyDragReorder": "Drag to reorder",
+  "@studyDragReorder": {
+    "description": "Study chapter list control: studyDragReorder"
+  },
+  "studyNoMatchingChapters": "No matching chapters",
+  "@studyNoMatchingChapters": {
+    "description": "Study chapter list control: studyNoMatchingChapters"
+  },
+  "studyChapterOpenNow": "Open now",
+  "@studyChapterOpenNow": {
+    "description": "Study chapter list control: studyChapterOpenNow"
+  },
+  "studyEditChapter": "Edit chapter",
+  "@studyEditChapter": {
+    "description": "Study chapter list control: studyEditChapter"
+  },
+  "studyDeleteChapter": "Delete chapter",
+  "@studyDeleteChapter": {
+    "description": "Study chapter list control: studyDeleteChapter"
+  },
+  "studyKeepOneChapter": "A study needs at least one chapter",
+  "@studyKeepOneChapter": {
+    "description": "Study chapter list control: studyKeepOneChapter"
+  },
+  "studyChapterActions": "Chapter actions",
+  "@studyChapterActions": {
+    "description": "Study chapter list control: studyChapterActions"
+  },
+  "studyChaptersDone": "Done",
+  "@studyChaptersDone": {
+    "description": "Study chapter list control: studyChaptersDone"
   }
 }

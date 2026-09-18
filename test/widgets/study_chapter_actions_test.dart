@@ -69,6 +69,7 @@ void main() {
     bool named = false,
     bool uncertainSave = false,
     double scale = 1,
+    bool light = false,
   }) async {
     tester.view.physicalSize = Size(width ?? (compact ? 900 : 1500), 1100);
     tester.view.devicePixelRatio = 1;
@@ -123,7 +124,7 @@ void main() {
           ChangeNotifierProvider<AppState>.value(value: app),
         ],
         child: MaterialApp(
-          theme: AppTheme.dark(),
+          theme: light ? AppTheme.light() : AppTheme.dark(),
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           builder: (context, child) => MediaQuery(
@@ -209,6 +210,163 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  for (final light in [false, true]) {
+    testWidgets(
+      'manager search, selection and dismissal at 200% (${light ? 'light' : 'dark'})',
+      (tester) async {
+        final study = await host(
+          tester,
+          true,
+          width: 750,
+          scale: 2,
+          light: light,
+        );
+        study.renameChapter(
+          1,
+          'Second chapter with a very long descriptive title',
+        );
+        await openAction(tester, 'Manage & reorder chapters…');
+        final dialog = find.byType(Dialog);
+        final second = find.descendant(
+          of: dialog,
+          matching: find.text(
+            'Second chapter with a very long descriptive title',
+          ),
+        );
+        await tester.tap(second);
+        await tester.pumpAndSettle();
+        expect(study.chapterIndex, 1);
+        expect(
+          tester.widget<Text>(second).style!.color,
+          (light ? AppTheme.light() : AppTheme.dark())
+              .colorScheme
+              .onPrimaryContainer,
+        );
+        expect(dialog, findsOneWidget);
+        final search = find.descendant(
+          of: dialog,
+          matching: find.byType(TextField),
+        );
+        await tester.enterText(search, ' first ');
+        await tester.pumpAndSettle();
+        expect(
+          find.descendant(
+            of: dialog,
+            matching: find.byType(ReorderableListView),
+          ),
+          findsNothing,
+        );
+        expect(
+          find.descendant(of: dialog, matching: find.text('First')),
+          findsOneWidget,
+        );
+        expect(second, findsNothing);
+        await tester.enterText(search, 'no match');
+        await tester.pumpAndSettle();
+        expect(find.text('No matching chapters'), findsOneWidget);
+        await tester.tap(find.byTooltip('Clear search'));
+        await tester.pumpAndSettle();
+        expect(
+          find.descendant(
+            of: dialog,
+            matching: find.byType(ReorderableListView),
+          ),
+          findsOneWidget,
+        );
+        expect(second, findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        expect(dialog, findsNothing);
+        await openAction(tester, 'Manage & reorder chapters…');
+        expect(
+          tester
+              .widget<TextField>(
+                find.descendant(of: dialog, matching: find.byType(TextField)),
+              )
+              .controller!
+              .text,
+          isEmpty,
+        );
+        await tester.tap(find.text('Done'));
+        await tester.pumpAndSettle();
+        expect(dialog, findsNothing);
+        expect(tester.takeException(), isNull);
+        await study.flushSave();
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
+  testWidgets('manager edit button retains chapter through pre-frame reorder', (
+    tester,
+  ) async {
+    final study = await host(tester, true);
+    await openAction(tester, 'Manage & reorder chapters…');
+    final edit = tester.widget<IconButton>(
+      find
+          .byWidgetPredicate(
+            (w) => w is IconButton && w.tooltip == 'Edit chapter',
+          )
+          .first,
+    );
+    study.reorderChapter(0, 1);
+    edit.onPressed!();
+    await tester.pumpAndSettle();
+    final field = find.widgetWithText(TextField, 'First');
+    await tester.enterText(field, 'Edited original');
+    await tester.tap(find.widgetWithText(ElevatedButton, 'Save'));
+    await tester.pumpAndSettle();
+    expect(study.chapterList.chapters.map((c) => c.name), [
+      'Second',
+      'Edited original',
+    ]);
+    expect(find.byType(Dialog), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await study.flushSave();
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  for (final replace in [false, true]) {
+    testWidgets(
+      'manager delete confirmation ${replace ? 'rejects replacement' : 'follows reorder'}',
+      (tester) async {
+        final study = await host(tester, true);
+        await openAction(tester, 'Manage & reorder chapters…');
+        await tester.tap(find.byTooltip('Delete chapter').first);
+        await tester.pumpAndSettle();
+        if (replace) {
+          await study.newStudy('Replacement');
+        } else {
+          study.reorderChapter(0, 1);
+        }
+        await tester.tap(find.widgetWithText(TextButton, 'Delete'));
+        await tester.pumpAndSettle();
+        expect(study.chapterList.chapters, hasLength(1));
+        expect(
+          study.chapterList.chapters.single.name,
+          replace ? 'Chapter 1' : 'Second',
+        );
+        expect(
+          tester
+              .widget<IconButton>(
+                find.byWidgetPredicate(
+                  (w) =>
+                      w is IconButton &&
+                      w.tooltip == 'A study needs at least one chapter',
+                ),
+              )
+              .onPressed,
+          isNull,
+        );
+        expect(find.byType(Dialog), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await study.flushSave();
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
 
   for (final compact in [false, true]) {
     final layout = compact ? 'compact' : 'wide';

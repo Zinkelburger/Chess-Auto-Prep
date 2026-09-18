@@ -1105,4 +1105,42 @@ class AppLocalizationsEn extends AppLocalizations {
   String chapterDeleteContext(String path, String message) {
     return '$path\n$message';
   }
+
+  @override
+  String studyChapterListTitle(int count) {
+    return 'Chapters ($count)';
+  }
+
+  @override
+  String get studyNewChapter => 'New chapter';
+
+  @override
+  String get studySearchChapters => 'Search chapters';
+
+  @override
+  String get studyFilteredReorder => 'Reordering is off while searching';
+
+  @override
+  String get studyDragReorder => 'Drag to reorder';
+
+  @override
+  String get studyNoMatchingChapters => 'No matching chapters';
+
+  @override
+  String get studyChapterOpenNow => 'Open now';
+
+  @override
+  String get studyEditChapter => 'Edit chapter';
+
+  @override
+  String get studyDeleteChapter => 'Delete chapter';
+
+  @override
+  String get studyKeepOneChapter => 'A study needs at least one chapter';
+
+  @override
+  String get studyChapterActions => 'Chapter actions';
+
+  @override
+  String get studyChaptersDone => 'Done';
 }
