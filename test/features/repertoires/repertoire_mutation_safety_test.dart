@@ -237,6 +237,67 @@ void main() {
     },
   );
 
+  test(
+    'bulk cut renews only its successful refresh and supports another cut',
+    () async {
+      await file.writeAsString(
+        '$original\n[Event "Second"]\n\n1. d4 d5 *\n\n[Event "Third"]\n\n1. c4 e5 *\n',
+      );
+      await controller.document.loadRepertoire();
+      final initialGeneration = controller.document.loadGeneration;
+      final first = await controller.document.deleteLines([
+        controller.document.repertoireLines.first,
+      ], expectedGeneration: initialGeneration);
+      expect(first!.removed, 1);
+      expect(first.refreshedGeneration, greaterThan(initialGeneration));
+      expect(first.remainingLines, hasLength(2));
+      final second = await controller.document.deleteLines([
+        first.remainingLines!.first,
+      ], expectedGeneration: first.refreshedGeneration!);
+      expect(second!.removed, 1);
+      expect(second.remainingLines, hasLength(1));
+      expect(await file.readAsString(), contains('[Event "Third"]'));
+      final generation = controller.document.loadGeneration;
+      final noOp = await controller.document.deleteLines(
+        [],
+        expectedGeneration: generation,
+      );
+      expect(noOp!.removed, 0);
+      expect(noOp.refreshedGeneration, isNull);
+      expect(noOp.remainingLines, hasLength(1));
+      expect(controller.document.loadGeneration, generation);
+    },
+  );
+
+  for (final missing in [false, true]) {
+    test(
+      'bulk cut does not renew after ${missing ? 'missing source' : 'failed refresh'}',
+      () async {
+        final generation = controller.document.loadGeneration;
+        final line = controller.document.repertoireLines.single;
+        if (missing) {
+          await file.delete();
+        } else {
+          decoder.beforeBuild = () async =>
+              throw StateError('refresh unavailable');
+        }
+        final receipt = await controller.document.deleteLines([
+          line,
+        ], expectedGeneration: generation);
+        expect(receipt, isNotNull);
+        expect(receipt!.removed, missing ? 0 : 1);
+        expect(receipt.refreshedGeneration, isNull);
+        expect(receipt.remainingLines, isNull);
+        expect(
+          await controller.document.deleteLines([
+            line,
+          ], expectedGeneration: controller.document.loadGeneration),
+          isNull,
+        );
+      },
+    );
+  }
+
   for (final bulk in [false, true]) {
     test(
       'a late ${bulk ? 'bulk' : 'single'} deletion cannot clear a new chapter',
@@ -259,7 +320,9 @@ void main() {
         );
         final line = controller.document.repertoireLines.single;
         final deletion = bulk
-            ? controller.document.deleteLines([line])
+            ? controller.document.deleteLines([
+                line,
+              ], expectedGeneration: controller.document.loadGeneration)
             : controller.document.deleteLine(line);
         await repository.committed.future;
         final other = File(p.join(directory.path, 'other.pgn'));
@@ -273,7 +336,20 @@ void main() {
         );
         expect(controller.document.isLoading, isTrue);
         repository.resume.complete();
-        await deletion;
+        final receipt = await deletion;
+        if (bulk) {
+          expect(receipt, isNotNull);
+          final result =
+              receipt
+                  as ({
+                    int removed,
+                    int? refreshedGeneration,
+                    List<dynamic>? remainingLines,
+                  });
+          expect(result.removed, 1);
+          expect(result.refreshedGeneration, isNull);
+          expect(result.remainingLines, isNull);
+        }
         await switched;
         controller.selectLine(controller.document.repertoireLines.single);
         final tree = controller.board.tree;

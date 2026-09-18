@@ -2620,5 +2620,26 @@
   "boardUsePosition": "Use position",
   "@boardUsePosition": {
     "description": "Study and PGN control: boardUsePosition"
+  },
+  "generationSourceChanged": "The chapter changed. Close this configuration and open it again.",
+  "generationConfigurationRefreshRequired": "Reload the chapter and reopen this configuration before making further changes.",
+  "generationCutUnconfirmed": "The cut could not be confirmed. Reload the chapter before making further changes.",
+  "@generationSourceChanged": {
+    "description": "Builder generation configuration admission and cut recovery feedback."
+  },
+  "@generationConfigurationRefreshRequired": {
+    "description": "Builder generation configuration admission and cut recovery feedback."
+  },
+  "@generationCutUnconfirmed": {
+    "description": "Builder generation configuration admission and cut recovery feedback."
+  },
+  "generationCutRefreshRequired": "{count, plural, =0{The chapter could not be refreshed. Reload it and reopen this configuration before making further changes.} =1{Removed 1 line, but this configuration could not be refreshed. Reload the chapter before making further changes.} other{Removed {count} lines, but this configuration could not be refreshed. Reload the chapter before making further changes.}}",
+  "@generationCutRefreshRequired": {
+    "description": "Acknowledged cut count when the original chapter view cannot be refreshed.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   }
 }

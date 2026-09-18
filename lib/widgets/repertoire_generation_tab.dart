@@ -11,6 +11,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../features/documents/models/pgn_document.dart';
+import '../l10n/generated/app_localizations.dart';
 import '../core/generation_session_controller.dart';
 import '../core/generation_session_types.dart';
 import '../chess_core/generation/build_tree_node.dart';
@@ -32,9 +33,13 @@ class RepertoireGenerationTab extends StatefulWidget {
   final TreeBuildConfig? initialConfig;
 
   /// Removes the repertoire lines whose move-sequence keys are given, and
-  /// reports how many went. Null when the host cannot edit the file, which
-  /// hides the size control rather than offering a button that cannot work.
-  final Future<int> Function(Set<String> droppedKeys)? onTrimLines;
+  /// reports acknowledged removals and the refreshed projection. A null result
+  /// rejects admission; null remaining moves require reload before another cut.
+  /// A null callback hides the size control when the host cannot edit.
+  final Future<({int removed, List<List<String>>? remainingMoves})?> Function(
+    Set<String> droppedKeys,
+  )?
+  onTrimLines;
   final bool isWhiteRepertoire;
   final RepertoireMetadata? currentRepertoire;
   final List<String> currentMoveSequence;
@@ -43,8 +48,9 @@ class RepertoireGenerationTab extends StatefulWidget {
   /// that starts from the initial position).
   final String repertoireStartFen;
 
-  /// Capture a fresh chapter receiver for each run, including repeated builds.
-  final Future<void> Function(PgnSnapshot) Function() createPublicationReceiver;
+  /// Capture a fresh chapter receiver for each run; null rejects stale admission.
+  final Future<void> Function(PgnSnapshot)? Function()
+  createPublicationReceiver;
   final GenerationSessionController generationController;
 
   /// Move sequences of the lines the repertoire already holds, so the
@@ -83,6 +89,7 @@ class _RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   /// The size the control currently shows.
   int _keepLines = 0;
   bool _trimming = false;
+  List<List<String>>? _remainingLineMoves;
 
   /// Memoised "how many lines in the file this cut would remove".
   ///
@@ -108,6 +115,10 @@ class _RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   @override
   void initState() {
     super.initState();
+    _remainingLineMoves = List.unmodifiable([
+      for (final moves in widget.existingLineMoves)
+        List<String>.unmodifiable(moves),
+    ]);
     unawaited(_checkForPartialTree());
   }
 
@@ -221,6 +232,21 @@ class _RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       return;
     }
 
+    final labels = AppLocalizations.of(context);
+    if (_remainingLineMoves == null) {
+      showAppSnackBar(
+        context,
+        labels.generationConfigurationRefreshRequired,
+        isError: true,
+      );
+      return;
+    }
+    final onPublished = widget.createPublicationReceiver();
+    if (onPublished == null) {
+      showAppSnackBar(context, labels.generationSourceChanged, isError: true);
+      return;
+    }
+
     final TreeBuildConfig config;
     if (existingTree != null) {
       // Resume keeps the saved config; only the depth target may change.
@@ -253,9 +279,9 @@ class _RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       repertoireStartFen: widget.repertoireStartFen,
       existingTree: existingTree,
       artifactGeneration: existingTree == null ? null : _savedPartialGeneration,
-      onPublished: widget.createPublicationReceiver(),
+      onPublished: onPublished,
       existingLineKeys: {
-        for (final moves in widget.existingLineMoves)
+        for (final moves in _remainingLineMoves!)
           GenerationRequest.lineKey(moves),
       },
     );
@@ -478,7 +504,7 @@ class _RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       slicer = ranked.maxLines > 1 ? ranked : null;
       // Open on what the repertoire currently holds, so the control starts
       // by describing the file rather than proposing a change to it.
-      final held = widget.existingLineMoves.length;
+      final held = _remainingLineMoves?.length ?? 0;
       keep = held > 0 && held <= ranked.maxLines ? held : ranked.maxLines;
     } catch (e) {
       debugPrint('[RepertoireGenTab] Could not rank lines: $e');
@@ -499,8 +525,9 @@ class _RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   /// Called when the slider settles and once when the ranking lands — never
   /// from `build`.
   void _countRemovals(RepertoireSlicer slicer, int keep) {
-    if (_countedForKeep == keep) return;
-    final removals = slicer.plan(keep).removalsFrom(widget.existingLineMoves);
+    final lines = _remainingLineMoves;
+    if (_countedForKeep == keep || lines == null) return;
+    final removals = slicer.plan(keep).removalsFrom(lines);
     if (!mounted) return;
     setState(() {
       _willRemove = removals;
@@ -519,6 +546,13 @@ class _RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   List<Widget> _buildSliceCard(GenerationSessionController ctrl) {
     _refreshSlicer(ctrl);
     if (widget.onTrimLines == null) return const [];
+    if (_remainingLineMoves == null) {
+      return [
+        Text(
+          AppLocalizations.of(context).generationConfigurationRefreshRequired,
+        ),
+      ];
+    }
     if (_ranking) {
       return const [
         SizedBox(height: 8),
@@ -636,22 +670,32 @@ class _RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
 
   Future<void> _applySlice(RepertoireSlicer slicer, int keep) async {
     final trim = widget.onTrimLines;
-    if (trim == null) return;
+    if (!mounted || trim == null || _trimming || _remainingLineMoves == null) {
+      return;
+    }
+    final labels = AppLocalizations.of(context);
     setState(() => _trimming = true);
     try {
-      final plan = slicer.plan(keep);
-      final removed = await trim(plan.droppedKeys);
+      final result = await trim(slicer.plan(keep).droppedKeys);
       if (!mounted) return;
-      showAppSnackBar(
-        context,
-        removed == 0
-            ? 'Nothing to remove — the repertoire is already this size.'
-            : 'Removed $removed line${removed == 1 ? '' : 's'}. '
-                  'Saved analysis is still available.',
-      );
+      _remainingLineMoves = result?.remainingMoves;
+      if (result == null) {
+        showAppSnackBar(context, labels.generationSourceChanged, isError: true);
+        return;
+      }
+      final removed = result.removed;
+      final message = result.remainingMoves == null
+          ? labels.generationCutRefreshRequired(removed)
+          : removed == 0
+          ? 'Nothing to remove — the repertoire is already this size.'
+          : 'Removed $removed line${removed == 1 ? '' : 's'}. '
+                'Saved analysis is still available.';
+      showAppSnackBar(context, message, isError: result.remainingMoves == null);
+    } catch (_) {
+      if (!mounted) return;
+      _remainingLineMoves = null;
+      showAppSnackBar(context, labels.generationCutUnconfirmed, isError: true);
     } finally {
-      // The file just changed, so the memoised "would remove" count for this
-      // cut is stale even though the cut itself did not move.
       _countedForKeep = null;
       if (mounted) {
         setState(() => _trimming = false);

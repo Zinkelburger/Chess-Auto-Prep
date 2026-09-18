@@ -2005,4 +2005,31 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get boardUsePosition => 'Use position';
+
+  @override
+  String get generationSourceChanged =>
+      'The chapter changed. Close this configuration and open it again.';
+
+  @override
+  String get generationConfigurationRefreshRequired =>
+      'Reload the chapter and reopen this configuration before making further changes.';
+
+  @override
+  String get generationCutUnconfirmed =>
+      'The cut could not be confirmed. Reload the chapter before making further changes.';
+
+  @override
+  String generationCutRefreshRequired(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Removed $count lines, but this configuration could not be refreshed. Reload the chapter before making further changes.',
+      one:
+          'Removed 1 line, but this configuration could not be refreshed. Reload the chapter before making further changes.',
+      zero:
+          'The chapter could not be refreshed. Reload it and reopen this configuration before making further changes.',
+    );
+    return '$_temp0';
+  }
 }
