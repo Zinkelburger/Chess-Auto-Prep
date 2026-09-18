@@ -30,9 +30,9 @@ class QuarantineReceipt {
   final String quarantinedPath;
 }
 
-/// Every destructive move, rename or delete of managed data goes through
-/// here: each operation is locked, refuses to leave its allowed root, refuses
-/// symlinks, and never overwrites an existing entry.
+/// Managed mutations validate roots and links under app-local locks.
+/// [moveFileNoReplace] and explicit native installers protect destinations
+/// against external creators; legacy rename paths do not share that guarantee.
 class FileMutationService {
   FileMutationService();
 

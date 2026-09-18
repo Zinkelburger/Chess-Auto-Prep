@@ -3425,3 +3425,31 @@ semantics through the existing persistence owners before implementing that full
 replacement; preserve captured-snapshot deletion and destination protection as
 explicit safety obligations. No rename facade, redirect cache or second journal
 was added to make the unresolved contract appear complete.
+
+
+### Exclusive file-move destination protection — 2026-09-18
+
+`e59c351b` against `cf8a37f7` replaces the general file boundary's
+check-then-rename with the existing native exclusive move. A real destination
+created after preflight survives, and source bytes remain intact. Native
+collisions are translated back into the existing FileSystemException contract,
+preserving reference-index winner reuse and other callers' error handling.
+No new owner, API, injected mover or test hook is introduced. Production growth
+is **11 Dart + 8 C lines**; this is a safety repair, not a simplification result.
+
+Linux uses renameat2(RENAME_NOREPLACE), Windows its existing MoveFileExW without
+replacement, and the existing native function now uses renamex_np(RENAME_EXCL)
+on macOS. Apple header/test references and deployment compatibility are recorded
+in the package README. Unsupported filesystems fail without a replacing fallback.
+Linux is tested; macOS and Windows remain unverified on native hosts. No stronger
+source-identity, transaction recovery or power-loss guarantee is implied.
+
+The baseline test had one native collision control pass and one actual
+check/rename race fail. IOOverrides schedules the competing creator after the
+last absence observation; production still executes the real filesystem move.
+All **73 final tests pass**: 41 native/helper/storage/update/reference-index/
+tactics cases and 32 Outline/picker/Study callers. Analyze/lint passes with
+64 baseline infos, no warnings/errors and 45 checker cases. Independent review
+approves the exact commit. No visible control changed, so no new preview was
+needed. The broader captured-source and training-reference defects remain open;
+the historical relocation baseline above is not current passing evidence.
