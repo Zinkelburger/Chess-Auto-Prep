@@ -2879,3 +2879,14 @@ were inspected; only disposable driver data was used, and the preview was stoppe
 The independent reviewer accepted the corrected lifecycle and smaller ownership
 graph before integration; final merge checks must retain Builder's shared catalog
 repository binding and its `listChapters` contract.
+
+Integration at `c42fb5d0` preserves the reviewed Builder and Study changes from
+`fa7f309e`. Against that immediate main baseline the complete production delta is
+254 added / 302 deleted (net −48 handwritten Dart lines, generated unchanged);
+the additional three removed lines were Builder's now-duplicated repository
+binding, included in this measurement rather than counted as another cleanup.
+The combined 56-test catalog/composition/Appearance/Builder/Viewer-loading batch
+passes. Analyze/lint passes with 64 infos, no warnings/errors, 45 architecture
+checker cases and the 1,457-entry debt ledger. This establishes the bounded
+composition trial's reduction, simpler ownership and behavioral parity. The
+separate Viewer trial must also pass before renewal expands to another workflow.
