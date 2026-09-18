@@ -2,6 +2,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import '../../l10n/generated/app_localizations.dart';
 import '../../design_system/theme/app_typography.dart';
 
 class PgnSaveStatus extends StatelessWidget {
@@ -26,22 +27,24 @@ class PgnSaveStatus extends StatelessWidget {
     final String label;
     final String explanation;
     if (failed) {
-      label = 'Not saved';
+      label = AppLocalizations.of(context).generationRecoveryNotSaved;
       explanation = error!;
     } else if (filePath == null) {
-      label = 'Not saved to a file';
-      explanation = 'Use Save as… to choose a PGN file.';
+      label = AppLocalizations.of(context).pgnNotSavedFile;
+      explanation = AppLocalizations.of(context).pgnChooseSaveFile;
     } else if (saving || (autoSave && dirty)) {
-      label = 'Saving…';
-      explanation = 'Saving changes to $filePath';
+      label = AppLocalizations.of(context).documentSaving;
+      explanation = AppLocalizations.of(context).pgnSavingPath(filePath!);
     } else if (dirty) {
-      label = 'Unsaved changes';
-      explanation = 'Autosave is off. Use Save to write changes to $filePath';
+      label = AppLocalizations.of(context).documentDirty;
+      explanation = AppLocalizations.of(context).pgnManualSavePath(filePath!);
     } else {
-      label = autoSave ? 'Autosave on · Saved' : 'Autosave off · Saved';
+      label = autoSave
+          ? AppLocalizations.of(context).pgnAutoSaved
+          : AppLocalizations.of(context).pgnManualSaved;
       explanation = autoSave
-          ? 'Changes save automatically to $filePath'
-          : 'Changes need a manual save to $filePath';
+          ? AppLocalizations.of(context).pgnAutoSavePath(filePath!)
+          : AppLocalizations.of(context).pgnNeedsManualSavePath(filePath!);
     }
     return SizedBox(
       width: 150,

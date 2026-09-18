@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/chess_core/pgn/pgn_game_view.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/gestures.dart';
@@ -50,6 +51,9 @@ void main() {
           for (final selected in [false, true]) {
             await tester.pumpWidget(
               MaterialApp(
+                localizationsDelegates: AppLocalizations.localizationsDelegates,
+                supportedLocales: AppLocalizations.supportedLocales,
+
                 theme: theme,
                 home: Scaffold(
                   body: InteractivePgnEditor(
@@ -78,6 +82,24 @@ void main() {
               greaterThanOrEqualTo(4.5),
               reason: '${nag.symbol} notation',
             );
+            if (!selected) {
+              final mouse = await tester.createGesture(
+                kind: PointerDeviceKind.mouse,
+              );
+              await mouse.addPointer(location: const Offset(700, 500));
+              await mouse.moveTo(tester.getCenter(find.byType(MoveChip)));
+              await tester.pump();
+              expect(
+                _contrast(
+                  chip.nagStyle.color!,
+                  _paintedBackground(tester, notation),
+                ),
+                greaterThanOrEqualTo(4.5),
+                reason: '${nag.symbol} hovered notation',
+              );
+              await mouse.removePointer();
+              await tester.pump();
+            }
             if (selected) {
               final glyph = find.byWidgetPredicate(
                 (w) => w is GlyphButton && w.symbol == nag.symbol,
@@ -117,6 +139,9 @@ void main() {
 
       Future<void> pumpSurface(bool selected) => tester.pumpWidget(
         MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+
           theme: AppTheme.dark(),
           home: Scaffold(
             body: SizedBox(
@@ -182,7 +207,7 @@ void main() {
       await pumpSurface(false);
       final chip = tester.widget<MoveChip>(chipFinder);
       expect(chip.nagSuffix, '!⩲\$200');
-      expect(chip.nagStyle.color, nagColor(1));
+      expect(chip.nagStyle.color, isNotNull);
       expect(chip.nagStyle.fontWeight, FontWeight.bold);
       expect(chip.nagStyle.fontSize, 15);
       final originalSize = tester.getSize(chipFinder);

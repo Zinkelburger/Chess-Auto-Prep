@@ -2,7 +2,7 @@
   "@@locale": "en",
   "cancel": "Cancel",
   "@cancel": {
-    "description": "Repertoire catalog: cancel"
+    "description": "Study and PGN control: cancel"
   },
   "retry": "Retry",
   "@retry": {
@@ -18,7 +18,7 @@
   },
   "delete": "Delete",
   "@delete": {
-    "description": "Repertoire catalog: delete"
+    "description": "Study and PGN control: delete"
   },
   "rename": "Rename",
   "@rename": {
@@ -30,7 +30,7 @@
   },
   "importAction": "Import",
   "@importAction": {
-    "description": "Repertoire catalog: importAction"
+    "description": "Study and PGN control: importAction"
   },
   "importing": "Importing…",
   "@importing": {
@@ -426,11 +426,11 @@
   },
   "documentDirty": "Unsaved changes",
   "@documentDirty": {
-    "description": "Shared document save interaction: documentDirty"
+    "description": "Study and PGN control: documentDirty"
   },
   "documentSaving": "Saving…",
   "@documentSaving": {
-    "description": "Shared document save interaction: documentSaving"
+    "description": "Study and PGN control: documentSaving"
   },
   "documentSaved": "Saved",
   "@documentSaved": {
@@ -751,7 +751,7 @@
   },
   "studyWorkspaceName": "Study",
   "@studyWorkspaceName": {
-    "description": "Workspace recovery display name"
+    "description": "Study and PGN control: studyWorkspaceName"
   },
   "pgnWorkspaceName": "PGN Viewer",
   "@pgnWorkspaceName": {
@@ -922,7 +922,7 @@
   },
   "generationRecoveryNotSaved": "Not saved",
   "@generationRecoveryNotSaved": {
-    "description": "Legacy analysis inspection"
+    "description": "Study and PGN control: generationRecoveryNotSaved"
   },
   "generationRecoveryReadOnly": "Inspect or export saved outputs. Recovery does not change the chapter, select analysis or resume a build. Original files stay unchanged.",
   "@generationRecoveryReadOnly": {
@@ -1462,11 +1462,11 @@
   },
   "studyNewChapter": "New chapter",
   "@studyNewChapter": {
-    "description": "Study chapter list control: studyNewChapter"
+    "description": "Study workflow control: studyNewChapter"
   },
   "studySearchChapters": "Search chapters",
   "@studySearchChapters": {
-    "description": "Study chapter list control: studySearchChapters"
+    "description": "Study and PGN control: studySearchChapters"
   },
   "studyFilteredReorder": "Reordering is off while searching",
   "@studyFilteredReorder": {
@@ -1498,7 +1498,7 @@
   },
   "studyChapterActions": "Chapter actions",
   "@studyChapterActions": {
-    "description": "Study chapter list control: studyChapterActions"
+    "description": "Study workflow control: studyChapterActions"
   },
   "studyChaptersDone": "Done",
   "@studyChaptersDone": {
@@ -1551,7 +1551,7 @@
     "description": "Study chapter dialog label: Paste at least one game."
   },
   "@studyName": {
-    "description": "Study chapter dialog label: Name"
+    "description": "Study and PGN control: studyName"
   },
   "@studyChapterNameFromPgn": {
     "description": "Study chapter dialog label: From the PGN when left blank"
@@ -1603,5 +1603,884 @@
   },
   "@studyAddTag": {
     "description": "Study chapter dialog label: Add tag"
+  },
+  "studyImportGamesFound": "{count, plural, =1{1 game found.} other{{count} games found.}}",
+  "@studyImportGamesFound": {
+    "description": "Study workflow control: studyImportGamesFound",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "studyDownloadCount": "Download {count}",
+  "@studyDownloadCount": {
+    "description": "Study workflow control: studyDownloadCount",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "studyImportFromUrl": "Import from URL",
+  "@studyImportFromUrl": {
+    "description": "Study workflow control: studyImportFromUrl"
+  },
+  "studyUrl": "URL",
+  "@studyUrl": {
+    "description": "Study workflow control: studyUrl"
+  },
+  "studyImportSupportedUrls": "lichess.org/study/<id>  —  one study, all chapters\nlichess.org/study/by/<user>  —  every public study of theirs\nchessgames.com/perl/chesscollection?cid=<id>  —  a collection",
+  "@studyImportSupportedUrls": {
+    "description": "Study workflow control: studyImportSupportedUrls"
+  },
+  "studyImportAppend": "Add to the current study instead of creating a new one",
+  "@studyImportAppend": {
+    "description": "Study workflow control: studyImportAppend"
+  },
+  "studyImportCollectionSeparate": "A chessgames.com collection downloads in the background and always gets its own study.",
+  "@studyImportCollectionSeparate": {
+    "description": "Study workflow control: studyImportCollectionSeparate"
+  },
+  "studyImportNoOpenStudy": "No study is open.",
+  "@studyImportNoOpenStudy": {
+    "description": "Study workflow control: studyImportNoOpenStudy"
+  },
+  "studyImportDelay": "Seconds between requests (chessgames.com)",
+  "@studyImportDelay": {
+    "description": "Study workflow control: studyImportDelay"
+  },
+  "studyImportDelayHelp": "chessgames.com bans fast downloads: 2–3 s apart gets blocked after ~20 games, 22 s apart sustains 60. At 22 s a 60-game collection takes about 25 minutes, running in the background.",
+  "@studyImportDelayHelp": {
+    "description": "Study workflow control: studyImportDelayHelp"
+  },
+  "studyImportContacting": "Contacting the server…",
+  "@studyImportContacting": {
+    "description": "Study workflow control: studyImportContacting"
+  },
+  "studyImportLinkHint": "Paste a link to see what will be imported.",
+  "@studyImportLinkHint": {
+    "description": "Study workflow control: studyImportLinkHint"
+  },
+  "studyImportUnsupportedUrl": "Not a Lichess study or chessgames.com collection link.",
+  "@studyImportUnsupportedUrl": {
+    "description": "Study workflow control: studyImportUnsupportedUrl"
+  },
+  "studyImportCollectionBlocked": "Collection page blocked",
+  "@studyImportCollectionBlocked": {
+    "description": "Study workflow control: studyImportCollectionBlocked"
+  },
+  "studyImportPasteIdsHelp": "chessgames.com served a bot check instead of the collection. Downloading the games still works — it just needs the list.\n\nOpen the collection in a browser, select all (Ctrl+A) and copy, or save the page source, then paste it below.",
+  "@studyImportPasteIdsHelp": {
+    "description": "Study workflow control: studyImportPasteIdsHelp"
+  },
+  "studyImportOpenCollection": "Open the collection page",
+  "@studyImportOpenCollection": {
+    "description": "Study workflow control: studyImportOpenCollection"
+  },
+  "studyImportPasteIdsHint": "Paste the page, game links, or game ids…",
+  "@studyImportPasteIdsHint": {
+    "description": "Study workflow control: studyImportPasteIdsHint"
+  },
+  "studyImportNoIds": "No game ids found yet.",
+  "@studyImportNoIds": {
+    "description": "Study workflow control: studyImportNoIds"
+  },
+  "studyDownload": "Download",
+  "@studyDownload": {
+    "description": "Study workflow control: studyDownload"
+  },
+  "studyNumberedNew": "New study ({count})",
+  "@studyNumberedNew": {
+    "description": "Study workflow control: studyNumberedNew",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "studyChapterCount": "{count, plural, =1{1 chapter} other{{count} chapters}}",
+  "@studyChapterCount": {
+    "description": "Study workflow control: studyChapterCount",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "studyPreferredChapterCount": "Prep file · {count, plural, =1{1 chapter} other{{count} chapters}}",
+  "@studyPreferredChapterCount": {
+    "description": "Study workflow control: studyPreferredChapterCount",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "studyAddLine": "Add line to study",
+  "@studyAddLine": {
+    "description": "Study workflow control: studyAddLine"
+  },
+  "studyNewStudy": "New study",
+  "@studyNewStudy": {
+    "description": "Study and PGN control: studyNewStudy"
+  },
+  "studyAddNewStudy": "Add new study",
+  "@studyAddNewStudy": {
+    "description": "Study and PGN control: studyAddNewStudy"
+  },
+  "studyStudyName": "Study name",
+  "@studyStudyName": {
+    "description": "Study and PGN control: studyStudyName"
+  },
+  "studyCreateAndAdd": "Create and add",
+  "@studyCreateAndAdd": {
+    "description": "Study and PGN control: studyCreateAndAdd"
+  },
+  "studyNameRequired": "Please enter a study name.",
+  "@studyNameRequired": {
+    "description": "Study and PGN control: studyNameRequired"
+  },
+  "studyNameExists": "A study with this name already exists.",
+  "@studyNameExists": {
+    "description": "Study and PGN control: studyNameExists"
+  },
+  "studyChapterName": "Chapter name",
+  "@studyChapterName": {
+    "description": "Study and PGN control: studyChapterName"
+  },
+  "studySearchExisting": "Search existing studies",
+  "@studySearchExisting": {
+    "description": "Study and PGN control: studySearchExisting"
+  },
+  "studyNoStudiesToAdd": "No studies yet. Use Add new study to create one.",
+  "@studyNoStudiesToAdd": {
+    "description": "Study and PGN control: studyNoStudiesToAdd"
+  },
+  "studyNoStudiesMatch": "No studies match your search.",
+  "@studyNoStudiesMatch": {
+    "description": "Study and PGN control: studyNoStudiesMatch"
+  },
+  "studyEditChapterMenu": "Edit chapter…",
+  "@studyEditChapterMenu": {
+    "description": "Study workflow control: studyEditChapterMenu"
+  },
+  "studySetStartMenu": "Set starting position…",
+  "@studySetStartMenu": {
+    "description": "Study workflow control: studySetStartMenu"
+  },
+  "studyCopyChapter": "Copy chapter PGN",
+  "@studyCopyChapter": {
+    "description": "Study workflow control: studyCopyChapter"
+  },
+  "studyClearAnnotationsMenu": "Clear comments, glyphs and shapes…",
+  "@studyClearAnnotationsMenu": {
+    "description": "Study workflow control: studyClearAnnotationsMenu"
+  },
+  "studyClearVariationsMenu": "Clear variations…",
+  "@studyClearVariationsMenu": {
+    "description": "Study workflow control: studyClearVariationsMenu"
+  },
+  "studyDeleteChapterMenu": "Delete chapter…",
+  "@studyDeleteChapterMenu": {
+    "description": "Study workflow control: studyDeleteChapterMenu"
+  },
+  "studyNoChapters": "No chapters",
+  "@studyNoChapters": {
+    "description": "Study workflow control: studyNoChapters"
+  },
+  "studyManageChapters": "Manage & reorder chapters…",
+  "@studyManageChapters": {
+    "description": "Study workflow control: studyManageChapters"
+  },
+  "studyChapter": "Chapter",
+  "@studyChapter": {
+    "description": "Study workflow control: studyChapter"
+  },
+  "studyRename": "Rename study",
+  "@studyRename": {
+    "description": "Study workflow control: studyRename"
+  },
+  "studySwitch": "Switch study",
+  "@studySwitch": {
+    "description": "Study and PGN control: studySwitch"
+  },
+  "studyNameConfirm": "OK",
+  "@studyNameConfirm": {
+    "description": "Study and PGN control: studyNameConfirm"
+  },
+  "studyNameUnusable": "That name has no characters a file can use.",
+  "@studyNameUnusable": {
+    "description": "Study and PGN control: studyNameUnusable"
+  },
+  "studyAddFailed": "Failed to add to study.",
+  "@studyAddFailed": {
+    "description": "Study and PGN control: studyAddFailed"
+  },
+  "studyHistoryTitle": "Study: {name}",
+  "@studyHistoryTitle": {
+    "description": "Study and PGN control: studyHistoryTitle",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "pgnDeleteOneComment": "Delete 1 comment?",
+  "@pgnDeleteOneComment": {
+    "description": "Study and PGN control: pgnDeleteOneComment"
+  },
+  "pgnSaveComment": "Save comment",
+  "@pgnSaveComment": {
+    "description": "Study and PGN control: pgnSaveComment"
+  },
+  "pgnComment": "Comment",
+  "@pgnComment": {
+    "description": "Study and PGN control: pgnComment"
+  },
+  "pgnCollapseComment": "Collapse comment",
+  "@pgnCollapseComment": {
+    "description": "Study and PGN control: pgnCollapseComment"
+  },
+  "pgnEditComment": "Edit comment",
+  "@pgnEditComment": {
+    "description": "Study and PGN control: pgnEditComment"
+  },
+  "pgnCommentKept": "Comment kept until deleted",
+  "@pgnCommentKept": {
+    "description": "Study and PGN control: pgnCommentKept"
+  },
+  "pgnCommentLabel": "Comment:",
+  "@pgnCommentLabel": {
+    "description": "Study and PGN control: pgnCommentLabel"
+  },
+  "pgnDeleteComment": "Delete comment",
+  "@pgnDeleteComment": {
+    "description": "Study and PGN control: pgnDeleteComment"
+  },
+  "pgnSelectMoveNotes": "Select a move to add notes",
+  "@pgnSelectMoveNotes": {
+    "description": "Study and PGN control: pgnSelectMoveNotes"
+  },
+  "pgnRemoveCommentOn": "Remove the comment on {move}",
+  "@pgnRemoveCommentOn": {
+    "description": "Study and PGN control: pgnRemoveCommentOn",
+    "placeholders": {
+      "move": {
+        "type": "String"
+      }
+    }
+  },
+  "pgnLineCopied": "Line copied to clipboard",
+  "@pgnLineCopied": {
+    "description": "Study and PGN control: pgnLineCopied"
+  },
+  "pgnMove": "Move",
+  "@pgnMove": {
+    "description": "Study and PGN control: pgnMove"
+  },
+  "pgnEditCommentMenu": "Edit Comment",
+  "@pgnEditCommentMenu": {
+    "description": "Study and PGN control: pgnEditCommentMenu"
+  },
+  "pgnAddCommentMenu": "Add Comment",
+  "@pgnAddCommentMenu": {
+    "description": "Study and PGN control: pgnAddCommentMenu"
+  },
+  "pgnUnmarkQuizStart": "Unmark Quiz Start",
+  "@pgnUnmarkQuizStart": {
+    "description": "Study and PGN control: pgnUnmarkQuizStart"
+  },
+  "pgnMarkQuizStart": "Start Quiz From This Move",
+  "@pgnMarkQuizStart": {
+    "description": "Study and PGN control: pgnMarkQuizStart"
+  },
+  "pgnUnmarkQuizEnd": "Unmark Quiz End",
+  "@pgnUnmarkQuizEnd": {
+    "description": "Study and PGN control: pgnUnmarkQuizEnd"
+  },
+  "pgnMarkQuizEnd": "End Quiz After This Move",
+  "@pgnMarkQuizEnd": {
+    "description": "Study and PGN control: pgnMarkQuizEnd"
+  },
+  "pgnPromoteVariation": "Promote Variation",
+  "@pgnPromoteVariation": {
+    "description": "Study and PGN control: pgnPromoteVariation"
+  },
+  "pgnMakeMainLine": "Make Main Line",
+  "@pgnMakeMainLine": {
+    "description": "Study and PGN control: pgnMakeMainLine"
+  },
+  "pgnCopyWholeLine": "Copy Whole Line",
+  "@pgnCopyWholeLine": {
+    "description": "Study and PGN control: pgnCopyWholeLine"
+  },
+  "pgnCopyFromHere": "Copy PGN from Here",
+  "@pgnCopyFromHere": {
+    "description": "Study and PGN control: pgnCopyFromHere"
+  },
+  "pgnViewInLines": "View in Lines",
+  "@pgnViewInLines": {
+    "description": "Study and PGN control: pgnViewInLines"
+  },
+  "pgnDeleteFromHere": "Delete from Here",
+  "@pgnDeleteFromHere": {
+    "description": "Study and PGN control: pgnDeleteFromHere"
+  },
+  "pgnLineTitle": "Line title",
+  "@pgnLineTitle": {
+    "description": "Study and PGN control: pgnLineTitle"
+  },
+  "pgnStartPosition": "the start position",
+  "@pgnStartPosition": {
+    "description": "Study and PGN control: pgnStartPosition"
+  },
+  "pgnEmptyEditor": "Play a move or select a saved line.",
+  "@pgnEmptyEditor": {
+    "description": "Study and PGN control: pgnEmptyEditor"
+  },
+  "pgnQuizEndHelp": "Quiz ends here: training stops after this move",
+  "@pgnQuizEndHelp": {
+    "description": "Study and PGN control: pgnQuizEndHelp"
+  },
+  "pgnDeleteContinuations": "This removes the move and all continuations from here, including their annotations.",
+  "@pgnDeleteContinuations": {
+    "description": "Study and PGN control: pgnDeleteContinuations"
+  },
+  "pgnQuizStartHelp": "Quiz starts here: training auto-plays the moves before this one and asks for this one",
+  "@pgnQuizStartHelp": {
+    "description": "Study and PGN control: pgnQuizStartHelp"
+  },
+  "studyBackMove": "Back one move",
+  "@studyBackMove": {
+    "description": "Study and PGN control: studyBackMove"
+  },
+  "studyForwardMove": "Forward one move",
+  "@studyForwardMove": {
+    "description": "Study and PGN control: studyForwardMove"
+  },
+  "studyGoStart": "Go to start",
+  "@studyGoStart": {
+    "description": "Study and PGN control: studyGoStart"
+  },
+  "studyGoEnd": "Go to end",
+  "@studyGoEnd": {
+    "description": "Study and PGN control: studyGoEnd"
+  },
+  "studyToggleEngine": "Toggle engine",
+  "@studyToggleEngine": {
+    "description": "Study and PGN control: studyToggleEngine"
+  },
+  "studyFlipBoard": "Flip board",
+  "@studyFlipBoard": {
+    "description": "Study and PGN control: studyFlipBoard"
+  },
+  "studyBrowsePgn": "Browse in PGN viewer",
+  "@studyBrowsePgn": {
+    "description": "Study and PGN control: studyBrowsePgn"
+  },
+  "studyNextChapter": "Next chapter",
+  "@studyNextChapter": {
+    "description": "Study and PGN control: studyNextChapter"
+  },
+  "studyPreviousChapter": "Previous chapter",
+  "@studyPreviousChapter": {
+    "description": "Study and PGN control: studyPreviousChapter"
+  },
+  "studyFocusInput": "Focus move input",
+  "@studyFocusInput": {
+    "description": "Study and PGN control: studyFocusInput"
+  },
+  "studyCommentCurrent": "Comment current move",
+  "@studyCommentCurrent": {
+    "description": "Study and PGN control: studyCommentCurrent"
+  },
+  "studyImportPgnChapters": "Import PGN as chapters",
+  "@studyImportPgnChapters": {
+    "description": "Study and PGN control: studyImportPgnChapters"
+  },
+  "studyNoPgnGames": "No games found in that PGN.",
+  "@studyNoPgnGames": {
+    "description": "Study and PGN control: studyNoPgnGames"
+  },
+  "studyPgnCopied": "Study PGN copied to clipboard.",
+  "@studyPgnCopied": {
+    "description": "Study and PGN control: studyPgnCopied"
+  },
+  "studyReplacePosition": "Replace starting position?",
+  "@studyReplacePosition": {
+    "description": "Study and PGN control: studyReplacePosition"
+  },
+  "studyReplace": "Replace",
+  "@studyReplace": {
+    "description": "Study and PGN control: studyReplace"
+  },
+  "studySetPosition": "Set chapter position",
+  "@studySetPosition": {
+    "description": "Study and PGN control: studySetPosition"
+  },
+  "studySaveFirst": "Save the study first (create it by name).",
+  "@studySaveFirst": {
+    "description": "Study and PGN control: studySaveFirst"
+  },
+  "studyNoTrainingChapters": "No chapters with moves to train yet.",
+  "@studyNoTrainingChapters": {
+    "description": "Study and PGN control: studyNoTrainingChapters"
+  },
+  "studyNoTrainingMoves": "This chapter has no moves to train yet.",
+  "@studyNoTrainingMoves": {
+    "description": "Study and PGN control: studyNoTrainingMoves"
+  },
+  "studyChapterPgnCopied": "Chapter PGN copied to clipboard.",
+  "@studyChapterPgnCopied": {
+    "description": "Study and PGN control: studyChapterPgnCopied"
+  },
+  "studyClearAnnotations": "Clear all comments, glyphs and shapes?",
+  "@studyClearAnnotations": {
+    "description": "Study and PGN control: studyClearAnnotations"
+  },
+  "clear": "Clear",
+  "@clear": {
+    "description": "Study and PGN control: clear"
+  },
+  "studyClearVariations": "Clear variations?",
+  "@studyClearVariations": {
+    "description": "Study and PGN control: studyClearVariations"
+  },
+  "studyNeedsChapter": "A study needs at least one chapter.",
+  "@studyNeedsChapter": {
+    "description": "Study and PGN control: studyNeedsChapter"
+  },
+  "studyFromUrl": "From URL…",
+  "@studyFromUrl": {
+    "description": "Study and PGN control: studyFromUrl"
+  },
+  "studyPgnFileChapters": "PGN file as chapters…",
+  "@studyPgnFileChapters": {
+    "description": "Study and PGN control: studyPgnFileChapters"
+  },
+  "studyExportHeading": "Export",
+  "@studyExportHeading": {
+    "description": "Study and PGN control: studyExportHeading"
+  },
+  "studyCopyPgn": "Copy study PGN",
+  "@studyCopyPgn": {
+    "description": "Study and PGN control: studyCopyPgn"
+  },
+  "studySavePgnAs": "Save study PGN as…",
+  "@studySavePgnAs": {
+    "description": "Study and PGN control: studySavePgnAs"
+  },
+  "studyTrainHeading": "Train",
+  "@studyTrainHeading": {
+    "description": "Study and PGN control: studyTrainHeading"
+  },
+  "studyTrainChapter": "Train this chapter",
+  "@studyTrainChapter": {
+    "description": "Study and PGN control: studyTrainChapter"
+  },
+  "studyTrainAll": "Train whole study",
+  "@studyTrainAll": {
+    "description": "Study and PGN control: studyTrainAll"
+  },
+  "studyBoardHeading": "Board",
+  "@studyBoardHeading": {
+    "description": "Study and PGN control: studyBoardHeading"
+  },
+  "studyExploreHeading": "Explore",
+  "@studyExploreHeading": {
+    "description": "Study and PGN control: studyExploreHeading"
+  },
+  "studyManageHeading": "Manage",
+  "@studyManageHeading": {
+    "description": "Study and PGN control: studyManageHeading"
+  },
+  "studyDeleteMenu": "Delete study…",
+  "@studyDeleteMenu": {
+    "description": "Study and PGN control: studyDeleteMenu"
+  },
+  "studySearch": "Search studies",
+  "@studySearch": {
+    "description": "Study and PGN control: studySearch"
+  },
+  "studyNoStudies": "No studies yet — import or create one.",
+  "@studyNoStudies": {
+    "description": "Study and PGN control: studyNoStudies"
+  },
+  "studyGoChapter": "Go to chapter",
+  "@studyGoChapter": {
+    "description": "Study and PGN control: studyGoChapter"
+  },
+  "studyNoChaptersYet": "This study has no chapters yet.",
+  "@studyNoChaptersYet": {
+    "description": "Study and PGN control: studyNoChaptersYet"
+  },
+  "studyAddedChapters": "{count, plural, =1{Added 1 chapter.} other{Added {count} chapters.}}",
+  "@studyAddedChapters": {
+    "description": "Study and PGN control: studyAddedChapters",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "studyDeleteNamed": "Delete study \"{name}\"?",
+  "@studyDeleteNamed": {
+    "description": "Study and PGN control: studyDeleteNamed",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "studyDeleteChapterNamed": "Delete chapter \"{name}\"?",
+  "@studyDeleteChapterNamed": {
+    "description": "Study and PGN control: studyDeleteChapterNamed",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "studyChapterNumber": "Chapter {number}",
+  "@studyChapterNumber": {
+    "description": "Study and PGN control: studyChapterNumber",
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
+  "studyPgnHistory": "PGN: {name}",
+  "@studyPgnHistory": {
+    "description": "Study and PGN control: studyPgnHistory",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "boardInvalidFen": "Could not parse FEN. Check all fields.",
+  "@boardInvalidFen": {
+    "description": "Study and PGN control: boardInvalidFen"
+  },
+  "boardWhiteToMove": "White to move",
+  "@boardWhiteToMove": {
+    "description": "Study and PGN control: boardWhiteToMove"
+  },
+  "boardBlackToMove": "Black to move",
+  "@boardBlackToMove": {
+    "description": "Study and PGN control: boardBlackToMove"
+  },
+  "boardStartPosition": "Start position",
+  "@boardStartPosition": {
+    "description": "Study and PGN control: boardStartPosition"
+  },
+  "boardClear": "Clear board",
+  "@boardClear": {
+    "description": "Study and PGN control: boardClear"
+  },
+  "boardAdvanced": "Advanced position settings",
+  "@boardAdvanced": {
+    "description": "Study and PGN control: boardAdvanced"
+  },
+  "boardCastlingEnPassant": "Castling and en passant",
+  "@boardCastlingEnPassant": {
+    "description": "Study and PGN control: boardCastlingEnPassant"
+  },
+  "boardCastling": "Castling",
+  "@boardCastling": {
+    "description": "Study and PGN control: boardCastling"
+  },
+  "boardEnPassant": "En passant",
+  "@boardEnPassant": {
+    "description": "Study and PGN control: boardEnPassant"
+  },
+  "boardNoEnPassant": "none",
+  "@boardNoEnPassant": {
+    "description": "Study and PGN control: boardNoEnPassant"
+  },
+  "boardFenPending": "Apply or discard the FEN text before using this position.",
+  "@boardFenPending": {
+    "description": "Study and PGN control: boardFenPending"
+  },
+  "boardCopyFen": "Copy FEN",
+  "@boardCopyFen": {
+    "description": "Study and PGN control: boardCopyFen"
+  },
+  "boardFenCopied": "FEN copied.",
+  "@boardFenCopied": {
+    "description": "Study and PGN control: boardFenCopied"
+  },
+  "boardPasteFen": "Paste FEN",
+  "@boardPasteFen": {
+    "description": "Study and PGN control: boardPasteFen"
+  },
+  "boardApplyFen": "Apply FEN",
+  "@boardApplyFen": {
+    "description": "Study and PGN control: boardApplyFen"
+  },
+  "boardDiscardFen": "Discard FEN changes",
+  "@boardDiscardFen": {
+    "description": "Study and PGN control: boardDiscardFen"
+  },
+  "boardSetupHelp": "Drag pieces where you want them, or click a spare piece and paint it onto squares. Right-click clears a square; with a piece in hand it switches the colour.",
+  "@boardSetupHelp": {
+    "description": "Study and PGN control: boardSetupHelp"
+  },
+  "boardCastleSide": "{side} {castle}",
+  "@boardCastleSide": {
+    "description": "Study and PGN control: boardCastleSide",
+    "placeholders": {
+      "side": {
+        "type": "String"
+      },
+      "castle": {
+        "type": "String"
+      }
+    }
+  },
+  "boardMovePieces": "Move pieces",
+  "@boardMovePieces": {
+    "description": "Study and PGN control: boardMovePieces"
+  },
+  "boardErasePieces": "Erase pieces",
+  "@boardErasePieces": {
+    "description": "Study and PGN control: boardErasePieces"
+  },
+  "boardPiecePawn": "pawn",
+  "@boardPiecePawn": {
+    "description": "Study and PGN control: boardPiecePawn"
+  },
+  "boardPieceKnight": "knight",
+  "@boardPieceKnight": {
+    "description": "Study and PGN control: boardPieceKnight"
+  },
+  "boardPieceBishop": "bishop",
+  "@boardPieceBishop": {
+    "description": "Study and PGN control: boardPieceBishop"
+  },
+  "boardPieceRook": "rook",
+  "@boardPieceRook": {
+    "description": "Study and PGN control: boardPieceRook"
+  },
+  "boardPieceQueen": "queen",
+  "@boardPieceQueen": {
+    "description": "Study and PGN control: boardPieceQueen"
+  },
+  "boardPieceKing": "king",
+  "@boardPieceKing": {
+    "description": "Study and PGN control: boardPieceKing"
+  },
+  "boardPieceName": "{side} {piece}",
+  "@boardPieceName": {
+    "description": "Study and PGN control: boardPieceName",
+    "placeholders": {
+      "side": {
+        "type": "String"
+      },
+      "piece": {
+        "type": "String"
+      }
+    }
+  },
+  "boardSpareHelp": "{piece}: drag onto the board, or click to paint with it",
+  "@boardSpareHelp": {
+    "description": "Study and PGN control: boardSpareHelp",
+    "placeholders": {
+      "piece": {
+        "type": "String"
+      }
+    }
+  },
+  "copyDone": "Copied",
+  "@copyDone": {
+    "description": "Study and PGN control: copyDone"
+  },
+  "copyAction": "Copy",
+  "@copyAction": {
+    "description": "Study and PGN control: copyAction"
+  },
+  "choiceCloseList": "Close list",
+  "@choiceCloseList": {
+    "description": "Study and PGN control: choiceCloseList"
+  },
+  "choiceShowAll": "Show all",
+  "@choiceShowAll": {
+    "description": "Study and PGN control: choiceShowAll"
+  },
+  "choiceNothing": "Nothing to choose from",
+  "@choiceNothing": {
+    "description": "Study and PGN control: choiceNothing"
+  },
+  "choiceNoMatches": "No matches",
+  "@choiceNoMatches": {
+    "description": "Study and PGN control: choiceNoMatches"
+  },
+  "pgnNotSavedFile": "Not saved to a file",
+  "@pgnNotSavedFile": {
+    "description": "Study and PGN control: pgnNotSavedFile"
+  },
+  "pgnChooseSaveFile": "Use Save as… to choose a PGN file.",
+  "@pgnChooseSaveFile": {
+    "description": "Study and PGN control: pgnChooseSaveFile"
+  },
+  "pgnAutoSaved": "Autosave on · Saved",
+  "@pgnAutoSaved": {
+    "description": "Study and PGN control: pgnAutoSaved"
+  },
+  "pgnManualSaved": "Autosave off · Saved",
+  "@pgnManualSaved": {
+    "description": "Study and PGN control: pgnManualSaved"
+  },
+  "pgnSavingPath": "Saving changes to {path}",
+  "@pgnSavingPath": {
+    "description": "Study and PGN control: pgnSavingPath",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "pgnManualSavePath": "Autosave is off. Use Save to write changes to {path}",
+  "@pgnManualSavePath": {
+    "description": "Study and PGN control: pgnManualSavePath",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "pgnAutoSavePath": "Changes save automatically to {path}",
+  "@pgnAutoSavePath": {
+    "description": "Study and PGN control: pgnAutoSavePath",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "pgnNeedsManualSavePath": "Changes need a manual save to {path}",
+  "@pgnNeedsManualSavePath": {
+    "description": "Study and PGN control: pgnNeedsManualSavePath",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "pgnDeleteCounts": "Delete {moves, plural, =1{1 move} other{{moves} moves}} and {comments, plural, =1{1 comment} other{{comments} comments}}?",
+  "@pgnDeleteCounts": {
+    "description": "Study and PGN control: pgnDeleteCounts",
+    "placeholders": {
+      "moves": {
+        "type": "int"
+      },
+      "comments": {
+        "type": "int"
+      }
+    }
+  },
+  "studyDeleteContents": "{chapters, plural, =1{1 chapter} other{{chapters} chapters}} with {moves, plural, =1{1 move} other{{moves} moves}} and {comments, plural, =1{1 comment} other{{comments} comments}}. The PGN file will be moved to Chess Auto Prep recovery trash.",
+  "@studyDeleteContents": {
+    "description": "Study and PGN control: studyDeleteContents",
+    "placeholders": {
+      "chapters": {
+        "type": "int"
+      },
+      "moves": {
+        "type": "int"
+      },
+      "comments": {
+        "type": "int"
+      }
+    }
+  },
+  "studyReplacePositionContents": "Chapter \"{name}\" already has moves; setting a new starting position will clear them.",
+  "@studyReplacePositionContents": {
+    "description": "Study and PGN control: studyReplacePositionContents",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "studyClearAnnotationContents": "Remove {comments, plural, =1{1 comment} other{{comments} comments}} and all glyphs and shapes from \"{name}\". The moves stay.",
+  "@studyClearAnnotationContents": {
+    "description": "Study and PGN control: studyClearAnnotationContents",
+    "placeholders": {
+      "comments": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "studyClearVariationContents": "Remove {moves, plural, =1{1 move} other{{moves} moves}} and {comments, plural, =1{1 comment} other{{comments} comments}} from \"{name}\", including sideline annotations. The main line and its notes stay.",
+  "@studyClearVariationContents": {
+    "description": "Study and PGN control: studyClearVariationContents",
+    "placeholders": {
+      "moves": {
+        "type": "int"
+      },
+      "comments": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "studyRemoveCounts": "Remove {moves, plural, =1{1 move} other{{moves} moves}} and {comments, plural, =1{1 comment} other{{comments} comments}}, including all annotations.",
+  "@studyRemoveCounts": {
+    "description": "Study and PGN control: studyRemoveCounts",
+    "placeholders": {
+      "moves": {
+        "type": "int"
+      },
+      "comments": {
+        "type": "int"
+      }
+    }
+  },
+  "studyLichessSource": "Lichess study · {id}",
+  "@studyLichessSource": {
+    "description": "Study and PGN control: studyLichessSource",
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "studyLichessChapterSource": "Lichess study chapter · {study}/{chapter}",
+  "@studyLichessChapterSource": {
+    "description": "Study and PGN control: studyLichessChapterSource",
+    "placeholders": {
+      "study": {
+        "type": "String"
+      },
+      "chapter": {
+        "type": "String"
+      }
+    }
+  },
+  "studyLichessUserSource": "Lichess · all of {user}'s studies",
+  "@studyLichessUserSource": {
+    "description": "Study and PGN control: studyLichessUserSource",
+    "placeholders": {
+      "user": {
+        "type": "String"
+      }
+    }
+  },
+  "studyCollectionSource": "chessgames.com collection · cid {id}",
+  "@studyCollectionSource": {
+    "description": "Study and PGN control: studyCollectionSource",
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
   }
 }

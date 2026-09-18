@@ -4,6 +4,8 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../design_system/theme/app_typography.dart';
+import '../../l10n/generated/app_localizations.dart';
 import 'package:flutter/services.dart';
 
 import '../../features/studies/controllers/study_controller.dart';
@@ -142,7 +144,7 @@ class _CompactChapterBar extends StatelessWidget {
                     Expanded(
                       child: Text(
                         study.chapterList.chapters.isEmpty
-                            ? 'No chapters'
+                            ? AppLocalizations.of(context).studyNoChapters
                             : study
                                   .chapterList
                                   .chapters[study.chapterIndex]
@@ -159,13 +161,13 @@ class _CompactChapterBar extends StatelessWidget {
           ),
           IconButton(
             icon: const Icon(Icons.add, size: 18),
-            tooltip: 'New chapter',
+            tooltip: AppLocalizations.of(context).studyNewChapter,
             visualDensity: VisualDensity.compact,
             onPressed: onAddChapter,
           ),
           PopupMenuButton<Object>(
             key: ObjectKey(chapter.key),
-            tooltip: 'Chapter actions',
+            tooltip: AppLocalizations.of(context).studyChapterActions,
             onSelected: (action) {
               if (!context.mounted) return;
               if (action is! ChapterAction) {
@@ -178,22 +180,26 @@ class _CompactChapterBar extends StatelessWidget {
               if (current >= 0) onChapterAction(action, current);
             },
             itemBuilder: (_) => [
-              const PopupMenuItem<Object>(
+              PopupMenuItem<Object>(
                 value: _manageChapters,
-                child: Text('Manage & reorder chapters…'),
+                child: Text(AppLocalizations.of(context).studyManageChapters),
               ),
               const PopupMenuDivider(),
               ...studyChapterMenuItems(
+                context,
                 canDelete: study.chapterList.chapters.length > 1,
               ),
             ],
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('Chapter', style: TextStyle(fontSize: 13)),
-                  Icon(Icons.arrow_drop_down, size: 18),
+                  Text(
+                    AppLocalizations.of(context).studyChapter,
+                    style: AppTypography.secondary(context),
+                  ),
+                  const Icon(Icons.arrow_drop_down, size: 18),
                 ],
               ),
             ),

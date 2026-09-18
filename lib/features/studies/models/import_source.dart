@@ -9,9 +9,6 @@ library;
 /// A downloadable source of chapters, identified from a pasted URL.
 sealed class ImportSource {
   const ImportSource();
-
-  /// Short "what this is" line for the dialog (e.g. `Lichess study · WcJ8Iyaz`).
-  String get label;
 }
 
 /// One Lichess study — every chapter, or just [chapterId] when the URL
@@ -23,11 +20,6 @@ class LichessStudySource extends ImportSource {
 
   /// Non-null when the URL named a chapter (`/study/<id>/<chapterId>`).
   final String? chapterId;
-
-  @override
-  String get label => chapterId == null
-      ? 'Lichess study · $studyId'
-      : 'Lichess study chapter · $studyId/$chapterId';
 
   @override
   bool operator ==(Object other) =>
@@ -46,9 +38,6 @@ class LichessUserStudiesSource extends ImportSource {
   final String username;
 
   @override
-  String get label => "Lichess · all of $username's studies";
-
-  @override
   bool operator ==(Object other) =>
       other is LichessUserStudiesSource && other.username == username;
 
@@ -61,9 +50,6 @@ class ChessgamesCollectionSource extends ImportSource {
   const ChessgamesCollectionSource(this.cid);
 
   final String cid;
-
-  @override
-  String get label => 'chessgames.com collection · cid $cid';
 
   @override
   bool operator ==(Object other) =>

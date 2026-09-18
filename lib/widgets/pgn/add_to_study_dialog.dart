@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 
 import '../../features/repertoires/models/repertoire_metadata.dart';
 import '../../design_system/components/name_entry_dialog.dart';
+import '../../design_system/theme/app_typography.dart';
 import '../study/study_name_dialog.dart' show sanitizeStudyName;
 
 /// Outcome of [AddToStudyDialog]: exactly one of [existingPath] /
@@ -32,7 +33,7 @@ class AddToStudyResult {
 class AddToStudyDialog extends StatefulWidget {
   final Future<List<RepertoireMetadata>> Function() loadStudies;
   final String initialChapterName;
-  final String title;
+  final String? title;
   final String? selectionSummary;
 
   /// A study to list first, labelled as the prep file — an opponent's, when
@@ -43,7 +44,7 @@ class AddToStudyDialog extends StatefulWidget {
     super.key,
     required this.initialChapterName,
     required this.loadStudies,
-    this.title = 'Add line to study',
+    this.title,
     this.selectionSummary,
     this.preferredPath,
   });
@@ -124,22 +125,22 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
       for (final study in _studies ?? <RepertoireMetadata>[])
         study.name.toLowerCase(),
     };
-    var suggested = 'New study';
+    var suggested = AppLocalizations.of(context).studyNewStudy;
     for (var suffix = 2; taken.contains(suggested.toLowerCase()); suffix++) {
-      suggested = 'New study ($suffix)';
+      suggested = AppLocalizations.of(context).studyNumberedNew(suffix);
     }
     final name = await showNameEntryDialog(
       context,
-      title: 'Add new study',
-      fieldLabel: 'Study name',
-      confirmLabel: 'Create and add',
+      title: AppLocalizations.of(context).studyAddNewStudy,
+      fieldLabel: AppLocalizations.of(context).studyStudyName,
+      confirmLabel: AppLocalizations.of(context).studyCreateAndAdd,
       initialValue: suggested,
       allowUnchanged: true,
       validate: (value) {
         final safe = sanitizeStudyName(value);
-        if (safe.isEmpty) return 'Please enter a study name.';
+        if (safe.isEmpty) return AppLocalizations.of(context).studyNameRequired;
         if (taken.contains(safe.toLowerCase())) {
-          return 'A study with this name already exists.';
+          return AppLocalizations.of(context).studyNameExists;
         }
         return null;
       },
@@ -160,7 +161,7 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
     final filtered = _filtered;
 
     return AlertDialog(
-      title: Text(widget.title),
+      title: Text(widget.title ?? AppLocalizations.of(context).studyAddLine),
       content: SizedBox(
         width: 420,
         height: 420,
@@ -181,8 +182,8 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
             else
               TextField(
                 controller: _chapterCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Chapter name',
+                decoration: InputDecoration(
+                  labelText: AppLocalizations.of(context).studyChapterName,
                   isDense: true,
                 ),
               ),
@@ -190,15 +191,15 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
             FilledButton.icon(
               onPressed: studies == null ? null : _createNew,
               icon: const Icon(Icons.add),
-              label: const Text('Add new study'),
+              label: Text(AppLocalizations.of(context).studyAddNewStudy),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _searchCtrl,
               autofocus: true,
-              decoration: const InputDecoration(
-                labelText: 'Search existing studies',
-                prefixIcon: Icon(Icons.search, size: 18),
+              decoration: InputDecoration(
+                labelText: AppLocalizations.of(context).studySearchExisting,
+                prefixIcon: const Icon(Icons.search, size: 18),
                 isDense: true,
               ),
               onChanged: (v) {
@@ -222,8 +223,12 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
                             padding: const EdgeInsets.all(24),
                             child: Text(
                               studies.isEmpty
-                                  ? 'No studies yet. Use Add new study to create one.'
-                                  : 'No studies match your search.',
+                                  ? AppLocalizations.of(
+                                      context,
+                                    ).studyNoStudiesToAdd
+                                  : AppLocalizations.of(
+                                      context,
+                                    ).studyNoStudiesMatch,
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 color: Theme.of(
@@ -241,10 +246,14 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
                             ),
                             title: Text(s.name),
                             subtitle: Text(
-                              '${_isPreferred(s) ? 'Prep file · ' : ''}'
-                              '${s.gameCount} chapter'
-                              '${s.gameCount == 1 ? '' : 's'}',
-                              style: const TextStyle(fontSize: 12),
+                              _isPreferred(s)
+                                  ? AppLocalizations.of(
+                                      context,
+                                    ).studyPreferredChapterCount(s.gameCount)
+                                  : AppLocalizations.of(
+                                      context,
+                                    ).studyChapterCount(s.gameCount),
+                              style: AppTypography.caption(context),
                             ),
                             onTap: () => _pickExisting(s),
                           ),
@@ -257,7 +266,7 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(AppLocalizations.of(context).cancel),
         ),
       ],
     );

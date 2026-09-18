@@ -8,6 +8,7 @@ import '../../utils/pgn_nags.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../l10n/generated/app_localizations.dart';
 import 'package:flutter/services.dart';
 
 import '../../design_system/theme/app_typography.dart';
@@ -189,9 +190,11 @@ class PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
     final draft = _controller.text;
     final confirmed = await confirmAction(
       context,
-      title: 'Delete 1 comment?',
-      message: 'Remove the comment on ${widget.moveLabel}?',
-      confirmLabel: 'Delete',
+      title: AppLocalizations.of(context).pgnDeleteOneComment,
+      message: AppLocalizations.of(
+        context,
+      ).pgnRemoveCommentOn(widget.moveLabel),
+      confirmLabel: AppLocalizations.of(context).delete,
     );
     _confirmingDelete = false;
     if (!mounted ||
@@ -245,14 +248,16 @@ class PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
                       child: Text(
                         _hasComment && !_expanded
                             ? widget.comment.replaceAll('\n', ' ')
-                            : 'Comment',
+                            : AppLocalizations.of(context).pgnComment,
                         style: AppTypography.secondary(context),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     Tooltip(
-                      message: _expanded ? 'Collapse comment' : 'Edit comment',
+                      message: _expanded
+                          ? AppLocalizations.of(context).pgnCollapseComment
+                          : AppLocalizations.of(context).pgnEditComment,
                       child: Icon(
                         _expanded ? Icons.expand_less : Icons.expand_more,
                         size: 18,
@@ -264,7 +269,7 @@ class PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
             )
           else
             Text(
-              'Comment',
+              AppLocalizations.of(context).pgnComment,
               style: AppTypography.bodyStrong(
                 context,
               ).copyWith(color: Theme.of(context).colorScheme.onSurface),
@@ -301,8 +306,8 @@ class PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
                 Expanded(
                   child: Text(
                     _blankReplacement
-                        ? 'Comment kept until deleted'
-                        : 'Comment:',
+                        ? AppLocalizations.of(context).pgnCommentKept
+                        : AppLocalizations.of(context).pgnCommentLabel,
                     style: _blankReplacement
                         ? AppTypography.caption(context)
                         : AppTypography.bodyStrong(context).copyWith(
@@ -311,7 +316,7 @@ class PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
                   ),
                 ),
                 IconButton(
-                  tooltip: 'Delete comment',
+                  tooltip: AppLocalizations.of(context).pgnDeleteComment,
                   visualDensity: VisualDensity.compact,
                   icon: const Icon(Icons.delete_outline, size: 18),
                   onPressed: enabled && _hasComment ? _deleteComment : null,
@@ -330,7 +335,9 @@ class PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
               cursorColor: Theme.of(context).colorScheme.onSurface,
               decoration: InputDecoration(
                 isDense: true,
-                hintText: enabled ? null : 'Select a move to add notes',
+                hintText: enabled
+                    ? null
+                    : AppLocalizations.of(context).pgnSelectMoveNotes,
                 filled: true,
                 fillColor: Theme.of(context).colorScheme.surfaceContainer,
                 contentPadding: const EdgeInsets.symmetric(

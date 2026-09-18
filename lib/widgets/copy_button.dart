@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/generated/app_localizations.dart';
 
 import '../design_system/theme/app_typography.dart';
 import '../utils/app_messages.dart';
@@ -27,7 +28,7 @@ class CopyButton extends StatefulWidget {
   const CopyButton({
     super.key,
     required this.text,
-    this.label = 'Copy',
+    this.label,
     this.icon = Icons.copy_all_outlined,
     this.tooltip,
     this.foreground,
@@ -56,7 +57,7 @@ class CopyButton extends StatefulWidget {
   final ValueGetter<String> text;
 
   /// Resting label. Becomes "Copied" while the confirmation shows.
-  final String label;
+  final String? label;
 
   final IconData icon;
 
@@ -115,7 +116,9 @@ class _CopyButtonState extends State<CopyButton> {
       return IconButton(
         onPressed: widget.enabled ? _copy : null,
         icon: icon,
-        tooltip: _copied ? 'Copied' : widget.tooltip,
+        tooltip: _copied
+            ? AppLocalizations.of(context).copyDone
+            : widget.tooltip,
         padding: widget.dense ? EdgeInsets.zero : null,
         visualDensity: widget.dense ? VisualDensity.compact : null,
         color: widget.foreground,
@@ -123,7 +126,9 @@ class _CopyButtonState extends State<CopyButton> {
     }
 
     final label = Text(
-      _copied ? 'Copied' : widget.label,
+      _copied
+          ? AppLocalizations.of(context).copyDone
+          : (widget.label ?? AppLocalizations.of(context).copyAction),
       style: AppTypography.caption(context).copyWith(color: widget.foreground),
     );
     final button = TextButton.icon(

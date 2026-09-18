@@ -5,6 +5,7 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../l10n/generated/app_localizations.dart';
 import 'package:flutter/services.dart';
 
 import '../../features/studies/controllers/study_controller.dart';
@@ -126,7 +127,9 @@ class _StudyPickerBarState extends State<StudyPickerBar> {
         else
           Flexible(
             child: Tooltip(
-              message: canRename ? 'Rename study' : '',
+              message: canRename
+                  ? AppLocalizations.of(context).studyRename
+                  : '',
               child: InkWell(
                 onTap: canRename ? _startNameEdit : null,
                 borderRadius: BorderRadius.circular(4),
@@ -150,13 +153,13 @@ class _StudyPickerBarState extends State<StudyPickerBar> {
         if (canRename && !_editingName)
           IconButton(
             icon: const Icon(Icons.edit_outlined, size: 16),
-            tooltip: 'Rename study',
+            tooltip: AppLocalizations.of(context).studyRename,
             visualDensity: VisualDensity.compact,
             onPressed: _startNameEdit,
           ),
         IconButton(
           icon: const Icon(Icons.arrow_drop_down, size: 22),
-          tooltip: 'Switch study',
+          tooltip: AppLocalizations.of(context).studySwitch,
           visualDensity: VisualDensity.compact,
           onPressed: widget.onPickStudy,
         ),

@@ -16,6 +16,7 @@ library;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import '../../l10n/generated/app_localizations.dart';
 import 'package:flutter/services.dart';
 
 import '../../design_system/theme/app_typography.dart';
@@ -61,7 +62,7 @@ class ChoiceField<T> extends StatefulWidget {
     this.enabled = true,
     this.compact = false,
     this.style,
-    this.emptyMessage = 'No matches',
+    this.emptyMessage,
     this.autofocus = false,
     this.prefixIcon,
   });
@@ -89,7 +90,7 @@ class ChoiceField<T> extends StatefulWidget {
   final bool compact;
 
   final TextStyle? style;
-  final String emptyMessage;
+  final String? emptyMessage;
   final bool autofocus;
   final IconData? prefixIcon;
 
@@ -129,7 +130,15 @@ class _ChoiceFieldState<T> extends State<ChoiceField<T>> {
   }
 
   bool get _hasSubtitles => widget.items.any((i) => i.subtitle != null);
-  double get _rowHeight => _hasSubtitles ? 46 : 34;
+  double get _rowHeight {
+    final scaler = MediaQuery.textScalerOf(context);
+    final body = AppTypography.body(context);
+    final caption = AppTypography.caption(context);
+    final textHeight =
+        scaler.scale(body.fontSize!) * body.height! +
+        (_hasSubtitles ? scaler.scale(caption.fontSize!) * caption.height! : 0);
+    return math.max(_hasSubtitles ? 46 : 34, (textHeight + 12).ceilToDouble());
+  }
 
   @override
   void initState() {
@@ -306,7 +315,9 @@ class _ChoiceFieldState<T> extends State<ChoiceField<T>> {
             _overlay.isShowing ? Icons.arrow_drop_up : Icons.arrow_drop_down,
             size: 20,
           ),
-          tooltip: _overlay.isShowing ? 'Close list' : 'Show all',
+          tooltip: _overlay.isShowing
+              ? AppLocalizations.of(context).choiceCloseList
+              : AppLocalizations.of(context).choiceShowAll,
           visualDensity: widget.compact
               ? VisualDensity.compact
               : VisualDensity.standard,
@@ -390,7 +401,10 @@ class _ChoiceFieldState<T> extends State<ChoiceField<T>> {
       body = Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         child: Text(
-          widget.items.isEmpty ? 'Nothing to choose from' : widget.emptyMessage,
+          widget.items.isEmpty
+              ? AppLocalizations.of(context).choiceNothing
+              : (widget.emptyMessage ??
+                    AppLocalizations.of(context).choiceNoMatches),
           style: AppTypography.caption(context),
         ),
       );

@@ -61,7 +61,7 @@ abstract final class PgnTextStyles {
   );
 
   /// Keep the annotation's hue while making its ink legible on the actual
-  /// glyph fill, or on both ordinary and selected movetext backgrounds.
+  /// glyph fill, or on ordinary, hovered and selected movetext backgrounds.
   static Color annotationInk(
     BuildContext context,
     Color semanticColor, {
@@ -69,7 +69,11 @@ abstract final class PgnTextStyles {
   }) {
     final colors = Theme.of(context).colorScheme;
     final surfaces = background == null
-        ? [colors.surfaceContainerLow, colors.primaryContainer]
+        ? [
+            colors.surfaceContainerLow,
+            colors.surfaceContainerHighest,
+            colors.primaryContainer,
+          ]
         : [background];
     final hsl = HSLColor.fromColor(semanticColor);
     final target = colors.brightness == Brightness.light ? 0.0 : 1.0;

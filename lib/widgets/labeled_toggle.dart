@@ -78,10 +78,9 @@ class AppCheckbox extends StatelessWidget {
                   Flexible(
                     child: Text(
                       label,
-                      style: TextStyle(
-                        fontSize: 13,
+                      style: AppTypography.secondary(context).copyWith(
                         color: enabled
-                            ? null
+                            ? Theme.of(context).colorScheme.onSurface
                             : Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
@@ -146,10 +145,9 @@ class AppSwitch extends StatelessWidget {
             onTap: enabled ? () => onChanged(!value) : null,
             child: Text(
               label,
-              style: TextStyle(
-                fontSize: 13,
+              style: AppTypography.secondary(context).copyWith(
                 color: enabled
-                    ? null
+                    ? Theme.of(context).colorScheme.onSurface
                     : Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),

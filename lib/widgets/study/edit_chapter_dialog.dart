@@ -110,7 +110,7 @@ class _EditChapterDialogState extends State<_EditChapterDialog> {
 
   @override
   Widget build(BuildContext context) {
-    const mono = TextStyle(fontFamily: AppTypography.monoFamily, fontSize: 12);
+    final mono = AppTypography.mono(context);
     return AlertDialog(
       title: Text(AppLocalizations.of(context).studyEditChapter),
       content: SizedBox(
@@ -216,10 +216,9 @@ class _EditChapterDialogState extends State<_EditChapterDialog> {
                 const SizedBox(height: 8),
                 Text(
                   _error!,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.error,
-                  ),
+                  style: AppTypography.caption(
+                    context,
+                  ).copyWith(color: Theme.of(context).colorScheme.error),
                 ),
               ],
             ],

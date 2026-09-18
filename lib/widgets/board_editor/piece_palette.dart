@@ -12,6 +12,7 @@ library;
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
+import '../../l10n/generated/app_localizations.dart';
 
 import '../../core/board_editor_controller.dart';
 import '../common/piece_image.dart';
@@ -90,7 +91,7 @@ class SparePieceRow extends StatelessWidget {
             children: [
               Expanded(
                 child: _SpareSlot(
-                  tooltip: 'Move pieces',
+                  tooltip: AppLocalizations.of(context).boardMovePieces,
                   selected: tool is PointerTool,
                   onTap: () => onSelect(const PointerTool()),
                   child: Icon(
@@ -111,7 +112,7 @@ class SparePieceRow extends StatelessWidget {
                 ),
               Expanded(
                 child: _SpareSlot(
-                  tooltip: 'Erase pieces',
+                  tooltip: AppLocalizations.of(context).boardErasePieces,
                   selected: tool is EraserTool,
                   danger: true,
                   onTap: () => onSelect(const EraserTool()),
@@ -147,10 +148,21 @@ class _SparePiece extends StatelessWidget {
   Widget build(BuildContext context) {
     final brush = PieceBrush(piece);
     final selected = tool == brush;
-    final name =
-        '${piece.color == Side.white ? 'White' : 'Black'} ${piece.role.name}';
+    final name = AppLocalizations.of(context).boardPieceName(
+      piece.color == Side.white
+          ? AppLocalizations.of(context).white
+          : AppLocalizations.of(context).black,
+      {
+        Role.pawn: AppLocalizations.of(context).boardPiecePawn,
+        Role.knight: AppLocalizations.of(context).boardPieceKnight,
+        Role.bishop: AppLocalizations.of(context).boardPieceBishop,
+        Role.rook: AppLocalizations.of(context).boardPieceRook,
+        Role.queen: AppLocalizations.of(context).boardPieceQueen,
+        Role.king: AppLocalizations.of(context).boardPieceKing,
+      }[piece.role]!,
+    );
     return _SpareSlot(
-      tooltip: '$name: drag onto the board, or click to paint with it',
+      tooltip: AppLocalizations.of(context).boardSpareHelp(name),
       selected: selected,
       // Click: take the piece in hand, or put it down again.
       onTap: () => onSelect(selected ? const PointerTool() : brush),

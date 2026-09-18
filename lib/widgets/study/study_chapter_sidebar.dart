@@ -311,6 +311,7 @@ class _StudyChapterSidebarState extends State<StudyChapterSidebar> {
                 padding: EdgeInsets.zero,
                 onSelected: (action) => _act(action, chapter.key),
                 itemBuilder: (_) => studyChapterMenuItems(
+                  context,
                   canDelete: widget.study.chapterList.chapters.length > 1,
                 ),
               ),

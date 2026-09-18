@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/models/move_tree.dart';
@@ -29,6 +30,9 @@ void main() {
       final tree = course(20000);
       TreePath? jumped;
       Widget host(TreePath path) => MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+
         home: Scaffold(
           body: SizedBox(
             width: 400,
@@ -77,6 +81,9 @@ void main() {
     TreePath? jumped;
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+
         home: MediaQuery(
           data: const MediaQueryData(textScaler: TextScaler.linear(2)),
           child: Scaffold(
@@ -120,6 +127,9 @@ void main() {
       children = node.children;
     }
     Widget host(int ply) => MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+
       home: MediaQuery(
         data: const MediaQueryData(textScaler: TextScaler.linear(2)),
         child: Scaffold(
@@ -159,6 +169,9 @@ void main() {
     final tree = course(200);
     var path = const TreePath([0]);
     Widget host() => MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+
       home: Scaffold(
         body: SizedBox(
           width: 400,

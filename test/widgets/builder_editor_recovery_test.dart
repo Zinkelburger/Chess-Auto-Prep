@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import '../support/repertoire_dependencies.dart';
 import 'package:chess_auto_prep/widgets/interactive_pgn_editor.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_annotation_panel.dart';
@@ -12,6 +13,9 @@ void main() {
       addTearDown(owner.dispose);
       owner.composeMoves(['e4']);
       Widget host() => MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+
         home: Scaffold(
           body: InteractivePgnEditor(
             tree: owner.board.tree,

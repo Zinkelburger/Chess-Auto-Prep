@@ -94,7 +94,7 @@ abstract class AppLocalizations {
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[Locale('en')];
 
-  /// Repertoire catalog: cancel
+  /// Study and PGN control: cancel
   ///
   /// In en, this message translates to:
   /// **'Cancel'**
@@ -118,7 +118,7 @@ abstract class AppLocalizations {
   /// **'Restore'**
   String get restore;
 
-  /// Repertoire catalog: delete
+  /// Study and PGN control: delete
   ///
   /// In en, this message translates to:
   /// **'Delete'**
@@ -136,7 +136,7 @@ abstract class AppLocalizations {
   /// **'Import PGN'**
   String get importPgn;
 
-  /// Repertoire catalog: importAction
+  /// Study and PGN control: importAction
   ///
   /// In en, this message translates to:
   /// **'Import'**
@@ -628,13 +628,13 @@ abstract class AppLocalizations {
   /// **'No unsaved changes'**
   String get documentClean;
 
-  /// Shared document save interaction: documentDirty
+  /// Study and PGN control: documentDirty
   ///
   /// In en, this message translates to:
   /// **'Unsaved changes'**
   String get documentDirty;
 
-  /// Shared document save interaction: documentSaving
+  /// Study and PGN control: documentSaving
   ///
   /// In en, this message translates to:
   /// **'Saving…'**
@@ -1042,7 +1042,7 @@ abstract class AppLocalizations {
   /// **'{date} · {time}'**
   String workspaceRecoveryTimestamp(String date, String time);
 
-  /// Workspace recovery display name
+  /// Study and PGN control: studyWorkspaceName
   ///
   /// In en, this message translates to:
   /// **'Study'**
@@ -1264,7 +1264,7 @@ abstract class AppLocalizations {
   /// **'Engine principal variation (UCI)'**
   String get generationRecoveryPv;
 
-  /// Legacy analysis inspection
+  /// Study and PGN control: generationRecoveryNotSaved
   ///
   /// In en, this message translates to:
   /// **'Not saved'**
@@ -1846,13 +1846,13 @@ abstract class AppLocalizations {
   /// **'Chapters ({count})'**
   String studyChapterListTitle(int count);
 
-  /// Study chapter list control: studyNewChapter
+  /// Study workflow control: studyNewChapter
   ///
   /// In en, this message translates to:
   /// **'New chapter'**
   String get studyNewChapter;
 
-  /// Study chapter list control: studySearchChapters
+  /// Study and PGN control: studySearchChapters
   ///
   /// In en, this message translates to:
   /// **'Search chapters'**
@@ -1900,7 +1900,7 @@ abstract class AppLocalizations {
   /// **'A study needs at least one chapter'**
   String get studyKeepOneChapter;
 
-  /// Study chapter list control: studyChapterActions
+  /// Study workflow control: studyChapterActions
   ///
   /// In en, this message translates to:
   /// **'Chapter actions'**
@@ -1930,7 +1930,7 @@ abstract class AppLocalizations {
   /// **'Paste at least one game.'**
   String get studyPasteGameRequired;
 
-  /// Study chapter dialog label: Name
+  /// Study and PGN control: studyName
   ///
   /// In en, this message translates to:
   /// **'Name'**
@@ -2049,6 +2049,1062 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{tag} is written by the study; edit it above.'**
   String studyOwnedTag(String tag);
+
+  /// Study workflow control: studyImportGamesFound
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 game found.} other{{count} games found.}}'**
+  String studyImportGamesFound(int count);
+
+  /// Study workflow control: studyDownloadCount
+  ///
+  /// In en, this message translates to:
+  /// **'Download {count}'**
+  String studyDownloadCount(int count);
+
+  /// Study workflow control: studyImportFromUrl
+  ///
+  /// In en, this message translates to:
+  /// **'Import from URL'**
+  String get studyImportFromUrl;
+
+  /// Study workflow control: studyUrl
+  ///
+  /// In en, this message translates to:
+  /// **'URL'**
+  String get studyUrl;
+
+  /// Study workflow control: studyImportSupportedUrls
+  ///
+  /// In en, this message translates to:
+  /// **'lichess.org/study/<id>  —  one study, all chapters\nlichess.org/study/by/<user>  —  every public study of theirs\nchessgames.com/perl/chesscollection?cid=<id>  —  a collection'**
+  String get studyImportSupportedUrls;
+
+  /// Study workflow control: studyImportAppend
+  ///
+  /// In en, this message translates to:
+  /// **'Add to the current study instead of creating a new one'**
+  String get studyImportAppend;
+
+  /// Study workflow control: studyImportCollectionSeparate
+  ///
+  /// In en, this message translates to:
+  /// **'A chessgames.com collection downloads in the background and always gets its own study.'**
+  String get studyImportCollectionSeparate;
+
+  /// Study workflow control: studyImportNoOpenStudy
+  ///
+  /// In en, this message translates to:
+  /// **'No study is open.'**
+  String get studyImportNoOpenStudy;
+
+  /// Study workflow control: studyImportDelay
+  ///
+  /// In en, this message translates to:
+  /// **'Seconds between requests (chessgames.com)'**
+  String get studyImportDelay;
+
+  /// Study workflow control: studyImportDelayHelp
+  ///
+  /// In en, this message translates to:
+  /// **'chessgames.com bans fast downloads: 2–3 s apart gets blocked after ~20 games, 22 s apart sustains 60. At 22 s a 60-game collection takes about 25 minutes, running in the background.'**
+  String get studyImportDelayHelp;
+
+  /// Study workflow control: studyImportContacting
+  ///
+  /// In en, this message translates to:
+  /// **'Contacting the server…'**
+  String get studyImportContacting;
+
+  /// Study workflow control: studyImportLinkHint
+  ///
+  /// In en, this message translates to:
+  /// **'Paste a link to see what will be imported.'**
+  String get studyImportLinkHint;
+
+  /// Study workflow control: studyImportUnsupportedUrl
+  ///
+  /// In en, this message translates to:
+  /// **'Not a Lichess study or chessgames.com collection link.'**
+  String get studyImportUnsupportedUrl;
+
+  /// Study workflow control: studyImportCollectionBlocked
+  ///
+  /// In en, this message translates to:
+  /// **'Collection page blocked'**
+  String get studyImportCollectionBlocked;
+
+  /// Study workflow control: studyImportPasteIdsHelp
+  ///
+  /// In en, this message translates to:
+  /// **'chessgames.com served a bot check instead of the collection. Downloading the games still works — it just needs the list.\n\nOpen the collection in a browser, select all (Ctrl+A) and copy, or save the page source, then paste it below.'**
+  String get studyImportPasteIdsHelp;
+
+  /// Study workflow control: studyImportOpenCollection
+  ///
+  /// In en, this message translates to:
+  /// **'Open the collection page'**
+  String get studyImportOpenCollection;
+
+  /// Study workflow control: studyImportPasteIdsHint
+  ///
+  /// In en, this message translates to:
+  /// **'Paste the page, game links, or game ids…'**
+  String get studyImportPasteIdsHint;
+
+  /// Study workflow control: studyImportNoIds
+  ///
+  /// In en, this message translates to:
+  /// **'No game ids found yet.'**
+  String get studyImportNoIds;
+
+  /// Study workflow control: studyDownload
+  ///
+  /// In en, this message translates to:
+  /// **'Download'**
+  String get studyDownload;
+
+  /// Study workflow control: studyNumberedNew
+  ///
+  /// In en, this message translates to:
+  /// **'New study ({count})'**
+  String studyNumberedNew(int count);
+
+  /// Study workflow control: studyChapterCount
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 chapter} other{{count} chapters}}'**
+  String studyChapterCount(int count);
+
+  /// Study workflow control: studyPreferredChapterCount
+  ///
+  /// In en, this message translates to:
+  /// **'Prep file · {count, plural, =1{1 chapter} other{{count} chapters}}'**
+  String studyPreferredChapterCount(int count);
+
+  /// Study workflow control: studyAddLine
+  ///
+  /// In en, this message translates to:
+  /// **'Add line to study'**
+  String get studyAddLine;
+
+  /// Study and PGN control: studyNewStudy
+  ///
+  /// In en, this message translates to:
+  /// **'New study'**
+  String get studyNewStudy;
+
+  /// Study and PGN control: studyAddNewStudy
+  ///
+  /// In en, this message translates to:
+  /// **'Add new study'**
+  String get studyAddNewStudy;
+
+  /// Study and PGN control: studyStudyName
+  ///
+  /// In en, this message translates to:
+  /// **'Study name'**
+  String get studyStudyName;
+
+  /// Study and PGN control: studyCreateAndAdd
+  ///
+  /// In en, this message translates to:
+  /// **'Create and add'**
+  String get studyCreateAndAdd;
+
+  /// Study and PGN control: studyNameRequired
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a study name.'**
+  String get studyNameRequired;
+
+  /// Study and PGN control: studyNameExists
+  ///
+  /// In en, this message translates to:
+  /// **'A study with this name already exists.'**
+  String get studyNameExists;
+
+  /// Study and PGN control: studyChapterName
+  ///
+  /// In en, this message translates to:
+  /// **'Chapter name'**
+  String get studyChapterName;
+
+  /// Study and PGN control: studySearchExisting
+  ///
+  /// In en, this message translates to:
+  /// **'Search existing studies'**
+  String get studySearchExisting;
+
+  /// Study and PGN control: studyNoStudiesToAdd
+  ///
+  /// In en, this message translates to:
+  /// **'No studies yet. Use Add new study to create one.'**
+  String get studyNoStudiesToAdd;
+
+  /// Study and PGN control: studyNoStudiesMatch
+  ///
+  /// In en, this message translates to:
+  /// **'No studies match your search.'**
+  String get studyNoStudiesMatch;
+
+  /// Study workflow control: studyEditChapterMenu
+  ///
+  /// In en, this message translates to:
+  /// **'Edit chapter…'**
+  String get studyEditChapterMenu;
+
+  /// Study workflow control: studySetStartMenu
+  ///
+  /// In en, this message translates to:
+  /// **'Set starting position…'**
+  String get studySetStartMenu;
+
+  /// Study workflow control: studyCopyChapter
+  ///
+  /// In en, this message translates to:
+  /// **'Copy chapter PGN'**
+  String get studyCopyChapter;
+
+  /// Study workflow control: studyClearAnnotationsMenu
+  ///
+  /// In en, this message translates to:
+  /// **'Clear comments, glyphs and shapes…'**
+  String get studyClearAnnotationsMenu;
+
+  /// Study workflow control: studyClearVariationsMenu
+  ///
+  /// In en, this message translates to:
+  /// **'Clear variations…'**
+  String get studyClearVariationsMenu;
+
+  /// Study workflow control: studyDeleteChapterMenu
+  ///
+  /// In en, this message translates to:
+  /// **'Delete chapter…'**
+  String get studyDeleteChapterMenu;
+
+  /// Study workflow control: studyNoChapters
+  ///
+  /// In en, this message translates to:
+  /// **'No chapters'**
+  String get studyNoChapters;
+
+  /// Study workflow control: studyManageChapters
+  ///
+  /// In en, this message translates to:
+  /// **'Manage & reorder chapters…'**
+  String get studyManageChapters;
+
+  /// Study workflow control: studyChapter
+  ///
+  /// In en, this message translates to:
+  /// **'Chapter'**
+  String get studyChapter;
+
+  /// Study workflow control: studyRename
+  ///
+  /// In en, this message translates to:
+  /// **'Rename study'**
+  String get studyRename;
+
+  /// Study and PGN control: studySwitch
+  ///
+  /// In en, this message translates to:
+  /// **'Switch study'**
+  String get studySwitch;
+
+  /// Study and PGN control: studyNameConfirm
+  ///
+  /// In en, this message translates to:
+  /// **'OK'**
+  String get studyNameConfirm;
+
+  /// Study and PGN control: studyNameUnusable
+  ///
+  /// In en, this message translates to:
+  /// **'That name has no characters a file can use.'**
+  String get studyNameUnusable;
+
+  /// Study and PGN control: studyAddFailed
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to add to study.'**
+  String get studyAddFailed;
+
+  /// Study and PGN control: studyHistoryTitle
+  ///
+  /// In en, this message translates to:
+  /// **'Study: {name}'**
+  String studyHistoryTitle(String name);
+
+  /// Study and PGN control: pgnDeleteOneComment
+  ///
+  /// In en, this message translates to:
+  /// **'Delete 1 comment?'**
+  String get pgnDeleteOneComment;
+
+  /// Study and PGN control: pgnSaveComment
+  ///
+  /// In en, this message translates to:
+  /// **'Save comment'**
+  String get pgnSaveComment;
+
+  /// Study and PGN control: pgnComment
+  ///
+  /// In en, this message translates to:
+  /// **'Comment'**
+  String get pgnComment;
+
+  /// Study and PGN control: pgnCollapseComment
+  ///
+  /// In en, this message translates to:
+  /// **'Collapse comment'**
+  String get pgnCollapseComment;
+
+  /// Study and PGN control: pgnEditComment
+  ///
+  /// In en, this message translates to:
+  /// **'Edit comment'**
+  String get pgnEditComment;
+
+  /// Study and PGN control: pgnCommentKept
+  ///
+  /// In en, this message translates to:
+  /// **'Comment kept until deleted'**
+  String get pgnCommentKept;
+
+  /// Study and PGN control: pgnCommentLabel
+  ///
+  /// In en, this message translates to:
+  /// **'Comment:'**
+  String get pgnCommentLabel;
+
+  /// Study and PGN control: pgnDeleteComment
+  ///
+  /// In en, this message translates to:
+  /// **'Delete comment'**
+  String get pgnDeleteComment;
+
+  /// Study and PGN control: pgnSelectMoveNotes
+  ///
+  /// In en, this message translates to:
+  /// **'Select a move to add notes'**
+  String get pgnSelectMoveNotes;
+
+  /// Study and PGN control: pgnRemoveCommentOn
+  ///
+  /// In en, this message translates to:
+  /// **'Remove the comment on {move}'**
+  String pgnRemoveCommentOn(String move);
+
+  /// Study and PGN control: pgnLineCopied
+  ///
+  /// In en, this message translates to:
+  /// **'Line copied to clipboard'**
+  String get pgnLineCopied;
+
+  /// Study and PGN control: pgnMove
+  ///
+  /// In en, this message translates to:
+  /// **'Move'**
+  String get pgnMove;
+
+  /// Study and PGN control: pgnEditCommentMenu
+  ///
+  /// In en, this message translates to:
+  /// **'Edit Comment'**
+  String get pgnEditCommentMenu;
+
+  /// Study and PGN control: pgnAddCommentMenu
+  ///
+  /// In en, this message translates to:
+  /// **'Add Comment'**
+  String get pgnAddCommentMenu;
+
+  /// Study and PGN control: pgnUnmarkQuizStart
+  ///
+  /// In en, this message translates to:
+  /// **'Unmark Quiz Start'**
+  String get pgnUnmarkQuizStart;
+
+  /// Study and PGN control: pgnMarkQuizStart
+  ///
+  /// In en, this message translates to:
+  /// **'Start Quiz From This Move'**
+  String get pgnMarkQuizStart;
+
+  /// Study and PGN control: pgnUnmarkQuizEnd
+  ///
+  /// In en, this message translates to:
+  /// **'Unmark Quiz End'**
+  String get pgnUnmarkQuizEnd;
+
+  /// Study and PGN control: pgnMarkQuizEnd
+  ///
+  /// In en, this message translates to:
+  /// **'End Quiz After This Move'**
+  String get pgnMarkQuizEnd;
+
+  /// Study and PGN control: pgnPromoteVariation
+  ///
+  /// In en, this message translates to:
+  /// **'Promote Variation'**
+  String get pgnPromoteVariation;
+
+  /// Study and PGN control: pgnMakeMainLine
+  ///
+  /// In en, this message translates to:
+  /// **'Make Main Line'**
+  String get pgnMakeMainLine;
+
+  /// Study and PGN control: pgnCopyWholeLine
+  ///
+  /// In en, this message translates to:
+  /// **'Copy Whole Line'**
+  String get pgnCopyWholeLine;
+
+  /// Study and PGN control: pgnCopyFromHere
+  ///
+  /// In en, this message translates to:
+  /// **'Copy PGN from Here'**
+  String get pgnCopyFromHere;
+
+  /// Study and PGN control: pgnViewInLines
+  ///
+  /// In en, this message translates to:
+  /// **'View in Lines'**
+  String get pgnViewInLines;
+
+  /// Study and PGN control: pgnDeleteFromHere
+  ///
+  /// In en, this message translates to:
+  /// **'Delete from Here'**
+  String get pgnDeleteFromHere;
+
+  /// Study and PGN control: pgnLineTitle
+  ///
+  /// In en, this message translates to:
+  /// **'Line title'**
+  String get pgnLineTitle;
+
+  /// Study and PGN control: pgnStartPosition
+  ///
+  /// In en, this message translates to:
+  /// **'the start position'**
+  String get pgnStartPosition;
+
+  /// Study and PGN control: pgnEmptyEditor
+  ///
+  /// In en, this message translates to:
+  /// **'Play a move or select a saved line.'**
+  String get pgnEmptyEditor;
+
+  /// Study and PGN control: pgnQuizEndHelp
+  ///
+  /// In en, this message translates to:
+  /// **'Quiz ends here: training stops after this move'**
+  String get pgnQuizEndHelp;
+
+  /// Study and PGN control: pgnDeleteContinuations
+  ///
+  /// In en, this message translates to:
+  /// **'This removes the move and all continuations from here, including their annotations.'**
+  String get pgnDeleteContinuations;
+
+  /// Study and PGN control: pgnQuizStartHelp
+  ///
+  /// In en, this message translates to:
+  /// **'Quiz starts here: training auto-plays the moves before this one and asks for this one'**
+  String get pgnQuizStartHelp;
+
+  /// Study and PGN control: studyBackMove
+  ///
+  /// In en, this message translates to:
+  /// **'Back one move'**
+  String get studyBackMove;
+
+  /// Study and PGN control: studyForwardMove
+  ///
+  /// In en, this message translates to:
+  /// **'Forward one move'**
+  String get studyForwardMove;
+
+  /// Study and PGN control: studyGoStart
+  ///
+  /// In en, this message translates to:
+  /// **'Go to start'**
+  String get studyGoStart;
+
+  /// Study and PGN control: studyGoEnd
+  ///
+  /// In en, this message translates to:
+  /// **'Go to end'**
+  String get studyGoEnd;
+
+  /// Study and PGN control: studyToggleEngine
+  ///
+  /// In en, this message translates to:
+  /// **'Toggle engine'**
+  String get studyToggleEngine;
+
+  /// Study and PGN control: studyFlipBoard
+  ///
+  /// In en, this message translates to:
+  /// **'Flip board'**
+  String get studyFlipBoard;
+
+  /// Study and PGN control: studyBrowsePgn
+  ///
+  /// In en, this message translates to:
+  /// **'Browse in PGN viewer'**
+  String get studyBrowsePgn;
+
+  /// Study and PGN control: studyNextChapter
+  ///
+  /// In en, this message translates to:
+  /// **'Next chapter'**
+  String get studyNextChapter;
+
+  /// Study and PGN control: studyPreviousChapter
+  ///
+  /// In en, this message translates to:
+  /// **'Previous chapter'**
+  String get studyPreviousChapter;
+
+  /// Study and PGN control: studyFocusInput
+  ///
+  /// In en, this message translates to:
+  /// **'Focus move input'**
+  String get studyFocusInput;
+
+  /// Study and PGN control: studyCommentCurrent
+  ///
+  /// In en, this message translates to:
+  /// **'Comment current move'**
+  String get studyCommentCurrent;
+
+  /// Study and PGN control: studyImportPgnChapters
+  ///
+  /// In en, this message translates to:
+  /// **'Import PGN as chapters'**
+  String get studyImportPgnChapters;
+
+  /// Study and PGN control: studyNoPgnGames
+  ///
+  /// In en, this message translates to:
+  /// **'No games found in that PGN.'**
+  String get studyNoPgnGames;
+
+  /// Study and PGN control: studyPgnCopied
+  ///
+  /// In en, this message translates to:
+  /// **'Study PGN copied to clipboard.'**
+  String get studyPgnCopied;
+
+  /// Study and PGN control: studyReplacePosition
+  ///
+  /// In en, this message translates to:
+  /// **'Replace starting position?'**
+  String get studyReplacePosition;
+
+  /// Study and PGN control: studyReplace
+  ///
+  /// In en, this message translates to:
+  /// **'Replace'**
+  String get studyReplace;
+
+  /// Study and PGN control: studySetPosition
+  ///
+  /// In en, this message translates to:
+  /// **'Set chapter position'**
+  String get studySetPosition;
+
+  /// Study and PGN control: studySaveFirst
+  ///
+  /// In en, this message translates to:
+  /// **'Save the study first (create it by name).'**
+  String get studySaveFirst;
+
+  /// Study and PGN control: studyNoTrainingChapters
+  ///
+  /// In en, this message translates to:
+  /// **'No chapters with moves to train yet.'**
+  String get studyNoTrainingChapters;
+
+  /// Study and PGN control: studyNoTrainingMoves
+  ///
+  /// In en, this message translates to:
+  /// **'This chapter has no moves to train yet.'**
+  String get studyNoTrainingMoves;
+
+  /// Study and PGN control: studyChapterPgnCopied
+  ///
+  /// In en, this message translates to:
+  /// **'Chapter PGN copied to clipboard.'**
+  String get studyChapterPgnCopied;
+
+  /// Study and PGN control: studyClearAnnotations
+  ///
+  /// In en, this message translates to:
+  /// **'Clear all comments, glyphs and shapes?'**
+  String get studyClearAnnotations;
+
+  /// Study and PGN control: clear
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get clear;
+
+  /// Study and PGN control: studyClearVariations
+  ///
+  /// In en, this message translates to:
+  /// **'Clear variations?'**
+  String get studyClearVariations;
+
+  /// Study and PGN control: studyNeedsChapter
+  ///
+  /// In en, this message translates to:
+  /// **'A study needs at least one chapter.'**
+  String get studyNeedsChapter;
+
+  /// Study and PGN control: studyFromUrl
+  ///
+  /// In en, this message translates to:
+  /// **'From URL…'**
+  String get studyFromUrl;
+
+  /// Study and PGN control: studyPgnFileChapters
+  ///
+  /// In en, this message translates to:
+  /// **'PGN file as chapters…'**
+  String get studyPgnFileChapters;
+
+  /// Study and PGN control: studyExportHeading
+  ///
+  /// In en, this message translates to:
+  /// **'Export'**
+  String get studyExportHeading;
+
+  /// Study and PGN control: studyCopyPgn
+  ///
+  /// In en, this message translates to:
+  /// **'Copy study PGN'**
+  String get studyCopyPgn;
+
+  /// Study and PGN control: studySavePgnAs
+  ///
+  /// In en, this message translates to:
+  /// **'Save study PGN as…'**
+  String get studySavePgnAs;
+
+  /// Study and PGN control: studyTrainHeading
+  ///
+  /// In en, this message translates to:
+  /// **'Train'**
+  String get studyTrainHeading;
+
+  /// Study and PGN control: studyTrainChapter
+  ///
+  /// In en, this message translates to:
+  /// **'Train this chapter'**
+  String get studyTrainChapter;
+
+  /// Study and PGN control: studyTrainAll
+  ///
+  /// In en, this message translates to:
+  /// **'Train whole study'**
+  String get studyTrainAll;
+
+  /// Study and PGN control: studyBoardHeading
+  ///
+  /// In en, this message translates to:
+  /// **'Board'**
+  String get studyBoardHeading;
+
+  /// Study and PGN control: studyExploreHeading
+  ///
+  /// In en, this message translates to:
+  /// **'Explore'**
+  String get studyExploreHeading;
+
+  /// Study and PGN control: studyManageHeading
+  ///
+  /// In en, this message translates to:
+  /// **'Manage'**
+  String get studyManageHeading;
+
+  /// Study and PGN control: studyDeleteMenu
+  ///
+  /// In en, this message translates to:
+  /// **'Delete study…'**
+  String get studyDeleteMenu;
+
+  /// Study and PGN control: studySearch
+  ///
+  /// In en, this message translates to:
+  /// **'Search studies'**
+  String get studySearch;
+
+  /// Study and PGN control: studyNoStudies
+  ///
+  /// In en, this message translates to:
+  /// **'No studies yet — import or create one.'**
+  String get studyNoStudies;
+
+  /// Study and PGN control: studyGoChapter
+  ///
+  /// In en, this message translates to:
+  /// **'Go to chapter'**
+  String get studyGoChapter;
+
+  /// Study and PGN control: studyNoChaptersYet
+  ///
+  /// In en, this message translates to:
+  /// **'This study has no chapters yet.'**
+  String get studyNoChaptersYet;
+
+  /// Study and PGN control: studyAddedChapters
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Added 1 chapter.} other{Added {count} chapters.}}'**
+  String studyAddedChapters(int count);
+
+  /// Study and PGN control: studyDeleteNamed
+  ///
+  /// In en, this message translates to:
+  /// **'Delete study \"{name}\"?'**
+  String studyDeleteNamed(String name);
+
+  /// Study and PGN control: studyDeleteChapterNamed
+  ///
+  /// In en, this message translates to:
+  /// **'Delete chapter \"{name}\"?'**
+  String studyDeleteChapterNamed(String name);
+
+  /// Study and PGN control: studyChapterNumber
+  ///
+  /// In en, this message translates to:
+  /// **'Chapter {number}'**
+  String studyChapterNumber(int number);
+
+  /// Study and PGN control: studyPgnHistory
+  ///
+  /// In en, this message translates to:
+  /// **'PGN: {name}'**
+  String studyPgnHistory(String name);
+
+  /// Study and PGN control: boardInvalidFen
+  ///
+  /// In en, this message translates to:
+  /// **'Could not parse FEN. Check all fields.'**
+  String get boardInvalidFen;
+
+  /// Study and PGN control: boardWhiteToMove
+  ///
+  /// In en, this message translates to:
+  /// **'White to move'**
+  String get boardWhiteToMove;
+
+  /// Study and PGN control: boardBlackToMove
+  ///
+  /// In en, this message translates to:
+  /// **'Black to move'**
+  String get boardBlackToMove;
+
+  /// Study and PGN control: boardStartPosition
+  ///
+  /// In en, this message translates to:
+  /// **'Start position'**
+  String get boardStartPosition;
+
+  /// Study and PGN control: boardClear
+  ///
+  /// In en, this message translates to:
+  /// **'Clear board'**
+  String get boardClear;
+
+  /// Study and PGN control: boardAdvanced
+  ///
+  /// In en, this message translates to:
+  /// **'Advanced position settings'**
+  String get boardAdvanced;
+
+  /// Study and PGN control: boardCastlingEnPassant
+  ///
+  /// In en, this message translates to:
+  /// **'Castling and en passant'**
+  String get boardCastlingEnPassant;
+
+  /// Study and PGN control: boardCastling
+  ///
+  /// In en, this message translates to:
+  /// **'Castling'**
+  String get boardCastling;
+
+  /// Study and PGN control: boardEnPassant
+  ///
+  /// In en, this message translates to:
+  /// **'En passant'**
+  String get boardEnPassant;
+
+  /// Study and PGN control: boardNoEnPassant
+  ///
+  /// In en, this message translates to:
+  /// **'none'**
+  String get boardNoEnPassant;
+
+  /// Study and PGN control: boardFenPending
+  ///
+  /// In en, this message translates to:
+  /// **'Apply or discard the FEN text before using this position.'**
+  String get boardFenPending;
+
+  /// Study and PGN control: boardCopyFen
+  ///
+  /// In en, this message translates to:
+  /// **'Copy FEN'**
+  String get boardCopyFen;
+
+  /// Study and PGN control: boardFenCopied
+  ///
+  /// In en, this message translates to:
+  /// **'FEN copied.'**
+  String get boardFenCopied;
+
+  /// Study and PGN control: boardPasteFen
+  ///
+  /// In en, this message translates to:
+  /// **'Paste FEN'**
+  String get boardPasteFen;
+
+  /// Study and PGN control: boardApplyFen
+  ///
+  /// In en, this message translates to:
+  /// **'Apply FEN'**
+  String get boardApplyFen;
+
+  /// Study and PGN control: boardDiscardFen
+  ///
+  /// In en, this message translates to:
+  /// **'Discard FEN changes'**
+  String get boardDiscardFen;
+
+  /// Study and PGN control: boardSetupHelp
+  ///
+  /// In en, this message translates to:
+  /// **'Drag pieces where you want them, or click a spare piece and paint it onto squares. Right-click clears a square; with a piece in hand it switches the colour.'**
+  String get boardSetupHelp;
+
+  /// Study and PGN control: boardCastleSide
+  ///
+  /// In en, this message translates to:
+  /// **'{side} {castle}'**
+  String boardCastleSide(String side, String castle);
+
+  /// Study and PGN control: boardMovePieces
+  ///
+  /// In en, this message translates to:
+  /// **'Move pieces'**
+  String get boardMovePieces;
+
+  /// Study and PGN control: boardErasePieces
+  ///
+  /// In en, this message translates to:
+  /// **'Erase pieces'**
+  String get boardErasePieces;
+
+  /// Study and PGN control: boardPiecePawn
+  ///
+  /// In en, this message translates to:
+  /// **'pawn'**
+  String get boardPiecePawn;
+
+  /// Study and PGN control: boardPieceKnight
+  ///
+  /// In en, this message translates to:
+  /// **'knight'**
+  String get boardPieceKnight;
+
+  /// Study and PGN control: boardPieceBishop
+  ///
+  /// In en, this message translates to:
+  /// **'bishop'**
+  String get boardPieceBishop;
+
+  /// Study and PGN control: boardPieceRook
+  ///
+  /// In en, this message translates to:
+  /// **'rook'**
+  String get boardPieceRook;
+
+  /// Study and PGN control: boardPieceQueen
+  ///
+  /// In en, this message translates to:
+  /// **'queen'**
+  String get boardPieceQueen;
+
+  /// Study and PGN control: boardPieceKing
+  ///
+  /// In en, this message translates to:
+  /// **'king'**
+  String get boardPieceKing;
+
+  /// Study and PGN control: boardPieceName
+  ///
+  /// In en, this message translates to:
+  /// **'{side} {piece}'**
+  String boardPieceName(String side, String piece);
+
+  /// Study and PGN control: boardSpareHelp
+  ///
+  /// In en, this message translates to:
+  /// **'{piece}: drag onto the board, or click to paint with it'**
+  String boardSpareHelp(String piece);
+
+  /// Study and PGN control: copyDone
+  ///
+  /// In en, this message translates to:
+  /// **'Copied'**
+  String get copyDone;
+
+  /// Study and PGN control: copyAction
+  ///
+  /// In en, this message translates to:
+  /// **'Copy'**
+  String get copyAction;
+
+  /// Study and PGN control: choiceCloseList
+  ///
+  /// In en, this message translates to:
+  /// **'Close list'**
+  String get choiceCloseList;
+
+  /// Study and PGN control: choiceShowAll
+  ///
+  /// In en, this message translates to:
+  /// **'Show all'**
+  String get choiceShowAll;
+
+  /// Study and PGN control: choiceNothing
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing to choose from'**
+  String get choiceNothing;
+
+  /// Study and PGN control: choiceNoMatches
+  ///
+  /// In en, this message translates to:
+  /// **'No matches'**
+  String get choiceNoMatches;
+
+  /// Study and PGN control: pgnNotSavedFile
+  ///
+  /// In en, this message translates to:
+  /// **'Not saved to a file'**
+  String get pgnNotSavedFile;
+
+  /// Study and PGN control: pgnChooseSaveFile
+  ///
+  /// In en, this message translates to:
+  /// **'Use Save as… to choose a PGN file.'**
+  String get pgnChooseSaveFile;
+
+  /// Study and PGN control: pgnAutoSaved
+  ///
+  /// In en, this message translates to:
+  /// **'Autosave on · Saved'**
+  String get pgnAutoSaved;
+
+  /// Study and PGN control: pgnManualSaved
+  ///
+  /// In en, this message translates to:
+  /// **'Autosave off · Saved'**
+  String get pgnManualSaved;
+
+  /// Study and PGN control: pgnSavingPath
+  ///
+  /// In en, this message translates to:
+  /// **'Saving changes to {path}'**
+  String pgnSavingPath(String path);
+
+  /// Study and PGN control: pgnManualSavePath
+  ///
+  /// In en, this message translates to:
+  /// **'Autosave is off. Use Save to write changes to {path}'**
+  String pgnManualSavePath(String path);
+
+  /// Study and PGN control: pgnAutoSavePath
+  ///
+  /// In en, this message translates to:
+  /// **'Changes save automatically to {path}'**
+  String pgnAutoSavePath(String path);
+
+  /// Study and PGN control: pgnNeedsManualSavePath
+  ///
+  /// In en, this message translates to:
+  /// **'Changes need a manual save to {path}'**
+  String pgnNeedsManualSavePath(String path);
+
+  /// Study and PGN control: pgnDeleteCounts
+  ///
+  /// In en, this message translates to:
+  /// **'Delete {moves, plural, =1{1 move} other{{moves} moves}} and {comments, plural, =1{1 comment} other{{comments} comments}}?'**
+  String pgnDeleteCounts(int moves, int comments);
+
+  /// Study and PGN control: studyDeleteContents
+  ///
+  /// In en, this message translates to:
+  /// **'{chapters, plural, =1{1 chapter} other{{chapters} chapters}} with {moves, plural, =1{1 move} other{{moves} moves}} and {comments, plural, =1{1 comment} other{{comments} comments}}. The PGN file will be moved to Chess Auto Prep recovery trash.'**
+  String studyDeleteContents(int chapters, int moves, int comments);
+
+  /// Study and PGN control: studyReplacePositionContents
+  ///
+  /// In en, this message translates to:
+  /// **'Chapter \"{name}\" already has moves; setting a new starting position will clear them.'**
+  String studyReplacePositionContents(String name);
+
+  /// Study and PGN control: studyClearAnnotationContents
+  ///
+  /// In en, this message translates to:
+  /// **'Remove {comments, plural, =1{1 comment} other{{comments} comments}} and all glyphs and shapes from \"{name}\". The moves stay.'**
+  String studyClearAnnotationContents(int comments, String name);
+
+  /// Study and PGN control: studyClearVariationContents
+  ///
+  /// In en, this message translates to:
+  /// **'Remove {moves, plural, =1{1 move} other{{moves} moves}} and {comments, plural, =1{1 comment} other{{comments} comments}} from \"{name}\", including sideline annotations. The main line and its notes stay.'**
+  String studyClearVariationContents(int moves, int comments, String name);
+
+  /// Study and PGN control: studyRemoveCounts
+  ///
+  /// In en, this message translates to:
+  /// **'Remove {moves, plural, =1{1 move} other{{moves} moves}} and {comments, plural, =1{1 comment} other{{comments} comments}}, including all annotations.'**
+  String studyRemoveCounts(int moves, int comments);
+
+  /// Study and PGN control: studyLichessSource
+  ///
+  /// In en, this message translates to:
+  /// **'Lichess study · {id}'**
+  String studyLichessSource(String id);
+
+  /// Study and PGN control: studyLichessChapterSource
+  ///
+  /// In en, this message translates to:
+  /// **'Lichess study chapter · {study}/{chapter}'**
+  String studyLichessChapterSource(String study, String chapter);
+
+  /// Study and PGN control: studyLichessUserSource
+  ///
+  /// In en, this message translates to:
+  /// **'Lichess · all of {user}\'s studies'**
+  String studyLichessUserSource(String user);
+
+  /// Study and PGN control: studyCollectionSource
+  ///
+  /// In en, this message translates to:
+  /// **'chessgames.com collection · cid {id}'**
+  String studyCollectionSource(String id);
 }
 
 class _AppLocalizationsDelegate

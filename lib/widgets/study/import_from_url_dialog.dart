@@ -227,7 +227,7 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       scrollable: true,
-      title: const Text('Import from URL'),
+      title: Text(AppLocalizations.of(context).studyImportFromUrl),
       content: SizedBox(
         width: 520,
         child: Column(
@@ -235,9 +235,7 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'lichess.org/study/<id>  —  one study, all chapters\n'
-              'lichess.org/study/by/<user>  —  every public study of theirs\n'
-              'chessgames.com/perl/chesscollection?cid=<id>  —  a collection',
+              AppLocalizations.of(context).studyImportSupportedUrls,
               style: AppTypography.caption(context),
             ),
             const SizedBox(height: 12),
@@ -247,9 +245,9 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
               enabled: !_busy,
               onChanged: _onUrlChanged,
               onSubmitted: (_) => _import(),
-              decoration: const InputDecoration(
-                labelText: 'URL',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: AppLocalizations.of(context).studyUrl,
+                border: const OutlineInputBorder(),
                 isDense: true,
               ),
             ),
@@ -257,13 +255,12 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
             _statusLine(),
             const Divider(height: 24),
             AppCheckbox(
-              label: 'Add to the current study instead of creating a new one',
+              label: AppLocalizations.of(context).studyImportAppend,
               value: _canAppend && _appendToCurrent,
               enabled: _canAppend && !_busy,
               disabledReason: widget.canAppend
-                  ? 'A chessgames.com collection downloads in the background '
-                        'and always gets its own study.'
-                  : 'No study is open.',
+                  ? AppLocalizations.of(context).studyImportCollectionSeparate
+                  : AppLocalizations.of(context).studyImportNoOpenStudy,
               onChanged: (v) => setState(() => _appendToCurrent = v),
             ),
             const SizedBox(height: 12),
@@ -271,7 +268,7 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
               children: [
                 Expanded(
                   child: Text(
-                    'Seconds between requests (chessgames.com)',
+                    AppLocalizations.of(context).studyImportDelay,
                     style: AppTypography.body(context),
                   ),
                 ),
@@ -293,9 +290,7 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
             ),
             const SizedBox(height: 6),
             Text(
-              'chessgames.com bans fast downloads: 2–3 s apart gets blocked '
-              'after ~20 games, 22 s apart sustains 60. At 22 s a 60-game '
-              'collection takes about 25 minutes, running in the background.',
+              AppLocalizations.of(context).studyImportDelayHelp,
               style: AppTypography.caption(context),
             ),
           ],
@@ -304,7 +299,7 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
       actions: [
         TextButton(
           onPressed: _busy ? null : () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(AppLocalizations.of(context).cancel),
         ),
         FilledButton(
           onPressed: _source == null || _busy ? null : _import,
@@ -314,7 +309,7 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Import'),
+              : Text(AppLocalizations.of(context).importAction),
         ),
       ],
     );
@@ -329,19 +324,39 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
       (text, color) = (_error!, Theme.of(context).colorScheme.error);
     } else if (_busy) {
       (text, color) = (
-        'Contacting the server…',
+        AppLocalizations.of(context).studyImportContacting,
         Theme.of(context).colorScheme.onSurfaceVariant,
       );
     } else if (source != null) {
-      (text, color) = (source.label, Theme.of(context).colorScheme.tertiary);
+      (text, color) = (
+        switch (source) {
+          LichessStudySource(
+            :final studyId,
+            chapterId: final String chapterId,
+          ) =>
+            AppLocalizations.of(
+              context,
+            ).studyLichessChapterSource(studyId, chapterId),
+          LichessStudySource(:final studyId) => AppLocalizations.of(
+            context,
+          ).studyLichessSource(studyId),
+          LichessUserStudiesSource(:final username) => AppLocalizations.of(
+            context,
+          ).studyLichessUserSource(username),
+          ChessgamesCollectionSource(:final cid) => AppLocalizations.of(
+            context,
+          ).studyCollectionSource(cid),
+        },
+        Theme.of(context).colorScheme.tertiary,
+      );
     } else if (_urlController.text.trim().isEmpty) {
       (text, color) = (
-        'Paste a link to see what will be imported.',
+        AppLocalizations.of(context).studyImportLinkHint,
         Theme.of(context).colorScheme.onSurfaceVariant,
       );
     } else {
       (text, color) = (
-        'Not a Lichess study or chessgames.com collection link.',
+        AppLocalizations.of(context).studyImportUnsupportedUrl,
         Theme.of(context).colorScheme.tertiary,
       );
     }
@@ -405,7 +420,7 @@ class _PasteGameIdsDialogState extends State<_PasteGameIdsDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       scrollable: true,
-      title: const Text('Collection page blocked'),
+      title: Text(AppLocalizations.of(context).studyImportCollectionBlocked),
       content: SizedBox(
         width: 520,
         child: Column(
@@ -413,10 +428,7 @@ class _PasteGameIdsDialogState extends State<_PasteGameIdsDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'chessgames.com served a bot check instead of the collection. '
-              'Downloading the games still works — it just needs the list.\n\n'
-              'Open the collection in a browser, select all (Ctrl+A) and copy, '
-              'or save the page source, then paste it below.',
+              AppLocalizations.of(context).studyImportPasteIdsHelp,
               style: AppTypography.body(context),
             ),
             const SizedBox(height: 12),
@@ -428,7 +440,9 @@ class _PasteGameIdsDialogState extends State<_PasteGameIdsDialog> {
                   '?cid=${widget.cid}',
                 ),
                 icon: const Icon(Icons.open_in_new, size: 16),
-                label: const Text('Open the collection page'),
+                label: Text(
+                  AppLocalizations.of(context).studyImportOpenCollection,
+                ),
               ),
             ),
             const SizedBox(height: 12),
@@ -438,13 +452,10 @@ class _PasteGameIdsDialogState extends State<_PasteGameIdsDialog> {
               minLines: 5,
               maxLines: 10,
               onChanged: _onChanged,
-              style: const TextStyle(
-                fontFamily: AppTypography.monoFamily,
-                fontSize: 12,
-              ),
-              decoration: const InputDecoration(
-                hintText: 'Paste the page, game links, or game ids…',
-                border: OutlineInputBorder(),
+              style: AppTypography.mono(context),
+              decoration: InputDecoration(
+                hintText: AppLocalizations.of(context).studyImportPasteIdsHint,
+                border: const OutlineInputBorder(),
                 isDense: true,
               ),
             ),
@@ -455,9 +466,10 @@ class _PasteGameIdsDialogState extends State<_PasteGameIdsDialog> {
                 alignment: Alignment.centerLeft,
                 child: Text(
                   _ids.isEmpty
-                      ? 'No game ids found yet.'
-                      : '${_ids.length} game${_ids.length == 1 ? '' : 's'} '
-                            'found.',
+                      ? AppLocalizations.of(context).studyImportNoIds
+                      : AppLocalizations.of(
+                          context,
+                        ).studyImportGamesFound(_ids.length),
                   style: AppTypography.caption(context).copyWith(
                     color: _ids.isEmpty
                         ? Theme.of(context).colorScheme.onSurfaceVariant
@@ -472,11 +484,15 @@ class _PasteGameIdsDialogState extends State<_PasteGameIdsDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(AppLocalizations.of(context).cancel),
         ),
         FilledButton(
           onPressed: _ids.isEmpty ? null : () => Navigator.pop(context, _ids),
-          child: Text(_ids.isEmpty ? 'Download' : 'Download ${_ids.length}'),
+          child: Text(
+            _ids.isEmpty
+                ? AppLocalizations.of(context).studyDownload
+                : AppLocalizations.of(context).studyDownloadCount(_ids.length),
+          ),
         ),
       ],
     );

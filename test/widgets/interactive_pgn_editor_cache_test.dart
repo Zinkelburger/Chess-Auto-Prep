@@ -2,6 +2,8 @@
 /// line repaints the two chips whose selection changed and nothing else.
 library;
 
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart' show kSecondaryMouseButton;
 import 'package:flutter_test/flutter_test.dart';
@@ -14,6 +16,9 @@ import 'package:chess_auto_prep/widgets/pgn/movetext_primitives.dart';
 import 'package:chess_auto_prep/widgets/pgn/comment_editor.dart';
 
 Widget _host(MoveTree tree, TreePath path) => MaterialApp(
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
+
   theme: AppTheme.dark(),
   home: Scaffold(
     body: InteractivePgnEditor(tree: tree, currentPath: path),
@@ -82,6 +87,9 @@ void main() {
       final tree = MoveTree.fromPgn('1. e4 {Opening note} (1. d4 d5) e5 *');
       const path = TreePath([0]);
       Widget host(ThemeData theme) => MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+
         theme: theme,
         home: Scaffold(
           body: InteractivePgnEditor(
@@ -225,6 +233,9 @@ void main() {
       final second = MoveTree.fromMoves(['d4'])..rootComment = 'Second note';
       var active = first;
       Widget host() => MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+
         home: Scaffold(
           body: InteractivePgnEditor(
             tree: active,
@@ -270,6 +281,9 @@ void main() {
     TreePath? saved;
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+
         home: Scaffold(
           body: InteractivePgnEditor(
             tree: tree,

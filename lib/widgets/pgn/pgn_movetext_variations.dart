@@ -406,15 +406,10 @@ InlineSpan _variationMoveSpan(
         moveStyle: sanStyle,
         nags: node.nags,
       ),
-      decoration: PgnMoveDecorations.resolve(
-        context,
-        selected: isCurrentNode,
-        isEphemeral: node.isEphemeral,
-      ),
+      decoration: PgnMoveDecorations.resolve(context, selected: isCurrentNode),
       hoverDecoration: PgnMoveDecorations.resolve(
         context,
         selected: isCurrentNode,
-        isEphemeral: node.isEphemeral,
         hovered: true,
       ),
       behavior: HitTestBehavior.opaque,

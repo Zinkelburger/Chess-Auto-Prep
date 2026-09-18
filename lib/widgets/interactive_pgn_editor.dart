@@ -12,6 +12,7 @@ import '../features/documents/widgets/move_text_viewport.dart';
 import 'package:chess_auto_prep/utils/pgn_nags.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
+import '../l10n/generated/app_localizations.dart';
 
 import '../design_system/theme/app_typography.dart';
 import 'pgn/pgn_text_styles.dart';
@@ -263,11 +264,11 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     final summary = PgnDeletionSummary.nodes([node]);
     final confirmed = await confirmAction(
       context,
-      title: 'Delete ${summary.description}?',
-      message:
-          'This removes the move and all continuations from here, '
-          'including their annotations.',
-      confirmLabel: 'Delete',
+      title: AppLocalizations.of(
+        context,
+      ).pgnDeleteCounts(summary.moves, summary.comments),
+      message: AppLocalizations.of(context).pgnDeleteContinuations,
+      confirmLabel: AppLocalizations.of(context).delete,
     );
     if (!mounted ||
         !confirmed ||
@@ -302,7 +303,10 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       startingFen: widget.tree.startingFen,
     );
     final text = subtree.toPgnMoveText();
-    widget.onCopyToClipboard?.call(text, 'Line copied to clipboard');
+    widget.onCopyToClipboard?.call(
+      text,
+      AppLocalizations.of(context).pgnLineCopied,
+    );
   }
 
   void _copyPgnFromHere() {
@@ -333,7 +337,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     final menuVersion = menuTree.version;
     setState(() => _contextMenuOpen = true);
 
-    String moveName = 'Move';
+    String moveName = AppLocalizations.of(context).pgnMove;
     final node = widget.tree.nodeAt(path);
     if (node != null) moveName = node.san;
     final isOnMainline = path.isMainline;
@@ -355,9 +359,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
           height: 32,
           child: Text(
             moveName,
-            style: TextStyle(
+            style: AppTypography.secondary(context).copyWith(
               fontWeight: FontWeight.bold,
-              fontSize: 13,
               color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
@@ -367,7 +370,9 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
           value: 'comment',
           child: _PopupMenuRow(
             icon: Icons.comment,
-            text: hasComment ? 'Edit Comment' : 'Add Comment',
+            text: hasComment
+                ? AppLocalizations.of(context).pgnEditCommentMenu
+                : AppLocalizations.of(context).pgnAddCommentMenu,
           ),
         ),
         // Quiz markers: where the trainer starts asking for moves and where
@@ -378,8 +383,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
             child: _PopupMenuRow(
               icon: Icons.flag,
               text: hasPuzzleStart(node?.comment)
-                  ? 'Unmark Quiz Start'
-                  : 'Start Quiz From This Move',
+                  ? AppLocalizations.of(context).pgnUnmarkQuizStart
+                  : AppLocalizations.of(context).pgnMarkQuizStart,
             ),
           ),
           PopupMenuItem(
@@ -387,51 +392,57 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
             child: _PopupMenuRow(
               icon: Icons.sports_score,
               text: hasPuzzleEnd(node?.comment)
-                  ? 'Unmark Quiz End'
-                  : 'End Quiz After This Move',
+                  ? AppLocalizations.of(context).pgnUnmarkQuizEnd
+                  : AppLocalizations.of(context).pgnMarkQuizEnd,
             ),
           ),
         ],
         if (!isOnMainline)
-          const PopupMenuItem(
+          PopupMenuItem(
             value: 'promote',
             child: _PopupMenuRow(
               icon: Icons.arrow_upward,
-              text: 'Promote Variation',
+              text: AppLocalizations.of(context).pgnPromoteVariation,
             ),
           ),
         if (!isOnMainline)
-          const PopupMenuItem(
+          PopupMenuItem(
             value: 'mainline',
             child: _PopupMenuRow(
               icon: Icons.vertical_align_top,
-              text: 'Make Main Line',
+              text: AppLocalizations.of(context).pgnMakeMainLine,
             ),
           ),
         // Copies root→leaf through this move (the old "Duplicate Line" label
         // promised an edit it never performed).
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'duplicate',
-          child: _PopupMenuRow(icon: Icons.copy_all, text: 'Copy Whole Line'),
+          child: _PopupMenuRow(
+            icon: Icons.copy_all,
+            text: AppLocalizations.of(context).pgnCopyWholeLine,
+          ),
         ),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'copy',
           child: _PopupMenuRow(
             icon: Icons.content_copy,
-            text: 'Copy PGN from Here',
+            text: AppLocalizations.of(context).pgnCopyFromHere,
           ),
         ),
         if (widget.isEditingExistingLine && widget.onViewInLines != null)
-          const PopupMenuItem(
+          PopupMenuItem(
             value: 'viewlines',
-            child: _PopupMenuRow(icon: Icons.list_alt, text: 'View in Lines'),
+            child: _PopupMenuRow(
+              icon: Icons.list_alt,
+              text: AppLocalizations.of(context).pgnViewInLines,
+            ),
           ),
         const PopupMenuDivider(height: 1),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'delete',
           child: _PopupMenuRow(
             icon: Icons.delete_outline,
-            text: 'Delete from Here',
+            text: AppLocalizations.of(context).pgnDeleteFromHere,
           ),
         ),
       ],
@@ -507,8 +518,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                               widget.ephemeralTitle!,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 12,
+                              style: AppTypography.caption(context).copyWith(
                                 fontWeight: FontWeight.w700,
                                 color: Theme.of(context).colorScheme.tertiary,
                               ),
@@ -535,12 +545,13 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                           child: TextField(
                             controller: _titleController,
                             decoration: InputDecoration(
-                              hintText: 'Line title',
-                              hintStyle: TextStyle(
+                              hintText: AppLocalizations.of(
+                                context,
+                              ).pgnLineTitle,
+                              hintStyle: AppTypography.body(context).copyWith(
                                 color: Theme.of(
                                   context,
                                 ).colorScheme.onSurfaceVariant,
-                                fontSize: 14,
                                 fontWeight: FontWeight.w600,
                               ),
                               border: InputBorder.none,
@@ -549,8 +560,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                                 vertical: 4,
                               ),
                             ),
-                            style: TextStyle(
-                              fontSize: 14,
+                            style: AppTypography.body(context).copyWith(
                               fontWeight: FontWeight.w600,
                               color: Theme.of(context).colorScheme.onSurface,
                             ),
@@ -601,7 +611,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       commentDebounce: Duration.zero,
       targetKey: atRoot ? 'root' : (node == null ? null : 'n${node.id}'),
       moveLabel: atRoot
-          ? 'the start position'
+          ? AppLocalizations.of(context).pgnStartPosition
           : (node == null ? '' : _moveLabelFor(path, node)),
       nags: node?.nags ?? const [],
       glyphsEnabled: !atRoot && widget.onToggleNag != null,
@@ -626,7 +636,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 18),
         child: Text(
-          'Play a move or select a saved line.',
+          AppLocalizations.of(context).pgnEmptyEditor,
           style: AppTypography.secondary(context),
         ),
       );
@@ -746,9 +756,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
         padding: const EdgeInsets.only(left: 1, right: 1),
         child: Tooltip(
           message: start
-              ? 'Quiz starts here: training auto-plays the moves before '
-                    'this one and asks for this one'
-              : 'Quiz ends here: training stops after this move',
+              ? AppLocalizations.of(context).pgnQuizStartHelp
+              : AppLocalizations.of(context).pgnQuizEndHelp,
           child: Icon(
             start ? Icons.flag : Icons.sports_score,
             size: 13,
@@ -852,13 +861,11 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
         decoration: PgnMoveDecorations.resolve(
           context,
           selected: isSelected,
-          isEphemeral: node.isEphemeral,
           onContextPath: isOnCtxPath,
         ),
         hoverDecoration: PgnMoveDecorations.resolve(
           context,
           selected: isSelected,
-          isEphemeral: node.isEphemeral,
           hovered: true,
         ),
         behavior: HitTestBehavior.opaque,
@@ -940,7 +947,7 @@ class _PopupMenuRow extends StatelessWidget {
       children: [
         Icon(icon, size: 16),
         const SizedBox(width: 8),
-        Flexible(child: Text(text, style: const TextStyle(fontSize: 12))),
+        Flexible(child: Text(text, style: AppTypography.caption(context))),
       ],
     );
   }

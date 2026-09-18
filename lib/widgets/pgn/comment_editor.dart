@@ -7,6 +7,8 @@
 library;
 
 import 'package:flutter/material.dart';
+import '../../design_system/theme/app_typography.dart';
+import '../../l10n/generated/app_localizations.dart';
 
 import '../../design_system/components/confirm_dialog.dart';
 
@@ -54,8 +56,8 @@ class _PgnCommentEditorState extends State<PgnCommentEditor> {
       _confirming = true;
       final confirmed = await confirmAction(
         context,
-        title: 'Delete 1 comment?',
-        confirmLabel: 'Delete',
+        title: AppLocalizations.of(context).pgnDeleteOneComment,
+        confirmLabel: AppLocalizations.of(context).delete,
       );
       _confirming = false;
       if (!mounted || !confirmed || _controller.text != text) return;
@@ -80,10 +82,9 @@ class _PgnCommentEditorState extends State<PgnCommentEditor> {
               controller: _controller,
               autofocus: true,
               maxLines: null,
-              style: TextStyle(
-                fontSize: 13,
-                color: Theme.of(context).colorScheme.onSurface,
-              ),
+              style: AppTypography.secondary(
+                context,
+              ).copyWith(color: Theme.of(context).colorScheme.onSurface),
               decoration: const InputDecoration(
                 isDense: true,
                 contentPadding: EdgeInsets.symmetric(
@@ -105,7 +106,7 @@ class _PgnCommentEditorState extends State<PgnCommentEditor> {
             ),
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
-            tooltip: 'Save comment',
+            tooltip: AppLocalizations.of(context).pgnSaveComment,
           ),
           IconButton(
             onPressed: widget.onCancel,
@@ -116,7 +117,7 @@ class _PgnCommentEditorState extends State<PgnCommentEditor> {
             ),
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
-            tooltip: 'Cancel',
+            tooltip: AppLocalizations.of(context).cancel,
           ),
         ],
       ),

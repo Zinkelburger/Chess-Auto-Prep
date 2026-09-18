@@ -1217,4 +1217,687 @@ class AppLocalizationsEn extends AppLocalizations {
   String studyOwnedTag(String tag) {
     return '$tag is written by the study; edit it above.';
   }
+
+  @override
+  String studyImportGamesFound(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count games found.',
+      one: '1 game found.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String studyDownloadCount(int count) {
+    return 'Download $count';
+  }
+
+  @override
+  String get studyImportFromUrl => 'Import from URL';
+
+  @override
+  String get studyUrl => 'URL';
+
+  @override
+  String get studyImportSupportedUrls =>
+      'lichess.org/study/<id>  —  one study, all chapters\nlichess.org/study/by/<user>  —  every public study of theirs\nchessgames.com/perl/chesscollection?cid=<id>  —  a collection';
+
+  @override
+  String get studyImportAppend =>
+      'Add to the current study instead of creating a new one';
+
+  @override
+  String get studyImportCollectionSeparate =>
+      'A chessgames.com collection downloads in the background and always gets its own study.';
+
+  @override
+  String get studyImportNoOpenStudy => 'No study is open.';
+
+  @override
+  String get studyImportDelay => 'Seconds between requests (chessgames.com)';
+
+  @override
+  String get studyImportDelayHelp =>
+      'chessgames.com bans fast downloads: 2–3 s apart gets blocked after ~20 games, 22 s apart sustains 60. At 22 s a 60-game collection takes about 25 minutes, running in the background.';
+
+  @override
+  String get studyImportContacting => 'Contacting the server…';
+
+  @override
+  String get studyImportLinkHint =>
+      'Paste a link to see what will be imported.';
+
+  @override
+  String get studyImportUnsupportedUrl =>
+      'Not a Lichess study or chessgames.com collection link.';
+
+  @override
+  String get studyImportCollectionBlocked => 'Collection page blocked';
+
+  @override
+  String get studyImportPasteIdsHelp =>
+      'chessgames.com served a bot check instead of the collection. Downloading the games still works — it just needs the list.\n\nOpen the collection in a browser, select all (Ctrl+A) and copy, or save the page source, then paste it below.';
+
+  @override
+  String get studyImportOpenCollection => 'Open the collection page';
+
+  @override
+  String get studyImportPasteIdsHint =>
+      'Paste the page, game links, or game ids…';
+
+  @override
+  String get studyImportNoIds => 'No game ids found yet.';
+
+  @override
+  String get studyDownload => 'Download';
+
+  @override
+  String studyNumberedNew(int count) {
+    return 'New study ($count)';
+  }
+
+  @override
+  String studyChapterCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count chapters',
+      one: '1 chapter',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String studyPreferredChapterCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count chapters',
+      one: '1 chapter',
+    );
+    return 'Prep file · $_temp0';
+  }
+
+  @override
+  String get studyAddLine => 'Add line to study';
+
+  @override
+  String get studyNewStudy => 'New study';
+
+  @override
+  String get studyAddNewStudy => 'Add new study';
+
+  @override
+  String get studyStudyName => 'Study name';
+
+  @override
+  String get studyCreateAndAdd => 'Create and add';
+
+  @override
+  String get studyNameRequired => 'Please enter a study name.';
+
+  @override
+  String get studyNameExists => 'A study with this name already exists.';
+
+  @override
+  String get studyChapterName => 'Chapter name';
+
+  @override
+  String get studySearchExisting => 'Search existing studies';
+
+  @override
+  String get studyNoStudiesToAdd =>
+      'No studies yet. Use Add new study to create one.';
+
+  @override
+  String get studyNoStudiesMatch => 'No studies match your search.';
+
+  @override
+  String get studyEditChapterMenu => 'Edit chapter…';
+
+  @override
+  String get studySetStartMenu => 'Set starting position…';
+
+  @override
+  String get studyCopyChapter => 'Copy chapter PGN';
+
+  @override
+  String get studyClearAnnotationsMenu => 'Clear comments, glyphs and shapes…';
+
+  @override
+  String get studyClearVariationsMenu => 'Clear variations…';
+
+  @override
+  String get studyDeleteChapterMenu => 'Delete chapter…';
+
+  @override
+  String get studyNoChapters => 'No chapters';
+
+  @override
+  String get studyManageChapters => 'Manage & reorder chapters…';
+
+  @override
+  String get studyChapter => 'Chapter';
+
+  @override
+  String get studyRename => 'Rename study';
+
+  @override
+  String get studySwitch => 'Switch study';
+
+  @override
+  String get studyNameConfirm => 'OK';
+
+  @override
+  String get studyNameUnusable => 'That name has no characters a file can use.';
+
+  @override
+  String get studyAddFailed => 'Failed to add to study.';
+
+  @override
+  String studyHistoryTitle(String name) {
+    return 'Study: $name';
+  }
+
+  @override
+  String get pgnDeleteOneComment => 'Delete 1 comment?';
+
+  @override
+  String get pgnSaveComment => 'Save comment';
+
+  @override
+  String get pgnComment => 'Comment';
+
+  @override
+  String get pgnCollapseComment => 'Collapse comment';
+
+  @override
+  String get pgnEditComment => 'Edit comment';
+
+  @override
+  String get pgnCommentKept => 'Comment kept until deleted';
+
+  @override
+  String get pgnCommentLabel => 'Comment:';
+
+  @override
+  String get pgnDeleteComment => 'Delete comment';
+
+  @override
+  String get pgnSelectMoveNotes => 'Select a move to add notes';
+
+  @override
+  String pgnRemoveCommentOn(String move) {
+    return 'Remove the comment on $move';
+  }
+
+  @override
+  String get pgnLineCopied => 'Line copied to clipboard';
+
+  @override
+  String get pgnMove => 'Move';
+
+  @override
+  String get pgnEditCommentMenu => 'Edit Comment';
+
+  @override
+  String get pgnAddCommentMenu => 'Add Comment';
+
+  @override
+  String get pgnUnmarkQuizStart => 'Unmark Quiz Start';
+
+  @override
+  String get pgnMarkQuizStart => 'Start Quiz From This Move';
+
+  @override
+  String get pgnUnmarkQuizEnd => 'Unmark Quiz End';
+
+  @override
+  String get pgnMarkQuizEnd => 'End Quiz After This Move';
+
+  @override
+  String get pgnPromoteVariation => 'Promote Variation';
+
+  @override
+  String get pgnMakeMainLine => 'Make Main Line';
+
+  @override
+  String get pgnCopyWholeLine => 'Copy Whole Line';
+
+  @override
+  String get pgnCopyFromHere => 'Copy PGN from Here';
+
+  @override
+  String get pgnViewInLines => 'View in Lines';
+
+  @override
+  String get pgnDeleteFromHere => 'Delete from Here';
+
+  @override
+  String get pgnLineTitle => 'Line title';
+
+  @override
+  String get pgnStartPosition => 'the start position';
+
+  @override
+  String get pgnEmptyEditor => 'Play a move or select a saved line.';
+
+  @override
+  String get pgnQuizEndHelp => 'Quiz ends here: training stops after this move';
+
+  @override
+  String get pgnDeleteContinuations =>
+      'This removes the move and all continuations from here, including their annotations.';
+
+  @override
+  String get pgnQuizStartHelp =>
+      'Quiz starts here: training auto-plays the moves before this one and asks for this one';
+
+  @override
+  String get studyBackMove => 'Back one move';
+
+  @override
+  String get studyForwardMove => 'Forward one move';
+
+  @override
+  String get studyGoStart => 'Go to start';
+
+  @override
+  String get studyGoEnd => 'Go to end';
+
+  @override
+  String get studyToggleEngine => 'Toggle engine';
+
+  @override
+  String get studyFlipBoard => 'Flip board';
+
+  @override
+  String get studyBrowsePgn => 'Browse in PGN viewer';
+
+  @override
+  String get studyNextChapter => 'Next chapter';
+
+  @override
+  String get studyPreviousChapter => 'Previous chapter';
+
+  @override
+  String get studyFocusInput => 'Focus move input';
+
+  @override
+  String get studyCommentCurrent => 'Comment current move';
+
+  @override
+  String get studyImportPgnChapters => 'Import PGN as chapters';
+
+  @override
+  String get studyNoPgnGames => 'No games found in that PGN.';
+
+  @override
+  String get studyPgnCopied => 'Study PGN copied to clipboard.';
+
+  @override
+  String get studyReplacePosition => 'Replace starting position?';
+
+  @override
+  String get studyReplace => 'Replace';
+
+  @override
+  String get studySetPosition => 'Set chapter position';
+
+  @override
+  String get studySaveFirst => 'Save the study first (create it by name).';
+
+  @override
+  String get studyNoTrainingChapters => 'No chapters with moves to train yet.';
+
+  @override
+  String get studyNoTrainingMoves => 'This chapter has no moves to train yet.';
+
+  @override
+  String get studyChapterPgnCopied => 'Chapter PGN copied to clipboard.';
+
+  @override
+  String get studyClearAnnotations => 'Clear all comments, glyphs and shapes?';
+
+  @override
+  String get clear => 'Clear';
+
+  @override
+  String get studyClearVariations => 'Clear variations?';
+
+  @override
+  String get studyNeedsChapter => 'A study needs at least one chapter.';
+
+  @override
+  String get studyFromUrl => 'From URL…';
+
+  @override
+  String get studyPgnFileChapters => 'PGN file as chapters…';
+
+  @override
+  String get studyExportHeading => 'Export';
+
+  @override
+  String get studyCopyPgn => 'Copy study PGN';
+
+  @override
+  String get studySavePgnAs => 'Save study PGN as…';
+
+  @override
+  String get studyTrainHeading => 'Train';
+
+  @override
+  String get studyTrainChapter => 'Train this chapter';
+
+  @override
+  String get studyTrainAll => 'Train whole study';
+
+  @override
+  String get studyBoardHeading => 'Board';
+
+  @override
+  String get studyExploreHeading => 'Explore';
+
+  @override
+  String get studyManageHeading => 'Manage';
+
+  @override
+  String get studyDeleteMenu => 'Delete study…';
+
+  @override
+  String get studySearch => 'Search studies';
+
+  @override
+  String get studyNoStudies => 'No studies yet — import or create one.';
+
+  @override
+  String get studyGoChapter => 'Go to chapter';
+
+  @override
+  String get studyNoChaptersYet => 'This study has no chapters yet.';
+
+  @override
+  String studyAddedChapters(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Added $count chapters.',
+      one: 'Added 1 chapter.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String studyDeleteNamed(String name) {
+    return 'Delete study \"$name\"?';
+  }
+
+  @override
+  String studyDeleteChapterNamed(String name) {
+    return 'Delete chapter \"$name\"?';
+  }
+
+  @override
+  String studyChapterNumber(int number) {
+    return 'Chapter $number';
+  }
+
+  @override
+  String studyPgnHistory(String name) {
+    return 'PGN: $name';
+  }
+
+  @override
+  String get boardInvalidFen => 'Could not parse FEN. Check all fields.';
+
+  @override
+  String get boardWhiteToMove => 'White to move';
+
+  @override
+  String get boardBlackToMove => 'Black to move';
+
+  @override
+  String get boardStartPosition => 'Start position';
+
+  @override
+  String get boardClear => 'Clear board';
+
+  @override
+  String get boardAdvanced => 'Advanced position settings';
+
+  @override
+  String get boardCastlingEnPassant => 'Castling and en passant';
+
+  @override
+  String get boardCastling => 'Castling';
+
+  @override
+  String get boardEnPassant => 'En passant';
+
+  @override
+  String get boardNoEnPassant => 'none';
+
+  @override
+  String get boardFenPending =>
+      'Apply or discard the FEN text before using this position.';
+
+  @override
+  String get boardCopyFen => 'Copy FEN';
+
+  @override
+  String get boardFenCopied => 'FEN copied.';
+
+  @override
+  String get boardPasteFen => 'Paste FEN';
+
+  @override
+  String get boardApplyFen => 'Apply FEN';
+
+  @override
+  String get boardDiscardFen => 'Discard FEN changes';
+
+  @override
+  String get boardSetupHelp =>
+      'Drag pieces where you want them, or click a spare piece and paint it onto squares. Right-click clears a square; with a piece in hand it switches the colour.';
+
+  @override
+  String boardCastleSide(String side, String castle) {
+    return '$side $castle';
+  }
+
+  @override
+  String get boardMovePieces => 'Move pieces';
+
+  @override
+  String get boardErasePieces => 'Erase pieces';
+
+  @override
+  String get boardPiecePawn => 'pawn';
+
+  @override
+  String get boardPieceKnight => 'knight';
+
+  @override
+  String get boardPieceBishop => 'bishop';
+
+  @override
+  String get boardPieceRook => 'rook';
+
+  @override
+  String get boardPieceQueen => 'queen';
+
+  @override
+  String get boardPieceKing => 'king';
+
+  @override
+  String boardPieceName(String side, String piece) {
+    return '$side $piece';
+  }
+
+  @override
+  String boardSpareHelp(String piece) {
+    return '$piece: drag onto the board, or click to paint with it';
+  }
+
+  @override
+  String get copyDone => 'Copied';
+
+  @override
+  String get copyAction => 'Copy';
+
+  @override
+  String get choiceCloseList => 'Close list';
+
+  @override
+  String get choiceShowAll => 'Show all';
+
+  @override
+  String get choiceNothing => 'Nothing to choose from';
+
+  @override
+  String get choiceNoMatches => 'No matches';
+
+  @override
+  String get pgnNotSavedFile => 'Not saved to a file';
+
+  @override
+  String get pgnChooseSaveFile => 'Use Save as… to choose a PGN file.';
+
+  @override
+  String get pgnAutoSaved => 'Autosave on · Saved';
+
+  @override
+  String get pgnManualSaved => 'Autosave off · Saved';
+
+  @override
+  String pgnSavingPath(String path) {
+    return 'Saving changes to $path';
+  }
+
+  @override
+  String pgnManualSavePath(String path) {
+    return 'Autosave is off. Use Save to write changes to $path';
+  }
+
+  @override
+  String pgnAutoSavePath(String path) {
+    return 'Changes save automatically to $path';
+  }
+
+  @override
+  String pgnNeedsManualSavePath(String path) {
+    return 'Changes need a manual save to $path';
+  }
+
+  @override
+  String pgnDeleteCounts(int moves, int comments) {
+    String _temp0 = intl.Intl.pluralLogic(
+      moves,
+      locale: localeName,
+      other: '$moves moves',
+      one: '1 move',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      comments,
+      locale: localeName,
+      other: '$comments comments',
+      one: '1 comment',
+    );
+    return 'Delete $_temp0 and $_temp1?';
+  }
+
+  @override
+  String studyDeleteContents(int chapters, int moves, int comments) {
+    String _temp0 = intl.Intl.pluralLogic(
+      chapters,
+      locale: localeName,
+      other: '$chapters chapters',
+      one: '1 chapter',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      moves,
+      locale: localeName,
+      other: '$moves moves',
+      one: '1 move',
+    );
+    String _temp2 = intl.Intl.pluralLogic(
+      comments,
+      locale: localeName,
+      other: '$comments comments',
+      one: '1 comment',
+    );
+    return '$_temp0 with $_temp1 and $_temp2. The PGN file will be moved to Chess Auto Prep recovery trash.';
+  }
+
+  @override
+  String studyReplacePositionContents(String name) {
+    return 'Chapter \"$name\" already has moves; setting a new starting position will clear them.';
+  }
+
+  @override
+  String studyClearAnnotationContents(int comments, String name) {
+    String _temp0 = intl.Intl.pluralLogic(
+      comments,
+      locale: localeName,
+      other: '$comments comments',
+      one: '1 comment',
+    );
+    return 'Remove $_temp0 and all glyphs and shapes from \"$name\". The moves stay.';
+  }
+
+  @override
+  String studyClearVariationContents(int moves, int comments, String name) {
+    String _temp0 = intl.Intl.pluralLogic(
+      moves,
+      locale: localeName,
+      other: '$moves moves',
+      one: '1 move',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      comments,
+      locale: localeName,
+      other: '$comments comments',
+      one: '1 comment',
+    );
+    return 'Remove $_temp0 and $_temp1 from \"$name\", including sideline annotations. The main line and its notes stay.';
+  }
+
+  @override
+  String studyRemoveCounts(int moves, int comments) {
+    String _temp0 = intl.Intl.pluralLogic(
+      moves,
+      locale: localeName,
+      other: '$moves moves',
+      one: '1 move',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      comments,
+      locale: localeName,
+      other: '$comments comments',
+      one: '1 comment',
+    );
+    return 'Remove $_temp0 and $_temp1, including all annotations.';
+  }
+
+  @override
+  String studyLichessSource(String id) {
+    return 'Lichess study · $id';
+  }
+
+  @override
+  String studyLichessChapterSource(String study, String chapter) {
+    return 'Lichess study chapter · $study/$chapter';
+  }
+
+  @override
+  String studyLichessUserSource(String user) {
+    return 'Lichess · all of $user\'s studies';
+  }
+
+  @override
+  String studyCollectionSource(String id) {
+    return 'chessgames.com collection · cid $id';
+  }
 }

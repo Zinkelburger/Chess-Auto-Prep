@@ -204,10 +204,7 @@ class _NewChapterDialogState extends State<_NewChapterDialog> {
                   Expanded(
                     child: TextField(
                       controller: _fen,
-                      style: const TextStyle(
-                        fontFamily: AppTypography.monoFamily,
-                        fontSize: 12,
-                      ),
+                      style: AppTypography.mono(context),
                       decoration: InputDecoration(
                         labelText: AppLocalizations.of(context).studyFen,
                         isDense: true,
@@ -227,10 +224,7 @@ class _NewChapterDialogState extends State<_NewChapterDialog> {
                 controller: _pgn,
                 minLines: 5,
                 maxLines: 10,
-                style: const TextStyle(
-                  fontFamily: AppTypography.monoFamily,
-                  fontSize: 12,
-                ),
+                style: AppTypography.mono(context),
                 decoration: InputDecoration(
                   hintText: AppLocalizations.of(context).studyPasteChaptersHint,
                   isDense: true,
@@ -271,10 +265,9 @@ class _NewChapterDialogState extends State<_NewChapterDialog> {
               const SizedBox(height: 12),
               Text(
                 _error!,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(context).colorScheme.error,
-                ),
+                style: AppTypography.caption(
+                  context,
+                ).copyWith(color: Theme.of(context).colorScheme.error),
               ),
             ],
           ],

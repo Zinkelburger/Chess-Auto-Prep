@@ -24,7 +24,6 @@ abstract final class PgnMoveDecorations {
     BuildContext context, {
     bool selected = false,
     bool hovered = false,
-    bool isEphemeral = false,
     bool onContextPath = false,
   }) {
     final colors = Theme.of(context).colorScheme;

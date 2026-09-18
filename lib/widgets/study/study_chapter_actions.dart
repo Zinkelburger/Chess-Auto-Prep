@@ -2,6 +2,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import '../../l10n/generated/app_localizations.dart';
 
 enum ChapterAction {
   edit,
@@ -15,31 +16,35 @@ enum ChapterAction {
 /// Menu entries in their fixed order.  [canDelete] is false for the last
 /// chapter of a study, which keeps the entry visible but inert so the
 /// menu does not change shape.
-List<PopupMenuEntry<ChapterAction>> studyChapterMenuItems({
+List<PopupMenuEntry<ChapterAction>> studyChapterMenuItems(
+  BuildContext context, {
   required bool canDelete,
 }) => [
-  const PopupMenuItem(value: ChapterAction.edit, child: Text('Edit chapter…')),
-  const PopupMenuItem(
-    value: ChapterAction.setStartingPosition,
-    child: Text('Set starting position…'),
+  PopupMenuItem(
+    value: ChapterAction.edit,
+    child: Text(AppLocalizations.of(context).studyEditChapterMenu),
   ),
-  const PopupMenuItem(
+  PopupMenuItem(
+    value: ChapterAction.setStartingPosition,
+    child: Text(AppLocalizations.of(context).studySetStartMenu),
+  ),
+  PopupMenuItem(
     value: ChapterAction.copyPgn,
-    child: Text('Copy chapter PGN'),
+    child: Text(AppLocalizations.of(context).studyCopyChapter),
   ),
   const PopupMenuDivider(),
-  const PopupMenuItem(
+  PopupMenuItem(
     value: ChapterAction.clearAnnotations,
-    child: Text('Clear comments, glyphs and shapes…'),
+    child: Text(AppLocalizations.of(context).studyClearAnnotationsMenu),
   ),
-  const PopupMenuItem(
+  PopupMenuItem(
     value: ChapterAction.clearVariations,
-    child: Text('Clear variations…'),
+    child: Text(AppLocalizations.of(context).studyClearVariationsMenu),
   ),
   const PopupMenuDivider(),
   PopupMenuItem(
     value: ChapterAction.delete,
     enabled: canDelete,
-    child: const Text('Delete chapter…'),
+    child: Text(AppLocalizations.of(context).studyDeleteChapterMenu),
   ),
 ];

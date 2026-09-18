@@ -4,6 +4,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import '../../l10n/generated/app_localizations.dart';
 
 import '../../design_system/components/name_entry_dialog.dart';
 
@@ -32,12 +33,12 @@ Future<String?> promptStudyName(
   final name = await showNameEntryDialog(
     context,
     title: title,
-    fieldLabel: 'Name',
-    confirmLabel: 'OK',
+    fieldLabel: AppLocalizations.of(context).studyName,
+    confirmLabel: AppLocalizations.of(context).studyNameConfirm,
     initialValue: initial ?? '',
     allowUnchanged: true,
     validate: (value) => sanitizeStudyName(value).isEmpty
-        ? 'That name has no characters a file can use.'
+        ? AppLocalizations.of(context).studyNameUnusable
         : null,
   );
   return name == null ? null : sanitizeStudyName(name);

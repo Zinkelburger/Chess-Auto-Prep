@@ -3,6 +3,8 @@
 /// overflow during layout fails the test.
 library;
 
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
+
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -25,6 +27,9 @@ Widget _host(
   double height = 400,
 }) {
   return MaterialApp(
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
+
     home: Scaffold(
       body: Align(
         alignment: Alignment.topLeft,

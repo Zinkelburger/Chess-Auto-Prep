@@ -1,4 +1,6 @@
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/widgets/common/choice_field.dart';
+import 'package:chess_auto_prep/design_system/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
@@ -12,11 +14,24 @@ void main() {
     ChoiceItem(value: 'pirc', label: 'Pirc Defence'),
   ];
 
-  Future<String?> pump(WidgetTester tester, {String? value}) async {
+  Future<String?> pump(
+    WidgetTester tester, {
+    String? value,
+    double scale = 1,
+    bool light = false,
+  }) async {
     String? picked = value;
     await tester.pumpWidget(
       MaterialApp(
-        theme: ThemeData(platform: TargetPlatform.linux),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: light ? AppTheme.light() : AppTheme.dark(),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(scale)),
+          child: child!,
+        ),
         home: Scaffold(
           body: StatefulBuilder(
             // The other box sits above the field: the open list hangs
@@ -42,6 +57,29 @@ void main() {
     );
     await tester.pumpAndSettle();
     return picked;
+  }
+
+  for (final light in [false, true]) {
+    testWidgets(
+      '200% popup rows and keyboard selection (${light ? 'light' : 'dark'})',
+      (tester) async {
+        await pump(tester, value: 'french', scale: 2, light: light);
+        await tester.tap(find.byKey(const Key('field')));
+        await tester.pumpAndSettle();
+        expect(find.text('Solid'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.enterText(find.byKey(const Key('field')), 'caro');
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<ChoiceField<String>>(find.byKey(const Key('field')))
+              .value,
+          'caro',
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
   }
 
   testWidgets('shows the current choice and the whole list on click', (
@@ -135,7 +173,9 @@ void main() {
   testWidgets('a disabled field neither opens nor changes', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
-        theme: ThemeData(platform: TargetPlatform.linux),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: AppTheme.dark(),
         home: Scaffold(
           body: ChoiceField<String>(
             key: const Key('field'),

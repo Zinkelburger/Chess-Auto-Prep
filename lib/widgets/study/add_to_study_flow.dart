@@ -7,6 +7,7 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../l10n/generated/app_localizations.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_state.dart';
@@ -24,7 +25,7 @@ Future<void> runAddToStudyFlow(
   BuildContext context, {
   required String suggestedChapterName,
   required FutureOr<String?> Function(String chapterName) buildPgn,
-  String pickerTitle = 'Add line to study',
+  String? pickerTitle,
   bool openAfterAdding = false,
   List<String>? viewSanLine,
   Future<String?> Function()? preferredStudy,
@@ -66,13 +67,19 @@ Future<void> runAddToStudyFlow(
           chapterName: result.chapterName,
           initialSanLine: viewSanLine,
         ),
-        historyLabel: 'Study: ${result.studyName}',
+        historyLabel: AppLocalizations.of(
+          context,
+        ).studyHistoryTitle(result.studyName),
       );
     }
   } catch (e) {
     debugPrint('Add to study failed: $e');
     if (context.mounted) {
-      showAppSnackBar(context, 'Failed to add to study.', isError: true);
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context).studyAddFailed,
+        isError: true,
+      );
     }
   }
 }
