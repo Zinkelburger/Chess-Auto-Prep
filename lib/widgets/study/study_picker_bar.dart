@@ -89,35 +89,37 @@ class _StudyPickerBarState extends State<StudyPickerBar> {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (_editingName)
-          SizedBox(
-            width: 220,
-            child: Focus(
-              onKeyEvent: (node, event) {
-                if (!mounted) return KeyEventResult.ignored;
-                if (event is KeyDownEvent &&
-                    event.logicalKey == LogicalKeyboardKey.escape) {
-                  setState(() => _editingName = false);
-                  widget.focusNode.requestFocus();
-                  return KeyEventResult.handled;
-                }
-                return KeyEventResult.ignored;
-              },
-              onFocusChange: (focused) {
-                if (!focused) unawaited(_commitNameEdit());
-              },
-              child: TextField(
-                controller: _nameEditController,
-                autofocus: true,
-                style: theme.textTheme.bodyMedium,
-                decoration: const InputDecoration(
-                  isDense: true,
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 6,
+          Flexible(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 220),
+              child: Focus(
+                onKeyEvent: (node, event) {
+                  if (!mounted) return KeyEventResult.ignored;
+                  if (event is KeyDownEvent &&
+                      event.logicalKey == LogicalKeyboardKey.escape) {
+                    setState(() => _editingName = false);
+                    widget.focusNode.requestFocus();
+                    return KeyEventResult.handled;
+                  }
+                  return KeyEventResult.ignored;
+                },
+                onFocusChange: (focused) {
+                  if (!focused) unawaited(_commitNameEdit());
+                },
+                child: TextField(
+                  controller: _nameEditController,
+                  autofocus: true,
+                  style: theme.textTheme.bodyMedium,
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 6,
+                    ),
                   ),
+                  onSubmitted: (_) => _commitNameEdit(),
                 ),
-                onSubmitted: (_) => _commitNameEdit(),
               ),
             ),
           )
