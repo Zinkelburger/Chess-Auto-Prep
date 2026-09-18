@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/features/generation/services/generation_artifacts.dart';
 import 'package:chess_auto_prep/app/runtime_settings.dart';
 import 'package:chess_auto_prep/app/engine_runtime.dart';
 import '../support/runtime_settings.dart';
@@ -100,6 +101,7 @@ void main() {
 
   test('initial state is idle with no tree and clean progress', () {
     final controller = GenerationSessionController(
+      jobs: JobManager(),
       enginePool: engines.pool,
       engineLifecycle: engines.lifecycle,
       artifacts: generationArtifactsFixture(),
@@ -131,6 +133,7 @@ void main() {
   group('generated tree lifecycle', () {
     test('onTreeBuilt publishes the bundle and notifies', () {
       final controller = GenerationSessionController(
+        jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
         artifacts: generationArtifactsFixture(),
@@ -153,6 +156,7 @@ void main() {
 
     test('onTreeBuilt reads play_as_white from the config snapshot', () {
       final controller = GenerationSessionController(
+        jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
         artifacts: generationArtifactsFixture(),
@@ -169,6 +173,7 @@ void main() {
 
     test('clearTree drops the bundle and notifies', () {
       final controller = GenerationSessionController(
+        jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
         artifacts: generationArtifactsFixture(),
@@ -192,6 +197,7 @@ void main() {
       'a legacy partial tree from another position refuses cleanly',
       () async {
         final controller = GenerationSessionController(
+          jobs: JobManager(),
           enginePool: engines.pool,
           engineLifecycle: engines.lifecycle,
           artifacts: generationArtifactsFixture(),
@@ -203,6 +209,7 @@ void main() {
         // The paused tree was built from the e4 position (with no recorded
         // move prefix), but the caller is resuming from the standard start.
         final request = GenerationRequest(
+          jobLabel: 'Test generation',
           config: const TreeBuildConfig(
             startFen: kStandardStartFen,
             playAsWhite: true,
@@ -227,9 +234,92 @@ void main() {
     );
   });
 
+  for (final disposed in [false, true]) {
+    test(
+      'registered run ${disposed ? 'disposes' : 'cancels'} without a screen owner',
+      () async {
+        final jobs = JobManager();
+        final entered = Completer<void>();
+        final release = Completer<void>();
+        final artifacts = MemoryGenerationArtifacts()
+          ..beforeRead = (_) async {
+            if (!entered.isCompleted) entered.complete();
+            await release.future;
+          };
+        final controller = GenerationSessionController(
+          jobs: jobs,
+          enginePool: engines.pool,
+          engineLifecycle: engines.lifecycle,
+          artifacts: GenerationArtifacts(artifacts),
+          publication: generationPublicationFixture(),
+        );
+        final tree = _smallTree(rootFen: _fenAfterE4)..startMoves = 'e4';
+        final request = GenerationRequest(
+          jobLabel: 'Captured chapter',
+          config: const TreeBuildConfig(
+            startFen: _fenAfterE4,
+            playAsWhite: true,
+            downloadMasterGamesIfMissing: false,
+          ),
+          repertoireFilePath: '/captured.pgn',
+          buildRootFen: kStandardStartFen,
+          lineMovePrefix: const [],
+          repertoireStartFen: kStandardStartFen,
+          existingTree: tree,
+          onPublished: (_) => fail('cancelled run published'),
+        );
+        var notifications = 0;
+        // The cancel case has no controller observer at all. The disposal case
+        // also proves the very first observer sees a fully configured job.
+        if (disposed) {
+          controller.addListener(() {
+            notifications++;
+            final job = controller.currentJob!;
+            expect(job.status, JobStatus.running);
+            expect(job.label, 'Captured chapter');
+            expect(job.subtreeFen, _fenAfterE4);
+            expect(job.configSnapshot, request.config.toJson());
+          });
+        }
+        final run = controller.startBuild(request);
+        final job = jobs.jobs.single;
+        expect(controller.currentJob, same(job));
+        expect(job.status, JobStatus.running);
+        await controller.startBuild(request);
+        expect(
+          jobs.jobs,
+          hasLength(1),
+          reason: 'busy admission must not create another job',
+        );
+        await entered.future;
+        final beforeDisposal = notifications;
+        if (disposed) {
+          controller.dispose();
+        } else {
+          controller.cancelBuild();
+        }
+        release.complete();
+        await run;
+        expect(job.status, JobStatus.cancelled);
+        expect(job.progress.message, isNotEmpty);
+        final terminalMessage = job.progress.message;
+        expect(controller.currentJob, isNull);
+        expect(controller.progress.nodes, 0);
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        expect(job.progress.message, terminalMessage);
+        if (disposed) {
+          expect(notifications, beforeDisposal);
+        } else {
+          controller.dispose();
+        }
+      },
+    );
+  }
+
   group('progress plumbing', () {
     test('progress.update stores every field it is given', () {
       final controller = GenerationSessionController(
+        jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
         artifacts: generationArtifactsFixture(),
@@ -260,6 +350,7 @@ void main() {
 
     test('rapid updates coalesce into a throttled trailing notify', () async {
       final controller = GenerationSessionController(
+        jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
         artifacts: generationArtifactsFixture(),
@@ -275,7 +366,7 @@ void main() {
       expect(controller.progress.nodes, 2, reason: 'state updates instantly');
       expect(notified, 1, reason: 'second notify is deferred');
 
-      await Future<void>.delayed(const Duration(milliseconds: 200));
+      await Future<void>.delayed(const Duration(milliseconds: 300));
       expect(notified, 2, reason: 'trailing timer flushed the notify');
       controller.dispose();
     });
@@ -284,6 +375,7 @@ void main() {
   group('idle guards', () {
     test('pause/resume/cancel/finishNow are no-ops when idle', () {
       final controller = GenerationSessionController(
+        jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
         artifacts: generationArtifactsFixture(),
@@ -308,6 +400,7 @@ void main() {
 
     test('exportSnapshot refuses without an active build', () async {
       final controller = GenerationSessionController(
+        jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
         artifacts: generationArtifactsFixture(),
@@ -326,6 +419,7 @@ void main() {
 
     test('snapshotNameSuggestion falls back when no run is active', () {
       final controller = GenerationSessionController(
+        jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
         artifacts: generationArtifactsFixture(),
@@ -342,7 +436,9 @@ void main() {
         'engine ${failPause ? 'pause' : 'cleanup'} failure settles the job and releases run ownership',
         () async {
           final lifecycle = _FailingExitLifecycle(failPause: failPause);
+          final jobs = JobManager();
           final controller = GenerationSessionController(
+            jobs: jobs,
             enginePool: engines.pool,
             artifacts: generationArtifactsFixture(),
             publication: generationPublicationFixture(),
@@ -351,13 +447,8 @@ void main() {
           lifecycle.onEnter = failPause
               ? controller.pauseBuild
               : controller.cancelBuild;
-          final job = RepertoireJob(
-            id: 'cleanup',
-            type: JobType.generation,
-            label: 'Test',
-          );
-          controller.currentJob = job;
           final request = GenerationRequest(
+            jobLabel: 'Test generation',
             config: const TreeBuildConfig(
               startFen: kStandardStartFen,
               playAsWhite: true,
@@ -381,6 +472,7 @@ void main() {
               failPause ? 'engine pause failed' : 'engine release failed',
             ),
           );
+          final job = jobs.jobs.single;
           expect(job.status, JobStatus.failed);
           await controller.startBuild(request);
           expect(lifecycle.entries, 2);
@@ -393,6 +485,7 @@ void main() {
 
     test('dispose cancels the pending throttle timer', () async {
       final controller = GenerationSessionController(
+        jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
         artifacts: generationArtifactsFixture(),
@@ -406,12 +499,13 @@ void main() {
       expect(notified, 1);
 
       controller.dispose();
-      await Future<void>.delayed(const Duration(milliseconds: 200));
+      await Future<void>.delayed(const Duration(milliseconds: 300));
       expect(notified, 1, reason: 'no notify after dispose');
     });
 
     test('late progress updates after dispose are swallowed', () async {
       final controller = GenerationSessionController(
+        jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
         artifacts: generationArtifactsFixture(),
@@ -423,7 +517,7 @@ void main() {
       // SafeChangeNotifier drops the notification.
       controller.progress.update(nodes: 99);
       expect(controller.progress.nodes, 99);
-      await Future<void>.delayed(const Duration(milliseconds: 200));
+      await Future<void>.delayed(const Duration(milliseconds: 300));
     });
   });
 
@@ -481,6 +575,7 @@ void main() {
 
     GenerationRequest requestWith({required bool download}) =>
         GenerationRequest(
+          jobLabel: 'Test generation',
           config: TreeBuildConfig(
             startFen: kStandardStartFen,
             playAsWhite: true,
@@ -505,6 +600,7 @@ void main() {
         'and cancelling there is felt at once', () async {
       final svc = await emptyService();
       final controller = GenerationSessionController(
+        jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
         artifacts: generationArtifactsFixture(),
@@ -535,6 +631,7 @@ void main() {
         'started', () async {
       final svc = await emptyService();
       final controller = GenerationSessionController(
+        jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
         artifacts: generationArtifactsFixture(),
@@ -565,6 +662,7 @@ void main() {
     test('dispose releases a parked run and forbids another run', () async {
       final svc = await emptyService();
       final controller = GenerationSessionController(
+        jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
         artifacts: generationArtifactsFixture(),
@@ -589,6 +687,7 @@ void main() {
       () async {
         final svc = await emptyService();
         final controller = GenerationSessionController(
+          jobs: JobManager(),
           enginePool: engines.pool,
           engineLifecycle: engines.lifecycle,
           artifacts: generationArtifactsFixture(),
@@ -599,6 +698,7 @@ void main() {
         // the pipeline stops before the engine — what matters is that it did
         // not stop on the download first.
         final request = GenerationRequest(
+          jobLabel: 'Test generation',
           config: const TreeBuildConfig(
             startFen: kStandardStartFen,
             playAsWhite: true,

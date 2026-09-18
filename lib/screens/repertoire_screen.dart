@@ -125,9 +125,6 @@ class RepertoireScreen extends StatefulWidget {
   State<RepertoireScreen> createState() => _RepertoireScreenState();
 }
 
-/// How often the screen may repaint while a generation run reports progress.
-const _kGenRebuildInterval = Duration(milliseconds: 250);
-
 /// Fields and small shared helpers for [_RepertoireScreenState].
 ///
 /// The heavier member groups (layout builders, tab content builders, trap
@@ -140,6 +137,7 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   AppState? _appState;
   late final GenerationSessionController _generationController =
       GenerationSessionController(
+        jobs: _jobManager,
         enginePool: context.read<StockfishPool>(),
         engineLifecycle: context.read<EngineLifecycle>(),
         publication: context.read<GenerationPublicationFactory>()(),
@@ -181,13 +179,10 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   bool _boardFlipped = false;
 
   /// Decides what a generation notification means for this screen (run just
-  /// ended? re-cluster? coalesce the rebuild?). Stateful, so it lives outside
+  /// ended? re-cluster?). Stateful, so it lives outside
   /// the listener where it can be tested.
   final GenerationNotificationRouter _generationRouter =
       GenerationNotificationRouter();
-
-  /// Coalesces whole-screen rebuilds during generation progress ticks.
-  Timer? _genRebuildThrottle;
 
   /// Missing-move finding currently previewed on the board — the move played
   /// for looking at only, never written to the tree.
@@ -1059,7 +1054,6 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     if (_auditController.isAuditing) {
       _auditController.saveProgress(_repertoireFilePath);
     }
-    _genRebuildThrottle?.cancel();
     _bottomPane.dispose();
     _trapSession.removeListener(_onTrapsChanged);
     _trapSession.dispose();

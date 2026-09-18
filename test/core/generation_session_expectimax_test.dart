@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/services/jobs/repertoire_job.dart';
 import 'package:chess_auto_prep/chess_core/generation/expectimax_probe_codec.dart';
 import 'package:chess_auto_prep/app/runtime_settings.dart';
 import 'package:chess_auto_prep/app/engine_runtime.dart';
@@ -52,6 +53,7 @@ BuildTree _tree(String rootFen, {String childFen = _afterE4}) {
 class _CapturingGeneration extends GenerationSessionController {
   _CapturingGeneration(MemoryGenerationArtifacts storage)
     : super(
+        jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
         artifacts: GenerationArtifacts(storage),
@@ -121,6 +123,7 @@ void main() {
       depth: 14,
     );
     final controller = GenerationSessionController(
+      jobs: JobManager(),
       artifacts: GenerationArtifacts(storage),
       publication: generationPublicationFixture(),
       enginePool: pool,
@@ -138,6 +141,7 @@ void main() {
     final lifecycle = _PvLifecycle()..gate = Completer<void>();
     final pool = FakeStockfishPool();
     final controller = GenerationSessionController(
+      jobs: JobManager(),
       artifacts: GenerationArtifacts(storage),
       publication: generationPublicationFixture(),
       enginePool: pool,
@@ -191,6 +195,7 @@ void main() {
         _tree(_afterE4C5, childFen: 'probe-child'),
       ]);
       final controller = GenerationSessionController(
+        jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
         artifacts: GenerationArtifacts(storage),
@@ -215,6 +220,7 @@ void main() {
         _tree(_afterE4, childFen: 'other-child'),
       ]);
       final controller = GenerationSessionController(
+        jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
         artifacts: GenerationArtifacts(storage),
@@ -230,6 +236,7 @@ void main() {
 
     test('a repertoire with nothing saved ends with no tree', () async {
       final controller = GenerationSessionController(
+        jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
         artifacts: GenerationArtifacts(storage),
@@ -249,6 +256,7 @@ void main() {
         _tree(_afterE4C5, childFen: 'probe-child'),
       ]);
       final controller = GenerationSessionController(
+        jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
         artifacts: GenerationArtifacts(storage),
@@ -323,6 +331,7 @@ void main() {
     );
     test('refuses moves it cannot play from the start', () async {
       final controller = GenerationSessionController(
+        jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
         artifacts: GenerationArtifacts(storage),

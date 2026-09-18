@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/services/jobs/repertoire_job.dart';
 import 'package:chess_auto_prep/app/runtime_settings.dart';
 import 'package:chess_auto_prep/app/engine_runtime.dart';
 import '../../support/runtime_settings.dart';
@@ -28,6 +29,7 @@ import 'package:flutter_test/flutter_test.dart';
 class _FakeGeneration extends GenerationSessionController {
   _FakeGeneration()
     : super(
+        jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
         artifacts: generationArtifactsFixture(),

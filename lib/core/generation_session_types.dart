@@ -2,6 +2,7 @@
 library;
 
 import 'dart:async';
+import '../utils/movetext_builder.dart';
 
 import '../features/documents/models/pgn_document.dart';
 import '../chess_core/generation/build_tree_node.dart';
@@ -15,6 +16,9 @@ import '../services/generation/line_pruner.dart';
 /// independent of any widget lifecycle.
 class GenerationRequest {
   final TreeBuildConfig config;
+
+  /// Display name captured with the source, never read from a mutable screen.
+  final String jobLabel;
 
   /// Repertoire PGN file the generated lines are appended to.
   final String repertoireFilePath;
@@ -55,6 +59,7 @@ class GenerationRequest {
 
   const GenerationRequest({
     required this.config,
+    required this.jobLabel,
     required this.repertoireFilePath,
     required this.buildRootFen,
     required this.lineMovePrefix,
@@ -73,7 +78,9 @@ class GenerationRequest {
     required ExpectimaxProbeTarget target,
     required this.buildRootFen,
     required this.lineMovePrefix,
-  }) : repertoireFilePath = target.repertoireFilePath,
+  }) : jobLabel =
+           'Expectimax · ${lineMovePrefix.isEmpty ? 'start position' : buildNumberedMovetext(lineMovePrefix)}',
+       repertoireFilePath = target.repertoireFilePath,
        repertoireStartFen = target.repertoireStartFen,
        onPublished = _ignorePublication,
        existingTree = null,
