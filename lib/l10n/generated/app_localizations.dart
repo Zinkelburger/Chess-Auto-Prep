@@ -3105,6 +3105,144 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'chessgames.com collection · cid {id}'**
   String studyCollectionSource(String id);
+
+  /// Engine analysis control or status: engineAppearanceToggle
+  ///
+  /// In en, this message translates to:
+  /// **'Toggle engine'**
+  String get engineAppearanceToggle;
+
+  /// Engine analysis control or status: engineAppearanceEngine
+  ///
+  /// In en, this message translates to:
+  /// **'Engine'**
+  String get engineAppearanceEngine;
+
+  /// Engine analysis control or status: engineAppearanceBusy
+  ///
+  /// In en, this message translates to:
+  /// **'Engine busy'**
+  String get engineAppearanceBusy;
+
+  /// Engine analysis control or status: engineAppearanceHideThreat
+  ///
+  /// In en, this message translates to:
+  /// **'Hide threat'**
+  String get engineAppearanceHideThreat;
+
+  /// Engine analysis control or status: engineAppearanceShowThreat
+  ///
+  /// In en, this message translates to:
+  /// **'Show threat'**
+  String get engineAppearanceShowThreat;
+
+  /// Engine analysis control or status: engineAppearanceStopAnalysis
+  ///
+  /// In en, this message translates to:
+  /// **'Stop analysis'**
+  String get engineAppearanceStopAnalysis;
+
+  /// Engine analysis control or status: engineAppearanceStartAnalysis
+  ///
+  /// In en, this message translates to:
+  /// **'Start analysis'**
+  String get engineAppearanceStartAnalysis;
+
+  /// Engine analysis control or status: engineAppearanceStop
+  ///
+  /// In en, this message translates to:
+  /// **'Stop'**
+  String get engineAppearanceStop;
+
+  /// Engine analysis control or status: engineAppearanceLocalEngine
+  ///
+  /// In en, this message translates to:
+  /// **'Local engine'**
+  String get engineAppearanceLocalEngine;
+
+  /// Engine analysis control or status: engineAppearanceOptions
+  ///
+  /// In en, this message translates to:
+  /// **'Analysis options'**
+  String get engineAppearanceOptions;
+
+  /// Engine analysis control or status: engineAppearanceNoLegalMoves
+  ///
+  /// In en, this message translates to:
+  /// **'No legal moves.'**
+  String get engineAppearanceNoLegalMoves;
+
+  /// Engine analysis control or status: engineAppearanceAnalyzing
+  ///
+  /// In en, this message translates to:
+  /// **'Analyzing...'**
+  String get engineAppearanceAnalyzing;
+
+  /// Engine analysis control or status: engineAppearanceFailure
+  ///
+  /// In en, this message translates to:
+  /// **'Engine failed. Toggle it to retry.'**
+  String get engineAppearanceFailure;
+
+  /// Engine analysis control or status: engineAppearanceSettings
+  ///
+  /// In en, this message translates to:
+  /// **'Engine settings'**
+  String get engineAppearanceSettings;
+
+  /// Engine analysis control or status: engineAppearanceCollapseLine
+  ///
+  /// In en, this message translates to:
+  /// **'Collapse line'**
+  String get engineAppearanceCollapseLine;
+
+  /// Engine analysis control or status: engineAppearanceShowFullLine
+  ///
+  /// In en, this message translates to:
+  /// **'Show full line'**
+  String get engineAppearanceShowFullLine;
+
+  /// Engine analysis control or status: engineNoticeLocked
+  ///
+  /// In en, this message translates to:
+  /// **'Stockfish is busy building your repertoire. Pause the build or wait for it to finish before using engine analysis.'**
+  String get engineNoticeLocked;
+
+  /// Engine analysis control or status: engineNoticeBusyCompact
+  ///
+  /// In en, this message translates to:
+  /// **'Engine busy — building your repertoire.'**
+  String get engineNoticeBusyCompact;
+
+  /// Engine analysis control or status: engineNoticeBusyTitle
+  ///
+  /// In en, this message translates to:
+  /// **'Engine Busy'**
+  String get engineNoticeBusyTitle;
+
+  /// Engine analysis control or status: engineNoticeBusyBody
+  ///
+  /// In en, this message translates to:
+  /// **'Stockfish is building your repertoire.\nPause the build or let it finish to analyze again.'**
+  String get engineNoticeBusyBody;
+
+  /// Engine analysis control or status: engineAppearanceSearchStatus
+  ///
+  /// In en, this message translates to:
+  /// **'{mode, select, threat{Threat · } other{}}Depth {depth} • {nodes} nodes'**
+  String engineAppearanceSearchStatus(String mode, int depth, String nodes);
+
+  /// Engine analysis control or status: engineAppearanceLinesStatus
+  ///
+  /// In en, this message translates to:
+  /// **'{mode, select, threat{Threat · } other{}}{count, plural, =1{1 line} other{{count} lines}} • depth {depth}'**
+  String engineAppearanceLinesStatus(String mode, int count, int depth);
+
+  /// Engine analysis control or status: engineAppearanceDepthStatus
+  ///
+  /// In en, this message translates to:
+  /// **'Depth {depth} · {nodes} nodes'**
+  String engineAppearanceDepthStatus(int depth, String nodes);
 }
 
 class _AppLocalizationsDelegate

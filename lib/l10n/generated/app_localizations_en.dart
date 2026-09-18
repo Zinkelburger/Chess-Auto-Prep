@@ -1900,4 +1900,96 @@ class AppLocalizationsEn extends AppLocalizations {
   String studyCollectionSource(String id) {
     return 'chessgames.com collection · cid $id';
   }
+
+  @override
+  String get engineAppearanceToggle => 'Toggle engine';
+
+  @override
+  String get engineAppearanceEngine => 'Engine';
+
+  @override
+  String get engineAppearanceBusy => 'Engine busy';
+
+  @override
+  String get engineAppearanceHideThreat => 'Hide threat';
+
+  @override
+  String get engineAppearanceShowThreat => 'Show threat';
+
+  @override
+  String get engineAppearanceStopAnalysis => 'Stop analysis';
+
+  @override
+  String get engineAppearanceStartAnalysis => 'Start analysis';
+
+  @override
+  String get engineAppearanceStop => 'Stop';
+
+  @override
+  String get engineAppearanceLocalEngine => 'Local engine';
+
+  @override
+  String get engineAppearanceOptions => 'Analysis options';
+
+  @override
+  String get engineAppearanceNoLegalMoves => 'No legal moves.';
+
+  @override
+  String get engineAppearanceAnalyzing => 'Analyzing...';
+
+  @override
+  String get engineAppearanceFailure => 'Engine failed. Toggle it to retry.';
+
+  @override
+  String get engineAppearanceSettings => 'Engine settings';
+
+  @override
+  String get engineAppearanceCollapseLine => 'Collapse line';
+
+  @override
+  String get engineAppearanceShowFullLine => 'Show full line';
+
+  @override
+  String get engineNoticeLocked =>
+      'Stockfish is busy building your repertoire. Pause the build or wait for it to finish before using engine analysis.';
+
+  @override
+  String get engineNoticeBusyCompact =>
+      'Engine busy — building your repertoire.';
+
+  @override
+  String get engineNoticeBusyTitle => 'Engine Busy';
+
+  @override
+  String get engineNoticeBusyBody =>
+      'Stockfish is building your repertoire.\nPause the build or let it finish to analyze again.';
+
+  @override
+  String engineAppearanceSearchStatus(String mode, int depth, String nodes) {
+    String _temp0 = intl.Intl.selectLogic(mode, {
+      'threat': 'Threat · ',
+      'other': '',
+    });
+    return '${_temp0}Depth $depth • $nodes nodes';
+  }
+
+  @override
+  String engineAppearanceLinesStatus(String mode, int count, int depth) {
+    String _temp0 = intl.Intl.selectLogic(mode, {
+      'threat': 'Threat · ',
+      'other': '',
+    });
+    String _temp1 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count lines',
+      one: '1 line',
+    );
+    return '$_temp0$_temp1 • depth $depth';
+  }
+
+  @override
+  String engineAppearanceDepthStatus(int depth, String nodes) {
+    return 'Depth $depth · $nodes nodes';
+  }
 }

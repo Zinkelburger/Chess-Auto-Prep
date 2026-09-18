@@ -201,6 +201,11 @@ class ViewerDocumentController extends ChangeNotifier with SafeChangeNotifier {
   // File state
   String? filePath;
 
+  /// Label for a collection opened from captured content instead of a file.
+  String? _contentTitle;
+  String? get collectionTitle =>
+      filePath == null ? _contentTitle : p.basenameWithoutExtension(filePath!);
+
   /// Modification time of [filePath] as it was when this collection was read,
   /// or null for a collection with no backing file.
   ///
@@ -337,6 +342,7 @@ class ViewerDocumentController extends ChangeNotifier with SafeChangeNotifier {
     required List<PgnGameEntry> entries,
     required Perspective newPerspective,
     String preamble = '',
+    String? contentTitle,
     PgnSnapshot? baseline,
     bool flushOutgoing = true,
     PgnCollectionEditContext? editContext,
@@ -346,6 +352,7 @@ class ViewerDocumentController extends ChangeNotifier with SafeChangeNotifier {
     if (flushOutgoing) unawaited(editor.flushPendingMetadata());
     _openingEpoch++;
     filePath = path;
+    _contentTitle = contentTitle;
     // Whoever adopted a collection knows the mtime if there is one; a
     // from-memory collection has none. Cleared here so it can never outlive
     // the file it described.
@@ -512,6 +519,7 @@ class ViewerDocumentController extends ChangeNotifier with SafeChangeNotifier {
   int? adoptDecodedCollection(
     DecodedPgnCollection document, {
     String? initialFen,
+    String? title,
   }) {
     if (isDisposed || !isActive() || !editor.canReplaceCollection()) {
       return null;
@@ -527,6 +535,7 @@ class ViewerDocumentController extends ChangeNotifier with SafeChangeNotifier {
         current: presentation.perspective,
       ),
       preamble: document.preamble,
+      contentTitle: title,
     );
     reading.pgnInitialFen = initialFen;
     if (collection.games.isEmpty) reading.currentPosition = Chess.initial;
@@ -542,7 +551,11 @@ class ViewerDocumentController extends ChangeNotifier with SafeChangeNotifier {
   /// It has to be handed in here rather than set afterwards: the viewer widget
   /// reads it during the build this load triggers, which is the only moment
   /// the freshly parsed game and the cursor request meet.
-  Future<bool> loadPgnContent(String content, {String? initialFen}) async {
+  Future<bool> loadPgnContent(
+    String content, {
+    String? initialFen,
+    String? title,
+  }) async {
     if (!editor.canReplaceCollection()) return false;
     unawaited(reading.saveSession());
     _abandonInFlightWork();
@@ -570,6 +583,7 @@ class ViewerDocumentController extends ChangeNotifier with SafeChangeNotifier {
     final adoptedEpoch = adoptDecodedCollection(
       loaded.document,
       initialFen: initialFen,
+      title: title,
     );
     if (adoptedEpoch == null || !_isCurrentLoad(adoptedEpoch)) return false;
 
@@ -598,6 +612,7 @@ class ViewerDocumentController extends ChangeNotifier with SafeChangeNotifier {
     final editContext = editor.captureEditContext();
     final visibleIndices = collection.visibleIndices;
     final path = filePath;
+    final contentTitle = _contentTitle;
     final modified = loadedFileModified;
     final preamble = collectionPreamble;
     final viewPerspective = presentation.perspective;
@@ -619,6 +634,7 @@ class ViewerDocumentController extends ChangeNotifier with SafeChangeNotifier {
         entries: List.of(entries),
         newPerspective: viewPerspective,
         preamble: preamble,
+        contentTitle: contentTitle,
         editContext: editContext,
       );
       loadedFileModified = modified;

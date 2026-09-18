@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/design_system/theme/app_theme.dart';
 import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
 import 'package:chess_auto_prep/app/engine_runtime.dart';
 import '../support/runtime_settings.dart';
@@ -125,6 +126,61 @@ void main() {
       expect(find.text('Start analysis'), findsOneWidget);
     },
   );
+
+  testWidgets('live appearance preserves the active engine search and PV', (
+    tester,
+  ) async {
+    final theme = ValueNotifier(AppTheme.dark());
+    addTearDown(theme.dispose);
+    final connections = <_Connection>[];
+    StockfishConnectionFactory.createForTest = () async {
+      final connection = _Connection();
+      connections.add(connection);
+      return connection;
+    };
+    await pumpRuntimeWidget(
+      tester,
+      runtimeSettings,
+      ValueListenableBuilder(
+        valueListenable: theme,
+        builder: (_, value, _) => MaterialApp(
+          theme: value,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: InlineEngineBar(fen: fen)),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    InlineEngineBar.toggleEngine(tester.element(find.byType(InlineEngineBar)));
+    await tester.pumpAndSettle();
+    final searches = connections.single.commands
+        .where((command) => command.startsWith('go '))
+        .length;
+    await tester.tap(find.byTooltip('Show full line'));
+    await tester.pumpAndSettle();
+    theme.value = AppTheme.light();
+    await tester.pumpAndSettle();
+    expect(connections, hasLength(1));
+    expect(connections.single.disposed, isFalse);
+    expect(
+      connections.single.commands.where((command) => command.startsWith('go ')),
+      hasLength(searches),
+    );
+    expect(find.text('e4'), findsOneWidget);
+    expect(find.byTooltip('Collapse line'), findsOneWidget);
+    await tester.tap(find.byTooltip('Show threat'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Hide threat'), findsOneWidget);
+    expect(
+      connections.single.commands.where((command) => command.startsWith('go ')),
+      hasLength(searches + 1),
+    );
+    InlineEngineBar.toggleEngine(tester.element(find.byType(InlineEngineBar)));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Collapse line'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'off prepares one engine and repeated toggles keep its configuration',
@@ -254,7 +310,7 @@ void main() {
     );
     connection.output.add('bestmove e7e5');
     await tester.pumpAndSettle();
-    expect(find.text('1 lines • depth 1'), findsOneWidget);
+    expect(find.text('1 line • depth 1'), findsOneWidget);
     expect(pgnTop(), enabledTop);
 
     const mateFen = '7k/6Q1/5K2/8/8/8/8/8 b - - 0 1';

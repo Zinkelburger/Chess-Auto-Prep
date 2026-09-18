@@ -68,6 +68,8 @@ abstract final class AppTheme {
       snackBarTheme: SnackBarThemeData(
         backgroundColor: surfaces.inset,
         contentTextStyle: text.bodyMedium!.copyWith(fontSize: 15),
+        actionTextColor: colors.onSurface,
+        closeIconColor: colors.onSurface,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),

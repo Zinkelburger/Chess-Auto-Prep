@@ -242,6 +242,14 @@ generation transitions: unknown preferences do not enable analysis, late startup
 cannot undo a successful user toggle, and navigation resume does not rewrite
 preferences.
 
+The inline engine bar, PV moves, settings shortcut and busy notices resolve the
+active application theme; an open floating preview follows appearance without
+restarting analysis. Explicit evaluation and move-annotation colors remain owned
+by their callers. Shared notices use the paired `SnackBarTheme` surface, text,
+action and close colors in either appearance. Errors remain persistent and
+attention notices timed; severity is expressed by the message rather than a
+fixed red surface.
+
 Startup wraps legacy Linux/Windows preference backends in
 `FreshDesktopPreferencesStore`: serialized requests use fresh backend instances,
 so the plugin's second cache cannot confirm an unsaved value or flush a failed
@@ -1985,8 +1993,13 @@ or variations. Explicit move numbers and sides must match the preview position;
 bare square references in prose are not inferred as pawn moves. Move numbers, check signs
 and annotations are preserved in prose; invalid diagram text remains readable.
 Single-spaced comment lines also replay legally, with numbered restarts and
-parenthesized alternatives anchored to their own positions. Trainer Read handoffs use the same PGN Viewer previews (←/→ to step, Esc to
-return) without modifying course or training data. `[--]` paragraph separators, bullet sections and `**bold**`
+parenthesized alternatives anchored to their own positions. Trainer Read captures
+ordered PGN text, title, selected game and ply in `OpenPgnViewer.content` and
+opens it through the Viewer's existing leave approval and collection loader.
+It writes no temporary cache file. The Viewer owns this separate editable
+collection; Save a copy/export and unsaved-close approval preserve edits without
+modifying course or training data. Breadcrumb history retains its captured
+content, collection title and cursor. Newer navigation supersedes delayed loads. `[--]` paragraph separators, bullet sections and `**bold**`
 labels are formatted for reading. Known exporter null counters and impossible
 Black-prefixed duplicates of legal White moves are cleaned only for display;
 other invalid notation stays readable. A move and its explanation precede its

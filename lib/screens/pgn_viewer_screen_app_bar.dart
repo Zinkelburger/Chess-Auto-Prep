@@ -35,9 +35,7 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
 
   PreferredSizeWidget _buildAppBar(ThemeData theme) {
     final loaded = _document.collection.games.isNotEmpty;
-    final fileName = _document.filePath == null
-        ? (loaded ? 'Pasted games' : '')
-        : p.basenameWithoutExtension(_document.filePath!);
+    final fileName = _document.collectionTitle ?? (loaded ? 'Pasted games' : '');
     return AppBar(
       titleSpacing: 16,
       title: Row(

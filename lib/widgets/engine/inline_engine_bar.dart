@@ -24,8 +24,9 @@ import '../../features/settings/controllers/engine_settings.dart';
 import '../../models/analysis/discovery_result.dart';
 import '../../services/eval_cache.dart';
 import '../../services/engine/engine_lifecycle.dart';
-import '../../theme/app_colors.dart';
-import '../../theme/app_text_styles.dart';
+import '../../design_system/theme/app_typography.dart';
+import '../../design_system/theme/workspace_theme.dart';
+import '../../l10n/generated/app_localizations.dart';
 import '../../utils/chess_utils.dart'
     show fenAfterMoves, formatEvalDisplay, formatNodes, uciPvToSanCached;
 import '../../utils/fen_utils.dart';
@@ -101,7 +102,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   }
 
   bool _threatMode = false;
-  String? _error;
+  bool _failed = false;
   String get _searchFen =>
       _threatMode ? threatPositionFen(widget.fen) ?? widget.fen : widget.fen;
 
@@ -321,7 +322,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
 
     setState(() {
       _isSearching = true;
-      _error = null;
+      _failed = false;
       _discovery = const DiscoveryResult();
     });
     _publishThreat();
@@ -357,7 +358,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
       setState(() {
         _isSearching = false;
         _lastAnalyzedFen = null;
-        _error = 'Engine failed. Toggle it to retry.';
+        _failed = true;
       });
     }
   }
@@ -373,7 +374,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppColors.engineSurface,
+      color: WorkspaceTheme.of(context).panel,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -409,27 +410,22 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   }
 
   Widget _buildToggleBar(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context);
     if (widget.compactChrome) return _buildCompactToggleBar(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6),
-      color: AppColors.engineSurface,
+      color: WorkspaceTheme.of(context).panel,
       child: Row(
         children: [
           SizedBox(
             height: 32,
             child: FittedBox(
               child: ShortcutTooltip(
-                description: 'Toggle engine',
+                description: l10n.engineAppearanceToggle,
                 shortcut: AppShortcut.toggleEngine,
                 child: Switch(
                   value: _engineEnabled,
-                  activeThumbColor: AppColors.ink,
-                  activeTrackColor: AppColors.accent,
-                  inactiveThumbColor: AppColors.onSurfaceMuted,
-                  inactiveTrackColor: AppColors.surfaceInset,
-                  trackOutlineColor: const WidgetStatePropertyAll(
-                    AppColors.onSurfaceMuted,
-                  ),
                   onChanged: (value) {
                     if (value && !EngineGate.ensureAvailable(context)) return;
                     _setEngineEnabled(value);
@@ -443,38 +439,46 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
             child: _engineEnabled
                 ? Text(
                     EngineGate.isLocked(context)
-                        ? 'Engine busy'
+                        ? l10n.engineAppearanceBusy
                         : _isSearching
-                        ? '${_threatMode ? 'Threat · ' : ''}Depth ${_discovery.depth} • '
-                              '${formatNodes(_discovery.nodes)} nodes'
-                        : '${_threatMode ? 'Threat · ' : ''}${_discovery.lines.length} lines • '
-                              'depth ${_discovery.depth}',
-                    style: AppTextStyles.body.copyWith(
-                      fontWeight: FontWeight.w400,
-                    ),
+                        ? l10n.engineAppearanceSearchStatus(
+                            _threatMode ? 'threat' : 'normal',
+                            _discovery.depth,
+                            formatNodes(_discovery.nodes),
+                          )
+                        : l10n.engineAppearanceLinesStatus(
+                            _threatMode ? 'threat' : 'normal',
+                            _discovery.lines.length,
+                            _discovery.depth,
+                          ),
+                    style: AppTypography.body(
+                      context,
+                    ).copyWith(fontWeight: FontWeight.w400),
                     overflow: TextOverflow.ellipsis,
                   )
                 : Tooltip(
-                    message: 'Toggle engine',
+                    message: l10n.engineAppearanceToggle,
                     child: Text(
-                      'Engine',
-                      style: AppTextStyles.body.copyWith(
-                        fontWeight: FontWeight.w400,
-                      ),
+                      l10n.engineAppearanceEngine,
+                      style: AppTypography.body(
+                        context,
+                      ).copyWith(fontWeight: FontWeight.w400),
                     ),
                   ),
           ),
           IconButton(
             icon: const Icon(Icons.gps_fixed, size: 20),
-            style: IconButton.styleFrom(foregroundColor: AppColors.ink),
-            selectedIcon: const Icon(
+            style: IconButton.styleFrom(foregroundColor: colors.onSurface),
+            selectedIcon: Icon(
               Icons.gps_fixed,
               size: 20,
-              color: AppColors.accent,
+              color: colors.primary,
             ),
             padding: EdgeInsets.zero,
             visualDensity: VisualDensity.compact,
-            tooltip: _threatMode ? 'Hide threat' : 'Show threat',
+            tooltip: _threatMode
+                ? l10n.engineAppearanceHideThreat
+                : l10n.engineAppearanceShowThreat,
             isSelected: _threatMode,
             onPressed:
                 _engineEnabled &&
@@ -491,12 +495,16 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   }
 
   Widget _buildCompactToggleBar(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: Row(
         children: [
           ShortcutTooltip(
-            description: _engineEnabled ? 'Stop analysis' : 'Start analysis',
+            description: _engineEnabled
+                ? l10n.engineAppearanceStopAnalysis
+                : l10n.engineAppearanceStartAnalysis,
             shortcut: AppShortcut.toggleEngine,
             child: TextButton.icon(
               onPressed: () {
@@ -509,30 +517,39 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
                 _engineEnabled ? Icons.stop : Icons.play_arrow,
                 size: 18,
               ),
-              label: Text(_engineEnabled ? 'Stop' : 'Start analysis'),
+              label: Text(
+                _engineEnabled
+                    ? l10n.engineAppearanceStop
+                    : l10n.engineAppearanceStartAnalysis,
+              ),
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
             child: Tooltip(
               message: _engineEnabled
-                  ? 'Depth ${_discovery.depth} · ${formatNodes(_discovery.nodes)} nodes'
-                  : 'Local engine',
+                  ? l10n.engineAppearanceDepthStatus(
+                      _discovery.depth,
+                      formatNodes(_discovery.nodes),
+                    )
+                  : l10n.engineAppearanceLocalEngine,
               child: Text(
-                EngineGate.isLocked(context) ? 'Engine busy' : 'Stockfish',
-                style: AppTextStyles.muted.copyWith(
-                  color: AppColors.onSurfaceMuted,
-                ),
+                EngineGate.isLocked(context)
+                    ? l10n.engineAppearanceBusy
+                    : 'Stockfish',
+                style: AppTypography.secondary(
+                  context,
+                ).copyWith(color: colors.onSurfaceVariant),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
           ),
           PopupMenuButton<String>(
-            tooltip: 'Analysis options',
+            tooltip: l10n.engineAppearanceOptions,
             icon: Icon(
               Icons.more_horiz,
               size: 20,
-              color: _threatMode ? AppColors.accent : AppColors.onSurfaceMuted,
+              color: _threatMode ? colors.primary : colors.onSurfaceVariant,
             ),
             onSelected: (_) {
               if (!mounted) return;
@@ -546,7 +563,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
                     _engineEnabled &&
                     !EngineGate.isLocked(context) &&
                     threatPositionFen(widget.fen) != null,
-                child: const Text('Show threat'),
+                child: Text(l10n.engineAppearanceShowThreat),
               ),
             ],
           ),
@@ -557,29 +574,35 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   }
 
   Widget _buildLines(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final lines = _discovery.lines;
 
     if (lines.isEmpty && !_isSearching) {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        child: Text(_error ?? 'No legal moves.', style: AppTextStyles.caption),
+        child: Text(
+          _failed
+              ? l10n.engineAppearanceFailure
+              : l10n.engineAppearanceNoLegalMoves,
+          style: AppTypography.caption(context),
+        ),
       );
     }
     if (lines.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 4),
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            SizedBox(
+            const SizedBox(
               width: 14,
               height: 14,
               child: CircularProgressIndicator(strokeWidth: 1.5),
             ),
-            SizedBox(width: 8),
+            const SizedBox(width: 8),
             Text(
-              'Analyzing...',
-              style: TextStyle(color: AppColors.onSurfaceMuted, fontSize: 13),
+              l10n.engineAppearanceAnalyzing,
+              style: AppTypography.secondary(context),
             ),
           ],
         ),
