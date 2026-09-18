@@ -1,5 +1,6 @@
 import 'package:chess_auto_prep/app/runtime_settings.dart';
-import 'package:chess_auto_prep/features/settings/widgets/display_settings_scope.dart';
+import 'package:provider/provider.dart';
+import 'package:chess_auto_prep/features/settings/controllers/board_display_settings.dart';
 import 'package:chess_auto_prep/features/settings/models/board_display_configuration.dart';
 import 'package:chess_auto_prep/features/settings/widgets/san_display.dart';
 import 'package:flutter/material.dart';
@@ -96,7 +97,9 @@ void main() {
       await tester.pumpWidget(
         Builder(
           builder: (context) {
-            seen = DisplaySettingsScope.of(context);
+            seen =
+                (context.watch<BoardDisplaySettings?>()?.committed ??
+                BoardDisplayConfiguration());
             return const SizedBox();
           },
         ),
@@ -107,8 +110,8 @@ void main() {
     testWidgets('a scoped change redraws a move list in place', (tester) async {
       final settings = RuntimeSettings.preferences().display;
       await tester.pumpWidget(
-        DisplaySettingsScope(
-          settings: settings,
+        ChangeNotifierProvider<BoardDisplaySettings>.value(
+          value: settings,
           child: MaterialApp(
             home: Builder(
               builder: (context) => Text(displaySan(context, 'Nf3')),

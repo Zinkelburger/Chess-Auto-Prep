@@ -1,5 +1,6 @@
 import '../../support/runtime_settings.dart';
-import 'package:chess_auto_prep/features/settings/widgets/display_settings_scope.dart';
+import 'package:provider/provider.dart';
+import 'package:chess_auto_prep/features/settings/controllers/board_display_settings.dart';
 import 'package:chess_auto_prep/features/settings/models/board_display_configuration.dart';
 import 'package:chess_auto_prep/core/board_editor_controller.dart';
 import 'package:chess_auto_prep/features/bughouse/controllers/bughouse_controller.dart';
@@ -41,8 +42,8 @@ void main() {
         for (final width in [240.0, 338.0, 400.0]) {
           await tester.pumpWidget(
             MaterialApp(
-              home: DisplaySettingsScope(
-                settings: settings,
+              home: ChangeNotifierProvider<BoardDisplaySettings>.value(
+                value: settings,
                 child: Scaffold(
                   body: SingleChildScrollView(
                     child: SizedBox(

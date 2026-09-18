@@ -129,7 +129,7 @@ mixin _TacticsPlayback on _TacticsControlPanelStateBase {
     final suggested = tactic.gameWhite.isEmpty && tactic.gameBlack.isEmpty
         ? 'Tactic game'
         : '${tactic.gameWhite} vs ${tactic.gameBlack}';
-    final storedGames = StoredGameScope.read(context);
+    final storedGames = context.read<StoredGameRepository>();
     await runAddToStudyFlow(
       context,
       suggestedChapterName: suggested,
@@ -150,7 +150,7 @@ mixin _TacticsPlayback on _TacticsControlPanelStateBase {
       final pgn = await sourceGamePgn(
         tactic,
         _session.engine.solutionLineToSan(tactic),
-        storedGames: StoredGameScope.read(context),
+        storedGames: context.read<StoredGameRepository>(),
       );
       await Clipboard.setData(ClipboardData(text: pgn));
       if (mounted) showAppSnackBar(context, 'Game PGN copied.');

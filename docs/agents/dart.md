@@ -45,8 +45,8 @@
   concrete functions/classes. A one-method interface is neither required nor
   forbidden; a single production adapter alone is not a reason to remove it.
 - Use explicit constructors for domain/workflow dependencies and Provider for
-  Flutter lookup/listening. Existing Riverpod catalog/settings consumers are
-  pending one complete retirement, not a pattern for new features. Keep actual
+  Flutter lookup/listening. Riverpod and the generic stored-game/display scopes
+  are retired and mechanically rejected. Keep actual
   tree-local Flutter UI scopes; do not add a second generic dependency container.
   See the [maintainability gate](../ARCHITECTURE_RENEWAL.md#maintainability-correction-and-next-cutovers).
 - A `ChangeNotifier` service that launches fire-and-forget work must mix in

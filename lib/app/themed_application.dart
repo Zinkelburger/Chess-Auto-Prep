@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:provider/provider.dart';
 import '../design_system/theme/app_theme.dart';
-import '../features/settings/controllers/settings_providers.dart';
+import '../features/settings/models/settings_state.dart';
 import '../features/settings/models/app_appearance.dart';
 import '../l10n/generated/app_localizations.dart';
 
 /// Appearance is an app-owned preference; feature widgets read the resolved
 /// Theme, including platform brightness, rather than platform callbacks.
-class ThemedApplication extends ConsumerWidget {
+class ThemedApplication extends StatelessWidget {
   const ThemedApplication({
     super.key,
     required this.home,
@@ -21,12 +21,11 @@ class ThemedApplication extends ConsumerWidget {
   static final _dark = AppTheme.dark();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final appearance = ref.watch(
-      appearanceSettingsProvider.select(
-        (state) => state.asData?.value.committed ?? AppAppearance.dark,
-      ),
-    );
+  Widget build(BuildContext context) {
+    final appearance = context
+        .select<SettingsState<AppAppearance>, AppAppearance>(
+          (state) => state.committed ?? AppAppearance.dark,
+        );
     return MaterialApp(
       navigatorKey: navigatorKey,
       title: 'Chess Auto Prep',

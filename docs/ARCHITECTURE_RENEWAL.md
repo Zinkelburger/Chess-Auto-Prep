@@ -310,21 +310,23 @@ The final choice is **explicit constructors for domain/workflow owners, with
 `package:provider` as the Flutter dependency lookup and listening mechanism**.
 This revises the initial Riverpod default using repository evidence: most final
 owners and their tests already use plain objects/ChangeNotifier and explicit
-lifetimes; the smaller Riverpod island owns catalog presentation and two settings
+lifetimes; the smaller Riverpod island owned catalog presentation and two settings
 subscriptions. Converting the larger working graph would add migration work
 without resolving the identified ownership and callback problems.
 
-Retire Riverpod in one complete composition cutover: catalog controller and its
-consumers, settings subscriptions, themed application, app bindings, affected
-fixtures, then unused package/declarations. Also replace generic repository lookup
-through `StoredGameScope` and the duplicate `DisplaySettingsScope` lookup of the
-Provider-owned display settings. Delete those superseded scopes with their callers;
-removing Riverpod alone does not close ARCH-04. Preserve explicit retry, per-catalog
-state, mutation survival across navigation, listener disposal and one settings
-writer. Keep domain constructors independent of provider lookups. Add a ratchet
-for the existing Riverpod consumers when implementing this cutover; no new
-Riverpod consumers or parallel provider wrappers. This document does not claim
-that the runtime or checker already enforces the selected end state.
+The complete composition cutover removes Riverpod's catalog/settings bindings,
+all production consumers and its package dependency. `StoredGameScope` and
+`DisplaySettingsScope` are also deleted; repository and display consumers use the
+existing Provider tree directly. One app-owned catalog controller retains two
+private read snapshots, with independent load failures and no implicit mutation
+retry. Mutations now reject overlap across catalog kinds and invalidate both
+views' older reads. Catalog re-entry refreshes explicitly; listener loss does not
+destroy an active commit. Repository replacement starts a new keyed dependency
+lifetime and unsubscribes the previous appearance stream. The stream subscribes
+before starting a load so synchronous repository emissions cannot be lost.
+Retirement checks forbid the old scopes/provider symbols and Riverpod imports.
+No new dependency container or settings-state owner was added. The existing
+settings process singleton used by legacy Games/storage remains separate debt.
 
 Retain Flutter scopes only for actual tree-local UI protocols, such as close
 registration, focus or a scoped document view. Generic repository/owner lookup
@@ -622,7 +624,7 @@ The implementing agent owns each technical check and fallback under PLAN-01.
 |----------|---------|-----------------|----------------------------|
 | Catalog | Widgetbook with only first-slice production controls and fixtures. | Cannot run isolated/headless on the pinned SDK within the spike budget. | Use an isolated Flutter catalog harness temporarily; record the blocker and keep Widgetbook as the target. |
 | Visual checks | Native Flutter widget/golden tests with readable bundled fonts. | Fixtures become costly to maintain or miss required scenarios. | Add Alchemist only if the same scenarios are simpler; retain native host checks. |
-| State/DI | Explicit constructors plus Provider at Flutter composition; existing final owners retain their state and lifetimes. | Catalog/settings cutover loses retry, mutation lifetime, disposal or observation behavior. | Repair that complete cutover before integration; do not introduce another container or wrapper. Existing Riverpod removal remains open until parity passes. |
+| State/DI | Explicit constructors plus Provider at Flutter composition; existing final owners retain their state and lifetimes. | Catalog/settings cutover loses retry, mutation lifetime, disposal or observation behavior. | Repair that complete cutover before integration; do not introduce another container or wrapper. Keep catalog/settings parity gates for subsequent composition changes. |
 | Database | Existing SQLite adapters, schemas and migrations; defer Drift. | A scoped new store or replacement demonstrably needs safer typed queries/migrations. | Evaluate Drift for that ownership boundary only, with one schema/migration owner and migration/performance fixtures. |
 | Models/codegen | Plain immutable Dart values/sealed classes and manual providers; retain existing codecs. Flutter ARB generation is allowed. | Boilerplate produces evidenced defects or excessive maintenance cost. | Introduce only the relevant Freezed or JSON generator after a timed clean/incremental build check; no blanket codegen stack. |
 | Files | Retain atomic writer; inject narrow filesystem adapters with deterministic fakes and real OS tests. | Failure injection needs extensive ad hoc fake filesystem behavior. | Add package:file inside adapters; keep the native contract suite. |
@@ -642,7 +644,7 @@ machinery, trigger the go_router comparison before expanding the wrapper.
 [Router restoration still needs explicit configuration](https://pub.dev/documentation/go_router/latest/topics/State%20restoration-topic.html)
 and cannot restore arbitrary document/engine state for the app.
 Do not combine Provider, Riverpod and Bloc as permanent parallel choices. The
-remaining Riverpod consumers are explicit retirement work under ARCH-04, not the
+retired Riverpod consumers must not return under ARCH-04; Provider is the
 template for new features. No provider wrapper, code generator or automatic major
 upgrade is required for this consolidation. Record the tested SDK and lockfile;
 test retry, disposal and observation on that exact combination. A future codegen
@@ -694,20 +696,11 @@ even if the full settings/accounts UI remains in milestone 6.
 
 ## Runtime state and large documents
 
-Until the remaining Riverpod consumers retire, keep implicit retry disabled at the composition
-root (`retry: (retryCount, error) => null`); opt in only for bounded idempotent
-reads with one retry owner. Riverpod supports both
-[scope/container and per-provider policies](https://riverpod.dev/docs/concepts2/retry).
-The callback returning null disables retries; merely passing `retry: null` does
-not specify that policy. Test provider overrides too. This controls failed
-provider computations, not arbitrary commands or retries inside an adapter.
-Provider computations must not start jobs or perform document
-mutations. A dependency provider can expose an explicitly owned service, but
-visibility, rebuilds and listener counts must not own its active work.
-Test a failed observation, repeated clicks and route departure: one requested
-job starts once and continues or stops according to its declared policy.
-Observe paused/offscreen subscriptions under `TickerMode`, then return and
-verify the latest job state without duplicated work or unbounded buffering.
+Provider composition does not own retries. Catalog refresh coalesces reads;
+mutations reject overlap and failed mutations require explicit user action.
+Appearance keeps its repository's failed draft and committed value separate;
+subscribing or rebuilding does not replay a failed save. Tests cover repository
+override replacement, listener disposal and synchronous initial emissions.
 
 Use the feature notifier/controller as the sole UI action-state owner, with
 an explicit repeated-execution policy (reject, coalesce or queue). Use typed

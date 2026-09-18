@@ -6,7 +6,6 @@ import 'package:chess_auto_prep/features/repertoires/controllers/repertoire_cata
 import 'package:chess_auto_prep/features/repertoires/models/repertoire_creation.dart';
 import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
 import 'package:chess_auto_prep/features/repertoires/repositories/repertoire_catalog_repository.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 RepertoireMetadata entry(String name, [int day = 1]) => RepertoireMetadata(
@@ -37,6 +36,7 @@ class Catalog implements RepertoireCatalogRepository {
   int reads = 0;
   int writes = 0;
   int studyReads = 0;
+  Object? studyError;
 
   @override
   Future<List<RepertoireMetadata>> listRepertoires() {
@@ -48,6 +48,7 @@ class Catalog implements RepertoireCatalogRepository {
   @override
   Future<List<RepertoireMetadata>> listStudies() async {
     studyReads++;
+    if (studyError case final error?) throw error;
     return [entry('Study')];
   }
 
@@ -83,26 +84,118 @@ class Catalog implements RepertoireCatalogRepository {
 
 void main() {
   late Catalog repository;
-  late ProviderContainer container;
-  final provider = repertoireCatalogProvider(false);
-
+  late RepertoireCatalogController catalog;
   setUp(() {
     repository = Catalog();
-    container = ProviderContainer(
-      overrides: [
-        repertoireCatalogRepositoryProvider.overrideWithValue(repository),
-      ],
-      retry: (count, error) => null,
-    );
+    catalog = RepertoireCatalogController(repository);
   });
-  tearDown(() => container.dispose());
+  tearDown(() {
+    if (!catalog.isDisposed) catalog.dispose();
+  });
 
   Future<RepertoireCatalogController> ready() async {
-    container.listen(provider, (_, _) {});
-    await container.pump();
-    await container.read(provider.notifier).refresh();
-    return container.read(provider.notifier);
+    await catalog.refresh();
+    return catalog;
   }
+
+  for (final fail in [false, true]) {
+    test(
+      'first trainer entry during a ${fail ? "failed" : "successful"} library mutation completes its read',
+      () async {
+        await ready();
+        final gate = Completer<void>();
+        repository.write = () => gate.future;
+        final write = catalog.create(
+          const CreateRepertoire(name: 'Saved', color: 'White'),
+        );
+        final settled = fail ? expectLater(write, throwsStateError) : write;
+        await catalog.refresh(includeStudies: true);
+        expect(catalog.snapshot(includeStudies: true).loading, true);
+        await expectLater(
+          catalog.rename(
+            repository.entries.first,
+            'Overlap',
+            includeStudies: true,
+          ),
+          throwsStateError,
+        );
+        expect(repository.writes, 1);
+        if (fail) {
+          gate.completeError(StateError('disk'));
+        } else {
+          gate.complete();
+        }
+        await settled;
+        expect(catalog.snapshot(includeStudies: true).loading, false);
+        expect(
+          catalog.snapshot(includeStudies: true).studies.single.name,
+          'Study',
+        );
+        expect(repository.writes, 1);
+        expect(catalog.snapshot().actionError, fail ? isStateError : isNull);
+      },
+    );
+  }
+
+  test(
+    'read errors remain local to their catalog kind and explicit retry clears them',
+    () async {
+      repository.studyError = StateError('study read');
+      await catalog.refresh(includeStudies: true);
+      await catalog.refresh();
+      expect(catalog.snapshot().loadError, isNull);
+      expect(catalog.snapshot(includeStudies: true).loadError, isStateError);
+      repository.studyError = null;
+      await catalog.refresh(includeStudies: true);
+      expect(catalog.snapshot(includeStudies: true).loadError, isNull);
+    },
+  );
+
+  test(
+    'failed library mutation restarts an earlier trainer read and rejects its late completion',
+    () async {
+      await ready();
+      final gate = Completer<List<RepertoireMetadata>>();
+      repository.read = () => gate.future;
+      final stale = catalog.refresh(includeStudies: true);
+      repository.read = null;
+      repository.write = () async => throw StateError('disk');
+      await expectLater(
+        catalog.create(const CreateRepertoire(name: 'Failed', color: 'White')),
+        throwsStateError,
+      );
+      expect(
+        catalog.snapshot(includeStudies: true).studies.single.name,
+        'Study',
+      );
+      expect(catalog.snapshot(includeStudies: true).loading, false);
+      gate.complete([entry('Obsolete')]);
+      await stale;
+      expect(
+        catalog.snapshot(includeStudies: true).repertoires.map((r) => r.name),
+        ['New', 'Old'],
+      );
+      expect(catalog.snapshot().actionError, isStateError);
+      expect(repository.writes, 1);
+    },
+  );
+
+  test('a library mutation invalidates an older trainer read', () async {
+    await ready();
+    final gate = Completer<List<RepertoireMetadata>>();
+    final stale = List<RepertoireMetadata>.of(repository.entries);
+    repository.read = () => gate.future;
+    final trainer = catalog.refresh(includeStudies: true);
+    repository.read = null;
+    await catalog.moveToRecovery(repository.entries.first);
+    gate.complete(stale);
+    await trainer;
+    expect(catalog.snapshot().repertoires.map((r) => r.name), ['New']);
+    expect(
+      catalog.snapshot(includeStudies: true).repertoires.map((r) => r.name),
+      ['New'],
+    );
+  });
 
   test(
     'restore retains recovery on failure and refreshes both lists after commit',
@@ -117,19 +210,19 @@ void main() {
         ),
       ];
       final controller = await ready();
-      expect(container.read(provider).recovery, hasLength(1));
+      expect(catalog.snapshot().recovery, hasLength(1));
       repository.write = () async => throw StateError('collision');
       await expectLater(controller.restore('1-ab'), throwsStateError);
-      expect(container.read(provider).recovery, hasLength(1));
-      expect(container.read(provider).actionError, isA<StateError>());
+      expect(catalog.snapshot().recovery, hasLength(1));
+      expect(catalog.snapshot().actionError, isA<StateError>());
       repository.write = null;
       await controller.restore('1-ab', name: 'Recovered');
-      expect(container.read(provider).recovery, isEmpty);
+      expect(catalog.snapshot().recovery, isEmpty);
       expect(
-        container.read(provider).repertoires.map((r) => r.name),
+        catalog.snapshot().repertoires.map((r) => r.name),
         contains('Recovered'),
       );
-      expect(container.read(provider).actionError, isNull);
+      expect(catalog.snapshot().actionError, isNull);
     },
   );
 
@@ -146,15 +239,12 @@ void main() {
       repository.read = () async =>
           throw const RepertoireRecoveryRequired('operation', 'still pending');
       await controller.refresh();
-      expect(
-        container.read(provider).actionError,
-        isA<RepertoireRecoveryRequired>(),
-      );
+      expect(catalog.snapshot().actionError, isA<RepertoireRecoveryRequired>());
       repository.read = () async => [entry('Renamed')];
       await controller.refresh();
-      expect(container.read(provider).actionError, isNull);
-      expect(container.read(provider).loadError, isNull);
-      expect(container.read(provider).repertoires.single.name, 'Renamed');
+      expect(catalog.snapshot().actionError, isNull);
+      expect(catalog.snapshot().loadError, isNull);
+      expect(catalog.snapshot().repertoires.single.name, 'Renamed');
       expect(repository.writes, 1);
     },
   );
@@ -163,14 +253,11 @@ void main() {
     'sorts copies, exposes immutable lists, and omits unused study IO',
     () async {
       await ready();
-      expect(container.read(provider).repertoires.map((e) => e.name), [
-        'New',
-        'Old',
-      ]);
+      expect(catalog.snapshot().repertoires.map((e) => e.name), ['New', 'Old']);
       expect(repository.entries.first.name, 'Old');
       expect(repository.studyReads, 0);
       expect(
-        () => container.read(provider).repertoires.clear(),
+        () => catalog.snapshot().repertoires.clear(),
         throwsUnsupportedError,
       );
     },
@@ -180,19 +267,16 @@ void main() {
     final controller = await ready();
     repository.throwSynchronously = true;
     await controller.refresh();
-    expect(container.read(provider).loadError, isStateError);
+    expect(catalog.snapshot().loadError, isStateError);
     repository.throwSynchronously = false;
     await controller.refresh();
-    expect(container.read(provider).loadError, isNull);
-    expect(container.read(provider).repertoires, hasLength(2));
+    expect(catalog.snapshot().loadError, isNull);
+    expect(catalog.snapshot().repertoires, hasLength(2));
   });
 
   test('trainer catalog includes studies', () async {
-    final trainer = repertoireCatalogProvider(true);
-    container.listen(trainer, (_, _) {});
-    await container.pump();
-    await container.read(trainer.notifier).refresh();
-    expect(container.read(trainer).studies.single.name, 'Study');
+    await catalog.refresh(includeStudies: true);
+    expect(catalog.snapshot(includeStudies: true).studies.single.name, 'Study');
   });
 
   test(
@@ -207,11 +291,11 @@ void main() {
       expect(repository.reads, before + 1);
       pending.completeError(StateError('offline'));
       await Future.wait([first, second]);
-      expect(container.read(provider).loadError, isStateError);
-      expect(container.read(provider).repertoires, hasLength(2));
+      expect(catalog.snapshot().loadError, isStateError);
+      expect(catalog.snapshot().repertoires, hasLength(2));
       repository.read = null;
       await controller.refresh();
-      expect(container.read(provider).loadError, isNull);
+      expect(catalog.snapshot().loadError, isNull);
     },
   );
 
@@ -224,7 +308,7 @@ void main() {
       final first = controller.create(
         const CreateRepertoire(name: 'Caro', color: 'Black'),
       );
-      expect(container.read(provider).busy, isTrue);
+      expect(catalog.snapshot().busy, isTrue);
       await expectLater(
         controller.create(
           const CreateRepertoire(name: 'Duplicate', color: 'White'),
@@ -238,8 +322,8 @@ void main() {
       expect(repository.writes, 1);
       pending.complete();
       await first;
-      expect(container.read(provider).busy, isFalse);
-      expect(container.read(provider).repertoires.first.name, 'Caro');
+      expect(catalog.snapshot().busy, isFalse);
+      expect(catalog.snapshot().repertoires.first.name, 'Caro');
     },
   );
 
@@ -250,14 +334,14 @@ void main() {
       controller.rename(repository.entries.first, 'Renamed'),
       throwsStateError,
     );
-    await container.pump();
+    await Future<void>.delayed(Duration.zero);
     expect(repository.writes, 1);
-    expect(container.read(provider).actionError, isStateError);
-    expect(container.read(provider).busy, isFalse);
+    expect(catalog.snapshot().actionError, isStateError);
+    expect(catalog.snapshot().busy, isFalse);
     repository.write = null;
     await controller.rename(repository.entries.first, 'Renamed');
     expect(repository.writes, 2);
-    expect(container.read(provider).actionError, isNull);
+    expect(catalog.snapshot().actionError, isNull);
   });
 
   test('confirmed commit succeeds even when catalog refresh fails', () async {
@@ -268,8 +352,8 @@ void main() {
     );
     expect(result.directoryPath, '/Saved');
     expect(repository.writes, 1);
-    expect(container.read(provider).loadError, isStateError);
-    expect(container.read(provider).actionError, isNull);
+    expect(catalog.snapshot().loadError, isStateError);
+    expect(catalog.snapshot().actionError, isNull);
   });
 
   test(
@@ -284,7 +368,7 @@ void main() {
       await controller.moveToRecovery(repository.entries.first);
       pending.complete(stale);
       await read;
-      expect(container.read(provider).repertoires.map((e) => e.name), ['New']);
+      expect(catalog.snapshot().repertoires.map((e) => e.name), ['New']);
     },
   );
 
@@ -293,7 +377,7 @@ void main() {
     final pending = Completer<List<RepertoireMetadata>>();
     repository.read = () => pending.future;
     final read = controller.refresh();
-    container.dispose();
+    catalog.dispose();
     pending.complete([entry('Late')]);
     await read;
   });
@@ -301,20 +385,20 @@ void main() {
   test(
     'in-flight commit survives loss of every listener exactly once',
     () async {
-      final subscription = container.listen(provider, (_, _) {});
-      await container.pump();
-      final controller = container.read(provider.notifier);
+      void listener() {}
+      catalog.addListener(listener);
+      final controller = catalog;
       await controller.refresh();
       final pending = Completer<void>();
       repository.write = () => pending.future;
       final save = controller.create(
         const CreateRepertoire(name: 'Offscreen', color: 'White'),
       );
-      subscription.close();
-      await container.pump();
+      catalog.removeListener(listener);
+      await Future<void>.delayed(Duration.zero);
       pending.complete();
       await save;
-      await container.pump();
+      await Future<void>.delayed(Duration.zero);
       expect(repository.writes, 1);
       expect(repository.entries.last.name, 'Offscreen');
     },

@@ -14,7 +14,7 @@ import 'package:chess_auto_prep/l10n/localized_time.dart';
 import 'package:chess_auto_prep/design_system/theme/app_theme.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:provider/provider.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _ExpandedMessages extends AppLocalizationsEn {
@@ -318,10 +318,8 @@ void main() {
         await tester.binding.setSurfaceSize(const Size(800, 900));
         addTearDown(() => tester.binding.setSurfaceSize(null));
         await tester.pumpWidget(
-          ProviderScope(
-            overrides: [
-              repertoireCatalogRepositoryProvider.overrideWithValue(_Catalog()),
-            ],
+          ChangeNotifierProvider(
+            create: (_) => RepertoireCatalogController(_Catalog()),
             child: _app(
               Scaffold(body: RepertoireListBody(onSelected: (_) {})),
               expanded: true,

@@ -27,7 +27,10 @@
     "lib/services/generation/tree_serialization.dart",
     "lib/services/eval/eval_canonicalize.dart",
     "lib/features/generation/controllers/legacy_analysis_controller.dart",
-    "lib/features/generation/widgets/legacy_analysis_dialog.dart"
+    "lib/features/generation/widgets/legacy_analysis_dialog.dart",
+    "lib/features/settings/controllers/settings_providers.dart",
+    "lib/features/documents/widgets/stored_game_scope.dart",
+    "lib/features/settings/widgets/display_settings_scope.dart"
   ],
   "symbols": [
     "PgnBatchWriter",
@@ -48,6 +51,13 @@
     "inspectLegacy",
     "readLegacy",
     "exportLegacy",
-    "showLegacyAnalysisRecovery"
+    "showLegacyAnalysisRecovery",
+    "StoredGameScope",
+    "DisplaySettingsScope",
+    "repertoireCatalogProvider",
+    "repertoireCatalogRepositoryProvider",
+    "appearanceSettingsProvider",
+    "repertoireBooksSettingsProvider",
+    "appSettingsRepositoryProvider"
   ]
 }

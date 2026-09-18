@@ -1,165 +1,179 @@
 import 'dart:async';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/foundation.dart';
 
+import '../../../utils/safe_change_notifier.dart';
 import '../models/repertoire_catalog_state.dart';
 import '../models/repertoire_creation.dart';
 import '../models/repertoire_metadata.dart';
 import '../models/repertoire_recovery_required.dart';
 import '../repositories/repertoire_catalog_repository.dart';
 
-/// App startup must supply the implementation. Tests override the same boundary.
-final repertoireCatalogRepositoryProvider =
-    Provider<RepertoireCatalogRepository>(
-      (ref) =>
-          throw StateError('Repertoire catalog repository was not injected'),
-      retry: (count, error) => null,
+/// Read state for one of the two fixed catalog views, owned by the controller.
+class _CatalogView {
+  RepertoireCatalogState state = RepertoireCatalogState(loading: true);
+  Future<void>? pending;
+  int revision = 0;
+  bool requested = false;
+
+  void status({
+    bool loading = false,
+    Object? loadError,
+    CatalogAction? action,
+    Object? actionError,
+  }) {
+    state = RepertoireCatalogState(
+      repertoires: state.repertoires,
+      studies: state.studies,
+      recovery: state.recovery,
+      loading: loading,
+      loadError: loadError,
+      action: action,
+      actionError: actionError,
     );
-
-final repertoireCatalogProvider = NotifierProvider.autoDispose
-    .family<RepertoireCatalogController, RepertoireCatalogState, bool>(
-      RepertoireCatalogController.new,
-      retry: (count, error) => null,
-    );
-
-/// One presentation owner per catalog kind. Mutations reject overlap, never
-/// retry implicitly, and survive route/listener changes until their commit ends.
-class RepertoireCatalogController extends Notifier<RepertoireCatalogState> {
-  RepertoireCatalogController(this.includeStudies);
-
-  final bool includeStudies;
-  late RepertoireCatalogRepository _repository;
-  bool get supportsRecovery => _repository.supportsRecovery;
-  int _generation = 0;
-  Future<void>? _loading;
-
-  @override
-  RepertoireCatalogState build() {
-    _repository = ref.watch(repertoireCatalogRepositoryProvider);
-    final generation = ++_generation;
-    _loading = null;
-    ref.onDispose(() => _generation++);
-    scheduleMicrotask(() {
-      if (ref.mounted && generation == _generation) unawaited(refresh());
-    });
-    return RepertoireCatalogState(loading: true);
   }
+}
 
-  /// Coalesce repeated refreshes. A mutation invalidates any older read.
-  Future<void> refresh() {
-    if (!ref.mounted || state.busy) return Future.value();
-    final pending = _loading;
-    if (pending != null) return pending;
-    // Install the coalescing future before calling the adapter: an adapter
-    // may throw synchronously before returning a Future. Such a failure must
-    // not leave a completed future cached and prevent explicit retry.
+/// App-owned catalog reads and mutations. Route changes cannot cancel a commit;
+/// library and trainer reads remain independent, while mutations reject overlap.
+class RepertoireCatalogController extends ChangeNotifier
+    with SafeChangeNotifier {
+  RepertoireCatalogController(this._repository);
+  final RepertoireCatalogRepository _repository;
+  final _library = _CatalogView(), _trainer = _CatalogView();
+  _CatalogView _view(bool includeStudies) =>
+      includeStudies ? _trainer : _library;
+  RepertoireCatalogState snapshot({bool includeStudies = false}) =>
+      _view(includeStudies).state;
+  bool get supportsRecovery => _repository.supportsRecovery;
+  bool get busy => _library.state.busy || _trainer.state.busy;
+
+  Future<void> refresh({bool includeStudies = false}) {
+    if (isDisposed) return Future.value();
+    final view = _view(includeStudies)..requested = true;
+    if (busy) return Future.value();
+    if (view.pending case final pending?) return pending;
+    // Reserve before calling an adapter that may throw synchronously.
     final completion = Completer<void>();
-    _loading = completion.future;
+    view.pending = completion.future;
     unawaited(
-      _load().then(completion.complete, onError: completion.completeError),
+      _load(
+        view,
+        includeStudies,
+      ).then(completion.complete, onError: completion.completeError),
     );
     return completion.future;
   }
 
-  Future<void> _load() async {
-    final generation = ++_generation;
-    final repository = _repository;
-    state = RepertoireCatalogState(
-      repertoires: state.repertoires,
-      studies: state.studies,
-      recovery: state.recovery,
-      loading: true,
-      actionError: state.actionError,
-    );
+  Future<void> _load(_CatalogView view, bool includeStudies) async {
+    final revision = ++view.revision;
+    view.status(loading: true, actionError: view.state.actionError);
+    notifyListeners();
     try {
       final results = await Future.wait([
-        repository.listRepertoires(),
-        if (includeStudies) repository.listStudies(),
+        _repository.listRepertoires(),
+        if (includeStudies) _repository.listStudies(),
       ]);
-      final recovery = await repository.listRecovery();
-      if (!ref.mounted || generation != _generation) return;
+      final recovery = await _repository.listRecovery();
+      if (isDisposed || revision != view.revision) return;
       List<RepertoireMetadata> sorted(List<RepertoireMetadata> values) =>
           [...values]..sort((a, b) => b.lastModified.compareTo(a.lastModified));
-      state = RepertoireCatalogState(
+      view.state = RepertoireCatalogState(
         repertoires: sorted(results.first),
-        recovery: recovery,
         studies: includeStudies ? sorted(results.last) : const [],
-        actionError: state.actionError is RepertoireRecoveryRequired
+        recovery: recovery,
+        actionError: view.state.actionError is RepertoireRecoveryRequired
             ? null
-            : state.actionError,
+            : view.state.actionError,
       );
     } catch (error) {
-      if (!ref.mounted || generation != _generation) return;
-      state = RepertoireCatalogState(
-        repertoires: state.repertoires,
-        studies: state.studies,
-        recovery: state.recovery,
-        loadError: error,
-        actionError: state.actionError,
-      );
+      if (isDisposed || revision != view.revision) return;
+      view.status(loadError: error, actionError: view.state.actionError);
     } finally {
-      if (generation == _generation) _loading = null;
+      if (!isDisposed && revision == view.revision) {
+        view.pending = null;
+        notifyListeners();
+      }
     }
   }
 
-  Future<RepertoireCreationResult> create(CreateRepertoire request) =>
-      _mutate(CatalogAction.create, (repository) => repository.create(request));
-
-  Future<void> rename(RepertoireMetadata repertoire, String name) => _mutate(
+  Future<RepertoireCreationResult> create(
+    CreateRepertoire request, {
+    bool includeStudies = false,
+  }) => _mutate(
+    includeStudies,
+    CatalogAction.create,
+    () => _repository.create(request),
+  );
+  Future<void> rename(
+    RepertoireMetadata repertoire,
+    String name, {
+    bool includeStudies = false,
+  }) => _mutate(
+    includeStudies,
     CatalogAction.rename,
-    (repository) => repository.rename(repertoire, name),
+    () => _repository.rename(repertoire, name),
   );
-
-  Future<void> moveToRecovery(RepertoireMetadata repertoire) => _mutate(
+  Future<void> moveToRecovery(
+    RepertoireMetadata repertoire, {
+    bool includeStudies = false,
+  }) => _mutate(
+    includeStudies,
     CatalogAction.moveToRecovery,
-    (repository) => repository.moveToRecovery(repertoire),
+    () => _repository.moveToRecovery(repertoire),
   );
-
-  Future<void> restore(String id, {String? name}) => _mutate(
+  Future<void> restore(
+    String id, {
+    String? name,
+    bool includeStudies = false,
+  }) => _mutate(
+    includeStudies,
     CatalogAction.restore,
-    (repository) => repository.restore(id, name: name),
+    () => _repository.restore(id, name: name),
   );
 
   Future<T> _mutate<T>(
+    bool includeStudies,
     CatalogAction action,
-    Future<T> Function(RepertoireCatalogRepository) commit,
+    Future<T> Function() commit,
   ) async {
-    if (!ref.mounted) throw StateError('Catalog is closed');
-    if (state.busy) throw StateError('A catalog action is already running');
-    final keepAlive = ref.keepAlive();
-    final generation = ++_generation;
-    _loading = null;
-    state = RepertoireCatalogState(
-      repertoires: state.repertoires,
-      studies: state.studies,
-      recovery: state.recovery,
-      action: action,
-    );
-    try {
-      final result = await commit(_repository);
-      if (ref.mounted && generation == _generation) {
-        state = RepertoireCatalogState(
-          repertoires: state.repertoires,
-          studies: state.studies,
-          recovery: state.recovery,
+    if (isDisposed) throw StateError('Catalog is closed');
+    if (busy) throw StateError('A catalog action is already running');
+    final active = _view(includeStudies)..requested = true;
+    for (final view in [_library, _trainer]) {
+      view.revision++;
+      view.pending = null;
+      if (view.requested) {
+        view.status(
+          loadError: view.state.loadError,
+          actionError: view.state.actionError,
         );
-        // A refresh failure cannot turn a confirmed commit into a failed
-        // mutation that a dialog might replay. It has its own retry state.
-        await refresh();
+      }
+    }
+    active.status(action: action);
+    notifyListeners();
+    try {
+      final result = await commit();
+      if (!isDisposed) {
+        active.status();
+        // Read failures remain read failures; never replay a confirmed write.
+        await Future.wait([
+          if (_library.requested) refresh(),
+          if (_trainer.requested) refresh(includeStudies: true),
+        ]);
       }
       return result;
     } catch (error) {
-      if (ref.mounted && generation == _generation) {
-        state = RepertoireCatalogState(
-          repertoires: state.repertoires,
-          studies: state.studies,
-          recovery: state.recovery,
-          actionError: error,
-        );
+      if (!isDisposed) {
+        active.status(actionError: error);
+        notifyListeners();
+        // The opposite requested view must finish any read invalidated by this write.
+        final other = _view(!includeStudies);
+        if (other.requested) {
+          await refresh(includeStudies: !includeStudies);
+        }
       }
       rethrow;
-    } finally {
-      keepAlive.close();
     }
   }
 }

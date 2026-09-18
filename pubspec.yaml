@@ -60,7 +60,6 @@ dependencies:
   window_manager: ^0.5.2
   package_info_plus: ^10.2.1
   pub_semver: ^2.2.1
-  flutter_riverpod: ^3.0.0
 
 dev_dependencies:
   flutter_test:

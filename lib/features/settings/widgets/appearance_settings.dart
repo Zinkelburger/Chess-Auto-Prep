@@ -1,20 +1,19 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:provider/provider.dart';
 import '../../../design_system/theme/app_spacing.dart';
 import '../../../design_system/theme/app_typography.dart';
 import '../../../l10n/generated/app_localizations.dart';
-import '../controllers/settings_providers.dart';
+import '../repositories/app_settings_repository.dart';
 import '../models/app_appearance.dart';
 import '../models/settings_state.dart';
 
-class AppearanceSettings extends ConsumerWidget {
+class AppearanceSettings extends StatelessWidget {
   const AppearanceSettings({super.key});
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final repository = ref.watch(appSettingsRepositoryProvider).appearance;
-    final state =
-        ref.watch(appearanceSettingsProvider).asData?.value ?? repository.state;
+  Widget build(BuildContext context) {
+    final repository = context.read<AppearanceRepository>();
+    final state = context.watch<SettingsState<AppAppearance>>();
     final copy = AppLocalizations.of(context);
     final selected = state.draft ?? state.committed ?? AppAppearance.dark;
     void run(Future<void> action) =>

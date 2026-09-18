@@ -33,6 +33,18 @@ class BoundariesTest(unittest.TestCase):
         self.assertFalse(legacy_service_dependency_violations(sources, list(sources)))
         self.assertEqual(len(pure_dependency_violations(sources, ['lib/chess_core/generation/codec.dart'])), 1)
 
+    def test_composition_scopes_and_riverpod_cannot_return(self):
+        for path in ('lib/features/settings/controllers/settings_providers.dart',
+                     'lib/features/documents/widgets/stored_game_scope.dart',
+                     'lib/features/settings/widgets/display_settings_scope.dart'):
+            self.assertTrue(violations(path, "export 'replacement.dart';"))
+        for uri in ('package:flutter_riverpod/flutter_riverpod.dart',
+                    'package:riverpod/riverpod.dart'):
+            for directive in ('import', 'export'):
+                self.assertTrue(violations('lib/app/renamed.dart', f"{directive} '{uri}';"))
+        for symbol in ('StoredGameScope', 'DisplaySettingsScope', 'repertoireCatalogProvider'):
+            self.assertTrue(violations('lib/widgets/renamed.dart', f'class {symbol} {{}}'))
+
     def test_retired_artifact_libraries_cannot_return_as_forwarding_shims(self):
         for path in ('lib/models/build_tree_node.dart', 'lib/models/trap_line_info.dart',
                      'lib/models/trap_reply.dart', 'lib/services/generation/tree_serialization.dart',

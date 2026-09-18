@@ -25,7 +25,7 @@ import '../models/repertoire_metadata.dart';
 import 'repertoire_chapters_screen.dart';
 import 'repertoire_creation_screen.dart';
 import 'repertoire_import_dialog.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:provider/provider.dart';
 import '../controllers/repertoire_catalog_controller.dart';
 import '../../../widgets/pgn_import_dialog.dart';
 import '../../../design_system/theme/workspace_theme.dart';
@@ -38,7 +38,7 @@ import '../../../design_system/components/list_search_field.dart';
 import '../../../design_system/components/empty_state_placeholder.dart';
 import '../../../widgets/chapter_list_body.dart' show ChapterPick;
 
-class RepertoireListBody extends ConsumerStatefulWidget {
+class RepertoireListBody extends StatefulWidget {
   /// Called with the chosen *chapter*'s metadata (a `.pgn` file path). A
   /// repertoire is a folder; tapping one opens its chapter list, and the
   /// selected chapter is what the builder / trainer actually load.
@@ -75,10 +75,10 @@ class RepertoireListBody extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<RepertoireListBody> createState() => _RepertoireListBodyState();
+  State<RepertoireListBody> createState() => _RepertoireListBodyState();
 }
 
-class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
+class _RepertoireListBodyState extends State<RepertoireListBody> {
   AppLocalizations get l10n => AppLocalizations.of(context);
 
   String _search = '';
@@ -88,26 +88,26 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
 
   bool get _includeStudies => widget.onStudySelected != null;
   RepertoireCatalogController get _controller =>
-      ref.read(repertoireCatalogProvider(_includeStudies).notifier);
+      context.read<RepertoireCatalogController>();
   List<RepertoireMetadata> get _repertoires =>
-      ref.read(repertoireCatalogProvider(_includeStudies)).repertoires;
+      _controller.snapshot(includeStudies: _includeStudies).repertoires;
   List<RepertoireMetadata> get _studies =>
-      ref.read(repertoireCatalogProvider(_includeStudies)).studies;
-  bool get _busy => ref.read(repertoireCatalogProvider(_includeStudies)).busy;
+      _controller.snapshot(includeStudies: _includeStudies).studies;
+  bool get _busy => _controller.busy;
   List<RepertoireMetadata> get _visibleRepertoires =>
       _repertoires.where((r) => matchesSearch(_search, r.name)).toList();
   List<RepertoireMetadata> get _visibleStudies =>
       _studies.where((s) => matchesSearch(_search, s.name)).toList();
 
-  Future<void> _loadRepertoires() => _controller.refresh();
+  Future<void> _loadRepertoires() =>
+      _controller.refresh(includeStudies: _includeStudies);
 
   @override
   void initState() {
     super.initState();
-    // A legacy host recreates this widget on re-entry/Refresh. The provider
-    // may still be alive in another selector; refresh that shared owner too.
+    // Re-entry refreshes the app-owned snapshot without replaying mutations.
     scheduleMicrotask(() {
-      if (mounted) unawaited(_controller.refresh());
+      if (mounted) unawaited(_loadRepertoires());
     });
   }
 
@@ -121,7 +121,9 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
   );
 
   Widget _buildContents(BuildContext context) {
-    final catalog = ref.watch(repertoireCatalogProvider(_includeStudies));
+    final catalog = context.watch<RepertoireCatalogController>().snapshot(
+      includeStudies: _includeStudies,
+    );
     if (catalog.loading && _repertoires.isEmpty && _studies.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -485,7 +487,8 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
       MaterialPageRoute(
         builder: (_) => RepertoireCreationScreen(
           pickPgn: widget.pickPgn,
-          create: _controller.create,
+          create: (request) =>
+              _controller.create(request, includeStudies: _includeStudies),
         ),
       ),
     );
@@ -536,12 +539,14 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
           ? await showRepertoirePasteDialog(
               context,
               existingNames: names,
-              create: _controller.create,
+              create: (request) =>
+                  _controller.create(request, includeStudies: _includeStudies),
             )
           : await showRepertoireImportDialog(
               context,
               existingNames: names,
-              create: _controller.create,
+              create: (request) =>
+                  _controller.create(request, includeStudies: _includeStudies),
               pickPgn: widget.pickPgn,
             );
       if (created == null || !mounted) return;
@@ -582,7 +587,11 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
     );
     if (name == null || !mounted) return;
     try {
-      await _controller.restore(entry.id, name: name);
+      await _controller.restore(
+        entry.id,
+        name: name,
+        includeStudies: _includeStudies,
+      );
     } catch (_) {
       // The catalog owns the persistent error and recovery action.
     }
@@ -601,7 +610,10 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
 
     if (confirmed && mounted) {
       try {
-        await _controller.moveToRecovery(repertoire);
+        await _controller.moveToRecovery(
+          repertoire,
+          includeStudies: _includeStudies,
+        );
       } catch (e) {
         debugPrint('Delete repertoire failed: $e');
         if (mounted && e is! RepertoireRecoveryRequired) {
@@ -634,7 +646,11 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
 
     if (mounted && result != null && result.isNotEmpty) {
       try {
-        await _controller.rename(repertoire, result);
+        await _controller.rename(
+          repertoire,
+          result,
+          includeStudies: _includeStudies,
+        );
       } catch (e) {
         debugPrint('Rename repertoire failed: $e');
         if (mounted && e is! RepertoireRecoveryRequired) {
