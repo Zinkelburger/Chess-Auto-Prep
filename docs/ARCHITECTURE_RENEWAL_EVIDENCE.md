@@ -3946,3 +3946,32 @@ the growth review. Against fa7f309e, handwritten reduction is **13,560**, genera
 +2,463 separately. Unused/dormant retirement still accounts for 12,154 removed
 lines. Zero features have graduated; no broader extraction program is authorized
 by these capability and safety results.
+
+
+### Builder dormant launch and trap wrapper retirement — 2026-09-18
+
+Against `c91b9086`, the 17-file screen/form/handoff/trap graph shrinks
+**7,340→7,101 (−239 handwritten; generated unchanged)**. Builder screen itself
+shrinks 1,468→1,422. The scope includes the screen and its three parts, generation
+tab, generation form and its six parts, AppState/PendingHandoff, and the trap
+wrapper/browser/session. Final checkpoint and validation: RETIREMENT_VALIDATION_PENDING.
+
+Tracked callers prove the external generation handoff has no production producer.
+The presumed Discover entry is also unreachable: its only parent requires
+`hasTraps`, defined as a nonempty list, while the button requires an empty list.
+Delete both retry chains, the outer widget-state key, public seeding/state APIs,
+the handoff variant and the entire `TrapsTabContent`. The screen now supplies the
+same data, metrics, selection/tour callbacks and preview owner directly to the
+existing `TrapsBrowser`; its parent visibility rule stays intact. Manual generation,
+configuration defaults/presets, resume, publication and repeated cuts are unchanged.
+No replacement owner, constructor overlay or automatic-start mechanism was added.
+
+Attribution is deliberately bounded: 128 net lines outside the wrapper retire
+dormant launch/API/caller machinery. The deleted 111-line wrapper mixes a 54-line
+unreachable body with declarations, obsolete inputs and active forwarding. The
+active improvement is one removed widget layer, not a claim that all 239 lines
+simplify generation. Retirement checks forbid the deleted paths/APIs; six debt
+rows and one theme-consumer entry disappear with the code. Whole Builder and
+Generation remain Partial. Delayed source changes behind configuration and narrow
+trap-summary layout require their own reproduced, complete repairs; this deletion
+does not claim to fix them.
