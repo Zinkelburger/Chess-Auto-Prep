@@ -142,6 +142,39 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  for (final equalText in [false, true]) {
+    testWidgets(
+      'delete confirmation preserves a ${equalText ? 'same-text' : 'changed'} replacement',
+      (tester) async {
+        final original = File(p.join(folder.path, 'Main.pgn'))
+          ..writeAsStringSync(_competingPgn);
+        await open(tester);
+        await tester.tap(find.byTooltip('Delete chapter'));
+        await tester.pumpAndSettle();
+        expect(find.text('Delete chapter "Main"?'), findsOneWidget);
+
+        // Keep the old inode alive, making even equal-text replacement a
+        // distinct document while the user's confirmation is pending.
+        final retained = original.renameSync(p.join(root.path, 'original.pgn'));
+        final replacementText = equalText ? _competingPgn : '1. c4 e5 *\n';
+        original.writeAsStringSync(replacementText);
+        await tester.tap(find.text('Delete'));
+        await _until(tester, () => storage.mutationStarted.isCompleted);
+        storage.allowMutation.complete();
+        await _until(tester, () => storage.mutationFinished.isCompleted);
+        expect(tester.takeException(), isNull);
+        expect(retained.readAsStringSync(), _competingPgn);
+        expect(
+          original.existsSync(),
+          isTrue,
+          reason:
+              'confirmation for the old document cannot remove its replacement',
+        );
+        expect(original.readAsStringSync(), replacementText);
+      },
+    );
+  }
+
   for (final rename in [true, false]) {
     testWidgets('${rename ? 'rename' : 'delete'} can finish after leaving', (
       tester,
