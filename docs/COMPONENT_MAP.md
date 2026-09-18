@@ -953,6 +953,16 @@ BOM/line-ending changes from conflict checks. The native package
 hashes and codecs run off the UI isolate. Prior bytes are retained under each
 parent's `.cap-pgn-history/`; post-install failures require reconciliation.
 
+The general `FileMutationService.moveFileNoReplace` boundary also uses the
+existing native exclusive move, so a destination created after preflight survives.
+It preserves the `FileSystemException` collision contract used by reference-index
+publication, generic storage renames and verified update downloads. Linux uses
+`renameat2(RENAME_NOREPLACE)`, macOS `renamex_np(RENAME_EXCL)`, and Windows
+`MoveFileExW` without replacement; unsupported filesystems fail without fallback.
+Linux races and callers are tested; macOS/Windows source paths remain unverified
+on their native hosts. This narrow guarantee does not certify captured-source
+identity, chapter relocation journals or training-reference closure.
+
 The same boundary exposes `supportsQuarantine` and `quarantine(snapshot)`.
 Linux validates the captured native revision inside `FileMutationService`'s
 existing parent lock, preserves raw baseline bytes, and moves the source into
@@ -2454,22 +2464,17 @@ Viewer with a game index, so the viewer's own Prev/Next then walks the match.
 | **widgets/tournament_list_pane.dart** | The history rail: every saved run, newest first, grouped by day, each row carrying its score; filter box appears past six runs |
 | **lib/widgets/crosstable_view.dart**, **lib/widgets/match_games_table.dart**, **widgets/tournament_detail_pane.dart** | Head-to-head score and W/D/L counts, optional rating statistics, game lengths in moves, and a persisted final-position thumbnail toggle. `services/tournament_game_positions.dart` replays PGN mainlines off the UI thread, including older saved matches |
 
-### `lib/features/master_games/`
+### Retired master-practice review
 
-Your own games against the local TWIC corpus. The database's `book` table
-answers "what did masters play from this position" for the first fifteen
-moves, so walking one of your games through it finds the first move masters
-never played — who left theory, where, what masters play there instead, and
-the strongest and most recent games that did. Branch points are grouped like
-the opening review, so the one you keep walking into rises to the top. Master
-games are opened in the PGN Viewer by writing them to an ordinary PGN
-collection, so playing through them is not reimplemented.
+The disconnected master-practice comparison dialog, controller and review
+algorithm/models are retired, along with their four exclusive tests/fixtures.
+No application, tool, driver, plugin or Widgetbook entrypoint reached this
+three-file subtree; the earlier claim that Home Openings launched it was stale.
+This removes 1,163 production lines without a replacement. It retires an unused
+feature rather than marking a migrated feature complete.
 
-| File | Purpose |
-|------|---------|
-| **services/master_practice_review.dart** | The walk: one report per game (branch position, first unseen move, who played it, the masters' alternatives, the last agreed book row), grouped into entries by position + move with the key games attached — the strongest game per master move and the latest game of the most popular one |
-| **controllers/master_practice_controller.dart** | Runs the review over the home column's window, holds the selection, and writes an entry's key games out as `master-practice.pgn` for the viewer |
-| **widgets/master_practice_dialog.dart** | The dialog: sections for *you left first*, *your opponents left first* and *stayed in master practice*, a detail pane with the branch position (played move and the masters' moves drawn on it), the moves table with counts and scores, the games to open, and your own games at that point. Opened from the Openings block on the home column |
+The live master-games database/service, opening explorer, Games opening review,
+and generation's master-book coverage, selection and improvement algorithms remain.
 
 ### `lib/features/holes/`
 
@@ -2784,7 +2789,7 @@ and does not change active editor, document or save ownership.
 | `training/training_*.dart` | Training panels (progress, results, settings, board controls, repertoire selector); **PGN-style lessons** reveal played moves and introductory prose through `PgnMovetextView`, with a compact fixed **Next button** (Space shortcut); recall mode hides explanations except on mistakes; `MoveInputWidget` below board accepts SAN/UCI text input and auto-submits on a unique legal-move match; `BoardKeyboardScope` shares typing and navigation behavior across trainers |
 | `board_keyboard_scope.dart` | Shared `FocusScope` around Study, Repertoire Trainer and both Tactics panes. Uses the screen's `KeyBinding` list from the `AppShortcut` registry. With an enabled move field, SAN/UCI characters focus it and insert the first character once; normal Flutter text input handles the rest. Other editors retain typing, dialogs retain focus, hidden modes cannot capture keys, and field blur returns to this scope. Empty move fields forward navigation/repeats; partial moves retain left/right caret editing; Tab/Shift+Tab traverse and Escape clears/blurs. `MoveInputWidget` inherits navigation bindings, disables desktop select-all-on-focus, and never steals focus when enabled after an opponent reply. |
 | `study/study_board_pane.dart` | Study board + SAN input; board-shape helpers (`applyStudyBoardShape`) |
-| `study/study_side_pane.dart` | Engine bar + compact chapter bar + PGN editor; shared borderless move selection/hover and neutral Notes field with no move-specific placeholder |
+| `study/study_side_pane.dart` | Engine bar + compact chapter bar + PGN editor; compact and sidebar chapter menus retain their chapter key across selection/reordering and ignore removed targets. One plain `onChapterAction` callback dispatches to the screen’s existing dialogs; shared `studyChapterMenuItems` builds the entries without a callback-holder object. Shared borderless move selection/hover and neutral Notes field with no move-specific placeholder. |
 | `pgn/add_to_study_dialog.dart` | Shared destination picker for adding lines and games: an always-visible Add new study button opens a dedicated name prompt with a suggested unused name and duplicate validation; search and Enter select existing studies only. |
 | `study/study_picker_bar.dart` | App-bar study switcher with an explicit Rename study pencil and inline name editing |
 | `study/study_chapter_sidebar.dart` | Searchable, reorderable chapter list; New chapter sits above the filter and rows, with per-chapter actions in a trailing menu |
@@ -2859,8 +2864,6 @@ and does not change active editor, document or save ownership.
 | `test/features/coverage/coverage_result_test.dart` | `CoverageResult.findNextGap` / `findBiggestGap` gap ordering |
 | `test/features/traps/trap_index_service_test.dart` | FEN index, line traps |
 | `test/features/traps/trap_navigation_buttons_test.dart` | Trap jump UI |
-| `test/features/master_games/master_practice_review_test.dart` | Your games vs the master book: who left first, book depth, grouping by branch point, key games, cancellation |
-| `test/features/master_games/master_practice_dialog_test.dart` | The dialog against a real database: sections, the detail pane's moves and games, the hand-offs to the viewer, narrow-window layout |
 | `test/services/master_games/master_games_query_test.dart` | Browse filters, as clauses and against a real database |
 | `test/services/master_games/classical_counts_test.dart` | The book's classical-only split: import, the classical-only view, the rebuild in one go and in chunks, cancellation, completeness |
 | `test/services/explorer_game_opener_test.dart` | Explorer games into the collection: local and Lichess sources, the ply at the position, no duplicates |

@@ -25,13 +25,13 @@ class StudyChapterSidebar extends StatefulWidget {
 
   /// Chapter actions that need the screen's dialogs.
   final VoidCallback onAddChapter;
-  final StudyChapterActions actions;
+  final void Function(ChapterAction, int) onChapterAction;
 
   const StudyChapterSidebar({
     super.key,
     required this.study,
     required this.onAddChapter,
-    required this.actions,
+    required this.onChapterAction,
   });
 
   @override
@@ -246,12 +246,13 @@ class _StudyChapterSidebarState extends State<StudyChapterSidebar> {
               tooltip: 'Chapter actions',
               padding: EdgeInsets.zero,
               onSelected: (action) {
+                if (!mounted) return;
                 final current = widget.study.chapterList.chapters.indexWhere(
                   (item) => item.key == chapter.key,
                 );
-                if (current >= 0) widget.actions.run(action, current);
+                if (current >= 0) widget.onChapterAction(action, current);
               },
-              itemBuilder: (_) => StudyChapterActions.menuItems(
+              itemBuilder: (_) => studyChapterMenuItems(
                 canDelete: widget.study.chapterList.chapters.length > 1,
               ),
             ),

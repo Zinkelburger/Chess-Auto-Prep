@@ -4,6 +4,7 @@ library;
 import 'dart:io';
 import 'dart:math';
 
+import 'package:document_file_io/document_file_io.dart';
 import 'package:path/path.dart' as p;
 
 import '../../utils/file_operation_lock.dart';
@@ -29,9 +30,9 @@ class QuarantineReceipt {
   final String quarantinedPath;
 }
 
-/// Every destructive move, rename or delete of managed data goes through
-/// here: each operation is locked, refuses to leave its allowed root, refuses
-/// symlinks, and never overwrites an existing entry.
+/// Managed mutations validate roots and links under app-local locks.
+/// [moveFileNoReplace] and explicit native installers protect destinations
+/// against external creators; legacy rename paths do not share that guarantee.
 class FileMutationService {
   FileMutationService();
 
@@ -162,6 +163,9 @@ class FileMutationService {
 
   /// Moves a file without overwrite. Both paths must resolve inside
   /// [allowedRoot], and links are rejected at the mutation boundary.
+  /// The native move refuses a destination created after preflight too.
+  /// Unsupported filesystems fail without a replacement fallback. This does
+  /// not validate a previously captured source identity or migrate references.
   Future<void> moveFileNoReplace(
     File source,
     File destination, {
@@ -179,7 +183,14 @@ class FileMutationService {
           destination.path,
         );
       }
-      await source.rename(destination.path);
+      try {
+        await movePathNoReplace(source.path, destination.path);
+      } on NativeNameCollision {
+        throw FileSystemException(
+          'Destination already exists; refusing to overwrite',
+          destination.path,
+        );
+      }
     });
   }
 

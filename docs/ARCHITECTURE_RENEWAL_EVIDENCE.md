@@ -3425,3 +3425,95 @@ semantics through the existing persistence owners before implementing that full
 replacement; preserve captured-snapshot deletion and destination protection as
 explicit safety obligations. No rename facade, redirect cache or second journal
 was added to make the unresolved contract appear complete.
+
+
+### Exclusive file-move destination protection — 2026-09-18
+
+`e59c351b` against `cf8a37f7` replaces the general file boundary's
+check-then-rename with the existing native exclusive move. A real destination
+created after preflight survives, and source bytes remain intact. Native
+collisions are translated back into the existing FileSystemException contract,
+preserving reference-index winner reuse and other callers' error handling.
+No new owner, API, injected mover or test hook is introduced. Production growth
+is **11 Dart + 8 C lines**; this is a safety repair, not a simplification result.
+
+Linux uses renameat2(RENAME_NOREPLACE), Windows its existing MoveFileExW without
+replacement, and the existing native function now uses renamex_np(RENAME_EXCL)
+on macOS. Apple header/test references and deployment compatibility are recorded
+in the package README. Unsupported filesystems fail without a replacing fallback.
+Linux is tested; macOS and Windows remain unverified on native hosts. No stronger
+source-identity, transaction recovery or power-loss guarantee is implied.
+
+The baseline test had one native collision control pass and one actual
+check/rename race fail. IOOverrides schedules the competing creator after the
+last absence observation; production still executes the real filesystem move.
+All **73 final tests pass**: 41 native/helper/storage/update/reference-index/
+tactics cases and 32 Outline/picker/Study callers. Analyze/lint passes with
+64 baseline infos, no warnings/errors and 45 checker cases. Independent review
+approves the exact commit. No visible control changed, so no new preview was
+needed. The broader captured-source and training-reference defects remain open;
+the historical relocation baseline above is not current passing evidence.
+
+
+### Study chapter-action dispatch — 2026-09-18
+
+`3ba80b27` against `cf8a37f7` deletes the six-callback StudyChapterActions holder.
+Sidebar and compact menus call the screen's existing action dispatch directly;
+the shared menu remains a plain function. Existing controller mutations and
+dialog identity/mounted guards remain. No new owner or state mirror is added.
+The complete four-file scope falls **1,593 → 1,564 lines (−29)**, 69 added and
+98 deleted. The screen itself grows one line for direct dispatch/mounted checking;
+its entire action graph loses a forwarding layer. This is a bounded improvement,
+not a substantial Study rewrite or whole-feature graduation. The broader read-only
+audit found that recent screen growth mostly implements actual import/recovery
+and navigation safeguards; relocating those methods would not simplify them.
+
+A valid baseline menu regression had two existing passes and one new failure:
+an open compact menu acted on the newly selected chapter before the next frame.
+Dispatch now resolves the captured chapter key, matching the sidebar. Final
+**29 tests pass**, including eight actual wide/compact screen scenarios covering
+clipboard payload, reordered/removed targets, confirmation identity and the
+last-chapter restriction, plus rebuild/editor/chapter ordering checks. Initial
+full-screen fixture clipboard/timer/button issues were repaired and are covered
+by that final run. Analyze/lint passes with 64 baseline infos, no warnings/errors
+and 45 checker cases. Root independently reviews the exact implementation.
+
+The actual headless app's menus were inspected at
+[1280×720](images/renewal-study-chapter-actions-wide.png) and
+[900×1000](images/renewal-study-chapter-actions-compact.png); preview is stopped.
+An earlier 750px full-screen test exposed a 17px production StudyPickerBar row
+overflow at study_picker_bar.dart:88. It was not rerun on the baseline, so its
+pre-existing status is unverified. Compact validation is limited to 900px; this
+is an open layout finding, not a passed all-width acceptance gate.
+
+### Unused master-practice review retirement — 2026-09-18
+
+`def67780` against `eba9ada9` removes the unreachable master-practice dialog,
+controller and pure review algorithm/models: **three production files, 1,163
+lines**, without replacement code. Four exclusively owned tests/fixtures and one
+unused test-helper parameter remove another 726 test lines. No surviving
+production file changes. Live master-games database/service, explorer, Games
+review and generation master-book algorithms remain reachable and retained.
+
+The tracked import/export/part graph includes all conditional URIs, main and
+22 external non-test roots (tools, drivers, Widgetbook and plugins), 1,831 Dart
+files and no unresolved local edges. No root reaches this subtree; symbol and
+registration scans independently confirm the graph. The component map's claimed
+Home Openings entrypoint was stale and is corrected. Earlier evidence that
+excluded this subtree from a narrower audit remains historical. Root reviewed
+the graph, actual deletion diff and shared dependencies independently.
+
+Retirement guards add three paths and eight symbols. The debt ledger removes
+32 exact entries (1,276 → 1,244) and the theme ledger one consumer (211 → 210).
+The feature inventory is **20 directories: six enforced, 14 unfinished, none
+complete**. All **71 live-caller tests pass**, with two opt-in skips: the TWIC_PGN
+benchmark fixture and TWIC_LIVE network check were not enabled. Analyze/lint
+passes with 64 baseline infos, no warnings/errors and 45 checker cases.
+No reachable visual surface changed, so no new preview was necessary.
+
+Combined integration at `7f23b082` passes **99 tests, two opt-in skips and no
+failures**, plus analyze/lint. The retirement manifest preserves both units.
+All library Dart is **225,814 lines**, still 6,857 (+3.1%) above September 16.
+Against `fa7f309e`, handwritten library code adds 1,859 and deletes 15,549
+(**−13,690**), with generated localization +22 separately. Unused-code retirement
+accounts for 11,757 removed lines; it cannot establish simpler active workflows.

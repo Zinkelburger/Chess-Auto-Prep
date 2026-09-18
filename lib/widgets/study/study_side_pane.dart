@@ -25,7 +25,7 @@ class StudySidePane extends StatelessWidget {
     required this.onAddChapter,
     required this.onPickChapter,
     required this.onManageChapters,
-    required this.actions,
+    required this.onChapterAction,
   });
 
   final StudyController study;
@@ -34,7 +34,7 @@ class StudySidePane extends StatelessWidget {
   final VoidCallback onAddChapter;
   final VoidCallback onPickChapter;
   final VoidCallback onManageChapters;
-  final StudyChapterActions actions;
+  final void Function(ChapterAction, int) onChapterAction;
 
   @override
   Widget build(BuildContext context) {
@@ -56,7 +56,7 @@ class StudySidePane extends StatelessWidget {
             onAddChapter: onAddChapter,
             onPickChapter: onPickChapter,
             onManageChapters: onManageChapters,
-            actions: actions,
+            onChapterAction: onChapterAction,
           ),
           const Divider(height: 8),
         ] else
@@ -101,14 +101,14 @@ class _CompactChapterBar extends StatelessWidget {
     required this.onAddChapter,
     required this.onPickChapter,
     required this.onManageChapters,
-    required this.actions,
+    required this.onChapterAction,
   });
 
   final StudyController study;
   final VoidCallback onAddChapter;
   final VoidCallback onPickChapter;
   final VoidCallback onManageChapters;
-  final StudyChapterActions actions;
+  final void Function(ChapterAction, int) onChapterAction;
 
   @override
   Widget build(BuildContext context) =>
@@ -120,6 +120,7 @@ class _CompactChapterBar extends StatelessWidget {
 
   Widget _buildBar(BuildContext context) {
     final theme = Theme.of(context);
+    final chapter = study.chapterList.chapters[study.chapterIndex];
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 4, 0),
       child: Row(
@@ -163,18 +164,26 @@ class _CompactChapterBar extends StatelessWidget {
             onPressed: onAddChapter,
           ),
           PopupMenuButton<Object>(
-            key: ObjectKey(study.chapterList.chapters[study.chapterIndex].key),
+            key: ObjectKey(chapter.key),
             tooltip: 'Chapter actions',
-            onSelected: (action) => action is ChapterAction
-                ? actions.run(action, study.chapterIndex)
-                : onManageChapters(),
+            onSelected: (action) {
+              if (!context.mounted) return;
+              if (action is! ChapterAction) {
+                onManageChapters();
+                return;
+              }
+              final current = study.chapterList.chapters.indexWhere(
+                (item) => item.key == chapter.key,
+              );
+              if (current >= 0) onChapterAction(action, current);
+            },
             itemBuilder: (_) => [
               const PopupMenuItem<Object>(
                 value: _manageChapters,
                 child: Text('Manage & reorder chapters…'),
               ),
               const PopupMenuDivider(),
-              ...StudyChapterActions.menuItems(
+              ...studyChapterMenuItems(
                 canDelete: study.chapterList.chapters.length > 1,
               ),
             ],

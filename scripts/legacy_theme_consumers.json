@@ -43,7 +43,6 @@
   "lib/features/generate/widgets/position_generation_settings.dart": "generate; renewal milestone 6",
   "lib/features/holes/widgets/hole_hunt_config_dialog.dart": "holes; renewal milestone 6",
   "lib/features/holes/widgets/holes_report_panel.dart": "holes; renewal milestone 6",
-  "lib/features/master_games/widgets/master_practice_dialog.dart": "master_games; renewal milestone 6",
   "lib/features/opponents/widgets/people_screen.dart": "opponents; renewal milestone 6",
   "lib/features/opponents/widgets/player_cell.dart": "opponents; renewal milestone 6",
   "lib/features/opponents/widgets/player_study_links.dart": "opponents; renewal milestone 6",
