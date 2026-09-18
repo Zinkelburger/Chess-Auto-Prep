@@ -3995,3 +3995,45 @@ Manual configuration opens and cancels; the source PGN remains byte-for-byte
 unchanged. This check did not start a generation job. The disposable preview is
 stopped. Feature debt is 1,237 and the legacy-theme ledger is 181; neither is a
 completion certificate.
+
+### Builder handoff ownership and waiter retirement — 2026-09-18
+
+Against `e05e8e86`, independently reviewed `57b10629` replaces the two detached
+line/move continuations with one continuation that awaits its own load command.
+The existing document generation, successful readable content and current
+navigation intent determine whether it may apply. The shared `awaitLoaded`
+API/list, completion plumbing and both old continuation names are deleted and
+mechanically retired. No new controller, epoch or dependency boundary is added.
+
+The complete eight-file graph—screen and its three parts, document session,
+workspace, AppState and PendingHandoff—shrinks **4,989→4,969 (−20 handwritten;
+generated unchanged)**. The screen grows four validation lines while the
+document owner loses 24; other graph files are unchanged. Production diff is
++42/−62, and test code grows 328 lines. This is a bounded ownership improvement,
+not whole-Builder graduation or a claim that every screen is smaller.
+
+Five baseline cases fail for the intended behavior: a pending A move request
+applies to B, a pending A line ID selects B's different line with the same ID,
+A→B→A revives old navigation, failed decoding navigates the retained chapter,
+and a missing chapter receives a composed draft. Controlled decoder gates and
+the actual screen reproduce them; the missing-source case runs separately.
+All pass after repair. Three additional cases preserve ready same-source
+navigation without reloading, line-before-moves ordering, captured mutable
+inputs during a fresh same-source load, and suppression after leaving Builder.
+Owner tests now await their actual command while retaining late-adoption,
+disposal, supersession and restore assertions; an idle-waiter-only test retires
+with its removed API.
+
+**106 affected tests pass, zero failures/skips**, covering screen, load,
+document-session, workspace recovery and pending handoffs. Analyze/lint passes
+with 64 existing infos, no warnings/errors, 45 checker cases and 1,237 unchanged
+debt entries. The existing Linux `builder_projection_test.dart` also passes:
+real app handoff, line selection, annotation editing/save, mode return and reload.
+It checks native parity; the controlled widget tests prove the race interleavings.
+There is no appearance change or new native race claim. Logs are
+`/tmp/builder-handoff-{baseline-red,missing-red,combined-tests,gates,native}.log`.
+
+Library Dart at this checkpoint is **228,126**, down 8,865 from the reviewed
+growth snapshot but still 9,169 above September 16. Build/Cut source admission
+remains a separate in-progress safety repair; native identity before mutation
+reads, whole-feature simplicity and feature graduation remain open.
