@@ -27,11 +27,21 @@ an observation crosses the isolate boundary. Embedded NUL paths are rejected.
 `movePathNoReplace` uses Linux `renameat2(RENAME_NOREPLACE)` for an exclusive
 namespace move for files and directories, including against external creators; it returns an error when
 the filesystem/kernel cannot provide that operation, never a replace fallback.
-Windows source uses MoveFileExW without replacement; macOS reports unsupported.
+Windows source uses MoveFileExW without replacement; macOS uses
+`renamex_np(RENAME_EXCL)`. Apple declares this API from macOS 10.12 (the app
+targets 10.15) and tests rejection of existing destinations in its
+[public header](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/sys/stdio.h)
+and [native regression tests](https://github.com/apple-oss-distributions/xnu/blob/main/tests/rename_excl.c).
+Unsupported hosts/filesystems return their native error without a replace fallback.
+`FileMutationService.moveFileNoReplace` uses this same primitive, translating
+name collisions into its existing `FileSystemException` contract for storage,
+reference-index publication and verified update downloads. This protects the
+destination only; captured-source validation and reference migration remain
+the responsibility of their owning workflows.
 The repertoire journal verifies the identity before replaying reference updates.
 
 Linux x64 is tested. macOS and Windows source paths are not native-host verified.
-Production adoption is Linux only until macOS full-sync and Windows replacement,
+Full document-protocol adoption is Linux only until macOS full-sync and Windows replacement,
 ACL/backup, transient-sharing and namespace-durability gates are satisfied.
 The package does not implement ReplaceFileW, macOS F_FULLFSYNC or sync-provider
 hydration APIs, and makes no blanket power-loss guarantee.

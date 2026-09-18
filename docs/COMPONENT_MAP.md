@@ -927,6 +927,16 @@ BOM/line-ending changes from conflict checks. The native package
 hashes and codecs run off the UI isolate. Prior bytes are retained under each
 parent's `.cap-pgn-history/`; post-install failures require reconciliation.
 
+The general `FileMutationService.moveFileNoReplace` boundary also uses the
+existing native exclusive move, so a destination created after preflight survives.
+It preserves the `FileSystemException` collision contract used by reference-index
+publication, generic storage renames and verified update downloads. Linux uses
+`renameat2(RENAME_NOREPLACE)`, macOS `renamex_np(RENAME_EXCL)`, and Windows
+`MoveFileExW` without replacement; unsupported filesystems fail without fallback.
+Linux races and callers are tested; macOS/Windows source paths remain unverified
+on their native hosts. This narrow guarantee does not certify captured-source
+identity, chapter relocation journals or training-reference closure.
+
 The same boundary exposes `supportsQuarantine` and `quarantine(snapshot)`.
 Linux validates the captured native revision inside `FileMutationService`'s
 existing parent lock, preserves raw baseline bytes, and moves the source into
