@@ -42,7 +42,7 @@ import '../utils/log.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../widgets/chess_board_widget.dart';
 import '../features/coverage/widgets/coverage_calculator_widget.dart';
-import '../widgets/pgn_with_analysis_pane.dart';
+import '../widgets/interactive_pgn_editor.dart';
 import '../features/repertoires/repositories/repertoire_catalog_repository.dart';
 import '../widgets/pgn_import_dialog.dart';
 import '../widgets/repertoire_generation_tab.dart';

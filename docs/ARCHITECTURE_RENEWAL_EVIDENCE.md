@@ -2944,3 +2944,31 @@ Neither result certifies the whole Viewer or the whole renewal. Total `lib/`
 Dart is still 239,402 lines versus 218,957 at `e477dc58`; added recovery work
 and generated localization remain separately accounted for. The actual shared
 leave-dialog screenshot was also inspected during integration.
+
+### Builder editor wrapper retirement — 2026-09-18
+
+Builder's only `PgnWithAnalysisPane` caller disabled both its toolbar and embedded
+analysis dock. The screen now constructs the existing `InteractivePgnEditor`
+directly; `PgnWithAnalysisPane` (333 lines), `EditMainZone` (76) and the unreachable
+`RepertoireAnalysisDock` (342) are deleted. Retirement rules reject their paths
+and symbols, and the two deleted theme-ledger consumers are removed.
+
+The final graph is screen → editor → existing board/workspace commands, replacing
+screen → pane → zone → editor callback forwarding. Title changes still go to
+`workspace.setTitle`; branch deletion goes through `workspace.deleteDraftBranch`
+so writer undo evidence survives. Clipboard still uses the existing quiet helper,
+and View in Lines and annotated read-only titles retain their original bindings.
+The actual Engine reference tab and repertoire toolbar remain the live owners of
+engine controls, import and reload. `_cursorScoped` placement and editor keying
+are unchanged; no new owners, wrappers, state mirrors or interfaces are added.
+
+Against `e8355200`, all eight complete changed handwritten production files shrink
+from 3,458 to 2,695 lines (763 net removed). The three deleted files contribute
+751 lines; the direct editor call saves 11; the remaining line removes a stale
+comment for the separately approved dead context host. Excluding that coordinated
+comment, this cutover independently removes 762 lines. All handwritten `lib/` Dart
+(excluding `generated/`, `.g.dart` and `.freezed.dart`) shrinks from 236,555 to
+235,792 lines; generated production delta is zero. There are 21 fewer callback
+fields in the deleted wrapper files; existing workflow state owners are unchanged.
+
+Verification is in progress. Whole Builder renewal remains Partial.

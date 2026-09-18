@@ -32,7 +32,10 @@
     "lib/services/study_import/",
     "lib/features/settings/controllers/settings_providers.dart",
     "lib/features/documents/widgets/stored_game_scope.dart",
-    "lib/features/settings/widgets/display_settings_scope.dart"
+    "lib/features/settings/widgets/display_settings_scope.dart",
+    "lib/widgets/pgn_with_analysis_pane.dart",
+    "lib/widgets/layout/edit_main_zone.dart",
+    "lib/widgets/repertoire_analysis_dock.dart"
   ],
   "symbols": [
     "PgnBatchWriter",
@@ -62,6 +65,9 @@
     "repertoireCatalogRepositoryProvider",
     "appearanceSettingsProvider",
     "repertoireBooksSettingsProvider",
-    "appSettingsRepositoryProvider"
+    "appSettingsRepositoryProvider",
+    "PgnWithAnalysisPane",
+    "EditMainZone",
+    "RepertoireAnalysisDock"
   ]
 }

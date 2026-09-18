@@ -258,7 +258,7 @@ mixin _RepertoireLayout
   }
 
   /// Compact-layout tools pane: PGN | Lines/Draft | Tree tabs + nav.
-  /// Engine bars live inside PGN tab only.
+  /// Live engine analysis has its own reference tab.
   Widget _buildToolsColumn() {
     return Column(
       children: [

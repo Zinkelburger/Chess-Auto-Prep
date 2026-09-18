@@ -252,7 +252,7 @@ Design components are built on demand inside the first complete slice.
 | **Shift+click** add full line to repertoire | **Not started** | Click navigates; no bulk add |
 | **Ctrl+click** add-with-confirm for out-of-repertoire moves | **Not started** | |
 | Inline move **annotations** on lines (prob %, ★ repertoire, ⚠ trap) | **Not started** | `MoveAnnotation` model not on `ClickableMoveLineWidget` |
-| Side-by-side Engine + Expectimax panels | **Partial** | `RepertoireAnalysisDock` tabs; not simultaneous split |
+| Side-by-side Engine + Expectimax panels | **Not started** | Builder exposes live Engine and generated evaluation reference tabs separately; the unreachable old dock is retired. |
 | Hover preview on **all** move surfaces | **Partial** | Engine, expectimax, browse, traps, suggestions, PGN trap dots, lines browser — **not** eval-tree explorer rows, all PGN moves |
 | Independent persist of expectimax panel toggle | **Partial** | `showExpectimaxDock` persisted; not spec’s toolbar toggle semantics |
 

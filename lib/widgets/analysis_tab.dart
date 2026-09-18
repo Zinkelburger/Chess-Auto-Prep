@@ -1,5 +1,5 @@
 /// Browse tab: tree candidates, coverage suggestions, traps, opening tree.
-/// Engine + expectimax live on the PGN tab ([PgnWithAnalysisPane]).
+/// Live engine analysis and generated evaluations use separate reference tabs.
 library;
 
 import 'dart:async';

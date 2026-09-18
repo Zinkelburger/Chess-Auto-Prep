@@ -1,8 +1,10 @@
 import 'dart:io';
+import 'package:chess_auto_prep/widgets/interactive_pgn_editor.dart';
 
 import 'package:chess_auto_prep/models/opening_tree.dart';
 import 'package:chess_auto_prep/services/storage/app_paths.dart';
-import 'package:chess_auto_prep/widgets/pgn_with_analysis_pane.dart';
+import 'package:chess_auto_prep/app/builder_lifetime.dart';
+import 'package:provider/provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -52,11 +54,12 @@ void main() {
     await tester.tap(find.text('Native history').first);
     await _wait(
       tester,
-      () => find.byType(PgnWithAnalysisPane).evaluate().isNotEmpty,
+      () => find.byType(InteractivePgnEditor).evaluate().isNotEmpty,
     );
     final owner = tester
-        .widget<PgnWithAnalysisPane>(find.byType(PgnWithAnalysisPane))
-        .controller;
+        .element(find.byType(InteractivePgnEditor))
+        .read<BuilderLifetime>()
+        .workspace;
     expect(owner.document.openingGraph, isNot(isA<OpeningTree>()));
 
     await owner.writer.addMovesAtPosition(
