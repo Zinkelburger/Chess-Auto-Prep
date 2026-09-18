@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../features/settings/controllers/eval_database_settings.dart';
-import '../../features/settings/widgets/settings_section_status.dart';
 import '../../services/eval/lichess_eval_controller.dart';
 import '../../services/eval/sqlite_eval_provider.dart';
 import '../../theme/app_colors.dart';
@@ -116,10 +115,6 @@ class EvalSourcesSection extends StatelessWidget {
           'only runs when they all miss.',
           style: AppTextStyles.caption,
         ),
-        SettingsSectionStatus(
-          owner: context.watch<EvalDatabaseSettings>(),
-          policy: 'Builds use saved evaluation database preferences.',
-        ),
         const SizedBox(height: 14),
         _chessDbDumpSource(context),
         _sqliteSliceSource(context),
@@ -155,10 +150,11 @@ class EvalSourcesSection extends StatelessWidget {
   Widget _chessDbDumpSource(BuildContext context) {
     final databases = context.watch<EvalDatabaseSettings>();
     if (databases.state.committed == null) {
-      return SettingsSectionStatus(owner: databases, policy: '');
+      return const SizedBox.shrink();
     }
     final configured =
-        databases.enableCdbDirect && databases.cdbDirectPath.isNotEmpty;
+        databases.committed.enableCdbDirect &&
+        databases.committed.cdbDirectPath.isNotEmpty;
 
     if (!cdbDirectAvailable) {
       // The native reader is not loaded, so nothing here can be acted on —
@@ -195,19 +191,19 @@ class EvalSourcesSection extends StatelessWidget {
             );
           },
           enabled:
-              databases.cdbDirectPath.isNotEmpty &&
+              databases.committed.cdbDirectPath.isNotEmpty &&
               !isGenerating &&
               !databases.state.busy,
           tooltip: 'Machine-wide, shared with the Databases page.',
-          disabledReason: databases.cdbDirectPath.isEmpty
+          disabledReason: databases.committed.cdbDirectPath.isEmpty
               ? 'No dump on this machine yet.'
               : 'A build is running.',
         ),
-        if (databases.cdbDirectPath.isNotEmpty)
+        if (databases.committed.cdbDirectPath.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 4),
             child: Text(
-              databases.cdbDirectPath,
+              databases.committed.cdbDirectPath,
               style: AppTextStyles.caption,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
@@ -294,46 +290,43 @@ class EvalSourcesSection extends StatelessWidget {
     if (databases.state.committed == null) return const SizedBox.shrink();
     final lichess = context.watch<LichessEvalController>();
 
-    return ListenableBuilder(
-      listenable: lichess,
-      builder: (context, _) => _sourceBlock(
-        index: 3,
-        title: 'Lichess cloud evaluations',
-        blurb:
-            'Every position anyone has run through the Lichess analysis '
-            'board — far narrower than ChessDB, but deep where it hits, and '
-            'it needs no native reader.',
-        used: databases.enableLichessEvals && lichess.isReady,
-        children: [
-          const LichessEvalCard(),
-          const SizedBox(height: 10),
-          AppSwitch(
-            label: 'Use during builds',
-            value: databases.editing.enableLichessEvals,
-            onChanged: (v) {
-              if (!context.mounted) return;
-              unawaited(
-                databases.setEnableLichessEvals(v).catchError((Object _) {}),
-              );
-            },
-            enabled: lichess.isReady && !isGenerating && !databases.state.busy,
-            tooltip: 'Machine-wide, shared with the Databases page.',
-            disabledReason: lichess.isReady
-                ? 'A build is running.'
-                : 'No built store on this machine yet.',
-          ),
-          if (databases.lichessEvalsPath.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                databases.lichessEvalsPath,
-                style: AppTextStyles.caption,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
+    return _sourceBlock(
+      index: 3,
+      title: 'Lichess cloud evaluations',
+      blurb:
+          'Every position anyone has run through the Lichess analysis '
+          'board — far narrower than ChessDB, but deep where it hits, and '
+          'it needs no native reader.',
+      used: databases.committed.enableLichessEvals && lichess.isReady,
+      children: [
+        const LichessEvalCard(),
+        const SizedBox(height: 10),
+        AppSwitch(
+          label: 'Use during builds',
+          value: databases.editing.enableLichessEvals,
+          onChanged: (v) {
+            if (!context.mounted) return;
+            unawaited(
+              databases.setEnableLichessEvals(v).catchError((Object _) {}),
+            );
+          },
+          enabled: lichess.isReady && !isGenerating && !databases.state.busy,
+          tooltip: 'Machine-wide, shared with the Databases page.',
+          disabledReason: lichess.isReady
+              ? 'A build is running.'
+              : 'No built store on this machine yet.',
+        ),
+        if (databases.committed.lichessEvalsPath.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              databases.committed.lichessEvalsPath,
+              style: AppTextStyles.caption,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
-        ],
-      ),
+          ),
+      ],
     );
   }
 

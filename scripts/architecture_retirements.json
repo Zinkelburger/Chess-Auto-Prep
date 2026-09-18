@@ -101,7 +101,8 @@
     "lib/features/traps/widgets/traps_tab_content.dart",
     "lib/widgets/layout/board_zone.dart",
     "lib/features/repertoire/widgets/repertoire_lines_side_panel.dart",
-    "lib/widgets/layout/jobs_tab_content.dart"
+    "lib/widgets/layout/jobs_tab_content.dart",
+    "lib/models/eval_database_settings.dart"
   ],
   "symbols": [
     "PgnBatchWriter",
@@ -238,6 +239,9 @@
     "dragLinesPanelWidth",
     "saveLinesPanelWidth",
     "resolveLinesPanelWidth",
-    "JobsTabContent"
+    "JobsTabContent",
+    "EvalDatabaseSettings.instance",
+    "CdbSnapshotDownloadController.instance",
+    "LichessEvalController.instance"
   ]
 }

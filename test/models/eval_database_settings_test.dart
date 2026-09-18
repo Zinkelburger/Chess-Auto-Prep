@@ -34,9 +34,10 @@ class _Storage implements SettingsSectionStorage<EvalDatabaseConfiguration> {
 class _RejectActivation extends InMemorySharedPreferencesStore {
   _RejectActivation() : super.withData({});
   bool reject = true;
+  String rejectedKey = 'eval.lichess.enabled';
   @override
   Future<bool> setValue(String type, String key, Object value) {
-    if (reject && key.endsWith('eval.lichess.enabled')) {
+    if (reject && key.endsWith(rejectedKey)) {
       return Future.value(false);
     }
     return super.setValue(type, key, value);
@@ -59,10 +60,10 @@ void main() {
     addTearDown(settings.dispose);
     await settings.ensureLoaded();
 
-    expect(settings.chessDbApiForExpectimax, isFalse);
+    expect(settings.committed.chessDbApiForExpectimax, isFalse);
     expect(
-      settings.expectimaxProbePlies,
-      EvalDatabaseSettings.defaultExpectimaxProbePlies,
+      settings.committed.expectimaxProbePlies,
+      EvalDatabaseConfiguration.defaultExpectimaxProbePlies,
     );
 
     await settings.setChessDbApiForExpectimax(true);
@@ -72,8 +73,8 @@ void main() {
     expect(prefs.getInt('expectimax.probe_plies'), 16);
 
     await settings.resetToDefaults();
-    expect(settings.chessDbApiForExpectimax, isFalse);
-    expect(settings.expectimaxProbePlies, 12);
+    expect(settings.committed.chessDbApiForExpectimax, isFalse);
+    expect(settings.committed.expectimaxProbePlies, 12);
   });
 
   test(
@@ -91,19 +92,19 @@ void main() {
       final settings = preferencesOwner();
       addTearDown(settings.dispose);
       await settings.ensureLoaded();
-      expect(settings.enableCdbDirect, isTrue);
-      expect(settings.cdbDirectPath, '/cdb');
-      expect(settings.cdbDirectReadAhead, isTrue);
-      expect(settings.enableLichessEvals, isTrue);
-      expect(settings.lichessEvalsPath, '/lichess');
-      expect(settings.chessDbApiForExpectimax, isTrue);
-      expect(settings.expectimaxProbePlies, 60);
+      expect(settings.committed.enableCdbDirect, isTrue);
+      expect(settings.committed.cdbDirectPath, '/cdb');
+      expect(settings.committed.cdbDirectReadAhead, isTrue);
+      expect(settings.committed.enableLichessEvals, isTrue);
+      expect(settings.committed.lichessEvalsPath, '/lichess');
+      expect(settings.committed.chessDbApiForExpectimax, isTrue);
+      expect(settings.committed.expectimaxProbePlies, 60);
       await settings.setExpectimaxProbePlies(-1);
       final restarted = preferencesOwner();
       addTearDown(restarted.dispose);
       await restarted.ensureLoaded();
       expect(restarted.committed, settings.committed);
-      expect(restarted.expectimaxProbePlies, 2);
+      expect(restarted.committed.expectimaxProbePlies, 2);
       expect(() => restarted.committed.values.clear(), throwsUnsupportedError);
     },
   );
@@ -120,14 +121,14 @@ void main() {
         final settings = preferencesOwner();
         addTearDown(settings.dispose);
         await expectLater(settings.ensureLoaded(), throwsFormatException);
-        expect(settings.isLoaded, isFalse);
+        expect(settings.state.committed, isNull);
         expect(settings.state.phase, SettingsPhase.failed);
-        expect(settings.enableCdbDirect, isFalse);
-        expect(settings.enableLichessEvals, isFalse);
-        expect(settings.chessDbApiForExpectimax, isFalse);
+        expect(settings.committed.enableCdbDirect, isFalse);
+        expect(settings.committed.enableLichessEvals, isFalse);
+        expect(settings.committed.chessDbApiForExpectimax, isFalse);
         SharedPreferences.setMockInitialValues({});
         await settings.retry();
-        expect(settings.isLoaded, isTrue);
+        expect(settings.state.committed, isNotNull);
         expect(settings.state.phase, SettingsPhase.ready);
       },
     );
@@ -143,8 +144,8 @@ void main() {
       final activate = settings.configureCdbDirectory('/downloaded');
       final edit = settings.setCdbDirectReadAhead(true);
       await Future<void>.delayed(Duration.zero);
-      expect(settings.enableCdbDirect, isFalse);
-      expect(settings.cdbDirectPath, isEmpty);
+      expect(settings.committed.enableCdbDirect, isFalse);
+      expect(settings.committed.cdbDirectPath, isEmpty);
       expect(settings.editing.cdbDirectPath, '/downloaded');
       expect(settings.editing.enableCdbDirect, isTrue);
       expect(settings.editing.cdbDirectReadAhead, isTrue);
@@ -154,9 +155,9 @@ void main() {
       });
       storage.writeGate!.complete();
       await Future.wait([activate, edit]);
-      expect(settings.cdbDirectPath, '/downloaded');
-      expect(settings.enableCdbDirect, isTrue);
-      expect(settings.cdbDirectReadAhead, isTrue);
+      expect(settings.committed.cdbDirectPath, '/downloaded');
+      expect(settings.committed.enableCdbDirect, isTrue);
+      expect(settings.committed.cdbDirectReadAhead, isTrue);
     },
   );
 
@@ -171,8 +172,8 @@ void main() {
         settings.configureLichessDirectory('/ready'),
         throwsStateError,
       );
-      expect(settings.enableLichessEvals, isFalse);
-      expect(settings.lichessEvalsPath, isEmpty);
+      expect(settings.committed.enableLichessEvals, isFalse);
+      expect(settings.committed.lichessEvalsPath, isEmpty);
       expect(settings.editing.lichessEvalsPath, '/ready');
       expect(settings.state.phase, SettingsPhase.failed);
       storage.writeError = null;
@@ -180,9 +181,9 @@ void main() {
       expect(settings.state.phase, SettingsPhase.failed);
       expect(settings.editing.lichessEvalsPath, '/ready');
       await settings.retry();
-      expect(settings.enableLichessEvals, isTrue);
-      expect(settings.lichessEvalsPath, '/ready');
-      expect(settings.expectimaxProbePlies, 18);
+      expect(settings.committed.enableLichessEvals, isTrue);
+      expect(settings.committed.lichessEvalsPath, '/ready');
+      expect(settings.committed.expectimaxProbePlies, 18);
     },
   );
 
@@ -200,16 +201,16 @@ void main() {
         settings.configureLichessDirectory('/built'),
         throwsStateError,
       );
-      expect(settings.lichessEvalsPath, '/built');
-      expect(settings.enableLichessEvals, isFalse);
+      expect(settings.committed.lichessEvalsPath, '/built');
+      expect(settings.committed.enableLichessEvals, isFalse);
       expect(settings.editing.enableLichessEvals, isTrue);
       platform.reject = false;
       await settings.retry();
       final restarted = preferencesOwner();
       addTearDown(restarted.dispose);
       await restarted.ensureLoaded();
-      expect(restarted.lichessEvalsPath, '/built');
-      expect(restarted.enableLichessEvals, isTrue);
+      expect(restarted.committed.lichessEvalsPath, '/built');
+      expect(restarted.committed.enableLichessEvals, isTrue);
     },
   );
 
@@ -233,6 +234,214 @@ void main() {
         settings.setEnableLichessEvals(false),
         throwsStateError,
       );
+    },
+  );
+
+  test(
+    'clear followed by queued Retry and toggle cannot reactivate A',
+    () async {
+      final storage = _Storage();
+      final settings = EvalDatabaseSettings(storage);
+      addTearDown(settings.dispose);
+      await settings.configureLichessDirectory('/A');
+      storage.writeError = StateError('activation failure');
+      await expectLater(
+        settings.configureLichessDirectory('/A'),
+        throwsStateError,
+      );
+      storage.writeError = null;
+      storage.writeGate = Completer<void>();
+      final clear = settings.clearLichessDirectory('/A');
+      await Future<void>.delayed(Duration.zero);
+      final retry = settings.retry();
+      final enable = settings.setEnableLichessEvals(true);
+      storage.writeGate!.complete();
+      await Future.wait([clear, retry, enable]);
+      expect(storage.value.lichessEvalsPath, isEmpty);
+      expect(storage.value.enableLichessEvals, isFalse);
+      expect(settings.state.phase, SettingsPhase.ready);
+      expect(
+        storage.writes
+            .skip(2)
+            .every((p) => p.changes['eval.lichess.path'] == ''),
+        isTrue,
+      );
+    },
+  );
+
+  test(
+    'disk B survives clearing failed A while unrelated failed edit retries',
+    () async {
+      final storage = _Storage();
+      final settings = EvalDatabaseSettings(storage);
+      addTearDown(settings.dispose);
+      await settings.configureLichessDirectory('/B');
+      storage.writeError = StateError('disk unavailable');
+      await expectLater(
+        settings.configureLichessDirectory('/A'),
+        throwsStateError,
+      );
+      await expectLater(settings.setExpectimaxProbePlies(19), throwsStateError);
+      storage.writeError = null;
+      final before = storage.writes.length;
+      await settings.clearLichessDirectory('/A');
+      expect(storage.writes.length, before);
+      expect(settings.committed.lichessEvalsPath, '/B');
+      expect(settings.editing.lichessEvalsPath, '/B');
+      expect(settings.editing.expectimaxProbePlies, 19);
+      expect(settings.state.phase, SettingsPhase.failed);
+      await settings.retry();
+      expect(storage.writes.last.changes, {'expectimax.probe_plies': 19});
+      expect(settings.committed.enableLichessEvals, isTrue);
+    },
+  );
+
+  test('clearing persisted A preserves a failed newer B selection', () async {
+    final storage = _Storage();
+    final settings = EvalDatabaseSettings(storage);
+    addTearDown(settings.dispose);
+    await settings.configureCdbDirectory('/A');
+    storage.writeError = StateError('disk unavailable');
+    await expectLater(settings.configureCdbDirectory('/B'), throwsStateError);
+    storage.writeError = null;
+    await settings.clearCdbDirectory('/A');
+    expect(settings.committed.cdbDirectPath, isEmpty);
+    expect(settings.committed.enableCdbDirect, isFalse);
+    expect(settings.editing.cdbDirectPath, '/B');
+    expect(settings.editing.enableCdbDirect, isTrue);
+    await settings.retry();
+    expect(settings.committed.cdbDirectPath, '/B');
+    expect(settings.committed.enableCdbDirect, isTrue);
+  });
+
+  test('queued B and toggle bind to B after clearing A', () async {
+    final storage = _Storage();
+    final settings = EvalDatabaseSettings(storage);
+    addTearDown(settings.dispose);
+    await settings.configureCdbDirectory('/A');
+    storage.writeGate = Completer<void>();
+    final clear = settings.clearCdbDirectory('/A');
+    final newer = settings.configureCdbDirectory('/B');
+    final disable = settings.setEnableCdbDirect(false);
+    storage.writeGate!.complete();
+    await Future.wait([clear, newer, disable]);
+    expect(settings.committed.cdbDirectPath, '/B');
+    expect(settings.committed.enableCdbDirect, isFalse);
+    expect(storage.writes.last.changes, {
+      'eval.cdbdirect.path': '/B',
+      'eval.cdbdirect.enabled': false,
+    });
+  });
+
+  test(
+    'failed conditional clear preserves existing activation retry',
+    () async {
+      final storage = _Storage();
+      final settings = EvalDatabaseSettings(storage);
+      addTearDown(settings.dispose);
+      await settings.configureCdbDirectory('/A');
+      storage.writeError = StateError('disk unavailable');
+      await expectLater(settings.configureCdbDirectory('/A'), throwsStateError);
+      await expectLater(settings.clearCdbDirectory('/A'), throwsStateError);
+      expect(settings.editing.cdbDirectPath, '/A');
+      expect(settings.editing.enableCdbDirect, isTrue);
+      storage.writeError = null;
+      await settings.retry();
+      expect(storage.writes.last.changes, {
+        'eval.cdbdirect.path': '/A',
+        'eval.cdbdirect.enabled': true,
+      });
+    },
+  );
+
+  test(
+    'partial clear reconciles disabled A without a generic clear retry',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final platform = _RejectActivation()..reject = false;
+      SharedPreferencesStorePlatform.instance = platform;
+      addTearDown(() => SharedPreferences.setMockInitialValues({}));
+      final settings = preferencesOwner();
+      addTearDown(settings.dispose);
+      await settings.configureLichessDirectory('/A');
+      platform
+        ..reject = true
+        ..rejectedKey = 'eval.lichess.path';
+      await expectLater(settings.clearLichessDirectory('/A'), throwsStateError);
+      expect(settings.committed.lichessEvalsPath, '/A');
+      expect(settings.committed.enableLichessEvals, isFalse);
+      // Retry reloads; it must not replay the clear, which still cannot persist.
+      await settings.retry();
+      expect(settings.committed.lichessEvalsPath, '/A');
+      platform.reject = false;
+      await settings.configureLichessDirectory('/B');
+      await settings.retry();
+      expect(settings.committed.lichessEvalsPath, '/B');
+      expect(settings.committed.enableLichessEvals, isTrue);
+    },
+  );
+
+  test(
+    'unknown initial selection refuses clear and toggle without writes',
+    () async {
+      final storage = _Storage()..readError = StateError('unreadable');
+      final settings = EvalDatabaseSettings(storage);
+      addTearDown(settings.dispose);
+      await expectLater(settings.clearCdbDirectory('/A'), throwsStateError);
+      await expectLater(settings.setEnableCdbDirect(true), throwsStateError);
+      expect(storage.writes, isEmpty);
+      expect(settings.state.committed, isNull);
+      expect(settings.state.phase, SettingsPhase.failed);
+      storage.readError = null;
+      await settings.retry();
+      expect(settings.state.phase, SettingsPhase.ready);
+      expect(settings.committed.enableCdbDirect, isFalse);
+    },
+  );
+
+  test(
+    'explicit path-field clear disables the selected database together',
+    () async {
+      final storage = _Storage();
+      final settings = EvalDatabaseSettings(storage);
+      addTearDown(settings.dispose);
+      await settings.configureCdbDirectory('/A');
+      await settings.clearCdbSelection();
+      expect(storage.writes.last.changes, {
+        'eval.cdbdirect.enabled': false,
+        'eval.cdbdirect.path': '',
+      });
+      expect(settings.committed.cdbDirectPath, isEmpty);
+      expect(settings.committed.enableCdbDirect, isFalse);
+    },
+  );
+
+  test(
+    'toggle preserves displayed failed B and unrelated failed fields',
+    () async {
+      final storage = _Storage();
+      final settings = EvalDatabaseSettings(storage);
+      addTearDown(settings.dispose);
+      await settings.configureCdbDirectory('/A');
+      storage.writeError = StateError('disk unavailable');
+      await expectLater(settings.configureCdbDirectory('/B'), throwsStateError);
+      await expectLater(settings.setExpectimaxProbePlies(19), throwsStateError);
+      expect(settings.editing.cdbDirectPath, '/B');
+      expect(settings.committed.cdbDirectPath, '/A');
+      storage.writeError = null;
+      await settings.setEnableCdbDirect(false);
+      expect(storage.writes.last.changes, {
+        'eval.cdbdirect.path': '/B',
+        'eval.cdbdirect.enabled': false,
+      });
+      expect(settings.committed.cdbDirectPath, '/B');
+      expect(settings.committed.enableCdbDirect, isFalse);
+      expect(settings.state.phase, SettingsPhase.failed);
+      expect(settings.editing.expectimaxProbePlies, 19);
+      await settings.retry();
+      expect(storage.writes.last.changes, {'expectimax.probe_plies': 19});
+      expect(settings.committed.cdbDirectPath, '/B');
+      expect(settings.committed.enableCdbDirect, isFalse);
     },
   );
 }

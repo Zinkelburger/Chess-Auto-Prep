@@ -18,6 +18,7 @@ void main() {
         engine: EngineSettings(storage),
         bulk: fallback.bulk,
         display: fallback.display,
+        databases: fallback.databases,
       );
       addTearDown(runtime.dispose);
       tester.view.physicalSize = const Size(1400, 900);

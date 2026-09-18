@@ -86,6 +86,7 @@ void main() {
       }
       final jobs = JobManager();
       final controller = GenerationSessionController(
+        databases: (_engineFixtureSettings ??= testRuntimeSettings()).databases,
         jobs: jobs,
         enginePool: engines.pool,
         publication: GenerationPublicationController(

@@ -101,6 +101,7 @@ void main() {
 
   test('initial state is idle with no tree and clean progress', () {
     final controller = GenerationSessionController(
+      databases: (_engineFixtureSettings ??= testRuntimeSettings()).databases,
       jobs: JobManager(),
       enginePool: engines.pool,
       engineLifecycle: engines.lifecycle,
@@ -133,6 +134,7 @@ void main() {
   group('generated tree lifecycle', () {
     test('onTreeBuilt publishes the bundle and notifies', () {
       final controller = GenerationSessionController(
+        databases: (_engineFixtureSettings ??= testRuntimeSettings()).databases,
         jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
@@ -156,6 +158,7 @@ void main() {
 
     test('onTreeBuilt reads play_as_white from the config snapshot', () {
       final controller = GenerationSessionController(
+        databases: (_engineFixtureSettings ??= testRuntimeSettings()).databases,
         jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
@@ -173,6 +176,7 @@ void main() {
 
     test('clearTree drops the bundle and notifies', () {
       final controller = GenerationSessionController(
+        databases: (_engineFixtureSettings ??= testRuntimeSettings()).databases,
         jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
@@ -197,6 +201,8 @@ void main() {
       'a legacy partial tree from another position refuses cleanly',
       () async {
         final controller = GenerationSessionController(
+          databases:
+              (_engineFixtureSettings ??= testRuntimeSettings()).databases,
           jobs: JobManager(),
           enginePool: engines.pool,
           engineLifecycle: engines.lifecycle,
@@ -247,6 +253,8 @@ void main() {
             await release.future;
           };
         final controller = GenerationSessionController(
+          databases:
+              (_engineFixtureSettings ??= testRuntimeSettings()).databases,
           jobs: jobs,
           enginePool: engines.pool,
           engineLifecycle: engines.lifecycle,
@@ -319,6 +327,7 @@ void main() {
   group('progress plumbing', () {
     test('progress.update stores every field it is given', () {
       final controller = GenerationSessionController(
+        databases: (_engineFixtureSettings ??= testRuntimeSettings()).databases,
         jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
@@ -350,6 +359,7 @@ void main() {
 
     test('rapid updates coalesce into a throttled trailing notify', () async {
       final controller = GenerationSessionController(
+        databases: (_engineFixtureSettings ??= testRuntimeSettings()).databases,
         jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
@@ -375,6 +385,7 @@ void main() {
   group('idle guards', () {
     test('pause/resume/cancel/finishNow are no-ops when idle', () {
       final controller = GenerationSessionController(
+        databases: (_engineFixtureSettings ??= testRuntimeSettings()).databases,
         jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
@@ -400,6 +411,7 @@ void main() {
 
     test('exportSnapshot refuses without an active build', () async {
       final controller = GenerationSessionController(
+        databases: (_engineFixtureSettings ??= testRuntimeSettings()).databases,
         jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
@@ -419,6 +431,7 @@ void main() {
 
     test('snapshotNameSuggestion falls back when no run is active', () {
       final controller = GenerationSessionController(
+        databases: (_engineFixtureSettings ??= testRuntimeSettings()).databases,
         jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
@@ -438,6 +451,8 @@ void main() {
           final lifecycle = _FailingExitLifecycle(failPause: failPause);
           final jobs = JobManager();
           final controller = GenerationSessionController(
+            databases:
+                (_engineFixtureSettings ??= testRuntimeSettings()).databases,
             jobs: jobs,
             enginePool: engines.pool,
             artifacts: generationArtifactsFixture(),
@@ -485,6 +500,7 @@ void main() {
 
     test('dispose cancels the pending throttle timer', () async {
       final controller = GenerationSessionController(
+        databases: (_engineFixtureSettings ??= testRuntimeSettings()).databases,
         jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
@@ -505,6 +521,7 @@ void main() {
 
     test('late progress updates after dispose are swallowed', () async {
       final controller = GenerationSessionController(
+        databases: (_engineFixtureSettings ??= testRuntimeSettings()).databases,
         jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
@@ -600,6 +617,7 @@ void main() {
         'and cancelling there is felt at once', () async {
       final svc = await emptyService();
       final controller = GenerationSessionController(
+        databases: (_engineFixtureSettings ??= testRuntimeSettings()).databases,
         jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
@@ -631,6 +649,7 @@ void main() {
         'started', () async {
       final svc = await emptyService();
       final controller = GenerationSessionController(
+        databases: (_engineFixtureSettings ??= testRuntimeSettings()).databases,
         jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
@@ -662,6 +681,7 @@ void main() {
     test('dispose releases a parked run and forbids another run', () async {
       final svc = await emptyService();
       final controller = GenerationSessionController(
+        databases: (_engineFixtureSettings ??= testRuntimeSettings()).databases,
         jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
@@ -687,6 +707,8 @@ void main() {
       () async {
         final svc = await emptyService();
         final controller = GenerationSessionController(
+          databases:
+              (_engineFixtureSettings ??= testRuntimeSettings()).databases,
           jobs: JobManager(),
           enginePool: engines.pool,
           engineLifecycle: engines.lifecycle,

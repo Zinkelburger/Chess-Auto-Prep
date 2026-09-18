@@ -106,20 +106,23 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
     if (previous != null && !interrupt) {
       return Future.error(StateError('A download operation is still running'));
     }
-    if (interrupt) {
-      _stopRequested = true;
-      _isolateControl?.send(kLichessImportCancelMessage);
-    }
-    if (!interrupt) _stopRequested = false;
+    _stopRequested = interrupt;
+    if (interrupt) _isolateControl?.send(kLichessImportCancelMessage);
     final settled = Completer<void>();
     _runInFlight = settled.future;
+    notifyListenersOutsideBuild();
     return (() async {
       try {
         await previous;
         if (_closeFuture != null || isDisposed) {
           throw StateError('Download controller is closed');
         }
+        _error = null;
         return await action();
+      } catch (error) {
+        _error = '$error';
+        _phase = LichessEvalPhase.failed;
+        rethrow;
       } finally {
         if (identical(_runInFlight, settled.future)) _runInFlight = null;
         settled.complete();
@@ -127,6 +130,7 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
       }
     })();
   }
+
   Isolate? _isolate;
   SendPort? _isolateControl;
   RepertoireJob? _job;
@@ -146,11 +150,7 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
   int get rowsWritten => _rowsWritten;
   int get bucketsMerged => _bucketsMerged;
 
-  bool get isBusy =>
-      _runInFlight != null ||
-      _phase == LichessEvalPhase.downloading ||
-      _phase == LichessEvalPhase.importing ||
-      _phase == LichessEvalPhase.probing;
+  bool get isBusy => _runInFlight != null;
 
   /// True once a finished store is on disk.
   bool get isReady => _manifest?.complete == true;
@@ -223,7 +223,7 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     _parentDir = prefs.getString(_keyDirectory);
     if (_parentDir == null) {
-      final saved = settings.lichessEvalsPath;
+      final saved = settings.committed.lichessEvalsPath;
       if (saved.isNotEmpty) _parentDir = p.dirname(saved);
     }
     await _refreshStoreState();
@@ -237,6 +237,7 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
     final archive = archivePath;
     if (paths == null || archive == null) {
       _manifest = null;
+      _phase = LichessEvalPhase.idle;
       notifyListeners();
       return;
     }
@@ -248,6 +249,8 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
     } else if (_archiveDone > 0 || (manifest?.linesRead ?? 0) > 0) {
       _phase = LichessEvalPhase.paused;
       _linesRead = manifest?.linesRead ?? 0;
+    } else {
+      _phase = LichessEvalPhase.idle;
     }
     notifyListeners();
   }
@@ -282,7 +285,6 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
     _info = info;
     _parentDir = parentDir;
     _archiveTotal = info.bytes;
-    _error = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyDirectory, parentDir);
     await Directory(p.join(parentDir, folderName)).create(recursive: true);
@@ -292,62 +294,59 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
   /// Download what is missing, then import.  Safe to call again after a pause.
   Future<void> start() {
     if (isBusy) return _runInFlight ?? Future.value();
-    return _operate(_start);
-  }
+    return _operate(() async {
+      final info = _info;
+      final directory = storeDirectory;
+      final archive = archivePath;
+      if (info == null || directory == null || archive == null) {
+        _fail('Choose where the database should live first.');
+        return;
+      }
 
-  Future<void> _start() async {
-    final info = _info;
-    final directory = storeDirectory;
-    final archive = archivePath;
-    if (info == null || directory == null || archive == null) {
-      _fail('Choose where the database should live first.');
-      return;
-    }
+      final backend = await probeZstdBackend();
+      if (_stopRequested) return;
+      if (backend == ZstdBackend.none) {
+        _fail(zstdMissingMessage);
+        return;
+      }
 
-    final backend = await probeZstdBackend();
-    if (_stopRequested) return;
-    if (backend == ZstdBackend.none) {
-      _fail(zstdMissingMessage);
-      return;
-    }
+      _job = ensureEvalDatabaseJob(
+        _job,
+        label: 'Lichess evaluations',
+        onCancel: () => unawaited(pause()),
+      );
 
-    _error = null;
-    _job = ensureEvalDatabaseJob(
-      _job,
-      label: 'Lichess evaluations',
-      onCancel: () => unawaited(pause()),
-    );
-
-    try {
-      if (!isReady) {
-        await _download(info, File(archive));
+      try {
+        if (!isReady) {
+          await _download(info, File(archive));
+          if (_stopRequested) {
+            _setPaused();
+            return;
+          }
+          await _runImport(
+            archivePath: archive,
+            storeDirectory: directory,
+            info: info,
+            backend: backend,
+          );
+          if (_stopRequested) {
+            _setPaused();
+            return;
+          }
+        }
+        await _refreshStoreState();
+        if (isReady) await _completeJob(directory);
+      } catch (e) {
         if (_stopRequested) {
           _setPaused();
-          return;
+        } else {
+          _fail('$e');
         }
-        await _runImport(
-          archivePath: archive,
-          storeDirectory: directory,
-          info: info,
-          backend: backend,
-        );
-        if (_stopRequested) {
-          _setPaused();
-          return;
-        }
+      } finally {
+        _stopTicker();
+        notifyListeners();
       }
-      await _refreshStoreState();
-      if (isReady) await _completeJob(directory);
-    } catch (e) {
-      if (_stopRequested) {
-        _setPaused();
-      } else {
-        _fail('$e');
-      }
-    } finally {
-      _stopTicker();
-      notifyListeners();
-    }
+    });
   }
 
   Future<void> _completeJob(String directory) async {
@@ -394,6 +393,7 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
   Future<void> deleteEverything() => _operate(() async {
     final directory = storeDirectory;
     if (directory != null) {
+      await settings.clearLichessDirectory(directory);
       final dir = Directory(directory);
       if (await dir.exists()) await dir.delete(recursive: true);
     }
@@ -403,10 +403,6 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
     _rowsWritten = 0;
     _bucketsMerged = 0;
     _phase = LichessEvalPhase.idle;
-    if (settings.lichessEvalsPath == directory) {
-      await settings.setEnableLichessEvals(false);
-      await settings.setLichessEvalsPath('');
-    }
     notifyListeners();
   }, interrupt: true);
 
@@ -469,7 +465,6 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
         if (_stopRequested) break;
         sink.add(chunk);
         _archiveDone += chunk.length;
-        if (_stopRequested) break;
       }
     } finally {
       await sink.flush();
@@ -664,6 +659,7 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
     _rate.reset(_archiveDone);
   }
 
+  /// Stop admission and settle successfully after all admitted work drains.
   Future<void> close() {
     if (_closeFuture case final pending?) return pending;
     _stopRequested = true;
@@ -671,7 +667,7 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
     _stopTicker();
     _http.close(force: true);
     _source.dispose();
-    return _closeFuture = (() async { await _runInFlight; })();
+    return _closeFuture = _runInFlight ?? Future.value();
   }
 
   @override

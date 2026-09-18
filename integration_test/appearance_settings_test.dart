@@ -1,3 +1,11 @@
+import 'dart:ui' as ui;
+import 'package:flutter/rendering.dart';
+import 'package:provider/provider.dart';
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/features/databases/widgets/databases_screen.dart';
+import 'package:chess_auto_prep/features/settings/controllers/eval_database_settings.dart';
+import 'package:chess_auto_prep/services/eval/cdb_snapshot_download.dart';
+import 'package:chess_auto_prep/services/eval/lichess_eval_controller.dart';
 import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -20,6 +28,80 @@ import 'helpers/board_helpers.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   installFreshDesktopPreferencesStore();
+  testWidgets(
+    'native evaluation preferences fail visibly, retry and survive restart',
+    (tester) async {
+      final runtime = RuntimeSettings.preferences();
+      await runtime.load();
+      await runtime.engine.edit({'engine_lifecycle.toggle_on': false});
+      await runtime.databases.resetToDefaults();
+      await tester.pumpWidget(ChessAutoPrepApp(runtimeSettings: runtime));
+      await tester.pumpAndSettle();
+      getAppState(tester).setMode(AppMode.databases);
+      await tester.pumpAndSettle();
+      final context = tester.element(find.byType(DatabasesScreen));
+      final owner = context.read<EvalDatabaseSettings>();
+      expect(owner, same(runtime.databases));
+      expect(
+        context.read<CdbSnapshotDownloadController>().settings,
+        same(owner),
+      );
+      expect(context.read<LichessEvalController>().settings, same(owner));
+      final file = File(
+        p.join(
+          (await getApplicationSupportDirectory()).path,
+          'shared_preferences.json',
+        ),
+      );
+      final before = await file.readAsString();
+      expect((await Process.run('chmod', ['400', file.path])).exitCode, 0);
+      try {
+        await expectLater(
+          owner.setChessDbApiForExpectimax(true),
+          throwsStateError,
+        );
+        await tester.pumpAndSettle();
+        expect(owner.committed.chessDbApiForExpectimax, isFalse);
+        expect(owner.editing.chessDbApiForExpectimax, isTrue);
+        expect(
+          find.text(
+            'Preferences were not saved. Your changes are kept for retry.',
+          ),
+          findsOneWidget,
+        );
+        expect(await file.readAsString(), before);
+        final view = RendererBinding.instance.renderViews.first;
+        final image = await (view.debugLayer! as OffsetLayer).toImage(
+          Offset.zero & view.size,
+        );
+        final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+        image.dispose();
+        await File(
+          '/tmp/renewal-eval-settings-failure.png',
+        ).writeAsBytes(bytes!.buffer.asUint8List());
+      } finally {
+        expect((await Process.run('chmod', ['600', file.path])).exitCode, 0);
+      }
+      await tester.tap(find.text('Retry'));
+      await tester.pumpAndSettle();
+      expect(owner.committed.chessDbApiForExpectimax, isTrue);
+      expect(
+        find.text(
+          'Preferences were not saved. Your changes are kept for retry.',
+        ),
+        findsNothing,
+      );
+      final restarted = RuntimeSettings.preferences();
+      await restarted.load();
+      expect(restarted.databases.committed.chessDbApiForExpectimax, isTrue);
+      restarted.dispose();
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpAndSettle();
+    },
+    skip: !Platform.isLinux,
+  );
+
   testWidgets(
     'native read-only preferences retain confirmed appearance and retry after repair',
     (tester) async {

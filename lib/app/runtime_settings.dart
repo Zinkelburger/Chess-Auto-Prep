@@ -1,3 +1,5 @@
+import '../features/settings/controllers/eval_database_settings.dart';
+import '../features/settings/models/eval_database_configuration.dart';
 import '../features/settings/controllers/engine_settings.dart';
 import '../features/settings/controllers/bulk_analysis_settings.dart';
 import '../features/settings/controllers/board_display_settings.dart';
@@ -11,6 +13,7 @@ class RuntimeSettings {
     required this.engine,
     required this.bulk,
     required this.display,
+    required this.databases,
   });
   factory RuntimeSettings.preferences() {
     final maxCores = EngineSettings.systemCores;
@@ -46,6 +49,12 @@ class RuntimeSettings {
           decode: BulkAnalysisConfiguration.new,
         ),
       ),
+      databases: EvalDatabaseSettings(
+        PreferencesSectionStorage(
+          keys: EvalDatabaseConfiguration().values.keys.toSet(),
+          decode: EvalDatabaseConfiguration.new,
+        ),
+      ),
       display: BoardDisplaySettings(
         PreferencesSectionStorage(
           keys: BoardDisplayConfiguration().values.keys.toSet(),
@@ -57,11 +66,13 @@ class RuntimeSettings {
   final EngineSettings engine;
   final BulkAnalysisSettings bulk;
   final BoardDisplaySettings display;
+  final EvalDatabaseSettings databases;
   Future<void> load() => Future.wait(
     [
       engine.ensureLoaded(),
       bulk.ensureLoaded(),
       display.ensureLoaded(),
+      databases.ensureLoaded(),
     ].map((load) => load.catchError((Object _) {})),
   );
   bool _disposed = false;
@@ -71,5 +82,6 @@ class RuntimeSettings {
     engine.dispose();
     bulk.dispose();
     display.dispose();
+    databases.dispose();
   }
 }

@@ -24,7 +24,7 @@ import '../features/generation/models/generation_artifacts.dart';
 import '../features/documents/models/pgn_document.dart';
 import '../features/generation/models/generation_publication.dart';
 import '../chess_core/generation/build_tree_node.dart';
-import '../models/eval_database_settings.dart';
+import '../features/settings/controllers/eval_database_settings.dart';
 import '../chess_core/generation/trap_line_info.dart';
 import '../services/coherence_service.dart';
 import '../services/engine/engine_interrupt.dart';
@@ -74,6 +74,7 @@ class GenerationSessionController extends ChangeNotifier
     required GenerationArtifacts artifacts,
     required StockfishPool enginePool,
     required EngineLifecycle engineLifecycle,
+    required this._databases,
     TreeBuildService? treeBuilder,
   }) : _publication = publication,
        _artifacts = artifacts,
@@ -95,6 +96,7 @@ class GenerationSessionController extends ChangeNotifier
 
   final StockfishPool _enginePool;
   final EngineLifecycle _engineLifecycle;
+  final EvalDatabaseSettings _databases;
   final TreeBuildService buildService;
   final CoherenceService coherenceService = CoherenceService();
 
@@ -1348,6 +1350,10 @@ class GenerationSessionController extends ChangeNotifier
           ? 'An expectimax probe is already running.'
           : 'A build is running — wait for it to finish first.';
     }
+    final databases = _databases.state.committed;
+    if (databases == null) {
+      return 'Load evaluation settings before starting a probe.';
+    }
     final moves = target.moves;
     final fen = _probeRootFen(target);
     if (fen == null) {
@@ -1366,7 +1372,7 @@ class GenerationSessionController extends ChangeNotifier
     final config = target.probeConfig(
       base: base,
       fen: fen,
-      enableChessDbApi: EvalDatabaseSettings.instance.chessDbApiForExpectimax,
+      enableChessDbApi: databases.chessDbApiForExpectimax,
     );
     final request = GenerationRequest.expectimaxProbe(
       config: config,

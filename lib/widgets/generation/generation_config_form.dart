@@ -74,11 +74,6 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
   void initState() {
     super.initState();
     _bulkSettings.addListener(_refreshEngineSettings);
-    unawaited(
-      context.read<EvalDatabaseSettings>().ensureLoaded().catchError(
-        (Object _) {},
-      ),
-    );
     if (widget.initialConfig != null) {
       _applyInitialConfig(widget.initialConfig!);
     }

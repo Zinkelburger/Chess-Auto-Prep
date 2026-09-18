@@ -91,38 +91,7 @@ abstract class SectionSettingsOwner<C extends SectionConfiguration<C>>
   Future<void> reload() {
     final pending = _loading;
     if (pending != null) return pending;
-    final run = _queue(() async {
-      _emit(
-        SettingsState(
-          phase: SettingsPhase.loading,
-          committed: state.committed,
-          draft: state.draft,
-        ),
-      );
-      try {
-        final value = await _storage.read();
-        _emit(
-          SettingsState(
-            phase: _failedEdit == null
-                ? SettingsPhase.ready
-                : SettingsPhase.failed,
-            committed: value,
-            draft: _failedEdit?.apply(value),
-            error: _failedError,
-          ),
-        );
-      } catch (error) {
-        _emit(
-          SettingsState(
-            phase: SettingsPhase.failed,
-            committed: state.committed,
-            draft: state.draft,
-            error: error,
-          ),
-        );
-        rethrow;
-      }
-    });
+    final run = _queue(_reload);
     _loading = run;
     unawaited(
       run.then<void>(
@@ -135,6 +104,92 @@ abstract class SectionSettingsOwner<C extends SectionConfiguration<C>>
     return run;
   }
 
+  void _publish(C? value, {Object? error, SettingsPhase? phase}) {
+    _emit(
+      SettingsState(
+        phase:
+            phase ??
+            (error != null || _failedEdit != null
+                ? SettingsPhase.failed
+                : SettingsPhase.ready),
+        committed: value,
+        draft: value == null ? state.draft : _failedEdit?.apply(value),
+        error: error ?? _failedError,
+      ),
+    );
+  }
+
+  Future<void> _reload() async {
+    _publish(state.committed, phase: SettingsPhase.loading);
+    try {
+      _publish(await _storage.read());
+    } catch (error) {
+      _publish(state.committed, error: error);
+      rethrow;
+    }
+  }
+
+  void _discardFailed(Iterable<String> keys) {
+    _failedEdit = _failedEdit?.without(keys);
+    if (_failedEdit?.isEmpty ?? true) {
+      _failedEdit = null;
+      _failedError = null;
+    }
+  }
+
+  /// The caller retains files on failure and owns an explicit deletion retry.
+  /// Preferences are serialized here, not a cross-process CAS transaction.
+  @protected
+  Future<void> clearSelection({
+    required String pathKey,
+    required String expectedPath,
+    required String enabledKey,
+  }) => _queue(() async {
+    var value = state.committed;
+    try {
+      value = await _storage.read();
+      if (value.values[pathKey] == expectedPath) {
+        final clear = SettingsPatch<C>({enabledKey: false, pathKey: ''});
+        await _storage.write(clear);
+        value = await _storage.read();
+        if (clear.apply(value) != value) {
+          throw StateError('Preferences changed before deletion confirmation');
+        }
+      }
+      if (_failedEdit?.changes[pathKey] == expectedPath) {
+        _discardFailed([pathKey, enabledKey]);
+      }
+      _publish(value);
+    } catch (error) {
+      try {
+        value = await _storage.read();
+      } catch (_) {}
+      _publish(value, error: error);
+      rethrow;
+    }
+  });
+
+  @protected
+  Future<void> setSelectionEnabled({
+    required String pathKey,
+    required String enabledKey,
+    required bool enabled,
+  }) => _queue(() async {
+    C value;
+    try {
+      value = await _storage.read();
+    } catch (error) {
+      _publish(state.committed, error: error);
+      rethrow;
+    }
+    final path =
+        (_failedEdit?.changes[pathKey] ?? value.values[pathKey]) as String;
+    await _apply(
+      SettingsPatch<C>({pathKey: path, enabledKey: enabled && path.isNotEmpty}),
+      baseline: value,
+    );
+  });
+
   Future<void> _applyQueued(SettingsPatch<C> edit) {
     if (edit.isEmpty) return Future.value();
     if (isDisposed) {
@@ -144,7 +199,7 @@ abstract class SectionSettingsOwner<C extends SectionConfiguration<C>>
     return _queue(() => _apply(edit));
   }
 
-  Future<void> _apply(SettingsPatch<C> edit) async {
+  Future<void> _apply(SettingsPatch<C> edit, {C? baseline}) async {
     var committed = state.committed;
     var draft = committed == null ? null : edit.apply(committed);
     _emit(
@@ -155,7 +210,7 @@ abstract class SectionSettingsOwner<C extends SectionConfiguration<C>>
       ),
     );
     try {
-      committed = await _storage.read();
+      committed = baseline ?? await _storage.read();
       draft = edit.apply(committed);
       _emit(
         SettingsState(
@@ -170,21 +225,8 @@ abstract class SectionSettingsOwner<C extends SectionConfiguration<C>>
         throw StateError('Preferences changed before save confirmation');
       }
       _pendingEdits.remove(edit);
-      _failedEdit = _failedEdit?.without(edit.changes.keys);
-      if (_failedEdit?.isEmpty ?? true) {
-        _failedEdit = null;
-        _failedError = null;
-      }
-      _emit(
-        SettingsState(
-          phase: _failedEdit == null
-              ? SettingsPhase.ready
-              : SettingsPhase.failed,
-          committed: confirmed,
-          draft: _failedEdit?.apply(confirmed),
-          error: _failedError,
-        ),
-      );
+      _discardFailed(edit.changes.keys);
+      _publish(confirmed);
     } catch (error) {
       // A multi-key legacy save may have partially committed. Reconcile what
       // was actually stored; retain the edit for an explicit idempotent retry.
@@ -194,18 +236,13 @@ abstract class SectionSettingsOwner<C extends SectionConfiguration<C>>
       _pendingEdits.remove(edit);
       _failedEdit = _failedEdit?.followedBy(edit) ?? edit;
       _failedError = error;
-      _emit(
-        SettingsState(
-          phase: SettingsPhase.failed,
-          committed: committed,
-          draft: committed == null ? draft : _failedEdit!.apply(committed),
-          error: error,
-        ),
-      );
+      _publish(committed, error: error);
       rethrow;
     }
   }
 
-  Future<void> retry() =>
-      _failedEdit == null ? reload() : _applyQueued(_failedEdit!);
+  Future<void> retry() => _queue(() {
+    final edit = _failedEdit;
+    return edit == null ? _reload() : _apply(edit);
+  });
 }

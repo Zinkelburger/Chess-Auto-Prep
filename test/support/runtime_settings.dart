@@ -1,3 +1,7 @@
+import 'package:chess_auto_prep/features/settings/controllers/eval_database_settings.dart';
+import 'package:chess_auto_prep/features/settings/models/eval_database_configuration.dart';
+import 'package:chess_auto_prep/services/eval/cdb_snapshot_download.dart';
+import 'package:chess_auto_prep/services/eval/lichess_eval_controller.dart';
 import 'package:chess_auto_prep/app/engine_runtime.dart';
 import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
 import 'package:chess_auto_prep/services/engine/board_engine.dart';
@@ -52,6 +56,9 @@ RuntimeSettings testRuntimeSettings({Map<String, Object?> values = const {}}) =>
       bulk: BulkAnalysisSettings(
         MemorySettingsSection(BulkAnalysisConfiguration(values)),
       ),
+      databases: EvalDatabaseSettings(
+        MemorySettingsSection(EvalDatabaseConfiguration(values)),
+      ),
       display: BoardDisplaySettings(
         MemorySettingsSection(BoardDisplayConfiguration(values)),
       ),
@@ -72,6 +79,16 @@ Future<void> pumpRuntimeWidget(
         Provider<GenerationLease>.value(value: testEngines(settings).lease),
         ChangeNotifierProvider<EngineLifecycle>.value(
           value: testEngines(settings).lifecycle,
+        ),
+        ChangeNotifierProvider<EvalDatabaseSettings>.value(
+          value: settings.databases,
+        ),
+        ChangeNotifierProvider(
+          create: (_) =>
+              CdbSnapshotDownloadController(settings: settings.databases),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => LichessEvalController(settings: settings.databases),
         ),
         ChangeNotifierProvider<EngineSettings>.value(value: settings.engine),
         ChangeNotifierProvider<BulkAnalysisSettings>.value(

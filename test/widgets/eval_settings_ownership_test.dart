@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:chess_auto_prep/features/settings/controllers/eval_database_settings.dart';
 import 'package:chess_auto_prep/features/settings/models/eval_database_configuration.dart';
 import 'package:chess_auto_prep/features/settings/models/section_configuration.dart';
+import 'package:chess_auto_prep/features/settings/widgets/settings_section_status.dart';
 import 'package:chess_auto_prep/features/settings/repositories/settings_section_storage.dart';
 import 'package:chess_auto_prep/services/eval/cdb_snapshot_download.dart';
 import 'package:chess_auto_prep/services/eval/lichess_eval_controller.dart';
+import 'package:chess_auto_prep/services/eval/lichess_eval_source.dart';
 import 'package:chess_auto_prep/widgets/eval_database_settings_panel.dart';
 import 'package:chess_auto_prep/widgets/lichess_eval_download_card.dart';
 import 'package:flutter/material.dart';
@@ -38,15 +40,40 @@ class _Storage implements SettingsSectionStorage<EvalDatabaseConfiguration> {
 class _ReadyLichess extends LichessEvalController {
   _ReadyLichess(EvalDatabaseSettings settings) : super(settings: settings);
   int starts = 0;
+  int reads = 0;
+  bool failRead = false;
   @override
-  LichessEvalPhase get phase => LichessEvalPhase.complete;
+  LichessEvalPhase get phase =>
+      failRead ? LichessEvalPhase.failed : LichessEvalPhase.complete;
+  @override
+  String? get error => failRead ? 'Metadata unavailable' : null;
   @override
   int get storedPositions => 9;
   @override
-  Future<void> loadSaved() async {}
+  Future<void> loadSaved() async {
+    reads++;
+    if (failRead) throw StateError('Metadata unavailable');
+    notifyListeners();
+  }
+
   @override
   Future<void> start() async {
     starts++;
+  }
+}
+
+class _PausedLichess extends _ReadyLichess {
+  _PausedLichess(super.settings);
+  final probe = Completer<LichessEvalSourceInfo>();
+  int probes = 0;
+  @override
+  LichessEvalPhase get phase => LichessEvalPhase.paused;
+  @override
+  String? get parentDirectory => '/saved/download';
+  @override
+  Future<LichessEvalSourceInfo> refreshSource() {
+    probes++;
+    return probe.future;
   }
 }
 
@@ -67,13 +94,18 @@ void main() {
             value: download,
           ),
         ],
-        child: const MaterialApp(
+        child: MaterialApp(
           home: Scaffold(
             body: SingleChildScrollView(
               child: Column(
                 children: [
-                  EvalDatabaseSettingsPanel(libraryAvailable: true),
-                  EvalDatabaseSettingsPanel(libraryAvailable: true),
+                  SettingsSectionStatus(
+                    owner: settings,
+                    policy:
+                        'Saved preferences apply to new builds and lookups.',
+                  ),
+                  const EvalDatabaseSettingsPanel(libraryAvailable: true),
+                  const EvalDatabaseSettingsPanel(libraryAvailable: true),
                 ],
               ),
             ),
@@ -87,7 +119,10 @@ void main() {
   testWidgets(
     'two panels share failed draft, committed values and explicit retry',
     (tester) async {
-      final storage = _Storage();
+      final storage = _Storage()
+        ..value = EvalDatabaseConfiguration({
+          'eval.cdbdirect.path': '/saved/cdb',
+        });
       final settings = EvalDatabaseSettings(storage);
       addTearDown(settings.dispose);
       await settings.ensureLoaded();
@@ -111,7 +146,7 @@ void main() {
         find.text(
           'Preferences were not saved. Your changes are kept for retry.',
         ),
-        findsNWidgets(2),
+        findsOneWidget,
       );
       storage.failWrite = false;
       await tester.tap(find.text('Retry').first);
@@ -132,14 +167,15 @@ void main() {
         ..failRead = true;
       final settings = EvalDatabaseSettings(storage);
       addTearDown(settings.dispose);
+      unawaited(settings.ensureLoaded().catchError((Object _) {}));
       await panels(tester, settings);
       expect(find.byType(Switch), findsNothing);
-      expect(find.text('Loading saved preferences…'), findsNWidgets(2));
+      expect(find.text('Loading saved preferences…'), findsOneWidget);
       storage.readGate!.complete();
       await tester.pumpAndSettle();
       expect(
         find.text('Saved preferences could not be loaded.'),
-        findsNWidgets(2),
+        findsOneWidget,
       );
       expect(find.byType(Switch), findsNothing);
       storage.failRead = false;
@@ -151,6 +187,111 @@ void main() {
         hasLength(2),
       );
       expect(storage.writes, 0);
+    },
+  );
+
+  testWidgets('download metadata retry reads without starting a transfer', (
+    tester,
+  ) async {
+    final settings = EvalDatabaseSettings(_Storage());
+    final download = _ReadyLichess(settings)..failRead = true;
+    addTearDown(download.dispose);
+    addTearDown(settings.dispose);
+    await settings.ensureLoaded();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ChangeNotifierProvider<LichessEvalController>.value(
+            value: download,
+            child: const LichessEvalCard(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(download.reads, 1);
+    expect(find.text('Metadata unavailable'), findsOneWidget);
+    expect(find.text('Resume'), findsNothing);
+    download.failRead = false;
+    await tester.tap(find.text('Reload saved download'));
+    await tester.pumpAndSettle();
+    expect(download.reads, 2);
+    expect(download.starts, 0);
+    expect(find.text('9 positions ready'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('paused download without metadata offers explicit setup', (
+    tester,
+  ) async {
+    final settings = EvalDatabaseSettings(_Storage());
+    final download = _PausedLichess(settings);
+    addTearDown(download.dispose);
+    addTearDown(settings.dispose);
+    await settings.ensureLoaded();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ChangeNotifierProvider<LichessEvalController>.value(
+            value: download,
+            child: const LichessEvalCard(),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('Continue setup'), findsOneWidget);
+    expect(find.text('Resume'), findsNothing);
+    expect(download.probes, 0);
+    await tester.tap(find.text('Continue setup'));
+    await tester.pump();
+    expect(find.text('Download the Lichess evaluations'), findsOneWidget);
+    expect(download.probes, 1);
+    expect(download.starts, 0);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    download.probe.complete(LichessEvalSourceInfo.fallback);
+    await tester.pump();
+    expect(download.starts, 0);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'cards restore a replaced provider once and stop observing the old owner',
+    (tester) async {
+      final settings = EvalDatabaseSettings(_Storage());
+      final first = _ReadyLichess(settings);
+      final second = _ReadyLichess(settings);
+      addTearDown(settings.dispose);
+      addTearDown(first.dispose);
+      addTearDown(second.dispose);
+      Future<void> mount(LichessEvalController owner) => tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ChangeNotifierProvider<LichessEvalController>.value(
+              value: owner,
+              child: const LichessEvalCard(),
+            ),
+          ),
+        ),
+      );
+      await mount(first);
+      await tester.pump();
+      expect(first.reads, 1);
+      first.notifyListeners();
+      await tester.pump();
+      expect(first.reads, 1);
+      await mount(second);
+      await tester.pump();
+      expect(second.reads, 1);
+      first.failRead = true;
+      first.notifyListeners();
+      await tester.pump();
+      expect(find.text('9 positions ready'), findsOneWidget);
+      expect(find.text('Metadata unavailable'), findsNothing);
+      expect(first.reads, 1);
+      expect(second.reads, 1);
+      expect(tester.takeException(), isNull);
     },
   );
 
@@ -170,7 +311,20 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(body: LichessEvalCard(controller: download)),
+          home: Scaffold(
+            body: Column(
+              children: [
+                SettingsSectionStatus(
+                  owner: settings,
+                  policy: 'Saved preferences apply to new builds and lookups.',
+                ),
+                ChangeNotifierProvider<LichessEvalController>.value(
+                  value: download,
+                  child: const LichessEvalCard(),
+                ),
+              ],
+            ),
+          ),
         ),
       );
       await tester.pumpAndSettle();

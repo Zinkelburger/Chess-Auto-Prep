@@ -28,6 +28,7 @@ void main() {
     'settings stay in the overlay and apply to both generation actions',
     (tester) async {
       final gen = GenerationSessionController(
+        databases: (_engineFixtureSettings ??= testRuntimeSettings()).databases,
         jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
@@ -146,6 +147,7 @@ void main() {
     tester,
   ) async {
     final gen = GenerationSessionController(
+      databases: (_engineFixtureSettings ??= testRuntimeSettings()).databases,
       jobs: JobManager(),
       enginePool: engines.pool,
       engineLifecycle: engines.lifecycle,
@@ -212,6 +214,7 @@ void main() {
     tester,
   ) async {
     final gen = GenerationSessionController(
+      databases: (_engineFixtureSettings ??= testRuntimeSettings()).databases,
       jobs: JobManager(),
       enginePool: engines.pool,
       engineLifecycle: engines.lifecycle,

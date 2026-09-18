@@ -24,6 +24,7 @@ import '../features/settings/controllers/board_display_settings.dart';
 import '../features/settings/controllers/engine_settings.dart';
 import '../features/settings/controllers/bulk_analysis_settings.dart';
 import '../features/settings/controllers/eval_database_settings.dart';
+import '../features/settings/models/settings_state.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
@@ -544,7 +545,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       listenable: context.read<BoardDisplaySettings>(),
       builder: (context, _) {
         final display = context.read<BoardDisplaySettings>();
-        final databases = context.read<EvalDatabaseSettings>();
         return SettingsGroup(
           title: 'Board and moves',
           icon: Icons.grid_on_outlined,
@@ -658,16 +658,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildResetButton() {
+    final databases = context.watch<EvalDatabaseSettings>();
     return SettingsGroup(
       title: 'Reset analysis, board and data preferences',
       icon: Icons.restore,
       subtitle:
           'Reset engine, analysis, display and database preferences. Your accounts, games and repertoires are kept.',
       children: [
-        SettingsSectionStatus(
-          owner: context.watch<EvalDatabaseSettings>(),
-          policy: 'Database preferences are saved.',
-        ),
+        if (databases.state.phase == SettingsPhase.failed)
+          SettingsSectionStatus(
+            owner: databases,
+            policy: 'Database preferences are saved.',
+          ),
         Padding(
           padding: const EdgeInsets.all(20),
           child: Align(

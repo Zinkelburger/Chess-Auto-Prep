@@ -13,7 +13,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../features/settings/widgets/settings_section_status.dart';
 import '../utils/app_messages.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -28,50 +27,28 @@ import 'lichess_eval_download_dialog.dart';
 import 'storage_destination_picker.dart';
 
 class LichessEvalCard extends StatefulWidget {
-  const LichessEvalCard({super.key, this.controller});
-
-  final LichessEvalController? controller;
+  const LichessEvalCard({super.key});
 
   @override
   State<LichessEvalCard> createState() => _LichessEvalCardState();
 }
 
 class _LichessEvalCardState extends State<LichessEvalCard> {
-  late LichessEvalController _controller;
-  bool _loadFailed = false;
+  LichessEvalController get _controller =>
+      context.read<LichessEvalController>();
+  LichessEvalController? _restoredOwner;
 
   @override
-  void initState() {
-    super.initState();
-    _controller = widget.controller ?? context.read<LichessEvalController>();
-    _controller.addListener(_onChanged);
-    // Reads disk only — nothing starts downloading behind the user's back.
-    unawaited(_loadSaved());
-  }
-
-  @override
-  void didUpdateWidget(covariant LichessEvalCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    final next = widget.controller ?? context.read<LichessEvalController>();
-    if (identical(next, _controller)) return;
-    _controller.removeListener(_onChanged);
-    _controller = next;
-    _controller.addListener(_onChanged);
-    unawaited(_loadSaved());
-  }
-
-  Future<void> _loadSaved() async {
-    final owner = _controller;
-    try {
-      await owner.loadSaved();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final owner = context.watch<LichessEvalController>();
+    if (identical(owner, _restoredOwner)) return;
+    _restoredOwner = owner;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && identical(owner, _controller)) {
-        setState(() => _loadFailed = false);
+        unawaited(_run(owner.loadSaved));
       }
-    } catch (_) {
-      if (mounted && identical(owner, _controller)) {
-        setState(() => _loadFailed = true);
-      }
-    }
+    });
   }
 
   Future<void> _run(Future<void> Function() operation) async {
@@ -79,33 +56,18 @@ class _LichessEvalCardState extends State<LichessEvalCard> {
     try {
       await operation();
     } catch (error) {
-      if (mounted)
-        showAppSnackBar(
-          context,
-          'Database operation failed: $error',
-          isError: true,
-        );
+      if (mounted) {
+        showAppSnackBar(context, '$error', isError: true);
+      }
     }
   }
 
-  @override
-  void dispose() {
-    _controller.removeListener(_onChanged);
-    super.dispose();
-  }
-
-  void _onChanged() {
-    if (mounted) setState(() {});
-  }
-
   Future<void> _startDownload() async {
-    final request = await showLichessDownloadDialog(
-      context,
-      controller: _controller,
-    );
-    if (!mounted || request == null) return;
-    await _controller.prepare(info: request.info, parentDir: request.parentDir);
-    if (mounted) await _controller.start();
+    final owner = _controller;
+    final request = await showLichessDownloadDialog(context, controller: owner);
+    if (!mounted || !identical(owner, _controller) || request == null) return;
+    await owner.prepare(info: request.info, parentDir: request.parentDir);
+    if (mounted && identical(owner, _controller)) await owner.start();
   }
 
   Future<void> _reveal() async {
@@ -120,6 +82,8 @@ class _LichessEvalCardState extends State<LichessEvalCard> {
   }
 
   Future<void> _confirmDelete({required bool everything}) async {
+    final owner = _controller;
+    final directory = owner.storeDirectory;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -132,7 +96,7 @@ class _LichessEvalCardState extends State<LichessEvalCard> {
           everything
               ? 'Removes the built store and anything left of the download. '
                     'Getting it back means downloading '
-                    '${formatBytes(_controller.info?.bytes ?? kLichessEvalFallbackBytes)} '
+                    '${formatBytes(owner.info?.bytes ?? kLichessEvalFallbackBytes)} '
                     'again.'
               : 'Removes the compressed download and keeps the store the app '
                     'actually reads. Only needed again to rebuild.',
@@ -149,51 +113,37 @@ class _LichessEvalCardState extends State<LichessEvalCard> {
         ],
       ),
     );
-    if (!mounted || confirmed != true) return;
+    if (!mounted ||
+        !identical(owner, _controller) ||
+        confirmed != true ||
+        owner.storeDirectory != directory) {
+      return;
+    }
     if (everything) {
-      await _controller.deleteEverything();
+      await owner.deleteEverything();
     } else {
-      await _controller.deleteArchive();
+      await owner.deleteArchive();
     }
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainer,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.divider),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SettingsSectionStatus(
-            owner: _controller.settings,
-            policy: 'Database activation uses saved preferences.',
-          ),
-          if (_loadFailed)
-            TextButton(
-              onPressed: () {
-                if (mounted) unawaited(_loadSaved());
-              },
-              child: const Text('Could not read downloaded files. Retry'),
-            )
-          else
-            switch (_controller.phase) {
-              LichessEvalPhase.idle || LichessEvalPhase.probing => _idleCard(),
-              LichessEvalPhase.downloading ||
-              LichessEvalPhase.importing ||
-              LichessEvalPhase.paused ||
-              LichessEvalPhase.failed => _progressCard(),
-              LichessEvalPhase.complete => _completeCard(),
-            },
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: AppColors.surfaceContainer,
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: AppColors.divider),
+    ),
+    child: switch (_controller.phase) {
+      LichessEvalPhase.idle || LichessEvalPhase.probing => _idleCard(),
+      LichessEvalPhase.downloading ||
+      LichessEvalPhase.importing ||
+      LichessEvalPhase.paused ||
+      LichessEvalPhase.failed => _progressCard(),
+      LichessEvalPhase.complete => _completeCard(),
+    },
+  );
 
   Widget _idleCard() {
     return Column(
@@ -219,7 +169,9 @@ class _LichessEvalCardState extends State<LichessEvalCard> {
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             FilledButton.icon(
-              onPressed: () => unawaited(_run(_startDownload)),
+              onPressed: _controller.isBusy
+                  ? null
+                  : () => unawaited(_run(_startDownload)),
               icon: const Icon(Icons.download_outlined, size: 18),
               label: const Text('Download evaluations…'),
             ),
@@ -266,17 +218,34 @@ class _LichessEvalCardState extends State<LichessEvalCard> {
           spacing: 8,
           runSpacing: 8,
           children: [
+            if (phase == LichessEvalPhase.failed)
+              TextButton(
+                onPressed: _controller.isBusy
+                    ? null
+                    : () => unawaited(_run(_controller.loadSaved)),
+                child: const Text('Reload saved download'),
+              ),
             if (running)
               OutlinedButton.icon(
-                onPressed: () => unawaited(_run(() => _controller.pause())),
+                onPressed: () => unawaited(_run(_controller.pause)),
                 icon: const Icon(Icons.pause, size: 16),
                 label: const Text('Pause'),
               )
-            else
+            else if (_controller.parentDirectory != null)
               FilledButton.icon(
-                onPressed: () => unawaited(_run(() => _controller.start())),
+                onPressed: _controller.isBusy
+                    ? null
+                    : () => unawaited(
+                        _run(
+                          _controller.info == null
+                              ? _startDownload
+                              : _controller.start,
+                        ),
+                      ),
                 icon: const Icon(Icons.play_arrow, size: 16),
-                label: const Text('Resume'),
+                label: Text(
+                  _controller.info == null ? 'Continue setup' : 'Resume',
+                ),
               ),
             OutlinedButton.icon(
               onPressed: () => unawaited(_reveal()),
@@ -284,8 +253,10 @@ class _LichessEvalCardState extends State<LichessEvalCard> {
               label: const Text('Open folder'),
             ),
             OutlinedButton.icon(
-              onPressed: () =>
-                  unawaited(_run(() => _confirmDelete(everything: true))),
+              onPressed: _controller.isBusy
+                  ? null
+                  : () =>
+                        unawaited(_run(() => _confirmDelete(everything: true))),
               icon: const Icon(Icons.delete_outline, size: 16),
               label: const Text('Delete files'),
             ),
@@ -358,21 +329,28 @@ class _LichessEvalCardState extends State<LichessEvalCard> {
             ),
             if (archiveOnDisk)
               OutlinedButton.icon(
-                onPressed: () =>
-                    unawaited(_run(() => _confirmDelete(everything: false))),
+                onPressed: _controller.isBusy
+                    ? null
+                    : () => unawaited(
+                        _run(() => _confirmDelete(everything: false)),
+                      ),
                 icon: const Icon(Icons.cleaning_services_outlined, size: 16),
                 label: Text(
                   'Free ${formatBytes(_controller.archiveBytesDone)}',
                 ),
               ),
             OutlinedButton.icon(
-              onPressed: () => unawaited(_run(_startDownload)),
+              onPressed: _controller.isBusy
+                  ? null
+                  : () => unawaited(_run(_startDownload)),
               icon: const Icon(Icons.refresh, size: 16),
               label: const Text('Rebuild from a newer file…'),
             ),
             OutlinedButton.icon(
-              onPressed: () =>
-                  unawaited(_run(() => _confirmDelete(everything: true))),
+              onPressed: _controller.isBusy
+                  ? null
+                  : () =>
+                        unawaited(_run(() => _confirmDelete(everything: true))),
               icon: const Icon(Icons.delete_outline, size: 16),
               label: const Text('Delete'),
             ),

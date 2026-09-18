@@ -15,7 +15,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../features/settings/widgets/settings_section_status.dart';
+import '../utils/app_messages.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -71,7 +71,8 @@ class EvalDatabaseSettingsPanel extends StatefulWidget {
 
 class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
   late final EvalDatabaseSettings _settings;
-  late final CdbSnapshotDownloadController _download;
+  CdbSnapshotDownloadController get _download =>
+      context.read<CdbSnapshotDownloadController>();
   final TextEditingController _pathCtrl = TextEditingController();
 
   CdbDirectDirValidation? _dirValidation;
@@ -82,10 +83,7 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
   void initState() {
     super.initState();
     _settings = context.read<EvalDatabaseSettings>();
-    _download = context.read<CdbSnapshotDownloadController>();
-    unawaited(_settings.ensureLoaded().catchError((Object _) {}));
     _settings.addListener(_onSettingsChanged);
-    _download.addListener(_onDownloadChanged);
     _pathCtrl.text = _settings.editing.cdbDirectPath;
     if (widget.libraryAvailable && _settings.editing.cdbDirectPath.isNotEmpty) {
       unawaited(_validatePath(_settings.editing.cdbDirectPath));
@@ -95,7 +93,6 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
   @override
   void dispose() {
     _settings.removeListener(_onSettingsChanged);
-    _download.removeListener(_onDownloadChanged);
     _pathCtrl.dispose();
     super.dispose();
   }
@@ -105,10 +102,6 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
       _pathCtrl.text = _settings.editing.cdbDirectPath;
       unawaited(_validatePath(_settings.editing.cdbDirectPath));
     }
-    if (mounted) setState(() {});
-  }
-
-  void _onDownloadChanged() {
     if (mounted) setState(() {});
   }
 
@@ -133,21 +126,15 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
 
   Future<void> _pickDirectory() async {
     if (!mounted || !widget.libraryAvailable) return;
+    final download = _download;
     final result = await FilePicker.getDirectoryPath(
       dialogTitle: 'Select ChessDB data directory',
     );
-    if (!mounted || result == null) return;
+    if (!mounted || result == null || !identical(download, _download)) return;
     try {
-      await _settings.setCdbDirectPath(result);
-      if (!mounted) return;
-      await _validatePath(result);
-      if (mounted &&
-          _settings.editing.cdbDirectPath == result &&
-          _dirValidation?.isValid == true) {
-        await _settings.setEnableCdbDirect(true);
-      }
-    } catch (_) {
-      // The shared settings status retains the failed edit and offers Retry.
+      await download.activateDirectory(result);
+    } catch (error) {
+      if (mounted) showAppSnackBar(context, '$error', isError: true);
     }
   }
 
@@ -163,16 +150,15 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final status = SettingsSectionStatus(
-      owner: _settings,
-      policy: 'Saved preferences apply to new builds and lookups.',
-    );
-    if (_settings.state.committed == null) return status;
-    final available = widget.libraryAvailable && !_settings.state.busy;
+    context.watch<CdbSnapshotDownloadController>();
+    if (_settings.state.committed == null) return const SizedBox.shrink();
+    final available =
+        widget.libraryAvailable &&
+        !_settings.state.busy &&
+        !_download.isRunning;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        status,
         AppSwitch(
           label: 'Use offline ChessDB',
           value: _settings.editing.enableCdbDirect,
@@ -295,9 +281,9 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
                     ? () {
                         if (!mounted) return;
                         unawaited(
-                          _settings
-                              .setCdbDirectPath('')
-                              .catchError((Object _) {}),
+                          _settings.clearCdbSelection().catchError(
+                            (Object _) {},
+                          ),
                         );
                       }
                     : null,

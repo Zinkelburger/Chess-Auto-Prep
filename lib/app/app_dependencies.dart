@@ -1,3 +1,6 @@
+import '../features/settings/controllers/eval_database_settings.dart';
+import '../services/eval/cdb_snapshot_download.dart';
+import '../services/eval/lichess_eval_controller.dart';
 import 'engine_runtime.dart';
 import '../services/engine/board_engine.dart';
 import '../services/engine/engine_lifecycle.dart';
@@ -77,6 +80,8 @@ class _AppDependenciesState extends State<AppDependencies> {
   late final _runtime = widget.runtimeSettings ?? RuntimeSettings.preferences();
   late final _engines =
       widget.engineRuntime ?? EngineRuntime(settings: _runtime.engine);
+  late final _cdb = CdbSnapshotDownloadController(settings: _runtime.databases);
+  late final _lichess = LichessEvalController(settings: _runtime.databases);
   @override
   void initState() {
     super.initState();
@@ -94,7 +99,15 @@ class _AppDependenciesState extends State<AppDependencies> {
   void dispose() {
     _trainingSettings.dispose();
     _engines.dispose();
-    _runtime.dispose();
+    _cdb.dispose();
+    _lichess.dispose();
+    // Admitted activation writes settle before their settings owner is disposed.
+    unawaited(
+      Future.wait([
+        _cdb.close(),
+        _lichess.close(),
+      ]).whenComplete(_runtime.dispose),
+    );
     super.dispose();
   }
 
@@ -154,6 +167,11 @@ class _AppDependenciesState extends State<AppDependencies> {
       Provider<EngineSearchBudget>.value(value: _engines.budget),
       ChangeNotifierProvider<EngineLifecycle>.value(value: _engines.lifecycle),
       Provider<GenerationLease>.value(value: _engines.lease),
+      ChangeNotifierProvider<EvalDatabaseSettings>.value(
+        value: _runtime.databases,
+      ),
+      ChangeNotifierProvider<CdbSnapshotDownloadController>.value(value: _cdb),
+      ChangeNotifierProvider<LichessEvalController>.value(value: _lichess),
       ChangeNotifierProvider<EngineSettings>.value(value: _runtime.engine),
       ChangeNotifierProvider<BulkAnalysisSettings>.value(value: _runtime.bulk),
       ChangeNotifierProvider<BoardDisplaySettings>.value(

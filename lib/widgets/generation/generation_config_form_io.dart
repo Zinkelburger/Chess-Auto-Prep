@@ -87,7 +87,7 @@ mixin _GenerationConfigIo
     if (_buildMode == BuildMode.maiaDbExplore &&
         !_evalSources.enableLocalChessDb &&
         !_evalSources.enableChessDbApi &&
-        !databases.enableCdbDirect) {
+        !databases.committed.enableCdbDirect) {
       setState(() => _showEvalSources = true);
       return '"Database win rates" needs at least one evaluation database. '
           'Expand "Evaluation databases" at the bottom of the form and '
@@ -95,7 +95,7 @@ mixin _GenerationConfigIo
     }
     if (_buildMode == BuildMode.chessDbBook &&
         !_evalSources.enableChessDbApi &&
-        !databases.enableCdbDirect) {
+        !databases.committed.enableCdbDirect) {
       setState(() => _showEvalSources = true);
       return 'The ChessDB mainline book needs ChessDB itself. Expand '
           '"Evaluation databases" at the bottom of the form and enable the '
@@ -240,7 +240,7 @@ mixin _GenerationConfigIo
               selectionMode: SelectionMode.expectimax,
               engineTailPlies: 0,
             ),
-      databases: context.read<EvalDatabaseSettings>(),
+      databases: context.read<EvalDatabaseSettings>().committed,
       cdbDirectAvailable: _cdbDirectAvailable,
       engineEvalDepth: evalDepth,
     );

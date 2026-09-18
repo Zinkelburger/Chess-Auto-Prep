@@ -53,6 +53,7 @@ BuildTree _tree(String rootFen, {String childFen = _afterE4}) {
 class _CapturingGeneration extends GenerationSessionController {
   _CapturingGeneration(MemoryGenerationArtifacts storage)
     : super(
+        databases: (_engineFixtureSettings ??= testRuntimeSettings()).databases,
         jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
@@ -99,8 +100,9 @@ RuntimeSettings? _engineFixtureSettings;
 EngineRuntime get engines =>
     testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
-  setUp(() {
-    _engineFixtureSettings = null;
+  setUp(() async {
+    _engineFixtureSettings = testRuntimeSettings();
+    await _engineFixtureSettings!.databases.ensureLoaded();
     addTearDown(() => _engineFixtureSettings?.dispose());
   });
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -123,6 +125,7 @@ void main() {
       depth: 14,
     );
     final controller = GenerationSessionController(
+      databases: (_engineFixtureSettings ??= testRuntimeSettings()).databases,
       jobs: JobManager(),
       artifacts: GenerationArtifacts(storage),
       publication: generationPublicationFixture(),
@@ -141,6 +144,7 @@ void main() {
     final lifecycle = _PvLifecycle()..gate = Completer<void>();
     final pool = FakeStockfishPool();
     final controller = GenerationSessionController(
+      databases: (_engineFixtureSettings ??= testRuntimeSettings()).databases,
       jobs: JobManager(),
       artifacts: GenerationArtifacts(storage),
       publication: generationPublicationFixture(),
@@ -195,6 +199,7 @@ void main() {
         _tree(_afterE4C5, childFen: 'probe-child'),
       ]);
       final controller = GenerationSessionController(
+        databases: (_engineFixtureSettings ??= testRuntimeSettings()).databases,
         jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
@@ -220,6 +225,7 @@ void main() {
         _tree(_afterE4, childFen: 'other-child'),
       ]);
       final controller = GenerationSessionController(
+        databases: (_engineFixtureSettings ??= testRuntimeSettings()).databases,
         jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
@@ -236,6 +242,7 @@ void main() {
 
     test('a repertoire with nothing saved ends with no tree', () async {
       final controller = GenerationSessionController(
+        databases: (_engineFixtureSettings ??= testRuntimeSettings()).databases,
         jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
@@ -256,6 +263,7 @@ void main() {
         _tree(_afterE4C5, childFen: 'probe-child'),
       ]);
       final controller = GenerationSessionController(
+        databases: (_engineFixtureSettings ??= testRuntimeSettings()).databases,
         jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
@@ -273,6 +281,48 @@ void main() {
   });
 
   group('computeExpectimax', () {
+    test('unknown settings refuse before any artifact read or build', () async {
+      final previous = _engineFixtureSettings!;
+      addTearDown(previous.dispose);
+      _engineFixtureSettings = testRuntimeSettings();
+      var reads = 0;
+      storage.beforeRead = (_) async {
+        reads++;
+      };
+      final controller = _CapturingGeneration(storage);
+      addTearDown(controller.dispose);
+      expect(
+        await controller.computeExpectimax(_pvTarget),
+        contains('settings'),
+      );
+      expect(reads, 0);
+      expect(controller.request, isNull);
+    });
+
+    test(
+      'probe captures committed API policy before its artifact await',
+      () async {
+        final entered = Completer<void>();
+        final release = Completer<void>();
+        storage.beforeRead = (_) async {
+          if (!entered.isCompleted) entered.complete();
+          await release.future;
+        };
+        final controller = _CapturingGeneration(storage);
+        addTearDown(controller.dispose);
+        final pending = controller.computeExpectimax(_pvTarget);
+        await entered.future;
+        await _engineFixtureSettings!.databases.setChessDbApiForExpectimax(
+          true,
+        );
+        release.complete();
+        expect(await pending, isNull);
+        expect(controller.request!.config.enableChessDbApi, isFalse);
+        expect(await controller.computeExpectimax(_pvTarget), isNull);
+        expect(controller.request!.config.enableChessDbApi, isTrue);
+      },
+    );
+
     test(
       'loads existing analysis before the first position generation',
       () async {
@@ -331,6 +381,7 @@ void main() {
     );
     test('refuses moves it cannot play from the start', () async {
       final controller = GenerationSessionController(
+        databases: (_engineFixtureSettings ??= testRuntimeSettings()).databases,
         jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,

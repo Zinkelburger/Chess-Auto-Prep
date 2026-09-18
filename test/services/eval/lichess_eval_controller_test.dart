@@ -85,7 +85,8 @@ void main() {
     if (await tmp.exists()) await tmp.delete(recursive: true);
   });
 
-  LichessEvalController controller() => LichessEvalController(settings: settings,
+  LichessEvalController controller() => LichessEvalController(
+    settings: settings,
     source: LichessEvalSource(
       client: MockClient((request) async {
         if (request.method == 'HEAD') {
@@ -131,33 +132,36 @@ void main() {
     await store.close();
 
     // And the setting now points at it, switched on.
-    expect(settings.lichessEvalsPath, c.storeDirectory);
-    expect(settings.enableLichessEvals, isTrue);
+    expect(settings.committed.lichessEvalsPath, c.storeDirectory);
+    expect(settings.committed.enableLichessEvals, isTrue);
     c.dispose();
   });
 
-  test('activation failure retains imported store and retries only settings', () async {
-    final c = controller();
-    final info = await c.refreshSource();
-    await c.prepare(info: info, parentDir: tmp.path);
-    settingsStorage.failure = StateError('settings unavailable');
+  test(
+    'activation failure retains imported store and retries only settings',
+    () async {
+      final c = controller();
+      final info = await c.refreshSource();
+      await c.prepare(info: info, parentDir: tmp.path);
+      settingsStorage.failure = StateError('settings unavailable');
 
-    await c.start();
+      await c.start();
 
-    expect(c.phase, LichessEvalPhase.complete);
-    expect(c.isReady, isTrue);
-    expect(c.error, isNull);
-    expect(settings.state.error, isNotNull);
-    expect(settings.enableLichessEvals, isFalse);
-    expect(server.ranges, [null]);
-    settingsStorage.failure = null;
-    await settings.retry();
-    expect(settings.enableLichessEvals, isTrue);
-    expect(settings.lichessEvalsPath, c.storeDirectory);
-    expect(server.ranges, [null]);
-    await c.close();
-    c.dispose();
-  });
+      expect(c.phase, LichessEvalPhase.complete);
+      expect(c.isReady, isTrue);
+      expect(c.error, isNull);
+      expect(settings.state.error, isNotNull);
+      expect(settings.committed.enableLichessEvals, isFalse);
+      expect(server.ranges, [null]);
+      settingsStorage.failure = null;
+      await settings.retry();
+      expect(settings.committed.enableLichessEvals, isTrue);
+      expect(settings.committed.lichessEvalsPath, c.storeDirectory);
+      expect(server.ranges, [null]);
+      await c.close();
+      c.dispose();
+    },
+  );
 
   test('a half-finished download resumes rather than restarting', () async {
     final c = controller();
@@ -223,8 +227,8 @@ void main() {
     expect(await Directory(directory).exists(), isFalse);
     expect(c.phase, LichessEvalPhase.idle);
     expect(c.isReady, isFalse);
-    expect(settings.enableLichessEvals, isFalse);
-    expect(settings.lichessEvalsPath, '');
+    expect(settings.committed.enableLichessEvals, isFalse);
+    expect(settings.committed.lichessEvalsPath, '');
     c.dispose();
   });
 
@@ -233,14 +237,16 @@ void main() {
     final release = Completer<void>();
     final c = LichessEvalController(
       settings: settings,
-      source: LichessEvalSource(client: MockClient((request) async {
-        if (request.method == 'HEAD') {
-          requested.complete();
-          await release.future;
-          return http.Response('', 200, headers: {'content-length': '100'});
-        }
-        return http.Response('', 200);
-      })),
+      source: LichessEvalSource(
+        client: MockClient((request) async {
+          if (request.method == 'HEAD') {
+            requested.complete();
+            await release.future;
+            return http.Response('', 200, headers: {'content-length': '100'});
+          }
+          return http.Response('', 200);
+        }),
+      ),
     );
     final probing = c.refreshSource();
     await requested.future;
@@ -253,6 +259,35 @@ void main() {
     expect(settingsStorage.writes, isEmpty);
     expect(c.phase, LichessEvalPhase.idle);
   });
+
+  test(
+    'failed deletion retains store and later deletion preserves selection B',
+    () async {
+      final c = controller();
+      final info = await c.refreshSource();
+      await c.prepare(info: info, parentDir: tmp.path);
+      await c.start();
+      final directory = c.storeDirectory!;
+      settingsStorage.failure = StateError('preferences unavailable');
+
+      await expectLater(c.deleteEverything(), throwsStateError);
+      expect(await Directory(directory).exists(), isTrue);
+      expect(c.isReady, isTrue);
+      expect(c.error, contains('preferences unavailable'));
+      expect(settings.committed.lichessEvalsPath, directory);
+
+      settingsStorage.failure = null;
+      await settings.configureLichessDirectory('/selected/B');
+      await c.deleteEverything();
+      expect(await Directory(directory).exists(), isFalse);
+      expect(settings.committed.lichessEvalsPath, '/selected/B');
+      expect(settings.committed.enableLichessEvals, isTrue);
+      await settings.retry();
+      expect(settings.committed.lichessEvalsPath, '/selected/B');
+      await c.close();
+      c.dispose();
+    },
+  );
 
   test('the quoted cost is the peak, not the download size', () async {
     final c = controller();

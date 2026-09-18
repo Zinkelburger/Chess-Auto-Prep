@@ -1,3 +1,9 @@
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/features/settings/controllers/eval_database_settings.dart';
+import 'package:chess_auto_prep/features/settings/models/eval_database_configuration.dart';
+import 'package:chess_auto_prep/services/eval/cdb_snapshot_download.dart';
+import 'package:chess_auto_prep/services/eval/lichess_eval_controller.dart';
+import '../support/runtime_settings.dart';
 import 'dart:async';
 
 import 'package:chess_auto_prep/app/app_dependencies.dart';
@@ -56,6 +62,62 @@ class _Settings implements AppSettingsRepository {
 }
 
 void main() {
+  testWidgets(
+    'app shutdown drains download work before disposing its settings',
+    (tester) async {
+      final gate = Completer<void>();
+      final store = MemorySettingsSection(EvalDatabaseConfiguration())
+        ..readGate = gate.future;
+      final defaults = testRuntimeSettings();
+      defaults.databases.dispose();
+      final runtime = RuntimeSettings(
+        engine: defaults.engine,
+        bulk: defaults.bulk,
+        display: defaults.display,
+        databases: EvalDatabaseSettings(store),
+      );
+      final appearance = _Appearance(AppAppearance.dark);
+      late CdbSnapshotDownloadController cdb;
+      late LichessEvalController lichess;
+      await tester.pumpWidget(
+        AppDependencies(
+          runtimeSettings: runtime,
+          engineRuntime: testEngines(runtime),
+          settings: _Settings(appearance),
+          repertoireCatalog: Catalog(),
+          child: Builder(
+            builder: (context) {
+              cdb = context.read<CdbSnapshotDownloadController>();
+              lichess = context.read<LichessEvalController>();
+              expect(cdb.settings, same(runtime.databases));
+              expect(
+                lichess.settings,
+                same(context.read<EvalDatabaseSettings>()),
+              );
+              return const SizedBox();
+            },
+          ),
+        ),
+      );
+      final restoring = lichess.loadSaved();
+      await tester.pump();
+      expect(lichess.isBusy, isTrue);
+      await tester.pumpWidget(const SizedBox());
+      expect(cdb.isDisposed, isTrue);
+      expect(lichess.isDisposed, isTrue);
+      expect(runtime.databases.isDisposed, isFalse);
+      gate.complete();
+      await tester.pump();
+      await restoring;
+      await Future.wait([cdb.close(), lichess.close()]);
+      await tester.pump();
+      expect(runtime.databases.isDisposed, isTrue);
+      expect(store.writes, isEmpty);
+      expect(tester.takeException(), isNull);
+      await appearance.close();
+    },
+  );
+
   testWidgets(
     'appearance subscribes before synchronous loading and replaces borrowed overrides',
     (tester) async {

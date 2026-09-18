@@ -151,6 +151,7 @@ void main() {
     TreeBuildService? build,
   }) {
     final value = GenerationSessionController(
+      databases: (_engineFixtureSettings ??= testRuntimeSettings()).databases,
       jobs: JobManager(),
       publication: GenerationPublicationController(
         documents: documents,

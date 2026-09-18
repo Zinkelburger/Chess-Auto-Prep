@@ -127,7 +127,8 @@ void main() {
   );
 
   CdbSnapshotDownloadController controller({int concurrency = 1}) =>
-      CdbSnapshotDownloadController(settings: settings,
+      CdbSnapshotDownloadController(
+        settings: settings,
         concurrency: concurrency,
         urlBuilder: mirror.urlFor,
       );
@@ -238,7 +239,9 @@ void main() {
   });
 
   test('deletion drains transfer and rejects another preparation', () async {
-    mirror..chunkBytes = 256..chunkDelay = const Duration(milliseconds: 40);
+    mirror
+      ..chunkBytes = 256
+      ..chunkDelay = const Duration(milliseconds: 40);
     final c = controller();
     await c.prepare(snapshot: single, parentDir: tmp.path);
     final run = c.start();
@@ -255,14 +258,16 @@ void main() {
     expect(await local(mainPath).exists(), isFalse);
     expect(c.snapshot, isNull);
     expect(c.phase, CdbDownloadPhase.idle);
-    expect(settings.enableCdbDirect, isFalse);
+    expect(settings.committed.enableCdbDirect, isFalse);
     expect(settingsStorage.writes, isEmpty);
     await c.close();
     c.dispose();
   });
 
   test('close drains active transfer without activating settings', () async {
-    mirror..chunkBytes = 256..chunkDelay = const Duration(milliseconds: 40);
+    mirror
+      ..chunkBytes = 256
+      ..chunkDelay = const Duration(milliseconds: 40);
     final c = controller();
     await c.prepare(snapshot: single, parentDir: tmp.path);
     final run = c.start();
@@ -278,8 +283,35 @@ void main() {
     expect(kept, greaterThan(0));
     expect(kept, lessThan(fileBytes));
     expect(settingsStorage.writes, isEmpty);
-    await expectLater(c.prepare(snapshot: single, parentDir: tmp.path), throwsStateError);
+    await expectLater(
+      c.prepare(snapshot: single, parentDir: tmp.path),
+      throwsStateError,
+    );
   });
+
+  test(
+    'completed artifact stays busy until admitted activation settles',
+    () async {
+      final c = controller();
+      await c.prepare(snapshot: single, parentDir: tmp.path);
+      final activation = Completer<void>();
+      settingsStorage.writeGate = activation.future;
+      final run = c.start();
+      expect(c.isRunning, isTrue, reason: 'admitted before first await');
+      await waitUntil(() => settingsStorage.writes.isNotEmpty);
+      expect(c.phase, CdbDownloadPhase.complete);
+      expect(c.isRunning, isTrue);
+
+      final closing = c.close();
+      expect(c.isRunning, isTrue, reason: 'close drains the admitted save');
+      activation.complete();
+      await closing;
+      await run;
+      expect(c.isRunning, isFalse);
+      expect(settings.committed.enableCdbDirect, isTrue);
+      c.dispose();
+    },
+  );
 
   test('several files share the workers and every one lands intact', () async {
     const paths = [
@@ -360,7 +392,8 @@ void main() {
       }),
     );
 
-    final c = CdbSnapshotDownloadController(settings: settings,
+    final c = CdbSnapshotDownloadController(
+      settings: settings,
       catalog: catalog,
       concurrency: 1,
       urlBuilder: mirror.urlFor,
@@ -378,45 +411,61 @@ void main() {
     c.dispose();
   });
 
-  test('forget drains a pending restore without reattaching its snapshot', () async {
-    SharedPreferences.setMockInitialValues({
-      'eval.cdb_download.parent_dir': tmp.path,
-      'eval.cdb_download.snapshot_id': id,
-    });
-    await writePartial(mainPath, payload.sublist(0, 700));
-    final requested = Completer<void>();
-    final response = Completer<http.Response>();
-    final c = CdbSnapshotDownloadController(
-      settings: settings,
-      catalog: CdbSnapshotCatalog(client: MockClient((_) {
-        requested.complete();
-        return response.future;
-      })),
-      urlBuilder: mirror.urlFor,
-    );
-    final restoring = c.loadSaved();
-    await requested.future;
-    final forgetting = c.forget();
-    response.complete(http.Response(jsonEncode([
-      {'type': 'file', 'path': mainPath, 'size': fileBytes},
-    ]), 200));
-    await restoring;
-    await forgetting;
-    expect(c.snapshot, isNull);
-    expect(c.parentDir, isNull);
-    expect(c.phase, CdbDownloadPhase.idle);
-    expect(settingsStorage.writes, isEmpty);
-    expect((await SharedPreferences.getInstance()).getString('eval.cdb_download.snapshot_id'), isNull);
-    await c.close();
-    c.dispose();
-  });
+  test(
+    'forget drains a pending restore without reattaching its snapshot',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'eval.cdb_download.parent_dir': tmp.path,
+        'eval.cdb_download.snapshot_id': id,
+      });
+      await writePartial(mainPath, payload.sublist(0, 700));
+      final requested = Completer<void>();
+      final response = Completer<http.Response>();
+      final c = CdbSnapshotDownloadController(
+        settings: settings,
+        catalog: CdbSnapshotCatalog(
+          client: MockClient((_) {
+            requested.complete();
+            return response.future;
+          }),
+        ),
+        urlBuilder: mirror.urlFor,
+      );
+      final restoring = c.loadSaved();
+      await requested.future;
+      final forgetting = c.forget();
+      response.complete(
+        http.Response(
+          jsonEncode([
+            {'type': 'file', 'path': mainPath, 'size': fileBytes},
+          ]),
+          200,
+        ),
+      );
+      await restoring;
+      await forgetting;
+      expect(c.snapshot, isNull);
+      expect(c.parentDir, isNull);
+      expect(c.phase, CdbDownloadPhase.idle);
+      expect(settingsStorage.writes, isEmpty);
+      expect(
+        (await SharedPreferences.getInstance()).getString(
+          'eval.cdb_download.snapshot_id',
+        ),
+        isNull,
+      );
+      await c.close();
+      c.dispose();
+    },
+  );
 
   test('loadSaved ignores a saved download whose folder is gone', () async {
     SharedPreferences.setMockInitialValues({
       'eval.cdb_download.parent_dir': p.join(tmp.path, 'missing'),
       'eval.cdb_download.snapshot_id': id,
     });
-    final c = CdbSnapshotDownloadController(settings: settings,
+    final c = CdbSnapshotDownloadController(
+      settings: settings,
       catalog: CdbSnapshotCatalog(
         client: MockClient((_) async => fail('must not consult the mirror')),
       ),

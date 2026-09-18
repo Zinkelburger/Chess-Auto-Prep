@@ -48,7 +48,6 @@ import 'features/documents/repositories/workspace_recovery_store.dart';
 import 'features/bughouse/services/bughouse_bundle.dart';
 import 'debug/agent_driver.dart';
 import 'features/settings/controllers/bulk_analysis_settings.dart';
-import 'models/eval_database_settings.dart';
 import 'screens/main_screen.dart';
 import 'theme/app_colors.dart';
 import 'design_system/theme/app_theme.dart';
@@ -101,9 +100,7 @@ Future<void> _initializeApp(
   // Required before runApp (configures the native window).
   await windowManager.ensureInitialized();
 
-  // These three are independent SharedPreferences/settings loads — run them
-  // concurrently instead of serially so the first frame isn't gated on three
-  // sequential disk round-trips. They must finish before runApp so the first
+  // Load independent settings concurrently before runApp so the first
   // render reflects the user's saved engine/eval preferences.
   //
   // The bughouse probe joins them for the same reason: the mode menu is built
@@ -117,7 +114,6 @@ Future<void> _initializeApp(
         .ensureLoaded()
         .catchError((Object _) {}),
     runtime.load(),
-    EvalDatabaseSettings.instance.load(),
     engines.lifecycle.loadPersistedState().catchError((Object _) {}),
     _resolveOptionalModes(),
   ]);
@@ -297,9 +293,6 @@ class ChessAutoPrepApp extends StatelessWidget {
           // depend on them via context (instead of global `.instance` access) and
           // inject fakes in tests. `.value` because these are process singletons
           // (`.instance`) that must not be disposed by the provider.
-          ChangeNotifierProvider<EvalDatabaseSettings>.value(
-            value: EvalDatabaseSettings.instance,
-          ),
           ChangeNotifierProvider<MasterGamesService>.value(
             value: MasterGamesService.instance,
           ),

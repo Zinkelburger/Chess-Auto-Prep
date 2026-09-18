@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:chess_auto_prep/features/settings/controllers/eval_database_settings.dart';
 import 'package:chess_auto_prep/features/settings/models/eval_database_configuration.dart';
 import '../../support/runtime_settings.dart';
@@ -131,7 +132,8 @@ void main() {
     if (await tmp.exists()) await tmp.delete(recursive: true);
   });
 
-  LichessEvalController controller() => LichessEvalController(settings: settings,
+  LichessEvalController controller() => LichessEvalController(
+    settings: settings,
     source: LichessEvalSource(
       client: MockClient((request) async {
         if (request.method == 'HEAD') {
@@ -215,37 +217,69 @@ void main() {
     await waitUntil(() => c.phase == LichessEvalPhase.importing);
 
     final deletion = c.deleteEverything();
-    await expectLater(c.prepare(info: info, parentDir: tmp.path), throwsStateError);
+    await expectLater(
+      c.prepare(info: info, parentDir: tmp.path),
+      throwsStateError,
+    );
     await deletion;
     await run;
 
     expect(await Directory(directory).exists(), isFalse);
     expect(c.isReady, isFalse);
     expect(c.phase, LichessEvalPhase.idle);
-    expect(settings.enableLichessEvals, isFalse);
-    expect(settings.lichessEvalsPath, isEmpty);
+    expect(settings.committed.enableLichessEvals, isFalse);
+    expect(settings.committed.lichessEvalsPath, isEmpty);
     await c.close();
     c.dispose();
   });
 
-  test('close drains import and suppresses activation after disposal', () async {
+  test(
+    'close drains import and suppresses activation after disposal',
+    () async {
+      final c = controller();
+      final info = await c.refreshSource();
+      await c.prepare(info: info, parentDir: tmp.path);
+      final run = c.start();
+      await waitUntil(() => c.phase == LichessEvalPhase.importing);
+
+      final closing = c.close();
+      expect(identical(closing, c.close()), isTrue);
+      c.dispose();
+      await closing;
+      await run;
+
+      expect(c.isReady, isFalse);
+      expect(settingsStorage.writes, isEmpty);
+      final manifest = await readManifest(c.storePaths!);
+      expect(manifest?.complete, isNot(isTrue));
+      await expectLater(
+        c.prepare(info: info, parentDir: tmp.path),
+        throwsStateError,
+      );
+    },
+  );
+
+  test('completed store remains busy while activation is settling', () async {
     final c = controller();
     final info = await c.refreshSource();
     await c.prepare(info: info, parentDir: tmp.path);
+    final activation = Completer<void>();
+    settingsStorage.writeGate = activation.future;
     final run = c.start();
-    await waitUntil(() => c.phase == LichessEvalPhase.importing);
+    expect(c.isBusy, isTrue, reason: 'admitted before backend probe');
+    await waitUntil(() => settingsStorage.writes.isNotEmpty);
+    expect(c.phase, LichessEvalPhase.complete);
+    expect(c.isBusy, isTrue);
 
-    final closing = c.close();
-    expect(identical(closing, c.close()), isTrue);
-    c.dispose();
-    await closing;
+    final pausing = c.pause();
+    expect(c.isBusy, isTrue);
+    activation.complete();
+    await pausing;
     await run;
-
-    expect(c.isReady, isFalse);
-    expect(settingsStorage.writes, isEmpty);
-    final manifest = await readManifest(c.storePaths!);
-    expect(manifest?.complete, isNot(isTrue));
-    await expectLater(c.prepare(info: info, parentDir: tmp.path), throwsStateError);
+    expect(c.isBusy, isFalse);
+    expect(settings.committed.enableLichessEvals, isTrue);
+    await c.close();
+    c.dispose();
   });
 
   test('a mirror that ignores the range restarts the archive', () async {

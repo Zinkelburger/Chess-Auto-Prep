@@ -40,7 +40,7 @@ Last reviewed against `lib/` and `tree_builder/` (June 2026, post 7-phase remedi
 | **Models** | Immutable / serializable data | `models/` |
 | **Constants / utils / theme** | Shared helpers | `constants/`, `utils/`, `theme/` |
 
-**State management:** Provider (`ChangeNotifier`) supplies `AppState`, feature/session controllers and application-owned engine/settings components. `AppDependencies` shares the committed settings owners and `EngineRuntime` components across views. Unmigrated areas such as `EvalDatabaseSettings` retain their existing ownership.
+**State management:** Provider (`ChangeNotifier`) supplies `AppState`, feature/session controllers and application-owned engine/settings components. `AppDependencies` shares the committed settings owners and `EngineRuntime` components across views. Evaluation preferences and the CDB/Lichess download controllers are also app-owned; legacy settings outside those migrated sections remain separate debt.
 
 **June 2026 remediation (7-phase refactor):** Repertoire metadata is typed (`RepertoireMetadata` replaces `Map<String, dynamic>`). `AppState` no longer tracks a global saved-games list. `RepertoireController` navigation funnels through `playMove` / `playMoveAtTreePath` (removed `userPlayedMove`, `_isInternalUpdate`). `GenerationSessionController.dispose()` stops an in-flight build. Lines browser uses typed `LineSortBy` / `LineMetricsFilter`, 300 ms search debounce, and lazy grouped `ListView.builder` rows. PGN editor memoizes move widgets and delegates clipboard/persist I/O to parent callbacks. Coherence FP-Growth runs in `Isolate.run`. `EngineLifecycle.enterGeneration` / `exitGeneration` are serialized via `_serialExec`. Startup failures surface via `runZonedGuarded` → `StartupErrorApp`; repertoire load failures via `RepertoireController.loadError`. Deleted unused `ease_calculator.dart`. New extractions: `GenerationConfigForm`, `RepertoireShortcuts`.
 
@@ -231,16 +231,32 @@ The My books panel shows pending/failure state, keeps confirmed choices visible,
 and retries designation without recreating an already imported repertoire.
 The relocation operation maps path components and can retry a partial two-key
 update. Linux folder rename, deletion and restore invoke it through the directory
-journal above. Credentials and external evaluation-database settings retain
-legacy ownership. There is no cross-process preference transaction claim.
+journal above. Credentials retain legacy ownership. There is no cross-process preference transaction claim.
 
-`RuntimeSettings` composes the typed engine, bulk-analysis and board-display
-owners; their immutable configurations normalize both setter and explicit field
+`RuntimeSettings` composes the typed engine, bulk-analysis, board-display and
+evaluation-database owners; their immutable configurations normalize both setter and explicit field
 edits. A failed initial read stays failed and retryable until a committed value
 exists. `EngineLifecycle` serializes preference initialization with toggles and
 generation transitions: unknown preferences do not enable analysis, late startup
 cannot undo a successful user toggle, and navigation resume does not rewrite
 preferences.
+
+`EvalDatabaseSettings` now uses the same committed/draft owner and verified
+preference storage for its seven existing keys. Callers read immutable
+`EvalDatabaseConfiguration` snapshots; there is no process singleton or
+forwarding getter surface. Generation captures confirmed probe settings before
+loading artifacts. Builder refuses Planner admission without confirmed settings
+and passes its captured configuration through an explicit `PlanDataSource`.
+
+`AppDependencies` provides one CDB and one Lichess download controller. Each
+reserves its operations and drains them on close before settings disposal.
+Artifact completion and saving its activation are distinct: retrying settings
+never transfers or imports data. Destructive deletion first clears only the
+matching selection; failed preference writes retain files. Retry and toggles
+resolve selection inside the existing settings queue, preserving newer choices.
+Manual CDB selection validates under the same resource reservation. Metadata
+reload is read-only; Resume/Continue setup require an explicit user action.
+Preferences do not provide cross-process compare-and-swap semantics.
 
 The inline engine bar, PV moves, settings shortcut and busy notices resolve the
 active application theme; an open floating preview follows appearance without
@@ -398,8 +414,7 @@ and "infinite traps" class of bugs.
 
 ```
 main.dart
-  ├─ EngineSettings.loadFromPrefs()
-  ├─ EvalDatabaseSettings.instance.load()
+  ├─ RuntimeSettings.load()  // engine, bulk, display and evaluation preferences
   ├─ EvalCache.instance.init()  // SQLite eval + Maia cache ready for interactive writes
   ├─ EngineLifecycle.loadPersistedState()  // marks engine idle (no process spawn); workers created lazily on first eval
   ├─ DefaultPgnService.ensureExtracted()

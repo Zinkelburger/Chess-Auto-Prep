@@ -13,10 +13,6 @@
 /// by decision, rather than a dump of every line they ever played.
 library;
 
-import 'package:provider/provider.dart';
-import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
-import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
-
 import 'dart:async';
 
 import 'package:dartchess/dartchess.dart';
@@ -75,7 +71,7 @@ class PlanBuildScreen extends StatefulWidget {
     required this.baseConfig,
     this.chesscomUsername,
     this.lichessUsername,
-    this.dataSource,
+    required this.dataSource,
     this.gamesService,
     this.defaultElo = 1800,
   });
@@ -96,7 +92,7 @@ class PlanBuildScreen extends StatefulWidget {
   final String? lichessUsername;
 
   /// Injectable for tests.
-  final PlanDataSource? dataSource;
+  final PlanDataSource dataSource;
   final AnalysisGamesService? gamesService;
   final int defaultElo;
 
@@ -105,16 +101,10 @@ class PlanBuildScreen extends StatefulWidget {
 }
 
 class _PlanBuildScreenState extends State<PlanBuildScreen> {
-  late final PlanDataSource _source =
-      widget.dataSource ??
-      DefaultPlanDataSource(
-        pool: context.read<StockfishPool>(),
-        lifecycle: context.read<EngineLifecycle>(),
-      );
   late final AnalysisGamesService _games =
       widget.gamesService ?? AnalysisGamesService();
   late final PlanController _plan = PlanController(
-    source: _source,
+    source: widget.dataSource,
     isWhite: widget.isWhite,
     elo: widget.defaultElo,
   );
@@ -1212,7 +1202,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
                   onSelect: (san) => _selectRow(step, san),
                   evaluating: _plan.evaluating,
                   onEvaluate: (san) => unawaited(_plan.evaluateCandidate(san)),
-                  evalSourceLabel: switch (_source) {
+                  evalSourceLabel: switch (_plan.source) {
                     final DefaultPlanDataSource d => d.evalSourceLabel,
                     _ => 'Eval',
                   },

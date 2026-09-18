@@ -2,6 +2,8 @@
 /// Shows repertoire positions with board + PGN + context tabs layout.
 library;
 
+import '../features/settings/controllers/eval_database_settings.dart';
+
 import '../features/repertoires/models/builder_workspace_snapshot.dart';
 import '../features/documents/models/pgn_document.dart';
 import '../app/builder_lifetime.dart';
@@ -103,6 +105,7 @@ import '../features/repertoire/widgets/repertoire_outline_panel.dart';
 import '../features/repertoire/widgets/repertoire_loading_frame.dart';
 import '../features/planner/controllers/plan_runner.dart';
 import '../features/planner/widgets/plan_build_screen.dart';
+import '../features/planner/services/plan_data_source.dart';
 import '../features/planner/widgets/plan_runner_banner.dart';
 import '../services/generation/generation_config.dart';
 import '../services/generation/generation_presets.dart';
@@ -136,6 +139,7 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   AppState? _appState;
   late final GenerationSessionController _generationController =
       GenerationSessionController(
+        databases: context.read<EvalDatabaseSettings>(),
         jobs: _jobManager,
         enginePool: context.read<StockfishPool>(),
         engineLifecycle: context.read<EngineLifecycle>(),
@@ -935,10 +939,25 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
             startFen: kStandardStartFen,
             playAsWhite: isWhite,
           );
+    final databases = context.read<EvalDatabaseSettings>().state.committed;
+    if (databases == null) {
+      showAppSnackBar(
+        context,
+        'Load evaluation preferences in Settings before planning.',
+        isError: true,
+      );
+      return;
+    }
+    final source = DefaultPlanDataSource(
+      databases: databases,
+      pool: context.read<StockfishPool>(),
+      lifecycle: context.read<EngineLifecycle>(),
+    );
     final result = await _workspaceNavigation.push<PlanBuildResult>(
       LegacyPageRoute<PlanBuildResult>(
         fullscreenDialog: true,
         builder: (_) => PlanBuildScreen(
+          dataSource: source,
           isWhite: isWhite,
           repertoireName: p.basename(root),
           outline: _outline.outline,

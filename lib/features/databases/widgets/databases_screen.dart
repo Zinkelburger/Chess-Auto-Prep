@@ -36,7 +36,6 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../settings/controllers/eval_database_settings.dart';
 import '../../settings/widgets/settings_section_status.dart';
 import '../../../services/eval/cdbdirect_eval_provider.dart';
-import '../../../services/eval/cdb_snapshot_download.dart';
 import '../../../services/eval/lichess_eval_controller.dart';
 import '../../../services/eval/storage_volumes.dart';
 import '../../../services/game_store/game_store.dart';
@@ -71,9 +70,8 @@ class DatabasesScreen extends StatefulWidget {
 }
 
 class _DatabasesScreenState extends State<DatabasesScreen> {
-  late final CdbSnapshotDownloadController _download;
-  late final LichessEvalController _lichess;
-  late final EvalDatabaseSettings _settings;
+  LichessEvalController get _lichess => context.read<LichessEvalController>();
+  EvalDatabaseSettings get _settings => context.read<EvalDatabaseSettings>();
 
   DatabaseInventory _inventory = const DatabaseInventory.empty();
   CdbDirectLibraryStatus? _cdbStatus;
@@ -85,29 +83,10 @@ class _DatabasesScreenState extends State<DatabasesScreen> {
   @override
   void initState() {
     super.initState();
-    _download = context.read<CdbSnapshotDownloadController>();
-    _lichess = context.read<LichessEvalController>();
-    _settings = context.read<EvalDatabaseSettings>();
-    unawaited(_settings.ensureLoaded().catchError((Object _) {}));
-    _download.addListener(_onChanged);
-    _lichess.addListener(_onChanged);
-    _settings.addListener(_onChanged);
     // Reads disk only. Nothing here starts a transfer: a page about what you
     // already have must never be the thing that fetches 1.2 TB.
     // The mounted download cards restore their own artifact status.
     unawaited(_measure());
-  }
-
-  @override
-  void dispose() {
-    _download.removeListener(_onChanged);
-    _lichess.removeListener(_onChanged);
-    _settings.removeListener(_onChanged);
-    super.dispose();
-  }
-
-  void _onChanged() {
-    if (mounted) setState(() {});
   }
 
   /// One pass over every directory the app owns.
@@ -116,6 +95,7 @@ class _DatabasesScreenState extends State<DatabasesScreen> {
   /// page exists to describe a machine whose storage may well be the thing
   /// that is wrong.
   Future<void> _measure() async {
+    final databases = _settings.committed;
     if (mounted) setState(() => _measuring = true);
 
     final support = await _supportPath();
@@ -127,12 +107,12 @@ class _DatabasesScreenState extends State<DatabasesScreen> {
         : await readDatabaseInventory(
             supportDirectory: support,
             bughouseBookPath: book?.path,
-            lichessEvalsPath: _settings.lichessEvalsPath.isEmpty
+            lichessEvalsPath: databases.lichessEvalsPath.isEmpty
                 ? null
-                : _settings.lichessEvalsPath,
-            chessDbDataDirectory: _settings.cdbDirectPath.isEmpty
+                : databases.lichessEvalsPath,
+            chessDbDataDirectory: databases.cdbDirectPath.isEmpty
                 ? null
-                : _settings.cdbDirectPath,
+                : databases.cdbDirectPath,
           );
 
     final status = await CdbDirectEvalProvider.libraryStatus();
@@ -174,6 +154,8 @@ class _DatabasesScreenState extends State<DatabasesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<LichessEvalController>();
+    context.watch<EvalDatabaseSettings>();
     final master = context.watch<MasterGamesService>();
     return Scaffold(
       appBar: widget.embedded
@@ -486,12 +468,13 @@ class _DatabasesScreenState extends State<DatabasesScreen> {
       body: const LichessEvalCard(),
       details: const LichessEvalSettingsPanel(),
       menu: [
-        if (_settings.lichessEvalsPath.isNotEmpty)
+        if (_settings.committed.lichessEvalsPath.isNotEmpty)
           AppMenuEntry(
             label: 'Show in file manager',
             icon: Icons.folder_open,
-            onRun: () =>
-                unawaited(openInFileManager(_settings.lichessEvalsPath)),
+            onRun: () => unawaited(
+              openInFileManager(_settings.committed.lichessEvalsPath),
+            ),
           ),
       ],
     );
@@ -500,17 +483,11 @@ class _DatabasesScreenState extends State<DatabasesScreen> {
   // ── 4. The ChessDB dump ───────────────────────────────────────────────────
 
   bool get _chessDbReady =>
-      _settings.enableCdbDirect && _settings.cdbDirectPath.isNotEmpty;
+      _settings.committed.enableCdbDirect &&
+      _settings.committed.cdbDirectPath.isNotEmpty;
 
   Widget _chessDbCard() {
-    if (_settings.state.committed == null) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 12),
-        child: Text(
-          'ChessDB configuration is not available until saved preferences load.',
-        ),
-      );
-    }
+    if (_settings.state.committed == null) return const SizedBox.shrink();
     final status = _cdbStatus;
     final reason = status == null ? null : chessDbUnavailableReason(status);
     final footprint = _inventory[StoreLabels.chessDbDump];
@@ -545,11 +522,12 @@ class _DatabasesScreenState extends State<DatabasesScreen> {
           icon: Icons.info_outline,
           onRun: () => showOfflineChessDbInfo(context),
         ),
-        if (_settings.cdbDirectPath.isNotEmpty)
+        if (_settings.committed.cdbDirectPath.isNotEmpty)
           AppMenuEntry(
             label: 'Show in file manager',
             icon: Icons.folder_open,
-            onRun: () => unawaited(openInFileManager(_settings.cdbDirectPath)),
+            onRun: () =>
+                unawaited(openInFileManager(_settings.committed.cdbDirectPath)),
           ),
       ],
     );

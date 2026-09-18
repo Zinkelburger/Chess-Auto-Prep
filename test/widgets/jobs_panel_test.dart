@@ -36,6 +36,7 @@ class _Storage extends MemoryStorage {
 class _Generation extends GenerationSessionController {
   _Generation(JobManager jobs, RuntimeSettings settings)
     : super(
+        databases: settings.databases,
         jobs: jobs,
         publication: generationPublicationFixture(),
         artifacts: generationArtifactsFixture(),

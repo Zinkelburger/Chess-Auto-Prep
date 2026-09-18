@@ -29,6 +29,7 @@ import 'package:flutter_test/flutter_test.dart';
 class _FakeGeneration extends GenerationSessionController {
   _FakeGeneration()
     : super(
+        databases: (_engineFixtureSettings ??= testRuntimeSettings()).databases,
         jobs: JobManager(),
         enginePool: engines.pool,
         engineLifecycle: engines.lifecycle,
