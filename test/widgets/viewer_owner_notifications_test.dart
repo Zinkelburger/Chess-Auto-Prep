@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/infrastructure/documents/legacy_pgn_document_store.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -7,6 +8,8 @@ import 'package:chess_auto_prep/app/viewer_dependencies.dart';
 import 'package:chess_auto_prep/core/app_history.dart';
 import 'package:chess_auto_prep/core/app_state.dart';
 import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
+import 'package:chess_auto_prep/features/documents/models/viewer_collection_load.dart';
+import 'package:chess_auto_prep/features/documents/repositories/pgn_collection_decoder.dart';
 import 'package:chess_auto_prep/features/documents/models/pgn_workspace_snapshot.dart';
 import 'package:chess_auto_prep/infrastructure/documents/isolate_pgn_collection_decoder.dart';
 import 'package:chess_auto_prep/infrastructure/documents/isolate_pgn_collection_filter.dart';
@@ -30,6 +33,21 @@ import '../support/board_engine_fixture.dart';
 import '../support/fake_desktop_fullscreen_port.dart';
 import '../support/memory_workspace_recovery_store.dart';
 import '../support/runtime_settings.dart';
+
+class _ControlledDecoder implements PgnCollectionDecoder {
+  String? heldContent;
+  Completer<void>? gate;
+  bool started = false;
+
+  @override
+  Future<DecodedPgnCollection> decode(String content) async {
+    if (content == heldContent) {
+      started = true;
+      await gate!.future;
+    }
+    return const IsolatePgnCollectionDecoder().decode(content);
+  }
+}
 
 class _Preferences extends SharedPreferencesViewerRepository {
   _Preferences() : super(SharedPreferences.getInstance);
@@ -56,7 +74,7 @@ class _Preferences extends SharedPreferencesViewerRepository {
 }
 
 class _DelayedRepository extends StoragePgnCollectionRepository {
-  _DelayedRepository(super.storage);
+  _DelayedRepository(super.storage, {required super.documents});
 
   Completer<void>? saveGate;
   int writes = 0;
@@ -70,15 +88,6 @@ class _DelayedRepository extends StoragePgnCollectionRepository {
   Future<PgnWriteResult> save(PgnSnapshot baseline, String content) async {
     await _waitForSave();
     return super.save(baseline, content);
-  }
-
-  @override
-  Future<PgnWriteResult> patch(
-    String path,
-    Map<String, String> replacements,
-  ) async {
-    await _waitForSave();
-    return super.patch(path, replacements);
   }
 }
 
@@ -138,6 +147,7 @@ void main() {
   late Directory directory;
   late String path;
   late _Preferences preferences;
+  late _ControlledDecoder decoder;
   late _DelayedRepository repository;
   late _ControlledStorage storage;
   late PgnViewerLifetime lifetime;
@@ -168,7 +178,11 @@ void main() {
     );
     StorageFactory.instanceForTest = storage;
     preferences = _Preferences();
-    repository = _DelayedRepository(storage);
+    decoder = _ControlledDecoder();
+    repository = _DelayedRepository(
+      storage,
+      documents: LegacyPgnDocumentStore(storage),
+    );
     lifetime = PgnViewerLifetime(
       pool: engines.pool,
       lifecycle: engines.lifecycle,
@@ -176,7 +190,7 @@ void main() {
       openings: createViewerOpenings(),
       solitaireRepository: createViewerSolitaire(),
       window: FakeDesktopFullscreenPort(),
-      collectionDecoder: const IsolatePgnCollectionDecoder(),
+      collectionDecoder: decoder,
       collectionFilter: const IsolatePgnCollectionFilter(),
       library: StoragePgnLibraryRepository(
         storage,
@@ -191,6 +205,7 @@ void main() {
   });
 
   tearDown(() async {
+    if (decoder.gate case final gate? when !gate.isCompleted) gate.complete();
     final statGate = storage.statGate;
     if (statGate != null && !statGate.isCompleted) statGate.complete();
     final gate = repository.saveGate;
@@ -240,6 +255,166 @@ void main() {
     await shutdown;
     lifetimeClosed = true;
   }
+
+  testWidgets(
+    'captured reading collection selects, edits, copies and restores',
+    (tester) async {
+      try {
+        await mount(tester);
+        app.handOff(
+          const OpenPgnViewer.content(
+            content: _games,
+            title: 'Browser practice',
+            gameIndex: 1,
+            ply: 3,
+          ),
+        );
+        await _until(
+          tester,
+          () =>
+              lifetime.document.collection.selectedIndex == 1 &&
+              lifetime.reader.mainLineIndex == 3,
+          'captured second line at ply three',
+        );
+        final document = lifetime.document;
+        expect(document.filePath, isNull);
+        expect(document.collectionTitle, 'Browser practice');
+        expect(find.text('Browser practice'), findsWidgets);
+        expect(document.collection.games.map((g) => g.headers['Event']), [
+          'First game',
+          'Requested game',
+        ]);
+        expect(app.takeHandoff<OpenPgnViewer>(), isNull);
+        expect(document.editor.state.needsResolution, isTrue);
+        document.persistMoveCommentsFor(
+          document.collection.selectedGame!,
+          '1. d4 {Reading note} d5 2. c4 e6 *',
+        );
+        final restore = document.captureNavigationContext();
+        final copyPath = '${directory.path}/reading-copy.pgn';
+        final result = await tester.runAsync(
+          () => document.editor.saveCopy(copyPath),
+        );
+        expect(result, isA<PgnSaved>());
+        expect(File(copyPath).readAsStringSync(), contains('Reading note'));
+        expect(File(path).readAsStringSync(), _games);
+        expect(repository.writes, 0);
+        // A different visit must not replace the captured collection's title,
+        // edited games or cursor when breadcrumb restoration returns to it.
+        document.editor.discardChanges();
+        var changeDone = false;
+        final changed = document
+            .loadPgnContent(_games, title: 'Other visit')
+            .whenComplete(() => changeDone = true);
+        await _until(
+          tester,
+          () =>
+              changeDone && document.collectionTitle == 'Other visit',
+          'another content visit',
+        );
+        expect(await changed, isTrue);
+        document.editor.discardChanges();
+        var restoreDone = false;
+        final restored = restore().whenComplete(() => restoreDone = true);
+        await _until(
+          tester,
+          () =>
+              restoreDone &&
+              document.collectionTitle == 'Browser practice' &&
+              lifetime.reader.mainLineIndex == 3,
+          'restored title and cursor',
+        );
+        expect(await restored, isTrue);
+        expect(
+          document.collection.selectedGame!.pgnText,
+          contains('Reading note'),
+        );
+        expect(tester.takeException(), isNull);
+      } finally {
+        await finish(tester);
+      }
+    },
+  );
+
+  testWidgets('content handoff respects leave cancellation before adoption', (
+    tester,
+  ) async {
+    try {
+      await mount(tester);
+      app.switchToPgnViewer(path: path);
+      await _until(
+        tester,
+        () =>
+            lifetime.document.filePath == path && !lifetime.document.isLoading,
+        'backed collection',
+      );
+      final document = lifetime.document;
+      document.persistMoveCommentsFor(
+        document.collection.games.first,
+        '1. e4 {Keep existing draft} e5 2. Nf3 Nc6 *',
+      );
+      app.handOff(
+        const OpenPgnViewer.content(content: _games, title: 'Unapproved'),
+      );
+      await _until(
+        tester,
+        () => find.byType(AlertDialog).evaluate().isNotEmpty,
+        'leave approval',
+      );
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+      await tester.pumpAndSettle();
+      expect(document.filePath, path);
+      expect(document.collectionTitle, 'games');
+      expect(
+        document.collection.games.first.pgnText,
+        contains('Keep existing draft'),
+      );
+      expect(repository.writes, 0);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await finish(tester);
+    }
+  });
+
+  testWidgets('late content decoding cannot replace newer file handoff', (
+    tester,
+  ) async {
+    try {
+      await mount(tester);
+      decoder.heldContent = _games.replaceAll('First game', 'Old request');
+      decoder.gate = Completer<void>();
+      app.handOff(
+        OpenPgnViewer.content(
+          content: decoder.heldContent!,
+          title: 'Old content',
+          gameIndex: 0,
+          ply: 1,
+        ),
+      );
+      await _until(tester, () => decoder.started, 'blocked old decoding');
+      app.switchToPgnViewer(path: path, gameIndex: 1, ply: 3);
+      await _until(
+        tester,
+        () =>
+            lifetime.document.filePath == path &&
+            lifetime.reader.mainLineIndex == 3,
+        'newer file at requested position',
+      );
+      decoder.gate!.complete();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 150)),
+      );
+      await tester.pump();
+      expect(lifetime.document.filePath, path);
+      expect(lifetime.document.collectionTitle, 'games');
+      expect(lifetime.document.collection.selectedIndex, 1);
+      expect(lifetime.reader.mainLineIndex, 3);
+      expect(tester.takeException(), isNull);
+    } finally {
+      if (decoder.gate case final gate? when !gate.isCompleted) gate.complete();
+      await finish(tester);
+    }
+  });
 
   testWidgets(
     'an edit after the approval click prevents discarding the newer draft',

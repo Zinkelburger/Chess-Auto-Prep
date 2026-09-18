@@ -4,18 +4,15 @@ import '../../features/documents/repositories/pgn_collection_repository.dart';
 import '../../features/documents/repositories/pgn_document_store.dart';
 import '../../services/storage/storage_service.dart';
 import '../../services/pgn_document_patch.dart';
-import 'legacy_pgn_document_store.dart';
 
-/// Bridges managed paths while the viewer's library/session reads migrate.
-/// Verified hosts use native typed writes; other hosts keep the serialized
-/// storage transaction and report an ambiguous write acknowledgement as uncertain.
+/// Adds collection patching and recovery to the app-selected document store.
+/// Publication always validates the snapshot observed before patch computation.
 class StoragePgnCollectionRepository implements PgnCollectionRepository {
-  StoragePgnCollectionRepository(this.storage, {this.documents});
+  StoragePgnCollectionRepository(this.storage, {required this.documents});
   final StorageService storage;
-  final PgnDocumentStore? documents;
-  PgnDocumentStore get _store => documents ?? LegacyPgnDocumentStore(storage);
+  final PgnDocumentStore documents;
   @override
-  bool get supportsQuarantine => _store.supportsQuarantine;
+  bool get supportsQuarantine => documents.supportsQuarantine;
   @override
   Future<PgnQuarantineResult> quarantine(
     PgnSnapshot baseline, {
@@ -26,12 +23,12 @@ class StoragePgnCollectionRepository implements PgnCollectionRepository {
     } catch (error) {
       return PgnQuarantineFailed(error);
     }
-    return _store.quarantine(baseline, allowedRoot: allowedRoot);
+    return documents.quarantine(baseline, allowedRoot: allowedRoot);
   }
 
   void _checkPath(String path) {
-    if (documents != null && !p.isAbsolute(path)) {
-      throw ArgumentError('Native collection paths must be absolute');
+    if (!p.isAbsolute(path)) {
+      throw ArgumentError('Collection paths must be absolute');
     }
   }
 
@@ -39,7 +36,7 @@ class StoragePgnCollectionRepository implements PgnCollectionRepository {
   Future<PgnOpenResult> open(String path) async {
     try {
       _checkPath(path);
-      return await _store.open(path);
+      return await documents.open(path);
     } catch (error) {
       return PgnReadFailed(error);
     }
@@ -53,7 +50,7 @@ class StoragePgnCollectionRepository implements PgnCollectionRepository {
       return PgnWriteFailed(error);
     }
     try {
-      return await _store.create(path, content);
+      return await documents.create(path, content);
     } catch (error) {
       return PgnWriteUncertain(error: error, before: null, observed: null);
     }
@@ -67,7 +64,7 @@ class StoragePgnCollectionRepository implements PgnCollectionRepository {
       return PgnWriteFailed(error);
     }
     try {
-      return await _store.save(baseline, content);
+      return await documents.save(baseline, content);
     } catch (error) {
       return PgnWriteUncertain(error: error, before: baseline, observed: null);
     }
@@ -78,49 +75,23 @@ class StoragePgnCollectionRepository implements PgnCollectionRepository {
     String path,
     Map<String, String> replacements,
   ) async {
-    final store = documents;
-    if (store != null) {
-      if (!p.isAbsolute(path)) {
-        return PgnWriteFailed(
-          ArgumentError('Native collection paths must be absolute'),
-        );
-      }
-      final opened = await store.open(path);
-      if (opened is PgnMissing) return const PgnConflict(null);
-      if (opened is! PgnOpened) {
-        return PgnWriteFailed((opened as PgnReadFailed).error);
-      }
-      String content;
-      try {
-        content = await patchPgnDocumentAsync(
-          opened.snapshot.content,
-          replacements,
-        );
-      } on StateError {
-        return PgnConflict(opened.snapshot);
-      }
-      // A writer changing even an unrelated game after this observation is a
-      // conflict. No retry adopts that newer revision without user action.
-      return store.save(opened.snapshot, content);
+    final opened = await open(path);
+    if (opened is PgnMissing) return const PgnConflict(null);
+    if (opened is! PgnOpened) {
+      return PgnWriteFailed((opened as PgnReadFailed).error);
     }
-    String? submitted;
+    String content;
     try {
-      await storage.updateFile(path, (current) async {
-        if (current == null) throw StateError('The source file is missing.');
-        submitted = await patchPgnDocumentAsync(current, replacements);
-        return submitted!;
-      });
-      // Preserve the submitted receipt, never stamp an unseen later write.
-      return PgnSaved(
-        before: null,
-        after: LegacyPgnDocumentStore.snapshot(path, submitted!),
+      content = await patchPgnDocumentAsync(
+        opened.snapshot.content,
+        replacements,
       );
-    } on StateError catch (error) {
-      if (submitted == null) return const PgnConflict(null);
-      return PgnWriteUncertain(error: error, before: null, observed: null);
-    } catch (error) {
-      return PgnWriteUncertain(error: error, before: null, observed: null);
+    } on StateError {
+      return PgnConflict(opened.snapshot);
     }
+    // A writer changing even an unrelated game after this observation is a
+    // conflict. No retry adopts that newer revision without user action.
+    return save(opened.snapshot, content);
   }
 
   @override

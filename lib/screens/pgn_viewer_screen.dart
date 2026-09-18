@@ -415,51 +415,59 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     // bar; opening any file yourself brings it back.
     _singleGameFocus = gameId != null;
 
-    // Fast path: the requested game lives in the file that's already open
-    // (Games page → Review → breadcrumb back → Review again). Reloading
-    // would re-parse the whole games cache and — worse — cancel and forget
-    // an analysis that is still running, so reuse the loaded collection.
-    final sameFileLoaded =
-        handoff.sliceFen == null &&
-        gameId != null &&
-        handoff.pgnPath == _document.filePath &&
-        _document.errorMessage == null &&
-        _document.collection.games.isNotEmpty &&
-        // ...and the loaded copy is still what is on disk. The review of your
-        // recent games writes the scores it found back into the games cache,
-        // so a collection read before a run is a collection whose games have
-        // no graph — reusing it would draw a blank chart over evals that are
-        // sitting in the file.
-        await _loadedCopyIsCurrent(handoff.pgnPath);
-    if (!_isCurrentNavigation(epoch)) return;
-    if (sameFileLoaded) {
-      if (_currentGameIs(gameId)) {
-        _applyHandoffTab(handoff, epoch);
-        return;
-      }
-      if (await _goToGameById(gameId)) {
-        if (!_isCurrentNavigation(epoch)) return;
-        _applyHandoffTab(handoff, epoch);
-        return;
-      }
-      // Not in the loaded copy (the cache gained games since) — fall through
-      // to a full reload.
+    final path = handoff.pgnPath;
+    final bool opened;
+    if (path == null) {
+      if (!await _confirmLeavePgn() || !_isCurrentNavigation(epoch)) return;
+      opened = await _document.loadPgnContent(
+        handoff.content!,
+        title: handoff.title,
+      );
+    } else {
+      // Fast path: the requested game lives in the file that's already open
+      // (Games page → Review → breadcrumb back → Review again). Reloading
+      // would re-parse the whole games cache and — worse — cancel and forget
+      // an analysis that is still running, so reuse the loaded collection.
+      final sameFileLoaded =
+          handoff.sliceFen == null &&
+          gameId != null &&
+          path == _document.filePath &&
+          _document.errorMessage == null &&
+          _document.collection.games.isNotEmpty &&
+          // ...and the loaded copy is still what is on disk. The review of your
+          // recent games writes the scores it found back into the games cache,
+          // so a collection read before a run is a collection whose games have
+          // no graph — reusing it would draw a blank chart over evals that are
+          // sitting in the file.
+          await _loadedCopyIsCurrent(path);
       if (!_isCurrentNavigation(epoch)) return;
-    }
+      if (sameFileLoaded) {
+        if (_currentGameIs(gameId)) {
+          _applyHandoffTab(handoff, epoch);
+          return;
+        }
+        if (await _goToGameById(gameId)) {
+          if (!_isCurrentNavigation(epoch)) return;
+          _applyHandoffTab(handoff, epoch);
+          return;
+        }
+        // Not in the loaded copy (the cache gained games since) — fall through
+        // to a full reload.
+        if (!_isCurrentNavigation(epoch)) return;
+      }
 
-    final opened = await _openFileWithPositionSlice(
-      handoff.pgnPath,
-      handoff.sliceFen,
-      navigationEpoch: epoch,
-      // A single-game handoff must not resurrect an old slice: it can hide
-      // the target game and its filtered/total counter reads as noise when
-      // all you asked for was one game. Same for a file-position jump —
-      // a restored slice would shift the indices it was computed against.
-      restoreSavedSlice: gameId == null && handoff.gameIndex == null,
-    );
-    if (!_isCurrentNavigation(epoch) ||
-        !opened ||
-        _document.filePath != handoff.pgnPath) {
+      opened = await _openFileWithPositionSlice(
+        path,
+        handoff.sliceFen,
+        navigationEpoch: epoch,
+        // A single-game handoff must not resurrect an old slice: it can hide
+        // the target game and its filtered/total counter reads as noise when
+        // all you asked for was one game. Same for a file-position jump —
+        // a restored slice would shift the indices it was computed against.
+        restoreSavedSlice: gameId == null && handoff.gameIndex == null,
+      );
+    }
+    if (!_isCurrentNavigation(epoch) || !opened || _document.filePath != path) {
       return;
     }
     if (gameId != null) {
@@ -867,7 +875,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       matcher: _document.collectionFilter,
       key: ObjectKey(source),
       collectionName: _document.filePath == null
-          ? 'Pasted games'
+          ? (_document.collectionTitle ?? 'Pasted games')
           : p.basename(_document.filePath!),
       allGames: _filterRecords,
       collectionPlayer: _document.collection.collectionPlayer,

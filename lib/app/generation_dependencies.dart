@@ -8,23 +8,22 @@ import '../features/generation/services/generation_artifacts.dart';
 import '../infrastructure/generation/storage_generation_artifact_repository.dart';
 import '../features/documents/repositories/pgn_document_store.dart';
 import '../features/generation/controllers/generation_publication_controller.dart';
-import '../infrastructure/documents/legacy_pgn_document_store.dart';
 import '../infrastructure/generation/storage_generation_draft_repository.dart';
 import '../services/storage/storage_factory.dart';
 import '../services/storage/app_paths.dart';
 
 GenerationPublicationController createGenerationPublication({
-  required PgnDocumentStore? documents,
+  required PgnDocumentStore documents,
 }) {
   final storage = StorageFactory.instance;
   return GenerationPublicationController(
-    documents: documents ?? LegacyPgnDocumentStore(storage),
+    documents: documents,
     drafts: StorageGenerationDraftRepository(storage),
   );
 }
 
 GenerationArtifacts createGenerationArtifacts({
-  required PgnDocumentStore? documents,
+  required PgnDocumentStore documents,
 }) {
   final storage = StorageFactory.instance;
   return GenerationArtifacts(
@@ -32,7 +31,7 @@ GenerationArtifacts createGenerationArtifacts({
       storage: storage,
       recoveryRoot: () async =>
           (await AppPaths.repertoiresDirectory(create: false)).path,
-      documents: documents ?? LegacyPgnDocumentStore(storage),
+      documents: documents,
     ),
   );
 }

@@ -169,16 +169,32 @@ enum PgnViewerTab { game, line, explorer, analysis }
 /// Open a PGN collection in the PGN Viewer.
 final class OpenPgnViewer extends PendingHandoff {
   const OpenPgnViewer({
-    required this.pgnPath,
+    required String this.pgnPath,
     this.sliceFen,
     this.gameId,
     this.gameIndex,
     this.autoAnalyze = false,
     this.tab = PgnViewerTab.game,
     this.ply,
-  });
+  }) : content = null,
+       title = null;
 
-  final String pgnPath;
+  /// A captured collection with no backing file. Editing and export belong to
+  /// the Viewer; opening it never writes back to the source of these games.
+  const OpenPgnViewer.content({
+    required String this.content,
+    required String this.title,
+    this.gameIndex,
+    this.ply,
+  }) : pgnPath = null,
+       sliceFen = null,
+       gameId = null,
+       autoAnalyze = false,
+       tab = PgnViewerTab.game;
+
+  final String? pgnPath;
+  final String? content;
+  final String? title;
 
   /// When set, the viewer slices the collection to games passing through this
   /// position.
@@ -210,7 +226,7 @@ final class OpenPgnViewer extends PendingHandoff {
   AppMode get targetMode => AppMode.pgnViewer;
 
   @override
-  String get defaultHistoryLabel => 'PGN: ${_displayName(pgnPath)}';
+  String get defaultHistoryLabel => 'PGN: ${title ?? _displayName(pgnPath!)}';
 }
 
 /// Open Engine Tournament, optionally on one tournament.

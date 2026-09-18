@@ -3728,3 +3728,75 @@ browser work remains outside main pending truthful bulk-save failure recovery
 and native Read-line parity; a smaller diff alone does not pass its workflow gate.
 Combined Study/settings integration passes 53 affected tests and analyze/lint;
 the retirement manifest retains both independently deleted owners.
+
+
+### Selected document store and one collection patch writer — 2026-09-18
+
+`654898bf` against `d05f1d82` requires the selected PgnDocumentStore in the
+collection repository and six collection/Study/Generation factories. All actual
+production callers already supplied the same nonnull store. The platform factory
+remains the sole Native-versus-Legacy choice; the legitimate AppDependencies test
+override still selects through that factory when absent. No platform adapter or
+verification claim changed. Collection patching always observes a snapshot,
+computes the patch, then saves through the same store. The alternate
+StorageService.updateFile writer and its independent receipt creation are gone.
+Existing open/save result normalization handles unexpected adapter failures.
+
+Four changed production files shrink **473→438 (−35)**; including unchanged main
+composition, Legacy adapter and collection interface gives **965→930**. No new
+owner, API hierarchy or helper. Eight existing test fixtures now choose their
+adapter explicitly; fake storage implements the real delayed compare-and-swap
+semantics instead of bypassing them. Review removed a now-redundant patch override
+in the delayed notification fixture, leaving one gate/count per actual save.
+Two added real-I/O Legacy cases prove changed-content conflict and lost-
+acknowledgement before/observed receipts, forbidding the removed updateFile path.
+Native equal-byte replacement and retained Viewer save/recovery behavior remain
+covered. This is consolidation, not a newly verified legacy identity protocol.
+
+**143 distinct tests pass** across 11 affected files: the first batch passed 142
+actual tests but failed to load a mistakenly named screen test; the corrected
+screen path and repaired notification fixture then pass six tests (five repeated).
+Final analyze/lint passes with 63 existing infos, no warnings/errors and 45 checker
+cases. Independent review approves production ownership and fixture semantics.
+No visible layout/behavior changes require a new preview. Final library total is
+**225,716**, +6,759 (+3.1%) from September 16 and −11,275 from the growth review.
+Against fa7f309e, handwritten reduction is **14,011**, generated localization
++245 separately. No feature graduation; whole renewal remains Partial.
+
+
+### Trainer reading uses the existing Viewer collection — 2026-09-18
+
+`accadd1f` against `ec5be76f` completes the Read-lines handoff. Native validation
+of the old browser found it wrote a relative cache path through StorageService,
+then handed that relative path to the Viewer’s absolute-path document store;
+the actual UI reported that it could not read the file. The temporary writer,
+cache-path construction and Trainer’s storage singleton import are deleted.
+
+The existing immutable OpenPgnViewer gains mutually exclusive file/content
+constructors. Trainer synchronously captures ordered PGNs, source title, selected
+index and ply after validating mounted/loading/source membership. Viewer uses
+its existing leave approval, content decoder, collection owner and navigation
+lifetime. Collection-owned title metadata resets/restores with the collection;
+UI supplies display fallback copy. No new owner, queue or dependency mechanism.
+
+Read now opens an independent fileless collection: edits use existing Save a copy,
+export and unsaved-close protection, rather than autosaving an invisible cache
+file. Original training PGNs remain unchanged. The complete five-file production
+scope grows **4,404→4,442 (+38 handwritten)**, including Viewer **1,867→1,875**;
+Trainer screen remains 1,001. Generated/ARB changes are zero. This removes one
+writer and fixes a user-visible failure; it is not a net-size simplification.
+
+Independent source review covers final `accadd1f`. **45 focused tests** exercise
+content/index/ply, one-time handoff, leave cancellation, late decoding against a
+newer file, edited copy bytes and restored title/cursor. The native Linux journey
+uses the actual retained Trainer callback before source change and A→B→A, opens
+two games, edits and saves via the real copy dialog, returns to Trainer, and
+checks original bytes plus absence of the old cache file. The inspected
+[actual Viewer](images/renewal-trainer-read-content.png) shows source title, notes,
+two games and Save/recovery; its disposable preview is stopped. Final focused,
+native and analyze/lint checks use the merged selected-store fixture with only
+one publication gate. Wider Training safety/ownership completion remains open.
+
+Library Dart totals **225,754**: +6,797 (+3.1%) against September 16 and −11,237
+against the growth review. Against fa7f309e, handwritten reduction is **13,973**,
+generated localization +245 separately. No feature graduation.

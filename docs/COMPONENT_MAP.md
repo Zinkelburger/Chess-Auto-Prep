@@ -531,6 +531,14 @@ recovery remain unfinished.
 
 #### Shared document save interaction
 
+App composition selects one `PgnDocumentStore` for the document, Study and
+Generation factories. Those factories require that exact store; only
+`createPlatformDocumentStore` chooses the native Linux or remaining legacy host
+adapter. `StoragePgnCollectionRepository` adds collection patch/recovery duties:
+patch observes a snapshot, computes the text replacement, then saves through the
+same injected store. Its separate `storage.updateFile` patch writer is deleted.
+Collection paths are absolute for either selected adapter.
+
 `features/documents/controllers/document_save_session.dart` owns a loaded
 snapshot, current draft and explicit save/reload transitions over injected
 `PgnDocumentStore`. It has no Flutter, provider, filesystem or global-service
@@ -1994,8 +2002,13 @@ or variations. Explicit move numbers and sides must match the preview position;
 bare square references in prose are not inferred as pawn moves. Move numbers, check signs
 and annotations are preserved in prose; invalid diagram text remains readable.
 Single-spaced comment lines also replay legally, with numbered restarts and
-parenthesized alternatives anchored to their own positions. Trainer Read handoffs use the same PGN Viewer previews (←/→ to step, Esc to
-return) without modifying course or training data. `[--]` paragraph separators, bullet sections and `**bold**`
+parenthesized alternatives anchored to their own positions. Trainer Read captures
+ordered PGN text, title, selected game and ply in `OpenPgnViewer.content` and
+opens it through the Viewer's existing leave approval and collection loader.
+It writes no temporary cache file. The Viewer owns this separate editable
+collection; Save a copy/export and unsaved-close approval preserve edits without
+modifying course or training data. Breadcrumb history retains its captured
+content, collection title and cursor. Newer navigation supersedes delayed loads. `[--]` paragraph separators, bullet sections and `**bold**`
 labels are formatted for reading. Known exporter null counters and impossible
 Black-prefixed duplicates of legal White moves are cleaned only for display;
 other invalid notation stays readable. A move and its explanation precede its

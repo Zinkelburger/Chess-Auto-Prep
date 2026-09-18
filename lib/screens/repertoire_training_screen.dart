@@ -41,7 +41,6 @@ import '../widgets/app_settings_button.dart';
 import '../widgets/pgn_viewer_widget.dart';
 import '../widgets/shortcut_tooltip.dart';
 import '../widgets/board_keyboard_scope.dart';
-import '../services/storage/storage_factory.dart';
 import '../widgets/training/training_mistakes_panel.dart';
 import '../widgets/training/chapter_setup_dialog.dart';
 import '../widgets/training/move_input_widget.dart';
@@ -828,26 +827,27 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
     String? initialLineId,
     int? initialPly,
   }) async {
-    if (lines.isEmpty) return;
-    final path = p.join(
-      'cache',
-      'trainer-reading',
-      '${p.basename(_training.repertoire!.name)}.pgn',
-    );
-    await StorageFactory.instance.writeFile(
-      path,
-      lines.map((line) => line.fullPgn).join('\n\n'),
-    );
-    if (!mounted) return;
-    context.read<AppState>().switchToPgnViewer(
-      path: path,
-      gameIndex: initialLineId == null
-          ? 0
-          : lines
-                .indexWhere((line) => line.id == initialLineId)
-                .clamp(0, lines.length - 1),
-      ply: initialPly,
-      historyLabel: 'Read ${_training.repertoire!.name}',
+    final source = _training.repertoire;
+    if (!mounted ||
+        _training.isLoading ||
+        _training.error != null ||
+        source == null ||
+        lines.isEmpty ||
+        lines.any((line) => !_training.lines.contains(line))) {
+      return;
+    }
+    context.read<AppState>().handOff(
+      OpenPgnViewer.content(
+        content: lines.map((line) => line.fullPgn).join('\n\n'),
+        title: source.name,
+        gameIndex: initialLineId == null
+            ? 0
+            : lines
+                  .indexWhere((line) => line.id == initialLineId)
+                  .clamp(0, lines.length - 1),
+        ply: initialPly,
+      ),
+      historyLabel: 'Read ${source.name}',
     );
   }
 

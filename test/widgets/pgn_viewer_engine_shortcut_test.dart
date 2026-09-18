@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/infrastructure/documents/legacy_pgn_document_store.dart';
 import 'package:chess_auto_prep/app/runtime_settings.dart';
 import 'package:chess_auto_prep/app/engine_runtime.dart';
 import '../support/runtime_settings.dart';
@@ -86,7 +87,10 @@ void main() {
       preferences: SharedPreferencesViewerRepository(
         SharedPreferences.getInstance,
       ),
-      repository: StoragePgnCollectionRepository(StorageFactory.instance),
+      repository: StoragePgnCollectionRepository(
+        StorageFactory.instance,
+        documents: LegacyPgnDocumentStore(StorageFactory.instance),
+      ),
       store: MemoryWorkspaceRecoveryStore<PgnWorkspaceSnapshot>(),
     );
     addTearDown(lifetime.shutdown);
