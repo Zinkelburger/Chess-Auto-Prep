@@ -23,91 +23,115 @@ Future<SnapshotExportChoice?> showSnapshotExportDialog(
   required String suggestedName,
   required bool canVerify,
   int? verifyDepth,
-}) async {
-  final nameController = TextEditingController(text: suggestedName);
+}) => showDialog<SnapshotExportChoice>(
+  context: context,
+  builder: (_) => _SnapshotExportDialog(
+    suggestedName: suggestedName,
+    canVerify: canVerify,
+    verifyDepth: verifyDepth,
+  ),
+);
+
+class _SnapshotExportDialog extends StatefulWidget {
+  const _SnapshotExportDialog({
+    required this.suggestedName,
+    required this.canVerify,
+    required this.verifyDepth,
+  });
+
+  final String suggestedName;
+  final bool canVerify;
+  final int? verifyDepth;
+
+  @override
+  State<_SnapshotExportDialog> createState() => _SnapshotExportDialogState();
+}
+
+class _SnapshotExportDialogState extends State<_SnapshotExportDialog> {
+  late final nameController = TextEditingController(text: widget.suggestedName);
   String? nameError;
-  bool verify = canVerify;
+  late bool verify = widget.canVerify;
   bool checking = false;
 
-  final result = await showDialog<SnapshotExportChoice>(
-    context: context,
-    builder: (context) => StatefulBuilder(
-      builder: (context, setState) {
-        Future<void> submit() async {
-          final name = nameController.text.trim();
-          if (name.isEmpty) {
-            setState(() => nameError = 'Please enter a name');
-            return;
-          }
-          setState(() => checking = true);
-          final storage = StorageFactory.instance;
-          final path = await storage.repertoireFilePath(name);
-          final exists = await storage.fileExists(path);
-          if (!context.mounted) return;
-          if (exists) {
-            setState(() {
-              checking = false;
-              nameError = 'A repertoire named "$name" already exists';
-            });
-            return;
-          }
-          Navigator.of(
-            context,
-          ).pop(SnapshotExportChoice(name: name, verify: verify));
-        }
+  @override
+  void dispose() {
+    nameController.dispose();
+    super.dispose();
+  }
 
-        return AlertDialog(
-          title: const Text('Export Lines So Far'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Saves the lines found so far to a new repertoire. '
-                'The build keeps running.',
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: nameController,
-                decoration: InputDecoration(
-                  labelText: 'New repertoire name',
-                  errorText: nameError,
-                ),
-                autofocus: true,
-                onChanged: (_) {
-                  if (nameError != null) setState(() => nameError = null);
-                },
-                onSubmitted: (_) => submit(),
-              ),
-              const SizedBox(height: 8),
-              AppCheckbox(
-                label: 'Verify with engine before export',
-                value: verify,
-                onChanged: (v) => setState(() => verify = v),
-                enabled: canVerify,
-                subtitle: canVerify
-                    ? 'Re-checks the chosen moves'
-                          '${verifyDepth != null ? ' at depth $verifyDepth' : ''}. '
-                          'Exploration pauses while verifying, then resumes.'
-                    : 'Not available for this build mode.',
-              ),
-            ],
+  Future<void> submit() async {
+    final route = ModalRoute.of(context);
+    if (checking || route?.isCurrent != true) return;
+    final name = nameController.text.trim();
+    if (name.isEmpty) {
+      setState(() => nameError = 'Please enter a name');
+      return;
+    }
+    setState(() => checking = true);
+    final storage = StorageFactory.instance;
+    final path = await storage.repertoireFilePath(name);
+    final exists = await storage.fileExists(path);
+    if (!mounted || route?.isCurrent != true) return;
+    if (exists) {
+      setState(() {
+        checking = false;
+        nameError = 'A repertoire named "$name" already exists';
+      });
+      return;
+    }
+    Navigator.of(context).pop(SnapshotExportChoice(name: name, verify: verify));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final verifyDepth = widget.verifyDepth;
+    return AlertDialog(
+      title: const Text('Export Lines So Far'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Saves the lines found so far to a new repertoire. '
+            'The build keeps running.',
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
+          const SizedBox(height: 16),
+          TextField(
+            controller: nameController,
+            decoration: InputDecoration(
+              labelText: 'New repertoire name',
+              errorText: nameError,
             ),
-            FilledButton(
-              onPressed: checking ? null : submit,
-              child: const Text('Export'),
-            ),
-          ],
-        );
-      },
-    ),
-  );
-
-  nameController.dispose();
-  return result;
+            autofocus: true,
+            onChanged: (_) {
+              if (nameError != null) setState(() => nameError = null);
+            },
+            onSubmitted: (_) => submit(),
+          ),
+          const SizedBox(height: 8),
+          AppCheckbox(
+            label: 'Verify with engine before export',
+            value: verify,
+            onChanged: (v) => setState(() => verify = v),
+            enabled: widget.canVerify,
+            subtitle: widget.canVerify
+                ? 'Re-checks the chosen moves'
+                      '${verifyDepth != null ? ' at depth $verifyDepth' : ''}. '
+                      'Exploration pauses while verifying, then resumes.'
+                : 'Not available for this build mode.',
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: checking ? null : submit,
+          child: const Text('Export'),
+        ),
+      ],
+    );
+  }
 }

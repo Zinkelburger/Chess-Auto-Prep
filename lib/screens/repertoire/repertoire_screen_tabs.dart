@@ -184,13 +184,12 @@ mixin _RepertoireTabContent
   }
 
   Widget _buildJobsContent() {
-    return JobsTabContent(
-      controller: _controller,
+    return JobsPanel(
       generationController: _generationController,
       auditController: _auditController,
       jobManager: _jobManager,
       onOpenGenerationDialog: () => unawaited(_openGenerateTab()),
-      onOpenAuditConfig: () => _openAuditDialog(forceConfig: true),
+      onOpenAuditDialog: () => _openAuditDialog(forceConfig: true),
       // Coverage is a fraction of master-game counts, so without the local
       // master book the run traverses the whole tree and reports "0.0%
       // covered" for a repertoire of any size. Null hides the button until
