@@ -17,7 +17,7 @@ import '../features/settings/models/settings_state.dart';
 import 'dart:io';
 import 'package:provider/provider.dart';
 import 'training_dependencies.dart';
-import '../features/training/repositories/training_settings_repository.dart';
+import '../features/training/controllers/training_settings_controller.dart';
 
 import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -68,7 +68,7 @@ class AppDependencies extends StatefulWidget {
   final PgnDocumentStore? documentStore;
   final AppSettingsRepository? settings;
   final StoredGameRepository? storedGames;
-  final TrainingSettingsRepository? trainingSettings;
+  final TrainingSettingsController? trainingSettings;
   final RuntimeSettings? runtimeSettings;
   final EngineRuntime? engineRuntime;
 
@@ -86,6 +86,7 @@ class _AppDependenciesState extends State<AppDependencies> {
   void initState() {
     super.initState();
     unawaited(_runtime.load());
+    unawaited(_trainingSettings.ensureLoaded().catchError((Object _) {}));
     if (widget.engineRuntime == null) {
       unawaited(
         _engines.lifecycle.loadPersistedState().catchError((Object _) {}),
@@ -93,11 +94,22 @@ class _AppDependenciesState extends State<AppDependencies> {
     }
   }
 
-  late final _trainingSettings = createTrainingSettings();
+  TrainingSettingsController? _ownedTrainingSettings;
+  TrainingSettingsController get _trainingSettings =>
+      widget.trainingSettings ??
+      (_ownedTrainingSettings ??= createTrainingSettings());
+
+  @override
+  void didUpdateWidget(AppDependencies oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.trainingSettings, widget.trainingSettings)) {
+      unawaited(_trainingSettings.ensureLoaded().catchError((Object _) {}));
+    }
+  }
 
   @override
   void dispose() {
-    _trainingSettings.dispose();
+    _ownedTrainingSettings?.dispose();
     _engines.dispose();
     _cdb.dispose();
     _lichess.dispose();
@@ -159,8 +171,8 @@ class _AppDependenciesState extends State<AppDependencies> {
       Provider<StoredGameRepository>.value(
         value: widget.storedGames ?? _storedGames,
       ),
-      Provider<TrainingSettingsRepository>.value(
-        value: widget.trainingSettings ?? _trainingSettings,
+      ChangeNotifierProvider<TrainingSettingsController>.value(
+        value: _trainingSettings,
       ),
       Provider<BoardEngine>.value(value: _engines.board),
       Provider<StockfishPool>.value(value: _engines.pool),

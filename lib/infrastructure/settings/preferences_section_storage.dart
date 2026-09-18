@@ -28,6 +28,7 @@ class PreferencesSectionStorage<C extends SectionConfiguration<C>>
         throw ArgumentError('Unknown preference: ${entry.key}');
       final value = entry.value;
       final written = switch (value) {
+        null => await preferences.remove(entry.key),
         int() => await preferences.setInt(entry.key, value),
         bool() => await preferences.setBool(entry.key, value),
         String() => await preferences.setString(entry.key, value),

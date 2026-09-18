@@ -24,19 +24,19 @@ abstract class SectionSettingsOwner<C extends SectionConfiguration<C>>
   C get committed => state.committed ?? defaults;
   C get editing => state.draft ?? committed;
 
-  Future<void> edit(Map<String, Object> fields) {
+  Future<void> edit(Map<String, Object?> fields) {
     if (fields.keys.any((key) => !defaults.values.containsKey(key))) {
       return Future.error(ArgumentError('Unknown settings field'));
     }
     final normalized = editing.withValues({...editing.values, ...fields});
     return _applyQueued(
       SettingsPatch<C>({
-        for (final key in fields.keys) key: normalized.values[key]!,
+        for (final key in fields.keys) key: normalized.values[key],
       }),
     );
   }
 
-  void submit(Map<String, Object> fields) {
+  void submit(Map<String, Object?> fields) {
     if (fields.entries.every(
       (entry) => editing.values[entry.key] == entry.value,
     ))

@@ -1,3 +1,8 @@
+import 'dart:ui' as ui;
+import 'package:flutter/rendering.dart';
+import 'package:chess_auto_prep/features/training/controllers/training_settings_controller.dart';
+import 'package:chess_auto_prep/infrastructure/training/preferences_training_settings.dart';
+import 'package:chess_auto_prep/widgets/training/training_settings_panel.dart';
 import 'dart:io';
 
 import 'package:chess_auto_prep/services/repertoire_review_service.dart';
@@ -28,6 +33,8 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('trainer_auto_next', false);
     await prefs.setInt('trainer_move_speed_ms', 1);
+    await prefs.setInt('trainer_training_depth', 10);
+    await prefs.setBool('engine_lifecycle.toggle_on', false);
     final root = await AppPaths.studiesDirectory(create: true);
     final file = File(
       p.join(
@@ -58,6 +65,45 @@ void main() {
     }
     expect(session.completionCommitted, isTrue);
     expect(session.sessionCorrect, 1);
+    expect(session.settings.trainingDepth, 10);
+    await tester.tap(find.byKey(const Key('view-settings-repertoireTrainer')));
+    await tester.pumpAndSettle();
+    final settingsScroll = find
+        .descendant(
+          of: find.byType(TrainingSettingsPanel),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    await tester.scrollUntilVisible(
+      find.text('Train the whole line'),
+      200,
+      scrollable: settingsScroll,
+    );
+    await tester.tap(find.text('Train the whole line'));
+    await tester.pumpAndSettle();
+    expect(session.configuration.committed.toSettings().trainingDepth, isNull);
+    expect(
+      session.settings.trainingDepth,
+      10,
+      reason: 'Saved edits must not change an admitted sitting.',
+    );
+    await tester.scrollUntilVisible(
+      find.text('Saved changes apply to your next sitting.'),
+      -200,
+      scrollable: settingsScroll,
+    );
+    final view = RendererBinding.instance.renderViews.first;
+    final image = await (view.debugLayer! as OffsetLayer).toImage(
+      Offset.zero & view.size,
+    );
+    final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+    image.dispose();
+    await File(
+      '/tmp/renewal-training-shared-settings.png',
+    ).writeAsBytes(bytes!.buffer.asUint8List());
+    await tester.tap(find.byTooltip('Close settings (Esc)'));
+    await tester.pumpAndSettle();
+
     final firstId = session.currentLine!.persistedId;
     final reviews = RepertoireReviewService();
     var history = (await reviews.loadHistory())
@@ -70,6 +116,7 @@ void main() {
     await tester.tap(find.text('Next puzzle'));
     await tester.pump(const Duration(milliseconds: 300));
     expect(session.currentLine!.persistedId, isNot(firstId));
+    expect(session.settings.trainingDepth, 10);
     for (var i = 0; i < 120 && !session.waitingForUser; i++) {
       await tester.pump(const Duration(milliseconds: 100));
     }
@@ -108,6 +155,15 @@ void main() {
         .toList();
     expect(history, hasLength(2));
     expect(history.map((entry) => entry.lineId).toSet(), hasLength(2));
+    session.stopSession();
+    expect(session.settings.trainingDepth, isNull);
+    final restarted = TrainingSettingsController(PreferencesTrainingSettings());
+    await restarted.ensureLoaded();
+    expect(restarted.committed.toSettings().trainingDepth, isNull);
+    expect(restarted.committed.toSettings().moveSpeedMs, 1);
+    restarted.dispose();
+    await prefs.reload();
+    expect(prefs.containsKey('trainer_training_depth'), isFalse);
     await session.loadRepertoire();
     expect(
       session.reviewMap.values.map((entry) => entry.passCount),

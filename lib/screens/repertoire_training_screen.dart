@@ -4,8 +4,7 @@ library;
 
 import '../features/generation/services/generation_artifacts.dart';
 import '../app/training_dependencies.dart';
-import '../features/training/models/training_configuration.dart';
-import '../features/training/repositories/training_settings_repository.dart';
+import '../features/training/controllers/training_settings_controller.dart';
 
 import '../features/repertoires/controllers/repertoire_board_controller.dart';
 
@@ -93,7 +92,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
     _workspaceNavigation.addListener(_resumePendingHandoff);
     _training = createTrainingSession(
       artifacts: context.read<GenerationArtifacts>().repository,
-      configuration: context.read<TrainingSettingsRepository>(),
+      configuration: context.read<TrainingSettingsController>(),
       session: RepertoireBoardController(),
     );
     _training.onLineStarted = () {
@@ -300,20 +299,18 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
       AppShortcut.autoAdvance,
       'Toggle manual advance for next sitting',
       () {
+        if (!mounted) return;
         final configuration = _training.configuration;
         final before =
             configuration.state.draft ?? configuration.state.committed;
         if (before == null) return;
-        final draft = before.toSettings();
-        draft.learnRequiresClick = !draft.learnRequiresClick;
         unawaited(
           configuration
-              .apply(
-                TrainingSettingsPatch.between(
-                  before,
-                  TrainingConfiguration(draft),
-                ),
-              )
+              .edit({
+                'trainer_learn_requires_click': !before
+                    .toSettings()
+                    .learnRequiresClick,
+              })
               .catchError((Object _) {}),
         );
         setState(() {});

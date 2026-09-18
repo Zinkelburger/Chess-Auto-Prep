@@ -1,7 +1,7 @@
 import 'dart:async';
 import '../../features/settings/models/settings_state.dart';
 import '../../features/training/models/training_configuration.dart';
-import '../../features/training/repositories/training_settings_repository.dart';
+import '../../features/training/controllers/training_settings_controller.dart';
 import 'package:flutter/material.dart';
 
 import '../../features/training/models/training_settings.dart';
@@ -11,7 +11,7 @@ import '../common/choice_field.dart';
 
 /// Focused preference pages, using the same rows and cards as app settings.
 class TrainingSettingsPanel extends StatefulWidget {
-  final TrainingSettingsRepository configuration;
+  final TrainingSettingsController configuration;
   final bool applyNextSitting;
   final TrainingMode trainingMode;
   final RepetitionMode repetitionMode;
@@ -50,7 +50,6 @@ class TrainingSettingsPanel extends StatefulWidget {
 
 class _TrainingSettingsPanelState extends State<TrainingSettingsPanel> {
   late TrainingSettings settings;
-  StreamSubscription<Object?>? _subscription;
   final _fieldControllers = <String, TextEditingController>{};
   final _fieldFocusNodes = <String, FocusNode>{};
   bool _disposing = false;
@@ -103,18 +102,19 @@ class _TrainingSettingsPanelState extends State<TrainingSettingsPanel> {
   void didUpdateWidget(TrainingSettingsPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!identical(widget.configuration, oldWidget.configuration)) {
-      unawaited(_subscription?.cancel());
+      oldWidget.configuration.removeListener(_onSettingsChanged);
       _listen();
     }
   }
 
   void _listen() {
     _readSettings();
-    _subscription = widget.configuration.changes.listen((_) {
-      if (!mounted) return;
-      setState(_readSettings);
-    });
-    unawaited(widget.configuration.ensureLoaded().catchError((Object _) {}));
+    widget.configuration.addListener(_onSettingsChanged);
+  }
+
+  void _onSettingsChanged() {
+    if (!mounted) return;
+    setState(_readSettings);
   }
 
   void _readSettings() {
@@ -133,7 +133,7 @@ class _TrainingSettingsPanelState extends State<TrainingSettingsPanel> {
     for (final focus in _fieldFocusNodes.values) {
       focus.dispose();
     }
-    unawaited(_subscription?.cancel());
+    widget.configuration.removeListener(_onSettingsChanged);
     super.dispose();
   }
 
@@ -141,11 +141,8 @@ class _TrainingSettingsPanelState extends State<TrainingSettingsPanel> {
     if (!mounted) return;
     final before = TrainingConfiguration(settings);
     update();
-    final patch = TrainingSettingsPatch.between(
-      before,
-      TrainingConfiguration(settings),
-    );
-    unawaited(widget.configuration.apply(patch).catchError((Object _) {}));
+    final changes = TrainingConfiguration(settings).changesFrom(before);
+    unawaited(widget.configuration.edit(changes).catchError((Object _) {}));
     setState(() {});
   }
 

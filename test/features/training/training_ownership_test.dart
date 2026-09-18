@@ -509,7 +509,7 @@ void main() {
       controller.lines = [first, second];
       controller.isLoading = false;
       controller.startLine(first);
-      await settingsOwner.apply(
+      await settingsOwner.edit(
         trainingEdit(settingsOwner.state.committed!, (draft) {
           draft.moveSpeedMs = 900;
           draft.newLinesPerSession = 1;
@@ -535,7 +535,7 @@ void main() {
       await controller.loadSettings();
       config.failWrites = true;
       await expectLater(
-        settingsOwner.apply(
+        settingsOwner.edit(
           trainingEdit(
             settingsOwner.state.committed!,
             (draft) => draft.moveSpeedMs = 900,

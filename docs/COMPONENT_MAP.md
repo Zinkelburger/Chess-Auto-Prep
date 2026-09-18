@@ -1601,11 +1601,17 @@ their captured source generation. Checkbox drafts also retain their original
 line-list identity and cannot save after source replacement or reload. Read opens
 explicit unsaved Viewer content; it cannot overwrite the training source.
 
-`AppDependencies` owns one `TrainingSettingsController`. Settings panels submit
-immutable field patches and share committed values, pending drafts and visible
-save failures with Retry. Fresh reads and serialized writes preserve changes
-from concurrent panels; the existing preference keys and default migration are
-unchanged. A sitting captures its committed configuration, including auto-next
+`AppDependencies` provides and initially loads one `TrainingSettingsController`,
+using the existing `SectionSettingsOwner`; an injected override remains owned by
+its caller. The separate Training queue, stream, repository/storage contracts
+and patch type are retired. Panels and the session listen to the same concrete
+owner. `TrainingConfiguration.changesFrom` captures only changed persisted keys;
+the shared patch/storage contracts distinguish absent fields from explicit null
+(removal of optional training depth). Committed values, pending drafts, failures
+and Retry use the same machinery as engine/display/evaluation settings. Fresh
+reads and serialized writes preserve concurrent edits. `PreferencesTrainingSettings`
+retains the existing flag-last default-cap migration and uses the shared scalar
+storage adapter, including checked removal acknowledgements. A sitting captures its committed configuration, including auto-next
 lines, and later changes apply while browsing or at the next sitting. Initial
 settings load failure blocks training startup and uses the same retry path.
 Drafts are in memory, and partially completed multi-key writes are reconciled

@@ -205,4 +205,88 @@ void main() {
     expect(owner.state.committed!.toSettings().newLinesPerSession, 15);
     expect(tester.takeException(), isNull);
   });
+
+  Widget settingsHost(TrainingSettingsController owner) => MaterialApp(
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
+    home: Scaffold(
+      body: TrainingSettingsPanel(
+        configuration: owner,
+        trainingMode: TrainingMode.repertoire,
+        repetitionMode: RepetitionMode.spaced,
+        onTrainingModeChanged: (_) {},
+        onRepetitionModeChanged: (_) {},
+      ),
+    ),
+  );
+
+  testWidgets(
+    'focused drafts survive notifications and owner replacement detaches',
+    (tester) async {
+      final first = TrainingSettingsController(
+        MemoryTrainingSettings(TrainingSettings(newLinesPerSession: 20)),
+      );
+      final second = TrainingSettingsController(
+        MemoryTrainingSettings(TrainingSettings(newLinesPerSession: 35)),
+      );
+      addTearDown(first.dispose);
+      addTearDown(second.dispose);
+      await first.ensureLoaded();
+      await second.ensureLoaded();
+      await tester.pumpWidget(settingsHost(first));
+      final field = find.byKey(const ValueKey('New lines'));
+      String text() => tester.widget<TextFormField>(field).controller!.text;
+      await tester.enterText(field, '-');
+      await first.edit({'trainer_new_lines_per_session': 12});
+      await tester.pump();
+      expect(text(), '-');
+      FocusScope.of(tester.element(field)).unfocus();
+      await tester.pump();
+      expect(text(), '12');
+
+      await tester.pumpWidget(settingsHost(second));
+      expect(text(), '35');
+      await first.edit({'trainer_new_lines_per_session': 18});
+      await tester.pump();
+      expect(text(), '35');
+      await second.edit({'trainer_new_lines_per_session': 25});
+      await tester.pump();
+      expect(text(), '25');
+      await tester.pumpWidget(const SizedBox());
+      await second.edit({'trainer_new_lines_per_session': 30});
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('host owns initial load and panel exposes read failure retry', (
+    tester,
+  ) async {
+    final storage = MemoryTrainingSettings(
+      TrainingSettings(newLinesPerSession: 37),
+    )..failReads = true;
+    final owner = TrainingSettingsController(storage);
+    addTearDown(owner.dispose);
+    await tester.pumpWidget(settingsHost(owner));
+    expect(storage.reads, 0);
+    expect(find.text('Loading training settings…'), findsOneWidget);
+    await expectLater(owner.ensureLoaded(), throwsStateError);
+    await tester.pump();
+    expect(owner.state.committed, isNull);
+    expect(find.text('Training settings could not be loaded.'), findsOneWidget);
+    expect(storage.writes, isEmpty);
+    storage.failReads = false;
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+    expect(find.text('Retry'), findsNothing);
+    expect(owner.state.committed!.toSettings().newLinesPerSession, 37);
+    expect(
+      tester
+          .widget<TextFormField>(find.byKey(const ValueKey('New lines')))
+          .controller!
+          .text,
+      '37',
+    );
+    expect(storage.writes, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
 }

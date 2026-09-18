@@ -2,7 +2,6 @@ import '../features/generation/repositories/generation_artifact_repository.dart'
 import '../features/repertoires/controllers/repertoire_board_controller.dart';
 import '../features/training/controllers/training_session_controller.dart';
 import '../features/training/controllers/training_settings_controller.dart';
-import '../features/training/repositories/training_settings_repository.dart';
 import '../infrastructure/training/preferences_training_settings.dart';
 import '../infrastructure/training/training_source_loader.dart';
 import '../services/asked_questions_store.dart';
@@ -16,7 +15,7 @@ TrainingSettingsController createTrainingSettings() =>
 TrainingSessionController createTrainingSession({
   required RepertoireBoardController session,
   required GenerationArtifactRepository artifacts,
-  required TrainingSettingsRepository configuration,
+  required TrainingSettingsController configuration,
   RepertoireService? repertoireService,
   RepertoireReviewService? reviewService,
   AskedQuestionsStore? askedQuestions,

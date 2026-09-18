@@ -102,7 +102,8 @@
     "lib/widgets/layout/board_zone.dart",
     "lib/features/repertoire/widgets/repertoire_lines_side_panel.dart",
     "lib/widgets/layout/jobs_tab_content.dart",
-    "lib/models/eval_database_settings.dart"
+    "lib/models/eval_database_settings.dart",
+    "lib/features/training/repositories/training_settings_repository.dart"
   ],
   "symbols": [
     "PgnBatchWriter",
@@ -242,6 +243,10 @@
     "JobsTabContent",
     "EvalDatabaseSettings.instance",
     "CdbSnapshotDownloadController.instance",
-    "LichessEvalController.instance"
+    "LichessEvalController.instance",
+    "TrainingSettingsRepository",
+    "TrainingSettingsStorage",
+    "TrainingSettingsPatch",
+    "TrainingSetting"
   ]
 }

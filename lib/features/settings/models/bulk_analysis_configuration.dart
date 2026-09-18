@@ -16,7 +16,7 @@ class BulkAnalysisConfiguration
   static const minDepth = 1;
   static const maxDepth = 99;
   @override
-  BulkAnalysisConfiguration withValues(Map<String, Object> values) =>
+  BulkAnalysisConfiguration withValues(Map<String, Object?> values) =>
       BulkAnalysisConfiguration(values);
   int get depth => values['engine_settings.bulk_depth'] as int;
 }

@@ -18,7 +18,7 @@ import '../../../utils/chess_utils.dart' show isNullMoveSan, playSanOrNullMove;
 import '../../../utils/safe_change_notifier.dart';
 import '../repositories/training_answers.dart';
 import '../repositories/training_review_repository.dart';
-import '../repositories/training_settings_repository.dart';
+import 'training_settings_controller.dart';
 import '../models/chapter_layout.dart';
 import 'drill_phase.dart';
 import '../models/move_display.dart';
@@ -38,7 +38,7 @@ import '../models/training_window.dart';
 class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   final TrainingHeaderRepository headers;
   final TrainingSourceRepository _loader;
-  final TrainingSettingsRepository configuration;
+  final TrainingSettingsController configuration;
   final TrainingReviewRepository reviewService;
 
   /// Remembers the ask-once prompts (currently "sort into chapters?") so a
@@ -57,9 +57,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
     learn = LearnPhase(this);
     replay = ReplayPhase(this);
     drill = DrillPhase(this);
-    _configurationSubscription = configuration.changes.listen(
-      (_) => _configurationChanged(),
-    );
+    configuration.addListener(_configurationChanged);
   }
 
   /// New-line walkthrough (acknowledge / quiz). The controller still exposes
@@ -116,7 +114,6 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   TrainingSettings get settings => _settings.snapshot();
   @visibleForTesting
   set settings(TrainingSettings value) => _settings = value.snapshot();
-  late final StreamSubscription<Object?> _configurationSubscription;
 
   /// Every auto-next line in one sitting uses the same committed configuration.
   /// Successful panel edits are adopted while browsing or at the next sitting.
@@ -293,7 +290,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
-    unawaited(_configurationSubscription.cancel());
+    configuration.removeListener(_configurationChanged);
     chapterScope.cancelPending();
     _loadGeneration++;
     _invalidateLine();
@@ -601,11 +598,8 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   late final ChapterScope chapterScope = ChapterScope(
     askedQuestions: askedQuestions,
     saveSettings: (before, after) async {
-      await configuration.apply(
-        TrainingSettingsPatch.between(
-          TrainingConfiguration(before),
-          TrainingConfiguration(after),
-        ),
+      await configuration.edit(
+        TrainingConfiguration(after).changesFrom(TrainingConfiguration(before)),
       );
     },
     settings: () => settings,

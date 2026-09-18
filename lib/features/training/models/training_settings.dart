@@ -88,7 +88,7 @@ enum ChapterGroupingMode {
 
 /// The trainer's user preferences, persisted in SharedPreferences.
 ///
-/// Mutable editing value; persistence belongs to TrainingSettingsRepository.
+/// Mutable editing value; persistence belongs to TrainingSettingsController.
 class TrainingSettings {
   int correctStreakThreshold;
   int? trainingDepth; // null = full line

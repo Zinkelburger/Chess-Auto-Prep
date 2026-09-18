@@ -1,13 +1,14 @@
-/// Immutable scalar preferences for one independently committed section.
+/// Immutable scalar preferences (including explicit nullable values) for one independently committed section.
 abstract class SectionConfiguration<C> {
-  Map<String, Object> get values;
-  C withValues(Map<String, Object> values);
+  Map<String, Object?> get values;
+  C withValues(Map<String, Object?> values);
 }
 
 class SettingsPatch<C extends SectionConfiguration<C>> {
-  SettingsPatch(Map<String, Object> changes)
+  /// Absent keys are unchanged; present null values remove their preference.
+  SettingsPatch(Map<String, Object?> changes)
     : changes = Map.unmodifiable(changes);
-  final Map<String, Object> changes;
+  final Map<String, Object?> changes;
   bool get isEmpty => changes.isEmpty;
   C apply(C configuration) =>
       configuration.withValues({...configuration.values, ...changes});
@@ -18,10 +19,10 @@ class SettingsPatch<C extends SectionConfiguration<C>> {
 }
 
 abstract class ImmutableSection<C> implements SectionConfiguration<C> {
-  ImmutableSection(Map<String, Object> values)
+  ImmutableSection(Map<String, Object?> values)
     : values = Map.unmodifiable(values);
   @override
-  final Map<String, Object> values;
+  final Map<String, Object?> values;
   @override
   bool operator ==(Object other) =>
       other.runtimeType == runtimeType &&

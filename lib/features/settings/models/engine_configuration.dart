@@ -108,7 +108,7 @@ class EngineConfiguration extends ImmutableSection<EngineConfiguration> {
   bool get enabled => values['engine_lifecycle.toggle_on'] as bool;
   final int maxCores;
   @override
-  EngineConfiguration withValues(Map<String, Object> values) =>
+  EngineConfiguration withValues(Map<String, Object?> values) =>
       EngineConfiguration(values, maxCores);
   int get cores => values['engine_settings.cores'] as int;
   int get hashMb => values['engine_settings.hash_mb'] as int;

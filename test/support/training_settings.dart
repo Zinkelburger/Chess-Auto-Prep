@@ -2,9 +2,11 @@ import 'dart:async';
 
 import 'package:chess_auto_prep/features/training/models/training_configuration.dart';
 import 'package:chess_auto_prep/features/training/models/training_settings.dart';
-import 'package:chess_auto_prep/features/training/repositories/training_settings_repository.dart';
+import 'package:chess_auto_prep/features/settings/repositories/settings_section_storage.dart';
+import 'package:chess_auto_prep/features/settings/models/section_configuration.dart';
 
-class MemoryTrainingSettings implements TrainingSettingsStorage {
+class MemoryTrainingSettings
+    implements SettingsSectionStorage<TrainingConfiguration> {
   MemoryTrainingSettings([TrainingSettings? initial])
     : value = TrainingConfiguration(initial ?? TrainingSettings());
   TrainingConfiguration value;
@@ -13,7 +15,7 @@ class MemoryTrainingSettings implements TrainingSettingsStorage {
   bool failWrites = false;
   bool failReads = false;
   int reads = 0;
-  final writes = <TrainingSettingsPatch>[];
+  final writes = <SettingsPatch<TrainingConfiguration>>[];
 
   @override
   Future<TrainingConfiguration> read() async {
@@ -25,7 +27,7 @@ class MemoryTrainingSettings implements TrainingSettingsStorage {
   }
 
   @override
-  Future<void> write(TrainingSettingsPatch edit) async {
+  Future<void> write(SettingsPatch<TrainingConfiguration> edit) async {
     writes.add(edit);
     await writeGate?.future;
     if (failWrites) throw StateError('Preferences unavailable');
@@ -33,11 +35,11 @@ class MemoryTrainingSettings implements TrainingSettingsStorage {
   }
 }
 
-TrainingSettingsPatch trainingEdit(
+Map<String, Object?> trainingEdit(
   TrainingConfiguration from,
   void Function(TrainingSettings) change,
 ) {
   final draft = from.toSettings();
   change(draft);
-  return TrainingSettingsPatch.between(from, TrainingConfiguration(draft));
+  return TrainingConfiguration(draft).changesFrom(from);
 }

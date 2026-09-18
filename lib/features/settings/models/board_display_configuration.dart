@@ -50,7 +50,7 @@ class BoardDisplayConfiguration
             : false,
       });
   @override
-  BoardDisplayConfiguration withValues(Map<String, Object> values) =>
+  BoardDisplayConfiguration withValues(Map<String, Object?> values) =>
       BoardDisplayConfiguration(values);
   BoardCoordinates get coordinates => BoardCoordinates.fromStorage(
     values['display.board_coordinates'] as String,

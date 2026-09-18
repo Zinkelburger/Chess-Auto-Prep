@@ -50,7 +50,7 @@ class EvalDatabaseConfiguration
   }
 
   @override
-  EvalDatabaseConfiguration withValues(Map<String, Object> values) =>
+  EvalDatabaseConfiguration withValues(Map<String, Object?> values) =>
       EvalDatabaseConfiguration(values);
 
   bool get enableCdbDirect => values['eval.cdbdirect.enabled'] as bool;
