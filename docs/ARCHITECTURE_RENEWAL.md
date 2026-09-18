@@ -229,18 +229,24 @@ Finish the safety work already in flight, then simplify the existing graph.
 ### What the code establishes
 
 Measurements below compare the recorded renewal baseline `e477dc58` with local
-main `21873a6d`, excluding concurrent worktrees. They count physical lines,
+main `a6238ff5`, excluding concurrent worktrees. They count physical lines,
 including comments and blanks, in tracked `lib/**/*.dart` files. Generated Dart
 is included in this historical comparison; subsequent cutovers must report it
 separately. These are review baselines, not implementation-size targets.
 
 | Tracked scope | Baseline | Main snapshot | Finding |
 |---|---:|---:|---|
-| All production Dart | 218,957 lines / 890 files | 236,030 lines / 1,054 files | +17,073 lines (7.8%); no overall size reduction |
+| All production Dart | 218,957 lines / 890 files | 236,991 lines / 1,055 files | +18,034 lines (8.2%); no overall size reduction |
 | `screens/pgn_viewer_screen.dart` | 1,909 | 1,977 | Consumer grew despite facade retirement |
-| `screens/repertoire_screen.dart` | 1,191 | 1,315 | Consumer simplification remains open |
+| `screens/repertoire_screen.dart` | 1,191 | 1,333 | Consumer simplification remains open |
 | `screens/study_screen.dart` | 880 | 926 | Consumer simplification remains open |
 | `core/generation_session_controller.dart` | 1,321 | 1,455 | Orchestration remains unfinished |
+
+At this snapshot, generated localization accounts for 2,272 lines of the total;
+excluding it still leaves growth of 15,762 lines. `services/` contains 43,968
+lines and `widgets/` 55,788. There are 99 commits since the baseline, including
+merges (57 on the first-parent history). Commit count is activity, not completion.
+The six enforced and 17 unfinished features still include zero complete features.
 
 The criticism needs three qualifications, not a dismissal:
 
@@ -303,6 +309,23 @@ not add an architecture-metrics framework for this review. Use the diff, caller
 searches and the existing boundary/retirement checks. Record retirement,
 behavioral parity and maintainability outcomes separately; all applicable gates
 must pass before calling the workflow complete.
+
+**Binding stop rule for the next two simplifications.** Complete composition
+and Viewer simplification as two bounded, independently reviewed trials before
+expanding renewal into another domain. Each must reduce handwritten production
+code across its entire agreed scope, including moved methods, new helpers and
+all callers, and make the representative action traces easier to follow. Report
+exact base/head commits, additions/deletions, ownership/callback changes and
+behavioral evidence; count generated code and capability additions separately.
+Do not expand either trial to manufacture unrelated deletion credit.
+
+If either trial fails the reduction, clarity or parity test, stop broad rewrite
+expansion. Retain the proven safety improvements, finish any necessary repairs
+to preserve user data, and return to targeted fixes. Passing tests alone, retiring
+a facade or promising a later cleanup cannot override this decision. Unverified
+results do not authorize expansion. The coordinator enforces this rule without
+seeking another permission round; the existing in-flight safety repairs finish
+before these trials are assessed.
 
 ### One composition policy
 
