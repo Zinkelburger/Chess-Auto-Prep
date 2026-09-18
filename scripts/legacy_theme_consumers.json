@@ -134,7 +134,6 @@
   "lib/widgets/lines/line_filter_controls.dart": "widgets; renewal milestone 6",
   "lib/widgets/lines/line_item_row.dart": "widgets; renewal milestone 6",
   "lib/widgets/lines/line_metrics_panel.dart": "widgets; renewal milestone 6",
-  "lib/widgets/lines/lines_list_panel.dart": "widgets; renewal milestone 6",
   "lib/widgets/master_games_prompt_banner.dart": "widgets; renewal milestone 6",
   "lib/widgets/master_games_settings_panel.dart": "widgets; renewal milestone 6",
   "lib/widgets/match_games_table.dart": "widgets; renewal milestone 6",

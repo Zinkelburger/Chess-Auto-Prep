@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'package:chess_auto_prep/widgets/repertoire_lines_browser.dart';
+import 'package:chess_auto_prep/widgets/lines/line_item_row.dart';
 import 'dart:ui' as ui;
 import 'package:chess_auto_prep/widgets/layout/bottom_pane.dart';
 import 'package:chess_auto_prep/widgets/layout/jobs_panel.dart';
@@ -138,6 +140,34 @@ void main() {
       await tester.tap(find.byTooltip('Show analysis panel'));
       await tester.pump(const Duration(milliseconds: 300));
       await captureLayout('wide-layout');
+      await tester.tap(find.byTooltip('Chapter options'));
+      await ready(tester, find.text('Line metrics').hitTestable());
+      await tester.tap(find.text('Line metrics').hitTestable());
+      final browser = find.byType(RepertoireLinesBrowser);
+      await ready(tester, browser);
+      final rows = find.descendant(
+        of: browser,
+        matching: find.byType(LineItemRow),
+      );
+      expect(rows, findsOneWidget);
+      final search = find.descendant(
+        of: browser,
+        matching: find.byType(TextField),
+      );
+      await tester.enterText(search, 'no matching line');
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(rows, findsNothing);
+      expect(find.text('No lines match the current filters'), findsOneWidget);
+      await tester.tap(find.text('Show all lines'));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(rows, findsOneWidget);
+      expect(tester.widget<TextField>(search).controller!.text, isEmpty);
+      await captureLayout('line-metrics');
+      await tester.tap(find.byTooltip('Back to chapters'));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(owner.board.tree, same(retainedTree));
+      expect(owner.board.path, retainedPath);
+
       // Idle jobs have no status badge. Open the existing panel owner as a
       // native fixture; actual running-job button actions are widget-tested.
       tester

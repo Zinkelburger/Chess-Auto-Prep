@@ -1807,13 +1807,12 @@ a screen of blank space.
 **Settings → Shortcuts** shows a compact, bordered Action / Key / Where table with keycaps. Bindings and reference rows live together in `app_shortcuts.dart`; there is no separate list of handwritten mappings. Shared settings cards use 10px vertical row/header padding and 12px group gaps, with a 680px content cap to keep labels and values close together.
 
 PGN collection edits now belong to
-`features/documents/controllers/pgn_collection_editor.dart`. The legacy viewer
-forwards commands and observes this one edit owner; the metadata mixin is retired.
+`features/documents/controllers/pgn_collection_editor.dart`. Viewer consumers
+call and observe this one edit owner; the metadata mixin is retired.
 `PgnCollectionRepository` is injected at construction, with production setup in
 `app/app_dependencies.dart` and its storage/native adapter under
-`infrastructure/documents/`. `ViewerCollectionLoadController` owns read/decode
-request revisions through the injected collection repository and
-`PgnCollectionDecoder`; the production isolate adapter calls the pure
+`infrastructure/documents/`. `ViewerDocumentController` owns read/decode, request invalidation and
+adoption through the injected collection repository and `PgnCollectionDecoder`; the production isolate adapter calls the pure
 `chess_core/pgn/pgn_collection.dart` codec. Leading banners survive indented/CRLF
 headers and headerless movetext in copies and recovery. File, paste, close, navigation and
 recovery replacement share request invalidation. Late read/decode/metadata
@@ -1943,7 +1942,7 @@ Pure mainline lexing and Study-header rewriting now live in
 
 ```
 PgnViewerScreen._pickFile → `FilePicker.pickFile` (Linux: **XDG Desktop Portal only** in `file_picker` ≥10.3 — D-Bus `org.freedesktop.portal.FileChooser`; no zenity/kdialog fallback) → ViewerDocumentController.loadFile(path)
-  → ViewerCollectionLoadController → PgnCollectionRepository.open (native Linux snapshot captures content and file revision; other hosts use the legacy adapter)
+  → ViewerDocumentController → PgnCollectionRepository.open (native Linux snapshot captures content and file revision; other hosts use the legacy adapter)
   → injected PgnCollectionDecoder → IsolatePgnCollectionDecoder → chess-core parseMultiGamePgn; lightweight headers/raw text in allGames / filteredGames; only the selected game is parsed into the reader
   → on failure: controller.errorMessage + debugPrint; screen shows SnackBar + inline error in empty state
   → on success: recent-files prefs, missing ECO/Opening tags, optional saved slice and reading-session restore, loadCurrentGame
@@ -2837,7 +2836,7 @@ removed. The notation surface retains its clipping, border and child geometry.
 | `lines/line_filter_controls.dart` | Compact search + sort/coverage filter chips (same 6px-radius outline as `ListSearchField`) |
 | `lines/line_item_row.dart` | Single line row + trap/coherence badges; unaccounted-move preview sorts a copied list (does not mutate source); trash icon with confirm dialog (`onLineDeleted` callback) |
 | `lines/line_metrics_panel.dart` | Metrics + Next/Biggest gap buttons |
-| `lines/lines_list_panel.dart` | Grouped list view; lazy `ListView.builder` over flattened group headers + line rows |
+| `repertoire_lines_browser.dart` | Owns filters, sorting, indexes and scrolling; renders its table header and lazy line list directly, with reusable row/header cells and coverage prompt. No intermediate list-panel forwarding contract. |
 
 #### Shared / other modes
 

@@ -104,7 +104,9 @@
     "lib/widgets/layout/jobs_tab_content.dart",
     "lib/models/eval_database_settings.dart",
     "lib/features/training/repositories/training_settings_repository.dart",
-    "lib/services/generation/course/enrichment_runner.dart"
+    "lib/services/generation/course/enrichment_runner.dart",
+    "lib/widgets/lines/lines_list_panel.dart",
+    "lib/features/documents/controllers/viewer_collection_load_controller.dart"
   ],
   "symbols": [
     "PgnBatchWriter",
@@ -251,6 +253,12 @@
     "TrainingSetting",
     "EnrichmentRunner",
     "EnrichmentPass",
-    "EnrichmentProbe"
+    "EnrichmentProbe",
+    "LinesListPanel",
+    "ViewerCollectionLoadController",
+    "ViewerCollectionLoadResult",
+    "ViewerCollectionLoaded",
+    "ViewerCollectionLoadFailed",
+    "ViewerCollectionLoadFailure"
   ]
 }

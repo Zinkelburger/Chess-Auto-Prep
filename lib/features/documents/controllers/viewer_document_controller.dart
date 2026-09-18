@@ -9,7 +9,6 @@ import 'package:path/path.dart' as p;
 
 import 'pgn_collection_editor.dart';
 import 'viewer_collection_controller.dart';
-import 'viewer_collection_load_controller.dart';
 import 'viewer_filter_controller.dart';
 import 'viewer_presentation_controller.dart';
 import 'viewer_reading_controller.dart';
@@ -110,10 +109,6 @@ class ViewerDocumentController extends ChangeNotifier with SafeChangeNotifier {
   final PgnCollectionFilter collectionFilter;
   late final filters = ViewerFilterController(collectionFilter);
   final PgnLibraryRepository library;
-  late final _collectionLoads = ViewerCollectionLoadController(
-    repository: collectionRepository,
-    decoder: collectionDecoder,
-  );
   final ViewerPreferencesRepository preferences;
   late final PgnCollectionEditor editor;
   Future<void Function()> _prepareRecoveryReplacement(
@@ -249,10 +244,10 @@ class ViewerDocumentController extends ChangeNotifier with SafeChangeNotifier {
   }
 
   /// Collection requests are independent of selected-game analysis.
-  int get _loadEpoch => _collectionLoads.revision;
+  int _loadEpoch = 0;
 
   bool _isCurrentLoad(int epoch) =>
-      !isDisposed && isActive() && _collectionLoads.isCurrent(epoch);
+      !isDisposed && isActive() && epoch == _loadEpoch;
 
   /// Text above the first game in the loaded file — a `;`/`%` banner, which
   /// is not a game and so is not in [collection.games]. Held here because a write
@@ -294,7 +289,7 @@ class ViewerDocumentController extends ChangeNotifier with SafeChangeNotifier {
   @override
   void dispose() {
     unawaited(reading.saveSession());
-    _collectionLoads.dispose();
+    _loadEpoch++;
     filters.dispose();
     presentation.dispose();
     reading.dispose();
@@ -319,7 +314,7 @@ class ViewerDocumentController extends ChangeNotifier with SafeChangeNotifier {
   }
 
   int _abandonInFlightWork() {
-    final revision = _collectionLoads.invalidate();
+    final revision = ++_loadEpoch;
     _openingEpoch++;
     filters.invalidate();
     _loadingCollection = false;
@@ -374,25 +369,43 @@ class ViewerDocumentController extends ChangeNotifier with SafeChangeNotifier {
   /// single-game handoffs (Games page "Review"): a leftover slice there only
   /// hides the target game and confuses the count display.
   Future<bool> loadFile(String path, {bool restoreSavedSlice = true}) async {
-    if (!editor.canReplaceCollection()) return false;
+    if (isDisposed || !isActive() || !editor.canReplaceCollection()) {
+      return false;
+    }
     unawaited(reading.saveSession());
-    _abandonInFlightWork();
-    final loading = _collectionLoads.loadFile(path);
-    final loadEpoch = _loadEpoch;
+    final loadEpoch = _abandonInFlightWork();
     errorMessage = null;
     final fileName = p.basename(path);
 
     _loadingCollection = true;
     notifyListeners();
     try {
-      final result = await loading;
-      if (!_isCurrentLoad(loadEpoch) || result == null) return false;
-      if (result is ViewerCollectionLoadFailed) {
-        _loadingCollection = false;
-        errorMessage = _collectionFailureMessage(result, fileName: fileName);
-        notifyListeners();
-        return false;
+      final PgnSnapshot snapshot;
+      final DecodedPgnCollection? decoded;
+      final DateTime? modified;
+      try {
+        if (!_isCurrentLoad(loadEpoch)) return false;
+        final opened = await collectionRepository.open(path);
+        if (!_isCurrentLoad(loadEpoch)) return false;
+        switch (opened) {
+          case PgnMissing():
+            return _failCollectionLoad(loadEpoch, 'File not found: $fileName');
+          case PgnReadFailed():
+            return _failCollectionLoad(loadEpoch, 'Could not read $fileName');
+          case PgnOpened(snapshot: final observed):
+            snapshot = observed;
+            decoded = await _decodeCollection(
+              snapshot.content,
+              loadEpoch,
+              fileName: fileName,
+            );
+        }
+        if (!_isCurrentLoad(loadEpoch) || decoded == null) return false;
+        modified = await collectionRepository.modified(path);
+      } catch (_) {
+        return _failCollectionLoad(loadEpoch, 'Could not read $fileName');
       }
+      if (!_isCurrentLoad(loadEpoch)) return false;
       // Manual edits or a recovery action may have started during the read.
       // The initial permission to replace is not valid for that newer state.
       if (!editor.canReplaceCollection()) {
@@ -402,8 +415,7 @@ class ViewerDocumentController extends ChangeNotifier with SafeChangeNotifier {
         }
         return false;
       }
-      final loaded = result as ViewerCollectionLoaded;
-      final entries = List<PgnGameEntry>.of(loaded.document.games);
+      final entries = List<PgnGameEntry>.of(decoded.games);
 
       reading.restoringSession = true;
       _adoptCollection(
@@ -413,10 +425,10 @@ class ViewerDocumentController extends ChangeNotifier with SafeChangeNotifier {
           entries,
           current: presentation.perspective,
         ),
-        preamble: loaded.document.preamble,
-        baseline: loaded.snapshot,
+        preamble: decoded.preamble,
+        baseline: snapshot,
       );
-      loadedFileModified = loaded.modified;
+      loadedFileModified = modified;
       notifyListeners();
 
       await libraryState.addToRecentFiles(path);
@@ -489,26 +501,41 @@ class ViewerDocumentController extends ChangeNotifier with SafeChangeNotifier {
     }
   }
 
-  String _collectionFailureMessage(
-    ViewerCollectionLoadFailed result, {
+  bool _failCollectionLoad(int epoch, String message) {
+    if (!_isCurrentLoad(epoch)) return false;
+    _loadingCollection = false;
+    errorMessage = message;
+    notifyListeners();
+    return false;
+  }
+
+  Future<DecodedPgnCollection?> _decodeCollection(
+    String content,
+    int epoch, {
     String? fileName,
-  }) {
-    return switch (result.failure) {
-      ViewerCollectionLoadFailure.missing => 'File not found: $fileName',
-      ViewerCollectionLoadFailure.unreadable => 'Could not read $fileName',
-      ViewerCollectionLoadFailure.empty =>
-        fileName == null
-            ? 'Clipboard is empty — copy some PGN first'
-            : 'File is empty: $fileName',
-      ViewerCollectionLoadFailure.noGames =>
-        fileName == null
+  }) async {
+    if (!_isCurrentLoad(epoch)) return null;
+    String message;
+    if (content.trim().isEmpty) {
+      message = fileName == null
+          ? 'Clipboard is empty — copy some PGN first'
+          : 'File is empty: $fileName';
+    } else {
+      try {
+        final decoded = await collectionDecoder.decode(content);
+        if (!_isCurrentLoad(epoch)) return null;
+        if (decoded.games.isNotEmpty) return decoded;
+        message = fileName == null
             ? 'No valid PGN games found in the pasted text'
-            : 'No valid PGN games in $fileName',
-      ViewerCollectionLoadFailure.decoding =>
-        fileName == null
+            : 'No valid PGN games in $fileName';
+      } catch (_) {
+        message = fileName == null
             ? 'Could not parse the pasted PGN'
-            : 'Could not parse $fileName',
-    };
+            : 'Could not parse $fileName';
+      }
+    }
+    _failCollectionLoad(epoch, message);
+    return null;
   }
 
   /// Adopt a decoded in-memory document through the same collection boundary
@@ -556,22 +583,16 @@ class ViewerDocumentController extends ChangeNotifier with SafeChangeNotifier {
     String? initialFen,
     String? title,
   }) async {
-    if (!editor.canReplaceCollection()) return false;
+    if (isDisposed || !isActive() || !editor.canReplaceCollection()) {
+      return false;
+    }
     unawaited(reading.saveSession());
-    _abandonInFlightWork();
-    final loading = _collectionLoads.loadText(content);
-    final loadEpoch = _loadEpoch;
+    final loadEpoch = _abandonInFlightWork();
     errorMessage = null;
     _loadingCollection = true;
     notifyListeners();
-    final result = await loading;
-    if (!_isCurrentLoad(loadEpoch) || result == null) return false;
-    if (result is ViewerCollectionLoadFailed) {
-      _loadingCollection = false;
-      errorMessage = _collectionFailureMessage(result);
-      notifyListeners();
-      return false;
-    }
+    final decoded = await _decodeCollection(content, loadEpoch);
+    if (!_isCurrentLoad(loadEpoch) || decoded == null) return false;
     if (!editor.canReplaceCollection()) {
       if (_isCurrentLoad(loadEpoch)) {
         _loadingCollection = false;
@@ -579,9 +600,8 @@ class ViewerDocumentController extends ChangeNotifier with SafeChangeNotifier {
       }
       return false;
     }
-    final loaded = result as ViewerCollectionLoaded;
     final adoptedEpoch = adoptDecodedCollection(
-      loaded.document,
+      decoded,
       initialFen: initialFen,
       title: title,
     );
