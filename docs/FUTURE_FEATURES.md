@@ -174,7 +174,7 @@ Design components are built on demand inside the first complete slice.
 | Ultrawide four-zone layout (≥ 1600 px) | **Not started** | `kWideBreakpoint` exists; no fourth column |
 | Draggable zone dividers | **Not started** | Fixed flex ratios only (`RepertoireLayout`). Trial a shared package-backed splitter with keyboard, minimum-size and restoration checks; see [panel contract](ARCHITECTURE_RENEWAL.md#persistent-shell-and-reusable-panels). |
 | Eval bar docked on board (Lichess-style) | **Not started** | Engine output lives in context panel / analysis dock, not under board |
-| Dedicated **Expectimax toggle** on board toolbar | **Partial** | `EngineToggleButton` only; expectimax visibility via dock settings (`showExpectimaxDock`) |
+| Dedicated **Expectimax toggle** on board toolbar | **Not started** | Existing position generation commands remain; the unused engine bolt widget did not implement this capability. |
 | Repertoire keyboard shortcuts (`RepertoireShortcuts`) | **Done** | Letter shortcuts E/X/G/A/I/F/L/T/N/P/D with text-field guards; no digit bindings — see COMPONENT_MAP |
 | Typed `RepertoireMetadata` (replace repertoire maps) | **Done** | `Map<String, dynamic>` replaced across selection, controller, storage, generation, training |
 | Full unified keyboard shortcuts (all modes) | **Partial** | Letter shortcuts restored across repertoire, PGN viewer, tactics, training, audit findings; digit shortcuts remain removed; still missing global Tab |
@@ -299,7 +299,7 @@ Design components are built on demand inside the first complete slice.
 | **Coherence** in status bar | **Not started** | |
 | **Tradeoff sliders** (eval / ease / coherence) in generation | **Not started** | |
 | Coherence-aware **generation selection** modifier | **Not started** | |
-| Prominent **risk-line** warnings in lines list | **Partial** | `CoherencePanel` shows risk; not inline on every line row |
+| Prominent **risk-line** warnings in lines list | **Partial** | Lines already display coherence scores with low-score coloring; explicit risk-line explanations remain open |
 | FP-Growth off UI thread | **Done** | `CoherenceService.compute` runs mining in `Isolate.run` |
 | **v2**: PrefixSpan sequence mining, FEN collapse, pawn-structure tags | **Deferred** | Explicitly future in spec |
 

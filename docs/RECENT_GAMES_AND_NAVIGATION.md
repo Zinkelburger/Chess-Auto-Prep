@@ -33,7 +33,7 @@ Companion docs: [`GAMES_DRIVEN_REPERTOIRE.md`](GAMES_DRIVEN_REPERTOIRE.md)
 | Game-vs-repertoire deviation | **Partial.** `RepertoireDiff` (`lib/services/games_repertoire/repertoire_diff.dart`) classifies my-deviation / opponent-deviation / beyond-book — but only on an *aggregate* `OpeningTree`; per-game attribution ("you left book at move 12 of THIS game") does not exist. Strict SAN-prefix matching, no transpositions. |
 | Deep link into the repertoire at a line | **Exists.** `AppState.switchToBuilder(repertoirePath, lineId, moveSequence)` → `OpenBuilder` handoff → `navigateToLineMove` (same mechanism audit findings use). |
 | "My White repertoire / my Black repertoire" designation | **Missing.** Files carry `// Color:` but nothing says "this is *mine*". No repertoire path is persisted anywhere. |
-| App navigation history | **Missing.** Six `AppMode`s in an `IndexedStack`, switched via `AppState.setMode`/`handOff` (take-once `PendingHandoff`), 12 existing cross-screen handoffs, zero history. Note: `lib/core/navigation_stack.dart` + `lib/widgets/navigation_trail.dart` are an existing (currently dead/board-position-scoped) stack + chip-trail pair — right *shape*, wrong *scope*. |
+| App navigation history | **Missing.** Six `AppMode`s in an `IndexedStack`, switched via `AppState.setMode`/`handOff` (take-once `PendingHandoff`), 12 existing cross-screen handoffs, zero history. Note: `lib/core/navigation_stack.dart` tracks board positions rather than app destinations. Its unused chip-trail widget has been retired. |
 
 The project is therefore mostly **wiring existing engines to a new front
 door**, not building new infrastructure.

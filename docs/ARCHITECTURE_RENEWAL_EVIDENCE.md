@@ -3265,3 +3265,39 @@ targets exist. Current all-library Dart totals **229,215 lines** (+4.7% against
 September 16). Against `fa7f309e`, the batch has 1,301 handwritten production lines
 added and 11,590 deleted: **−10,289**, with generated localization +22 separate.
 The validated safety growth does not change the independent simplification gates.
+
+
+### Remaining unused presentation retirement — 2026-09-18
+
+Against `72ff3519`, delete **14 unreachable production files, 2,154 lines**:
+four old opponent dialogs, two old training dialogs, underboard/coherence panels,
+the board navigation trail, unused date/filter controls, trap/engine indicators
+and the superseded PGN prose-span helper. No surviving production code changes
+and no replacement owner is added. An independent reviewer rebuilt the tracked
+import/export/part graph, including conditional URIs, from main and all 22
+external non-test Dart roots (including driver/tool entrypoints). None reaches
+these files; tracked symbol scans confirm no live constructors/helpers, dynamic
+registrations or re-exports. Only the obsolete Add opponent dialog calls the
+obsolete person dialog.
+
+The two exclusively owned tests are deleted (219 lines). Live PlayerImportPanel,
+US Chess client, coherence computation and line-score presentation, current
+bottom pane, trap navigation, training setup, engine settings, and movetext
+comment-token/diagram rendering remain. Master-practice and pure algorithm/model
+orphans are outside this presentation-only retirement. Documentation now names
+the actual live consumers rather than these disconnected controls; the older
+performance audit retains its historical reference.
+
+The exact debt ledger removes 22 deleted-path entries (1,301 → 1,279), and the
+theme ledger removes 13 consumers (224 → 211). Feature status is unchanged:
+21 directories, six enforced, 15 unfinished, none complete. Independent actual-
+diff review confirms those removals and the matching retirement gates.
+
+All **78 focused tests pass** across the live opponents, coherence, trap
+navigation, bottom-pane, engine-settings and chapter-setup paths. Analyze/lint
+passes with 64 existing infos, no warnings/errors and 45 checker cases; all 131
+checked local documentation file targets exist. No visible production surface
+changed, so a new preview was unnecessary. Final all-library Dart is **227,061
+lines**, 8,104 (+3.7%) above September 16. Against `fa7f309e`, the complete batch
+now removes **12,443 handwritten production lines**, with generated localization
++22 separate. This remains retirement progress, not whole-renewal completion.

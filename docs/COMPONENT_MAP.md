@@ -1337,7 +1337,7 @@ TrapExtractor (during generation)
 CoherenceService.compute(lines)
   → extractItemset per line → Isolate.run(runFpGrowthMining)  // FP-Growth off UI thread
   → clusters + lineCoherence scores on main isolate
-  → CoherencePanel, browse coherence hints, suggestion scoring
+  → repertoire lines browser metrics, coherence sorting and low-score highlighting
 ```
 
 ### Engine analysis
@@ -2283,7 +2283,6 @@ renewal work; Windows/macOS native verification remains open.
 | **chess_core/generation/trap_reply.dart** | Opponent reply classification at trap position |
 | **services/trap_index_service.dart** | FEN/prefix indexes, repertoire & line metrics, ETV |
 | **widgets/trap_detail_card.dart** | Narrative trap UI, reply table, hoverable move path |
-| **widgets/trap_move_indicator.dart** | Orange dot for pre-trap PGN moves, enriched multi-line tooltip (mistake desc, popularity, reach, score) |
 | **widgets/trap_navigation_buttons.dart** | Prev/next trap in line (board toolbar) |
 | **widgets/trap_summary_header.dart** | Aggregate trap stats + ETV |
 | **widgets/trap_tour_bar.dart** | Sequential trap tour bar with list hover preview |
@@ -2683,14 +2682,12 @@ and does not change active editor, document or save ownership.
 | `opening_tree/opening_tree_move_row.dart` | Tree row |
 | `opening_tree/coverage_annotation.dart` | Coverage badges on tree |
 | `features/coverage/widgets/coverage_calculator_widget.dart` | Run coverage analysis UI |
-| `coherence_panel.dart` | Cluster list + global coherence score |
 
 #### Engine widgets
 
 | File | Purpose |
 |------|---------|
 | `engine/inline_engine_bar.dart` | Compact engine for PGN viewer and tactics; reserves a fixed height for the configured MultiPV count while enabled, including loading and positions with fewer legal moves; settings button opens `AnalysisSettingsContext.tacticsEngine` (depth + multiPv only); writes Stockfish eval to `EvalCache` after discovery completes |
-| `engine/engine_toggle_button.dart` | Legacy bolt toggle widget (unused; engine on/off is in Settings) |
 | `engine/floating_board_preview.dart` | Cursor-following mini board overlay on engine/expectimax line hover |
 
 #### Lines sub-widgets
@@ -2709,7 +2706,6 @@ and does not change active editor, document or save ownership.
 | `app_mode_switcher.dart` | Top-level View selector: bordered current-mode button and separator, with the grouped mode menu behind it |
 | `chess_board_widget.dart` | Board rendering, move input; coordinates follow the Display preference unless the caller passes `coordinates:` (thumbnails under 24px squares are always bare; *outside* takes a margin out of the squares — see `board/board_coordinates.dart`, whose `coordinateLabels` is the pure placement rule); `board/board_square_painter.dart` owns the shared surface for interactive boards, the position editor and static thumbnails. Selection, explicit hint/preview highlights, and recent moves use borderless tints (in that precedence); legal destinations use dots on empty squares and inset rings on occupied squares. Bughouse drops use the same `legalMoveSquares` API. Tile colours are composited before painting without tile-edge antialiasing, avoiding seams at fractional sizes; square feedback never changes board layout or its permanent outer frame. The painter snapshots input sets and compares their contents for repainting. Pieces are `Positioned` on their squares with no implicit animation, so a layout resize (expanding a chapter list, dragging a panel) cannot slide them. Annotation types live in `lib/models/board_annotation.dart`. |
 | `clickable_move_line.dart` | SAN line with tap + hover callbacks |
-| `navigation_trail.dart` | Breadcrumb trail widget (used by repertoire tab bar) |
 | `layout/jobs_panel.dart` | Jobs tab: single rich card per active generation or audit job (name, build mode config summary, phase icon/label, C-style live stats, thread/hash chips, linear progress, elapsed, pause/resume/cancel/finish-now); completed jobs as compact list tiles |
 | `services/jobs/generation_job_display.dart` | Phase labels, stats-line formatting, and progress fraction helpers for generation job cards |
 | `analysis/stockfish_settings_dialog.dart` | Shared Analysis controls reached by every `InlineEngineSettings` shortcut; board and bulk depths persist independently. |

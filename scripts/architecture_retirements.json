@@ -74,7 +74,21 @@
     "lib/features/eval_tree/widgets/eval_tree_node_chip.dart",
     "lib/features/eval_tree/widgets/eval_tree_toolbar.dart",
     "lib/features/eval_tree/widgets/eval_tree_viewport.dart",
-    "lib/features/eval_tree/widgets/repertoire_tree_explorer.dart"
+    "lib/features/eval_tree/widgets/repertoire_tree_explorer.dart",
+    "lib/features/opponents/widgets/person_edit_dialog.dart",
+    "lib/features/opponents/widgets/import_field_dialog.dart",
+    "lib/features/opponents/widgets/tournament_details_dialog.dart",
+    "lib/features/opponents/widgets/add_opponent_dialog.dart",
+    "lib/widgets/training/training_side_dialog.dart",
+    "lib/widgets/training/line_preview_dialog.dart",
+    "lib/widgets/layout/underboard_panel.dart",
+    "lib/widgets/coherence_panel.dart",
+    "lib/widgets/navigation_trail.dart",
+    "lib/widgets/common/since_date_picker.dart",
+    "lib/widgets/common/icon_filter_chip.dart",
+    "lib/features/traps/widgets/trap_move_indicator.dart",
+    "lib/widgets/pgn/comment_prose_spans.dart",
+    "lib/widgets/engine/engine_toggle_button.dart"
   ],
   "symbols": [
     "PgnBatchWriter",
@@ -151,6 +165,22 @@
     "EvalTreeDetailsPane",
     "EvalTreeNodeChip",
     "EvalTreeToolbar",
-    "EvalTreeViewport"
+    "EvalTreeViewport",
+    "PersonEditDialog",
+    "ImportFieldDialog",
+    "TournamentDetailsDialog",
+    "AddOpponentDialog",
+    "TrainingSideChoice",
+    "showTrainingSideDialog",
+    "LinePreviewDialog",
+    "UnderboardPanel",
+    "UnderboardTab",
+    "CoherencePanel",
+    "NavigationTrail",
+    "SinceDatePicker",
+    "IconFilterChip",
+    "TrapMoveIndicator",
+    "commentProseSpans",
+    "EngineToggleButton"
   ]
 }
