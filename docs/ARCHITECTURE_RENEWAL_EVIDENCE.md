@@ -3892,8 +3892,8 @@ entry leaves 1,243. This completes an appearance capability and removes its old
 theme path; it does **not** pass a net-size simplification gate or certify Study.
 
 **98 combined focused tests**, **44 additional retained-caller tests**, and
-analyze/lint pass at the reviewed production source (63 existing infos, no
-warnings/errors, 45 checker cases). The retained batch initially had 23 failures
+analyze/lint pass at the reviewed production source (the final handoff reports
+64 infos, no warnings/errors, and 45 checker cases). The retained batch initially had 23 failures
 from two bare widget hosts lacking app localization; fixture commit `f84ba7a2`
 adds only their delegates/imports. A wider widget-directory run exposed
 additional indirect hosts and old fixed-color assertions; it was stopped after
@@ -3954,14 +3954,15 @@ Against `c91b9086`, the 17-file screen/form/handoff/trap graph shrinks
 **7,340→7,101 (−239 handwritten; generated unchanged)**. Builder screen itself
 shrinks 1,468→1,422. The scope includes the screen and its three parts, generation
 tab, generation form and its six parts, AppState/PendingHandoff, and the trap
-wrapper/browser/session. Final checkpoint and validation: RETIREMENT_VALIDATION_PENDING.
+wrapper/browser/session. Independently approved production is `f8227f6e`;
+final `708b58e4` adds only reviewed fixtures and three screenshots.
 
 Tracked callers prove the external generation handoff has no production producer.
 The presumed Discover entry is also unreachable: its only parent requires
 `hasTraps`, defined as a nonempty list, while the button requires an empty list.
-Delete both retry chains, the outer widget-state key, public seeding/state APIs,
-the handoff variant and the entire `TrapsTabContent`. The screen now supplies the
-same data, metrics, selection/tour callbacks and preview owner directly to the
+Deleted both retry chains, the outer widget-state key, public seeding/state APIs,
+the generation handoff field/producer API and the entire `TrapsTabContent`. The
+screen now supplies the same data, metrics, selection/tour callbacks and preview owner directly to the
 existing `TrapsBrowser`; its parent visibility rule stays intact. Manual generation,
 configuration defaults/presets, resume, publication and repeated cuts are unchanged.
 No replacement owner, constructor overlay or automatic-start mechanism was added.
@@ -3972,6 +3973,25 @@ unreachable body with declarations, obsolete inputs and active forwarding. The
 active improvement is one removed widget layer, not a claim that all 239 lines
 simplify generation. Retirement checks forbid the deleted paths/APIs; six debt
 rows and one theme-consumer entry disappear with the code. Whole Builder and
-Generation remain Partial. Delayed source changes behind configuration and narrow
-trap-summary layout require their own reproduced, complete repairs; this deletion
-does not claim to fix them.
+Generation remain Partial; delayed source changes behind configuration are not
+resolved by this deletion. The initial bare widget host overflowed in the trap
+summary and breadcrumb; the breadcrumb failure also reproduced on baseline
+`c91b9086`. The actual 950×1,200 app did not reproduce it. Using the production
+theme and bundled Inter/SourceCodePro fonts fixes both new widget cases at the
+same viewport, with no production layout change or error suppression. Earlier
+fixture failures also included animation readiness, a dynamic tab label, the
+ChessDB depth field name and an identity-vs-value list assertion; all were
+corrected before the final combined run.
+
+**All 69 affected tests pass**, with no failures/skips: 24 actual Builder screen
+cases and 45 retained trap/handoff cases. Analyze/lint passes with 64 existing
+infos, no warnings/errors and 45 checker cases. Its diagnostic set matches the
+preceding Study handoff; no new lint debt was added. The headless app was inspected
+through [manual configuration](images/renewal-generation-manual-config.png),
+[retained traps](images/renewal-generation-retained-traps.png) and
+[the trap tour](images/renewal-generation-trap-tour.png). Actual selection shows
+the expected board/annotations; the tour and chapter picker remain usable.
+Manual configuration opens and cancels; the source PGN remains byte-for-byte
+unchanged. This check did not start a generation job. The disposable preview is
+stopped. Feature debt is 1,237 and the legacy-theme ledger is 181; neither is a
+completion certificate.
