@@ -37,7 +37,19 @@ import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/widgets/escape_to_pop_scope.dart';
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+import 'package:chess_auto_prep/constants/chess_constants.dart';
+import 'package:chess_auto_prep/design_system/theme/app_theme.dart';
+import 'package:chess_auto_prep/chess_core/generation/trap_line_info.dart';
+import 'package:chess_auto_prep/features/generation/models/generation_artifacts.dart';
+import 'package:chess_auto_prep/features/traps/widgets/traps_browser.dart';
+import 'package:chess_auto_prep/features/traps/widgets/trap_tour_bar.dart';
+import 'package:chess_auto_prep/services/generation/generation_config.dart';
+import 'package:chess_auto_prep/widgets/generation/generation_config_form.dart';
+import 'package:chess_auto_prep/widgets/repertoire_generation_tab.dart';
+import 'package:chess_auto_prep/widgets/engine/floating_board_preview.dart';
+import 'package:chess_auto_prep/utils/chess_utils.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_annotation_panel.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
@@ -177,6 +189,7 @@ Future<AppState> _pumpScreen(
   RepertoireDecoder decoder = const IsolateRepertoireDecoder(),
   BuilderLifetime? restoredLifetime,
   RepertoireCatalogRepository? catalog,
+  GenerationArtifacts? artifacts,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
@@ -190,7 +203,7 @@ Future<AppState> _pumpScreen(
     MultiProvider(
       providers: [
         Provider<GenerationArtifacts>(
-          create: (_) => generationArtifactsFixture(),
+          create: (_) => artifacts ?? generationArtifactsFixture(),
         ),
         Provider<GenerationPublicationFactory>(
           create: (_) => generationPublicationFixture,
@@ -217,6 +230,7 @@ Future<AppState> _pumpScreen(
         ),
       ],
       child: MaterialApp(
+        theme: AppTheme.dark(),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         builder: (_, child) => EscapeToPopScope(child: child!),
@@ -233,6 +247,21 @@ Future<AppState> _pumpScreen(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUpAll(() async {
+    // Real desktop typography matters when the trap controls share a toolbar
+    // with the chapter picker; Ahem gives those labels different widths.
+    for (final entry in {
+      'Inter': ['Regular', 'Medium', 'SemiBold', 'Bold', 'Italic'],
+      'SourceCodePro': ['Regular', 'Semibold', 'Bold', 'It'],
+    }.entries) {
+      final loader = FontLoader(entry.key);
+      for (final face in entry.value) {
+        loader.addFont(rootBundle.load('assets/fonts/${entry.key}-$face.ttf'));
+      }
+      await loader.load();
+    }
+  });
 
   late Directory storageRoot;
   late PathProviderPlatform originalPaths;
@@ -255,6 +284,180 @@ void main() {
     GameStoreService.instance.close();
     PathProviderPlatform.instance = originalPaths;
     if (await storageRoot.exists()) await storageRoot.delete(recursive: true);
+  });
+
+  testWidgets(
+    'loaded trap artifacts retain browser selection, preview and tour',
+    (tester) async {
+      final path = _writeRepertoire(tester);
+      final trap = TrapLineInfo(
+        movesSan: const ['e4', 'e5'],
+        fen: fenAfterMoves(kStandardStartFen, const ['e4', 'e5'], 1),
+        trapScore: 0.5,
+        popularProb: 0.4,
+        popularMove: 'Nc3',
+        bestMove: 'Nf3',
+        popularEvalCp: 150,
+        bestEvalCp: 20,
+        evalDiffCp: 130,
+        cumulativeProb: 0.1,
+        trickSurplus: 0.1,
+        expectimaxValue: 0.6,
+        wpEval: 0.5,
+      );
+      final repository = MemoryGenerationArtifacts();
+      repository.saved[path] = {
+        GenerationArtifactKind.traps: jsonEncode({
+          'traps': [trap.toJson()],
+        }),
+      };
+      await _pumpScreen(
+        tester,
+        repertoirePath: path,
+        artifacts: GenerationArtifacts(repository),
+        size: const Size(950, 1200),
+      );
+      await tester.tap(find.text('Chapters & Traps'));
+      await _settleUntil(
+        tester,
+        find.byTooltip('Chapter options').hitTestable(),
+      );
+      await tester.tap(find.byTooltip('Chapter options'));
+      await _settleUntil(tester, find.text('Line metrics').hitTestable());
+      await tester.tap(find.text('Line metrics'));
+      await _settleUntil(tester, find.text('Traps (1)').hitTestable());
+      await tester.tap(find.text('Traps (1)'));
+      await _settleUntil(tester, find.byType(TrapsBrowser));
+
+      final browser = tester.widget<TrapsBrowser>(find.byType(TrapsBrowser));
+      expect(browser.traps.single.movesSan, trap.movesSan);
+      expect(browser.metrics, isNotNull);
+      expect(
+        browser.repertoireLineMoves,
+        equals([
+          ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4'],
+        ]),
+      );
+      expect(
+        tester
+            .widgetList<FloatingBoardPreview>(find.byType(FloatingBoardPreview))
+            .any(
+              (preview) => identical(preview.controller, browser.boardPreview),
+            ),
+        isTrue,
+      );
+      final workspace = tester
+          .element(find.byType(RepertoireScreen))
+          .read<BuilderLifetime>()
+          .workspace;
+      await tester.tap(
+        find.descendant(
+          of: find.byType(TrapsBrowser),
+          matching: find.text('#1'),
+        ),
+      );
+      await _settle(tester, cycles: 8);
+      expect(workspace.board.moveHistory, trap.movesSan);
+      expect(workspace.board.fen, trap.fen);
+      expect(
+        workspace.board.tree
+            .nodeAt(workspace.board.path)!
+            .children
+            .map((node) => node.san),
+        containsAll(['Nc3', 'Nf3']),
+      );
+
+      await tester.tap(find.text('Chapters & Traps'));
+      await _settleUntil(tester, find.text('Start Trap Tour').hitTestable());
+      await tester.tap(find.text('Start Trap Tour'));
+      await _settle(tester, cycles: 8);
+      expect(find.byType(TrapTourBar), findsOneWidget);
+      expect(workspace.board.fen, trap.fen);
+      final tour = tester.widget<TrapTourBar>(find.byType(TrapTourBar));
+      expect(tour.trapIndex.allTraps.single.movesSan, trap.movesSan);
+      await tester.tap(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is Tooltip &&
+              (widget.message?.startsWith('Close tour') ?? false),
+        ),
+      );
+      await _settle(tester, cycles: 8);
+      expect(find.byType(TrapTourBar), findsNothing);
+    },
+  );
+
+  testWidgets('manual build opens its preset, cancels, and reopens fresh', (
+    tester,
+  ) async {
+    final path = _writeRepertoire(tester);
+    await _pumpScreen(
+      tester,
+      repertoirePath: path,
+      size: const Size(950, 1200),
+    );
+    final original = File(path).readAsStringSync();
+    await tester.tap(find.text('Actions'));
+    await _settleUntil(tester, find.text('Generate from here…').hitTestable());
+    await tester.tap(find.text('Generate from here…'));
+    await _settleUntil(
+      tester,
+      find.byKey(const ValueKey('generation-actions')).hitTestable(),
+    );
+    for (var attempt = 0; attempt < 2; attempt++) {
+      await tester.tap(find.byKey(const ValueKey('generation-actions')));
+      await _settleUntil(
+        tester,
+        find.byKey(const ValueKey('build-chessdb-repertoire')).hitTestable(),
+      );
+      await tester.tap(find.byKey(const ValueKey('build-chessdb-repertoire')));
+      await _settleUntil(tester, find.byType(GenerationConfigForm));
+      await _settleUntil(tester, find.byTooltip('Close').hitTestable());
+      final form = tester.state<GenerationConfigFormState>(
+        find.byType(GenerationConfigForm),
+      );
+      final config = form.toConfig(
+        startFen: kStandardStartFen,
+        playAsWhite: true,
+      );
+      expect(config.buildMode, BuildMode.chessDbBook);
+      expect(config.maxPly, 20);
+      expect(config.maxNodes, 12000);
+      expect(config.enableChessDbApi, isTrue);
+      expect(config.pgnFilePaths, isEmpty);
+      expect(
+        tester
+            .widget<RepertoireGenerationTab>(
+              find.byType(RepertoireGenerationTab),
+            )
+            .generationController
+            .isGenerating,
+        isFalse,
+      );
+      if (attempt == 0) {
+        await tester.enterText(
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is TextField &&
+                (widget.decoration?.labelText?.startsWith('Branching depth') ??
+                    false),
+          ),
+          '12',
+        );
+        expect(
+          form.toConfig(startFen: kStandardStartFen, playAsWhite: true).maxPly,
+          12,
+        );
+      }
+      await tester.tap(find.byTooltip('Close'));
+      await _settleUntil(
+        tester,
+        find.byKey(const ValueKey('generation-actions')).hitTestable(),
+      );
+      expect(find.byType(GenerationConfigForm), findsNothing);
+    }
+    expect(File(path).readAsStringSync(), original);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('inline chapter creation rejects case-insensitive duplicate', (
