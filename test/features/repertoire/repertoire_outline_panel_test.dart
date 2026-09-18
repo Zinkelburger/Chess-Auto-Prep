@@ -1,3 +1,6 @@
+import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
+import 'package:chess_auto_prep/features/repertoire/services/chapter_splitter.dart';
+import 'package:chess_auto_prep/infrastructure/documents/native_pgn_document_store.dart';
 import 'dart:io';
 
 import 'package:chess_auto_prep/features/repertoire/controllers/repertoire_outline_controller.dart';
@@ -16,10 +19,21 @@ import 'package:path/path.dart' as p;
 String _game(String event, String moves) =>
     '[Event "$event"]\n[Result "*"]\n\n$moves *\n';
 
+class _FailingDestinations extends NativePgnDocumentStore {
+  bool fail = false;
+  int creates = 0;
+  @override
+  Future<PgnWriteResult> create(String path, String content) async {
+    if (fail && ++creates == 2) return PgnWriteFailed(StateError('disk full'));
+    return super.create(path, content);
+  }
+}
+
 void main() {
   late Directory tmp;
   late String root;
   late RepertoireOutlineController controller;
+  late _FailingDestinations documents;
 
   setUp(() async {
     tmp = Directory.systemTemp.createTempSync('outline_panel_test');
@@ -34,13 +48,16 @@ void main() {
     File(p.join(root, 'Sidelines', 'Exchange.pgn')).writeAsStringSync(
       '// Color: Black\n\n${_game('Exchange', '1. e4 e6 2. d4 d5 3. exd5')}\n',
     );
+    final storage = IOStorageService(
+      documentsRoot: tmp,
+      supportRoot: tmp,
+      repertoiresRoot: Directory(root),
+    );
+    documents = _FailingDestinations();
     controller = RepertoireOutlineController(
       service: RepertoireOutlineService(
-        storage: IOStorageService(
-          documentsRoot: tmp,
-          supportRoot: tmp,
-          repertoiresRoot: Directory(root),
-        ),
+        storage: storage,
+        splitter: ChapterSplitter(documents: documents, storage: storage),
       ),
     );
     await controller.open(
@@ -137,6 +154,49 @@ void main() {
     );
     await tester.pumpAndSettle();
   }
+
+  testWidgets(
+    'partial split refreshes saved chapters and shows inspectable paths without Retry',
+    (tester) async {
+      await tester.runAsync(() async {
+        final course = p.join(root, 'Course.pgn');
+        final content = [
+          for (final title in ['One', 'Two'])
+            for (final moves in ['1. e4 e5', '1. d4 d5'])
+              '[Event "Course"]\n[White "$title"]\n[Black "Line"]\n[Result "*"]\n\n$moves *\n',
+        ].join('\n');
+        await File(course).writeAsString(content);
+        documents.fail = true;
+        await controller.refresh();
+        await pump(tester);
+        await rightClick(tester, find.text('Course'));
+        await tester.tap(find.text('Split into chapters…'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Split'));
+        await untilOutline(
+          tester,
+          (outline) => outline.findChapter(p.join(root, 'One.pgn')) != null,
+        );
+        expect(find.text('Review chapter split'), findsOneWidget);
+        final details = tester
+            .widget<SelectableText>(find.byType(SelectableText))
+            .data!;
+        expect(
+          details,
+          contains('Saved chapters:\n${p.join(root, 'One.pgn')}'),
+        );
+        expect(details, contains('Paths to inspect'));
+        expect(details, contains(p.join(root, 'Two.pgn')));
+        expect(find.text('Retry'), findsNothing);
+        expect(await File(course).readAsString(), content);
+        expect(documents.creates, 2);
+        await tester.tap(find.text('Close'));
+        await tester.pumpAndSettle();
+        expect(find.text('One'), findsOneWidget);
+        expect(find.text('Course'), findsOneWidget);
+      });
+    },
+  );
 
   testWidgets('lists folders, chapters and the active chapter\'s lines', (
     tester,

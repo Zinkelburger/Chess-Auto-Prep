@@ -16,6 +16,12 @@ PgnSnapshot snapshot(
 );
 
 class Store implements PgnDocumentStore {
+  @override
+  bool get supportsQuarantine => false;
+  @override
+  Future<PgnQuarantineResult> quarantine(PgnSnapshot baseline) async =>
+      PgnQuarantineFailed(UnsupportedError('Unused in this fixture'));
+
   PgnSnapshot current = snapshot('original');
   Future<PgnWriteResult> Function(String, String)? onCreate;
   Future<PgnWriteResult> Function(PgnSnapshot, String)? onSave;

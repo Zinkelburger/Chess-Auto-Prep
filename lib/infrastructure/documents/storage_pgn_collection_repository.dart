@@ -14,6 +14,18 @@ class StoragePgnCollectionRepository implements PgnCollectionRepository {
   final StorageService storage;
   final PgnDocumentStore? documents;
   PgnDocumentStore get _store => documents ?? LegacyPgnDocumentStore(storage);
+  @override
+  bool get supportsQuarantine => _store.supportsQuarantine;
+  @override
+  Future<PgnQuarantineResult> quarantine(PgnSnapshot baseline) async {
+    try {
+      _checkPath(baseline.path);
+    } catch (error) {
+      return PgnQuarantineFailed(error);
+    }
+    return _store.quarantine(baseline);
+  }
+
   void _checkPath(String path) {
     if (documents != null && !p.isAbsolute(path)) {
       throw ArgumentError('Native collection paths must be absolute');

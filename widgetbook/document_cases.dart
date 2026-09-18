@@ -163,6 +163,12 @@ class _CopyDestinationDialogState extends State<_CopyDestinationDialog> {
 
 /// Memory-only scripted outcomes; never instantiates an external storage owner.
 class MemoryDocumentStore implements PgnDocumentStore {
+  @override
+  bool get supportsQuarantine => false;
+  @override
+  Future<PgnQuarantineResult> quarantine(PgnSnapshot baseline) async =>
+      PgnQuarantineFailed(UnsupportedError('Unused in this fixture'));
+
   MemoryDocumentStore(this.scenario) {
     files['/fixture/Main.pgn'] = _snapshot(
       '/fixture/Main.pgn',

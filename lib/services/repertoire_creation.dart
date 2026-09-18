@@ -1,154 +1,77 @@
-/// Making a repertoire on disk: a folder, and the "Main" chapter inside it.
-///
-/// A repertoire is a directory of chapter `.pgn` files, and a brand new one is
-/// not empty — it holds one chapter with the header that records which colour
-/// it is for. That header is what every later reader keys off (the deviation
-/// check, the trainer, the audit), so the two places that create repertoires —
-/// the repertoire list's Create dialog and the My-repertoires designation
-/// panel, which now creates one rather than sending you away to make it — must
-/// write exactly the same thing. Hence one function instead of two copies.
+/// Creates a repertoire using the same prepared chapter plan on every host.
+/// Linux publishes the prepared directory atomically; other hosts retain any
+/// acknowledged files if a later chapter cannot be confirmed.
 library;
 
-import '../features/repertoires/models/repertoire_creation.dart';
 import 'dart:io';
-
-import '../features/repertoire/services/chapter_splitter.dart';
-import '../chess_core/pgn/pgn_text.dart' as pgn;
-import '../chess_core/pgn/repertoire_line_expansion.dart';
+import 'dart:isolate';
+import 'package:path/path.dart' as p;
+import '../features/documents/models/pgn_document.dart';
+import '../features/documents/repositories/pgn_document_store.dart';
+import '../features/repertoires/models/repertoire_creation.dart';
+import '../infrastructure/repertoires/repertoire_import_planner.dart';
 import 'storage/storage_factory.dart';
 import 'storage/storage_service.dart';
 import 'storage/io_storage_service.dart';
 
-/// Create the folder for [name] with one chapter marked for [color]
-/// ('White' or 'Black'), optionally seeded with [pgnContent].
-///
-/// The PGN is written one game per line: a game with bracketed variations
-/// becomes one game per variation ([expandVariationsIntoLines]), because
-/// every reader of a chapter walks mainlines only. The result reports the
-/// count after expansion; [gameCount] is the caller's own count, used only
-/// when the content holds no game this app can count.
-///
-/// The chapter is called "Main" unless [chapterName] says otherwise — an
-/// imported file is better off with a chapter named after itself, since that
-/// name is what every book verdict on the games list then shows.
-///
-/// A course export names its chapters in a player header of every game.
-/// Left as one file it is a 16,000-line chapter nobody can navigate, and
-/// every verdict names the file; so when the games group by such a title
-/// and [splitChapters] is on, the file is split into one chapter per title
-/// (see [ChapterSplitter]) the moment it is written.
-///
-/// The caller checks for a name clash first — it has the list on screen and
-/// can say so in the form, which is better than a thrown error. This function
-/// checks the *path* as well and throws [RepertoireExistsException] rather
-/// than writing, because the two checks are not the same one: a name is
-/// sanitised on its way to a folder (`Sicilian: Najdorf` and `Sicilian_
-/// Najdorf` land in the same place), so a name the caller found free can
-/// still name a chapter that already exists — and this write would replace
-/// it with a three-line header, deleting the lines in it.
 Future<RepertoireCreationResult> createRepertoire({
   required String name,
   required String color,
+  required PgnDocumentStore documents,
   String? pgnContent,
   int gameCount = 0,
   String chapterName = 'Main',
   DateTime? createdAt,
   StorageService? storage,
   bool splitChapters = true,
-  Future<void> Function(String path, String content)? createDocument,
 }) async {
   final store = storage ?? StorageFactory.instance;
+  final request = CreateRepertoire(
+    name: name,
+    color: color,
+    pgnContent: pgnContent,
+    gameCount: gameCount,
+    chapterName: chapterName,
+    splitChapters: splitChapters,
+  );
+  final createdPaths = <String>[];
+  Future<void> create(String path, String content) async {
+    final outcome = await documents.create(path, content);
+    switch (outcome) {
+      case PgnSaved():
+        createdPaths.add(outcome.after.path);
+      case PgnNameCollision() when createdPaths.isEmpty:
+        throw RepertoireExistsException(name);
+      default:
+        throw RepertoireCreationUncertain(
+          cause: outcome,
+          createdPaths: List.unmodifiable(createdPaths),
+          pathsToInspect: [
+            path,
+            if (outcome is PgnWriteUncertain && outcome.recoveryPath != null)
+              outcome.recoveryPath!,
+          ],
+        );
+    }
+  }
+
   if (Platform.isLinux && store is IOStorageService) {
     return store.publishRepertoire(
-      CreateRepertoire(
-        name: name,
-        color: color,
-        pgnContent: pgnContent,
-        gameCount: gameCount,
-        chapterName: chapterName,
-        splitChapters: splitChapters,
-      ),
+      request,
       createdAt: createdAt,
-      createDocument: createDocument,
+      createDocument: create,
     );
   }
+  final date = createdAt ?? DateTime.now();
+  final plan = await Isolate.run(() => planRepertoireImport(request, date));
   final dirPath = await store.repertoireDirectoryPath(name);
-  final chapterPath = store.chapterFilePath(dirPath, chapterName);
-  final stamp = (createdAt ?? DateTime.now()).toString().split('.')[0];
-  final header =
-      '// $chapterName\n'
-      '// Color: $color\n'
-      '// Created on $stamp\n\n';
-
-  if (pgnContent == null) {
-    await (createDocument?.call(chapterPath, header) ??
-        _createChapter(store, chapterPath, header, name));
-    return RepertoireCreationResult(
-      directoryPath: dirPath,
-      chapterPath: chapterPath,
-      gameCount: 0,
-    );
-  }
-
-  // On this isolate: the expansion only tokenizes (no game is replayed), and
-  // the widget tests that drive an import pump fake time, which an isolate's
-  // result would never arrive under.
-  final expanded = expandVariationsIntoLines(pgnContent);
-  final imported = '$header${expanded.pgn}\n';
-  await (createDocument?.call(chapterPath, imported) ??
-      _createChapter(store, chapterPath, imported, name));
-  final count = expanded.gameCount > 0 ? expanded.gameCount : gameCount;
-
-  final isCourse =
-      splitChapters &&
-      courseChapterHeaderKey(
-            pgn.splitPgnIntoGames(pgn.stripBom(expanded.pgn)),
-          ) !=
-          null;
-  if (isCourse) {
-    try {
-      final split = await ChapterSplitter(
-        storage: store,
-      ).split(chapterPath, isWhite: color.toLowerCase() == 'white');
-      final paths = [
-        ...split.createdPaths,
-        if (!split.sourceRemoved) chapterPath,
-      ];
-      return RepertoireCreationResult(
-        directoryPath: dirPath,
-        chapterPath: paths.first,
-        gameCount: count,
-        chapterPaths: paths,
-      );
-    } on ChapterSplitException {
-      // Fewer than two chapters after all: one file it is.
-    }
+  for (final chapter in plan.chapters.entries) {
+    await create(p.join(dirPath, chapter.key), chapter.value);
   }
   return RepertoireCreationResult(
     directoryPath: dirPath,
-    chapterPath: chapterPath,
-    gameCount: count,
-    chapterPaths: [chapterPath],
+    chapterPath: createdPaths.first,
+    chapterPaths: createdPaths,
+    gameCount: plan.gameCount,
   );
-}
-
-/// Write a repertoire's first chapter, refusing to overwrite one that is
-/// already there.
-///
-/// The refusal is `createOnly`, not a prior existence check: two names can
-/// sanitise to one folder ("Sicilian: Najdorf" and "Sicilian_ Najdorf"), so a
-/// caller's own name check can pass for a chapter that exists — and a check
-/// here would still race the write. The storage error is translated so
-/// callers can say "that name is taken" rather than surface a file path.
-Future<void> _createChapter(
-  StorageService store,
-  String chapterPath,
-  String content,
-  String name,
-) async {
-  try {
-    await store.writeFile(chapterPath, content, createOnly: true);
-  } on FileSystemException {
-    throw RepertoireExistsException(name);
-  }
 }

@@ -1365,5 +1365,23 @@
   "builderCopyRetained": "The copy and draft are retained. Inspect the destination before trying again.",
   "@builderCopyRetained": {
     "description": "Builder durable workspace recovery"
+  },
+  "createdChapterPaths": "Saved chapters:\n{paths}",
+  "@createdChapterPaths": {
+    "description": "Confirmed chapter files retained after a partial import",
+    "placeholders": {
+      "paths": {
+        "type": "String"
+      }
+    }
+  },
+  "chapterPathsToInspect": "Paths to inspect (writes may be unconfirmed):\n{paths}",
+  "@chapterPathsToInspect": {
+    "description": "Candidate and recovery paths after an interrupted chapter operation",
+    "placeholders": {
+      "paths": {
+        "type": "String"
+      }
+    }
   }
 }

@@ -27,89 +27,124 @@
 /// split can leave a duplicate but never a lost line.
 library;
 
+import 'dart:isolate';
+
 import 'package:path/path.dart' as p;
 
 import '../../../chess_core/pgn/pgn_text.dart' as pgn;
+import '../../../chess_core/pgn/repertoire_document_mutation.dart';
+import '../../../chess_core/pgn/repertoire_pgn_text.dart';
+import '../../documents/models/pgn_document.dart';
+import '../../documents/repositories/pgn_document_store.dart';
 import '../../../services/repertoire_review_service.dart';
 import '../../../services/repertoire_service.dart';
-import '../../../services/storage/storage_factory.dart';
 import '../../../services/storage/storage_service.dart';
 import 'chapter_store.dart';
 import 'course_chapter_partition.dart';
 import 'review_progress_repointer.dart';
 
-/// What a split did, for the toast and for the caller to follow the active
-/// chapter.
 class ChapterSplitResult {
-  /// New chapter files, in the order the course names them.
-  final List<String> createdPaths;
-
-  /// Lines that moved out of the source chapter.
-  final int movedLines;
-
-  /// Lines with no chapter of their own, left where they were.
-  final int remainingLines;
-
-  /// The source file held nothing but chapter-titled lines, so it is gone.
-  final bool sourceRemoved;
-
   const ChapterSplitResult({
     required this.createdPaths,
     required this.movedLines,
     required this.remainingLines,
     required this.sourceRemoved,
   });
+  final List<String> createdPaths;
+  final int movedLines;
+  final int remainingLines;
+  final bool sourceRemoved;
 }
 
-/// Raised when a split cannot be done, with a message the panel can toast.
+enum ChapterSplitFailure {
+  missing,
+  noChapters,
+  unsupported,
+  destination,
+  source,
+  progress,
+}
+
+/// Mutation confirmed by this split; another writer may change the source.
+enum ChapterSplitSourceState { unchanged, committed, uncertain }
+
+/// Partial writes are retained, never rolled back or automatically retried.
+/// [createdPaths] are acknowledged saves; [pathsToInspect] may be uncertain.
 class ChapterSplitException implements Exception {
+  ChapterSplitException(
+    this.kind,
+    this.message, {
+    this.cause,
+    List<String> createdPaths = const [],
+    this.sourceState = ChapterSplitSourceState.unchanged,
+    List<String> pathsToInspect = const [],
+    this.sourceRemoved = false,
+  }) : createdPaths = List.unmodifiable(createdPaths),
+       pathsToInspect = List.unmodifiable(pathsToInspect);
+  final ChapterSplitFailure kind;
   final String message;
-  const ChapterSplitException(this.message);
+  final Object? cause;
+  final List<String> createdPaths;
+  final ChapterSplitSourceState sourceState;
+  final List<String> pathsToInspect;
+  final bool sourceRemoved;
   @override
   String toString() => message;
 }
 
 class ChapterSplitter {
   ChapterSplitter({
-    StorageService? storage,
-    RepertoireService? repertoire,
+    required this._documents,
+    required StorageService storage,
     RepertoireReviewService? review,
     ReviewProgressRepointer? repointer,
-  }) : _storage = storage ?? StorageFactory.instance,
-       _repertoire = repertoire ?? RepertoireService(storage: storage),
+  }) : _storage = storage,
        _repointer =
            repointer ??
            ReviewProgressRepointer(
              review: review ?? RepertoireReviewService(storage: storage),
            );
 
+  final PgnDocumentStore _documents;
   final StorageService _storage;
-  final RepertoireService _repertoire;
   final ReviewProgressRepointer _repointer;
 
-  /// Splits [chapterPath] into one file per `[White]` chapter title, in the
-  /// folder it already lives in.
-  ///
-  /// [isWhite] is the side stamped into a new chapter's `// Color:` header,
-  /// used only when the source file does not declare one of its own.
   Future<ChapterSplitResult> split(
     String chapterPath, {
     required bool isWhite,
   }) async {
-    final document = await _repertoire.files.readPgnDocument(chapterPath);
-    if (document == null) {
-      throw const ChapterSplitException('That chapter is no longer there.');
+    final opened = await _documents.open(chapterPath);
+    if (opened is! PgnOpened) {
+      throw ChapterSplitException(
+        ChapterSplitFailure.missing,
+        'That chapter could not be read. Reload the outline before splitting.',
+        cause: opened,
+      );
     }
-
-    // The parser is the authority on both questions — which chapter a game
-    // belongs to, and what id it resolves to — so ask it rather than
-    // re-deriving either here.
-    final parsed = await _repertoire.parseRepertoireFile(chapterPath);
-    final partition = CourseChapterPartition(document.games, parsed);
+    final baseline = opened.snapshot;
+    final content = baseline.content;
+    final (document, partition) = await Isolate.run(() {
+      final document = splitRepertoireDocument(content);
+      return (
+        document,
+        CourseChapterPartition(
+          document.games,
+          RepertoireService().parseRepertoirePgn(content),
+        ),
+      );
+    });
     final titles = partition.chapters.keys.toList();
     if (titles.length < 2) {
-      throw const ChapterSplitException(
+      throw ChapterSplitException(
+        ChapterSplitFailure.noChapters,
         'This chapter has no course chapters to split by.',
+      );
+    }
+    final sourceRemoved = partition.remaining.isEmpty;
+    if (sourceRemoved && !_documents.supportsQuarantine) {
+      throw ChapterSplitException(
+        ChapterSplitFailure.unsupported,
+        'This host cannot safely remove the original chapter. No chapters were created.',
       );
     }
     final folder = _storage.parentPath(chapterPath);
@@ -119,55 +154,120 @@ class ChapterSplitter {
         folder,
       )).map((c) => p.basenameWithoutExtension(c.filePath)),
     );
-
     final color = pgn.extractRepertoireColor(document.preamble);
     final sideIsWhite = color == null ? isWhite : color == 'white';
-
     final createdPaths = <String>[];
     final movedIdsByPath = <String, Set<String>>{};
     var movedLines = 0;
-
     for (final title in titles) {
       final name = names[title]!;
       final path = _storage.chapterFilePath(folder, name);
-      await _repertoire.files.writePgnDocument(
+      final outcome = await _documents.create(
         path,
-        preamble: ChapterStore.chapterHeader(
-          name: name,
-          isWhite: sideIsWhite,
-          createdAt: DateTime.now(),
-          courseChapter: title,
+        reassemblePgnDocument(
+          ChapterStore.chapterHeader(
+            name: name,
+            isWhite: sideIsWhite,
+            createdAt: DateTime.now(),
+            courseChapter: title,
+          ).trimRight(),
+          partition.chapters[title]!,
         ),
-        games: partition.chapters[title]!,
-        createOnly: true,
       );
-      createdPaths.add(path);
-      movedIdsByPath[path] = partition.ids[title] ?? {};
+      if (outcome is! PgnSaved) {
+        throw _writeFailure(outcome, path, createdPaths, isSource: false);
+      }
+      createdPaths.add(outcome.after.path);
+      movedIdsByPath[outcome.after.path] = partition.ids[title] ?? {};
       movedLines += partition.chapters[title]!.length;
     }
 
-    // Only now is the source rewritten — every line above is already on disk
-    // under its new chapter.
-    final remaining = partition.remaining;
-    final sourceRemoved = remaining.isEmpty;
+    final recoveryPaths = <String>[];
     if (sourceRemoved) {
-      await _storage.deleteFile(chapterPath);
+      final outcome = await _documents.quarantine(baseline);
+      switch (outcome) {
+        case PgnQuarantined(:final retained, :final recoveryPath):
+          recoveryPaths.addAll([retained.path, recoveryPath]);
+        case PgnQuarantineConflict():
+          throw ChapterSplitException(
+            ChapterSplitFailure.source,
+            'The original chapter changed. Created chapters remain; training progress was not moved.',
+            cause: outcome,
+            createdPaths: createdPaths,
+            pathsToInspect: [chapterPath],
+          );
+        case PgnQuarantineFailed():
+          throw ChapterSplitException(
+            ChapterSplitFailure.source,
+            'The original chapter could not be removed. Created chapters remain; training progress was not moved.',
+            cause: outcome,
+            createdPaths: createdPaths,
+            pathsToInspect: [chapterPath],
+          );
+        case PgnQuarantineUncertain(:final quarantinePath, :final recoveryPath):
+          throw ChapterSplitException(
+            ChapterSplitFailure.source,
+            'The original chapter removal could not be confirmed. Inspect the retained files before another split. Training progress was not moved.',
+            cause: outcome,
+            createdPaths: createdPaths,
+            sourceState: ChapterSplitSourceState.uncertain,
+            pathsToInspect: [chapterPath, quarantinePath, recoveryPath],
+          );
+      }
     } else {
-      await _repertoire.files.writePgnDocument(
-        chapterPath,
-        preamble: document.preamble,
-        games: remaining,
-        expectedContent: document.originalContent,
+      final outcome = await _documents.save(
+        baseline,
+        reassemblePgnDocument(document.preamble, partition.remaining),
       );
+      if (outcome is! PgnSaved) {
+        throw _writeFailure(outcome, chapterPath, createdPaths, isSource: true);
+      }
+      if (outcome.recoveryPath case final path?) recoveryPaths.add(path);
     }
 
-    await _repointer.repoint(from: chapterPath, movedIdsByPath: movedIdsByPath);
-
+    try {
+      await _repointer.repoint(
+        from: chapterPath,
+        movedIdsByPath: movedIdsByPath,
+      );
+    } catch (error) {
+      throw ChapterSplitException(
+        ChapterSplitFailure.progress,
+        'The chapter files were split, but training progress could not be fully moved. The files were not rolled back. Do not repeat the split.',
+        cause: error,
+        createdPaths: createdPaths,
+        sourceState: ChapterSplitSourceState.committed,
+        sourceRemoved: sourceRemoved,
+        pathsToInspect: recoveryPaths,
+      );
+    }
     return ChapterSplitResult(
-      createdPaths: createdPaths,
+      createdPaths: List.unmodifiable(createdPaths),
       movedLines: movedLines,
-      remainingLines: remaining.length,
+      remainingLines: partition.remaining.length,
       sourceRemoved: sourceRemoved,
     );
   }
+
+  ChapterSplitException _writeFailure(
+    PgnWriteResult outcome,
+    String path,
+    List<String> createdPaths, {
+    required bool isSource,
+  }) => ChapterSplitException(
+    isSource ? ChapterSplitFailure.source : ChapterSplitFailure.destination,
+    outcome is PgnWriteUncertain
+        ? 'A chapter write could not be confirmed. Inspect the files before another split. Training progress was not moved.'
+        : 'A chapter changed or could not be saved. Created chapters remain; training progress was not moved.',
+    cause: outcome,
+    createdPaths: createdPaths,
+    sourceState: isSource && outcome is PgnWriteUncertain
+        ? ChapterSplitSourceState.uncertain
+        : ChapterSplitSourceState.unchanged,
+    pathsToInspect: [
+      path,
+      if (outcome is PgnWriteUncertain && outcome.recoveryPath != null)
+        outcome.recoveryPath!,
+    ],
+  );
 }

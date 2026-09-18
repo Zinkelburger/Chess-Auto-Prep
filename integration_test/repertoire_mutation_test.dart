@@ -54,7 +54,7 @@ void main() {
       final file = File(p.join(folder.path, 'Main.pgn'));
       await file.writeAsString(_original);
       final documents = _InterleavingDocuments(
-        createPlatformDocumentStore()!,
+        createPlatformDocumentStore(),
         file.path,
       );
       final repository = DocumentRepertoireRepository(documents);
@@ -104,6 +104,11 @@ void main() {
 class _InterleavingDocuments implements PgnDocumentStore {
   _InterleavingDocuments(this.delegate, this.destination);
   final PgnDocumentStore delegate;
+  @override
+  bool get supportsQuarantine => delegate.supportsQuarantine;
+  @override
+  Future<PgnQuarantineResult> quarantine(PgnSnapshot baseline) =>
+      delegate.quarantine(baseline);
   final String destination;
   bool armed = false;
 

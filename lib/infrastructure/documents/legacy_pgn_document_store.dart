@@ -11,6 +11,14 @@ import '../../utils/atomic_file.dart';
 class LegacyPgnDocumentStore implements PgnDocumentStore {
   LegacyPgnDocumentStore(this.storage);
   final StorageService storage;
+  @override
+  bool get supportsQuarantine => false;
+  @override
+  Future<PgnQuarantineResult> quarantine(PgnSnapshot baseline) async =>
+      PgnQuarantineFailed(
+        UnsupportedError('Verified quarantine is unavailable'),
+      );
+
   static PgnSnapshot snapshot(String path, String content) => PgnSnapshot(
     path: path,
     content: content,

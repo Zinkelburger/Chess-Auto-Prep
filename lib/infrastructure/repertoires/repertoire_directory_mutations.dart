@@ -192,7 +192,8 @@ class RepertoireDirectoryMutations {
         destination,
         allowedRoot: kind == 'restore' ? trash! : root,
         destinationAllowedRoot: kind == 'trash' ? trash! : root,
-        installNoReplace: () => moveDirectoryNew(source.path, destination.path),
+        installNoReplace: () =>
+            movePathNoReplace(source.path, destination.path),
         beforeMove: () async {
           if ((await observeDirectory(source.path)).identity !=
               operation.identity) {

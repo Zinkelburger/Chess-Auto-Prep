@@ -520,11 +520,16 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     _toolsTabController = TabController(length: 4, vsync: this);
     _sidePanelTabController = TabController(length: 2, vsync: this);
     _outline = RepertoireOutlineController(
+      service: context.read<RepertoireOutlineService>(),
       onActiveChapterMoved: _onActiveChapterMoved,
     );
-    _planRunner = PlanRunner(generation: _generationController)
-      ..onChapterChanged = _onPlannedChapterChanged
-      ..addListener(_onPlanRunnerChanged);
+    _planRunner =
+        PlanRunner(
+            generation: _generationController,
+            outline: context.read<RepertoireOutlineService>(),
+          )
+          ..onChapterChanged = _onPlannedChapterChanged
+          ..addListener(_onPlanRunnerChanged);
     _layout.addListener(_onLayoutChanged);
     unawaited(_layout.load());
     _workspaceNavigation.addListener(_onAppStateChanged);

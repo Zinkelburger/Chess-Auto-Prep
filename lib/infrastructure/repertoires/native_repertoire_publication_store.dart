@@ -125,7 +125,7 @@ class NativeRepertoirePublicationStore {
             await testHook?.call(RepertoirePublicationStep.prepared);
           },
           installNoReplace: () =>
-              moveDirectoryNew(payload.path, _target(receipt)),
+              movePathNoReplace(payload.path, _target(receipt)),
           afterMove: () async =>
               testHook?.call(RepertoirePublicationStep.installed),
         );

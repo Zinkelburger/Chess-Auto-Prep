@@ -19,6 +19,7 @@ import '../../../utils/safe_change_notifier.dart';
 import '../models/outline_rows.dart';
 import '../models/repertoire_outline.dart';
 import '../services/repertoire_outline_service.dart';
+import '../services/chapter_splitter.dart';
 import 'outline_fold_state.dart';
 
 /// Result of an edit, for the panel to toast. [error] set means refused.
@@ -30,11 +31,20 @@ import 'outline_fold_state.dart';
 class OutlineEditOutcome {
   final String? error;
   final String? message;
+  final ChapterSplitException? splitFailure;
   final Future<OutlineEditOutcome> Function()? undo;
 
-  const OutlineEditOutcome.ok() : error = null, message = null, undo = null;
-  const OutlineEditOutcome.done({this.message, this.undo}) : error = null;
-  const OutlineEditOutcome.failed(this.error) : message = null, undo = null;
+  const OutlineEditOutcome.ok()
+    : error = null,
+      message = null,
+      undo = null,
+      splitFailure = null;
+  const OutlineEditOutcome.done({this.message, this.undo})
+    : error = null,
+      splitFailure = null;
+  const OutlineEditOutcome.failed(this.error, {this.splitFailure})
+    : message = null,
+      undo = null;
 
   bool get ok => error == null;
 }
@@ -46,9 +56,9 @@ typedef _MovedLines = ({List<int> origin, List<int> landed});
 class RepertoireOutlineController extends ChangeNotifier
     with SafeChangeNotifier {
   RepertoireOutlineController({
-    RepertoireOutlineService? service,
+    required this._service,
     this.onActiveChapterMoved,
-  }) : _service = service ?? RepertoireOutlineService();
+  });
 
   final RepertoireOutlineService _service;
   late final OutlineFoldState _fold = OutlineFoldState(
@@ -222,19 +232,30 @@ class RepertoireOutlineController extends ChangeNotifier
 
   /// Runs one structural edit and rebuilds afterwards, turning a refusal
   /// into a failed outcome rather than an exception.
+  bool _editing = false;
+
   Future<OutlineEditOutcome> _edit(
     Future<OutlineEditOutcome> Function() body,
   ) async {
+    if (_editing) {
+      return const OutlineEditOutcome.failed(
+        'Another outline change is still running. Wait for it to finish.',
+      );
+    }
+    _editing = true;
     try {
       final outcome = await body();
       await refresh();
       return outcome;
     } on OutlineEditException catch (e) {
-      return OutlineEditOutcome.failed(e.message);
+      if (e.splitFailure != null) await refresh();
+      return OutlineEditOutcome.failed(e.message, splitFailure: e.splitFailure);
     } catch (e) {
       // The edit may have half-happened on disk: show what is there now.
       await refresh();
       return OutlineEditOutcome.failed('That did not work: $e');
+    } finally {
+      _editing = false;
     }
   }
 
@@ -381,7 +402,16 @@ class RepertoireOutlineController extends ChangeNotifier
   Future<OutlineEditOutcome> splitChapter(
     String chapterPath,
   ) => _edit(() async {
-    final result = await _service.splitChapter(chapterPath, isWhite: _isWhite);
+    final ChapterSplitResult result;
+    try {
+      result = await _service.splitChapter(chapterPath, isWhite: _isWhite);
+    } on OutlineEditException catch (error) {
+      final partial = error.splitFailure;
+      if (partial != null && partial.sourceRemoved && _isActive(chapterPath)) {
+        _moveActiveTo(partial.createdPaths.firstOrNull);
+      }
+      rethrow;
+    }
     _fold
       ..closeChapter(chapterPath)
       ..expand(p.dirname(chapterPath));

@@ -57,7 +57,14 @@ class CreateRepertoire {
 /// Namespace installation may have completed; retain the draft and inspect the
 /// library before issuing another creation request. Never retry automatically.
 class RepertoireCreationUncertain implements Exception {
-  const RepertoireCreationUncertain();
+  const RepertoireCreationUncertain({
+    this.cause,
+    this.createdPaths = const [],
+    this.pathsToInspect = const [],
+  });
+  final Object? cause;
+  final List<String> createdPaths;
+  final List<String> pathsToInspect;
   @override
   String toString() =>
       'The file may already be saved. Keep this draft and reload the library before retrying.';

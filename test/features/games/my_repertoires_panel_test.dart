@@ -3,6 +3,10 @@
 /// what is already in the app, with "New empty repertoire…" at its foot.
 library;
 
+import 'package:provider/provider.dart';
+import 'package:chess_auto_prep/features/repertoires/controllers/repertoire_catalog_controller.dart';
+import 'package:chess_auto_prep/infrastructure/repertoires/legacy_repertoire_catalog_repository.dart';
+
 import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'dart:io';
 
@@ -105,19 +109,38 @@ void main() {
     dir.deleteSync(recursive: true);
   });
 
+  Future<void> waitForImport(WidgetTester tester) async {
+    for (
+      var i = 0;
+      i < 100 && settings.whitePaths.isEmpty && settings.blackPaths.isEmpty;
+      i++
+    ) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump();
+    }
+    await tester.pumpAndSettle();
+  }
+
   Future<void> pumpPanel(
     WidgetTester tester, {
     Future<PickedPgnImport?> Function()? pickPgn,
   }) async {
     await tester.pumpWidget(
-      MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(
-          body: SingleChildScrollView(
-            child: MyRepertoiresPanel(
-              settings: settings,
-              pickPgn: pickPgn ?? pickPgnImport,
+      ChangeNotifierProvider(
+        create: (_) => RepertoireCatalogController(
+          LegacyRepertoireCatalogRepository(storage),
+        ),
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: MyRepertoiresPanel(
+                settings: settings,
+                pickPgn: pickPgn ?? pickPgnImport,
+              ),
             ),
           ),
         ),
@@ -159,10 +182,7 @@ void main() {
       'London System',
     );
     await tester.tap(find.widgetWithText(FilledButton, 'Create'));
-    for (var i = 0; i < 30 && settings.whitePaths.isEmpty; i++) {
-      await tester.pump(const Duration(milliseconds: 20));
-    }
-    await tester.pumpAndSettle();
+    await waitForImport(tester);
 
     // The folder exists, its Main chapter carries the colour of the section
     // the user pressed Add in…
@@ -262,7 +282,7 @@ void main() {
       // Black's Import button; the file reads as a Black book, so nothing to
       // confirm and nothing to name.
       await tester.tap(find.widgetWithText(FilledButton, 'Import PGN…').last);
-      await tester.pumpAndSettle();
+      await waitForImport(tester);
 
       expect(picks, 1);
       expect(find.byKey(const Key('repertoire-name-field')), findsNothing);
@@ -298,7 +318,7 @@ void main() {
     ];
     await pumpPanel(tester, pickPgn: () async => _pickedCaroKann());
     await tester.tap(find.widgetWithText(FilledButton, 'Import PGN…').last);
-    await tester.pumpAndSettle();
+    await waitForImport(tester);
 
     expect(
       File(p.join(dir.path, 'Caro-Kann 2', 'Caro-Kann 2.pgn')).existsSync(),
@@ -327,7 +347,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Import PGN…').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Add as Black'));
-    await tester.pumpAndSettle();
+    await waitForImport(tester);
     expect(settings.blackPaths, [p.join(dir.path, 'Caro-Kann')]);
     expect(
       File(p.join(dir.path, 'Caro-Kann', 'Caro-Kann.pgn')).readAsStringSync(),

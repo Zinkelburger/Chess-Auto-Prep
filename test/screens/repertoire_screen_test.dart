@@ -1,3 +1,9 @@
+library;
+
+import 'package:chess_auto_prep/infrastructure/documents/legacy_pgn_document_store.dart';
+import 'package:chess_auto_prep/app/repertoire_dependencies.dart';
+import 'package:chess_auto_prep/features/repertoire/services/repertoire_outline_service.dart';
+
 /// Characterization tests for [RepertoireScreen].
 ///
 /// The screen is a large composite with no test coverage of its own, which
@@ -9,7 +15,6 @@
 /// The screen loads real files through [StorageFactory], so each test writes a
 /// throwaway repertoire folder to a temp directory and drives the screen the
 /// way the rest of the app does: an [AppState] handoff.
-library;
 
 import 'package:chess_auto_prep/app/builder_lifetime.dart';
 import 'package:chess_auto_prep/features/repertoires/models/builder_workspace_snapshot.dart';
@@ -165,6 +170,11 @@ Future<AppState> _pumpScreen(
           create: (_) => generationPublicationFixture,
         ),
         ChangeNotifierProvider<AppState>.value(value: appState),
+        Provider<RepertoireOutlineService>(
+          create: (_) => createRepertoireOutline(
+            documents: LegacyPgnDocumentStore(StorageFactory.instance),
+          ),
+        ),
         Provider<RepertoireDocumentRepository>.value(
           value: testRepertoireDocuments(),
         ),

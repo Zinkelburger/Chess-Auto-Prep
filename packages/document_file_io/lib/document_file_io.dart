@@ -35,7 +35,7 @@ external int _installNew(Pointer<Utf8> from, Pointer<Utf8> to);
 @Native<Int32 Function(Pointer<Utf8>, Pointer<Utf8>)>(
   symbol: 'cap_move_directory_new',
 )
-external int _moveDirectoryNew(Pointer<Utf8> from, Pointer<Utf8> to);
+external int _movePathNoReplace(Pointer<Utf8> from, Pointer<Utf8> to);
 @Native<Int32 Function(Pointer<Utf8>)>(symbol: 'cap_sync_directory')
 external int _syncDirectory(Pointer<Utf8> path);
 
@@ -153,20 +153,20 @@ Future<void> syncDirectory(String path) => Isolate.run(() {
   }
 });
 
-Future<void> moveDirectoryNew(String source, String destination) =>
+Future<void> movePathNoReplace(String source, String destination) =>
     Isolate.run(() {
       _checkPath(source);
       _checkPath(destination);
       final from = source.toNativeUtf8(), to = destination.toNativeUtf8();
       try {
-        final error = _moveDirectoryNew(from, to);
+        final error = _movePathNoReplace(from, to);
         if (error == (Platform.isWindows ? 80 : 17) ||
             (Platform.isWindows && error == 183)) {
           throw NativeNameCollision(destination);
         }
         if (error != 0) {
           throw FileSystemException(
-            'Exclusive directory move failed',
+            'Exclusive path move failed',
             destination,
             OSError('Native move', error),
           );

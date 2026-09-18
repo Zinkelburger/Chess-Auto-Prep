@@ -8,7 +8,10 @@ import 'package:flutter/material.dart';
 
 import '../../repertoires/models/repertoire_metadata.dart';
 import '../../../chess_core/pgn/pgn_text.dart' as pgn;
-import '../../../services/repertoire_creation.dart';
+import 'package:provider/provider.dart';
+import '../../repertoires/controllers/repertoire_catalog_controller.dart';
+import '../../repertoires/widgets/repertoire_messages.dart';
+import '../../../l10n/generated/app_localizations.dart';
 import '../../../services/storage/storage_factory.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
@@ -265,12 +268,14 @@ class _MyRepertoiresPanelState extends State<MyRepertoiresPanel> {
     required String Function(int lines) done,
   }) async {
     try {
-      final created = await createRepertoire(
-        name: name,
-        color: white ? 'White' : 'Black',
-        chapterName: chapterName,
-        pgnContent: pgnContent,
-        gameCount: gameCount,
+      final created = await context.read<RepertoireCatalogController>().create(
+        CreateRepertoire(
+          name: name,
+          color: white ? 'White' : 'Black',
+          chapterName: chapterName,
+          pgnContent: pgnContent,
+          gameCount: gameCount,
+        ),
       );
       try {
         await _settings.addPath(white: white, path: created.directoryPath);
@@ -289,7 +294,15 @@ class _MyRepertoiresPanelState extends State<MyRepertoiresPanel> {
       _say(AppMessages.repertoireExists(name), isError: true);
     } catch (e) {
       debugPrint('Create repertoire failed: $e');
-      _say(AppMessages.createRepertoireFailed, isError: true);
+      if (!mounted) return;
+      _say(
+        repertoireFailureMessage(
+          AppLocalizations.of(context),
+          e,
+          fallback: AppMessages.createRepertoireFailed,
+        ),
+        isError: true,
+      );
     }
   }
 

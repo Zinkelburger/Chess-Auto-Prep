@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/infrastructure/documents/native_pgn_document_store.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -72,6 +73,23 @@ String _game(String event, String moves, {String? chapter}) =>
     '${chapter != null ? '[White "$chapter"]\n' : ''}'
     '[Result "*"]\n\n$moves *\n';
 
+class _ControlledRepointer extends ReviewProgressRepointer {
+  _ControlledRepointer({required super.review});
+  bool fail = false;
+  Completer<void>? hold;
+  final entered = Completer<void>();
+  @override
+  Future<void> repoint({
+    required String from,
+    required Map<String, Set<String>> movedIdsByPath,
+  }) async {
+    if (!entered.isCompleted) entered.complete();
+    await hold?.future;
+    if (fail) throw StateError('progress unavailable');
+    await super.repoint(from: from, movedIdsByPath: movedIdsByPath);
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -79,6 +97,7 @@ void main() {
   late String root;
   late RepertoireOutlineService service;
   late _CsvStorage csv;
+  late _ControlledRepointer repointer;
 
   setUp(() {
     tmp = Directory.systemTemp.createTempSync('outline_test');
@@ -99,13 +118,17 @@ void main() {
       repertoiresRoot: Directory(root),
     );
     csv = _CsvStorage();
-    final repointer = ReviewProgressRepointer(
+    repointer = _ControlledRepointer(
       review: RepertoireReviewService(storage: csv),
     );
     service = RepertoireOutlineService(
       storage: storage,
       repointer: repointer,
-      splitter: ChapterSplitter(storage: storage, repointer: repointer),
+      splitter: ChapterSplitter(
+        documents: NativePgnDocumentStore(),
+        storage: storage,
+        repointer: repointer,
+      ),
     );
   });
 
@@ -398,6 +421,69 @@ void main() {
         );
       },
     );
+
+    test(
+      'progress failure refreshes committed files and follows quarantined active source',
+      () async {
+        final course = p.join(root, 'Course.pgn');
+        await File(course).writeAsString(
+          [
+            for (final title in ['One', 'Two'])
+              for (final moves in ['1. e4 e5', '1. d4 d5'])
+                _game('Course', moves, chapter: title),
+          ].join('\n'),
+        );
+        repointer.fail = true;
+        String? active;
+        final c = RepertoireOutlineController(
+          service: service,
+          onActiveChapterMoved: (path) => active = path,
+        );
+        addTearDown(c.dispose);
+        await c.open(rootPath: root, activeChapterPath: course, isWhite: false);
+        final outcome = await c.splitChapter(course);
+        expect(outcome.ok, isFalse);
+        expect(
+          outcome.splitFailure!.sourceState,
+          ChapterSplitSourceState.committed,
+        );
+        expect(outcome.splitFailure!.sourceRemoved, isTrue);
+        expect(outcome.error, contains('not rolled back'));
+        expect(active, p.join(root, 'One.pgn'));
+        expect(c.outline!.findChapter(course), isNull);
+        expect(c.outline!.findChapter(active!)!.lineCount, 2);
+        expect(c.outline!.findChapter(p.join(root, 'Two.pgn'))!.lineCount, 2);
+      },
+    );
+
+    test('pending split rejects another split and structural edits', () async {
+      final course = p.join(root, 'Course.pgn');
+      await File(course).writeAsString(
+        [
+          for (final title in ['One', 'Two'])
+            for (final moves in ['1. e4 e5', '1. d4 d5'])
+              _game('Course', moves, chapter: title),
+        ].join('\n'),
+      );
+      repointer.hold = Completer<void>();
+      final c = RepertoireOutlineController(service: service);
+      addTearDown(c.dispose);
+      await c.open(rootPath: root, activeChapterPath: course, isWhite: false);
+      final first = c.splitChapter(course);
+      await repointer.entered.future;
+      expect((await c.splitChapter(course)).error, contains('still running'));
+      expect(
+        (await c.renameChapter(p.join(root, 'One.pgn'), 'Changed')).ok,
+        isFalse,
+      );
+      expect(File(p.join(root, 'Changed.pgn')).existsSync(), isFalse);
+      repointer.hold!.complete();
+      expect((await first).ok, isTrue);
+      expect(
+        (await c.renameChapter(p.join(root, 'One.pgn'), 'Changed')).ok,
+        isTrue,
+      );
+    });
 
     test('splitting a chapter with no course chapters is refused', () async {
       final c = RepertoireOutlineController(service: service);

@@ -1,3 +1,4 @@
+import 'features/repertoire/services/repertoire_outline_service.dart';
 import 'app/builder_lifetime.dart';
 import 'features/studies/repositories/study_import_repository.dart';
 import 'features/studies/widgets/study_save_button.dart'
@@ -241,6 +242,9 @@ class ChessAutoPrepApp extends StatelessWidget {
             create: (_) =>
                 repertoireDocuments ??
                 createRepertoireDocuments(documents: documents),
+          ),
+          Provider<RepertoireOutlineService>(
+            create: (_) => createRepertoireOutline(documents: documents),
           ),
           Provider<RepertoireDecoder>(create: (_) => createRepertoireDecoder()),
           Provider<BuilderLifetime>(

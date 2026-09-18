@@ -24,8 +24,8 @@ The C API owns every native allocation; its result is copied and freed before
 an observation crosses the isolate boundary. Embedded NUL paths are rejected.
 
 `observeDirectory` exposes directory object identity without reading contents.
-`moveDirectoryNew` uses Linux `renameat2(RENAME_NOREPLACE)` for an exclusive
-namespace move, including against external creators; it returns an error when
+`movePathNoReplace` uses Linux `renameat2(RENAME_NOREPLACE)` for an exclusive
+namespace move for files and directories, including against external creators; it returns an error when
 the filesystem/kernel cannot provide that operation, never a replace fallback.
 Windows source uses MoveFileExW without replacement; macOS reports unsupported.
 The repertoire journal verifies the identity before replaying reference updates.

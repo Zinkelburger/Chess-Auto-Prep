@@ -1048,4 +1048,14 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get builderCopyRetained =>
       'The copy and draft are retained. Inspect the destination before trying again.';
+
+  @override
+  String createdChapterPaths(String paths) {
+    return 'Saved chapters:\n$paths';
+  }
+
+  @override
+  String chapterPathsToInspect(String paths) {
+    return 'Paths to inspect (writes may be unconfirmed):\n$paths';
+  }
 }

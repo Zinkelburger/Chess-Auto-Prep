@@ -55,17 +55,25 @@ class FileMutationService {
 
   /// Moves a managed file into [quarantineRoot]. Neither the managed root nor
   /// a symlink may be deleted, and the resolved path must remain under
-  /// [allowedRoot].
+  /// [allowedRoot]. Validation and acknowledgement hooks run under the same
+  /// parent-directory mutex as the move. The generated destination is exposed
+  /// before mutation so callers can retain evidence if acknowledgement fails.
   Future<QuarantineReceipt?> quarantineFile(
     File target, {
     required Directory allowedRoot,
     required Directory quarantineRoot,
     Directory? quarantineAllowedRoot,
+    Future<void> Function(String destination)? beforeMove,
+    Future<void> Function(String destination)? afterMove,
+    Future<void> Function(String destination)? installNoReplace,
   }) => _quarantine(
     target,
     allowedRoot: allowedRoot,
     quarantineRoot: quarantineRoot,
     quarantineAllowedRoot: quarantineAllowedRoot,
+    beforeMove: beforeMove,
+    afterMove: afterMove,
+    installNoReplace: installNoReplace,
   );
 
   /// Moves a managed directory into [quarantineRoot] without traversing it.
@@ -90,6 +98,9 @@ class FileMutationService {
     required Directory allowedRoot,
     required Directory quarantineRoot,
     Directory? quarantineAllowedRoot,
+    Future<void> Function(String destination)? beforeMove,
+    Future<void> Function(String destination)? afterMove,
+    Future<void> Function(String destination)? installNoReplace,
   }) async {
     if (!await target.exists()) return null;
     return withFileOperationLock(target.parent.path, () async {
@@ -109,7 +120,13 @@ class FileMutationService {
           destination,
         );
       }
-      await target.rename(destination);
+      await beforeMove?.call(destination);
+      if (installNoReplace == null) {
+        await target.rename(destination);
+      } else {
+        await installNoReplace(destination);
+      }
+      await afterMove?.call(destination);
       return QuarantineReceipt(
         originalPath: target.path,
         quarantinedPath: destination,
