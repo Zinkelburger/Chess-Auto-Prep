@@ -755,6 +755,333 @@ void main() {
     expect(app.hasPending<OpenBuilder>(), isFalse);
   });
 
+  for (final selectsLine in [false, true]) {
+    testWidgets(
+      'superseded ${selectsLine ? 'line' : 'moves'} handoff cannot navigate a newer chapter',
+      (tester) async {
+        final path = _writeRepertoire(tester);
+        final decoder = GatedRepertoireDecoder();
+        final app = await _pumpScreen(
+          tester,
+          repertoirePath: path,
+          decoder: decoder,
+        );
+        final workspace = tester
+            .element(find.byType(RepertoireScreen))
+            .read<BuilderLifetime>()
+            .workspace;
+        final pending = File('${File(path).parent.path}/Pending.pgn')
+          ..writeAsStringSync(
+            _chapterPgn.replaceFirst(
+              '[Result "*"]',
+              '[LineID "shared-id"]\n[Result "*"]',
+            ),
+          );
+        final newer = File('${File(path).parent.path}/Newer.pgn')
+          ..writeAsStringSync(
+            _chapterPgn
+                .replaceFirst('Italian Game', 'Newer chapter')
+                .replaceFirst(
+                  '[Result "*"]',
+                  '[LineID "shared-id"]\n[Result "*"]',
+                )
+                .replaceFirst(
+                  '1. e4 e5 2. Nf3 Nc6 3. Bc4 *',
+                  '1. d4 d5 2. c4 *',
+                ),
+          );
+        final gate = Completer<void>();
+        var reads = 0;
+        decoder.beforeBuild = () async {
+          if (++reads == 1) await gate.future;
+        };
+        addTearDown(() {
+          if (!gate.isCompleted) gate.complete();
+        });
+        app.switchToBuilder(
+          repertoirePath: pending.path,
+          lineId: selectsLine ? 'shared-id' : null,
+          moveSequence: selectsLine ? null : ['e4', 'e5'],
+        );
+        await _settleUntil(
+          tester,
+          find.byWidgetPredicate(
+            (widget) => widget is RepertoireScreen && reads == 1,
+          ),
+        );
+        expect(workspace.document.isLoading, isTrue);
+        app.switchToBuilder(repertoirePath: newer.path);
+        await _settleUntil(tester, find.text('Newer chapter'));
+        expect(workspace.document.currentRepertoire?.filePath, newer.path);
+        expect(workspace.document.loadError, isNull);
+        gate.complete();
+        await _settle(tester, cycles: 3);
+
+        expect(workspace.document.selectedPgnLine, isNull);
+        expect(workspace.board.moveHistory, isEmpty);
+        expect(workspace.board.fen, kStandardStartFen);
+      },
+    );
+  }
+
+  testWidgets('an A B A handoff drops the first A navigation intent', (
+    tester,
+  ) async {
+    final path = _writeRepertoire(tester);
+    final decoder = GatedRepertoireDecoder();
+    final app = await _pumpScreen(
+      tester,
+      repertoirePath: path,
+      decoder: decoder,
+    );
+    final workspace = tester
+        .element(find.byType(RepertoireScreen))
+        .read<BuilderLifetime>()
+        .workspace;
+    final a = File(
+      '${File(path).parent.path}/A.pgn',
+    )..writeAsStringSync(_chapterPgn.replaceFirst('Italian Game', 'Chapter A'));
+    final b = File(
+      '${File(path).parent.path}/B.pgn',
+    )..writeAsStringSync(_chapterPgn.replaceFirst('Italian Game', 'Chapter B'));
+    final gates = [Completer<void>(), Completer<void>()];
+    var reads = 0;
+    decoder.beforeBuild = () async {
+      final index = reads++;
+      if (index < gates.length) await gates[index].future;
+    };
+    addTearDown(() {
+      for (final gate in gates) {
+        if (!gate.isCompleted) gate.complete();
+      }
+    });
+    app.switchToBuilder(repertoirePath: a.path, moveSequence: ['e4', 'e5']);
+    await _settleUntil(
+      tester,
+      find.byWidgetPredicate(
+        (widget) => widget is RepertoireScreen && reads == 1,
+      ),
+    );
+    app.switchToBuilder(repertoirePath: b.path);
+    await _settleUntil(
+      tester,
+      find.byWidgetPredicate(
+        (widget) => widget is RepertoireScreen && reads == 2,
+      ),
+    );
+    app.switchToBuilder(repertoirePath: a.path);
+    await _settleUntil(tester, find.text('Chapter A'));
+    expect(workspace.document.currentRepertoire?.filePath, a.path);
+    for (final gate in gates) {
+      gate.complete();
+    }
+    await _settle(tester, cycles: 3);
+    expect(workspace.board.moveHistory, isEmpty);
+    expect(workspace.board.fen, kStandardStartFen);
+  });
+
+  testWidgets('a failed handoff load does not navigate the retained chapter', (
+    tester,
+  ) async {
+    final path = _writeRepertoire(tester);
+    final decoder = GatedRepertoireDecoder();
+    final app = await _pumpScreen(
+      tester,
+      repertoirePath: path,
+      decoder: decoder,
+    );
+    final workspace = tester
+        .element(find.byType(RepertoireScreen))
+        .read<BuilderLifetime>()
+        .workspace;
+    final pending = File('${File(path).parent.path}/Unavailable.pgn')
+      ..writeAsStringSync(_chapterPgn);
+    final board = workspace.board.tree;
+    decoder.beforeBuild = () async => throw StateError('Unavailable chapter');
+    app.switchToBuilder(
+      repertoirePath: pending.path,
+      moveSequence: ['d4', 'd5'],
+    );
+    await _settleUntil(tester, find.byType(MaterialBanner));
+    expect(workspace.document.currentRepertoire?.filePath, path);
+    expect(workspace.document.loadError, contains('Unavailable chapter'));
+    expect(workspace.board.tree, same(board));
+    expect(workspace.board.moveHistory, isEmpty);
+  });
+
+  testWidgets(
+    'a missing handoff chapter cannot receive a composed move draft',
+    (tester) async {
+      final path = _writeRepertoire(tester);
+      final app = await _pumpScreen(tester, repertoirePath: path);
+      final workspace = tester
+          .element(find.byType(RepertoireScreen))
+          .read<BuilderLifetime>()
+          .workspace;
+      final missing = '${File(path).parent.path}/Missing.pgn';
+      app.switchToBuilder(repertoirePath: missing, moveSequence: ['d4', 'd5']);
+      await _settleUntil(
+        tester,
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is RepertoireScreen &&
+              workspace.document.currentRepertoire?.filePath == missing &&
+              !workspace.document.isLoading,
+        ),
+      );
+      expect(workspace.document.repertoirePgn, isNull);
+      expect(File(missing).existsSync(), isFalse);
+      expect(workspace.board.moveHistory, isEmpty);
+      expect(workspace.board.fen, kStandardStartFen);
+    },
+  );
+
+  testWidgets(
+    'ready same-source handoff selects a line then composes without reload',
+    (tester) async {
+      final path = _writeRepertoire(tester);
+      final decoder = GatedRepertoireDecoder();
+      final app = await _pumpScreen(
+        tester,
+        repertoirePath: path,
+        decoder: decoder,
+      );
+      final workspace = tester
+          .element(find.byType(RepertoireScreen))
+          .read<BuilderLifetime>()
+          .workspace;
+      final generation = workspace.document.loadGeneration;
+      final line = workspace.document.repertoireLines.first;
+      decoder.beforeBuild = () async => throw StateError('Unexpected reload');
+      app.switchToBuilder(repertoirePath: path, lineId: line.id);
+      await _settle(tester, cycles: 2);
+      expect(workspace.document.selectedPgnLine, same(line));
+      app.switchToBuilder(
+        repertoirePath: path,
+        lineId: line.id,
+        moveSequence: ['d4', 'd5'],
+      );
+      await _settle(tester, cycles: 2);
+      expect(workspace.document.selectedPgnLine, isNull);
+      expect(workspace.board.moveHistory, ['d4', 'd5']);
+      expect(workspace.document.loadGeneration, generation);
+      expect(workspace.document.loadError, isNull);
+    },
+  );
+
+  testWidgets(
+    'same-source pending handoff owns a fresh load and captured moves',
+    (tester) async {
+      final path = _writeRepertoire(tester);
+      final decoder = GatedRepertoireDecoder();
+      final app = await _pumpScreen(
+        tester,
+        repertoirePath: path,
+        decoder: decoder,
+      );
+      final workspace = tester
+          .element(find.byType(RepertoireScreen))
+          .read<BuilderLifetime>()
+          .workspace;
+      final gates = [Completer<void>(), Completer<void>()];
+      var reads = 0;
+      decoder.beforeBuild = () async {
+        final index = reads++;
+        await gates[index].future;
+      };
+      addTearDown(() {
+        for (final gate in gates) {
+          if (!gate.isCompleted) gate.complete();
+        }
+      });
+      var oldFinished = false;
+      unawaited(
+        workspace.document.loadRepertoire().then((_) => oldFinished = true),
+      );
+      await _settleUntil(
+        tester,
+        find.byWidgetPredicate(
+          (widget) => widget is RepertoireScreen && reads == 1,
+        ),
+      );
+      final moves = ['e4', 'e5'];
+      app.switchToBuilder(repertoirePath: path, moveSequence: moves);
+      await _settleUntil(
+        tester,
+        find.byWidgetPredicate(
+          (widget) => widget is RepertoireScreen && reads == 2,
+        ),
+      );
+      moves
+        ..clear()
+        ..addAll(['d4', 'd5']);
+      gates[1].complete();
+      await _settleUntil(
+        tester,
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is RepertoireScreen && !workspace.document.isLoading,
+        ),
+      );
+      expect(workspace.board.moveHistory, ['e4', 'e5']);
+      gates[0].complete();
+      await _settleUntil(
+        tester,
+        find.byWidgetPredicate(
+          (widget) => widget is RepertoireScreen && oldFinished,
+        ),
+      );
+      expect(workspace.board.moveHistory, ['e4', 'e5']);
+      expect(workspace.document.loadError, isNull);
+    },
+  );
+
+  testWidgets('leaving Builder while a handoff loads suppresses navigation', (
+    tester,
+  ) async {
+    final path = _writeRepertoire(tester);
+    final decoder = GatedRepertoireDecoder();
+    final app = await _pumpScreen(
+      tester,
+      repertoirePath: path,
+      decoder: decoder,
+    );
+    final workspace = tester
+        .element(find.byType(RepertoireScreen))
+        .read<BuilderLifetime>()
+        .workspace;
+    final pending = File('${File(path).parent.path}/Pending.pgn')
+      ..writeAsStringSync(_chapterPgn);
+    final gate = Completer<void>();
+    var entered = false;
+    decoder.beforeBuild = () async {
+      entered = true;
+      await gate.future;
+    };
+    addTearDown(() {
+      if (!gate.isCompleted) gate.complete();
+    });
+    app.switchToBuilder(
+      repertoirePath: pending.path,
+      moveSequence: ['e4', 'e5'],
+    );
+    await _settleUntil(
+      tester,
+      find.byWidgetPredicate((widget) => widget is RepertoireScreen && entered),
+    );
+    app.setMode(AppMode.pgnViewer);
+    gate.complete();
+    await _settleUntil(
+      tester,
+      find.byWidgetPredicate(
+        (widget) => widget is RepertoireScreen && !workspace.document.isLoading,
+      ),
+    );
+    expect(app.currentMode, AppMode.pgnViewer);
+    expect(workspace.document.currentRepertoire?.filePath, pending.path);
+    expect(workspace.board.moveHistory, isEmpty);
+  });
+
   group('wide layout', () {
     testWidgets('renders the loaded chapter, its lines, and the side panel', (
       tester,

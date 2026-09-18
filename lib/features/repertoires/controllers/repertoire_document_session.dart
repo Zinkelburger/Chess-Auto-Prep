@@ -2,8 +2,6 @@
 /// Board navigation and Flutter notifications belong to the composing host.
 library;
 
-import 'dart:async';
-
 import '../../documents/models/pgn_document.dart';
 
 import '../../../chess_core/pgn/repertoire_headers.dart';
@@ -533,8 +531,6 @@ class RepertoireDocumentSession {
   int _loadGeneration = 0;
   int get loadGeneration => _loadGeneration;
 
-  final List<Completer<void>> _loadCompleters = [];
-
   /// Sets a new repertoire and triggers loading.
   Future<void> setRepertoire(RepertoireMetadata repertoire) async {
     await _loadRepertoire(repertoire);
@@ -623,8 +619,7 @@ class RepertoireDocumentSession {
       }
       onChanged();
     } finally {
-      // Claiming the generation above suppressed the in-flight load's own
-      // release, so this call owes any `awaitLoaded()` waiters theirs.
+      // The superseded load cannot clear its loading state after this restore.
       if (isCurrent(generation) && _isLoading) {
         _setLoading(false);
       }
@@ -784,24 +779,9 @@ class RepertoireDocumentSession {
     _setLoading(false);
   }
 
-  /// Returns a Future that completes when the current load finishes.
-  /// Resolves immediately if no load is in progress.
-  Future<void> awaitLoaded() {
-    if (!_isLoading) return Future.value();
-    final c = Completer<void>();
-    _loadCompleters.add(c);
-    return c.future;
-  }
-
   void _setLoading(bool loading) {
     if (_disposed) return;
     _isLoading = loading;
-    if (!loading) {
-      for (final c in _loadCompleters) {
-        c.complete();
-      }
-      _loadCompleters.clear();
-    }
     onChanged();
   }
 
@@ -817,9 +797,5 @@ class RepertoireDocumentSession {
     _disposed = true;
     _loadGeneration++;
     _isLoading = false;
-    for (final completer in _loadCompleters) {
-      completer.complete();
-    }
-    _loadCompleters.clear();
   }
 }

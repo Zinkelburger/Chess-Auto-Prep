@@ -224,6 +224,9 @@
     "RepertoireGenerationTabState",
     "TrapsTabContent",
     "_seedGenerationWhenReady",
-    "_seedGenerationAfterLoad"
+    "_seedGenerationAfterLoad",
+    "awaitLoaded",
+    "_openMovesAfterLoad",
+    "_openLineAfterLoad"
   ]
 }

@@ -512,12 +512,12 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     _handoffCheckQueued = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _handoffCheckQueued = false;
-      if (mounted) _applyPendingHandoff();
+      if (mounted) unawaited(_applyPendingHandoff());
     });
     WidgetsBinding.instance.ensureVisualUpdate();
   }
 
-  void _applyPendingHandoff() {
+  Future<void> _applyPendingHandoff() async {
     // Preserve the document underlying an open picker/configuration. A new
     // source request waits until that destination closes and generation ends.
     if (_workspaceNavigation.hasDestination ||
@@ -532,44 +532,48 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     final handoff = appState.takeHandoff<OpenBuilder>();
     if (handoff == null) return;
 
-    // A library handoff reloads structural edits even for the current file.
-    final currentPath = _controller.document.currentRepertoire?.filePath;
-    if (currentPath != handoff.repertoirePath || handoff.reloadFromDisk) {
-      unawaited(
-        _controller.document.setRepertoire(
-          RepertoireMetadata(
-            filePath: handoff.repertoirePath,
-            name: p.basenameWithoutExtension(handoff.repertoirePath),
-            lastModified: DateTime.now(),
-          ),
-        ),
-      );
+    final document = _controller.document;
+    final moves = handoff.moveSequence == null
+        ? null
+        : List<String>.of(handoff.moveSequence!);
+    // Own this request's load, including a same-file request that supersedes
+    // pending work. A ready document needs no reload or asynchronous gap.
+    final load =
+        document.currentRepertoire?.filePath != handoff.repertoirePath ||
+            handoff.reloadFromDisk ||
+            document.isLoading ||
+            document.loadError != null ||
+            document.repertoirePgn == null
+        ? document.setRepertoire(
+            RepertoireMetadata(
+              filePath: handoff.repertoirePath,
+              name: p.basenameWithoutExtension(handoff.repertoirePath),
+              lastModified: DateTime.now(),
+            ),
+          )
+        : null;
+    final generation = document.loadGeneration;
+    if (load != null) await load;
+    if (!mounted ||
+        !document.isCurrent(generation) ||
+        document.isLoading ||
+        document.loadError != null ||
+        document.repertoirePgn == null ||
+        document.currentRepertoire?.filePath != handoff.repertoirePath ||
+        appState.currentMode != AppMode.repertoire ||
+        appState.hasPending<OpenBuilder>() ||
+        _workspaceNavigation.hasDestination ||
+        _generationController.isGenerating) {
+      return;
     }
+
     if (handoff.lineId != null) {
-      unawaited(_openLineAfterLoad(handoff.lineId!));
+      final line = document.repertoireLines
+          .where((line) => line.id == handoff.lineId)
+          .firstOrNull;
+      if (line != null) _controller.selectLine(line);
     }
-    if (handoff.moveSequence != null) {
-      unawaited(_openMovesAfterLoad(handoff.moveSequence!));
-    }
-  }
-
-  /// Navigate the board to a SAN sequence once the repertoire is loaded
-  /// ("Explore this position" hand-off from the trainer).
-  Future<void> _openMovesAfterLoad(List<String> moves) async {
-    await _controller.document.awaitLoaded();
-    if (!mounted) return;
-    _controller.composeMoves(moves);
-  }
-
-  Future<void> _openLineAfterLoad(String lineId) async {
-    await _controller.document.awaitLoaded();
-    if (!mounted) return;
-    final line = _controller.document.repertoireLines
-        .where((l) => l.id == lineId)
-        .firstOrNull;
-    if (line != null) {
-      _controller.selectLine(line);
-    }
+    if (moves != null) _controller.composeMoves(moves);
   }
 
   void _onTrapsChanged() {
