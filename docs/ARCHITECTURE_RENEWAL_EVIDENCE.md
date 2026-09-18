@@ -2710,3 +2710,38 @@ permissions and using Refresh removed the error and revealed the formerly
 inaccessible source in the same dialog. The preview used the disposable driver
 profile and was stopped before final checks. Analyze/lint pass with 63 existing
 infos, no warnings/errors; 44 architecture checks pass with unchanged debt.
+
+### Builder workspace retirement and independent review — 2026-09-18
+
+The Builder branch at `a7352bb2` deletes the 284-line `RepertoireController`
+facade and moves its production callers to the existing document, board and
+writer owners or the app-owned workspace. `BuilderLifetime` owns durable draft
+recovery before the route mounts. Widget autosave timers are removed; document
+saves admit one active write and the latest pending content per line, preserving
+ordering barriers around document commands. A recovered source needs native
+revision, whole-source text and line identity evidence before autosave can
+reattach. Missing/replaced sources remain editable detached drafts.
+
+Independent review reproduced and repaired three races before integration:
+source autosave could remove a draft still required by an unresolved copy;
+selecting a retained outline row bypassed the native reattachment check; and a
+late chapter load could replace a recovered scratch draft. Repairs reuse the
+existing draft invariant, shared attachment validation and intent invalidation.
+Copy/open/initial-folder selection now use the injected catalog's chapter
+listing; direct `StorageFactory` access is removed from the Builder screen and
+parts. A listing failure retains the draft, and retry performs the actual append.
+
+Branch evidence: 327 broad focused tests before the final scratch-intent fix,
+63 final recovery/load tests, three Linux native restart cases, and 44 final
+catalog/localization/screen tests pass. Analyze/lint pass with 64 informational
+messages and no warnings/errors. The parent reviewed the repairs and combined
+the app-owned close/recovery hosts with the Study and Viewer hosts. The
+[restored Builder](images/renewal-builder-restored.png) and
+[restart recovery](images/renewal-builder-restart-recovery.png) use disposable
+profiles; native replacement-to-outline-to-edit coverage verifies detachment.
+
+This completes the named facade retirement and recovery responsibility, not the
+whole Builder feature or its maintainability gate. Against `29fbb4b0`, the branch
+adds 1,828 and deletes 852 handwritten production Dart lines: **net +976**, with
+144 generated localization lines counted separately. Remaining legacy chapter
+creation, UI coordination and theme work are not certified by these checks.
