@@ -6,6 +6,26 @@ import 'package:flutter_test/flutter_test.dart';
 /// a handoff is delivered to exactly one screen, exactly once, and related
 /// values travel together instead of being cleared field by field.
 void main() {
+  test('captured content is delivered once without a file identity', () {
+    final app = AppState();
+    addTearDown(app.dispose);
+    const request = OpenPgnViewer.content(
+      content: '[Event "Reading"]\n\n1. e4 *',
+      title: 'Browser practice',
+      gameIndex: 1,
+      ply: 3,
+    );
+    app.handOff(request);
+    expect(app.currentMode, AppMode.pgnViewer);
+    final delivered = app.takeHandoff<OpenPgnViewer>()!;
+    expect(delivered, same(request));
+    expect(delivered.pgnPath, isNull);
+    expect(delivered.defaultHistoryLabel, 'PGN: Browser practice');
+    expect(delivered.gameIndex, 1);
+    expect(delivered.ply, 3);
+    expect(app.takeHandoff<OpenPgnViewer>(), isNull);
+  });
+
   group('routing', () {
     test('each handoff switches to the screen that can deliver it', () {
       final cases = <PendingHandoff, AppMode>{
