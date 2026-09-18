@@ -516,17 +516,4 @@ class RepertoireReviewService implements TrainingReviewRepository {
   @override
   double previewInterval(RepertoireReviewEntry entry, ReviewRating rating) =>
       _nextInterval(entry.intervalDays, rating, _clampedEase(entry));
-
-  /// Human-readable label for a review interval in days.
-  static String formatInterval(double intervalDays) {
-    // "Again" schedules zero days on purpose — the line comes back inside the
-    // session you are in — and "<1m" reads as a rounding artefact rather than
-    // as the promise it is.
-    if (intervalDays <= 0) return 'now';
-    if (intervalDays < 1 / 24) return '<1m';
-    if (intervalDays < 1) return '${(intervalDays * 24).round()}h';
-    if (intervalDays < 30) return '${intervalDays.round()}d';
-    if (intervalDays < 365) return '${(intervalDays / 30).round()}mo';
-    return '${(intervalDays / 365).round()}y';
-  }
 }

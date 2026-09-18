@@ -288,15 +288,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
       (AppShortcut.rateEasy, ReviewRating.easy),
     ])
       ...KeyBinding.forShortcutIf(shortcut, 'Rate recall', () {
-        if (_training.phase != TrainingPhase.finished ||
-            _training.currentLine == null ||
-            _training.runComplete ||
-            _training.dueQueue.isEmpty ||
-            _training.repetitionMode != RepetitionMode.spaced ||
-            !_training.settings.showRatingButtons ||
-            _training.hadLearnPhaseThisSession) {
-          return false;
-        }
+        if (!_training.canRate) return false;
         unawaited(_training.rateLine(rating));
         return true;
       }),
@@ -780,25 +772,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
             child: _training.runComplete
                 ? _buildRunCompletePanel()
                 : _training.phase == TrainingPhase.finished
-                ? TrainingResultsPanel(
-                    phase: _training.phase,
-                    currentLine: _training.currentLine,
-                    dueQueue: _training.dueQueue,
-                    reviewMap: _training.reviewMap,
-                    repertoireId: _training.repertoireId,
-                    lineHadMistake: _training.lineHadMistake,
-                    hadLearnPhaseThisSession:
-                        _training.hadLearnPhaseThisSession == true,
-                    repetitionMode: _training.repetitionMode,
-                    trainingMode: _training.trainingMode,
-                    settings: _training.settings,
-                    sessionCorrect: _training.sessionCorrect,
-                    sessionIncorrect: _training.sessionIncorrect,
-                    sessionStreak: _training.sessionStreak,
-                    reviewService: _training.reviewService,
-                    onRateLine: _training.rateLine,
-                    onNextLine: _training.nextLine,
-                  )
+                ? TrainingResultsPanel(session: _training)
                 : TrainingPhasePanel(
                     phase: _training.phase,
                     feedback: _training.feedback,

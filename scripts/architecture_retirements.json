@@ -82,6 +82,8 @@
     "showEditContextLayoutSheet",
     "PgnWithAnalysisPane",
     "EditMainZone",
-    "RepertoireAnalysisDock"
+    "RepertoireAnalysisDock",
+    "TrainingRatingButtons",
+    "AllCaughtUpPanel"
   ]
 }

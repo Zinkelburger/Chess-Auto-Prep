@@ -281,7 +281,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
     unawaited(_configurationSubscription.cancel());
     chapterScope.cancelPending();
     _loadGeneration++;
-    _lineGeneration++;
+    _invalidateLine();
     learn.cancelPending();
     // Get the session's schedules into the PGN before the timer that would
     // have done it is cancelled.
@@ -307,6 +307,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   Future<void> Function()? _retryFailure;
 
   Future<void> retryFailure() async {
+    if (completionBusy) return;
     final retry = _retryFailure;
     _retryFailure = null;
     error = null;
@@ -318,12 +319,17 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
     }
   }
 
+  void _invalidateLine() {
+    _lineGeneration++;
+    progress.abandonOutcomeRetries();
+  }
+
   void _cancelSourceWork() {
     _retryFailure = null;
     error = null;
     _adoptConfiguration();
     _loadGeneration++;
-    _lineGeneration++;
+    _invalidateLine();
     learn.cancelPending();
     chapterScope.cancelPending();
     currentLine = null;
@@ -447,7 +453,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
     // this load must decide "study or repertoire" from its own snapshot.
     final generation = ++_loadGeneration;
     bool stale() => generation != _loadGeneration;
-    _lineGeneration++;
+    _invalidateLine();
     learn.cancelPending();
     currentLine = null;
     waitingForUser = false;
@@ -461,6 +467,8 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
 
     try {
+      await progress.settleOutcomes();
+      if (stale()) return;
       final filePath = source.filePath;
       // A hand-set colour beats everything: it exists precisely because the
       // file and the inference between them got it wrong.
@@ -719,6 +727,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   void startReviewSession() => _startSession(TrainingIntent.review);
 
   void _startSession(TrainingIntent intent) {
+    if (_uncommittedResult) return;
     _adoptConfiguration();
     dueQueue = _buildQueue();
     run.begin(dueQueue, intent);
@@ -765,7 +774,11 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
     TrainingIntent? intent,
     bool keepRunScope = false,
   }) {
-    if (line == null || (reviewMap[line.id]?.excluded ?? false)) return;
+    if (_uncommittedResult ||
+        line == null ||
+        (reviewMap[line.id]?.excluded ?? false)) {
+      return;
+    }
     if (!keepRunScope) {
       _adoptConfiguration();
       run.clear();
@@ -788,7 +801,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
     // the puzzle's solution.
     final isNew = trainingMode == TrainingMode.repertoire && _isLineNew(line);
 
-    _lineGeneration++;
+    _invalidateLine();
     _clearPresentation();
     currentLine = line;
     currentLineLength = window.length;
@@ -892,13 +905,14 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
 
   /// Skip for this sitting without changing the saved schedule.
   void skipLine() {
-    if (currentLine == null || runComplete) return;
+    if (!canAdvance) return;
     run.skip(currentLine!.id);
     learn.cancelPending();
     rebuildQueueAndAdvance();
   }
 
   Future<void> setLineExcluded(RepertoireLine line, bool excluded) async {
+    if (_uncommittedResult) return;
     final saved = progress.setExcluded(line, excluded);
     if (excluded && currentLine?.id == line.id) {
       learn.cancelPending();
@@ -913,7 +927,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   /// Restart the current line from the beginning (learn phase again if the
   /// line is still new).
   void restartLine() {
-    if (currentLine == null) return;
+    if (!canAdvance) return;
     startLine(currentLine, intent: sessionIntent, keepRunScope: true);
   }
 
@@ -924,7 +938,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
     // Leaving the line is the natural moment to pay off the batched PGN
     // writes: the user has stopped answering, so the pause costs nothing.
     unawaited(progress.flushHeaders());
-    _lineGeneration++;
+    _invalidateLine();
     runComplete = false;
     run.clear();
     currentLine = null;
@@ -1000,58 +1014,35 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
     }
   }
 
-  /// Enter the finished phase.  In spaced mode the results panel asks for a
-  /// rating; in linear mode the completion is recorded here (pass/fail, no
-  /// scheduling) and the panel offers Next.
+  /// Finishing, persisting and advancing are one session-owned transition.
+  /// A mounted results widget is never required to commit an automatic result.
   void _finishLine() {
+    if (_disposed ||
+        currentLine == null ||
+        runComplete ||
+        _completionGeneration == _lineGeneration) {
+      return;
+    }
     phase = TrainingPhase.finished;
     waitingForUser = false;
     currentAnnotation = null;
     if (repetitionMode == RepetitionMode.linear) {
-      final solvedClean = !lineHadMistake;
+      final clean = !lineHadMistake;
       feedback = trainingMode == TrainingMode.tactics
-          ? (solvedClean ? 'Puzzle solved!' : 'Solved — with mistakes.')
-          : (solvedClean ? 'Line complete!' : 'Line complete — with mistakes.');
-      unawaited(_recordLinearCompletion());
+          ? (clean ? 'Puzzle solved!' : 'Solved — with mistakes.')
+          : (clean ? 'Line complete!' : 'Line complete — with mistakes.');
+      unawaited(_commitCompletion(null));
+    } else if (!settings.showRatingButtons || hadLearnPhaseThisSession) {
+      unawaited(
+        _commitCompletion(
+          lineHadMistake ? ReviewRating.again : ReviewRating.good,
+        ),
+      );
     } else {
       feedback = 'Line complete — rate your recall.';
     }
     notifyListeners();
   }
-
-  /// Linear-mode bookkeeping: pass/fail counts, session stats and history —
-  /// but no spaced-repetition scheduling (the line stays "new" for SRS).
-  Future<void> _recordLinearCompletion() async {
-    final line = currentLine;
-    if (line == null || _linearCompletionGeneration == _lineGeneration) return;
-    final generation = _lineGeneration;
-    _linearCompletionGeneration = generation;
-    _linearDone.add(line.id);
-    // Drop the finished line from the queue synchronously so the results
-    // panel's remaining count (and set-complete detection) are accurate.
-    dueQueue = _buildQueue();
-
-    final hadMistake = lineHadMistake;
-    try {
-      await progress.recordCompletion(line, hadMistake: hadMistake);
-    } catch (e) {
-      if (_disposed || generation != _lineGeneration) return;
-      _linearCompletionGeneration = null;
-      _linearDone.remove(line.id);
-      dueQueue = _buildQueue();
-      _retryFailure = _recordLinearCompletion;
-      error = 'Could not save completion: $e';
-      notifyListeners();
-      return;
-    }
-    if (_disposed || generation != _lineGeneration) return;
-    _tallySessionResult(hadMistake: hadMistake);
-    notifyListeners();
-  }
-
-  // ---------------------------------------------------------------------------
-  // RATING & PROGRESS
-  // ---------------------------------------------------------------------------
 
   /// Fold one finished line into the running session counters.
   void _tallySessionResult({required bool hadMistake}) {
@@ -1067,61 +1058,130 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
     }
   }
 
-  bool _ratingInFlight = false;
-  int? _ratedGeneration;
-  int? _linearCompletionGeneration;
+  int? _completionGeneration;
+  int? _savingGeneration;
+  int? _completedGeneration;
+  bool get completionBusy => _savingGeneration == _lineGeneration;
+  bool get completionCommitted => _completedGeneration == _lineGeneration;
+  bool get _uncommittedResult =>
+      currentLine != null &&
+      !runComplete &&
+      phase == TrainingPhase.finished &&
+      !completionCommitted;
+  bool get canAdvance =>
+      !_disposed &&
+      !completionBusy &&
+      !runComplete &&
+      currentLine != null &&
+      (phase != TrainingPhase.finished || completionCommitted);
+
+  bool get canRate =>
+      !_disposed &&
+      !runComplete &&
+      currentLine != null &&
+      phase == TrainingPhase.finished &&
+      repetitionMode == RepetitionMode.spaced &&
+      _completionGeneration != _lineGeneration &&
+      error == null;
+
+  double previewRatingInterval(ReviewRating rating) =>
+      reviewService.previewInterval(
+        reviewMap[currentLine?.id] ??
+            RepertoireReviewEntry(
+              repertoireId: repertoireId,
+              lineId: currentLine?.id ?? '',
+              lineName: currentLine?.name ?? '',
+            ),
+        rating,
+      );
 
   Future<void> rateLine(ReviewRating rating) async {
-    if (_disposed || _ratingInFlight || _ratedGeneration == _lineGeneration) {
+    if (phase != TrainingPhase.finished ||
+        (repetitionMode == RepetitionMode.spaced && !canRate)) {
       return;
     }
-    _ratingInFlight = true;
-    final generation = _lineGeneration;
-    try {
-      await _recordLineRating(rating);
-    } catch (e) {
-      if (!_disposed && generation == _lineGeneration) {
-        _retryFailure = () => rateLine(rating);
-        error = 'Could not save rating: $e';
-        notifyListeners();
-      }
-    } finally {
-      _ratingInFlight = false;
+    if (repetitionMode == RepetitionMode.linear && completionCommitted) {
+      nextLine();
+      return;
     }
+    await _commitCompletion(
+      repetitionMode == RepetitionMode.linear ? null : rating,
+    );
   }
 
-  Future<void> _recordLineRating(ReviewRating rating) async {
+  Future<void> _commitCompletion(ReviewRating? rating) async {
     final line = currentLine;
-    if (line == null) return;
-    // Linear mode has no ratings — completion was recorded in _finishLine;
-    // a stray rating call (keyboard shortcut) just advances.
-    if (repetitionMode == RepetitionMode.linear) {
-      rebuildQueueAndAdvance();
+    if (_disposed ||
+        line == null ||
+        runComplete ||
+        _completionGeneration == _lineGeneration) {
       return;
     }
-
     final generation = _lineGeneration;
+    _completionGeneration = generation;
+    final attempt = Object();
     final hadMistake = lineHadMistake;
-    await progress.recordRating(line, rating, hadMistake: hadMistake);
-    if (_disposed || generation != _lineGeneration) return;
-    _ratedGeneration = generation;
-    // This line has already been corrected; a low rating schedules another
-    // review, rather than mixing an old line into this learning run.
-    run.skip(line.id);
-    _tallySessionResult(hadMistake: hadMistake);
-    notifyListeners();
-
-    if (settings.autoNext) {
-      rebuildQueueAndAdvance();
-    } else {
-      dueQueue = _buildQueue();
+    final autoNext = settings.autoNext;
+    // Retain the same decision through a partial-write retry. The progress
+    // store already owns captured source bytes and resumable persistence stages.
+    Future<void> persist() async {
+      if (_disposed ||
+          generation != _lineGeneration ||
+          completionBusy ||
+          completionCommitted) {
+        return;
+      }
+      _savingGeneration = generation;
       notifyListeners();
+      try {
+        if (rating == null) {
+          await progress.recordCompletion(
+            line,
+            attempt: attempt,
+            hadMistake: hadMistake,
+          );
+        } else {
+          await progress.recordRating(
+            line,
+            rating,
+            attempt: attempt,
+            hadMistake: hadMistake,
+          );
+        }
+      } catch (failure) {
+        if (!_disposed && generation == _lineGeneration) {
+          _retryFailure = persist;
+          error =
+              'Could not save ${rating == null ? 'completion' : 'rating'}: $failure';
+        }
+        return;
+      } finally {
+        if (_savingGeneration == generation) _savingGeneration = null;
+        if (!_disposed && generation == _lineGeneration) notifyListeners();
+      }
+      if (_disposed || generation != _lineGeneration) return;
+      _completedGeneration = generation;
+      if (rating == null) {
+        _linearDone.add(line.id);
+      } else {
+        run.skip(line.id);
+      }
+      _tallySessionResult(hadMistake: hadMistake);
+      if (autoNext) {
+        rebuildQueueAndAdvance();
+      } else {
+        dueQueue = _buildQueue();
+        notifyListeners();
+      }
     }
+
+    await persist();
   }
 
   /// Advance to the next line of the current run (Learn or Review), or finish
   /// the session when the scope is exhausted.
   void rebuildQueueAndAdvance() {
+    if (!canAdvance) return;
     dueQueue = _buildQueue();
 
     final next = run.next(
@@ -1130,7 +1190,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
       afterLineId: currentLine?.id,
     );
     if (next == null) {
-      _lineGeneration++;
+      _invalidateLine();
       waitingForUser = false;
       playingIntro = false;
       phase = TrainingPhase.finished;

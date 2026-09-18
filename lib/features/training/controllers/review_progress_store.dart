@@ -142,18 +142,19 @@ class ReviewProgressStore {
   // ── Rating a completed line ──────────────────────────────────────────
 
   /// Apply [rating] to [line], persist the new schedule, and append a history
-  /// row. Returns the updated entry.
+  /// row. Returns the updated entry. Reuse [attempt] only to retry this result.
   ///
   /// [hadMistake] steers the pass/fail tallies, which are kept separately from
   /// the interval so "how well do I know this" survives a schedule reset.
   Future<RepertoireReviewEntry> recordRating(
     RepertoireLine line,
     ReviewRating rating, {
+    required Object attempt,
     required bool hadMistake,
     String sessionType = 'trainer',
   }) async {
     final sourcePath = line.sourcePath ?? repertoireId;
-    final pending = _outcomes[_outcomeKey(sourcePath, line)];
+    final pending = _outcomes[(sourcePath, line.persistedId, attempt)];
     if (pending != null) {
       await _resumeOutcome(pending);
       _queueHeaderWrite(sourcePath, line.persistedId, pending.updated);
@@ -171,6 +172,7 @@ class ReviewProgressStore {
     await _persistLineOutcome(
       line,
       sourcePath: sourcePath,
+      attempt: attempt,
       rating: rating.name,
       hadMistake: hadMistake,
       sessionType: sessionType,
@@ -187,11 +189,12 @@ class ReviewProgressStore {
   /// untouched — the line stays "new" as far as SRS is concerned.
   Future<void> recordCompletion(
     RepertoireLine line, {
+    required Object attempt,
     required bool hadMistake,
     String sessionType = 'linear',
   }) async {
     final sourcePath = line.sourcePath ?? repertoireId;
-    final pending = _outcomes[_outcomeKey(sourcePath, line)];
+    final pending = _outcomes[(sourcePath, line.persistedId, attempt)];
     if (pending != null) {
       await _resumeOutcome(pending);
       return;
@@ -205,6 +208,7 @@ class ReviewProgressStore {
     await _persistLineOutcome(
       line,
       sourcePath: sourcePath,
+      attempt: attempt,
       rating: '',
       hadMistake: hadMistake,
       sessionType: sessionType,
@@ -216,12 +220,13 @@ class ReviewProgressStore {
   Future<void> _persistLineOutcome(
     RepertoireLine line, {
     required String sourcePath,
+    required Object attempt,
     required String rating,
     required bool hadMistake,
     required String sessionType,
   }) async {
     final outcome = _TrainingOutcome(
-      key: _outcomeKey(sourcePath, line),
+      key: (sourcePath, line.persistedId, attempt),
       sourcePath: sourcePath,
       updated: byLine[line.id]!,
       reviews: byLine.values.toList(),
@@ -239,11 +244,32 @@ class ReviewProgressStore {
     await _resumeOutcome(outcome);
   }
 
-  final Map<String, _TrainingOutcome> _outcomes = {};
-  String _outcomeKey(String sourcePath, RepertoireLine line) =>
-      '${sourcePath.length}:$sourcePath${line.persistedId}';
+  final Map<(String, String, Object), _TrainingOutcome> _outcomes = {};
+  Future<void> _outcomeWrites = Future<void>.value();
 
-  Future<void> _resumeOutcome(_TrainingOutcome outcome) async {
+  // Capture before joining this queue: another session may already have
+  // rebound the store by the time the preceding write finishes.
+  /// End retry admission when the owning session is cancelled. Queued writes
+  /// still hold their captured outcomes and finish independently of this map.
+  void abandonOutcomeRetries() => _outcomes.clear();
+
+  /// Wait for admitted writes to settle before reading a source again.
+  /// Settlement neither certifies success nor retries a failed write.
+  Future<void> settleOutcomes() => _outcomeWrites;
+
+  Future<void> _resumeOutcome(_TrainingOutcome outcome) {
+    if (outcome.inFlight case final pending?) return pending;
+    final write = _outcomeWrites.then((_) => _writeOutcome(outcome));
+    final tracked = write.whenComplete(() => outcome.inFlight = null);
+    outcome.inFlight = tracked;
+    _outcomeWrites = tracked.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    return tracked;
+  }
+
+  Future<void> _writeOutcome(_TrainingOutcome outcome) async {
     if (!outcome.reviewsSaved) {
       await reviewService.saveAll(
         outcome.reviews,
@@ -259,7 +285,9 @@ class ReviewProgressStore {
       outcome.movesSaved = true;
     }
     await reviewService.appendHistory([outcome.history]);
-    _outcomes.remove(outcome.key);
+    if (identical(_outcomes[outcome.key], outcome)) {
+      _outcomes.remove(outcome.key);
+    }
   }
 
   Future<void> setExcluded(RepertoireLine line, bool excluded) async {
@@ -454,12 +482,13 @@ class _TrainingOutcome {
     required this.moves,
     required this.history,
   });
-  final String key;
+  final (String, String, Object) key;
   final String sourcePath;
   final RepertoireReviewEntry updated;
   final List<RepertoireReviewEntry> reviews;
   final List<RepertoireMoveProgress> moves;
   final RepertoireReviewHistoryEntry history;
+  Future<void>? inFlight;
   bool reviewsSaved = false;
   bool movesSaved = false;
 }
