@@ -3301,3 +3301,48 @@ changed, so a new preview was unnecessary. Final all-library Dart is **227,061
 lines**, 8,104 (+3.7%) above September 16. Against `fa7f309e`, the complete batch
 now removes **12,443 handwritten production lines**, with generated localization
 +22 separate. This remains retirement progress, not whole-renewal completion.
+
+
+### Generation run/job ownership — 2026-09-18
+
+Production commit `b034067f` against `72ff3519` closes the circular startup path:
+previously the session announced a run, its screen listener created the job, and
+the session resumed to configure that job. The existing session now receives the
+existing concrete JobManager, registers a running job with captured request label,
+configuration and actual root, then publishes its first notification. Its job
+reference is read-only to consumers. A run with no mounted screen still has a
+properly registered and settled job; tests use isolated concrete registries.
+
+The existing GenerationProgress owns the one elapsed stopwatch and reuses the
+existing notification throttle. Four runtime suppliers disappear. Ordinary stats
+and phase changes share a **250 ms** budget, replacing 100 ms job statistics plus
+a second 250 ms whole-screen timer. This intentionally slows ordinary job updates
+to four per second; admission, pause/resume/cancel and terminal transitions remain
+immediate. Paused time stays frozen, disposed callbacks cannot restart a clock or
+timer, and settlement writes the retained job summary before unbinding/resetting
+progress. The useful pure coherence/completion router remains; its redundant
+coalescing result disappears. Jobs-panel controls call the session directly, and
+the exporter directly borrows its stable progress and tree-builder references.
+
+The complete declared 18-file consumer/helper scope falls from **7,947 to 7,893
+handwritten production lines**: 129 added / 183 deleted, **−54**. Nonblank,
+noncomment lines fall from 6,393 to 6,354 (−39). There is no new owner/interface,
+generated code change or unrelated deletion credit. Tests verify zero-observer
+startup/cancellation, fully configured first observer and resumed root, busy
+rejection, disposed settlement, phase/stat burst bounds, paused elapsed time and
+late callbacks. The final focused run passes **98 tests**, and the additional
+caller/native batch passes **31**, including real native artifact publication/
+reopen/resume, generation pane, Builder/main and the configured registry.
+An initial run had an obsolete 200 ms timing assertion and an invalid fixture
+argument; both were corrected and pass in the final checks.
+
+The actual headless app generated from a disposable PGN using Engine + human
+model, auto-opened Jobs, then accepted Pause → Resume → Cancel through its real
+controls. The original PGN bytes stayed unchanged and the completed job retained
+its 295-node cancellation summary. Implementer, independent reviewer and
+coordinator inspected [paused](images/renewal-generation-job-paused.png) and
+[cancelled](images/renewal-generation-job-cancelled.png) screenshots. The preview
+was stopped. Analyze/lint passes with 64 existing infos, no warnings/errors and
+45 checker cases. Combined integration over `f600070c` passes **92 tests** and
+analyze/lint; the retirement-manifest merge keeps both branches' retired symbols.
+Whole Generation, Builder and the renewal remain Partial.
