@@ -426,8 +426,8 @@ product owner to choose implementation details.
    the repair. A green test suite alone is not a design review.
 5. **Measure and integrate.** Compare the same user-action traces, owner and
    dependency counts, callbacks, and full-scope handwritten code size. Record
-   whether each improved, regressed or remains unverified. For the composition
-   and Viewer simplification units below, require net production-code removal
+   whether each improved, regressed or remains unverified. Every simplification
+   requires net handwritten production-code removal across its complete scope
    as well as clearer ownership; new helper files count against that result.
    Do not compress formatting or omit safety behavior to achieve a reduction.
    Reconcile shared files, run affected combined checks, and integrate only the
