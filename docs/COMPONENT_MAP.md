@@ -1505,7 +1505,7 @@ Training session, phases, chapter scope and review progress have canonical
 owners under `features/training/`; the old `services/training/` libraries and
 `models/training_settings.dart` are removed. Models no longer persist themselves.
 Epoch guards reject stale source, layout, settings and rating completions.
-Outcome persistence resumes failed stages without repeating confirmed history
+Line-completion persistence resumes failed stages without repeating confirmed history
 appends or tallying twice. The existing error panel retries the pending action;
 failed header mirrors remain queued. This retry state is in memory; crash-resume
 remains a separate requirement.
@@ -1527,7 +1527,10 @@ rating-button wrapper and all-caught-up panel are retired.
 Learn/Review, per-line practice and bulk-known commands. The screen retains
 only navigation callbacks; browser-local search, sort and checkbox selection
 stay in the widget. Its chapter inventory includes read-only model games even
-when those chapters contain no trainable lines.
+when those chapters contain no trainable lines. This binding cleanup does not
+complete bulk-known failure recovery: its legacy command can alter memory before
+persistence fails. The existing Read handoff also passes a relative cache path
+that the native Viewer document store cannot open; these remain separate repairs.
 
 `AppDependencies` owns one `TrainingSettingsController`. Settings panels submit
 immutable field patches and share committed values, pending drafts and visible

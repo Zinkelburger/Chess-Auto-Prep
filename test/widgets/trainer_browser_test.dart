@@ -375,5 +375,27 @@ void main() {
         expect(reviews.history.map((entry) => entry.lineId), ['A']);
       },
     );
+
+    testWidgets(
+      'a retained row command cannot start training after browser disposal',
+      (tester) async {
+        final session = await trainerBrowserSession(lines: [_line('A')]);
+        await tester.pumpWidget(_liveBrowser(session));
+        final tap = tester
+            .widget<InkWell>(
+              find
+                  .ancestor(
+                    of: find.text('Line A'),
+                    matching: find.byType(InkWell),
+                  )
+                  .first,
+            )
+            .onTap!;
+        await tester.pumpWidget(const SizedBox.shrink());
+        tap();
+        expect(session.currentLine, isNull);
+        expect(tester.takeException(), isNull);
+      },
+    );
   });
 }
