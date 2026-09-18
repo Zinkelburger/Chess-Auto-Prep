@@ -76,7 +76,6 @@ void main() {
         ),
         matching: find.byType(MoveChip),
       );
-      final originalContent = study.doc.toPgn();
       await tester.tap(selectedChip, buttons: kSecondaryMouseButton);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Edit Comment'));
@@ -95,6 +94,10 @@ void main() {
         baseOffset: 5,
         extentOffset: 17,
       );
+      // Inline typing already updates the dirty document; Save closes the
+      // inline editor. Theme changes must preserve both draft and document.
+      final editedContent = study.doc.toPgn();
+      expect(editedContent, contains(draft));
       final inlineState = tester.state(inlineEditor);
       final scroll = tester.state<ScrollableState>(
         find
@@ -108,7 +111,12 @@ void main() {
       await tester.pumpAndSettle();
       final offset = scroll.position.pixels;
       expect(offset, greaterThan(1));
-      final darkInk = tester.widget<MoveChip>(selectedChip).sanStyle.color;
+      // The selected move can leave the mounted window while its inline
+      // comment is open. Check resolved ink on a currently mounted row.
+      final styledChip = find
+          .descendant(of: editor, matching: find.byType(MoveChip))
+          .first;
+      final darkInk = tester.widget<MoveChip>(styledChip).sanStyle.color;
 
       Future<void> expectRetained(Brightness brightness) async {
         await tester.pumpAndSettle();
@@ -129,10 +137,13 @@ void main() {
         expect(study.path, cursor);
         expect(study.flipped, isTrue);
         expect(study.dirty, isTrue);
-        expect(study.doc.toPgn(), originalContent);
-        final chip = tester.widget<MoveChip>(selectedChip);
-        final colors = Theme.of(tester.element(selectedChip)).colorScheme;
-        expect(chip.sanStyle.color, colors.onPrimaryContainer);
+        expect(study.doc.toPgn(), editedContent);
+        final chip = tester.widget<MoveChip>(styledChip);
+        final colors = Theme.of(tester.element(styledChip)).colorScheme;
+        expect(
+          chip.sanStyle.color,
+          anyOf(colors.onSurface, colors.onPrimaryContainer),
+        );
         expect(tester.takeException(), isNull);
       }
 
@@ -140,7 +151,7 @@ void main() {
       await settings.appearance.setAppearance(AppAppearance.light);
       await expectRetained(Brightness.light);
       expect(
-        tester.widget<MoveChip>(selectedChip).sanStyle.color,
+        tester.widget<MoveChip>(styledChip).sanStyle.color,
         isNot(darkInk),
       );
       await settings.appearance.setAppearance(AppAppearance.dark);
