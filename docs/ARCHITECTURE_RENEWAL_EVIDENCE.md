@@ -3517,3 +3517,34 @@ All library Dart is **225,814 lines**, still 6,857 (+3.1%) above September 16.
 Against `fa7f309e`, handwritten library code adds 1,859 and deletes 15,549
 (**−13,690**), with generated localization +22 separately. Unused-code retirement
 accounts for 11,757 removed lines; it cannot establish simpler active workflows.
+
+
+### Compact Study toolbar repair — 2026-09-18
+
+`78fb52cc` against `24a8f3fa` reproduces the previously observed 750px overflow
+on the actual StudyScreen fixture, then repairs its two existing controls.
+StudySaveButton uses its existing warning/save icon and localized tooltip at the
+existing compact breakpoint; the wide labelled button and save command remain.
+StudyPickerBar constrains its inline rename editor to the available width.
+No new owner, layout framework or state mirror is introduced. Two-widget scope
+**214 → 227 lines (+13)**; including the unchanged direct StudyScreen caller,
+**1,264 → 1,277**. This is a layout repair, not a simplification pass.
+
+The baseline fails with the 17px production overflow. Final **26 focused tests
+pass**, including a named, renameable study at 750px with 100% and 150% text,
+inline rename, switcher access and keyboard activation of the compact recovery
+button after an uncertain save. Existing chapter actions and document save
+behavior remain covered. An initial post-fix test selected an unrelated field;
+the repaired fixture scopes the editor to the real StudyPickerBar. Analyze/lint
+passes with 64 existing infos, zero warnings/errors and 45 checker cases.
+
+The actual Linux app was resized to 750×1000. Its named study was selected,
+renamed inline with Enter, and reopened in the existing save/recovery dialog.
+Filesystem inspection confirms the old name absent and original movetext
+preserved at the new name. Root inspected the [inline editor](images/renewal-study-picker-750-edit.png)
+and [recovery dialog](images/renewal-study-picker-750-recovery.png) screenshots;
+preview is stopped. Independent root review approves the exact source and tests.
+The earlier 900px-only limitation is closed for these 750px interactions; no
+arbitrary-width or other-host verification is implied. Reviewed integration
+`a783a9f1` totals 225,827 library Dart lines, +6,870 (+3.1%) over September 16
+and −11,164 against the growth-review snapshot.
