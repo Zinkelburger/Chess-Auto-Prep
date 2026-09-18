@@ -53,6 +53,7 @@ void main() {
         addTearDown(configuration.dispose);
         final line = fakeLine('line', ['e4']);
         session.lines = [line];
+        session.isLoading = false;
         session.currentLine = line;
         session.completeLine();
         await tester.pumpWidget(
@@ -115,6 +116,7 @@ void main() {
       addTearDown(configuration.dispose);
       final line = fakeLine('line', ['e4']);
       session.lines = [line];
+      session.isLoading = false;
       session.currentLine = line;
       session.phase = TrainingPhase.finished;
       await tester.pumpWidget(

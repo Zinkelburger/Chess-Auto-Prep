@@ -8,7 +8,7 @@
 ///
 /// It deliberately does not notify: mutators return their result and the
 /// owner decides when to rebuild the queue and repaint, because ordering
-/// matters (repaint before the disk write, not after).
+/// matters: commands publish only according to their acknowledged outcome.
 library;
 
 import 'dart:async';
@@ -32,7 +32,7 @@ class ReviewProgressStore {
   }) : _now = now ?? DateTime.now;
 
   final DateTime Function() _now;
-  final void Function(Object)? onError;
+  void Function(Object)? onError;
   final TrainingReviewRepository reviewService;
   final TrainingHeaderRepository headers;
 
@@ -69,7 +69,8 @@ class ReviewProgressStore {
   static const headerFlushDelay = Duration(seconds: 4);
 
   Timer? _headerFlushTimer;
-  final Map<String, Map<String, RepertoireReviewEntry>> _pendingHeaders = {};
+  final _pendingHeaders =
+      <String, Map<String, ({RepertoireReviewEntry entry, Object owner})>>{};
   Future<void>? _headerFlush;
   bool _disposed = false;
 
@@ -77,8 +78,9 @@ class ReviewProgressStore {
     String sourcePath,
     String lineId,
     RepertoireReviewEntry entry,
+    Object owner,
   ) {
-    (_pendingHeaders[sourcePath] ??= {})[lineId] = entry;
+    (_pendingHeaders[sourcePath] ??= {})[lineId] = (entry: entry, owner: owner);
     _headerFlushTimer?.cancel();
     if (_disposed) {
       unawaited(flushHeaders());
@@ -91,31 +93,48 @@ class ReviewProgressStore {
   }
 
   /// Failed mirrors remain pending; the authoritative CSV outcome is preserved.
-  Future<void> flushHeaders() {
+  Future<void> flushHeaders({Set<String>? sources}) {
     _headerFlushTimer?.cancel();
     _headerFlushTimer = null;
-    return _headerFlush ??= _flushHeaders().whenComplete(
-      () => _headerFlush = null,
-    );
+    final pending = _headerFlush;
+    if (pending != null) {
+      return sources == null
+          ? pending
+          : pending.then((_) => flushHeaders(sources: sources));
+    }
+    return _headerFlush = _flushHeaders(
+      sources,
+    ).whenComplete(() => _headerFlush = null);
   }
 
-  Future<void> _flushHeaders() async {
-    while (_pendingHeaders.isNotEmpty) {
-      final path = _pendingHeaders.keys.first;
-      final batch = Map<String, RepertoireReviewEntry>.of(
-        _pendingHeaders[path]!,
-      );
+  Future<void> _flushHeaders(Set<String>? sources) async {
+    while (true) {
+      final path = _pendingHeaders.keys
+          .where((path) => sources == null || sources.contains(path))
+          .firstOrNull;
+      if (path == null) return;
+      final batch = Map.of(_pendingHeaders[path]!);
+      final report = onError;
       try {
         if (path.isNotEmpty &&
-            !await headers.updateManyLineReviewHeaders(path, batch)) {
+            !await headers.updateManyLineReviewHeaders(path, {
+              for (final entry in batch.entries) entry.key: entry.value.entry,
+            })) {
           throw StateError('Training source could not be updated: $path');
         }
       } catch (e) {
-        onError?.call(e);
+        if (!_disposed &&
+            batch.values.any((value) => identical(value.owner, byLine))) {
+          report?.call(e);
+        }
         return;
       }
       final pending = _pendingHeaders[path]!;
-      pending.removeWhere((key, value) => identical(batch[key], value));
+      pending.removeWhere(
+        (key, value) =>
+            identical(batch[key]?.entry, value.entry) &&
+            identical(batch[key]?.owner, value.owner),
+      );
       if (pending.isEmpty) _pendingHeaders.remove(path);
     }
   }
@@ -135,6 +154,7 @@ class ReviewProgressStore {
     // Whatever the previous source owed its own file, it owes now.
     unawaited(flushHeaders());
     this.byLine = byLine;
+    _requiresReload = false;
     this.moveProgress = moveProgress;
     this.otherRepertoires = otherRepertoires;
   }
@@ -153,11 +173,11 @@ class ReviewProgressStore {
     required bool hadMistake,
     String sessionType = 'trainer',
   }) async {
+    _checkWritable();
     final sourcePath = line.sourcePath ?? repertoireId;
     final pending = _outcomes[(sourcePath, line.persistedId, attempt)];
     if (pending != null) {
       await _resumeOutcome(pending);
-      _queueHeaderWrite(sourcePath, line.persistedId, pending.updated);
       return pending.updated;
     }
     final existing = byLine[line.id] ?? _freshEntry(line);
@@ -177,7 +197,6 @@ class ReviewProgressStore {
       hadMistake: hadMistake,
       sessionType: sessionType,
     );
-    _queueHeaderWrite(sourcePath, line.persistedId, updated);
 
     return updated;
   }
@@ -193,6 +212,7 @@ class ReviewProgressStore {
     required bool hadMistake,
     String sessionType = 'linear',
   }) async {
+    _checkWritable();
     final sourcePath = line.sourcePath ?? repertoireId;
     final pending = _outcomes[(sourcePath, line.persistedId, attempt)];
     if (pending != null) {
@@ -229,6 +249,7 @@ class ReviewProgressStore {
       key: (sourcePath, line.persistedId, attempt),
       sourcePath: sourcePath,
       updated: byLine[line.id]!,
+      owner: byLine,
       reviews: byLine.values.toList(),
       moves: moveProgress.values.toList(),
       history: RepertoireReviewHistoryEntry(
@@ -246,12 +267,69 @@ class ReviewProgressStore {
 
   final Map<(String, String, Object), _TrainingOutcome> _outcomes = {};
   Future<void> _outcomeWrites = Future<void>.value();
+  int _pendingWrites = 0;
+  bool _editBusy = false;
+  bool get editBusy => _editBusy;
+  bool _requiresReload = false;
+  bool get requiresReload => _requiresReload;
+  bool get editsBlocked => editBusy || requiresReload || _disposed;
+
+  void _checkWritable() {
+    if (editsBlocked) {
+      throw StateError('Training progress needs to settle or reload');
+    }
+  }
+
+  void _admitEdit() {
+    _checkWritable();
+    if (_pendingWrites != 0 || _outcomes.isNotEmpty) {
+      throw StateError('A training outcome is still unresolved');
+    }
+  }
+
+  Future<T> _queueWrite<T>(Future<T> Function() action) {
+    _pendingWrites++;
+    final write = _outcomeWrites
+        .then((_) => action())
+        .whenComplete(() => _pendingWrites--);
+    _outcomeWrites = write.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    return write;
+  }
+
+  // Non-resumable edits have one acknowledgement boundary. A partial failure
+  // requires a durable read, never another attempt with the same selection.
+  Future<T> _edit<T>(
+    Map<String, RepertoireReviewEntry> owner,
+    Future<T> Function() write,
+  ) {
+    _editBusy = true;
+    return _queueWrite(() async {
+      try {
+        return await write();
+      } catch (_) {
+        if (identical(byLine, owner)) _requiresReload = true;
+        rethrow;
+      } finally {
+        _editBusy = false;
+      }
+    });
+  }
 
   // Capture before joining this queue: another session may already have
   // rebound the store by the time the preceding write finishes.
   /// End retry admission when the owning session is cancelled. Queued writes
   /// still hold their captured outcomes and finish independently of this map.
-  void abandonOutcomeRetries() => _outcomes.clear();
+  void abandonOutcomeRetries() {
+    if (_outcomes.values.any(
+      (outcome) => outcome.inFlight == null && identical(outcome.owner, byLine),
+    )) {
+      _requiresReload = true;
+    }
+    _outcomes.clear();
+  }
 
   /// Wait for admitted writes to settle before reading a source again.
   /// Settlement neither certifies success nor retries a failed write.
@@ -259,13 +337,19 @@ class ReviewProgressStore {
 
   Future<void> _resumeOutcome(_TrainingOutcome outcome) {
     if (outcome.inFlight case final pending?) return pending;
-    final write = _outcomeWrites.then((_) => _writeOutcome(outcome));
+    final write = _queueWrite(() async {
+      try {
+        await _writeOutcome(outcome);
+      } catch (_) {
+        if (!identical(_outcomes[outcome.key], outcome) &&
+            identical(byLine, outcome.owner)) {
+          _requiresReload = true;
+        }
+        rethrow;
+      }
+    });
     final tracked = write.whenComplete(() => outcome.inFlight = null);
     outcome.inFlight = tracked;
-    _outcomeWrites = tracked.then<void>(
-      (_) {},
-      onError: (Object _, StackTrace _) {},
-    );
     return tracked;
   }
 
@@ -285,137 +369,149 @@ class ReviewProgressStore {
       outcome.movesSaved = true;
     }
     await reviewService.appendHistory([outcome.history]);
+    if (outcome.history.rating.isNotEmpty) {
+      _queueHeaderWrite(
+        outcome.sourcePath,
+        outcome.key.$2,
+        outcome.updated,
+        outcome.owner,
+      );
+    }
     if (identical(_outcomes[outcome.key], outcome)) {
       _outcomes.remove(outcome.key);
     }
   }
 
   Future<void> setExcluded(RepertoireLine line, bool excluded) async {
+    _admitEdit();
     final sourcePath = line.sourcePath ?? repertoireId;
-    final entry = byLine[line.id] ?? _freshEntry(line);
-    byLine[line.id] = entry.copyWith(excluded: excluded);
-    await reviewService.saveAll(
-      byLine.values.toList(),
-      repertoireId: sourcePath,
+    final owner = byLine;
+    final updated = (owner[line.id] ?? _freshEntry(line)).copyWith(
+      excluded: excluded,
     );
+    final proposed = {...owner, line.id: updated};
+    await _edit(owner, () async {
+      await reviewService.saveAll(
+        proposed.values.toList(),
+        repertoireId: sourcePath,
+      );
+      if (!_disposed && identical(byLine, owner)) owner[line.id] = updated;
+    });
   }
 
   // ── Bulk "I already know these" ──────────────────────────────────────
 
-  /// Bulk-set which lines count as learned without training them — for lines
-  /// the user already knows from elsewhere (another tool, over-the-board
-  /// experience). Lines in [checkedLineIds] that are new get seeded as
-  /// learned; learned lines left unchecked are reset to new. Returns how many
-  /// lines changed state.
-  ///
-  /// [within] limits the pass to those line ids (the lines the user could
-  /// actually see): with a chapter filter active, learned lines outside the
-  /// chapter must not be reset just because they weren't on screen.
-  ///
-  /// [onApplied] runs once the in-memory state is updated but before anything
-  /// is written, so the owner can repaint without waiting on disk.
+  /// Capture the entire selected scope before joining the write queue. Nothing
+  /// is published until every source's schedule, history and headers acknowledge.
+  /// Failure can be partial on disk and requires reload before another edit.
   Future<int> applyLearnedSelection(
     List<RepertoireLine> lines,
     Set<String> checkedLineIds, {
     Set<String>? within,
-    void Function()? onApplied,
   }) async {
-    final sources = {for (final line in lines) line.sourcePath ?? repertoireId};
-    if (sources.length > 1 ||
-        (sources.isNotEmpty && sources.single != repertoireId)) {
-      var changed = 0;
-      for (final source in sources) {
-        changed += await _applyLearnedSelectionForSource(
-          lines
-              .where((line) => (line.sourcePath ?? repertoireId) == source)
-              .toList(),
-          checkedLineIds,
-          sourcePath: source,
-          within: within,
-          onApplied: onApplied,
-        );
-      }
-      return changed;
-    }
-    return _applyLearnedSelectionForSource(
-      lines,
-      checkedLineIds,
-      sourcePath: repertoireId,
-      within: within,
-      onApplied: onApplied,
-    );
-  }
-
-  Future<int> _applyLearnedSelectionForSource(
-    List<RepertoireLine> lines,
-    Set<String> checkedLineIds, {
-    required String sourcePath,
-    Set<String>? within,
-    void Function()? onApplied,
-  }) async {
+    _admitEdit();
+    final owner = byLine;
+    final sourcePath = repertoireId;
+    final proposed = Map.of(owner);
     final now = _now().toUtc();
-    final history = <RepertoireReviewHistoryEntry>[];
-    final headerUpdates = <String, RepertoireReviewEntry>{};
-    int seeded = 0;
-
-    for (final line in lines) {
-      if (within != null && !within.contains(line.id)) continue;
-      final entry = byLine[line.id];
-      final isLearned = entry != null && !entry.isNew;
-      final wantLearned = checkedLineIds.contains(line.id);
-      if (wantLearned == isLearned) continue;
-
-      final RepertoireReviewEntry updated;
-      if (wantLearned) {
-        final existing = entry ?? _freshEntry(line);
-        // Stagger seeded intervals (1–3 days) so a big bulk import doesn't
-        // dump every line into the same future review day.
-        final interval = 1.0 + (seeded++ % 5) * 0.5;
-        updated = existing.copyWith(
-          intervalDays: interval,
-          dueDateUtc: now.add(Duration(hours: (interval * 24).round())),
-          lastRating: ReviewRating.good.name,
-          lastReviewedUtc: now,
-        );
-      } else {
-        // Back to new: scheduling cleared, pass/fail history kept. A fresh
-        // entry rather than copyWith because copyWith can't null the dates.
-        updated = RepertoireReviewEntry(
-          repertoireId: sourcePath,
-          lineId: line.persistedId,
-          lineName: line.name,
-          difficulty: entry!.difficulty,
-          passCount: entry.passCount,
-          failCount: entry.failCount,
-          excluded: entry.excluded,
+    final batches =
+        <
+          ({
+            String path,
+            List<RepertoireReviewEntry> reviews,
+            Map<String, RepertoireReviewEntry> headers,
+            List<RepertoireReviewHistoryEntry> history,
+          })
+        >[];
+    final sources = {for (final line in lines) line.sourcePath ?? sourcePath};
+    for (final source in sources) {
+      final history = <RepertoireReviewHistoryEntry>[];
+      final updates = <String, RepertoireReviewEntry>{};
+      int seeded = 0;
+      for (final line in lines) {
+        if ((line.sourcePath ?? sourcePath) != source ||
+            (within != null && !within.contains(line.id))) {
+          continue;
+        }
+        final entry = owner[line.id];
+        final isLearned = entry != null && !entry.isNew;
+        final wantLearned = checkedLineIds.contains(line.id);
+        if (wantLearned == isLearned) continue;
+        final RepertoireReviewEntry updated;
+        if (wantLearned) {
+          final existing = entry ?? _freshEntry(line);
+          final interval = 1.0 + (seeded++ % 5) * 0.5;
+          updated = existing.copyWith(
+            intervalDays: interval,
+            dueDateUtc: now.add(Duration(hours: (interval * 24).round())),
+            lastRating: ReviewRating.good.name,
+            lastReviewedUtc: now,
+          );
+        } else {
+          updated = RepertoireReviewEntry(
+            repertoireId: source,
+            lineId: line.persistedId,
+            lineName: line.name,
+            difficulty: entry!.difficulty,
+            passCount: entry.passCount,
+            failCount: entry.failCount,
+            excluded: entry.excluded,
+          );
+        }
+        proposed[line.id] = updated;
+        updates[line.persistedId] = updated;
+        history.add(
+          RepertoireReviewHistoryEntry(
+            repertoireId: source,
+            lineId: line.persistedId,
+            timestampUtc: now,
+            rating: wantLearned ? ReviewRating.good.name : '',
+            hadMistake: false,
+            sessionType: 'marked',
+          ),
         );
       }
-      byLine[line.id] = updated;
-      headerUpdates[line.persistedId] = updated;
-      history.add(
-        RepertoireReviewHistoryEntry(
-          repertoireId: sourcePath,
-          lineId: line.persistedId,
-          timestampUtc: now,
-          rating: wantLearned ? ReviewRating.good.name : '',
-          hadMistake: false,
-          sessionType: 'marked',
-        ),
-      );
+      if (updates.isNotEmpty) {
+        batches.add((
+          path: source,
+          reviews: List.unmodifiable(
+            proposed.values.where((entry) => entry.repertoireId == source),
+          ),
+          headers: Map.unmodifiable(updates),
+          history: List.unmodifiable(history),
+        ));
+      }
     }
-
-    if (headerUpdates.isEmpty) return 0;
-
-    onApplied?.call();
-
-    final savedReviews = byLine.values.toList();
-    await reviewService.saveAll(savedReviews, repertoireId: sourcePath);
-    await reviewService.appendHistory(history);
-    // Fold in anything still waiting so the two writes cannot race for the
-    // same file, then write once.
-    await flushHeaders();
-    await headers.updateManyLineReviewHeaders(sourcePath, headerUpdates);
-    return headerUpdates.length;
+    if (batches.isEmpty) return 0;
+    return _edit(owner, () async {
+      // Never let an older retained mirror overwrite these newer schedules.
+      final paths = batches.map((batch) => batch.path).toSet();
+      await flushHeaders(sources: paths);
+      if (_pendingHeaders.keys.any(paths.contains)) {
+        throw StateError('Earlier PGN mirrors remain unconfirmed');
+      }
+      for (final batch in batches) {
+        await reviewService.saveAll(batch.reviews, repertoireId: batch.path);
+        await reviewService.appendHistory(batch.history);
+        if (!await headers.updateManyLineReviewHeaders(
+          batch.path,
+          batch.headers,
+        )) {
+          throw StateError(
+            'Training source could not be updated: ${batch.path}',
+          );
+        }
+      }
+      if (!_disposed && identical(byLine, owner)) {
+        owner
+          ..clear()
+          ..addAll(proposed);
+      }
+      return batches.fold<int>(
+        0,
+        (count, batch) => count + batch.headers.length,
+      );
+    });
   }
 
   // ── Per-move streaks ─────────────────────────────────────────────────
@@ -427,6 +523,7 @@ class ReviewProgressStore {
     int moveIndex, {
     required bool wasCorrect,
   }) {
+    _checkWritable();
     final key = _moveKey(line, moveIndex);
     final threshold = settings.correctStreakThreshold;
 
@@ -478,12 +575,14 @@ class _TrainingOutcome {
     required this.key,
     required this.sourcePath,
     required this.updated,
+    required this.owner,
     required this.reviews,
     required this.moves,
     required this.history,
   });
   final (String, String, Object) key;
   final String sourcePath;
+  final Object owner;
   final RepertoireReviewEntry updated;
   final List<RepertoireReviewEntry> reviews;
   final List<RepertoireMoveProgress> moves;

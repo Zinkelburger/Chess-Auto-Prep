@@ -143,15 +143,18 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
   Future<void> _saveSelection() async {
     if (!mounted || _savingSelection) return;
     setState(() => _savingSelection = true);
-    await session.applyLearnedSelection(
-      Set.of(_checked),
-      within: {for (final line in _visibleLines) line.id},
-    );
-    if (!mounted) return;
-    setState(() {
-      _selecting = false;
-      _savingSelection = false;
-    });
+    try {
+      await session.applyLearnedSelection(
+        Set.of(_checked),
+        within: {for (final line in _visibleLines) line.id},
+      );
+      if (mounted) setState(() => _selecting = false);
+    } catch (_) {
+      // The session retains the failure and offers a durable reload, not a
+      // second save of a possibly partly committed selection.
+    } finally {
+      if (mounted) setState(() => _savingSelection = false);
+    }
   }
 
   void _openChapter(String? chapter) {

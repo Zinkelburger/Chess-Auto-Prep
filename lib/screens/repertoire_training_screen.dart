@@ -543,11 +543,13 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
 
     if (_training.isLoading ||
         _training.error != null ||
+        _training.progressNeedsReload ||
         _training.lines.isEmpty) {
       return RepertoireSelectorPanel(
         isLoading: _training.isLoading,
         loadingStatus: _training.loadingStatus,
         error: _training.error,
+        progressNeedsReload: _training.progressNeedsReload,
         onRetry: () => unawaited(_training.retryFailure()),
         hasLines: _training.lines.isNotEmpty,
         canStartTraining: false,

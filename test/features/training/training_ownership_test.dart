@@ -163,7 +163,7 @@ void main() {
       configuration: settingsOwner,
       reviewService: reviews,
       askedQuestions: _Answers(),
-    );
+    )..isLoading = false;
   });
   tearDown(() {
     if (!disposed) controller.dispose();
@@ -192,6 +192,7 @@ void main() {
     'STATE-01 selecting a source invalidates pending rating advancement',
     () async {
       controller.setRepertoire(_meta('/old.pgn'));
+      controller.isLoading = false;
       controller.currentLine = fakeLine('old', ['e4']);
       controller.phase = TrainingPhase.finished;
       reviews.saveGate = Completer();
@@ -209,6 +210,7 @@ void main() {
   test('STATE-01 repeated finished-line rating records one outcome', () async {
     controller.setRepertoire(_meta('/line.pgn'));
     controller.settings = controller.settings..autoNext = false;
+    controller.isLoading = false;
     controller.currentLine = fakeLine('line', ['e4']);
     controller.phase = TrainingPhase.finished;
     await controller.rateLine(ReviewRating.good);
@@ -222,6 +224,7 @@ void main() {
     () async {
       controller.setRepertoire(_meta('/line.pgn'));
       controller.settings = controller.settings..autoNext = false;
+      controller.isLoading = false;
       controller.currentLine = fakeLine('line', ['e4']);
       controller.phase = TrainingPhase.finished;
       reviews.failMoves = true;
@@ -240,6 +243,7 @@ void main() {
 
   test('STATE-01 linear completion callback commits once', () async {
     controller.setStudySource(_meta('/line.pgn'));
+    controller.isLoading = false;
     controller.currentLine = fakeLine('line', ['e4']);
     controller.phase = TrainingPhase.finished;
     controller.completeLine();
@@ -254,6 +258,7 @@ void main() {
     final first = fakeLine('first', ['e4']);
     final second = fakeLine('second', ['d4']);
     controller.lines = [first, second];
+    controller.isLoading = false;
     controller.currentLine = first;
     reviews.saveGate = Completer();
     controller.completeLine();
@@ -281,6 +286,7 @@ void main() {
       final first = fakeLine('first', ['e4']);
       final second = fakeLine('second', ['d4']);
       controller.lines = [first, second];
+      controller.isLoading = false;
       controller.currentLine = first;
       reviews.failMoves = true;
       controller.completeLine();
@@ -314,11 +320,13 @@ void main() {
         ..showRatingButtons = false
         ..autoNext = false;
       final line = fakeLine('line', ['e4']);
+      controller.isLoading = false;
       controller.currentLine = line;
       reviews.saveGate = Completer();
       controller.completeLine();
       await Future<void>.delayed(Duration.zero);
       controller.stopSession();
+      controller.isLoading = false;
       controller.currentLine = line;
       controller.lineHadMistake = true;
       controller.completeLine();
@@ -347,6 +355,7 @@ void main() {
       controller.setRepertoire(_meta('/line.pgn'));
       controller.settings = controller.settings..autoNext = false;
       final line = fakeLine('line', ['e4']);
+      controller.isLoading = false;
       controller.currentLine = line;
       controller.phase = TrainingPhase.finished;
       reviews.saveGate = Completer();
@@ -369,6 +378,7 @@ void main() {
         ),
       );
       await loading;
+      controller.isLoading = false;
       controller.currentLine = line;
       controller.phase = TrainingPhase.finished;
       controller.lineHadMistake = true;
@@ -386,6 +396,7 @@ void main() {
     controller.settings = controller.settings
       ..showRatingButtons = false
       ..autoNext = false;
+    controller.isLoading = false;
     controller.currentLine = fakeLine('first', ['e4']);
     controller.lineHadMistake = true;
     controller.completeLine();
@@ -403,6 +414,7 @@ void main() {
       'pending linear completion settles original writes after $end without publishing',
       () async {
         controller.setStudySource(_meta('/old.pgn'));
+        controller.isLoading = false;
         controller.currentLine = fakeLine('old', ['e4']);
         reviews.saveGate = Completer();
         controller.completeLine();
@@ -428,6 +440,7 @@ void main() {
     'DATA-06 linear retry resumes after a partial write and tallies once',
     () async {
       controller.setStudySource(_meta('/line.pgn'));
+      controller.isLoading = false;
       controller.currentLine = fakeLine('line', ['e4']);
       controller.phase = TrainingPhase.finished;
       reviews.failMoves = true;
@@ -450,6 +463,7 @@ void main() {
     'cancelled failed outcome cannot poison or replay into the next completion',
     () async {
       controller.setRepertoire(_meta('/old.pgn'));
+      controller.isLoading = false;
       controller.currentLine = fakeLine('old', ['e4']);
       controller.phase = TrainingPhase.finished;
       reviews.saveGate = Completer();
@@ -461,8 +475,12 @@ void main() {
       expect(controller.error, isNull);
       expect(reviews.history, isEmpty);
       reviews.failMoves = false;
+      final loading = controller.loadRepertoire();
+      await Future<void>.delayed(Duration.zero);
+      source.pending['/new.pgn']!.complete(_loaded('new'));
+      await loading;
       controller.settings = controller.settings..autoNext = false;
-      controller.currentLine = fakeLine('new', ['d4']);
+      controller.currentLine = controller.lines.single;
       controller.completeLine();
       await Future<void>.delayed(Duration.zero);
       expect(controller.completionCommitted, isTrue);
@@ -489,6 +507,7 @@ void main() {
       final first = fakeLine('first', ['e4']);
       final second = fakeLine('second', ['d4']);
       controller.lines = [first, second];
+      controller.isLoading = false;
       controller.startLine(first);
       await settingsOwner.apply(
         trainingEdit(settingsOwner.state.committed!, (draft) {
@@ -524,7 +543,10 @@ void main() {
         ),
         throwsStateError,
       );
-      controller.startLine(fakeLine('line', ['e4']));
+      controller.lines = [
+        fakeLine('line', ['e4']),
+      ];
+      controller.startLine(controller.lines.single);
       expect(controller.settings.moveSpeedMs, 1);
       config.failWrites = false;
       await settingsOwner.retry();

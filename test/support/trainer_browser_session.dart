@@ -41,6 +41,7 @@ Future<TrainingSessionController> trainerBrowserSession({
       lastModified: DateTime(2026),
     ),
   );
+  session.isLoading = false;
   session.lines = lines;
   session.reviewMap.addAll(reviewMap);
   await session.loadSettings();

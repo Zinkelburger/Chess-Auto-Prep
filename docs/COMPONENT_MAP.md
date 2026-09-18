@@ -1527,10 +1527,18 @@ rating-button wrapper and all-caught-up panel are retired.
 Learn/Review, per-line practice and bulk-known commands. The screen retains
 only navigation callbacks; browser-local search, sort and checkbox selection
 stay in the widget. Its chapter inventory includes read-only model games even
-when those chapters contain no trainable lines. This binding cleanup does not
-complete bulk-known failure recovery: its legacy command can alter memory before
-persistence fails. The existing Read handoff also passes a relative cache path
-that the native Viewer document store cannot open; these remain separate repairs.
+when those chapters contain no trainable lines. Bulk-known and exclusion edits
+share the existing progress write queue and publish only after acknowledgement.
+Bulk proposals capture every selected source before waiting; their previous PGN
+mirrors must drain before newer schedules are written. Unrelated failed mirrors
+do not block another source. A partial edit failure offers **Reload saved progress**,
+never a blind retry: committed schedules may survive while history/PGN mirrors
+remain incomplete. A successful durable review read clears the block (optional
+presentation work may still fail); a failed read does not. Reload does not replay
+the edit. Abandoned failed completion/rating outcomes also require reconciliation.
+Source changes invalidate retained row commands and visible errors remain with
+their captured source generation. The existing Read handoff's relative cache
+path remains a separate repair pending integration.
 
 `AppDependencies` owns one `TrainingSettingsController`. Settings panels submit
 immutable field patches and share committed values, pending drafts and visible

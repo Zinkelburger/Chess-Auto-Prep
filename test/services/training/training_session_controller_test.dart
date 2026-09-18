@@ -38,12 +38,14 @@ void main() {
 
   TrainingSessionController buildController() {
     return createTrainingSession(
-      artifacts: generationArtifactsFixture().repository,
-      configuration: createTrainingSettings(),
-      session: RepertoireBoardController(),
-      repertoireService: repService,
-      reviewService: reviewService,
-    )..settings = fastSettings();
+        artifacts: generationArtifactsFixture().repository,
+        configuration: createTrainingSettings(),
+        session: RepertoireBoardController(),
+        repertoireService: repService,
+        reviewService: reviewService,
+      )
+      ..settings = fastSettings()
+      ..isLoading = false;
   }
 
   String repPath() => '${tempDir.path}/rep.pgn';
@@ -227,7 +229,7 @@ void main() {
     });
 
     test('no repertoire set is a no-op', () async {
-      final controller = buildController();
+      final controller = buildController()..isLoading = true;
       await controller.loadRepertoire();
       expect(controller.isLoading, isTrue, reason: 'untouched initial state');
       controller.dispose();
@@ -403,6 +405,7 @@ void main() {
       final controller = buildController()..setRepertoire(meta());
       final line = fakeLine('D', ['e4', 'e5', 'Nf3', 'Nc6']);
       controller.lines = [line];
+      controller.isLoading = false;
       // reviewed → drilling
       controller.reviewMap['D'] = fakeEntry(repPath(), 'D');
 
@@ -467,6 +470,7 @@ void main() {
         final controller = buildController();
         final line = fakeLine('O', ['e4', 'e5']);
         controller.lines = [line];
+        controller.isLoading = false;
         controller.reviewMap['O'] = fakeEntry('', 'O');
 
         controller.startLine(line);
@@ -495,6 +499,7 @@ void main() {
         final controller = buildController();
         final line = fakeLine('L', ['e4', 'e5']);
         controller.lines = [line];
+        controller.isLoading = false;
         // No review entry → the line is new → learning phase.
 
         controller.startLine(line);
@@ -535,6 +540,7 @@ void main() {
       final controller = buildController();
       final line = fakeLine('M', ['e4', 'e5'], comments: {'1': 'Classic'});
       controller.lines = [line];
+      controller.isLoading = false;
 
       controller.startLine(line);
       await waitFor(() => controller.learnWaitingForAck);
@@ -561,6 +567,7 @@ void main() {
       final controller = buildController();
       final line = fakeLine('N', ['e4', 'e5', 'Nf3']);
       controller.lines = [line];
+      controller.isLoading = false;
 
       controller.startLine(line);
       await waitFor(() => controller.learnWaitingForAck);
@@ -591,6 +598,7 @@ void main() {
         comments: {'1': 'Classic'},
       );
       controller.lines = [line];
+      controller.isLoading = false;
 
       controller.startLine(line);
       await waitFor(() => controller.learnWaitingForAck);
@@ -615,6 +623,7 @@ void main() {
         ..learnDelaySec = 1;
       final line = fakeLine('R', ['e4', 'e5']);
       controller.lines = [line];
+      controller.isLoading = false;
 
       controller.startLine(line);
       // No Next gate in auto mode: the move shows, then the quiz follows on
@@ -648,6 +657,7 @@ void main() {
       // … and then an ordinary line from move one.
       final line = fakeLine('Q', ['d4', 'd5']);
       controller.lines = [puzzle, line];
+      controller.isLoading = false;
 
       controller.startLine(puzzle);
       await waitFor(() => controller.learnWaitingForAck);
@@ -673,6 +683,7 @@ void main() {
       final controller = buildController();
       final line = fakeLine('S', ['e4']);
       controller.lines = [line];
+      controller.isLoading = false;
       controller.reviewMap['S'] = fakeEntry('', 'S');
       controller.startLine(line);
       await waitFor(() => controller.waitingForUser);
@@ -713,6 +724,7 @@ void main() {
       final controller = buildController()
         ..settings = fastSettings(correctStreakThreshold: 2);
       final line = fakeLine('X', ['e4']);
+      controller.lines = [line];
 
       controller.updateMoveProgress(line, 0, wasCorrect: true);
       expect(controller.moveProgressMap['X:0']!.correctStreak, 1);
@@ -735,6 +747,7 @@ void main() {
       final controller = buildController();
       final line = fakeLine('T', ['e4', 'e5']);
       controller.lines = [line];
+      controller.isLoading = false;
       // No review entry → the line is "new", but tactics mode must not
       // reveal the solution via the learn walkthrough.
       controller.trainingMode = TrainingMode.tactics;
@@ -756,6 +769,7 @@ void main() {
         comments: {'2': 'The point.'},
       );
       controller.lines = [line];
+      controller.isLoading = false;
       controller.reviewMap['T2'] = fakeEntry('', 'T2');
 
       // Repertoire mode skips ahead to the first commented move…
@@ -780,6 +794,7 @@ void main() {
         comments: {'2': 'Find it. [%tstart]'},
       );
       controller.lines = [line];
+      controller.isLoading = false;
       controller.reviewMap['M1'] = fakeEntry('', 'M1');
       controller.trainingMode = TrainingMode.tactics;
 
@@ -800,6 +815,7 @@ void main() {
         comments: {'1': '[%tend]'},
       );
       controller.lines = [line];
+      controller.isLoading = false;
       controller.reviewMap['M2'] = fakeEntry('', 'M2');
 
       controller.startLine(line);
@@ -816,6 +832,7 @@ void main() {
         comments: {'3': '[%tstart]'},
       );
       controller.lines = [line];
+      controller.isLoading = false;
       controller.reviewMap['M3'] = fakeEntry('', 'M3');
 
       controller.startLine(line);
@@ -1315,6 +1332,7 @@ void main() {
       final controller = buildController();
       final line = fakeLine('D', ['e4', 'e5', 'Nf3']);
       controller.lines = [line];
+      controller.isLoading = false;
       controller.reviewMap['D'] = fakeEntry('', 'D');
 
       controller.startLine(line);
