@@ -1,5 +1,5 @@
 import '../features/generation/repositories/generation_artifact_repository.dart';
-import '../features/repertoires/controllers/repertoire_controller.dart';
+import '../features/repertoires/controllers/repertoire_board_controller.dart';
 import '../features/training/controllers/training_session_controller.dart';
 import '../features/training/controllers/training_settings_controller.dart';
 import '../features/training/repositories/training_settings_repository.dart';
@@ -14,7 +14,7 @@ TrainingSettingsController createTrainingSettings() =>
 
 /// Session bridges share the injected application configuration owner.
 TrainingSessionController createTrainingSession({
-  required RepertoireController session,
+  required RepertoireBoardController session,
   required GenerationArtifactRepository artifacts,
   required TrainingSettingsRepository configuration,
   RepertoireService? repertoireService,

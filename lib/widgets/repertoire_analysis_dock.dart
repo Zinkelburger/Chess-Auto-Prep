@@ -12,7 +12,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 
 import '../core/generation_session_controller.dart';
-import '../features/repertoires/controllers/repertoire_controller.dart';
+import '../features/repertoires/controllers/builder_workspace_controller.dart';
 import '../chess_core/generation/build_tree_node.dart';
 import '../features/settings/controllers/engine_settings.dart';
 import '../services/analysis_service.dart';
@@ -35,7 +35,7 @@ import 'engine/inline_engine_settings.dart';
 
 /// Stockfish PV and expectimax PV shown together (split horizontally).
 class RepertoireAnalysisDock extends StatefulWidget {
-  final RepertoireController controller;
+  final BuilderWorkspaceController controller;
   final BuildTree? tree;
   final TreeBuildConfig? treeConfig;
   final FenMap? fenMap;
@@ -244,33 +244,35 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
 
   Widget _buildEnginePane() {
     return UnifiedEnginePane(
-      fen: widget.controller.fen,
+      fen: widget.controller.board.fen,
       isActive: widget.isActive,
       analysis: _analysis,
       compact: true,
       isUserTurn:
-          widget.controller.position.turn ==
-          (widget.controller.isRepertoireWhite ? Side.white : Side.black),
-      currentMoveSequence: widget.controller.currentMoveSequence,
-      isWhiteRepertoire: widget.controller.isRepertoireWhite,
+          widget.controller.board.position.turn ==
+          (widget.controller.document.isRepertoireWhite
+              ? Side.white
+              : Side.black),
+      currentMoveSequence: widget.controller.board.currentMoveSequence,
+      isWhiteRepertoire: widget.controller.document.isRepertoireWhite,
       boardPreview: widget.boardPreview,
       onMoveSelected: (uciMove) {
-        final san = uciToSan(widget.controller.fen, uciMove);
+        final san = uciToSan(widget.controller.board.fen, uciMove);
         if (san != uciMove) {
-          widget.controller.playMove(san);
+          widget.controller.board.playMove(san);
         }
       },
       onLineMoveTapped: (sanMoves, index) {
-        widget.controller.applyLineFromCurrent(sanMoves, index);
+        widget.controller.board.applyLineFromCurrent(sanMoves, index);
         widget.boardPreview.clearPreview();
       },
-      onSetRoot: widget.controller.rootMoves.isEmpty
+      onSetRoot: widget.controller.document.rootMoves.isEmpty
           ? () async {
               try {
-                await widget.controller.setRootPosition();
+                await widget.controller.document.setRootPosition();
                 if (!mounted) return;
                 context.read<EngineSettings>().probabilityStartMoves =
-                    widget.controller.rootMoves;
+                    widget.controller.document.rootMoves;
               } catch (error) {
                 if (!mounted) return;
                 showAppSnackBar(
@@ -289,7 +291,7 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
   BuildTreeNode? _treeNodeAtCursor() {
     final tree = widget.tree;
     if (tree == null) return null;
-    final fen = widget.controller.fen;
+    final fen = widget.controller.board.fen;
     final canonical = widget.fenMap?.getCanonical(fen);
     if (canonical != null && canonical.children.isNotEmpty) return canonical;
     return findNodeByFen(tree, fen) ?? canonical;
@@ -305,9 +307,9 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
       coherenceResult: widget.coherenceResult,
       compact: true,
       generation: widget.generation,
-      onMoveSelected: (san) => widget.controller.playMove(san),
+      onMoveSelected: (san) => widget.controller.board.playMove(san),
       onLineMoveClicked: (sanMoves, index) {
-        widget.controller.applyLineFromCurrent(sanMoves, index);
+        widget.controller.board.applyLineFromCurrent(sanMoves, index);
         widget.boardPreview.clearPreview();
       },
     );

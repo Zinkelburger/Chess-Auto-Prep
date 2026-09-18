@@ -10,7 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../features/browse/widgets/browse_panel.dart';
 import '../features/coverage/widgets/suggestion_panel.dart';
-import '../features/repertoires/controllers/repertoire_controller.dart';
+import '../features/repertoires/controllers/builder_workspace_controller.dart';
 import '../chess_core/generation/build_tree_node.dart';
 import '../models/repertoire_line.dart';
 import 'package:chess_auto_prep/chess_core/generation/trap_line_info.dart';
@@ -28,7 +28,7 @@ import 'labeled_toggle.dart';
 import 'opening_tree_widget.dart';
 
 class AnalysisTab extends StatefulWidget {
-  final RepertoireController controller;
+  final BuilderWorkspaceController controller;
   final BuildTree? tree;
   final TreeBuildConfig? treeConfig;
   final FenMap? fenMap;
@@ -109,7 +109,7 @@ class _AnalysisTabState extends State<AnalysisTab> {
     _candidateService = CandidateService(
       tree: widget.tree,
       fenMap: widget.fenMap,
-      openingTree: widget.controller.openingGraph,
+      openingTree: widget.controller.document.openingGraph,
       coverage: widget.coverageResult,
       coverageService: CoverageService(),
     );
@@ -186,29 +186,31 @@ class _AnalysisTabState extends State<AnalysisTab> {
   List<CandidateMove> _getCandidates() {
     if (_candidateService == null) return [];
     final isOurTurn =
-        widget.controller.position.turn ==
-        (widget.controller.isRepertoireWhite ? Side.white : Side.black);
+        widget.controller.board.position.turn ==
+        (widget.controller.document.isRepertoireWhite
+            ? Side.white
+            : Side.black);
     return _candidateService!.getTreeCandidates(
-      fen: widget.controller.fen,
+      fen: widget.controller.board.fen,
       isOurTurn: isOurTurn,
-      playAsWhite: widget.controller.isRepertoireWhite,
-      pathFromRoot: widget.controller.currentMoveSequence,
+      playAsWhite: widget.controller.document.isRepertoireWhite,
+      pathFromRoot: widget.controller.board.currentMoveSequence,
     );
   }
 
   Future<void> _onCandidateTap(CandidateMove move) async {
     if (move.inRepertoire) {
-      widget.controller.playMove(move.san);
+      widget.controller.board.playMove(move.san);
       return;
     }
 
     try {
       await widget.controller.writer.addMoveAtPosition(
-        fen: widget.controller.fen,
+        fen: widget.controller.board.fen,
         san: move.san,
-        pathFromRoot: widget.controller.currentMoveSequence,
+        pathFromRoot: widget.controller.board.currentMoveSequence,
       );
-      widget.controller.playMove(move.san);
+      widget.controller.board.playMove(move.san);
     } catch (e) {
       debugPrint('[AnalysisTab] Failed to add move: $e');
       if (mounted) {
@@ -228,8 +230,10 @@ class _AnalysisTabState extends State<AnalysisTab> {
   Widget build(BuildContext context) {
     final candidates = _getCandidates();
     final isOurTurn =
-        widget.controller.position.turn ==
-        (widget.controller.isRepertoireWhite ? Side.white : Side.black);
+        widget.controller.board.position.turn ==
+        (widget.controller.document.isRepertoireWhite
+            ? Side.white
+            : Side.black);
 
     final hasCandidates = candidates.isNotEmpty;
     final hasBrowseSource =
@@ -277,7 +281,7 @@ class _AnalysisTabState extends State<AnalysisTab> {
                 fenMap: widget.fenMap,
                 coherence: widget.coherenceResult,
               ),
-              playAsWhite: widget.controller.isRepertoireWhite,
+              playAsWhite: widget.controller.document.isRepertoireWhite,
               boardPreview: widget.boardPreview,
               currentCoverage: widget.coverageResult!.coveragePercent,
               onAccept: _acceptSuggestion,
@@ -287,14 +291,14 @@ class _AnalysisTabState extends State<AnalysisTab> {
           Expanded(
             flex: hasSuggestionPanel ? 3 : 1,
             child: BrowsePanel(
-              fen: widget.controller.fen,
-              pathFromRoot: widget.controller.currentMoveSequence,
+              fen: widget.controller.board.fen,
+              pathFromRoot: widget.controller.board.currentMoveSequence,
               isOurTurn: isOurTurn,
-              isWhiteRepertoire: widget.controller.isRepertoireWhite,
+              isWhiteRepertoire: widget.controller.document.isRepertoireWhite,
               candidateService: _candidateService!,
               boardPreview: widget.boardPreview,
               coherenceResult: widget.coherenceResult,
-              currentMoves: widget.controller.currentMoveSequence,
+              currentMoves: widget.controller.board.currentMoveSequence,
               trapIndex: _trapIndexCache,
               expandedTrapIndex: _expandedTrapIndex,
               onCandidateTap: _onCandidateTap,
@@ -307,16 +311,16 @@ class _AnalysisTabState extends State<AnalysisTab> {
                 widget.navigationStack.push(
                   NavigationEntry(
                     tabIndex: 1,
-                    fen: widget.controller.fen,
+                    fen: widget.controller.board.fen,
                     label:
-                        'PGN · ${widget.controller.currentMoveSequence.lastOrNull ?? 'start'}',
+                        'PGN · ${widget.controller.board.currentMoveSequence.lastOrNull ?? 'start'}',
                     reason: 'trap',
                   ),
                 );
-                widget.controller.loadMoveSequence(trap.movesSan);
+                widget.controller.composeMoves(trap.movesSan);
               },
-              onBack: widget.controller.goBack,
-              onRoot: widget.controller.goToStart,
+              onBack: widget.controller.board.goBack,
+              onRoot: widget.controller.board.goToStart,
               canUndo: widget.controller.writer.canUndo,
               onUndo: _performUndo,
             ),
@@ -330,21 +334,21 @@ class _AnalysisTabState extends State<AnalysisTab> {
   }
 
   Widget _buildTreeSection() {
-    if (widget.controller.openingGraph == null) {
+    if (widget.controller.document.openingGraph == null) {
       return const Center(
         child: Text('No opening tree available', style: AppTextStyles.muted),
       );
     }
     return OpeningTreeWidget(
-      tree: widget.controller.openingGraph!,
+      tree: widget.controller.document.openingGraph!,
       showPgnSearch: false,
-      repertoireLines: widget.controller.repertoireLines,
-      currentMoveSequence: widget.controller.currentMoveSequence,
+      repertoireLines: widget.controller.document.repertoireLines,
+      currentMoveSequence: widget.controller.board.currentMoveSequence,
       onMoveSelected: (move) {
-        widget.controller.userSelectedTreeMove(move);
+        widget.controller.board.userSelectedTreeMove(move);
       },
-      onGoBack: () => widget.controller.goBack(),
-      onGoForward: () => widget.controller.goForward(),
+      onGoBack: () => widget.controller.board.goBack(),
+      onGoForward: () => widget.controller.board.goForward(),
       onPositionSelected: (fen) {},
       onLineSelected: widget.onLineSelected,
     );

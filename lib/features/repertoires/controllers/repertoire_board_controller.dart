@@ -12,8 +12,19 @@ import '../../../utils/fen_utils.dart';
 import '../../../utils/san_token_utils.dart';
 
 /// Private mutable board state and immutable projections. No Flutter, storage,
-/// listeners or document loading: the host publishes changes after commands.
+/// document loading. Notifications publish completed commands synchronously.
 class RepertoireBoardController with MoveNavigation {
+  final Set<void Function()> _listeners = {};
+  void addListener(void Function() listener) => _listeners.add(listener);
+  void removeListener(void Function() listener) => _listeners.remove(listener);
+  void _notify() {
+    for (final listener in List.of(_listeners)) {
+      if (_listeners.contains(listener)) listener();
+    }
+  }
+
+  void dispose() => _listeners.clear();
+
   Object _session = Object();
   int _revision = 0;
   int _structureVersion = 0;
@@ -25,6 +36,7 @@ class RepertoireBoardController with MoveNavigation {
   void _markStructureChanged() {
     _structureVersion++;
     _revision++;
+    _notify();
   }
 
   void reset() {
@@ -162,6 +174,7 @@ class RepertoireBoardController with MoveNavigation {
     // A pure cursor move: listeners that only care about structure can
     // compare [structureVersion] and skip their rebuild.
     _revision++;
+    _notify();
   }
 
   // ── Move entry ───────────────────────────────────────────────────
@@ -472,6 +485,7 @@ class RepertoireBoardController with MoveNavigation {
     final sanMoves = rootMoveSans(rootMoves);
     if (sanMoves.isEmpty) {
       _revision++;
+      _notify();
       return;
     }
     _ensureMovesInTree(sanMoves);
@@ -480,6 +494,7 @@ class RepertoireBoardController with MoveNavigation {
       _markStructureChanged();
     } else {
       _revision++;
+      _notify();
     }
   }
 }

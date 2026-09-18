@@ -6,7 +6,7 @@ import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chess_auto_prep/features/repertoires/controllers/repertoire_controller.dart';
+import 'package:chess_auto_prep/features/repertoires/controllers/builder_workspace_controller.dart';
 import 'package:chess_auto_prep/features/repertoires/controllers/repertoire_writer.dart';
 import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
 
@@ -14,7 +14,7 @@ void main() {
   group('RepertoireWriter', () {
     late Directory tempDir;
     late String filePath;
-    late RepertoireController controller;
+    late BuilderWorkspaceController controller;
     late RepertoireWriter writer;
 
     setUp(() async {
@@ -37,8 +37,8 @@ void main() {
 1. e4 e5
 ''');
 
-      controller = testRepertoireController();
-      await controller.setRepertoire(
+      controller = testBuilderWorkspace();
+      await controller.document.setRepertoire(
         RepertoireMetadata(
           name: 'Test',
           filePath: filePath,
@@ -59,17 +59,27 @@ void main() {
     test(
       'addMoveAtPosition extends matching line on disk and in memory',
       () async {
-        controller.loadMoveHistory(['e4', 'e5']);
+        controller.board.loadMoveHistory(['e4', 'e5']);
 
         final path = await writer.addMoveAtPosition(
-          fen: controller.fen,
+          fen: controller.board.fen,
           san: 'Nf3',
           pathFromRoot: ['e4', 'e5'],
         );
 
         expect(path, ['e4', 'e5', 'Nf3']);
-        expect(controller.openingGraph!.hasMove(controller.fen, 'Nf3'), isTrue);
-        expect(controller.repertoireLines.first.moves, ['e4', 'e5', 'Nf3']);
+        expect(
+          controller.document.openingGraph!.hasMove(
+            controller.board.fen,
+            'Nf3',
+          ),
+          isTrue,
+        );
+        expect(controller.document.repertoireLines.first.moves, [
+          'e4',
+          'e5',
+          'Nf3',
+        ]);
 
         final disk = await File(filePath).readAsString();
         expect(disk, contains('Nf3'));
@@ -79,11 +89,11 @@ void main() {
     test(
       'addMoveAtPosition is no-op when move already in repertoire',
       () async {
-        controller.loadMoveHistory(['e4']);
+        controller.board.loadMoveHistory(['e4']);
 
         final before = await File(filePath).readAsString();
         final path = await writer.addMoveAtPosition(
-          fen: controller.fen,
+          fen: controller.board.fen,
           san: 'e5',
           pathFromRoot: ['e4'],
         );

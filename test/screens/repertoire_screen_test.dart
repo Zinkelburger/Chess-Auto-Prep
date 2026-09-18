@@ -11,6 +11,11 @@
 /// way the rest of the app does: an [AppState] handoff.
 library;
 
+import 'package:chess_auto_prep/app/builder_lifetime.dart';
+import 'package:chess_auto_prep/features/repertoires/models/builder_workspace_snapshot.dart';
+import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
+import 'package:chess_auto_prep/features/repertoires/repositories/repertoire_catalog_repository.dart';
+import 'package:chess_auto_prep/infrastructure/repertoires/legacy_repertoire_catalog_repository.dart';
 import '../support/generation_artifacts_fixture.dart';
 import 'package:chess_auto_prep/features/generation/services/generation_artifacts.dart';
 import 'package:chess_auto_prep/features/generation/controllers/generation_publication_controller.dart';
@@ -54,6 +59,29 @@ class _TestPaths extends PathProviderPlatform with MockPlatformInterfaceMixin {
   Future<String?> getApplicationDocumentsPath() async => root;
   @override
   Future<String?> getApplicationSupportPath() async => root;
+}
+
+class _ChapterCatalog extends LegacyRepertoireCatalogRepository {
+  _ChapterCatalog(this.folder) : super(StorageFactory.instance);
+  final String folder;
+  bool unavailable = false;
+  int chapterReads = 0;
+
+  @override
+  Future<List<RepertoireMetadata>> listRepertoires() async => [
+    RepertoireMetadata(
+      filePath: folder,
+      name: 'MyRep',
+      lastModified: DateTime(2026),
+    ),
+  ];
+
+  @override
+  Future<List<RepertoireMetadata>> listChapters(String folderPath) {
+    chapterReads++;
+    if (unavailable) throw StateError('Chapter listing unavailable');
+    return super.listChapters(folderPath);
+  }
 }
 
 const _chapterPgn = '''
@@ -115,6 +143,8 @@ Future<AppState> _pumpScreen(
   required String repertoirePath,
   Size size = const Size(1600, 1000),
   RepertoireDecoder decoder = const IsolateRepertoireDecoder(),
+  BuilderLifetime? restoredLifetime,
+  RepertoireCatalogRepository? catalog,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
@@ -138,6 +168,15 @@ Future<AppState> _pumpScreen(
           value: testRepertoireDocuments(),
         ),
         Provider<RepertoireDecoder>.value(value: decoder),
+        Provider<BuilderLifetime>(
+          create: (ctx) =>
+              restoredLifetime ??
+              testBuilderLifetime(
+                documents: ctx.read<RepertoireDocumentRepository>(),
+                decoder: ctx.read<RepertoireDecoder>(),
+              ),
+          dispose: (_, lifetime) => lifetime.dispose(),
+        ),
       ],
       child: MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -146,6 +185,7 @@ Future<AppState> _pumpScreen(
         home: const RepertoireScreen(),
       ),
     ),
+    catalog: catalog,
   );
   await tester.pump();
   appState.switchToBuilder(repertoirePath: repertoirePath);
@@ -178,6 +218,138 @@ void main() {
     PathProviderPlatform.instance = originalPaths;
     if (await storageRoot.exists()) await storageRoot.delete(recursive: true);
   });
+
+  testWidgets('failed copy destination listing retains the draft and retries', (
+    tester,
+  ) async {
+    final path = _writeRepertoire(tester);
+    final catalog = _ChapterCatalog(File(path).parent.path)..unavailable = true;
+    await _pumpScreen(tester, repertoirePath: path, catalog: catalog);
+    final lifetime = tester
+        .element(find.byType(RepertoireScreen))
+        .read<BuilderLifetime>();
+    lifetime.workspace.composeMoves(['d4', 'd5']);
+    lifetime.workspace.setTitle('Retained copy');
+    await tester.pump();
+    final original = File(path).readAsStringSync();
+    await tester.tap(find.byKey(const ValueKey('save-builder-draft-copy')));
+    await _settleUntil(tester, find.widgetWithText(ListTile, 'MyRep'));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.widgetWithText(ListTile, 'MyRep'));
+    await _settle(tester, cycles: 10);
+    expect(catalog.chapterReads, 1);
+    expect(
+      find.text(
+        'The draft is retained. Choose a destination and try saving it again.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      lifetime.workspace.retainedDrafts.single.content,
+      contains('Retained copy'),
+    );
+    expect(File(path).readAsStringSync(), original);
+    expect(tester.takeException(), isNull);
+    catalog.unavailable = false;
+    await tester.tap(find.byKey(const ValueKey('save-builder-draft-copy')));
+    await _settleUntil(tester, find.widgetWithText(ListTile, 'MyRep'));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.widgetWithText(ListTile, 'MyRep'));
+    await _settle(tester);
+    final deadline = DateTime.now().add(const Duration(seconds: 15));
+    while (lifetime.workspace.uncertainCopies.any(
+          (copy) => lifetime.workspace.copyInProgress(copy.draftKey),
+        ) &&
+        DateTime.now().isBefore(deadline)) {
+      await _settle(tester, cycles: 1);
+    }
+    expect(catalog.chapterReads, 2);
+    expect(lifetime.workspace.saveError, isNull);
+    expect(
+      lifetime.workspace.uncertainCopies.map((copy) => copy.outcome.error),
+      isEmpty,
+    );
+    expect(lifetime.workspace.retainedDrafts, isEmpty);
+    expect(File(path).readAsStringSync(), contains('Retained copy'));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'unreadable source recovery exposes detached editor and save-copy',
+    (tester) async {
+      final path = _writeRepertoire(tester);
+      File(path).deleteSync();
+      Directory(path).createSync();
+      await _pumpScreen(tester, repertoirePath: path);
+      final lifetime = tester
+          .element(find.byType(RepertoireScreen))
+          .read<BuilderLifetime>();
+      await tester.runAsync(
+        () => lifetime.workspace.restoreWorkspace(
+          BuilderWorkspaceSnapshot(
+            drafts: [
+              BuilderDraft(
+                key: 'unreadable-recovery',
+                repertoire: RepertoireMetadata(
+                  filePath: path,
+                  name: 'Unreadable',
+                  lastModified: DateTime(2026),
+                ),
+                content:
+                    '[Event "Recovered scratch"]\n\n1. e4 {retained annotation} e5 *',
+                sourcePgn: _chapterPgn,
+                lineId: 'original',
+                linePgn: _chapterPgn,
+                title: 'Recovered scratch',
+                cursor: [0],
+              ),
+            ],
+            activeKey: 'unreadable-recovery',
+          ),
+        ),
+      );
+      await _settle(tester, cycles: 3);
+      expect(find.byType(InteractivePgnEditor), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('save-builder-draft-copy')),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('source changed or is missing'),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'first mounted Builder adopts the already restored document outline',
+    (tester) async {
+      final path = _writeRepertoire(tester);
+      final lifetime = testBuilderLifetime();
+      await tester.runAsync(
+        () => lifetime.workspace.document.setRepertoire(
+          RepertoireMetadata(
+            filePath: path,
+            name: 'Main',
+            lastModified: DateTime(2026),
+          ),
+        ),
+      );
+      lifetime.workspace.composeMoves(['d4']);
+      lifetime.workspace.setTitle('Restored before route');
+      await _pumpScreen(
+        tester,
+        repertoirePath: path,
+        restoredLifetime: lifetime,
+      );
+      await _settleUntil(tester, find.text('Italian Game'));
+      expect(find.text('No repertoire open'), findsNothing);
+      expect(lifetime.workspace.title, 'Restored before route');
+      expect(lifetime.workspace.board.moveHistory, ['d4']);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('loaded Builder exposes detached legacy analysis recovery', (
     tester,
@@ -464,20 +636,20 @@ void main() {
           .widget<PgnWithAnalysisPane>(find.byType(PgnWithAnalysisPane))
           .controller;
       final editor = tester.state(find.byType(InteractivePgnEditor));
-      final board = controller.tree;
-      final current = controller.currentRepertoire;
+      final board = controller.board.tree;
+      final current = controller.document.currentRepertoire;
       decoder.afterBuild = () async =>
           throw StateError('Chapter temporarily unavailable');
-      unawaited(controller.loadRepertoire());
+      unawaited(controller.document.loadRepertoire());
       await _settleUntil(tester, find.byType(MaterialBanner));
-      expect(controller.currentRepertoire, current);
-      expect(controller.tree, same(board));
+      expect(controller.document.currentRepertoire, current);
+      expect(controller.board.tree, same(board));
       expect(tester.state(find.byType(InteractivePgnEditor)), same(editor));
       await tester.tap(find.text('Dismiss'));
       await tester.pump();
       expect(find.byType(MaterialBanner), findsNothing);
       expect(tester.state(find.byType(InteractivePgnEditor)), same(editor));
-      controller.playMove('d3');
+      controller.board.playMove('d3');
       await tester.pump();
       expect(tester.takeException(), isNull);
     },
@@ -513,7 +685,7 @@ void main() {
     expect(titleField, findsOneWidget);
     final gate = Completer<void>();
     decoder.afterBuild = () => gate.future;
-    unawaited(controller.loadRepertoire());
+    unawaited(controller.document.loadRepertoire());
     await tester.pump();
     expect(find.text('Loading repertoire...'), findsNothing);
     expect(tester.state(find.byType(InteractivePgnEditor)), same(editor));
@@ -529,9 +701,9 @@ void main() {
         (widget) => widget is RepertoireLoadingFrame && !widget.isLoading,
       ),
     );
-    expect(controller.isLoading, isFalse);
+    expect(controller.document.isLoading, isFalse);
     expect(
-      controller.repertoireLines.single.fullPgn,
+      controller.document.repertoireLines.single.fullPgn,
       contains('Save this before reloading'),
     );
     expect(tester.state(find.byType(InteractivePgnEditor)), same(editor));
@@ -539,5 +711,10 @@ void main() {
   });
 }
 
-Future<void> pumpCatalogWidget(WidgetTester tester, Widget child) =>
-    tester.pumpWidget(AppDependencies(child: child));
+Future<void> pumpCatalogWidget(
+  WidgetTester tester,
+  Widget child, {
+  RepertoireCatalogRepository? catalog,
+}) => tester.pumpWidget(
+  AppDependencies(repertoireCatalog: catalog, child: child),
+);

@@ -152,7 +152,7 @@ void main() {
   testWidgets('tapping a trap row loads the annotated line onto the board', (
     tester,
   ) async {
-    final controller = testRepertoireController();
+    final controller = testBuilderWorkspace();
     final trap = _scandiTrap();
 
     await tester.pumpWidget(
@@ -163,7 +163,7 @@ void main() {
             boardPreview: BoardPreviewController(),
             onTrapSelected: (t) {
               final built = TrapLineBuilder.build(t)!;
-              controller.loadAnnotatedTree(built.tree, cursor: built.cursor);
+              controller.inspectAnnotatedTree(built.tree, cursor: built.cursor);
             },
           ),
         ),
@@ -175,11 +175,13 @@ void main() {
     await tester.tap(find.text('#1'));
     await tester.pumpAndSettle();
 
-    expect(controller.moveHistory, trap.movesSan);
-    expect(controller.fen, trap.fen);
+    expect(controller.board.moveHistory, trap.movesSan);
+    expect(controller.board.fen, trap.fen);
     // The opponent's blunder is explorable one ply forward.
     expect(
-      controller.tree.nodeAt(TreePath(controller.path.toList()))!.children,
+      controller.board.tree
+          .nodeAt(TreePath(controller.board.path.toList()))!
+          .children,
       isNotEmpty,
     );
   });

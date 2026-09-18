@@ -64,14 +64,14 @@ mixin _RepertoireTabContent
   }
 
   Widget _buildOutlinePanel() {
-    final selected = _controller.selectedPgnLine;
-    final chapterPath = _controller.currentRepertoire?.filePath;
+    final selected = _controller.document.selectedPgnLine;
+    final chapterPath = _controller.document.currentRepertoire?.filePath;
     return Column(
       children: [
         Expanded(
           child: RepertoireOutlinePanel(
             controller: _outline,
-            currentMoves: _controller.currentMoveSequence,
+            currentMoves: _controller.board.currentMoveSequence,
             selectedLine: selected == null || chapterPath == null
                 ? null
                 : (chapterPath: chapterPath, gameIndex: selected.gameIndex),
@@ -103,9 +103,9 @@ mixin _RepertoireTabContent
       onShowGenerated: () {
         if (mounted) setState(() => _databaseSource = 3);
       },
-      fen: _controller.fen,
+      fen: _controller.board.fen,
       databaseName:
-          '${p.basename(p.dirname(_controller.currentRepertoire!.filePath))} / ${_controller.currentRepertoire!.name}',
+          '${p.basename(p.dirname(_controller.document.currentRepertoire!.filePath))} / ${_controller.document.currentRepertoire!.name}',
       generation: _generationController,
       onGenerate:
           ({
@@ -119,11 +119,14 @@ mixin _RepertoireTabContent
               ? _generationController.computeExpectimax
               : _generationController.computeMovePv)(
                 ExpectimaxProbeTarget(
-                  repertoireFilePath: _controller.currentRepertoire!.filePath,
+                  repertoireFilePath:
+                      _controller.document.currentRepertoire!.filePath,
                   repertoireStartFen:
-                      _controller.startingFen ?? kStandardStartFen,
-                  movesFromStart: List.of(_controller.currentMoveSequence),
-                  playAsWhite: _controller.isRepertoireWhite,
+                      _controller.board.startingFen ?? kStandardStartFen,
+                  movesFromStart: List.of(
+                    _controller.board.currentMoveSequence,
+                  ),
+                  playAsWhite: _controller.document.isRepertoireWhite,
                   moveSan: moveSan,
                   plies: plies,
                   engineThreads: cores,
@@ -131,14 +134,14 @@ mixin _RepertoireTabContent
                   maiaCoverage: maiaCoverage,
                 ),
               ),
-      onPlayMove: _controller.playMove,
+      onPlayMove: _controller.board.playMove,
       onHoverMove: (uci) => _boardPreview.setHoverArrow(
         uci == null ? null : BoardAnnotation.arrowFromUci(uci),
       ),
       onBuildChessDb: () => unawaited(
         _openLineBuildDialog(
           initialConfig: chessDbRepertoirePreset(
-            playAsWhite: _controller.isRepertoireWhite,
+            playAsWhite: _controller.document.isRepertoireWhite,
           ),
         ),
       ),
@@ -150,7 +153,7 @@ mixin _RepertoireTabContent
   /// Live engine analysis; saved/generated evaluations are a database source.
   Widget _buildEngineTabContent() => SingleChildScrollView(
     child: InlineEngineBar(
-      fen: _controller.fen,
+      fen: _controller.board.fen,
       isActive: true,
       previewFlipped: _boardFlipped,
       compactChrome: true,
@@ -166,15 +169,15 @@ mixin _RepertoireTabContent
       },
       evaluationsBuilder: (menu, chessDb) =>
           _buildGenerateTabContent(sourceControl: menu, chessDbSource: chessDb),
-      tree: _controller.openingGraph,
-      repertoireLines: _controller.repertoireLines,
+      tree: _controller.document.openingGraph,
+      repertoireLines: _controller.document.repertoireLines,
       onHoverTreeMove: _onTreeMoveHover,
-      onGoBack: _controller.goBack,
-      onGoForward: _controller.goForward,
-      fen: _controller.fen,
-      currentMoveSequence: _controller.currentMoveSequence,
+      onGoBack: _controller.board.goBack,
+      onGoForward: _controller.board.goForward,
+      fen: _controller.board.fen,
+      currentMoveSequence: _controller.board.currentMoveSequence,
       repertoireMovesAtPosition: _repertoireMovesAtCurrentPosition,
-      onPlayMove: _controller.playMove,
+      onPlayMove: _controller.board.playMove,
       onAddMove: _onExplorerAddMove,
       onHoverMove: _onExplorerMoveHover,
     );
@@ -209,7 +212,7 @@ mixin _RepertoireTabContent
       auditNodesChecked: ac.nodesChecked,
       auditTotalNodes: ac.totalNodes,
       errorText: ac.error,
-      chapterName: _controller.currentRepertoire?.name,
+      chapterName: _controller.document.currentRepertoire?.name,
       config: ac.lastConfig,
       onFindingSelected: _onFindingSelected,
       onResultChanged: (updatedResult) {
@@ -229,9 +232,9 @@ mixin _RepertoireTabContent
 
   Widget _buildLinesContent() {
     return RepertoireLinesBrowser(
-      lines: _controller.repertoireLines,
-      currentMoveSequence: _controller.currentMoveSequence,
-      isWhiteRepertoire: _controller.isRepertoireWhite,
+      lines: _controller.document.repertoireLines,
+      currentMoveSequence: _controller.board.currentMoveSequence,
+      isWhiteRepertoire: _controller.document.isRepertoireWhite,
       coverageResult: _coverageController.result,
       isCoverageRunning: _coverageController.isRunning,
       coverageProgress: _coverageController.progress,
@@ -250,7 +253,7 @@ mixin _RepertoireTabContent
           ? _showCoverageCalculator
           : null,
       onNavigateToPosition: (moves) {
-        _controller.loadMoveSequence(moves);
+        _controller.composeMoves(moves);
       },
     );
   }
@@ -273,23 +276,18 @@ mixin _RepertoireTabContent
   }
 
   Widget _buildPgnTab() {
-    final saveLine = _controller.selectedLineSaver;
     return PgnWithAnalysisPane(
       controller: _controller,
-      tree: _controller.tree,
-      currentPath: _controller.path,
-      onJump: (path) => _controller.jump(path),
+      tree: _controller.board.tree,
+      currentPath: _controller.board.path,
+      onJump: (path) => _controller.board.jump(path),
       onCommentChanged: (path, comment) =>
-          _controller.setCommentAtPath(path, comment),
-      onToggleNag: _controller.toggleNagAtPath,
-      onDelete: (path) => _controller.deleteAtPath(path),
-      onPromote: (path) => _controller.promoteVariation(path),
-      onMakeMainLine: (path) => _controller.makeMainLine(path),
-      repertoireColor: _controller.isRepertoireWhite ? 'White' : 'Black',
-      isEditingExistingLine: _controller.selectedPgnLine != null,
-      onLineEdited: saveLine == null
-          ? null
-          : (updatedPgn) => unawaited(saveLine(updatedPgn)),
+          _controller.board.setCommentAtPath(path, comment),
+      onToggleNag: _controller.board.toggleNagAtPath,
+      onDelete: (path) => _controller.deleteDraftBranch(path),
+      onPromote: (path) => _controller.board.promoteVariation(path),
+      onMakeMainLine: (path) => _controller.board.makeMainLine(path),
+      isEditingExistingLine: _controller.document.selectedPgnLine != null,
       onImportPgn: _importPgn,
       onViewInLines: _showLinesSurface,
       onReload: _reloadRepertoire,
@@ -323,7 +321,7 @@ mixin _RepertoireTabContent
                           ButtonSegment<bool>(
                             value: false,
                             label: Text(
-                              'Lines (${_controller.repertoireLines.length})',
+                              'Lines (${_controller.document.repertoireLines.length})',
                               style: const TextStyle(fontSize: 12),
                             ),
                             icon: const Icon(Icons.list, size: 14),
@@ -376,8 +374,8 @@ mixin _RepertoireTabContent
     return TrapsTabContent(
       traps: _trapSession.traps,
       trapIndex: _trapSession.index,
-      currentMoveSequence: _controller.currentMoveSequence,
-      repertoireLineMoves: _controller.repertoireLines
+      currentMoveSequence: _controller.board.currentMoveSequence,
+      repertoireLineMoves: _controller.document.repertoireLines
           .map((l) => l.moves)
           .toList(),
       boardPreview: _boardPreview,
@@ -393,15 +391,15 @@ mixin _RepertoireTabContent
 
   /// SANs already present in the repertoire tree at the current cursor.
   Set<String> _repertoireMovesAtCurrentPosition() {
-    final tree = _controller.tree;
-    final path = _controller.path;
+    final tree = _controller.board.tree;
+    final path = _controller.board.path;
     final children = path.isEmpty ? tree.roots : tree.nodeAt(path)?.children;
-    final saved = _controller.openingGraph;
+    final saved = _controller.document.openingGraph;
     return {
       if (children != null)
         for (final child in children) child.san,
       if (saved != null)
-        for (final group in saved.continuationsAt(_controller.fen))
+        for (final group in saved.continuationsAt(_controller.board.fen))
           if (!group.viaTransposition) group.move,
     };
   }
@@ -418,7 +416,7 @@ mixin _RepertoireTabContent
   /// it against the board position (a tree row that is not legal there —
   /// the tree can sit one transposition off — simply draws nothing).
   void _onTreeMoveHover(String? san) {
-    final uci = san == null ? null : sanToUci(_controller.fen, san);
+    final uci = san == null ? null : sanToUci(_controller.board.fen, san);
     _boardPreview.setHoverArrow(
       uci == null ? null : BoardAnnotation.arrowFromUci(uci),
     );
@@ -427,11 +425,11 @@ mixin _RepertoireTabContent
   Future<void> _onExplorerAddMove(ExplorerMove move) async {
     try {
       await _controller.writer.addMoveAtPosition(
-        fen: _controller.fen,
+        fen: _controller.board.fen,
         san: move.san,
-        pathFromRoot: _controller.currentMoveSequence,
+        pathFromRoot: _controller.board.currentMoveSequence,
       );
-      _controller.playMove(move.san);
+      _controller.board.playMove(move.san);
       if (mounted) showAppSnackBar(context, 'Added ${move.san} to repertoire');
     } catch (e) {
       if (mounted) {

@@ -1,3 +1,4 @@
+import 'app/builder_lifetime.dart';
 import 'features/studies/repositories/study_import_repository.dart';
 import 'features/studies/widgets/study_save_button.dart'
     show chooseStudyCopyDestination;
@@ -242,6 +243,14 @@ class ChessAutoPrepApp extends StatelessWidget {
                 createRepertoireDocuments(documents: documents),
           ),
           Provider<RepertoireDecoder>(create: (_) => createRepertoireDecoder()),
+          Provider<BuilderLifetime>(
+            create: (ctx) => BuilderLifetime(
+              documents: ctx.read<RepertoireDocumentRepository>(),
+              decoder: ctx.read<RepertoireDecoder>(),
+              store: createBuilderRecoveryStore(),
+            ),
+            dispose: (_, lifetime) => lifetime.dispose(),
+          ),
           Provider<PgnCollectionRepository>(
             create: (_) => createPgnCollectionRepository(documents: documents),
           ),
@@ -365,7 +374,13 @@ class ChessAutoPrepApp extends StatelessWidget {
                           context.read<AppState>().setMode(AppMode.pgnViewer),
                       child: PgnViewerCloseHost(
                         lifetime: context.read<PgnViewerLifetime>(),
-                        child: const MainScreen(),
+                        child: BuilderWorkspaceHost(
+                          lifetime: context.read<BuilderLifetime>(),
+                          onRestored: () => context.read<AppState>().setMode(
+                            AppMode.repertoire,
+                          ),
+                          child: const MainScreen(),
+                        ),
                       ),
                     ),
                   ),

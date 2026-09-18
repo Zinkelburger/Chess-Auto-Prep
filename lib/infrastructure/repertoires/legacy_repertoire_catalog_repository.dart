@@ -28,6 +28,10 @@ class LegacyRepertoireCatalogRepository implements RepertoireCatalogRepository {
       _storage.listRepertoires();
 
   @override
+  Future<List<RepertoireMetadata>> listChapters(String folderPath) =>
+      _storage.listChapters(folderPath);
+
+  @override
   Future<List<RepertoireMetadata>> listStudies() => _storage.listStudyFiles();
 
   @override

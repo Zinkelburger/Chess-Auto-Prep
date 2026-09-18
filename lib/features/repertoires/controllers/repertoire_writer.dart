@@ -11,7 +11,8 @@ import '../models/repertoire_mutation_receipt.dart';
 import '../../documents/models/pgn_document.dart';
 import '../../../utils/atomic_file.dart';
 import '../../../utils/chess_utils.dart' show playSanOrNullMove, tryParseFen;
-import 'repertoire_controller.dart';
+import 'repertoire_document_session.dart';
+import 'repertoire_board_controller.dart';
 
 sealed class _UndoEntry {}
 
@@ -49,10 +50,15 @@ class _DraftUndo extends _UndoEntry {
 }
 
 class RepertoireWriter {
-  RepertoireWriter(this._controller, {required this.documents});
+  RepertoireWriter({
+    required this.document,
+    required this.board,
+    required this.documents,
+  });
 
   static const int _maxUndoOperations = 20;
-  final RepertoireController _controller;
+  final RepertoireDocumentSession document;
+  final RepertoireBoardController board;
   final RepertoireDocumentRepository documents;
   final List<_UndoEntry> _undoStack = [];
   int _session = 0;
@@ -79,7 +85,7 @@ class RepertoireWriter {
   }
 
   Future<T> _serialExec<T>(Future<T> Function() fn) =>
-      _controller.runDocumentMutation(fn);
+      document.runDocumentMutation(fn);
 
   /// Invocations capture the document session before joining the queue.
   /// A load/reset invalidates queued actions, even for an A -> B -> A switch.
@@ -97,8 +103,8 @@ class RepertoireWriter {
     final moves = List<String>.unmodifiable(sans);
     final session = _session;
     final filePath = _filePath;
-    final startingFen = _controller.startingFen;
-    final isWhite = _controller.isRepertoireWhite;
+    final startingFen = board.startingFen;
+    final isWhite = document.isRepertoireWhite;
     return _serialExec(() async {
       _requireSession(session);
       if (moves.isEmpty) return List<String>.of(prefix);
@@ -107,7 +113,7 @@ class RepertoireWriter {
       var position = _positionAtPath(prefix);
       var firstNew = 0;
       while (firstNew < moves.length &&
-          (_controller.openingGraph?.hasMove(position.fen, moves[firstNew]) ??
+          (document.openingGraph?.hasMove(position.fen, moves[firstNew]) ??
               false)) {
         final next = playSanOrNullMove(position, moves[firstNew]);
         if (next == null) break;
@@ -133,7 +139,7 @@ class RepertoireWriter {
       final result =
           nativeReceipt?.mutation ??
           prepareAppendMoves(
-            _controller.repertoirePgn ?? '',
+            document.repertoirePgn ?? '',
             appendPrefix,
             newMoves,
             startingFen: startingFen,
@@ -144,22 +150,22 @@ class RepertoireWriter {
       result.validate(requestedPath: [...prefix, ...moves]);
       _requireSession(session);
       _acceptReceipt(result, filePath, nativeReceipt);
-      if (result.previousContent == _controller.repertoirePgn) {
+      if (result.previousContent == document.repertoirePgn) {
         // Preserve the existing incremental presentation path when the
         // session really owns the validated baseline. External changes need
         // a full refresh so their annotations/games also reach the UI.
         for (final step in result.steps) {
           if (session != _session) break;
-          _controller.appendMoveToExistingLine(
+          document.appendMoveToExistingLine(
             step.pathBefore,
             step.san,
             updatedPgnContent: step.content,
           );
         }
       } else {
-        await _controller.restoreRepertoireFromPgn(
+        await document.restoreRepertoireFromPgn(
           result.updatedContent,
-          syncPath: _controller.currentMoveSequence,
+          syncPath: board.currentMoveSequence,
         );
       }
       _requireSession(session);
@@ -168,12 +174,12 @@ class RepertoireWriter {
   }
 
   String? get _filePath {
-    final path = _controller.currentRepertoire?.filePath;
+    final path = document.currentRepertoire?.filePath;
     return path == null || path.isEmpty ? null : path;
   }
 
   void _requireSession(int session) {
-    if (session != _session || _controller.isLoading) {
+    if (session != _session || document.isLoading) {
       throw StateError('The repertoire changed before the action could run.');
     }
   }
@@ -253,7 +259,7 @@ class RepertoireWriter {
         restored = await documents.restore(expected, op.before);
       } else {
         final expected = op.expectedMemoryContent;
-        if (expected == null || _controller.repertoirePgn != expected) {
+        if (expected == null || document.repertoirePgn != expected) {
           throw const AtomicWriteConflict('draft');
         }
       }
@@ -277,13 +283,13 @@ class RepertoireWriter {
       }
       // Publish history before refreshing UI: a failed refresh must never
       // replay an already committed undo on retry.
-      await _controller.restoreRepertoireFromPgn(op.before, syncPath: op.path);
+      await document.restoreRepertoireFromPgn(op.before, syncPath: op.path);
       return true;
     });
   }
 
   Position _positionAtPath(List<String> moves) {
-    final start = _controller.startingFen;
+    final start = board.startingFen;
     var position = start == null
         ? Chess.initial
         : tryParseFen(start) ?? Chess.initial;

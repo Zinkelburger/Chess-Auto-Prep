@@ -74,7 +74,7 @@ mixin _RepertoireLayout
       return RepertoireLinesSidePanel(
         collapsed: true,
         width: width,
-        lineCount: _controller.repertoireLines.length,
+        lineCount: _controller.document.repertoireLines.length,
         tabController: _sidePanelTabController,
         tabs: const [],
         stripLabel: 'Chapters',
@@ -176,7 +176,7 @@ mixin _RepertoireLayout
         if (_trapSession.closeTour()) return true;
         // Start at the trap under the cursor when there is one.
         return _trapSession.openTour(
-          startTrap: _trapSession.trapAtFen(_controller.fen),
+          startTrap: _trapSession.trapAtFen(_controller.board.fen),
         );
       },
       onToggleEngine: () => InlineEngineBar.toggleEngine(context),
@@ -239,11 +239,11 @@ mixin _RepertoireLayout
           child: _cursorScoped(
             (_) => BoardZone(
               boardPreview: _boardPreview,
-              fen: _ephemeralPreview?.fen ?? _controller.fen,
+              fen: _ephemeralPreview?.fen ?? _controller.board.fen,
               positionFromFen: _positionFromFen,
               boardFlipped: _boardFlipped,
               onMove: _handleMove,
-              annotations: _auditAnnotationsAt(_controller.fen),
+              annotations: _auditAnnotationsAt(_controller.board.fen),
             ),
           ),
         ),
@@ -323,7 +323,7 @@ mixin _RepertoireLayout
 
   Widget _buildNavControls() {
     return RepertoireNavControls(
-      onGoToStart: _controller.goToStart,
+      onGoToStart: _controller.board.goToStart,
       onGoBack: _sessionAwareGoBack,
       onGoForward: _sessionAwareGoForward,
       onGenerateFromHere: _openGenerateTab,

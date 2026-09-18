@@ -1,6 +1,7 @@
 {
   "paths": [
     "lib/core/repertoire_controller.dart",
+    "lib/features/repertoires/controllers/repertoire_controller.dart",
     "lib/core/repertoire_writer.dart",
     "lib/core/repertoire_authoring.dart",
     "lib/core/move_navigation.dart",
@@ -38,6 +39,7 @@
     "rebuildLine",
     "reconcileInstalled",
     "PgnViewerController",
+    "RepertoireController",
     "PgnPerspectiveButton",
     "GenerationArtifactStore",
     "ExpectimaxProbeStore",

@@ -1,3 +1,5 @@
+import '../support/repertoire_dependencies.dart';
+import 'package:chess_auto_prep/app/builder_lifetime.dart';
 import 'package:chess_auto_prep/app/generation_dependencies.dart';
 import 'package:chess_auto_prep/features/generation/services/generation_artifacts.dart';
 import 'package:chess_auto_prep/app/repertoire_dependencies.dart';
@@ -69,6 +71,13 @@ void main() {
             ),
             Provider<RepertoireDecoder>(
               create: (_) => createRepertoireDecoder(),
+            ),
+            Provider<BuilderLifetime>(
+              create: (ctx) => testBuilderLifetime(
+                documents: ctx.read<RepertoireDocumentRepository>(),
+                decoder: ctx.read<RepertoireDecoder>(),
+              ),
+              dispose: (_, lifetime) => lifetime.dispose(),
             ),
             ChangeNotifierProvider<AppState>.value(value: appState),
             ChangeNotifierProvider<AppHistory>(

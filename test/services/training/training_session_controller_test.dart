@@ -1,6 +1,6 @@
 import '../../support/generation_artifacts_fixture.dart';
 import 'package:chess_auto_prep/app/training_dependencies.dart';
-import '../../support/repertoire_dependencies.dart';
+import 'package:chess_auto_prep/features/repertoires/controllers/repertoire_board_controller.dart';
 import 'dart:io';
 
 import 'package:chess_auto_prep/models/repertoire_line.dart';
@@ -40,7 +40,7 @@ void main() {
     return createTrainingSession(
       artifacts: generationArtifactsFixture().repository,
       configuration: createTrainingSettings(),
-      session: testRepertoireController(),
+      session: RepertoireBoardController(),
       repertoireService: repService,
       reviewService: reviewService,
     )..settings = fastSettings();

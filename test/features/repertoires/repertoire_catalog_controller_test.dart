@@ -46,6 +46,9 @@ class Catalog implements RepertoireCatalogRepository {
   }
 
   @override
+  Future<List<RepertoireMetadata>> listChapters(String folderPath) async => [];
+
+  @override
   Future<List<RepertoireMetadata>> listStudies() async {
     studyReads++;
     return [entry('Study')];

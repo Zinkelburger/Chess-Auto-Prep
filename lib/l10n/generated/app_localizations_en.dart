@@ -994,4 +994,58 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get studyImportNotAccepted =>
       'The import was not accepted. Resolve the active import or study change, then retry. Your download is kept in this dialog.';
+
+  @override
+  String builderCopyNeedsVerification(String destination) {
+    return 'Copy needs verification: $destination. The draft is retained; this append will not be repeated.';
+  }
+
+  @override
+  String get builderInspectCopy => 'Inspect copy';
+
+  @override
+  String get builderLineSaveFailed => 'Line edits are retained. Saving failed.';
+
+  @override
+  String get builderSourceChanged =>
+      'The source changed or is missing. Restored edits are a scratch line; save them to an explicit destination.';
+
+  @override
+  String get builderSaveDraftCopy => 'Save draft as a new line…';
+
+  @override
+  String get builderRetainedDraftsTooltip => 'Retained Builder drafts';
+
+  @override
+  String get builderScratch => 'Scratch';
+
+  @override
+  String get builderDraftRetained =>
+      'The draft is retained. Choose a destination and try saving it again.';
+
+  @override
+  String builderRetainedDraftCount(int count) {
+    return 'Retained drafts ($count)';
+  }
+
+  @override
+  String get builderCopyInspectionFailed =>
+      'Destination could not be inspected. The copy intent and draft are retained.';
+
+  @override
+  String get builderVerifyCopy => 'Verify the saved copy';
+
+  @override
+  String get builderVerifyCopyExplanation =>
+      'Confirm only if the intended line is present in this observed file. Keeping the draft does not repeat the append.';
+
+  @override
+  String get builderKeepDraft => 'Keep draft';
+
+  @override
+  String get builderCopyPresent => 'Copy is present';
+
+  @override
+  String get builderCopyRetained =>
+      'The copy and draft are retained. Inspect the destination before trying again.';
 }
