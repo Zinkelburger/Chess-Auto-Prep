@@ -1503,5 +1503,127 @@
   "studyChaptersDone": "Done",
   "@studyChaptersDone": {
     "description": "Study chapter list control: studyChaptersDone"
+  },
+  "engineAppearanceToggle": "Toggle engine",
+  "engineAppearanceEngine": "Engine",
+  "engineAppearanceBusy": "Engine busy",
+  "engineAppearanceHideThreat": "Hide threat",
+  "engineAppearanceShowThreat": "Show threat",
+  "engineAppearanceStopAnalysis": "Stop analysis",
+  "engineAppearanceStartAnalysis": "Start analysis",
+  "engineAppearanceStop": "Stop",
+  "engineAppearanceLocalEngine": "Local engine",
+  "engineAppearanceOptions": "Analysis options",
+  "engineAppearanceNoLegalMoves": "No legal moves.",
+  "engineAppearanceAnalyzing": "Analyzing...",
+  "engineAppearanceFailure": "Engine failed. Toggle it to retry.",
+  "engineAppearanceSettings": "Engine settings",
+  "engineAppearanceCollapseLine": "Collapse line",
+  "engineAppearanceShowFullLine": "Show full line",
+  "engineNoticeLocked": "Stockfish is busy building your repertoire. Pause the build or wait for it to finish before using engine analysis.",
+  "engineNoticeBusyCompact": "Engine busy — building your repertoire.",
+  "engineNoticeBusyTitle": "Engine Busy",
+  "engineNoticeBusyBody": "Stockfish is building your repertoire.\nPause the build or let it finish to analyze again.",
+  "engineAppearanceSearchStatus": "{mode, select, threat{Threat · } other{}}Depth {depth} • {nodes} nodes",
+  "@engineAppearanceSearchStatus": {
+    "placeholders": {
+      "mode": {
+        "type": "String"
+      },
+      "depth": {
+        "type": "int"
+      },
+      "nodes": {
+        "type": "String"
+      }
+    },
+    "description": "Engine analysis control or status: engineAppearanceSearchStatus"
+  },
+  "engineAppearanceLinesStatus": "{mode, select, threat{Threat · } other{}}{count, plural, =1{1 line} other{{count} lines}} • depth {depth}",
+  "@engineAppearanceLinesStatus": {
+    "placeholders": {
+      "mode": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      },
+      "depth": {
+        "type": "int"
+      }
+    },
+    "description": "Engine analysis control or status: engineAppearanceLinesStatus"
+  },
+  "engineAppearanceDepthStatus": "Depth {depth} · {nodes} nodes",
+  "@engineAppearanceDepthStatus": {
+    "placeholders": {
+      "depth": {
+        "type": "int"
+      },
+      "nodes": {
+        "type": "String"
+      }
+    },
+    "description": "Engine analysis control or status: engineAppearanceDepthStatus"
+  },
+  "@engineAppearanceToggle": {
+    "description": "Engine analysis control or status: engineAppearanceToggle"
+  },
+  "@engineAppearanceEngine": {
+    "description": "Engine analysis control or status: engineAppearanceEngine"
+  },
+  "@engineAppearanceBusy": {
+    "description": "Engine analysis control or status: engineAppearanceBusy"
+  },
+  "@engineAppearanceHideThreat": {
+    "description": "Engine analysis control or status: engineAppearanceHideThreat"
+  },
+  "@engineAppearanceShowThreat": {
+    "description": "Engine analysis control or status: engineAppearanceShowThreat"
+  },
+  "@engineAppearanceStopAnalysis": {
+    "description": "Engine analysis control or status: engineAppearanceStopAnalysis"
+  },
+  "@engineAppearanceStartAnalysis": {
+    "description": "Engine analysis control or status: engineAppearanceStartAnalysis"
+  },
+  "@engineAppearanceStop": {
+    "description": "Engine analysis control or status: engineAppearanceStop"
+  },
+  "@engineAppearanceLocalEngine": {
+    "description": "Engine analysis control or status: engineAppearanceLocalEngine"
+  },
+  "@engineAppearanceOptions": {
+    "description": "Engine analysis control or status: engineAppearanceOptions"
+  },
+  "@engineAppearanceNoLegalMoves": {
+    "description": "Engine analysis control or status: engineAppearanceNoLegalMoves"
+  },
+  "@engineAppearanceAnalyzing": {
+    "description": "Engine analysis control or status: engineAppearanceAnalyzing"
+  },
+  "@engineAppearanceFailure": {
+    "description": "Engine analysis control or status: engineAppearanceFailure"
+  },
+  "@engineAppearanceSettings": {
+    "description": "Engine analysis control or status: engineAppearanceSettings"
+  },
+  "@engineAppearanceCollapseLine": {
+    "description": "Engine analysis control or status: engineAppearanceCollapseLine"
+  },
+  "@engineAppearanceShowFullLine": {
+    "description": "Engine analysis control or status: engineAppearanceShowFullLine"
+  },
+  "@engineNoticeLocked": {
+    "description": "Engine analysis control or status: engineNoticeLocked"
+  },
+  "@engineNoticeBusyCompact": {
+    "description": "Engine analysis control or status: engineNoticeBusyCompact"
+  },
+  "@engineNoticeBusyTitle": {
+    "description": "Engine analysis control or status: engineNoticeBusyTitle"
+  },
+  "@engineNoticeBusyBody": {
+    "description": "Engine analysis control or status: engineNoticeBusyBody"
   }
 }

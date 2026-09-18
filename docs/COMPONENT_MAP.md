@@ -242,6 +242,14 @@ generation transitions: unknown preferences do not enable analysis, late startup
 cannot undo a successful user toggle, and navigation resume does not rewrite
 preferences.
 
+The inline engine bar, PV moves, settings shortcut and busy notices resolve the
+active application theme; an open floating preview follows appearance without
+restarting analysis. Explicit evaluation and move-annotation colors remain owned
+by their callers. Shared notices use the paired `SnackBarTheme` surface, text,
+action and close colors in either appearance. Errors remain persistent and
+attention notices timed; severity is expressed by the message rather than a
+fixed red surface.
+
 Startup wraps legacy Linux/Windows preference backends in
 `FreshDesktopPreferencesStore`: serialized requests use fresh backend instances,
 so the plugin's second cache cannot confirm an unsaved value or flush a failed
