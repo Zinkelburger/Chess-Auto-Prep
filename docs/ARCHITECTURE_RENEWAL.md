@@ -332,6 +332,47 @@ constructed instances of the same owner through different mechanisms.
 
 ### Next complete integration units
 
+Each integration unit uses the following execution cycle. The coordinating agent
+owns this process and resolves design changes without repeatedly asking the
+product owner to choose implementation details.
+
+1. **Plan the final workflow.** Inspect the current production graph and record
+   one short design card: user behavior; state/resource owners; public commands
+   and typed results; admission/cancellation/close policy; concrete app wiring;
+   old APIs/callers to delete; relevant failure and parity checks. Include the
+   whole consumer/helper scope and its starting commit/handwritten production
+   size. Define boundary semantics before coding, not every private helper.
+2. **Review the design.** The coordinator checks that each owner has a distinct
+   responsibility and that the proposed action traces are shorter or clearer.
+   Prefer the existing final owner over another controller, forwarding adapter
+   or generic context object. Disjoint implementation tasks may then proceed
+   in parallel; overlapping ownership is resolved first.
+3. **Implement a complete replacement.** The subagent chooses algorithms,
+   internal structure and tests within the agreed contracts. Discoveries may
+   change the design; new owners, public contracts, state mirrors or dependency
+   mechanisms require coordinator review before expanding the implementation.
+   Keep private work backed up, but do not integrate incomplete scaffolding.
+4. **Review the implementation independently.** A different agent reviews the
+   actual base-to-head diff and production callers, not just the implementer's
+   report. Check correctness, lifecycle, unnecessary abstractions, complexity
+   moved into consumers and the deleted paths/APIs. Reproduce actionable
+   findings. The implementer or reviewer may repair them; another agent checks
+   the repair. A green test suite alone is not a design review.
+5. **Measure and integrate.** Compare the same user-action traces, owner and
+   dependency counts, callbacks, and full-scope handwritten code size. Record
+   whether each improved, regressed or remains unverified. For the composition
+   and Viewer simplification units below, require net production-code removal
+   as well as clearer ownership; new helper files count against that result.
+   Do not compress formatting or omit safety behavior to achieve a reduction.
+   Reconcile shared files, run affected combined checks, and integrate only the
+   reviewed/tested commit into local main with a verified backup.
+6. **Use the result to choose the next unit.** Keep working designs and remove
+   failed abstractions. Finish the current responsibility before spreading its
+   pattern to another feature. A capability addition may add code; account for
+   that separately and never label it a simplification merely because an old
+   owner was deleted. Put detailed evidence in the evidence record, with one
+   current status update here.
+
 | Order | Final result | Required removals and evidence |
 |---|---|---|
 | Finish active safety/recovery cutovers | Builder durable workspace, native recovery identity and bounded autosave; Study app-owned import/publication; Generation retained-output recovery | Their already named old owners/callers are removed; same-text replacement, bounded slow-store edit bursts, close/copy, failed publication and actual UI/restart gates pass. No additional extraction-only landings. |
