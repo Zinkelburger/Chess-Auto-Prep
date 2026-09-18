@@ -64,15 +64,20 @@ void main() {
       expect(study.autoSaveEnabled, isFalse);
       final editor = find.byType(InteractivePgnEditor);
       final editorState = tester.state(editor);
-      final chips = find.descendant(
-        of: editor,
+      final selectedChip = find.descendant(
+        of: find.descendant(
+          of: editor,
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is KeyedSubtree &&
+                widget.key is GlobalKey &&
+                widget.child is MoveChip,
+          ),
+        ),
         matching: find.byType(MoveChip),
       );
       final originalContent = study.doc.toPgn();
-      await tester.tap(
-        chips.hitTestable().first,
-        buttons: kSecondaryMouseButton,
-      );
+      await tester.tap(selectedChip, buttons: kSecondaryMouseButton);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Edit Comment'));
       await tester.pumpAndSettle();
@@ -99,8 +104,11 @@ void main() {
             )
             .first,
       );
+      scroll.position.jumpTo(48);
+      await tester.pumpAndSettle();
       final offset = scroll.position.pixels;
-      final darkInk = tester.widget<MoveChip>(chips.first).sanStyle.color;
+      expect(offset, greaterThan(1));
+      final darkInk = tester.widget<MoveChip>(selectedChip).sanStyle.color;
 
       Future<void> expectRetained(Brightness brightness) async {
         await tester.pumpAndSettle();
@@ -122,9 +130,9 @@ void main() {
         expect(study.flipped, isTrue);
         expect(study.dirty, isTrue);
         expect(study.doc.toPgn(), originalContent);
-        final chip = tester.widget<MoveChip>(chips.first);
-        final colors = Theme.of(tester.element(chips.first)).colorScheme;
-        expect(chip.sanStyle.color, colors.onSurface);
+        final chip = tester.widget<MoveChip>(selectedChip);
+        final colors = Theme.of(tester.element(selectedChip)).colorScheme;
+        expect(chip.sanStyle.color, colors.onPrimaryContainer);
         expect(tester.takeException(), isNull);
       }
 
@@ -132,7 +140,7 @@ void main() {
       await settings.appearance.setAppearance(AppAppearance.light);
       await expectRetained(Brightness.light);
       expect(
-        tester.widget<MoveChip>(chips.first).sanStyle.color,
+        tester.widget<MoveChip>(selectedChip).sanStyle.color,
         isNot(darkInk),
       );
       await settings.appearance.setAppearance(AppAppearance.dark);
@@ -143,6 +151,8 @@ void main() {
       tester.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
       await expectRetained(Brightness.dark);
 
+      await tester.ensureVisible(find.byTooltip('Save comment'));
+      await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Save comment'));
       await tester.pumpAndSettle();
       expect(find.byType(PgnCommentEditor), findsNothing);
