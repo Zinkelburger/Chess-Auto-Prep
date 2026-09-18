@@ -2745,3 +2745,46 @@ whole Builder feature or its maintainability gate. Against `29fbb4b0`, the branc
 adds 1,828 and deletes 852 handwritten production Dart lines: **net +976**, with
 144 generated localization lines counted separately. Remaining legacy chapter
 creation, UI coordination and theme work are not certified by these checks.
+
+### Study import/publication review repair — 2026-09-18
+
+Independent review of `3f3521bb` found that the app-owned collection importer
+had retained native publication outcomes, but completed Lichess downloads still
+used a duplicate editor create path without recovery. Scoped Lichess cancellation
+also abandoned its caller while the old retry timer continued. The repair at
+`92b799ee` gives completed Lichess downloads, collection downloads and Builder
+study exports one admitted publication command and removes
+`StudyController.createStudyFromPgn` with both consumers. The existing
+`DocumentSaveSession` retains uncertain bytes/path; the editor remains the owner
+of append and explicit document adoption. No new owner/interface files were added.
+
+Rejected URL submissions remain in their existing dialog. Retry reuses the
+resolved payload with the current append/delay options. Failed append keeps its
+dirty chapters in the same editor instead of inviting a duplicate append;
+unexpected unconsumed failures keep the downloaded payload. Superseded adoption
+reports the actual publication result, never the unrelated current study title.
+The URL dialog receives its repository directly from composition. Its transport
+uses the injected HTTP client and cancels Lichess backoff/retry timers on close.
+
+Validation: 234 focused Study/import/storage/UI and shared Explorer tests pass;
+two Linux native tests pass (exclusive collection publication and Study native
+conflict/reload/copy). Analyze/lint pass with 63 pre-existing informational
+messages and no errors/warnings; all 43 architecture checks pass and exact
+boundary debt falls from 1459 to 1457 for the complete Study branch. New coverage
+includes uncertainty review, failed append retention, stale adoption, admission
+retry without refetch, changed append selection, exact headerless PGN bytes,
+Lichess cancellation during a 429 backoff, and 480×640 at 200% text. A real
+headless app was inspected at 1280×720 and stopped after capturing the
+[URL import dialog](images/renewal-study-url-import.png). No live website request
+or user data was required. These checks do not certify Windows/macOS native
+publication or the whole Study theme.
+
+Maintainability remains **Partial**. Compared with main `29fbb4b0`, the complete
+branch adds 941 handwritten production Dart lines, including localization
+helpers and excluding generated accessors/ARB; Study screen grows
+926→1049, URL dialog 434→479 and Builder screen 1315→1345. The review repair alone
+adds 155 handwritten production Dart lines over `3f3521bb`. Retirement and ownership improved:
+one publication authority replaces the duplicate create path and all old
+`services/study_import/` files are gone. This is a safety/capability closure,
+not evidence of an overall code-size or consumer-complexity reduction. The
+planned consumer simplification and full Study design-system cutover remain open.
