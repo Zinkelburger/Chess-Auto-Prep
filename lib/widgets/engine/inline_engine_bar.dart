@@ -21,7 +21,7 @@ import 'package:flutter/material.dart';
 
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../../features/settings/controllers/engine_settings.dart';
-import '../../services/analysis_service.dart';
+import '../../models/analysis/discovery_result.dart';
 import '../../services/eval_cache.dart';
 import '../../services/engine/engine_lifecycle.dart';
 import '../../theme/app_colors.dart';

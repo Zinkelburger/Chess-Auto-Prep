@@ -1089,7 +1089,6 @@ The quiz uses `services/eco_trie.dart` to identify opening forks and `services/p
 - `lib/features/audit/controllers/audit_session_controller.dart` — owns `RepertoireAuditService` + audit state + persistence; pause/resume/cancel from any widget
 - `lib/features/coverage/controllers/coverage_controller.dart` — owns coverage result + progress state
 - `lib/widgets/layout/bottom_pane.dart` — resizable, collapsible, tabbed bottom pane (Findings/Jobs — the Lines list lives only in the side panel)
-- `lib/widgets/engine/inline_expectimax_bar.dart` — compact toggleable expectimax PV display
 - `lib/features/audit/widgets/audit_findings_panel.dart` — findings list with category filter chips, auto-scaled to ~20 findings, bulk dismiss, keyboard navigation, and interrupted-audit resume banner; dismiss context menus use `showAnchorMenu` (shared with the holes report)
 - `lib/features/audit/services/audit_persistence.dart` — centralized save/load for audit snapshots (result + config + resume state)
 - `lib/widgets/layout/jobs_panel.dart` — jobs panel: one compact card per active generation/audit job (phase, live stats, threads/hash, progress bar, controls); completed jobs as simple tiles; no duplicate status banners
@@ -1254,29 +1253,22 @@ A section whose knobs cannot apply to the current build source renders one sente
 
 See `docs/ALGORITHM.md` for algorithm detail.
 
-### Browse → one-click add
+### Database exploration and one-click add
 
-```
-BrowsePanel
-  → CandidateService.getCandidates(fen, tree + BuildTree)  // Lichess Explorer mothballed
-       → inRepertoire via OpeningTree.hasMoveOnPath(pathFromRoot, san)
-  → tap in repertoire → RepertoireController.playMove(san) (jump to existing child)
-  → tap unexplored → RepertoireWriter.addMoveAtPosition()
-       → RepertoireService.appendMoveAtPath (atomic PGN)
-       → RepertoireController.appendMoveToExistingLine
-       → playMove(san)
-  → Ctrl+Z → RepertoireWriter.undo()
-```
+Builder composes `RepertoireDatabasePane` directly. Its local explorer sends
+selected moves to the existing board owner; Add to repertoire calls
+`RepertoireWriter.addMoveAtPosition` with the current path, then advances the
+board. Receipt-backed `undo` remains the same writer responsibility. Generated
+evaluations use the database pane's existing source selection and generation
+view. The unused browse/suggestion panels and their candidate pipeline are
+retired; they are not a second production route.
 
-### Coverage & suggestions
+### Coverage
 
-```
-CoverageCalculatorWidget / CoverageService
-  → CoverageService.getPositionData() mothballed (returns null; no Lichess API)
-  → CoverageResult (gaps, unaccounted moves, covered %) from in-tree data where available
-  → CoverageSuggestionService.generateSuggestions()
-  → SuggestionPanel → RepertoireWriter.acceptSuggestion()
-```
+`CoverageCalculatorWidget` starts the existing coverage controller/service.
+Results feed the live repertoire lines browser, line metrics and tree coverage
+annotations. The retired suggestion panel/service had no live screen caller;
+coverage calculation and its regression tests remain.
 
 ### Audit
 
@@ -1327,12 +1319,12 @@ CoherenceService.compute(lines)
 
 ### Engine analysis
 
-Engine rows in `UnifiedEnginePane` and `InlineEngineBar` show the evaluation
+Engine rows in `InlineEngineBar` show the evaluation
 in a fixed left gutter, followed by one continuous numbered PV in regular weight.
-Both use `EnginePvRow`: compact rows, hairline separators and a cool slate surface
+Rows use `EnginePvRow`: compact rows, hairline separators and a cool slate surface
 distinguish analysis from the neutral PGN canvas. All engine-provided moves are
 available, without a fixed move-count cap; each row can expand to show its full
-line. The shared PV-row preference limits collapsed wrapping in both panels (one row
+line. The shared PV-row preference limits collapsed wrapping in every instance (one row
 by default); each slot reserves that many rows even for short or pending lines.
 Move taps and hover previews work throughout the line, including the first move.
 The inline toolbar is 24px tall and reserves compact PV slots during streaming
@@ -1342,18 +1334,18 @@ the following rows.
 
 ```
 Settings → Enable engine analysis → EngineLifecycle.toggleOn/Off
-UnifiedEnginePane (when lifecycle ≠ off)
-  → post-frame _runAnalysis on FEN / lifecycle changes (not during parent build)
-  → pane-owned AnalysisService → BoardEngineSession → shared BoardEngine / EvalWorker
-  → Eval chain: session cache → CdbDirect → Stockfish (Lichess Explorer mothballed; DB column hidden, _fetchDbData never called)
-  → Best-line eval persisted to EvalCache via _persistBestEvalToCache()
-  → Hover on MOVE or PV line → BoardPreviewController (floating) → FloatingBoardPreview overlay
-InlineEngineBar — shares BoardEngine with the analysis pane; normal Stockfish discovery writes best eval to EvalCache on completion; hypothetical threat searches use threatPositionFen and skip cache writes
-ExpectimaxLinesPane — same floating preview on line hover
+InlineEngineBar (Builder, Viewer and tactics)
+  → its existing BoardEngineSession → shared BoardEngine / EvalWorker
+  → discover at the selected FEN; coalesce live PV updates
+  → persist normal Stockfish discovery to EvalCache on completion
+  → hypothetical threat search uses threatPositionFen and skips cache writes
+  → move/PV hover uses the existing floating board preview
+Generated evaluation views use the saved tree; the live trick probe retains
+ExpectimaxLineService for practical continuations.
 ```
 
 Active board panes prepare one shared Stockfish process before the first toggle.
-`EngineLifecycle` owns the persisted toggle for both pane types. Toggle-off sends
+`EngineLifecycle` owns the persisted toggle for these panes. Toggle-off sends
 UCI `stop` and keeps the idle process, network, hash and configured threads warm.
 Turning it on starts a new search with the retained hash; it does not continue
 the stopped search's stack or depth. Leaving the last board, backgrounding the
@@ -1364,7 +1356,6 @@ The engine responsibilities are separated as follows:
 | Component | Owns | Contract |
 |---|---|---|
 | `BoardEngineSession` | One pane's attachment and search ownership | `prepare`, `discover`/`evaluate`, `pause`, reversible `detach`, terminal `dispose`. Detached panes cannot search. An old pane cannot cancel its successor; same-position views share discovery and live PVs. |
-| `AnalysisService` | One pane's discovery/candidate pipeline and UI notifiers | Owns a session. Cancellation invalidates deferred publications; disposing the service disposes its notifiers. A host may inject its service into `UnifiedEnginePane`. |
 | `BoardEngine` / `EngineWorkerSlot` | Latest interactive request and one lazily initialized worker | Coalesce startup, reject late connections after teardown, update settings while idle, retry a retired worker once. Pausing keeps the process. |
 | `EvalWorker` | UCI transaction and result parsing | Serialize readiness, options and searches. Cancellation completes the caller promptly while the worker drains through `bestmove`; old output never belongs to a new FEN. Ten-second readiness/stop timeouts retire the transport. Disposed workers are unavailable. |
 | `EngineSearchBudget` | Search-thread admission shared by board and bulk workers | FIFO, cancellable admission; grant up to the requested threads from free cores. Release only after `bestmove` or retirement. Idle processes consume no search allocation. |
@@ -1401,8 +1392,8 @@ error/disposed states require no quit write. Adapter lifecycle tests inject the
 package engine, so desktop unit tests do not need its native library.
 
 Regression checks live in `test/services/engine/{board_engine,eval_worker_protocol,engine_search_budget,stockfish_pool}_test.dart`,
-`test/services/analysis_service_test.dart`, and the actual pane widget tests in
-`test/widgets/{inline_engine_bar,unified_engine_pane}_lifecycle_test.dart`.
+and the actual pane widget tests in
+`test/widgets/inline_engine_bar_lifecycle_test.dart`.
 They cover delayed/stale output, stop timeout and replacement, queued cancellation,
 CPU sharing, settings changes, hidden panes, warm toggles and teardown. For a
 native Linux check, set `STOCKFISH_EXECUTABLE` to the extracted bundled binary
@@ -2259,7 +2250,6 @@ renewal work; Windows/macOS native verification remains open.
 | File | Purpose |
 |------|---------|
 | **services/coverage_service.dart** | Gap detection, `CoverageResult` (`findNextGap`, `findBiggestGap`), `UnaccountedMove.source` as `UnaccountedSource` (masters/maia), typed `MasterMoveCount` from `getMovesWithCounts`; `getPositionData()` mothballed (returns null, no Lichess API) |
-| **services/coverage_suggestion_service.dart** | Gap → line resolution, scoring, greedy set cover → `SuggestedLine` |
 | **widgets/suggestion_panel.dart** | Target coverage UI, accept/skip suggestions with hover preview |
 
 ### `lib/features/traps/`
@@ -2467,7 +2457,6 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `engine/stockfish_*_connection.dart` | Platform Stockfish backends |
 | `engine/process_connection*.dart` | Process spawn (native/stub). Delegates path setup to `stockfish_bundle.dart`. |
 | `engine/stockfish_bundle.dart` | Installs desktop Stockfish: support-dir cache, then bundled `.gz`, then download of the lockfile URL (checksummed). macOS lock key is arch-specific; the extracted file is always `stockfish-macos`. |
-| `analysis_service.dart` | Multi-position analysis orchestration |
 | `analysis_games_service.dart` | Fetch/store analysis game-sets; `downloadGamesFor(player)` is the single (re-)download entry point — one live account, or every `account` of an opponent concatenated into one PGN |
 | `game_analysis_controller.dart` | Game review session; cached and live replay pass ChessBase `--`/`Z0` without dropping later plies (1-based PGN ply still includes the pass) |
 | `engine_weakness_service.dart` | Weakness detection |
@@ -2683,13 +2672,8 @@ and does not change active editor, document or save ownership.
 
 | File | Purpose |
 |------|---------|
-| `engine/unified_engine_pane.dart` | MultiPV table, hoverable PV via `ClickableMoveLineWidget` (numbers and inter-move spacing share each move’s full hit target); FEN changes schedule analysis post-frame (avoids setState-during-build); DB column hidden; best eval persisted to `EvalCache` via `_persistBestEvalToCache()` |
-| `engine/expectimax_lines_pane.dart` | Position table from the built tree: every move with practical (expectimax) value beside engine eval, ★ on the chosen move, continuation; honest empty states (no tree / not in tree / leaf). Never runs the engine |
-| `engine/expectimax_panel_host.dart` | Thin wrapper binding [ExpectimaxLinesPane] to a [BuilderWorkspaceController] cursor (or `fenOverride`); used by [EditContextZone], [InlineExpectimaxBar]  |
 | `engine/inline_engine_bar.dart` | Compact engine for PGN viewer and tactics; reserves a fixed height for the configured MultiPV count while enabled, including loading and positions with fewer legal moves; settings button opens `AnalysisSettingsContext.tacticsEngine` (depth + multiPv only); writes Stockfish eval to `EvalCache` after discovery completes |
-| `engine/inline_expectimax_bar.dart` | Compact toggleable expectimax bar for right pane; wraps `ExpectimaxPanelHost(compact: true)` with toggle switch and settings gear |
 | `engine/engine_toggle_button.dart` | Legacy bolt toggle widget (unused; engine on/off is in Settings) |
-| `engine/engine_pane_footer.dart` | Engine pane footer controls |
 | `engine/floating_board_preview.dart` | Cursor-following mini board overlay on engine/expectimax line hover |
 
 #### Lines sub-widgets
@@ -2709,12 +2693,10 @@ and does not change active editor, document or save ownership.
 | `chess_board_widget.dart` | Board rendering, move input; coordinates follow the Display preference unless the caller passes `coordinates:` (thumbnails under 24px squares are always bare; *outside* takes a margin out of the squares — see `board/board_coordinates.dart`, whose `coordinateLabels` is the pure placement rule); `board/board_square_painter.dart` owns the shared surface for interactive boards, the position editor and static thumbnails. Selection, explicit hint/preview highlights, and recent moves use borderless tints (in that precedence); legal destinations use dots on empty squares and inset rings on occupied squares. Bughouse drops use the same `legalMoveSquares` API. Tile colours are composited before painting without tile-edge antialiasing, avoiding seams at fractional sizes; square feedback never changes board layout or its permanent outer frame. The painter snapshots input sets and compares their contents for repainting. Pieces are `Positioned` on their squares with no implicit animation, so a layout resize (expanding a chapter list, dragging a panel) cannot slide them. Annotation types live in `lib/models/board_annotation.dart`. |
 | `clickable_move_line.dart` | SAN line with tap + hover callbacks |
 | `navigation_trail.dart` | Breadcrumb trail widget (used by repertoire tab bar) |
-| `analysis_tab.dart` | Legacy browse/analysis tab wrapper (not used in current repertoire screen) |
 | `layout/jobs_panel.dart` | Jobs tab: single rich card per active generation or audit job (name, build mode config summary, phase icon/label, C-style live stats, thread/hash chips, linear progress, elapsed, pause/resume/cancel/finish-now); completed jobs as compact list tiles |
 | `services/jobs/generation_job_display.dart` | Phase labels, stats-line formatting, and progress fraction helpers for generation job cards |
 | `analysis/stockfish_settings_dialog.dart` | Shared Analysis controls reached by every `InlineEngineSettings` shortcut; board and bulk depths persist independently. |
 | `analysis_download_dialog.dart` | Download games for analysis: site, username, range (months or last N games) and time controls. Given a saved `player`, site and username are fixed and it pops that player with the new range — the refresh button beside "downloaded … ago" in Player Analysis and "Change range…" on the picker both use it |
-| `game_analysis_tab.dart` | PGN viewer closable Analysis tab: opening a recent tactics game with stored evaluations also opens this tab in the background, keeping the annotated Game reader selected; saved evaluation coverage explains missing played positions and offers a full pass; null PGN moves are excluded from coverage totals while ply coordinates stay unchanged. chart, classified move list, best-line / Maia taps; each tap adds an **ephemeral RAV** at that ply (accumulates; does not clear prior lines); move list scrolls only when the nearest classified row changes (instant `ensureVisible`, no per-ply jump+animate) |
 | `game_analysis_chart.dart` | Eval chart for game review |
 | `game_nav_item.dart` | `GameNavItem` — label, study rating/summary, PGN `headers` for nav bar and search dialog; `fromEntry(PgnGameEntry)` |
 | `game_number_field.dart` | **Game N of Total** jump box: the counter *is* the input (digits only, Enter jumps, Escape restores, `G` focuses). Search-by-name stays on the Search button so the current position stays visible while you type |
@@ -2822,7 +2804,6 @@ and does not change active editor, document or save ownership.
 | `test/features/repertoires/repertoire_writer_test.dart` | Add move, PGN append |
 | `test/features/repertoires/repertoire_writer_undo_test.dart` | Undo stack |
 | `test/features/browse/candidate_service_test.dart` | Candidate merge/sort |
-| `test/features/coverage/coverage_suggestion_service_test.dart` | Suggestions, coherence bonus |
 | `test/features/coverage/coverage_result_test.dart` | `CoverageResult.findNextGap` / `findBiggestGap` gap ordering |
 | `test/features/traps/trap_index_service_test.dart` | FEN index, line traps |
 | `test/features/traps/trap_navigation_buttons_test.dart` | Trap jump UI |
@@ -2873,7 +2854,6 @@ and does not change active editor, document or save ownership.
 | `test/services/coherence_service_test.dart` | Coherence compute |
 | `test/services/engine_lifecycle_test.dart` | State transitions, notify-count guards, full lifecycle cycle |
 | `test/services/engine/stockfish_bundle_test.dart` | Host lock key + largest-member extract from zip/tar |
-| `test/widgets/unified_engine_pane_lifecycle_test.dart` | Engine pane ↔ lifecycle feedback-loop regression via pane-coupling harness |
 | `test/services/expectimax_line_service_test.dart` | Line following / MultiPV |
 | `test/services/fp_growth_test.dart` | FP-Growth mining |
 | `test/services/generation/tree_my_ease_test.dart` | myEase computation |

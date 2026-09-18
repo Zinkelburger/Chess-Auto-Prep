@@ -1,4 +1,4 @@
-/// Expectimax line generation for the ExpectimaxLinesPane.
+/// Expectimax continuations used by the live trick probe.
 ///
 /// Walks a precomputed (cooked) [BuildTree] to produce engine-style "best
 /// lines" using practical win probability (V) instead of raw engine eval.

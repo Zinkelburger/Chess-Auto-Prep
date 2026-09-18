@@ -5,7 +5,6 @@ import 'package:chess_auto_prep/chess_core/pgn/repertoire_document_mutation.dart
 
 import 'package:dartchess/dartchess.dart';
 
-import '../../coverage/services/coverage_suggestion_service.dart';
 import '../repositories/repertoire_document_repository.dart';
 import '../models/repertoire_mutation_receipt.dart';
 import '../../documents/models/pgn_document.dart';
@@ -299,13 +298,5 @@ class RepertoireWriter {
       position = next;
     }
     return position;
-  }
-
-  Future<List<String>> acceptSuggestion(SuggestedLine suggestion) {
-    final prefixLen = suggestion.fullMoves.length - suggestion.newMoves.length;
-    return addMovesAtPosition(
-      pathFromRoot: suggestion.fullMoves.sublist(0, prefixLen),
-      sans: suggestion.newMoves,
-    );
   }
 }

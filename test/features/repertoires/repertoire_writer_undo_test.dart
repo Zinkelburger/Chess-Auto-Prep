@@ -10,7 +10,6 @@ import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chess_auto_prep/features/repertoires/controllers/builder_workspace_controller.dart';
 import 'package:chess_auto_prep/features/repertoires/controllers/repertoire_writer.dart';
-import 'package:chess_auto_prep/features/coverage/services/coverage_suggestion_service.dart';
 import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
 import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 
@@ -166,25 +165,13 @@ void main() {
       expect(await writer.undo(), isFalse);
     });
 
-    test('acceptSuggestion undo removes moves one at a time', () async {
+    test('multi-move append undo removes moves one at a time', () async {
       controller.board.loadMoveHistory(['e4', 'e5']);
 
-      const suggestion = SuggestedLine(
-        gap: GapCandidate(
-          pathToGap: ['e4', 'e5'],
-          fen: '',
-          type: GapType.tooShallow,
-          gameCount: 1,
-          coverageImpact: 0.1,
-        ),
-        fullMoves: ['e4', 'e5', 'Nf3', 'Nc6'],
-        newMoves: ['Nf3', 'Nc6'],
-        coverageGain: 0.1,
-        score: 1.0,
-        source: 'test',
+      await writer.addMovesAtPosition(
+        pathFromRoot: ['e4', 'e5'],
+        sans: ['Nf3', 'Nc6'],
       );
-
-      await writer.acceptSuggestion(suggestion);
       expect(controller.document.repertoireLines.first.moves, [
         'e4',
         'e5',

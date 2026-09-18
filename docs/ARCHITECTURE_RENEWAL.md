@@ -145,8 +145,10 @@ engine bindings, replacement facades or duplicate writers.
 **Make incompleteness visible.** The architecture checker now discovers every
 `lib/features/` directory and checks its imports, singleton access and widget
 theme boundaries. [The explicit debt ledger](../scripts/architecture_feature_debt.json)
-classifies all 23 existing directories: six `enforced` directories retain their
-zero-debt gate, and 17 are `unfinished`. No directory is declared `complete`.
+classifies all 22 remaining directories: six `enforced` directories retain their
+zero-debt gate, and 16 are `unfinished`. The unused legacy `browse` feature is
+retired rather than classified as a completed replacement. No directory is
+declared `complete`.
 `enforced` certifies only these static boundaries, not workflow completion or
 runtime wiring. The ledger records 1,493 exact existing dependency/offending-line
 entries at initialization; repeated lines retain their occurrence counts. This
@@ -226,7 +228,7 @@ merely because it has a new path, constructor injection or passing unit tests.
 The 2026-09-17 review identifies a real failure of the process: improved safety
 and testability have not established simpler consumers. A retired facade is a
 completed deletion, not proof that its replacement workflow is maintainable.
-Do not repeat the present composition pattern across the 17 unfinished features.
+Do not repeat the present composition pattern across the remaining unfinished features.
 Finish the safety work already in flight, then simplify the existing graph.
 
 ### What the code establishes
@@ -249,7 +251,8 @@ At this snapshot, generated localization accounts for 2,272 lines of the total;
 excluding it still leaves growth of 15,762 lines. `services/` contains 43,968
 lines and `widgets/` 55,788. There are 99 commits since the baseline, including
 merges (57 on the first-parent history). Commit count is activity, not completion.
-The six enforced and 17 unfinished features still include zero complete features.
+At that snapshot, six enforced and 17 unfinished features included zero complete
+features. The current inventory above separately records later deletions.
 
 The criticism needs three qualifications, not a dismissal:
 
@@ -411,6 +414,7 @@ product owner to choose implementation details.
 | Builder editor and orphan layout retired (`1c0514f2`, `2ead1e6c`) | Builder directly composes its existing editor; unused layout implementations are deleted | Nine files removed, net −1,887 production lines across both reviewed scopes. Existing clipboard, annotation, title, branch undo, editor identity and Viewer splitter retained. Independent review, focused/native checks and compact/wide screenshots pass. Whole Builder renewal remains Partial. |
 | Training completion consolidated (`e4468ea6`) | Existing session owns finish → persistence → tally → advance; results widget only renders and sends commands | Deleted widget scheduling, the 17-field forwarding constructor, rating wrapper and duplicate completion panel; complete six-file scope removes 146 production lines. Attempt identity, ordered captured writes, one invalidation path and reload ordering preserve completion through retry/source changes. Independent review, focused tests, Linux native persistence/reload and inspected screenshots pass. Whole Training remains Partial. |
 | Viewer movement consolidated (`0f23a5a4`) | Existing reading owner dispatches navigation to the selected reader or its existing game/tree/Solitaire owners | Deleted `PgnPaneRouter` and duplicate supplier routing; full screen/parts/reading scope removes 44 production lines. Native fullscreen navigation now retains the primary reader; reference cursors, mode-specific board projection, autoplay cancellation and filter editing are preserved. Independently reviewed with focused and Linux native checks; whole Viewer remains Partial. |
+| Obsolete analysis surfaces retired | Active Builder/Viewer engine and database panes remain the only app routes | Twenty unused files and the writer's suggestion forwarder deleted: net −5,077 production lines, with no replacement owner. The live inline engine imports its existing result model directly. Independent import/caller and implementation reviews pass; 152 focused tests, Linux native Builder history and analyze/lint pass. Live coverage, engine-session and per-move undo behavior remain covered. |
 | Catalog chapter workflow remains open | One shared chapter mutation boundary must replace picker/Builder/outline duplication | The competing-create and disposed-picker defects are repaired (`69ad9189`, net +2 production lines); this is safety work, not migration completion. The cutover must retire `ChapterStore` and legacy picker ownership with all callers; preserve progressive course reads and explicit retry. The temporary catalog adapter and legacy Library organizer still block whole-catalog completion. Separately, reproduce the audited splitter race: exhausted-source deletion currently lacks captured-revision validation; repair it through the existing mutation boundary before certifying split safety. |
 | Complete the next domain | One domain's commands, consumers, design-system controls and legacy retirement finish together | Apply the same ownership/consumer review before expanding. Singular/plural repertoire consolidation follows actual remaining responsibilities, not another directory-only move. |
 

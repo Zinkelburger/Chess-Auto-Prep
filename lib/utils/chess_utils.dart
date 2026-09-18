@@ -1,7 +1,6 @@
 /// Shared chess move-conversion and formatting utilities.
 ///
-/// Centralises UCI ↔ SAN helpers that were duplicated in
-/// [UnifiedEnginePane] and [RepertoireScreen].
+/// Shared UCI ↔ SAN helpers for engine analysis and repertoire editing.
 library;
 
 import 'package:dartchess/dartchess.dart';

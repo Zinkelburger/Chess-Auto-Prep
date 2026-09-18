@@ -1,7 +1,5 @@
 /// Single source of truth for engine state across analysis and generation.
 ///
-/// Replaces the implicit lifecycle spread across MainScreen,
-/// UnifiedEnginePane, RepertoireController, and RepertoireGenerationTab.
 library;
 
 import 'dart:async';
@@ -171,7 +169,7 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
     _notifyListenersSafe();
   }
 
-  /// Called when AnalysisService completes.
+  /// Called when the interactive search completes.
   void onAnalysisComplete() {
     if (_state == EngineState.analyzing) {
       _state = EngineState.idle;

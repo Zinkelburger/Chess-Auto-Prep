@@ -216,12 +216,12 @@ Design components are built on demand inside the first complete slice.
 |------|--------|-------|
 | **Add as trainable line** | **Not started** | No `savePathAsTrainable`; no `[Trainable "1"]` PGN header |
 | **Split as named line** | **Not started** | No `splitAsNamedLine` / `parentLineId` on `RepertoireLine` |
-| **Next Gap / Biggest Gap** in browse nav bar | **Not started** | Gap buttons live in `LineMetricsPanel` (Lines tab), not `BrowsePanel` |
+| **Next Gap / Biggest Gap** in browse nav bar | **Not started** | Gap buttons live in `LineMetricsPanel` (Lines tab); no dedicated browse navigation action |
 | Inline **expectimax continuation** on candidate hover | **Not started** | Hover previews FEN only; no `ClickableMoveLineWidget` under row |
-| **Coverage ring** per opponent candidate | **Partial** | `coverageDelta` chip exists; no visual ring |
-| **W/D/B result bar** for opponent moves | **Partial** | DB frequency/games shown; full win/draw/loss bar not in `CandidateRow` |
+| **Coverage ring** per opponent candidate | **Not started** | The unused candidate chip implementation is retired; active explorer rows have no coverage ring |
+| **W/D/B result bar** for opponent moves | **Done** | Active `ExplorerMoveRow` uses `WinDrawLossBar` with the local explorer's white/draw/black counts |
 | `RepertoireTreeExplorer` DB frequency columns | **Not started** | Explorer shows engine metrics, not Lichess W/D/B |
-| Entry: **Build manually** (empty repertoire, DB-only) | **Partial** | DB fallback in `CandidateService` works; no dedicated entry CTA |
+| Entry: **Build manually** (empty repertoire, DB-only) | **Partial** | Empty repertoire creation and the active Database explorer are available; no dedicated entry CTA |
 | Entry: **Browse Result** after generation | **Partial** | Tree loads; no explicit post-gen browse button |
 | PGN editor persistence ownership | **Partial** | Builder controller/writer now use injected document contracts and the shared native PGN store on Linux; durable draft recovery, native undo receipts and remaining outline/generation editor callers are pending |
 | Tree-path navigation (single source of truth) | **Done** | `MoveTree` + `TreePath` cursor privately owned by pure `RepertoireBoardController`; PGN editor is a pure view; no `addPostFrameCallback` sync; arrow keys always go through controller |

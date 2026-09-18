@@ -3131,3 +3131,40 @@ The entire current `lib/` still contains **237,327 Dart lines in 1,052 files**,
 versus 218,957 lines at the September 16 baseline (`e477dc58`): +18,370 (8.4%).
 These bounded deletions do not erase the earlier safety/recovery growth or
 establish that all screens/features are simpler.
+
+### Obsolete analysis workflow retirement — 2026-09-18
+
+Against `cfdf999b`, the complete obsolete analysis/browse/expectimax workflow
+removes **20 production files** and **5,077 net handwritten lines** (6 added /
+5,083 deleted). The new lines only update existing comments and replace the live
+inline engine's re-export import with its existing `DiscoveryResult` model path.
+No new implementation, owner, callback supplier or compatibility layer was added.
+
+An independent reviewer rebuilt the import/export/part graph, including
+conditional URIs, from `lib/main.dart` and all 23 tracked external non-test Dart
+entry roots (tools and Widgetbook included). None reached these panels. Whole-repo
+caller checks confirmed the old candidate/suggestion pipeline and analysis
+service had no live callers. The latter only survived as a model re-export for
+`InlineEngineBar`, which already owns a `BoardEngineSession` directly. The live
+Builder Engine and Database panes, Viewer analysis tab, BoardEngine/session,
+coverage calculation and trick-probe `ExpectimaxLineService` are retained.
+
+Six test files belonging solely to removed components are deleted (1,724 test lines).
+The useful per-move undo regression now invokes the existing `addMovesAtPosition`
+primitive and retains its original assertions. **152 focused tests pass** across
+writer/undo, coverage, engine/session/protocol/settings/lifecycle, expectimax
+continuations, ease calculations and the actual Builder/inline-engine widgets.
+One Linux native Builder history journey passes, including equal-text replacement
+rejection. Analyze/lint passes with 64 infos, zero warnings/errors and 45 boundary
+checker cases; 48 checked local documentation file targets exist.
+
+The feature ledger removes only the deleted paths' 41 debt entries (1,457 →
+1,416), and the legacy theme ledger removes 11 consumers (241 → 230). The unused
+`browse` directory is deleted, leaving 22 classified feature directories: six
+enforced, 16 unfinished, none complete. Component/backlog descriptions now name
+the actual live database/engine surfaces rather than the removed panels.
+
+Including earlier completed simplifications, the batch against `fa7f309e` removes
+**7,232 production lines**. All library Dart now totals **232,250 lines**, still
+13,293 above September 16's 218,957 (6.1%). This is a verified retirement result;
+the rest of the architecture renewal remains Partial.
