@@ -2986,4 +2986,24 @@ comment, this cutover independently removes 762 lines. All handwritten `lib/` Da
 235,792 lines; generated production delta is zero. There are 21 fewer callback
 fields in the deleted wrapper files; existing workflow state owners are unchanged.
 
-Verification is in progress. Whole Builder renewal remains Partial.
+Validation of implementation `1c0514f2`: 74 focused screen/editor/board/line-save/
+recovery tests pass, including actual context-menu `Clipboard.setData` payload,
+workspace title changes and unchanged editor identity. Both Linux native journeys
+pass: immutable annotations survive mode switches and reload, and receipt-backed
+undo rejects an equal-text replacement. The four tests that previously inspected
+the wrapper now obtain the existing `BuilderLifetime` through Provider; no test
+accessor was added to production. Analyze/lint pass with no warnings/errors, 45
+architecture checker cases and the unchanged 1,457-entry feature debt ledger.
+
+An initial clipboard assertion waited indefinitely for a test-only clipboard
+read response; interrupted attempts are not counted as passes. The final test
+observes the actual outgoing platform clipboard payload and asserts the helper's
+existing silent-success policy. No production behavior changed to satisfy it.
+
+Fresh headless [wide 1600×1000](images/renewal-builder-editor-wide.png) and
+[compact 900×900](images/renewal-builder-editor-compact.png) screenshots show the
+same selected chapter/title, annotations and variation after resizing. Both were
+visually inspected: the editor retains bounded height and the live Engine tab
+remains separate. Only disposable driver data was used; the preview was stopped.
+Independent review accepted the exact production commit and its simpler binding
+graph. Whole Builder renewal remains Partial.

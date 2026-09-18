@@ -1172,7 +1172,7 @@ RepertoireListBody (embedded inline or in RepertoireSelectionScreen)
   → BuilderWorkspaceController (draft/recovery owner) + RepertoireDocumentSession (chapter/serialized writes) + RepertoireBoardController (editable tree/cursor)
   → InteractivePgnEditor (pure view: tree + path props, action callbacks; memoized move widgets; context-menu path highlighting)
   → Screen binds title/edit commands directly; workspace observes board edits for autosave
-  → Screen supplies clipboard feedback and View in Lines; no intermediate editor wrappers
+  → Screen supplies clipboard copy and View in Lines; no intermediate editor wrappers
   → OpeningTreeWidget (unchanged — read-only statistics tree)
   → injected RepertoireDocumentRepository → DocumentRepertoireRepository → shared PgnDocumentStore (native on Linux)
   → injected RepertoireDecoder → IsolateRepertoireDecoder → atomic application of chapter load results
