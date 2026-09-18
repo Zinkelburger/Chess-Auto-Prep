@@ -77,8 +77,10 @@ class _ImportDocuments extends NativePgnDocumentStore {
   }
 
   @override
-  Future<PgnQuarantineResult> quarantine(PgnSnapshot baseline) =>
-      throw StateError('new imports have no existing source to quarantine');
+  Future<PgnQuarantineResult> quarantine(
+    PgnSnapshot baseline, {
+    String? allowedRoot,
+  }) => throw StateError('new imports have no existing source to quarantine');
 }
 
 void main() {

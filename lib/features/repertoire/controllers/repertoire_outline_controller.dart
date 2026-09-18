@@ -11,6 +11,8 @@
 library;
 
 import 'dart:async';
+import '../../documents/models/pgn_document.dart';
+import '../../repertoires/repositories/repertoire_catalog_repository.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
@@ -57,10 +59,12 @@ class RepertoireOutlineController extends ChangeNotifier
     with SafeChangeNotifier {
   RepertoireOutlineController({
     required this._service,
+    required this._catalog,
     this.onActiveChapterMoved,
   });
 
   final RepertoireOutlineService _service;
+  final RepertoireCatalogRepository _catalog;
   late final OutlineFoldState _fold = OutlineFoldState(
     rootPath: () => _rootPath,
   );
@@ -91,6 +95,7 @@ class RepertoireOutlineController extends ChangeNotifier
   /// parts of the row list that are not the outline itself. [rows] keys its
   /// cache on it.
   int _viewVersion = 0;
+  int get viewRevision => _viewVersion;
 
   OutlineRowCache? _rowCache;
 
@@ -269,7 +274,7 @@ class RepertoireOutlineController extends ChangeNotifier
 
   /// A new chapter in [folderPath] holding the lines at [gameIndexes] of
   /// [fromChapterPath] — what dropping lines on a folder makes. Undo moves
-  /// the lines back and removes the chapter.
+  /// the lines back and retains the chapter file.
   Future<OutlineEditOutcome> createChapterWithLines({
     required String folderPath,
     required String name,
@@ -288,26 +293,19 @@ class RepertoireOutlineController extends ChangeNotifier
     final count = moved.landed.length;
     return OutlineEditOutcome.done(
       message:
-          'Made "${chapter.name}" from $count line${count == 1 ? '' : 's'}.',
+          'Made "${chapter.name}" from $count line${count == 1 ? '' : 's'}. '
+          'Undo returns the lines and keeps the chapter.',
       undo: () => _edit(() async {
-        // Only what was moved in is there, unless lines were added since;
-        // then the chapter stays, emptied of the ones that came from here.
-        final untouched =
-            (_outline?.findChapter(chapter.path)?.lineCount ?? 0) ==
-            moved.landed.length;
         await _service.moveLines(
           fromChapterPath: chapter.path,
           gameIndexes: moved.landed.toSet(),
           toChapterPath: fromChapterPath,
           toIndexes: moved.origin,
         );
-        if (untouched) {
-          await _service.deleteChapter(chapter.path);
-          _fold.closeChapter(chapter.path);
-          if (_isActive(chapter.path)) _moveActiveTo(fromChapterPath);
-        }
         _noteChapterChanged(fromChapterPath);
-        return const OutlineEditOutcome.done(message: 'Moved the lines back.');
+        return OutlineEditOutcome.done(
+          message: 'Moved the lines back; kept "${chapter.name}".',
+        );
       }),
     );
   });
@@ -423,13 +421,35 @@ class RepertoireOutlineController extends ChangeNotifier
     return const OutlineEditOutcome.ok();
   });
 
-  Future<OutlineEditOutcome> deleteChapter(String chapterPath) =>
-      _edit(() async {
-        await _service.deleteChapter(chapterPath);
-        _fold.closeChapter(chapterPath);
-        if (_isActive(chapterPath)) _moveActiveTo(null);
-        return const OutlineEditOutcome.ok();
-      });
+  Future<PgnQuarantineResult> deleteChapter(PgnSnapshot baseline) async {
+    if (_editing || isDisposed) {
+      return PgnQuarantineFailed(
+        StateError('Another outline change is still running.'),
+      );
+    }
+    _editing = true;
+    final revision = viewRevision;
+    try {
+      final result = await _catalog.deleteChapter(baseline);
+      if (result is PgnQuarantined || result is PgnQuarantineUncertain) {
+        _service.invalidate(baseline.path);
+      }
+      if (result is PgnQuarantined && !isDisposed && revision == viewRevision) {
+        _fold.closeChapter(baseline.path);
+        if (_isActive(baseline.path)) _moveActiveTo(null);
+      }
+      // Refresh observed state even when acknowledgement is uncertain. This
+      // does not authorize following a missing source or announcing removal.
+      if (!isDisposed) await refresh();
+      return result;
+    } catch (_) {
+      _service.invalidate(baseline.path);
+      if (!isDisposed) await refresh();
+      rethrow;
+    } finally {
+      _editing = false;
+    }
+  }
 
   Future<OutlineEditOutcome> deleteFolder(String folderPath) => _edit(() async {
     await _service.deleteFolder(folderPath);

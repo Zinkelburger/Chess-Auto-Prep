@@ -166,8 +166,10 @@ class MemoryDocumentStore implements PgnDocumentStore {
   @override
   bool get supportsQuarantine => false;
   @override
-  Future<PgnQuarantineResult> quarantine(PgnSnapshot baseline) async =>
-      PgnQuarantineFailed(UnsupportedError('Unused in this fixture'));
+  Future<PgnQuarantineResult> quarantine(
+    PgnSnapshot baseline, {
+    String? allowedRoot,
+  }) async => PgnQuarantineFailed(UnsupportedError('Unused in this fixture'));
 
   MemoryDocumentStore(this.scenario) {
     files['/fixture/Main.pgn'] = _snapshot(

@@ -119,9 +119,13 @@ class IOStorageService implements StorageService {
     String path,
     Future<T> Function() action,
   ) async {
-    if (Platform.isLinux &&
-        _isInside(await _repertoiresRoot(create: false), path)) {
-      return (await _moves()).guard(action);
+    if (Platform.isLinux) {
+      final root = await _repertoiresRoot(create: false);
+      if (_isInside(root, path) ||
+          (await root.exists() &&
+              _isInside(Directory(await root.resolveSymbolicLinks()), path))) {
+        return (await _moves()).guard(action);
+      }
     }
     return action();
   }
@@ -297,6 +301,32 @@ class IOStorageService implements StorageService {
   Future<void> deleteFile(String path) async {
     final file = await _resolveFile(path);
     await guardDocumentOperation(file.path, () => _deleteResolvedFile(file));
+  }
+
+  /// The configured ownership root of a managed file, never a caller's folder.
+  /// Reject aliases before callers capture the document for a destructive action.
+  Future<({Directory root, String path})> managedFileLocation(
+    String path,
+  ) async {
+    final candidate = p.normalize(p.absolute(path));
+    for (final configured in [await _documentsRoot(), await _supportRoot()]) {
+      if (!await configured.exists()) continue;
+      final lexical = p.normalize(p.absolute(configured.path));
+      final canonical = p.normalize(await configured.resolveSymbolicLinks());
+      final spelling = p.isWithin(lexical, candidate) ? lexical : canonical;
+      if (!p.isWithin(spelling, candidate)) continue;
+      await _mutations.validateManagedFilePath(
+        File(candidate),
+        allowedRoot: Directory(spelling),
+      );
+      return (
+        root: Directory(canonical),
+        path: p.join(canonical, p.relative(candidate, from: spelling)),
+      );
+    }
+    throw UnsafeFileMutation(
+      'Refusing to remove $path: it is not managed app data.',
+    );
   }
 
   Future<void> _deleteResolvedFile(File file) async {

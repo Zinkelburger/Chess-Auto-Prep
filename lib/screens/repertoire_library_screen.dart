@@ -1,5 +1,6 @@
 import '../features/repertoire/services/repertoire_outline_service.dart';
 import 'dart:async';
+import '../features/repertoires/repositories/repertoire_catalog_repository.dart';
 import '../app/legacy_theme_boundary.dart';
 import '../features/repertoires/controllers/repertoire_catalog_controller.dart';
 import '../design_system/layout/workspace_navigation_controller.dart';
@@ -37,6 +38,7 @@ class RepertoireLibraryScreen extends StatefulWidget {
 class _RepertoireLibraryScreenState extends State<RepertoireLibraryScreen> {
   late final RepertoireOutlineController _outline = RepertoireOutlineController(
     service: context.read<RepertoireOutlineService>(),
+    catalog: context.read<RepertoireCatalogRepository>(),
     onActiveChapterMoved: (path) {
       if (!mounted) return;
       _outline.setActiveChapter(path);

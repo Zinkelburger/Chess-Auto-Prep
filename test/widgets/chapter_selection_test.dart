@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 
 import 'package:chess_auto_prep/design_system/theme/app_theme.dart';
 import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
@@ -22,6 +23,17 @@ class _Catalog implements RepertoireCatalogRepository {
   Future<List<RepertoireMetadata>> Function(String) read = (_) async => [];
   Future<List<ChapterSummary>> Function(String) sections = (_) async => [];
   Future<PgnWriteResult> Function()? createResult;
+  Future<PgnOpenResult> Function(String)? capture;
+  Future<PgnQuarantineResult> Function(PgnSnapshot)? remove;
+  int deletions = 0;
+  @override
+  Future<PgnOpenResult> prepareChapterDeletion(String path) => capture!(path);
+  @override
+  Future<PgnQuarantineResult> deleteChapter(PgnSnapshot before) {
+    deletions++;
+    return remove!(before);
+  }
+
   int reads = 0;
   int writes = 0;
   @override
@@ -62,6 +74,8 @@ void main() {
     bool enabled = true,
   }) => tester.pumpWidget(
     MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       theme: AppTheme.dark(),
       home: Scaffold(
         body: RepertoireBreadcrumbTitle(
@@ -78,6 +92,8 @@ void main() {
 
   Future<void> picker(WidgetTester tester, String folder) => tester.pumpWidget(
     MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       theme: AppTheme.dark(),
       home: Provider<RepertoireCatalogRepository>.value(
         value: catalog,
@@ -90,6 +106,100 @@ void main() {
       ),
     ),
   );
+
+  const before = PgnSnapshot(
+    path: '/A/Main.pgn',
+    content: '1. e4 *',
+    revision: PgnRevision(
+      documentId: '/A/Main.pgn',
+      nativeIdentity: 'original',
+      sha256: 'old',
+    ),
+  );
+  testWidgets('picker rejects delayed deletion capture after folder A B A', (
+    tester,
+  ) async {
+    final capture = Completer<PgnOpenResult>();
+    catalog.read = (folder) async => [_entry('$folder/Main.pgn')];
+    catalog.capture = (_) => capture.future;
+    await picker(tester, '/A');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Delete chapter'));
+    await picker(tester, '/B');
+    await picker(tester, '/A');
+    capture.complete(const PgnOpened(before));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(catalog.deletions, 0);
+    expect(selected, isNull);
+  });
+
+  testWidgets('picker confirmation rejects folder A B A before mutation', (
+    tester,
+  ) async {
+    catalog.read = (folder) async => [_entry('$folder/Main.pgn')];
+    catalog.capture = (_) async => const PgnOpened(before);
+    await picker(tester, '/A');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Delete chapter'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsOneWidget);
+    await picker(tester, '/B');
+    await picker(tester, '/A');
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    expect(catalog.deletions, 0);
+    expect(selected, isNull);
+  });
+
+  for (final returnToA in [false, true]) {
+    testWidgets(
+      'picker keeps admitted uncertainty evidence after folder ${returnToA ? "A B A" : "A B"}',
+      (tester) async {
+        final result = Completer<PgnQuarantineResult>();
+        catalog.read = (folder) async => [_entry('$folder/Main.pgn')];
+        catalog.capture = (_) async => const PgnOpened(before);
+        catalog.remove = (_) => result.future;
+        await picker(tester, '/A');
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Delete chapter'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Delete'));
+        await tester.pumpAndSettle();
+        expect(catalog.deletions, 1);
+        await picker(tester, '/B');
+        if (returnToA) await picker(tester, '/A');
+        await tester.pumpAndSettle();
+        final reads = catalog.reads;
+        result.complete(
+          PgnQuarantineUncertain(
+            error: StateError('lost acknowledgement'),
+            before: before,
+            quarantinePath: '/A/.cap-pgn-history/retained.pgn',
+            recoveryPath: '/A/.cap-pgn-history/raw.pgn',
+            observedSource: null,
+            observedQuarantine: null,
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Review chapter deletion'), findsOneWidget);
+        final text = tester
+            .widget<SelectableText>(find.byType(SelectableText))
+            .data!;
+        expect(text, contains('/A/Main.pgn'));
+        expect(text, contains('/A/.cap-pgn-history/retained.pgn'));
+        expect(text, contains('/A/.cap-pgn-history/raw.pgn'));
+        expect(text, isNot(contains('/B')));
+        expect(
+          catalog.reads,
+          reads,
+          reason: 'Old completion cannot reload the new view',
+        );
+        expect(catalog.deletions, 1);
+        expect(selected, isNull);
+      },
+    );
+  }
 
   testWidgets(
     'breadcrumb loads on demand and rejects duplicate opening clicks',

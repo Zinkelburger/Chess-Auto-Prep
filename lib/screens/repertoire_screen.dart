@@ -507,6 +507,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     _sidePanelTabController = TabController(length: 2, vsync: this);
     _outline = RepertoireOutlineController(
       service: context.read<RepertoireOutlineService>(),
+      catalog: context.read<RepertoireCatalogRepository>(),
       onActiveChapterMoved: _onActiveChapterMoved,
     );
     _planRunner =

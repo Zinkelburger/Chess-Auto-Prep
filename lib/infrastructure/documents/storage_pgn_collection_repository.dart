@@ -17,13 +17,16 @@ class StoragePgnCollectionRepository implements PgnCollectionRepository {
   @override
   bool get supportsQuarantine => _store.supportsQuarantine;
   @override
-  Future<PgnQuarantineResult> quarantine(PgnSnapshot baseline) async {
+  Future<PgnQuarantineResult> quarantine(
+    PgnSnapshot baseline, {
+    String? allowedRoot,
+  }) async {
     try {
       _checkPath(baseline.path);
     } catch (error) {
       return PgnQuarantineFailed(error);
     }
-    return _store.quarantine(baseline);
+    return _store.quarantine(baseline, allowedRoot: allowedRoot);
   }
 
   void _checkPath(String path) {

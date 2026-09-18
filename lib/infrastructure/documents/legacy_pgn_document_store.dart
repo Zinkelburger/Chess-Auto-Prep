@@ -14,10 +14,12 @@ class LegacyPgnDocumentStore implements PgnDocumentStore {
   @override
   bool get supportsQuarantine => false;
   @override
-  Future<PgnQuarantineResult> quarantine(PgnSnapshot baseline) async =>
-      PgnQuarantineFailed(
-        UnsupportedError('Verified quarantine is unavailable'),
-      );
+  Future<PgnQuarantineResult> quarantine(
+    PgnSnapshot baseline, {
+    String? allowedRoot,
+  }) async => PgnQuarantineFailed(
+    UnsupportedError('Verified quarantine is unavailable'),
+  );
 
   static PgnSnapshot snapshot(String path, String content) => PgnSnapshot(
     path: path,

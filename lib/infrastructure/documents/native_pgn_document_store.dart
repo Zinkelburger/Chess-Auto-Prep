@@ -135,7 +135,10 @@ class NativePgnDocumentStore implements PgnDocumentStore {
   bool get supportsQuarantine => Platform.isLinux;
 
   @override
-  Future<PgnQuarantineResult> quarantine(PgnSnapshot baseline) async {
+  Future<PgnQuarantineResult> quarantine(
+    PgnSnapshot baseline, {
+    String? allowedRoot,
+  }) async {
     if (!supportsQuarantine) {
       return PgnQuarantineFailed(
         UnsupportedError('Verified quarantine is unavailable'),
@@ -144,7 +147,10 @@ class NativePgnDocumentStore implements PgnDocumentStore {
     PgnQuarantineResult? completed;
     try {
       return await _guard(baseline.path, () async {
-        return completed = await _quarantineGuarded(baseline);
+        return completed = await _quarantineGuarded(
+          baseline,
+          allowedRoot: allowedRoot,
+        );
       });
     } catch (error) {
       if (completed case final PgnQuarantined saved) {
@@ -162,7 +168,10 @@ class NativePgnDocumentStore implements PgnDocumentStore {
     }
   }
 
-  Future<PgnQuarantineResult> _quarantineGuarded(PgnSnapshot baseline) async {
+  Future<PgnQuarantineResult> _quarantineGuarded(
+    PgnSnapshot baseline, {
+    String? allowedRoot,
+  }) async {
     String? destination;
     String? recoveryPath;
     var moveAttempted = false;
@@ -171,10 +180,16 @@ class NativePgnDocumentStore implements PgnDocumentStore {
     try {
       canonical = await _path(baseline.path);
       final source = canonical;
+      if (allowedRoot != null &&
+          source != p.normalize(p.absolute(baseline.path))) {
+        throw const UnsafeFileMutation(
+          'Managed deletion refuses symbolic-link aliases.',
+        );
+      }
       final parent = Directory(p.dirname(source));
       final receipt = await FileMutationService.instance.quarantineFile(
         File(source),
-        allowedRoot: parent,
+        allowedRoot: allowedRoot == null ? parent : Directory(allowedRoot),
         quarantineRoot: Directory(p.join(parent.path, '.cap-pgn-history')),
         beforeMove: (path) async {
           destination = path;

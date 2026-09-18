@@ -4,12 +4,18 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:chess_auto_prep/features/repertoires/repositories/repertoire_catalog_repository.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:chess_auto_prep/features/repertoire/controllers/repertoire_outline_controller.dart';
 import 'package:chess_auto_prep/features/repertoire/models/outline_rows.dart';
 import 'package:chess_auto_prep/features/repertoire/models/repertoire_outline.dart';
 import 'package:chess_auto_prep/features/repertoire/services/repertoire_outline_service.dart';
+
+class _Catalog implements RepertoireCatalogRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
 
 OutlineLine _line(
   String chapter,
@@ -208,6 +214,7 @@ void main() {
   group('RepertoireOutlineController.rows', () {
     test('reuses the row list until fold state or filter changes', () async {
       final controller = RepertoireOutlineController(
+        catalog: _Catalog(),
         service: _FixtureService(),
       );
       await controller.open(
@@ -243,6 +250,7 @@ void main() {
 
     test('the active chapter starts open and marked', () async {
       final controller = RepertoireOutlineController(
+        catalog: _Catalog(),
         service: _FixtureService(),
       );
       await controller.open(

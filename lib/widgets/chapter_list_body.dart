@@ -24,6 +24,8 @@ import '../features/repertoires/models/repertoire_metadata.dart';
 import 'package:provider/provider.dart';
 import 'package:path/path.dart' as p;
 import '../features/documents/models/pgn_document.dart';
+import '../features/repertoires/widgets/repertoire_messages.dart';
+import '../l10n/generated/app_localizations.dart';
 import '../features/repertoires/repositories/repertoire_catalog_repository.dart';
 import '../services/storage/storage_factory.dart';
 import '../features/training/models/chapter_layout.dart' show ChapterSummary;
@@ -68,6 +70,7 @@ class _ChapterListBodyState extends State<ChapterListBody> {
   late final _catalog = context.read<RepertoireCatalogRepository>();
   Object? _readRequest;
   bool _creating = false;
+  bool _deleting = false;
   List<RepertoireMetadata> _chapters = [];
 
   /// Course chapters found inside each chapter file, by file path. Absent
@@ -486,27 +489,49 @@ class _ChapterListBodyState extends State<ChapterListBody> {
   }
 
   Future<void> _deleteChapter(RepertoireMetadata chapter) async {
-    final confirmed = await confirmAction(
-      context,
-      title: 'Delete chapter "${chapter.name}"?',
-      message: 'Its file will be moved to Chess Auto Prep recovery trash.',
-      confirmLabel: 'Delete',
-    );
-
-    if (!confirmed) return;
-
+    if (_deleting) return;
+    _deleting = true;
+    final request = _readRequest;
+    bool isCurrent() => mounted && identical(request, _readRequest);
     try {
-      await StorageFactory.instance.deleteFile(chapter.filePath);
-      await _loadChapters();
-    } catch (e) {
-      debugPrint('Delete chapter failed: $e');
-      if (mounted) {
+      final captured = await _catalog.prepareChapterDeletion(chapter.filePath);
+      if (!mounted || !isCurrent()) return;
+      if (captured is! PgnOpened) {
+        await showChapterDeletionResult(
+          context,
+          captured,
+          chapterPath: chapter.filePath,
+        );
+        return;
+      }
+      final confirmed = await confirmAction(
+        context,
+        title: AppLocalizations.of(context).chapterDeleteTitle(chapter.name),
+        message: AppLocalizations.of(context).chapterDeleteConfirm,
+        confirmLabel: AppLocalizations.of(context).delete,
+      );
+      if (!confirmed || !mounted || !isCurrent()) return;
+      final result = await _catalog.deleteChapter(captured.snapshot);
+      if (!mounted) return;
+      if (isCurrent() &&
+          (result is PgnQuarantined || result is PgnQuarantineUncertain)) {
+        unawaited(_loadChapters());
+      }
+      await showChapterDeletionResult(
+        context,
+        result,
+        chapterPath: chapter.filePath,
+      );
+    } catch (_) {
+      if (mounted && isCurrent()) {
         showAppSnackBar(
           context,
-          AppMessages.deleteRepertoireFailed,
+          AppLocalizations.of(context).chapterDeleteFailed,
           isError: true,
         );
       }
+    } finally {
+      _deleting = false;
     }
   }
 }

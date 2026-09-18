@@ -107,8 +107,10 @@ class _InterleavingDocuments implements PgnDocumentStore {
   @override
   bool get supportsQuarantine => delegate.supportsQuarantine;
   @override
-  Future<PgnQuarantineResult> quarantine(PgnSnapshot baseline) =>
-      delegate.quarantine(baseline);
+  Future<PgnQuarantineResult> quarantine(
+    PgnSnapshot baseline, {
+    String? allowedRoot,
+  }) => delegate.quarantine(baseline, allowedRoot: allowedRoot);
   final String destination;
   bool armed = false;
 

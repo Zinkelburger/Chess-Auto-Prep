@@ -304,6 +304,12 @@ class FixtureRepertoireRepository implements RepertoireCatalogRepository {
   @override
   Future<List<RepertoireMetadata>> listChapters(String folderPath) async => [];
   @override
+  Future<PgnOpenResult> prepareChapterDeletion(String path) async =>
+      const PgnMissing();
+  @override
+  Future<PgnQuarantineResult> deleteChapter(PgnSnapshot baseline) async =>
+      PgnQuarantineFailed(UnsupportedError('Fixture deletion unavailable'));
+  @override
   Future<List<ChapterSummary>> chapterSections(String path) async => [];
   @override
   Future<PgnWriteResult> createChapter({

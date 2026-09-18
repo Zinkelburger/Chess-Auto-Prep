@@ -846,6 +846,32 @@ The catalog now lives in `lib/features/repertoires/`: `models/`, `controllers/`,
 The catalog contract also lists a folder's chapters for Builder open/copy
 selection through that same Provider-injected repository. Listing failures
 retain the draft and surface localized feedback.
+
+Manual chapter deletion in the picker and Outline captures a `PgnSnapshot`
+through `RepertoireCatalogRepository.prepareChapterDeletion` before confirming.
+The catalog validates the actual configured Documents/support roots, trusts an
+explicitly configured root alias, and rejects untrusted aliases beneath it.
+`deleteChapter(snapshot)` uses the selected document store's quarantine operation
+with that root constraint; it never delegates to the old path-only storage delete.
+The native store repeats managed-path validation under its existing mutation lock
+and shares the repertoire directory domain guard for lexical and canonical paths.
+External PGN open/save and the splitter's general quarantine remain supported;
+an absent managed root is not created merely to inspect an external document.
+Unsupported hosts refuse manual chapter deletion before mutation.
+
+Only acknowledged quarantine closes Outline folds or follows active selection.
+A changed view cannot inherit those effects. Uncertainty refreshes observed rows
+without treating absence as confirmed removal; its dialog exposes selectable
+original, retained-candidate and raw-backup paths, with no automatic retry.
+Results identify the original chapter even if a still-mounted caller navigated
+elsewhere. Recovery files live beside the source under `.cap-pgn-history`, not
+in OS trash or the catalog's repertoire-folder recovery list. No chapter restore
+UI is implied. Undo for **Move lines to a new chapter** returns the moved lines
+but retains the created chapter; its initial and completion messages say so.
+This avoids deleting later additions or header-only edits based on cached line
+counts. Line transfer/Undo still addresses games by index; it is not certified
+against arbitrary external line replacement or reordering. Folder deletion and
+chapter rename/move retain their existing separate behavior.
 The adapter is the catalog's only storage/creation caller. One constructor-injected
 `RepertoireCatalogController`, owned by the app Provider, keeps independent library
 and trainer read snapshots. It rejects overlapping mutations across both kinds,
@@ -1110,7 +1136,7 @@ RepertoireScreen (composition root — wires controllers to widgets)
   └─ optional TrapWalkthrough overlay
 ```
 
-**Outline panel** (`features/repertoire/widgets/repertoire_outline_panel.dart`): header (Chapters, options menu with counts/metrics, collapse, `+` = New chapter…), visible search field, position filter in a menu; tree rows for folders (nestable, expand/collapse), chapters (active one highlighted; unfold to show lines; course-composer `[White]` sections shown as uppercase section headers), lines (name + move preview + ply count; model games italic). **Selection**: Ctrl/Cmd-click toggles a line, Shift-click extends; a selection lives in one chapter and a drag or menu on any picked line acts on all of them. **Right-click / long-press menus**: empty space → New chapter…, New folder…; folder → New chapter here…, New folder here…, Rename…, Move to…, Delete folder…; chapter → Open, Generate lines into this chapter…, Audit this chapter, Train this chapter, Rename…, Move to folder…, New chapter next to this…, Split into chapters… (course exports only), Delete chapter…; line → Load on the board, Train this line, Rename…, Move [N lines] to chapter…, Move [N lines] to a new chapter…, Delete [N lines] (no confirmation — the toast has Undo). **Drag & drop** (a mouse drags at once; touch after a press): a line onto a chapter row appends it, between two lines (top/bottom half of the row, drawn as an insertion line) lands it there — in another chapter or its own (reorder); lines onto a folder or the foot drop zone (shown only during a drag, = the top level) start a new chapter there, named after the first line; chapters and folders onto folders or the foot zone (a folder cannot be dropped into itself). A closed folder/chapter opens after the pointer rests on it 600 ms; the list auto-scrolls near its edges. Moves and deletions finish quietly. Edit outcomes retain undo callbacks (`OutlineEditOutcome.undo`), but no completion toast or toast action is displayed. A line that crosses files keeps its training progress: `ReviewProgressRepointer` pins `[LineID]` into the game and re-points the review CSVs (shared with the chapter splitter). Names go through the shared `showNameEntryDialog` with `RepertoireOutlineService.validateName` plus a same-folder duplicate check. Line edits address games by file index (`RepertoireLine.gameIndex`) because the move-based line id truncates and collides for lines sharing a long prefix.
+**Outline panel** (`features/repertoire/widgets/repertoire_outline_panel.dart`): header (Chapters, options menu with counts/metrics, collapse, `+` = New chapter…), visible search field, position filter in a menu; tree rows for folders (nestable, expand/collapse), chapters (active one highlighted; unfold to show lines; course-composer `[White]` sections shown as uppercase section headers), lines (name + move preview + ply count; model games italic). **Selection**: Ctrl/Cmd-click toggles a line, Shift-click extends; a selection lives in one chapter and a drag or menu on any picked line acts on all of them. **Right-click / long-press menus**: empty space → New chapter…, New folder…; folder → New chapter here…, New folder here…, Rename…, Move to…, Delete folder…; chapter → Open, Generate lines into this chapter…, Audit this chapter, Train this chapter, Rename…, Move to folder…, New chapter next to this…, Split into chapters… (course exports only), Delete chapter…; line → Load on the board, Train this line, Rename…, Move [N lines] to chapter…, Move [N lines] to a new chapter…, Delete [N lines] (no confirmation — the toast has Undo). **Drag & drop** (a mouse drags at once; touch after a press): a line onto a chapter row appends it, between two lines (top/bottom half of the row, drawn as an insertion line) lands it there — in another chapter or its own (reorder); lines onto a folder or the foot drop zone (shown only during a drag, = the top level) start a new chapter there, named after the first line; chapters and folders onto folders or the foot zone (a folder cannot be dropped into itself). A closed folder/chapter opens after the pointer rests on it 600 ms; the list auto-scrolls near its edges. Edits that carry `OutlineEditOutcome.undo` show their existing completion message and Undo action. Manual chapter deletion separately confirms recovery retention and reports its typed result; uncertainty opens a recovery-evidence dialog. A line that crosses files keeps its training progress: `ReviewProgressRepointer` pins `[LineID]` into the game and re-points the review CSVs (shared with the chapter splitter). Names go through the shared `showNameEntryDialog` with `RepertoireOutlineService.validateName` plus a same-folder duplicate check. Line edits address games by file index (`RepertoireLine.gameIndex`) because the move-based line id truncates and collides for lines sharing a long prefix.
 
 **Chapter split safety:** The app provides one outline service using its selected
 `PgnDocumentStore`. The existing outline controller rejects concurrent structural

@@ -32,6 +32,11 @@
 library;
 
 import 'dart:async';
+import 'package:provider/provider.dart';
+import '../../documents/models/pgn_document.dart';
+import '../../repertoires/repositories/repertoire_catalog_repository.dart';
+import '../../repertoires/widgets/repertoire_messages.dart';
+import '../../../l10n/generated/app_localizations.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HardwareKeyboard;
@@ -775,17 +780,57 @@ class _RepertoireOutlinePanelState extends State<RepertoireOutlinePanel> {
       case 'split':
         await _promptSplitChapter(chapter);
       case 'delete':
-        if (!mounted) return;
-        if (await confirmAction(
+        await _deleteChapter(chapter);
+    }
+  }
+
+  bool _deletingChapter = false;
+  Future<void> _deleteChapter(OutlineChapter chapter) async {
+    if (_deletingChapter) return;
+    _deletingChapter = true;
+    final controller = _c;
+    final revision = controller.viewRevision;
+    bool isCurrent() =>
+        mounted &&
+        identical(controller, _c) &&
+        revision == controller.viewRevision;
+    try {
+      final captured = await context
+          .read<RepertoireCatalogRepository>()
+          .prepareChapterDeletion(chapter.path);
+      if (!mounted || !isCurrent()) return;
+      if (captured is! PgnOpened) {
+        await showChapterDeletionResult(
           context,
-          title: 'Delete chapter "${chapter.name}"?',
-          message:
-              '${chapter.lineCount} line(s) will be moved to Chess Auto Prep '
-              'recovery trash.',
-          confirmLabel: 'Delete',
-        )) {
-          _report(await _c.deleteChapter(chapter.path));
-        }
+          captured,
+          chapterPath: chapter.path,
+        );
+        return;
+      }
+      final confirmed = await confirmAction(
+        context,
+        title: AppLocalizations.of(context).chapterDeleteTitle(chapter.name),
+        message: AppLocalizations.of(context).chapterDeleteConfirm,
+        confirmLabel: AppLocalizations.of(context).delete,
+      );
+      if (!confirmed || !mounted || !isCurrent()) return;
+      final result = await controller.deleteChapter(captured.snapshot);
+      if (!mounted || !identical(controller, _c)) return;
+      await showChapterDeletionResult(
+        context,
+        result,
+        chapterPath: chapter.path,
+      );
+    } catch (_) {
+      if (mounted && isCurrent()) {
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context).chapterDeleteFailed,
+          isError: true,
+        );
+      }
+    } finally {
+      _deletingChapter = false;
     }
   }
 

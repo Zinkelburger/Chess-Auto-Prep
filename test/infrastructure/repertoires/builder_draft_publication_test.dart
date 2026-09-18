@@ -16,8 +16,10 @@ class _InterceptingStore implements PgnDocumentStore {
   @override
   bool get supportsQuarantine => delegate.supportsQuarantine;
   @override
-  Future<PgnQuarantineResult> quarantine(PgnSnapshot baseline) =>
-      delegate.quarantine(baseline);
+  Future<PgnQuarantineResult> quarantine(
+    PgnSnapshot baseline, {
+    String? allowedRoot,
+  }) => delegate.quarantine(baseline, allowedRoot: allowedRoot);
   final Future<PgnWriteResult> Function(PgnSnapshot, String) onSave;
   @override
   Future<PgnOpenResult> open(String path) => delegate.open(path);
