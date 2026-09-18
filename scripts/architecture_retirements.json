@@ -38,7 +38,10 @@
     "lib/widgets/layout/edit_context_tabs.dart",
     "lib/models/edit_context_layout.dart",
     "lib/models/repertoire_mode.dart",
-    "lib/services/edit_context_layout_prefs.dart"
+    "lib/services/edit_context_layout_prefs.dart",
+    "lib/widgets/pgn_with_analysis_pane.dart",
+    "lib/widgets/layout/edit_main_zone.dart",
+    "lib/widgets/repertoire_analysis_dock.dart"
   ],
   "symbols": [
     "PgnBatchWriter",
@@ -76,6 +79,9 @@
     "EditContextView",
     "EditContextTabSpec",
     "kEditContextTabs",
-    "showEditContextLayoutSheet"
+    "showEditContextLayoutSheet",
+    "PgnWithAnalysisPane",
+    "EditMainZone",
+    "RepertoireAnalysisDock"
   ]
 }

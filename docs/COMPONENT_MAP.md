@@ -1052,7 +1052,7 @@ RepertoireScreen (composition root — wires controllers to widgets)
   ├─ Wide (≥ kCompactBreakpoint):
   │     Outline column (resizable, collapsible → "Chapters" strip)
   │       beside a workspace containing:
-  │         Board + NavControls | Moves + Comment (PgnWithAnalysisPane)
+  │         Board + NavControls | Moves + Comment (InteractivePgnEditor)
   │                             | Engine / Database tabs
   │         Database source menu: Engine evals | Repertoire | Opening explorer | Local PGN
   │     Outline content = RepertoireOutlinePanel, or the optional line-metrics view
@@ -1169,9 +1169,10 @@ RepertoireListBody (embedded inline or in RepertoireSelectionScreen)
   → RepertoireCatalogController → RepertoireCatalogRepository.listRepertoires()
   → injected legacy storage adapter → List<RepertoireMetadata>
   → user picks RepertoireMetadata → onSelected callback → setRepertoire / loadRepertoire
-  → RepertoireController (pure board owner, OpeningTree, RepertoireLine list; loadError on failure)
+  → BuilderWorkspaceController (draft/recovery owner) + RepertoireDocumentSession (chapter/serialized writes) + RepertoireBoardController (editable tree/cursor)
   → InteractivePgnEditor (pure view: tree + path props, action callbacks; memoized move widgets; context-menu path highlighting)
-  → EditMainZone (onAutoSave, onDirty, onCopyToClipboard, onViewInLines adapters)
+  → Screen binds title/edit commands directly; workspace observes board edits for autosave
+  → Screen supplies clipboard feedback and View in Lines; no intermediate editor wrappers
   → OpeningTreeWidget (unchanged — read-only statistics tree)
   → injected RepertoireDocumentRepository → DocumentRepertoireRepository → shared PgnDocumentStore (native on Linux)
   → injected RepertoireDecoder → IsolateRepertoireDecoder → atomic application of chapter load results
@@ -2630,7 +2631,6 @@ and does not change active editor, document or save ownership.
 | File | Purpose |
 |------|---------|
 | `layout/board_zone.dart` | Board wrapper; app-bar trap navigation via `BoardZoneControls` |
-| `layout/edit_main_zone.dart` | PGN editor column shell (clipboard + view-in-lines adapters) |
 | `layout/edit_context_split_handle.dart` | Draggable divider retained by the PGN Viewer opening-tree panel |
 | `layout/bottom_pane.dart` | VS Code-style resizable, collapsible bottom pane with tabs (Findings/Jobs); collapsed by default, opens at max height (60%) to minimise board area, auto-opens on audit/generation start, drag-resizable, badge counts |
 | `layout/repertoire_status_bar.dart` | Bottom metrics bar (badges open bottom pane tabs) |
@@ -2649,7 +2649,6 @@ and does not change active editor, document or save ownership.
 | `generation/eval_sources_controller.dart` | `EvalSourcesController` — the eval lookup chain's settings (local ChessDB file, ChessDB API quota/concurrency, subtree skip, depth floor) plus today's API spend; `applyConfig` ↔ `applyTo` are the two halves of the config round trip |
 | `generation/skeleton_plan_controller.dart` | `SkeletonPlanController` + `kStructureVetoes` — the typed lines and active vetoes behind `SkeletonPlanCard`; `loadPlan` / `currentPlan(playAsWhite:)` |
 | `repertoire_generation_tab.dart` | Build orchestration + progress UI; embeds `GenerationConfigForm` via `GlobalKey`; receives `GenerationSessionController`; sets `controller.setPartialSaveContext()` at build start so pause/cancel from any source saves partial tree |
-| `repertoire_analysis_dock.dart` | Resizable Engine/Expectimax dock above PGN |
 | `repertoire_lines_browser.dart` | Filter/sort/group lines; 300 ms search debounce; typed `LineSortBy`/`LineMetricsFilter`; filter reset uses single `setState` |
 | `interactive_pgn_editor.dart` | Tree-structured PGN editor sharing the viewer's borderless move selection, hover, and NAG styling; prose and indented variations break into reading rows. Context menu supports comments, promotion, copy and delete; memoizes movetext by tree identity/version while selection repaints only affected chips. I/O via `onAutoSave`/`onDirty`/`onCopyToClipboard`/`onViewInLines` callbacks; shared Notes editor below the moves |
 | `opening_tree_widget.dart` | Compact tree navigator. Continuations come from `OpeningTree.continuations` (played moves plus one-ply transpositions, marked `≈` / "transp.") |
@@ -2664,7 +2663,7 @@ and does not change active editor, document or save ownership.
 |------|---------|
 | `engine/unified_engine_pane.dart` | MultiPV table, hoverable PV via `ClickableMoveLineWidget` (numbers and inter-move spacing share each move’s full hit target); FEN changes schedule analysis post-frame (avoids setState-during-build); DB column hidden; best eval persisted to `EvalCache` via `_persistBestEvalToCache()` |
 | `engine/expectimax_lines_pane.dart` | Position table from the built tree: every move with practical (expectimax) value beside engine eval, ★ on the chosen move, continuation; honest empty states (no tree / not in tree / leaf). Never runs the engine |
-| `engine/expectimax_panel_host.dart` | Thin wrapper binding [ExpectimaxLinesPane] to a [RepertoireController] cursor (or `fenOverride`); used by [EditContextZone], [InlineExpectimaxBar] and [RepertoireAnalysisDock] |
+| `engine/expectimax_panel_host.dart` | Thin wrapper binding [ExpectimaxLinesPane] to a [BuilderWorkspaceController] cursor (or `fenOverride`); used by [EditContextZone], [InlineExpectimaxBar]  |
 | `engine/inline_engine_bar.dart` | Compact engine for PGN viewer and tactics; reserves a fixed height for the configured MultiPV count while enabled, including loading and positions with fewer legal moves; settings button opens `AnalysisSettingsContext.tacticsEngine` (depth + multiPv only); writes Stockfish eval to `EvalCache` after discovery completes |
 | `engine/inline_expectimax_bar.dart` | Compact toggleable expectimax bar for right pane; wraps `ExpectimaxPanelHost(compact: true)` with toggle switch and settings gear |
 | `engine/engine_toggle_button.dart` | Legacy bolt toggle widget (unused; engine on/off is in Settings) |
@@ -2702,7 +2701,6 @@ and does not change active editor, document or save ownership.
 | `games_list_widget.dart` | Selectable games list |
 | `fullscreen_game_view.dart` | Fullscreen game + board view |
 | `fen_list_widget.dart` | Ranked positions list of Player Analysis. The Bad/Good Eval sorts are always offered; picked before any engine pass, the empty state explains and carries the **Analyze with engine…** button (`onAnalyzeWithEngine`) |
-| `pgn_with_analysis_pane.dart` | PGN + analysis dock split |
 | `pgn_with_engine.dart` | PGN pane with inline engine bar |
 | `pgn_viewer_widget.dart` | Game list + board for viewer; `_variationsByPly` holds mainline + **multiple ephemeral RAVs** per branch point (`addEphemeralMove` / `clearEphemeralMoves`); movetext via `PgnMovetextView` (near-white `PgnTextStyles`, comments/variations on own rows; reading column capped at 900 logical pixels with 24–32 pixel side insets, prose capped at 640 pixels for readability); larger branch chips + Return-to-mainline + nav icons; **Edit mode** (`editMode` prop): NAG inline display, annotation panel, right-click context menu with promote/delete gated by `protectOriginal`; `_toggleNag` modifies `PgnNodeData.nags` and persists via `buildGameMovetext` |
 | `chess_core/pgn/pgn_analysis_variations.dart` | Converts classified legacy/new engine PVs to standard RAVs, reuses existing branches, and synchronizes the `[%bestline]` display reference after edits; shared by full review, tactics annotation and viewer loading. |

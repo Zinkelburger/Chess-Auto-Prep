@@ -4,7 +4,8 @@ import 'package:chess_auto_prep/core/app_state.dart';
 import 'package:chess_auto_prep/services/storage/app_paths.dart';
 import 'package:chess_auto_prep/widgets/interactive_pgn_editor.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_annotation_panel.dart';
-import 'package:chess_auto_prep/widgets/pgn_with_analysis_pane.dart';
+import 'package:chess_auto_prep/app/builder_lifetime.dart';
+import 'package:provider/provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -43,10 +44,11 @@ void main() {
       app.switchToBuilder(repertoirePath: file.path);
       await ready(tester, find.text('Projection line'));
       await tester.tap(find.text('Projection line').first);
-      await ready(tester, find.byType(PgnWithAnalysisPane));
+      await ready(tester, find.byType(InteractivePgnEditor));
       final owner = tester
-          .widget<PgnWithAnalysisPane>(find.byType(PgnWithAnalysisPane))
-          .controller;
+          .element(find.byType(InteractivePgnEditor))
+          .read<BuilderLifetime>()
+          .workspace;
       final before = owner.board.tree;
       final cursor = owner.board.path;
       expect(before, isA<MoveTreeSnapshot>());

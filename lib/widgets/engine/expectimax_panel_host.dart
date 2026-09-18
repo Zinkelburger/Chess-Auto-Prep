@@ -1,8 +1,7 @@
 /// The expectimax pane wired to a [BuilderWorkspaceController]: follows the cursor
 /// (or a caller-supplied FEN) and plays moves back into the controller.
 ///
-/// Shared by [RepertoireAnalysisDock], [InlineExpectimaxBar] and
-/// [EditContextZone] so all three show the same thing for a position.
+/// Used by [InlineExpectimaxBar] to show the current position.
 library;
 
 import 'package:flutter/material.dart';

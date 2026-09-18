@@ -32,13 +32,14 @@ import 'package:chess_auto_prep/widgets/escape_to_pop_scope.dart';
 
 import 'dart:async';
 import 'dart:io';
-import 'package:chess_auto_prep/widgets/pgn_with_analysis_pane.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_annotation_panel.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:chess_auto_prep/services/game_store/game_store_service.dart';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart' show kSecondaryMouseButton;
+import 'package:chess_auto_prep/widgets/pgn/movetext_primitives.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -633,8 +634,9 @@ void main() {
       await tester.tap(find.text('Italian Game'));
       await _settle(tester);
       final controller = tester
-          .widget<PgnWithAnalysisPane>(find.byType(PgnWithAnalysisPane))
-          .controller;
+          .element(find.byType(RepertoireScreen))
+          .read<BuilderLifetime>()
+          .workspace;
       final editor = tester.state(find.byType(InteractivePgnEditor));
       final board = controller.board.tree;
       final current = controller.document.currentRepertoire;
@@ -655,6 +657,57 @@ void main() {
     },
   );
 
+  testWidgets('Builder editor copies PGN and edits the workspace title', (
+    tester,
+  ) async {
+    await _pumpScreen(tester, repertoirePath: _writeRepertoire(tester));
+    await _settleUntil(tester, find.text('Italian Game'));
+    await tester.tap(find.text('Italian Game'));
+    await _settle(tester);
+    final workspace = tester
+        .element(find.byType(RepertoireScreen))
+        .read<BuilderLifetime>()
+        .workspace;
+    final editor = tester.state(find.byType(InteractivePgnEditor));
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Italian Game'),
+      'My Italian preparation',
+    );
+    await _settle(tester);
+    expect(workspace.title, 'My Italian preparation');
+    expect(tester.state(find.byType(InteractivePgnEditor)), same(editor));
+
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied = (call.arguments as Map)['text'] as String;
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    final move = find.descendant(
+      of: find.byType(InteractivePgnEditor),
+      matching: find.byWidgetPredicate((w) => w is MoveChip && w.san == 'e4'),
+    );
+    await tester.tap(move, buttons: kSecondaryMouseButton);
+    await _settle(tester, cycles: 8);
+    expect(find.text('View in Lines'), findsOneWidget);
+    await tester.tap(find.text('Copy Whole Line'));
+    await _settle(tester, cycles: 8);
+    expect(copied, contains('e4 e5 2. Nf3 Nc6 3. Bc4'));
+    // The shared clipboard helper intentionally keeps successful copies silent.
+    expect(find.text('Line copied to clipboard'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('reload preserves the board editor while the chapter loads', (
     tester,
   ) async {
@@ -665,8 +718,9 @@ void main() {
       decoder: decoder,
     );
     final controller = tester
-        .widget<PgnWithAnalysisPane>(find.byType(PgnWithAnalysisPane))
-        .controller;
+        .element(find.byType(RepertoireScreen))
+        .read<BuilderLifetime>()
+        .workspace;
     await _settleUntil(tester, find.text('Italian Game'));
     await tester.tap(find.text('Italian Game'));
     await _settle(tester);

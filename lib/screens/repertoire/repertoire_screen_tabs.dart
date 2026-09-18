@@ -275,34 +275,23 @@ mixin _RepertoireTabContent
     );
   }
 
-  Widget _buildPgnTab() {
-    return PgnWithAnalysisPane(
-      controller: _controller,
-      tree: _controller.board.tree,
-      currentPath: _controller.board.path,
-      onJump: (path) => _controller.board.jump(path),
-      onCommentChanged: (path, comment) =>
-          _controller.board.setCommentAtPath(path, comment),
-      onToggleNag: _controller.board.toggleNagAtPath,
-      onDelete: (path) => _controller.deleteDraftBranch(path),
-      onPromote: (path) => _controller.board.promoteVariation(path),
-      onMakeMainLine: (path) => _controller.board.makeMainLine(path),
-      isEditingExistingLine: _controller.document.selectedPgnLine != null,
-      onImportPgn: _importPgn,
-      onViewInLines: _showLinesSurface,
-      onReload: _reloadRepertoire,
-      generatedTree: _generationController.generatedTree,
-      treeConfig: _generationController.generatedTreeConfig,
-      fenMap: _generationController.generatedTreeFenMap,
-      generation: _generationController,
-      boardPreview: _boardPreview,
-      coherenceResult: _generationController.coherenceService.result,
-      isAnalysisActive: true,
-      embedAnalysisDock: false,
-      showToolbar: false,
-      ephemeralTitle: _controller.annotatedLineLabel,
-    );
-  }
+  Widget _buildPgnTab() => InteractivePgnEditor(
+    tree: _controller.board.tree,
+    currentPath: _controller.board.path,
+    lineTitle: _controller.title,
+    onJump: _controller.board.jump,
+    onCommentChanged: _controller.board.setCommentAtPath,
+    onToggleNag: _controller.board.toggleNagAtPath,
+    onDelete: _controller.deleteDraftBranch,
+    onPromote: _controller.board.promoteVariation,
+    onMakeMainLine: _controller.board.makeMainLine,
+    isEditingExistingLine: _controller.document.selectedPgnLine != null,
+    onTitleChanged: _controller.setTitle,
+    onCopyToClipboard: (text, message) =>
+        copyToClipboard(context, text, successMessage: message),
+    onViewInLines: _showLinesSurface,
+    ephemeralTitle: _controller.annotatedLineLabel,
+  );
 
   Widget _buildLinesTabContent() {
     return Stack(
