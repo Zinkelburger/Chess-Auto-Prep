@@ -169,7 +169,7 @@ enum PgnViewerTab { game, line, explorer, analysis }
 /// Open a PGN collection in the PGN Viewer.
 final class OpenPgnViewer extends PendingHandoff {
   const OpenPgnViewer({
-    required this.pgnPath,
+    required String this.pgnPath,
     this.sliceFen,
     this.gameId,
     this.gameIndex,
