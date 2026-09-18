@@ -1,4 +1,5 @@
 import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import '../../support/runtime_settings.dart';
 import 'package:chess_auto_prep/services/opening_catalog.dart';
 import 'package:chess_auto_prep/constants/chess_constants.dart';
@@ -145,6 +146,8 @@ void main() {
       tester,
       settings,
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Builder(
           builder: (context) => Scaffold(
             body: ElevatedButton(
@@ -416,6 +419,8 @@ void main() {
       tester,
       settings,
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: PlanBuildScreen(
           isWhite: false,
           repertoireName: 'French',
@@ -456,6 +461,8 @@ void main() {
         tester,
         settings,
         MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: PlanBuildScreen(
             isWhite: false,
             repertoireName: 'French',

@@ -1367,6 +1367,8 @@ The Builder opens configuration explicitly. The form keeps its existing initial-
 
 **Where the form's sub-editor state lives.** The three sub-editors are views over controllers `GenerationConfigFormState` owns — `EvalSourcesController`, `SkeletonPlanController`, `PgnSourcesController` — not `GlobalKey`-addressed widget state. Each of their widgets sits behind an expander or a build-source switch, so none is guaranteed to be mounted when the form seeds it (`_applyInitialConfig`) or reads it back (`toConfig`); owning the state lets the widgets be built conditionally and removes the post-frame seeding hop. `EvalSourcesController` pairs `applyConfig` with `applyTo`, the two halves of the config round trip, in one file.
 
+The form retains uneditable settings in its immutable seed configuration rather than mirroring them in hidden text controllers or booleans. Presets replace that seed; visible controls supply explicit overrides. Existing defaults, range limits, clamps, text trimming and mode-specific normalization remain in force. Start validates editable fields first, then inherited values with the same range validator, so a visible error takes priority when both are invalid. The inherited error still blocks Start after the visible field is corrected.
+
 "Finish Now" stops Phase 1 BFS and proceeds to Phase 2 on the partial tree; discarding an unfinished build asks for confirmation first.
 
 See `docs/ALGORITHM.md` for algorithm detail.
