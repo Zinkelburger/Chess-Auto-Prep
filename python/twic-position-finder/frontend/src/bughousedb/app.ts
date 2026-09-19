@@ -11,6 +11,7 @@ import {
   ApiError, bookPosition, bookTicket, bookUpload,
   type BookMove, type BookPosition, type BookScore, type Clock, type RawSearch, type Team,
 } from '../lib/api';
+import { balance, checkFen, parseReserve, splitBoard } from './setup';
 
 type BoardName = 'A' | 'B';
 type Colour = 'white' | 'black';
@@ -174,6 +175,7 @@ function renderBoard(name: BoardName) {
     const square = files[col] + ranks[row];
     const piece = data.pieces[square];
     const button = document.createElement('button');
+    button.type = 'button';  // inside the setup form
     button.className = `bdb-square${(row + col) % 2 ? ' dark' : ''}`;
     if (marks.includes(square)) button.classList.add('last');
     if (selected?.board === name && selected.from === square) button.classList.add('selected');
@@ -209,6 +211,7 @@ function renderBoard(name: BoardName) {
       const count = [...pocket].filter((c) => c.toLowerCase() === p).length;
       if (!count) continue;
       const button = document.createElement('button');
+      button.type = 'button';
       button.className = 'bdb-pocket';
       const letter = p.toUpperCase();
       button.append(image(colour === 'white' ? letter : p), document.createTextNode(String(count)));
@@ -275,6 +278,7 @@ function renderHistory(name: BoardName) {
       list.append(row);
     }
     const b = document.createElement('button');
+    b.type = 'button';
     b.textContent = step.san;
     b.title = `Player ${SEAT[name][step.colour!]}`;
     if (i > ply) b.classList.add('future');
@@ -316,7 +320,7 @@ function render() {
   renderBoards(); renderTables(); renderHistory('A'); renderHistory('B'); renderNav(); renderMissing();
   // Only a browser analysis is worth a note: it is much shallower than the book.
   el('bdb-source').textContent = cur?.meta && cur.meta.source !== 'desktop' ? 'Analyzed in a browser: a quick, shallower search.' : '';
-  el<HTMLInputElement>('bdb-fen').value = cur?.fen ?? line[ply].fen;
+  fillSetup(cur?.fen ?? line[ply].fen);
 }
 
 function setHover(m: BookMove | null) { hover = m; renderArrow('A'); renderArrow('B'); }
@@ -338,9 +342,12 @@ async function load() {
     if (line[ply] !== step) return;  // navigated on while this was loading
     cur = pos;
     if (!job) setStatus('');
+    el('bdb-fen-error-A').textContent = '';
   } catch (e) {
+    if (line[ply] !== step) return;
     cur = null;
-    setStatus(e instanceof ApiError ? e.message : 'Could not reach the book.', true);
+    // Shown under the setup boxes: the missing-position strip is hidden without a position.
+    el('bdb-fen-error-A').textContent = e instanceof ApiError ? e.message : 'Could not reach the book.';
   }
   render();
 }
@@ -376,6 +383,73 @@ function clickSquare(board: BoardName, square: string) {
   }
   selected = own.some((m) => !m.uci.includes('@') && m.uci.startsWith(square)) ? { board, from: square } : null;
   renderBoards();
+}
+
+// ── Setting a position by hand ────────────────────────────────────
+
+const input = (id: string) => el<HTMLInputElement>(id);
+
+function fillSetup(dual: string) {
+  const boards = dual.split('|');
+  (['A', 'B'] as BoardName[]).forEach((name, i) => {
+    const setup = splitBoard(boards[i] ?? '');
+    input(`bdb-fen-${name}`).value = setup.fen;
+    input(`bdb-reserve-${name}-white`).value = setup.white;
+    input(`bdb-reserve-${name}-black`).value = setup.black;
+  });
+  renderBalance();
+}
+
+/** What the setup boxes leave unplaced, live as they are edited. */
+function renderBalance() {
+  const reserves = (['A', 'B'] as BoardName[]).flatMap((name) => (['white', 'black'] as Colour[]).map((colour) => {
+    const r = parseReserve(input(`bdb-reserve-${name}-${colour}`).value);
+    return 'error' in r ? '' : colour === 'white' ? r.pieces : r.pieces.toLowerCase();
+  })).join('');
+  const b = balance([input('bdb-fen-A').value, input('bdb-fen-B').value], reserves);
+  const out = el('bdb-balance');
+  out.replaceChildren();
+  if (!b) return;
+  const part = (label: string, sides: Record<Colour, string>, cls: string) => {
+    const text = (['white', 'black'] as Colour[]).filter((c) => sides[c]).map((c) => `${c === 'white' ? 'White' : 'Black'}: ${sides[c]}`).join(' · ');
+    if (!text) return;
+    const span = document.createElement('span');
+    span.className = cls;
+    span.textContent = `${label} ${text}`;
+    out.append(span);
+  };
+  part('To place —', b.missing, 'missing');
+  part('Too many —', b.extra, 'extra');
+  if (!out.childElementCount) out.textContent = 'All 64 pieces placed';
+}
+
+/** Both boards from their boxes; a pasted dual FEN in either box fills both. */
+function setPosition() {
+  for (const name of ['A', 'B'] as BoardName[]) {
+    const pasted = input(`bdb-fen-${name}`).value;
+    if (pasted.includes('|')) { fillSetup(pasted); break; }
+  }
+  const boards: string[] = [];
+  let ok = true;
+  for (const name of ['A', 'B'] as BoardName[]) {
+    const errors: string[] = [];
+    const fen = checkFen(input(`bdb-fen-${name}`).value);
+    input(`bdb-fen-${name}`).setAttribute('aria-invalid', String('error' in fen));
+    if ('error' in fen) errors.push(fen.error);
+    const pockets: string[] = [];
+    for (const colour of ['white', 'black'] as Colour[]) {
+      const box = input(`bdb-reserve-${name}-${colour}`);
+      const reserve = parseReserve(box.value);
+      box.setAttribute('aria-invalid', String('error' in reserve));
+      if ('error' in reserve) errors.push(`Player ${SEAT[name][colour]}: ${reserve.error}`);
+      else pockets.push(colour === 'white' ? reserve.pieces : reserve.pieces.toLowerCase());
+    }
+    // A pocket pasted in brackets counts too, beside what the reserve boxes say.
+    if (!('error' in fen)) boards.push(`${fen.placement}[${pockets.join('')}${fen.pocket}] ${fen.rest}`);
+    el(`bdb-fen-error-${name}`).textContent = errors.join(' ');
+    ok &&= errors.length === 0;
+  }
+  if (ok) reset(boards.join('|'));
 }
 
 // ── Drag and drop ─────────────────────────────────────────────────
@@ -501,11 +575,10 @@ el('bdb-first').onclick = () => go(0);
 el('bdb-prev').onclick = () => go(ply - 1);
 el('bdb-next').onclick = () => go(ply + 1);
 el('bdb-last').onclick = () => go(line.length - 1);
-el<HTMLFormElement>('bdb-fen-form').onsubmit = (e) => {
-  e.preventDefault();
-  const fen = el<HTMLInputElement>('bdb-fen').value.trim();
-  if (fen) reset(fen);
-};
+el<HTMLFormElement>('bdb-fen-form').onsubmit = (e) => { e.preventDefault(); setPosition(); };
+for (const input of document.querySelectorAll<HTMLInputElement>('.bdb-setup input')) {
+  input.oninput = () => { input.removeAttribute('aria-invalid'); renderBalance(); };
+}
 document.addEventListener('keydown', (e) => {
   const t = e.target as HTMLElement;
   if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA') return;

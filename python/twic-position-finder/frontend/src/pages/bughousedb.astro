@@ -14,7 +14,7 @@ const NAV = [
     <h1 class="visually-hidden">BughouseDB</h1>
     <noscript><p class="alert alert-error">Enable JavaScript to browse the book.</p></noscript>
 
-    <div class="bdb-left">
+    <form id="bdb-fen-form" class="bdb-left" novalidate>
       <div class="bdb-boards">
         {['A', 'B'].map((name, i) => (
           <section class="bdb-board-panel" aria-label={`Board ${i + 1}`}>
@@ -25,23 +25,35 @@ const NAV = [
             </div>
             <div id={`bdb-player-bottom-${name}`} class="bdb-player"></div>
             <ol id={`bdb-history-${name}`} class="bdb-history" aria-label={`Moves on board ${i + 1}`}></ol>
+            <div class="bdb-setup">
+              <input id={`bdb-fen-${name}`} class="mono" spellcheck="false" autocomplete="off" placeholder={`Board ${i + 1} FEN`} aria-label={`Board ${i + 1} FEN`} />
+              <div class="bdb-reserves">
+                {(name === 'A' ? [['white', 'A'], ['black', 'B']] : [['white', 'D'], ['black', 'C']]).map(([colour, seat]) => (
+                  <label>
+                    <span>{seat}</span>
+                    <input id={`bdb-reserve-${name}-${colour}`} class="mono" spellcheck="false" autocomplete="off" placeholder="2N Q P" aria-label={`Player ${seat}'s reserve pieces, like 2N Q P`} />
+                  </label>
+                ))}
+              </div>
+              <p id={`bdb-fen-error-${name}`} class="bdb-fen-error" role="alert"></p>
+            </div>
           </section>
         ))}
       </div>
       <div class="bdb-controls">
         <div class="bdb-nav">
           {NAV.map((b) => (
-            <button id={`bdb-${b.id}`} class="btn btn-outline btn-icon" title={b.label} aria-label={b.label}>
+            <button type="button" id={`bdb-${b.id}`} class="btn btn-outline btn-icon" title={b.label} aria-label={b.label}>
               <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d={b.path} /></svg>
             </button>
           ))}
         </div>
-        <form id="bdb-fen-form" class="bdb-fen">
-          <input id="bdb-fen" class="mono" spellcheck="false" placeholder="FEN board 1 | FEN board 2" aria-label="Position: FEN of board 1 | FEN of board 2" />
-          <button class="btn btn-outline" type="submit">Load</button>
-        </form>
+        <p id="bdb-balance" class="bdb-balance" aria-live="polite"></p>
+        <span class="bdb-info" tabindex="0" role="img" aria-label="How to set a position"
+          title={'Each box takes one board’s ordinary FEN. The small boxes are each player’s reserve: P, N, B, R, Q with counts, like 2N Q P.\nPasting a two-board FEN (board 1 | board 2) fills both boards.\nBughouse never loses a piece, so all 64 are on a board or in a reserve; the line beside this shows what is left to place.'}>i</span>
+        <button class="btn btn-outline" type="submit">Set position</button>
       </div>
-    </div>
+    </form>
 
     <div class="bdb-right">
       <p id="bdb-source" class="bdb-source dim"></p>
