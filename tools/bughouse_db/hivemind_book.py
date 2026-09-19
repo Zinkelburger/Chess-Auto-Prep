@@ -536,7 +536,9 @@ def push(args: argparse.Namespace) -> int:
         req = urllib.request.Request(
             args.url.rstrip("/") + "/api/bughousedb/import",
             data=json.dumps({"positions": batch, "replace": args.replace}).encode(),
-            headers={"Content-Type": "application/json", "X-API-Key": key}, method="POST")
+            # Cloudflare turns away Python's default user agent.
+            headers={"Content-Type": "application/json", "X-API-Key": key,
+                     "User-Agent": "chess-auto-prep hivemind_book"}, method="POST")
         with urllib.request.urlopen(req, timeout=120) as resp:
             out = json.load(resp)
         totals["added"] += out["added"]
