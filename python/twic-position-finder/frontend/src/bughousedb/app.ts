@@ -48,6 +48,9 @@ let cur: BookPosition | null = null;
 let selected: { board: BoardName; from?: string; drop?: string } | null = null;
 let hover: BookMove | null = null;
 let job: { fen: string; cancelled: boolean } | null = null;
+/** A piece being dragged from a square or a pocket; `ghost` exists once it has moved. */
+let drag: { board: BoardName; from?: string; drop?: string; piece: string; x: number; y: number; ghost?: HTMLImageElement } | null = null;
+let swallowClick = false;
 
 // ── Reading a dual FEN for display ────────────────────────────────
 
@@ -175,6 +178,12 @@ function renderBoard(name: BoardName) {
     if (marks.includes(square)) button.classList.add('last');
     if (selected?.board === name && selected.from === square) button.classList.add('selected');
     if (targets.includes(square)) button.classList.add('target');
+    if (drag?.ghost && drag.board === name && drag.from === square) button.classList.add('dragging');
+    button.dataset.board = name;
+    button.dataset.square = square;
+    if (piece && cur?.moves.some((m) => m.board === name && m.uci.startsWith(square))) {
+      button.onpointerdown = (e) => startDrag(e, { board: name, from: square, piece });
+    }
     button.setAttribute('aria-label', `Board ${name === 'A' ? 1 : 2} ${square}${piece ? ` ${piece === piece.toUpperCase() ? 'white' : 'black'} ${PIECE_NAMES[piece.toLowerCase()]}` : ''}`);
     if (piece) button.append(image(piece));
     if (row === 7) { const f = document.createElement('span'); f.className = 'bdb-coord file'; f.textContent = files[col]; button.append(f); }
@@ -207,6 +216,7 @@ function renderBoard(name: BoardName) {
       button.setAttribute('aria-pressed', String(selected?.board === name && selected.drop === letter));
       button.disabled = turn !== colour || !cur?.moves.some((m) => m.board === name && m.uci.startsWith(`${letter}@`));
       button.onclick = () => { selected = selected?.board === name && selected.drop === letter ? null : { board: name, drop: letter }; renderBoards(); };
+      if (!button.disabled) button.onpointerdown = (e) => startDrag(e, { board: name, drop: letter, piece: colour === 'white' ? letter : p });
       box.append(button);
     }
   }
@@ -367,6 +377,51 @@ function clickSquare(board: BoardName, square: string) {
   selected = own.some((m) => !m.uci.includes('@') && m.uci.startsWith(square)) ? { board, from: square } : null;
   renderBoards();
 }
+
+// ── Drag and drop ─────────────────────────────────────────────────
+// A press that moves more than a few pixels becomes a drag; a still press
+// stays a click, so click-to-move keeps working.
+
+function startDrag(e: PointerEvent, from: { board: BoardName; from?: string; drop?: string; piece: string }) {
+  if (e.button !== 0 || !cur) return;
+  e.preventDefault();
+  drag = { ...from, x: e.clientX, y: e.clientY };
+}
+
+document.addEventListener('pointermove', (e) => {
+  if (!drag) return;
+  if (!drag.ghost) {
+    if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 5) return;
+    const size = el(`bdb-board-${drag.board}`).getBoundingClientRect().width / 8;
+    drag.ghost = image(drag.piece);
+    drag.ghost.className = 'bdb-ghost';
+    drag.ghost.style.width = drag.ghost.style.height = `${size}px`;
+    document.body.append(drag.ghost);
+    selected = { board: drag.board, from: drag.from, drop: drag.drop };
+    renderBoards();
+  }
+  drag.ghost.style.left = `${e.clientX}px`;
+  drag.ghost.style.top = `${e.clientY}px`;
+});
+
+function endDrag(e: PointerEvent) {
+  const d = drag;
+  drag = null;
+  if (!d?.ghost) return;
+  d.ghost.remove();
+  swallowClick = true;
+  setTimeout(() => { swallowClick = false; });
+  const target = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest<HTMLElement>('.bdb-square');
+  const hit = target?.dataset.board === d.board
+    ? candidates(d.board).filter((m) => m.uci.slice(2, 4) === target.dataset.square) : [];
+  if (hit.length) { play(hit.find((m) => m.uci.endsWith('q')) ?? hit[0]); return; }
+  selected = null;
+  renderBoards();
+}
+document.addEventListener('pointerup', endDrag);
+document.addEventListener('pointercancel', () => { drag?.ghost?.remove(); drag = null; selected = null; renderBoards(); });
+// The click that ends a drag is not a second, separate click.
+document.addEventListener('click', (e) => { if (swallowClick) { swallowClick = false; e.stopPropagation(); e.preventDefault(); } }, true);
 
 // ── Analysing a missing position in this browser ──────────────────
 

@@ -23,6 +23,9 @@
 .bdb-board { display: grid; grid-template: repeat(8, 1fr) / repeat(8, 1fr); width: 100%; height: 100%; }
 .bdb-square { position: relative; min-width: 0; min-height: 0; padding: 0; border: 0; border-radius: 0; background: var(--light); cursor: pointer; }
 .bdb-square.dark { background: var(--dark); }
+.bdb-square.dragging img { opacity: 0.3; }
+.bdb-board, .bdb-pocket:not(:disabled) { touch-action: none; }
+.bdb-ghost { position: fixed; z-index: 1000; pointer-events: none; transform: translate(-50%, -50%); cursor: grabbing; }
 .bdb-square::before { content: ''; position: absolute; inset: 0; }
 .bdb-square.last::before { background: var(--last-move); }
 .bdb-square.selected::before { background: var(--selected); }

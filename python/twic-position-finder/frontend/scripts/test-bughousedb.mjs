@@ -38,6 +38,22 @@ try {
   assert.equal(await page.$$eval('#bdb-arrow-A line', (s) => s.length), 1);
   assert.ok((await page.$eval('#bdb-moves-A tr:first-child td:nth-child(3)', (n) => n.title)).length > 5);
 
+  // Drag a piece: A e2 to e4, then step back.
+  const centre = async (square) => {
+    const box = await (await page.$(`#bdb-board-A [data-square="${square}"]`)).boundingBox();
+    return [box.x + box.width / 2, box.y + box.height / 2];
+  };
+  await page.mouse.move(...await centre('e2'));
+  await page.mouse.down();
+  await page.mouse.move(...await centre('e3'), { steps: 4 });
+  await page.mouse.move(...await centre('e4'), { steps: 4 });
+  await page.mouse.up();
+  await page.waitForFunction(() => document.querySelector('#bdb-mover-A').textContent === 'Move: Player B');
+  assert.equal(await page.$eval('#bdb-history-A button', (b) => b.textContent), 'e4');
+  assert.equal(await page.$$eval('.bdb-ghost', (g) => g.length), 0);
+  await page.keyboard.press('ArrowLeft');
+  await page.waitForFunction(() => document.querySelector('#bdb-mover-A').textContent === 'Move: Player A');
+
   // A move with no stored analysis (the first rare move no earlier run
   // uploaded): the tables still list its replies.
   let missing = false;
@@ -45,7 +61,7 @@ try {
     const row = await page.$$eval('#bdb-moves-A tr', (trs, want) => trs.findIndex((tr) => tr.cells[0].textContent === want), san);
     assert.ok(row >= 0, san);
     await page.click(`#bdb-moves-A tr:nth-child(${row + 1})`);
-    await page.waitForFunction(() => document.querySelectorAll('#bdb-history-A button').length === 1 && document.querySelector('#bdb-moves-B tr'));
+    await page.waitForFunction(() => document.querySelector('#bdb-mover-A').textContent === 'Move: Player B');
     missing = !(await page.$eval('#bdb-missing', (n) => n.hidden));
     if (missing) break;
     await page.click('#bdb-prev');
