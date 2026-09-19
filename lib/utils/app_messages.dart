@@ -26,6 +26,29 @@ class AppMessages {
   static const clipboardWriteFailed = 'Could not copy to clipboard.';
   static const renameLineFailed = 'Could not rename line.';
 
+  /// A download that never reached the server. Naming the site and the
+  /// connection is the difference between "try again" and knowing that
+  /// clicking again will not help until the network is back.
+  static String downloadFailed(Object error, {required String site}) =>
+      _looksOffline(error)
+      ? 'Could not reach $site. Check your internet connection and try again.'
+      : 'Could not download from $site. Please try again.';
+
+  /// Whether [error] is the machine failing to reach the network at all,
+  /// rather than the site answering with something unusable. Matched on the
+  /// message because `package:http` wraps the socket failure in its own
+  /// `ClientException`.
+  static bool _looksOffline(Object error) {
+    if (error is TimeoutException) return true;
+    final text = error.toString();
+    return text.contains('SocketException') ||
+        text.contains('Failed host lookup') ||
+        text.contains('Connection refused') ||
+        text.contains('Connection reset') ||
+        text.contains('Network is unreachable') ||
+        text.contains('No route to host');
+  }
+
   // ── Informational (SnackBar, auto-dismiss 3s) ─────────────────
   static String noGamesFound(String username) =>
       'No games found for $username.';
