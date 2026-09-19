@@ -44,18 +44,18 @@ const NAV = [
     </div>
 
     <div class="bdb-right">
-      <section id="bdb-missing" class="bdb-missing card" hidden>
-        <p id="bdb-missing-text">No data for this position.</p>
-        {TURNSTILE && <div class="cf-turnstile" data-sitekey={TURNSTILE} data-appearance="interaction-only"></div>}
-        <div class="btn-row">
-          <button id="bdb-analyse" class="btn btn-primary">Analyze on this computer</button>
-          <button id="bdb-cancel" class="btn btn-outline" hidden>Cancel</button>
-        </div>
-        <div id="bdb-progress" class="bdb-progress" hidden><i></i></div>
-        <p id="bdb-status" class="bdb-status dim" role="status"></p>
-      </section>
       <p id="bdb-source" class="bdb-source dim"></p>
       <div class="bdb-tables">
+        <section id="bdb-missing" class="bdb-missing" hidden>
+          <div class="bdb-missing-row">
+            <button id="bdb-analyse" class="btn btn-primary" title="Run Hivemind in this browser and add the position to the book for everyone">Analyze locally</button>
+            <button id="bdb-cancel" class="btn btn-outline" hidden>Cancel</button>
+            <span id="bdb-missing-text" class="dim">Not in the book yet.</span>
+          </div>
+          {TURNSTILE && <div class="cf-turnstile" data-sitekey={TURNSTILE} data-appearance="interaction-only"></div>}
+          <div id="bdb-progress" class="bdb-progress" hidden><i></i></div>
+          <p id="bdb-status" class="bdb-status dim" role="status"></p>
+        </section>
         {['A', 'B'].map((name, i) => (
           <div class="bdb-table-wrap">
             <table class="bdb-table" aria-label={`Moves on board ${i + 1}`}>

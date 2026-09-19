@@ -74,11 +74,17 @@
 .bdb-table tr.best td:first-child { font-weight: 600; }
 .bdb-table td.none { color: var(--text-faint); }
 
-.bdb-missing { margin: 0 0 12px; padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; }
+.bdb-tables { grid-template-rows: minmax(0, 1fr); }
+.bdb-tables:has(> .bdb-missing:not([hidden])) { grid-template-rows: auto minmax(0, 1fr); }
+.bdb-tables > .bdb-missing { grid-column: 1 / -1; }
+.bdb-missing { display: flex; flex-direction: column; gap: 8px; padding: 0 0 8px; }
+.bdb-missing[hidden] { display: none; }
 .bdb-missing p { margin: 0; }
+.bdb-missing-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 14px; }
 .bdb-progress { height: 6px; border-radius: 3px; background: var(--bg-input); overflow: hidden; }
 .bdb-progress i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.2s; }
-.bdb-status { min-height: 1.5em; font-size: 14px; }
+.bdb-status { font-size: 14px; }
+.bdb-status:empty { display: none; }
 .bdb-status[data-error="true"] { color: var(--danger); }
 
 /* Narrow or short screens: one column that scrolls. */

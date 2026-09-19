@@ -291,8 +291,8 @@ function renderMissing() {
   el<HTMLButtonElement>('bdb-cancel').hidden = !running;
   el('bdb-progress').hidden = !running;
   el('bdb-missing-text').textContent = running
-    ? (job!.fen === cur?.fen ? 'Analyzing this position on your computer.' : 'Analyzing an earlier position on your computer.')
-    : `No data for this position. Analyzing it here takes about ${estimate()} and adds it to the book.`;
+    ? (job!.fen === cur?.fen ? 'Analyzing on this computer…' : 'Analyzing an earlier position on this computer…')
+    : `Not in the book yet · about ${estimate()}`;
 }
 
 function estimate(): string {
