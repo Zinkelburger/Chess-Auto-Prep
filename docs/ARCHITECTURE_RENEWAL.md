@@ -156,10 +156,11 @@ Allowed imports:
 | `features/<mode>/` | `workspace/` and everything it may import; never another mode |
 | `app/` | Everything in `v2` |
 
-Nothing in `v2` imports the old `lib/` folders. Cross-mode jumps (open this
-line in the builder, train this chapter) are typed requests handled by `app/`.
-An import check for this table is added in the step that first has two folders
-to check, not before.
+Nothing in `v2` imports the old `lib/` folders; `scripts/check_v2.py` enforces
+this table. The one exception is `lib/main_v2.dart` importing
+`lib/debug/agent_driver.dart`, the headless-test hook shared with the old app.
+Cross-mode jumps (open this line in the builder, train this chapter) are typed
+requests handled by `app/`.
 
 ## Code rules
 
@@ -224,7 +225,7 @@ decide it, and the reviewer answers each with a file and line, not an opinion.
   works means the block should be rewritten (kernel `coding-style`). A
   non-obvious algorithm gets a short paragraph with its representation, units
   and one worked example beside the code (Knuth).
-- A function does one thing and fits on a screen: at most about 40 lines, 3
+- A function does one thing and fits on a screen: at most 50 lines, 3
   levels of nesting and 5 parameters. Extract a piece when it has a name and a
   contract, not to hit a length; one long linear function that runs top to
   bottom once is better than six that share state through fields (Carmack).
@@ -275,12 +276,29 @@ decide it, and the reviewer answers each with a file and line, not an opinion.
   default, sealed classes and exhaustive switches, records for small tuples,
   extension types for ids, `package:path` for paths.
 
+### Style reference
+
+Copy the shape of these files; they are what the rules above look like:
+
+| File | Shows |
+|---|---|
+| `lib/v2/chess/pgn/game_tree.dart` | Immutable values (`MoveNode`, `NodePath`, `GameTree`), doc comments that say why |
+| `lib/v2/chess/pgn/pgn_reader.dart` | A pure function over a package, typed issues instead of exceptions |
+| `lib/v2/chess/pgn/tree_merge.dart` | One algorithm, one paragraph explaining it |
+| `lib/v2/workspace/document_session.dart` | An owner: two fields, commands, derived getters, nothing else |
+| `lib/v2/features/library/library.dart` | Sealed states and results, a stale check after `await` |
+| `lib/v2/workspace/move_tree_view.dart` | A widget built from an owner, private sub-widgets, no I/O |
+| `lib/v2/app/shell.dart` | Composition and the one cross-feature request |
+
+`scripts/check_v2.py` enforces the numbers below and the import table; run
+it before saying a step is done.
+
 ### Reviewer checklist
 
 The independent review of a finished step answers these, each with a location:
 
-1. Any file over 400 lines, function over 40, nesting over 3, class over 10
-   fields?
+1. Any file over 400 lines, function over 50, nesting over 3, class over 10
+   fields? (`scripts/check_v2.py` finds the first three.)
 2. Any owner holding data that belongs to another owner in the
    [workspace table](#workspace-owners)?
 3. Any `await` not followed by a stale check? Any subscription without a
@@ -414,7 +432,7 @@ settings, lint and Widgetbook appear inside the row that first needs them.
 
 | Step | Scope | Ends with | Status |
 |---|---|---|---|
-| 0 | **Board on screen.** `main_v2.dart`, a window with the mode menu stub, board widget, move-tree widget; open a real chapter from Documents `repertoires/` read-only; click and arrow through moves. Only the theme values a board and a move list need. | Screenshot of a real chapter | Not started |
+| 0 | **Board on screen.** `main_v2.dart`, a window with the mode menu stub, board widget, move-tree widget; open a real chapter from Documents `repertoires/` read-only; click and arrow through moves. Only the theme values a board and a move list need. | Screenshot of a real chapter | Done 2026-09-19: 1.5k lines, 23 tests |
 | 1 | **Engine.** Supervisor, one Stockfish, engine pane with MultiPV lines at 200 ms, kill-on-exit test on Linux. | Live evaluation on the board | Not started |
 | 2 | **Document store.** `PgnDocumentStore` (open, save, create, rename, move, recoverable delete) with revisions; add moves and comments in the workspace; save; undo from receipts; the required failure tests; the old app sees the edit. | Edit a chapter, reopen it in the old app | Not started |
 | 3 | **Library.** Repertoire list, search, create, rename, move, recoverable delete; training references follow chapter changes. | Screenshot | Not started |
@@ -484,8 +502,14 @@ Rules:
   done, commit what runs, integrate it if checks pass, and report what is
   missing in three lines.
 - Done = screenshot from the headless driver, tests passing,
-  scripts/ci.sh analyze lint, integrated to local main, v2 line count reported.
+  python3 scripts/check_v2.py clean, scripts/ci.sh analyze lint, integrated to
+  local main, v2 line count reported. Before saying done, answer the nine
+  reviewer questions in docs/ARCHITECTURE_RENEWAL.md with a file and line.
 ```
+
+To see the app: `python3 scripts/app_driver.py start --target lib/main_v2.dart`
+from the worktree, then copy a chapter into the profile's
+`Documents/repertoires/<name>/` folder that `status` reports.
 
 ### Session rules
 

@@ -1,0 +1,57 @@
+import 'package:chess_auto_prep/v2/chess/fen.dart';
+import 'package:chess_auto_prep/v2/chess/pgn/pgn_reader.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  test(
+    'reads moves, variations, comments and NAGs with the position after each',
+    () {
+      final result = readPgn('1. e4 e5 (1... c5!? {Sicilian}) 2. Nf3 *');
+      expect(result.issues, isEmpty);
+      final tree = result.games.single.tree;
+      expect(tree.rootFen, Fen.initial);
+
+      final e4 = tree.children.single;
+      expect(e4.san, 'e4');
+      expect(e4.uci, 'e2e4');
+      expect(e4.fen.whiteToMove, isFalse);
+
+      final [e5, c5] = e4.children;
+      expect(e5.san, 'e5');
+      expect(c5.san, 'c5');
+      expect(c5.nags, [5]);
+      expect(c5.comment, 'Sicilian');
+      expect(e5.children.single.san, 'Nf3');
+    },
+  );
+
+  test('starts from the FEN header', () {
+    final result = readPgn('''
+[FEN "8/8/8/8/8/8/8/K6k w - - 0 1"]
+
+1. Kb1 *
+''');
+    expect(result.games.single.tree.children.single.uci, 'a1b1');
+  });
+
+  test('an illegal move ends its branch and is reported', () {
+    final result = readPgn('1. e4 e5 2. Ke3 Nf6 (2... Qh4) *');
+    final tree = result.games.single.tree;
+    expect(tree.children.single.children.single.children, isEmpty);
+    expect(result.issues.map((i) => i.detail), ['Ke3 is not legal']);
+  });
+
+  test('an unusable FEN skips the game', () {
+    final result = readPgn('''
+[FEN "not a fen"]
+
+1. e4 *
+
+[Event "second"]
+
+1. d4 *
+''');
+    expect(result.games.map((g) => g.tree.children.single.san), ['d4']);
+    expect(result.issues.single.game, 0);
+  });
+}

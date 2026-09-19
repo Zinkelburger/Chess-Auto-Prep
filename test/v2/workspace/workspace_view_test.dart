@@ -1,0 +1,83 @@
+import 'package:chess_auto_prep/v2/chess/pgn/chapter.dart';
+import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
+import 'package:chess_auto_prep/v2/ui/theme.dart';
+import 'package:chess_auto_prep/v2/workspace/document_session.dart';
+import 'package:chess_auto_prep/v2/workspace/workspace_view.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import '../support/fixtures.dart';
+
+void main() {
+  late DocumentSession session;
+
+  Future<void> pump(WidgetTester tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 700));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: darkTheme(),
+        home: Scaffold(body: WorkspaceView(session: session)),
+      ),
+    );
+    await tester.pump();
+  }
+
+  setUp(() {
+    session = DocumentSession()
+      ..open(parseChapter(name: 'Main', text: blackChapter));
+  });
+
+  testWidgets('shows the chapter, its lines and its variations', (
+    tester,
+  ) async {
+    await pump(tester);
+    expect(find.text('Main'), findsOneWidget);
+    expect(
+      find.text('Black · 2 lines, 1 from another position'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('c5'), findsOneWidget);
+    expect(find.textContaining('Nc3'), findsOneWidget);
+    expect(find.text('The Sicilian'), findsOneWidget);
+    expect(find.textContaining('[%eval'), findsNothing);
+  });
+
+  testWidgets('clicking a variation move puts the cursor on it', (
+    tester,
+  ) async {
+    await pump(tester);
+    await tester.tap(find.textContaining('Nc3'));
+    await tester.pump();
+    expect(session.cursor, NodePath.of([0, 1]));
+    expect(session.currentMove?.san, 'Nc3');
+    // The Nc3 block sits right under "2. Nf3", so its Nc6 comes first.
+    await tester.tap(find.textContaining('Nc6').first);
+    await tester.pump();
+    expect(session.cursor, NodePath.of([0, 1, 0]));
+    await tester.tap(find.textContaining('cxd4'));
+    await tester.pump();
+    expect(session.cursor, NodePath.of([0, 0, 0, 0, 0]));
+  });
+
+  testWidgets('arrow keys walk the line', (tester) async {
+    await pump(tester);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(session.currentMove?.san, 'Nf3');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    expect(session.currentMove?.san, 'c5');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    expect(session.currentMove?.san, 'cxd4');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    expect(session.cursor.isRoot, isTrue);
+  });
+
+  testWidgets('with nothing open it asks for a chapter', (tester) async {
+    session = DocumentSession();
+    await pump(tester);
+    expect(find.text('Open a chapter'), findsOneWidget);
+    expect(find.text('No moves'), findsOneWidget);
+  });
+}
