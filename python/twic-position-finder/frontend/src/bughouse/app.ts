@@ -29,7 +29,6 @@ const LICHESS_K = 0.00368208;  // Lichess's win-chance curve, as BughouseDB's sc
 
 const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const engine = new BrowserEngine((message) => status(message));
-const clockInput = el<HTMLInputElement>('bh-clock');
 const choice = (name: string) => document.querySelector<HTMLInputElement>(`#bh-analyse-form input[name="${name}"]:checked`)!.value;
 
 const lines = new Lines(START_DUAL);
@@ -221,7 +220,8 @@ el('bh-analyse-form').onsubmit = async (event) => {
   try {
     analysis = await engine.request<Analysis>('analyse', {
       dual_fen: state.dual_fen, team: choice('team'),
-      time_advantage: clockInput.checked, require_move_on: choice('required'),
+      time_advantage: choice('clock') === 'ahead', their_time_advantage: choice('clock') === 'behind',
+      require_move_on: choice('required'),
       movetime_ms: Number(choice('budget')), multipv: 3,
     });
     status('Hover a row to see it on the boards.');

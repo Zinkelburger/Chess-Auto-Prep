@@ -4,9 +4,10 @@ import BughouseBoards from '../components/BughouseBoards.astro';
 import '../styles/bughouse-board.css';
 import '../styles/bughouse.css';
 const CHOICES = [
-  { name: 'team', label: 'Our team', options: [['white', 'A + C'], ['black', 'B + D']] },
-  { name: 'required', label: 'Must move on', options: [['none', 'Either'], ['A', 'Board 1'], ['B', 'Board 2']] },
-  { name: 'budget', label: 'Search', options: [['3000', '3 s'], ['10000', '10 s'], ['30000', '30 s']] },
+  { name: 'team', label: 'Our team', checked: 0, options: [['white', 'A + C'], ['black', 'B + D']] },
+  { name: 'required', label: 'Must move on', checked: 0, options: [['none', 'Either'], ['A', 'Board 1'], ['B', 'Board 2']] },
+  { name: 'budget', label: 'Search', checked: 0, options: [['3000', '3 s'], ['10000', '10 s'], ['30000', '30 s']] },
+  { name: 'clock', label: 'Our clock', checked: 1, options: [['ahead', 'Ahead'], ['even', 'Equal'], ['behind', 'Behind']] },
 ];
 ---
 <Base title="Bughouse Lab" description="Explore two-board bughouse positions with Hivemind. Move, drop, and analyse in your browser." fill>
@@ -22,18 +23,14 @@ const CHOICES = [
       <form id="bh-analyse-form" class="bh-find" aria-label="Find a move">
         {CHOICES.map((c) => (
           <div class="bh-row">
-            <span class="bh-label">{c.label}</span>
+            <span class="bh-label">{c.label}{c.name === 'clock' && <span class="bb-info" tabindex="0" role="img" aria-label="About the clock" title="The team ahead on the diagonal clock may sit. Equal: nobody may.">i</span>}</span>
             <div class="choice-row" role="radiogroup" aria-label={c.label}>
               {c.options.map(([value, text], i) => (
-                <label class="choice"><input type="radio" name={c.name} value={value} checked={i === 0} /><span>{text}</span></label>
+                <label class="choice"><input type="radio" name={c.name} value={value} checked={i === c.checked} /><span>{text}</span></label>
               ))}
             </div>
           </div>
         ))}
-        <label class="bh-clock checkbox-label">
-          <input type="checkbox" id="bh-clock" /> Our team is ahead on time
-          <span class="bb-info" tabindex="0" role="img" aria-label="About the clock" title="Only the team ahead on the diagonal clock may sit on both boards.">i</span>
-        </label>
         <div class="bh-go">
           <button class="btn btn-primary" id="bh-analyse" type="submit">Analyze</button>
           <button class="btn btn-outline" id="bh-stop" type="button" hidden>Stop</button>

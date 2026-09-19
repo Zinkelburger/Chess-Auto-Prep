@@ -3,7 +3,7 @@
 .bh-find { display: flex; flex-direction: column; gap: 10px; }
 .bh-row { display: grid; grid-template-columns: 7.5em 1fr; align-items: center; gap: 10px; }
 .bh-label { color: var(--text-dim); font-size: 14px; }
-.bh-clock { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.bh-label .bb-info { display: inline-grid; margin-left: 6px; vertical-align: middle; }
 .bh-go { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
 .bh-go #bh-flip { margin-left: auto; }
 .bh-status { min-height: 1.5em; margin: 0; font-size: 14px; color: var(--text-dim); }

@@ -9,7 +9,7 @@ interface Wasm {
 }
 interface Chunk { file: string; sha256: string; bytes: number }
 interface Manifest { model_sha256: string; chunks: Chunk[]; input: string; outputs: Record<string, string> }
-interface Payload { dual_fen?: string | null; moves?: string[]; team?: string; time_advantage?: boolean; require_move_on?: string; movetime_ms?: number; nodes?: number }
+interface Payload { dual_fen?: string | null; moves?: string[]; team?: string; time_advantage?: boolean; their_time_advantage?: boolean; require_move_on?: string; movetime_ms?: number; nodes?: number }
 interface Search {
   q: number; mate: number | null; nodes: number; elapsed_ms?: number; best: unknown; pv?: string[]; lines: unknown[]; error?: string;
 }
@@ -144,7 +144,9 @@ async function request(action: string, payload: Payload) {
   if (ours.error) throw new Error(ours.error);
   if (cancelled) throw new Error('Analysis cancelled.');
   progress('Comparing the other team’s position…');
-  const theirs = await search(1 - team, false, 0);
+  // Hivemind's clock input is one bit per team: "ahead". Equal clocks are
+  // both bits off; behind is theirs on. The calibration searches them with it.
+  const theirs = await search(1 - team, payload.their_time_advantage ?? false, 0);
   if (cancelled) throw new Error('Analysis cancelled.');
   const measured = !theirs.error && ours.mate === null && theirs.mate === null;
   return { ...ours, advantage: measured ? (ours.q - theirs.q) / 2 : null,
