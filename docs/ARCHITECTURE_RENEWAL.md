@@ -20,15 +20,23 @@ The rewrite keeps what is not the problem:
   engines and assets, `packages/`, packaging and release tooling.
 - **The same user data:** every file and database keeps its format and
   location. Both apps can run on one profile at the same time.
-- **Proven pure code**, copied into `v2` and reviewed there, not rewritten
-  (see [What to copy](#what-to-copy)).
 - **Every mode.** Nothing is dropped: Tactics, Player analysis, Repertoire
   builder, Repertoire trainer, PGN Viewer, Study, Engine tournament, Bughouse
   lab, Databases, Repertoires, Players & prep.
 
-What changes is the application layer (screens, controllers, services and the
-wiring between them) and the product shape: five modes that are each "a PGN
-with a board" become one workspace (see [Product shape](#product-shape)).
+Everything else is written again, including the algorithms. **No file is
+copied from the old app.** The old code is reference material: read it to
+learn what a feature does, then write it to [the definition of clean
+code](#what-clean-code-means-here). For algorithms the spec is
+[ALGORITHM.md](ALGORITHM.md), [DATA_INTEGRITY.md](DATA_INTEGRITY.md) and, for
+Scid, `tools/scid_reference`; the old app stays installed as an oracle, so a
+rewritten algorithm is checked by running both on the same input and comparing
+where the result is deterministic. Copying would carry the debt in (a 71-field
+config synced by hand, a third algorithm bolted on as an `extension`, five
+copies of pool warm-up); the comparison test is the better safety net.
+
+The product shape also changes: five modes that are each "a PGN with a board"
+become one workspace (see [Product shape](#product-shape)).
 
 ## What the old app gets wrong
 
@@ -67,8 +75,9 @@ Measured on 2026-09-19; details in
 
 - The old app is **frozen**. Fix data loss, crashes and release blockers only.
   No refactors or migrations; each one makes the rewrite chase a moving target.
-- `v2` never imports old `lib/` code. To reuse something, copy the file into
-  `v2` and fix it there. The duplicate disappears at switch-over.
+- `v2` never imports or copies old `lib/` code. Read it, then write the `v2`
+  version. What must stay compatible is data and protocols, not code: file
+  formats, the SQLite lock the two apps share, and settings keys.
 - A data-safety bug found while rewriting is fixed in `v2` and ported to the
   old app only when the old app can lose user data because of it.
 - The old ledgers (`scripts/architecture_feature_debt.json`,
@@ -96,12 +105,29 @@ the workspace:
 | Engine tournament, Bughouse lab | Their own screens, as today, on the same engine supervisor |
 
 The workspace, move tree, engine pane and explorer are written once. A panel
-receives the workspace's owner and adds its own state; it never has its own
-board or move tree.
+receives the one or two owners it uses (below) and adds its own state; it never
+has its own board or move tree.
 
-Size target for the whole of `v2/`: under 80k lines of `lib/` including about
-35k lines of copied pure code, against 227k today. The gate that matters is
-per step ([below](#a-step-is-done-when)); the total is the sanity check.
+Size target for the whole of `v2/`: under 60k lines of `lib/`, against 227k
+today. The gate that matters is per step ([below](#a-step-is-done-when)); the
+total is the sanity check.
+
+### Workspace owners
+
+The workspace is several small owners, not one. A panel takes the one or two
+it uses; nothing takes "the workspace".
+
+| Owner | Holds | Never holds |
+|---|---|---|
+| `DocumentSession` | The parsed move tree as an immutable value, the cursor, the store revision, dirty state, undo receipts | Engine output, explorer data, panel state |
+| `EngineAnalysis` | The running engine job for the cursor position and its latest snapshot | Anything about the document |
+| `Explorer` | The cached explorer query for the cursor position | Anything about the document |
+| `WorkspaceLayout` | Which panel is open and the split sizes | Data |
+| A panel's owner (`GenerationRun`, `TrainingSession`, `HoleHunt`, …) | That tool's state, keyed to a document revision | A second copy of the tree or cursor |
+
+If an owner grows past about 300 lines or ten fields, it has two jobs; split
+it by job. The old `PgnViewerController` (1,341 lines) is what this table
+prevents.
 
 ## Layout
 
@@ -178,7 +204,7 @@ None of these is re-opened during the rewrite.
 | State | Plain immutable values and sealed classes. No code generation. |
 | Packages | No new pub dependencies. The existing set (`dartchess`, `provider`, `http`, `sqlite3`/`sqflite_common_ffi`, `shared_preferences`, `stockfish`, `onnxruntime`, `window_manager`, `file_picker`) covers `v2`. |
 | Database | The existing SQLite files, schemas and migrations. |
-| Files | The existing atomic writer and its SQLite-transaction lock, copied into `v2/storage/`, so the old and new apps lock each other out correctly. |
+| Files | A new atomic writer in `v2/storage/` that takes the same SQLite-transaction lock the old app takes (`file_operation_lock.dart` documents the protocol), so the two apps lock each other out. |
 | Network | `http` behind one client per service, each with its own retry policy. |
 | Navigation | A persistent shell with the mode menu and plain `Navigator`. No router package. |
 | Strings | Plain English in widgets. |
@@ -187,21 +213,90 @@ None of these is re-opened during the rewrite.
 | Theme | Dark by default with Light/System, tokens in `ui/`. Built in step 0 only as far as a board and a move list need; extended by later steps. |
 | Catalog and visual tests | Widgetbook on production widgets, added at step 12. Widget tests before that; no golden framework. |
 
-## What to copy
+## What clean code means here
 
-Copy into `v2` and review against the code rules; do not rewrite:
+Clean code is code a maintainer reads once and can predict. Three questions
+decide it, and the reviewer answers each with a file and line, not an opinion.
 
-| Old location | Lines | Goes to |
-|---|---|---|
-| `lib/chess_core/` (PGN parser, move trees, projections, generation codecs) | 5.8k | `chess/` |
-| `lib/services/generation/` (expectimax, line extraction, pruning, config) | 15.4k | `chess/generation/` |
-| `lib/services/scid/` | ~2k | `chess/scid/` |
-| `lib/services/master_games/`, `lib/services/eval/` | 7.8k | `storage/` and `net/` |
-| `lib/services/engine/`, `lib/services/maia/` | ~3k | `engines/` |
-| `lib/utils/atomic_file.dart`, `file_operation_lock.dart`, `pgn_utils.dart`, `fen_utils.dart`, `movetext_builder.dart`, `pgn_nags.dart`, `time_format.dart`, `chess_utils.dart` | ~3k | `storage/` and `chess/` |
+**Can I read it?**
 
-Copy a file when a step needs it, not all at once. Drop the parts the step does
-not use.
+- Names say what; comments say why. A comment that explains *how* a block
+  works means the block should be rewritten (kernel `coding-style`). A
+  non-obvious algorithm gets a short paragraph with its representation, units
+  and one worked example beside the code (Knuth).
+- A function does one thing and fits on a screen: at most about 40 lines, 3
+  levels of nesting and 5 parameters. Extract a piece when it has a name and a
+  contract, not to hit a length; one long linear function that runs top to
+  bottom once is better than six that share state through fields (Carmack).
+- A file holds one type or one group of closely related functions, at most
+  about 400 lines. Never `part`.
+- Clear beats clever (Pike). No tricks that need a second reading.
+
+**Can I reason about it?**
+
+- Data is values. Domain types are immutable; a change returns a new value.
+  Mutable state lives in exactly one owner that notifies (Hickey: do not braid
+  state, identity and time).
+- Effects happen at the edge. Parsing, tree operations, scheduling and scoring
+  are pure functions of their arguments; `storage/`, `engines/` and `net/` do
+  the I/O; owners connect the two. A pure function is tested with values only.
+- Expected outcomes are typed results, not exceptions: a sealed `SaveResult`
+  with `Saved`, `Conflict`, `Collision`, `Invalid`, `IoFailure` and an
+  exhaustive `switch`. Design so the error cannot happen where possible
+  (Ousterhout: define errors out of existence).
+- Ids and units are types when confusion would be a bug: `Fen`, `Revision`,
+  `ChapterId`, `Centipawns` (lila's opaque ids). Not every string.
+- Every `await` in an owner is followed by a check that the request is still
+  current. Every subscription, timer and process has a named owner and is
+  closed in `dispose`.
+- No `dynamic`, no `late` for things that could be constructor arguments, no
+  boolean parameters that switch behaviour, no nullable fields that mean
+  "not loaded yet" when a sealed state would say it.
+
+**Can I change it?**
+
+- One place per fact. FEN normalisation, movetext formatting, chapter naming
+  each exist once. A little copying at the edges is better than a dependency
+  on an unrelated module (Pike); a second implementation of a rule that must
+  agree is a bug.
+- Deep modules: a small interface hiding real work (`store.save(doc,
+  expected: rev)`), never a wide one (`writeFile(path, bytes, {overwrite,
+  lock, backup, …})`). A class or method that only forwards to another does
+  not exist (Ousterhout).
+- Nothing is there for later. No options nobody sets, no abstract classes
+  with one implementation, no hooks for a step that has not started. Dead
+  code is deleted, not commented out.
+- Modules do not reach across: a feature imports `workspace/` and below,
+  never another feature (lila's `modules/`, each with its own wiring).
+- Tests describe behaviour a user could see or a contract another module
+  relies on. A test never reads private state or asserts a call sequence. If
+  a refactor that keeps behaviour breaks a test, the test was wrong.
+- Dart idiom: [Effective Dart](https://dart.dev/effective-dart), `final` by
+  default, sealed classes and exhaustive switches, records for small tuples,
+  extension types for ids, `package:path` for paths.
+
+### Reviewer checklist
+
+The independent review of a finished step answers these, each with a location:
+
+1. Any file over 400 lines, function over 40, nesting over 3, class over 10
+   fields?
+2. Any owner holding data that belongs to another owner in the
+   [workspace table](#workspace-owners)?
+3. Any `await` not followed by a stale check? Any subscription without a
+   `dispose`?
+4. Any exception used for an expected outcome? Any `catch` that swallows?
+5. Any pass-through class, unused option, abstract type with one
+   implementation, or code for a later step?
+6. Any rule implemented twice? Any old-app code pasted in?
+7. Any test that reads private state or asserts implementation order?
+8. Any comment that explains *how*? Any algorithm without a *why*?
+9. Is the `v2` line count for this step below the old app's for the same
+   features?
+
+A finding is fixed before the status cell says Done. **Step 0 is reviewed by a
+second agent before step 1 starts**, because every later step copies its
+style.
 
 ## Data safety
 
@@ -326,7 +421,7 @@ settings, lint and Widgetbook appear inside the row that first needs them.
 | 4 | **Chapters and Study.** Chapter outline panel, chapter operations, per-chapter orientation, Lichess study import and export, quiz markers. | Screenshot | Not started |
 | 5 | **Trainer.** Training session over the workspace, scheduling, history and bulk actions on the existing CSV/JSONL formats. | Screenshot and one completed session | Not started |
 | 6 | **Games.** Collections from `app_games.db`, game list, filters, explorer pane (Lichess, Masters, TWIC). | Screenshot | Not started |
-| 7 | **Generation.** Launch from a chapter, progress, cancel, publish against the source revision, results in the side panel; copies the expectimax code. | One real build | Not started |
+| 7 | **Generation.** Launch from a chapter, progress, cancel, publish against the source revision, results in the side panel; expectimax rewritten from ALGORITHM.md and compared with the old app on the same input. | One real build | Not started |
 | 8 | **Checks.** Holes/tricks, coverage, audit and planner as side-panel tools on the same document. | Screenshot | Not started |
 | 9 | **Tactics.** Puzzle sets, game import, review, filters, puzzle session. | Screenshot | Not started |
 | 10 | **Players.** Player analysis, opponent search and prep sheets, tournaments, people directory, US Chess lookup. | Screenshot | Not started |
@@ -346,8 +441,8 @@ each with its own screenshot; it is not stretched over two sessions.
 3. It reads and writes the same data as the old app, and both run at once.
 4. Tests cover its user actions, its failure paths and every write it makes.
 5. Its `v2` code is smaller than the old code for the same features. If it is
-   not, stop and review the design before continuing. Tests and copied pure
-   code are counted separately.
+   not, stop and review the design before continuing. Tests are counted
+   separately.
 
 Mark the status cell *Done* with the commit. Nothing else is written down.
 
@@ -378,8 +473,8 @@ Goal: v2 step N — <the row's scope in one sentence>; screenshot; tests;
 integrate; stop.
 
 Rules:
-- Work only in lib/v2/, lib/main_v2.dart and test/v2/. Never import old lib/
-  code; copy the file in. Never edit the old app.
+- Work only in lib/v2/, lib/main_v2.dart and test/v2/. Never import or copy
+  old lib/ code; read it, then write the v2 version. Never edit the old app.
 - No new pub packages. No package or framework evaluations.
 - No documents except the one status cell in docs/ARCHITECTURE_RENEWAL.md.
   No evidence logs, checkpoints, reports, ledgers or diaries.
@@ -399,7 +494,8 @@ Rules:
 - **Before integrating**, run `scripts/ci.sh analyze lint` and the `test/v2/`
   suite. The old app's full suite is not run for `v2` changes.
 - **Status is the table cell.** Commit messages and tests are the record.
-- **Review:** one independent review of the diff when a row is marked done.
+- **Review:** one independent review of the diff against the
+  [reviewer checklist](#reviewer-checklist) when a row is marked done.
 - **After a context reset**, re-read this file and `git log -- lib/v2`.
 - **Ask the product owner** about scope, dropping something and visible design.
   Decide implementation details without asking.
