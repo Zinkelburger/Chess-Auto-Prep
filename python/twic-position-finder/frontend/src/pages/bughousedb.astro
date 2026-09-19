@@ -34,9 +34,10 @@ const TURNSTILE = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
             <table class="bdb-table" aria-label={`Moves on board ${i + 1}`}>
               <thead><tr>
                 <th scope="col" id={`bdb-mover-${name}`}>Move</th>
-                <th scope="col" title="The mover's team is ahead on the diagonal clock">Ahead on time</th>
-                <th scope="col" title="Equal clocks">Even on time</th>
-                <th scope="col" title="The mover's team is behind on the diagonal clock">Behind on time</th>
+                <th scope="col" title="A has more time than D: A + C may sit">A &gt; D</th>
+                <th scope="col" title="Neither A > D nor B > C: nobody may sit">Equal</th>
+                <th scope="col" title="B has more time than C: B + D may sit">B &gt; C</th>
+                <th scope="col" title="A > D and B > C: both teams may sit">Both</th>
               </tr></thead>
               <tbody id={`bdb-moves-${name}`}></tbody>
             </table>

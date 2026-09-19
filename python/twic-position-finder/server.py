@@ -58,6 +58,18 @@ app.add_middleware(
 app.include_router(booking_router)
 app.include_router(bughousedb.router)
 
+_LOGO_PATH = Path(__file__).parent / "static" / "logo.png"
+
+
+@app.get("/static/logo.png")
+def _logo_png():
+    """Serve the brand logo used in outbound emails."""
+    return Response(
+        content=_LOGO_PATH.read_bytes(),
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
 
 @app.on_event("startup")
 def _startup():

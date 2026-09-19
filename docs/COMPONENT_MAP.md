@@ -323,10 +323,12 @@ share; `BughouseHistory.play` is the one path a move takes onto a line.
 
 `tools/bughouse_db/hivemind_book.py` builds a precomputed Hivemind book beside
 the FICS book (`~/.local/share/chess-prep/bughouse-db/hivemind_book.db`, same
-position key): every legal move on both boards, each scored for A + C being
-ahead, even and behind on the clock, with a principal variation. One engine,
-one search at a time, resumable; by default it follows the four most-played
-FICS moves of each position to ply 10. The Lab does not read it yet.
+position key): every legal move on both boards, each scored for the four
+clock cases Hivemind can tell apart (A > D, equal, B > C, both), with a
+principal variation. One engine, one search at a time, resumable; by default
+it follows the four most-played FICS moves of each position to ply 10.
+`push` uploads it to BughouseDB (`/bughousedb` on the site); the desktop Lab
+does not read it yet.
 
 Engine failures show the exit code and Windows NTSTATUS name without guessing
 which file caused it. **Copy full report** copies the diagnostic block through

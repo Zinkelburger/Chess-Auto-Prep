@@ -12,14 +12,15 @@ How a position is scored
 ------------------------
 A move's score is the value of the position it leads to: the move is played,
 and the team that has to answer it on that board is searched. Hivemind's
-clock input is one bit -- "the searched team is ahead on the diagonal clock
-and may sit" -- so each answer costs two searches (bit on, bit off), and the
-three clock cases are read from those two:
+clock input is one bit per team -- "ahead on the diagonal clock, may sit":
+A + C's is A > D, B + D's is B > C -- so each answer costs two searches (bit
+on, bit off), and the four clock cases are read from those two:
 
-    A + C clock   B + D answers with    A + C answers with
-    ahead         bit off               bit on
-    even          bit off               bit off
-    behind        bit on                bit off
+    clock case         B + D answers with    A + C answers with
+    ahead  (A > D)     bit off               bit on
+    even               bit off               bit off
+    behind (B > C)     bit on                bit off
+    both               bit on                bit on
 
 A raw Hivemind score carries a large offset (see
 ``tools/mcp/bughouse/calibration.py``), measured once per position and clock
@@ -74,7 +75,9 @@ from bughouse_db.book import explore, open_book  # noqa: E402
 from bughouse_db.paths import data_home  # noqa: E402
 from bughouse_db.poskey import dual_key_fen, position_key  # noqa: E402
 
-CLOCKS = ("ahead", "even", "behind")
+# A + C's clock cases, named by Hivemind's two inputs: "ahead" is A > D
+# (A + C may sit), "behind" is B > C (B + D may sit), "both" is both.
+CLOCKS = ("ahead", "even", "behind", "both")
 TEAMS = (chess.WHITE, chess.BLACK)  # a team is named by its colour on board A
 SEATS = {("A", chess.WHITE): "A", ("A", chess.BLACK): "B",
          ("B", chess.WHITE): "D", ("B", chess.BLACK): "C"}
@@ -220,7 +223,7 @@ def for_ac(result: SearchResult, team: chess.Color, offset: float) -> tuple[floa
 
 def team_bits(clock: str) -> dict[chess.Color, bool]:
     """Which team has the clock bit on, for one A + C clock case."""
-    return {chess.WHITE: clock == "ahead", chess.BLACK: clock == "behind"}
+    return {chess.WHITE: clock in ("ahead", "both"), chess.BLACK: clock in ("behind", "both")}
 
 
 def analyse_position(engine: HivemindEngine, dual: DualBoard, nodes: int,
@@ -404,6 +407,48 @@ def expand_fics(con: sqlite3.Connection, fics: sqlite3.Connection, dual: DualBoa
         queued += 1
 
 
+def rescore(score: float | None, team: str, old: float, new: float) -> float | None:
+    """A stored A + C score read against another offset."""
+    if score is None:
+        return None
+    sign = 1 if team == "AC" else -1
+    raw = sign * to_q(score * 100) + old
+    return round(sign * to_score(max(-1.0, min(1.0, raw - new))), 3)
+
+
+def fill_both(con: sqlite3.Connection) -> int:
+    """'both' rows for positions scored before that clock existed. No search
+    is needed: A + C's bit-on search is the 'ahead' one and B + D's the
+    'behind' one; only the offset they are read by changes, and it is
+    (A+C on + B+D on)/2 = ahead + behind - even."""
+    todo = con.execute("SELECT pos, fen FROM position WHERE status='done' AND pos NOT IN "
+                       "(SELECT pos FROM pick WHERE clock='both')").fetchall()
+    for pos, fen in todo:
+        off = dict(con.execute("SELECT clock, offset FROM pick WHERE pos=?", (pos,)).fetchall())
+        if not all(c in off for c in ("ahead", "even", "behind")):
+            continue
+        both = off["ahead"] + off["behind"] - off["even"]
+        same = {"AC": "ahead", "BD": "behind"}
+        for team, clock in same.items():
+            row = con.execute("SELECT best, score, mate, pv FROM pick WHERE pos=? AND clock=? AND team=?",
+                              (pos, clock, team)).fetchone()
+            if row:
+                con.execute("INSERT OR REPLACE INTO pick VALUES(?,?,?,?,?,?,?,?)",
+                            (pos, "both", team, row[0], rescore(row[1], team, off[clock], both),
+                             row[2], row[3], round(both, 4)))
+        dual = DualBoard.from_dual_fen(fen)
+        answers = {name: "AC" if answering_team(dual, which) == chess.WHITE else "BD"
+                   for which, name in enumerate(BOARD_NAMES)}
+        for move, seat, uci, clock, score, mate, pv, child in con.execute(
+                "SELECT move, seat, uci, clock, score, mate, pv, child FROM move WHERE pos=?", (pos,)).fetchall():
+            team = answers[move[0]]
+            if clock == same[team]:
+                con.execute("INSERT OR REPLACE INTO move VALUES(?,?,?,?,?,?,?,?,?)",
+                            (pos, move, seat, uci, "both", rescore(score, team, off[clock], both), mate, pv, child))
+    con.commit()
+    return len(todo)
+
+
 # ── Reading the book ────────────────────────────────────────────────────────
 
 
@@ -429,7 +474,7 @@ def show(args: argparse.Namespace) -> int:
         r[clock] = (score, mate)
         if clock == "even":
             r["pv"] = pv
-    print(f"\n  {'move':12} {'ahead':>7} {'even':>7} {'behind':>7}  pv (even)")
+    print(f"\n  {'move':12} " + " ".join(f"{c:>7}" for c in CLOCKS) + "  pv (even)")
     for move, r in sorted(rows.items(), key=lambda kv: (kv[0][0], -mover_value(kv[1]["even"], kv[1]["seat"]))):
         print(f"  {r['seat']} {move[2:]:10} " + " ".join(f"{fmt(*r[c]):>7}" for c in CLOCKS) + f"  {r['pv']}")
     return 0
@@ -469,6 +514,7 @@ def push(args: argparse.Namespace) -> int:
         print("set --key or BUGHOUSEDB_ADMIN_KEY", file=sys.stderr)
         return 2
     con = open_db(args.db)
+    fill_both(con)
     done = con.execute("SELECT pos, fen, nodes, child_nodes FROM position WHERE status='done' "
                        "ORDER BY done_at").fetchall()
 

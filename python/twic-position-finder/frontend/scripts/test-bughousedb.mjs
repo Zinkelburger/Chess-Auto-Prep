@@ -25,7 +25,7 @@ try {
   await page.waitForFunction(() => document.querySelectorAll('#bdb-moves-A tr').length === 20);
   const start = await rows('A');
   assert.equal((await rows('B')).length, 20);
-  assert.ok(start.every((r) => r.length === 4), 'Move, Ahead, Even, Behind');
+  assert.ok(start.every((r) => r.length === 5), 'Move, A > D, Equal, B > C, Both');
   assert.equal(await page.$eval('#bdb-mover-A', (n) => n.textContent), 'Move: Player A');
   assert.ok(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight), 'fits without scrolling');
   assert.match(start[0][2], /^[+−]?\d+\.\d\d$/, 'Even is in pawns');

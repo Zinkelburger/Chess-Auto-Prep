@@ -11,8 +11,20 @@ from botocore.exceptions import ClientError
 SES_REGION = os.getenv("AWS_SES_REGION", "us-east-1")
 FROM_EMAIL = os.getenv("TWIC_FROM_EMAIL", "subscriptions@chessautoprep.com")
 SITE_URL = os.getenv("TWIC_SITE_URL", "https://chessautoprep.com")
+LOGO_URL = os.getenv("TWIC_LOGO_URL", "https://api.chessautoprep.com/static/logo.png")
 
 _ses_client = None
+
+
+def _logo_header() -> str:
+    """Centered brand logo for the top of every HTML email."""
+    return (
+        f'<div style="text-align:center;margin-bottom:20px;">'
+        f'<img src="{LOGO_URL}" alt="Chess Auto Prep" width="240" '
+        f'style="width:240px;max-width:70%;height:auto;border:0;'
+        f'outline:none;text-decoration:none;display:inline-block;" />'
+        f'</div>'
+    )
 
 
 def _get_ses_client():
@@ -153,6 +165,7 @@ def build_email_html(subscription: dict, games: list[dict],
 <body style="background:#121212;color:#e8e8e8;font-family:-apple-system,Segoe UI,
              Roboto,Helvetica,Arial,sans-serif;padding:24px;margin:0;">
   <div style="max-width:600px;margin:0 auto;">
+    {_logo_header()}
     <div style="text-align:center;margin-bottom:24px;">
       <h1 style="color:#fff;font-size:22px;margin:0;">
         TWIC Position Alert
@@ -318,6 +331,7 @@ def build_no_matches_html(subscription: dict, twic_label: str,
 <body style="background:#121212;color:#e8e8e8;font-family:-apple-system,Segoe UI,
              Roboto,Helvetica,Arial,sans-serif;padding:24px;margin:0;">
   <div style="max-width:600px;margin:0 auto;">
+    {_logo_header()}
     <div style="text-align:center;margin-bottom:24px;">
       <h1 style="color:#fff;font-size:22px;margin:0;">
         TWIC #{_esc(twic_label)} — No Matches
@@ -405,6 +419,7 @@ def send_verification_email(to: str, verify_token: str) -> bool:
 <body style="background:#121212;color:#e8e8e8;font-family:-apple-system,Segoe UI,
              Roboto,Helvetica,Arial,sans-serif;padding:24px;margin:0;">
   <div style="max-width:500px;margin:0 auto;text-align:center;">
+    {_logo_header()}
     <h1 style="color:#fff;font-size:22px;">Verify Your Email</h1>
     <p style="color:#aaa;">Click the button below to activate your TWIC Position Finder alerts.</p>
     <a href="{verify_url}" style="display:inline-block;background:#629924;color:#fff;
@@ -431,6 +446,7 @@ def send_login_email(to: str, login_token: str) -> bool:
 <body style="background:#121212;color:#e8e8e8;font-family:-apple-system,Segoe UI,
              Roboto,Helvetica,Arial,sans-serif;padding:24px;margin:0;">
   <div style="max-width:500px;margin:0 auto;text-align:center;">
+    {_logo_header()}
     <h1 style="color:#fff;font-size:22px;">Your Login Link</h1>
     <p style="color:#aaa;">Click to manage your TWIC alerts.</p>
     <a href="{login_url}" style="display:inline-block;background:#629924;color:#fff;

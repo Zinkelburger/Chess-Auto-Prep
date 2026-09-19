@@ -99,6 +99,8 @@ class UploadTests(unittest.TestCase):
         # Behind: BD's bit is on.
         self.assertAlmostEqual(e4["scores"]["behind"]["q"], -(0.1 + 0.29), places=4)
         self.assertEqual(e4["scores"]["behind"]["pv"], "A e4 · B e5")
+        # Both: B + D answers with its bit on, read against (0 + 0)/2.
+        self.assertAlmostEqual(e4["scores"]["both"]["q"], -0.1, places=4)
         self.assertEqual({p["clock"] for p in pos["picks"]}, set(bh.CLOCKS))
 
     def test_the_move_set_must_be_exactly_the_legal_moves(self):
@@ -161,7 +163,7 @@ class UploadTests(unittest.TestCase):
             picks=[bh.ImportPick(clock="even", team="AC", best="A d4", q=0.0)],
             moves=[bh.ImportMove(board=m["board"], uci=m["uci"], clock=c, q=0.01)
                    for m in moves for c in bh.CLOCKS])
-        bad = good.model_copy(update={"moves": good.moves[3:]})
+        bad = good.model_copy(update={"moves": good.moves[len(bh.CLOCKS):]})  # one move short
         out = bh.store_import(self.conn, bh.ImportBatch(positions=[bad, good]))
         self.assertEqual((out["added"], len(out["errors"])), (1, 1))
         self.assertEqual(bh.store_import(self.conn, bh.ImportBatch(positions=[good]))["skipped"], 1)

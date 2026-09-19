@@ -131,8 +131,9 @@ Endpoints: `GET /health`, `GET /api/slots` (returns window, `blocked_dates`, `av
 ### BughouseDB (`/bughousedb`)
 
 A shared, precomputed Hivemind book for bughouse, like chessdb.cn: every
-legal move on both boards, scored for A + C ahead, even and behind on the
-diagonal clock, with a principal variation. `bughousedb.py` owns it, in its
+legal move on both boards, scored for the four clock cases Hivemind can
+tell apart (A > D, equal, B > C, both; its clock input is one bit per team),
+with a principal variation. `bughousedb.py` owns it, in its
 own SQLite file (`BUGHOUSEDB_PATH`, default `bughousedb.db` beside the app).
 The server runs no engine:
 

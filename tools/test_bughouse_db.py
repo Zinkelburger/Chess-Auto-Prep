@@ -259,6 +259,44 @@ class TestHivemindBook(unittest.TestCase):
         self.assertEqual(team_bits("ahead"), {chess.WHITE: True, chess.BLACK: False})
         self.assertEqual(team_bits("even"), {chess.WHITE: False, chess.BLACK: False})
         self.assertEqual(team_bits("behind"), {chess.WHITE: False, chess.BLACK: True})
+        self.assertEqual(team_bits("both"), {chess.WHITE: True, chess.BLACK: True})
+
+    def test_both_is_filled_from_the_searches_already_made(self):
+        import sqlite3
+
+        import chess
+        from bughouse_db import hivemind_book as hb
+
+        # Raw Q of each team's own search, bit on and off, and of B + D
+        # answering A's e4 (board A: B + D answers) with its bit on.
+        raw = {("AC", True): 0.1, ("AC", False): -0.5, ("BD", True): 0.05, ("BD", False): -0.6}
+        answer_on = 0.3
+        off = {c: (raw[("AC", b[chess.WHITE])] + raw[("BD", b[chess.BLACK])]) / 2
+               for c in hb.CLOCKS for b in [hb.team_bits(c)]}
+        con = sqlite3.connect(":memory:")
+        con.executescript(hb.SCHEMA)
+        dual = hb.DualBoard()
+        pos = hb.key_of(dual)
+        con.execute("INSERT INTO position VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    (pos, dual.dual_fen, "", 0, 0, "done", 100, 10, 1.0, ""))
+        for clock in ("ahead", "even", "behind"):
+            bits = hb.team_bits(clock)
+            for team, colour in (("AC", chess.WHITE), ("BD", chess.BLACK)):
+                sign = 1 if team == "AC" else -1
+                score = round(sign * hb.to_score(raw[(team, bits[colour])] - off[clock]), 3)
+                con.execute("INSERT INTO pick VALUES(?,?,?,?,?,?,?,?)",
+                            (pos, clock, team, "", score, None, "", round(off[clock], 4)))
+            bd_bit = bits[chess.BLACK]
+            q = answer_on if bd_bit else -0.4
+            con.execute("INSERT INTO move VALUES(?,?,?,?,?,?,?,?,?)",
+                        (pos, "A:e4", "A", "e2e4", clock, round(-hb.to_score(q - off[clock]), 3), None, "A e4", 0))
+        self.assertEqual(hb.fill_both(con), 1)
+        got = con.execute("SELECT score FROM move WHERE clock='both'").fetchone()[0]
+        self.assertAlmostEqual(got, -hb.to_score(answer_on - off["both"]), places=2)
+        picks = dict(con.execute("SELECT team, score FROM pick WHERE clock='both'").fetchall())
+        self.assertAlmostEqual(picks["AC"], hb.to_score(raw[("AC", True)] - off["both"]), places=2)
+        self.assertAlmostEqual(picks["BD"], -hb.to_score(raw[("BD", True)] - off["both"]), places=2)
+        self.assertEqual(hb.fill_both(con), 0, "filled once")
 
     def test_seats_follow_the_side_to_move(self):
         from bughouse_db import hivemind_book as hb

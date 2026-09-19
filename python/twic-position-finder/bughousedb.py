@@ -46,7 +46,8 @@ ADMIN_KEY = os.getenv("BUGHOUSEDB_ADMIN_KEY", "")
 TICKET_TTL = 30 * 60           # seconds a ticket stays valid
 MIN_SECONDS_PER_SEARCH = 0.05  # an upload faster than this per search is not real
 
-CLOCKS = ("ahead", "even", "behind")
+# A + C's clock cases: "ahead" is A > D, "behind" is B > C, "both" is both.
+CLOCKS = ("ahead", "even", "behind", "both")
 TEAMS = ("AC", "BD")           # AC = White on board A + Black on board B
 SIT_BIT_Q = 0.5814             # tools/mcp/bughouse/calibration.py
 LICHESS_K = 0.00368208         # lila's winning-chances curve
@@ -242,9 +243,9 @@ def joint_text(boards: list[CrazyhouseBoard], joint: str | None, team: str) -> s
 
 
 def team_bits(clock: str) -> dict[str, bool]:
-    """Hivemind's only clock input: 'the searched team is ahead'. Equal
-    clocks train as both bits off (hivemind src/domain/board2planes.py)."""
-    return {"AC": clock == "ahead", "BD": clock == "behind"}
+    """Hivemind's only clock input, one bit per team: A + C's is A > D, B + D's
+    is B > C (hivemind src/domain/board2planes.py). Equal is both off."""
+    return {"AC": clock in ("ahead", "both"), "BD": clock in ("behind", "both")}
 
 
 def centipawns(q: float | None) -> int | None:
@@ -489,7 +490,7 @@ def store_upload(conn: sqlite3.Connection, up: PositionUpload, contributor: str)
 
 
 class ImportPick(BaseModel):
-    clock: str = Field(pattern="^(ahead|even|behind)$")
+    clock: str = Field(pattern="^(ahead|even|behind|both)$")
     team: str = Field(pattern="^(AC|BD)$")
     best: str = Field(default="", max_length=80)
     q: float | None = Field(default=None, ge=-1, le=1)
@@ -500,7 +501,7 @@ class ImportPick(BaseModel):
 class ImportMove(BaseModel):
     board: str = Field(pattern="^[AB]$")
     uci: str = Field(max_length=8)
-    clock: str = Field(pattern="^(ahead|even|behind)$")
+    clock: str = Field(pattern="^(ahead|even|behind|both)$")
     q: float | None = Field(default=None, ge=-1, le=1)
     mate: int | None = None
     pv: str = Field(default="", max_length=400)
@@ -511,8 +512,8 @@ class ImportPosition(BaseModel):
     engine: str = Field(max_length=80)
     nodes: int
     child_nodes: int
-    picks: list[ImportPick] = Field(max_length=6)
-    moves: list[ImportMove] = Field(max_length=1800)
+    picks: list[ImportPick] = Field(max_length=8)
+    moves: list[ImportMove] = Field(max_length=2400)
 
 
 class ImportBatch(BaseModel):

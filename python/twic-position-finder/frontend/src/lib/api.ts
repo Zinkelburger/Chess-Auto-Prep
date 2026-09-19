@@ -267,7 +267,8 @@ export async function logout(token: string): Promise<void> {
 
 // ── BughouseDB (bughousedb.py) ─────────────────────────────────────
 
-export type Clock = 'ahead' | 'even' | 'behind';
+/** A + C's clock cases, named by Hivemind's two inputs: ahead = A > D, behind = B > C. */
+export type Clock = 'ahead' | 'even' | 'behind' | 'both';
 export type Team = 'AC' | 'BD';
 
 export interface BookScore { q: number | null; cp: number | null; mate: number | null; pv: string }

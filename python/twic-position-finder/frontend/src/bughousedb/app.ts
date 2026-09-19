@@ -17,12 +17,10 @@ import {
   type BookMove, type BookPosition, type BookScore, type Clock, type RawSearch, type Team,
 } from '../lib/api';
 
-/** A table column, from the mover's side: their team ahead, even or behind. */
-type Column = 'ahead' | 'even' | 'behind';
-
 const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1';
 const START_DUAL = `${START}|${START}`;
-const COLUMNS: Column[] = ['ahead', 'even', 'behind'];
+/** The table's columns: A > D, Equal, B > C, Both. */
+const COLUMNS: Clock[] = ['ahead', 'even', 'behind', 'both'];
 // The browser engine runs one network evaluation (about 80 ms) per node, so a
 // browser analysis is far shallower than the desktop builder's 1500/200.
 const OWN_NODES = 200;    // each search of the position itself
@@ -66,12 +64,10 @@ function moveNumber(fen: string, board: BoardName): number {
 
 const moverTeam = (m: BookMove): Team => (m.seat === 'A' || m.seat === 'C' ? 'AC' : 'BD');
 
-/** Stored scores are for A + C and A + C's clock; the tables read from the mover's side. */
-function moverScore(m: BookMove, column: Column): BookScore | undefined {
-  const ac = moverTeam(m) === 'AC';
-  const clock: Clock = column === 'even' ? 'even' : (column === 'ahead') === ac ? 'ahead' : 'behind';
+/** Stored scores are for A + C; the tables read them from the mover's side. */
+function moverScore(m: BookMove, clock: Clock): BookScore | undefined {
   const s = m.scores?.[clock];
-  if (!s || ac) return s;
+  if (!s || moverTeam(m) === 'AC') return s;
   return { ...s, q: s.q === null ? null : -s.q, cp: s.cp === null ? null : -s.cp, mate: s.mate === null ? null : -s.mate };
 }
 
