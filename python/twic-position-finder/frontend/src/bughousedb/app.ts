@@ -7,7 +7,7 @@
  * the raw searches the server asks for and uploads them unchanged. Boards,
  * move lists and setup boxes are shared with Bughouse Lab (../bughouse/boards).
  */
-import { BrowserEngine, type NodeSearchResult } from '../bughouse/engine';
+import { EnginePool, type BrowserEngine, type NodeSearchResult } from '../bughouse/engine';
 import {
   BOARDS, Boards, LineView, Lines, SEAT, SetupBoxes, readBoard, squaresOf,
   type BoardName, type BoardView, type Colour,
@@ -31,7 +31,7 @@ const BOTTOM: Record<BoardName, Colour> = { A: 'white', B: 'black' };
 
 const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const root = el('bughousedb');
-const engine = new BrowserEngine((message) => setStatus(message));
+const pool = new EnginePool((message) => setStatus(message));
 
 const lines = new Lines(START_DUAL);
 /** The last line the server accepted, to step back to if it refuses one. */
@@ -128,6 +128,7 @@ function renderMissing() {
   el<HTMLButtonElement>('bdb-analyse').hidden = running;
   el<HTMLButtonElement>('bdb-cancel').hidden = !running;
   el('bdb-progress').hidden = !running;
+  coresInput.disabled = running;
   el('bdb-missing-text').textContent = running
     ? (job!.fen === cur?.fen ? 'Analyzing on this computer…' : 'Analyzing an earlier position on this computer…')
     : `Not in the book yet · about ${estimate()}`;
@@ -136,9 +137,30 @@ function renderMissing() {
 function estimate(): string {
   if (!cur) return '';
   const nodes = cur.teams.length * 2 * OWN_NODES + cur.moves.length * 2 * CHILD_NODES;
-  const minutes = Math.max(1, Math.round((nodes * SECONDS_PER_NODE) / 60));
-  return `${minutes} minute${minutes === 1 ? '' : 's'}`;
+  const seconds = (nodes * SECONDS_PER_NODE) / cores();
+  return seconds < 90 ? `${Math.max(10, Math.round(seconds / 10) * 10)} s` : `${Math.round(seconds / 60)} min`;
 }
+
+// ── Cores ─────────────────────────────────────────────────────────
+// One engine worker per core, half the machine's by default; the choice is
+// remembered in this browser only.
+
+const coresInput = el<HTMLInputElement>('bdb-cores');
+coresInput.max = String(EnginePool.cores());
+coresInput.value = (() => {
+  try { return localStorage.getItem('bughousedb.cores') ?? ''; } catch { return ''; }
+})() || String(EnginePool.defaultSize());
+
+function cores(): number {
+  const n = Math.round(Number(coresInput.value));
+  return Number.isFinite(n) ? Math.max(1, Math.min(EnginePool.cores(), n)) : EnginePool.defaultSize();
+}
+
+coresInput.addEventListener('change', () => {
+  coresInput.value = String(cores());
+  try { localStorage.setItem('bughousedb.cores', coresInput.value); } catch { /* storage is optional */ }
+  renderMissing();
+});
 
 function render() {
   boards.render(); lineView.render(); renderTables(); renderMissing();
@@ -213,7 +235,7 @@ function turnstileToken(): string {
   return root.dataset.turnstile ? (t?.getResponse() ?? '') : '';
 }
 
-async function search(fen: string, team: Team, ahead: boolean, nodes: number): Promise<RawSearch | null> {
+async function search(engine: BrowserEngine, fen: string, team: Team, ahead: boolean, nodes: number): Promise<RawSearch | null> {
   try {
     const r = await engine.request<NodeSearchResult>('search', {
       dual_fen: fen, team: team === 'AC' ? 'white' : 'black', time_advantage: ahead, nodes,
@@ -246,20 +268,21 @@ async function analyse() {
     setStatus('Getting a ticket…');
     const { ticket } = await bookTicket(pos.fen, turnstileToken());
     setStatus('Loading Hivemind (about 44 MB the first time)…');
-    const own: { team: Team; ahead: boolean; search: RawSearch }[] = [];
-    for (const team of pos.teams) for (const ahead of [true, false]) {
+    // Every search is independent: the position's own four, then two per move.
+    type Task = { fen: string; team: Team; ahead: boolean; nodes: number };
+    const ownTasks: Task[] = pos.teams.flatMap((team) => [true, false].map((ahead) => ({ fen: pos.fen, team, ahead, nodes: OWN_NODES })));
+    const moveTasks: Task[] = pos.moves.flatMap((m) => [true, false].map((ahead) => ({ fen: m.child_fen, team: m.answerer, ahead, nodes: CHILD_NODES })));
+    const results = await pool.map(cores(), [...ownTasks, ...moveTasks], async (engine, t) => {
       if (mine.cancelled) throw new Error('cancelled');
-      const s = await search(pos.fen, team, ahead, OWN_NODES);
-      if (s) own.push({ team, ahead, search: s });
+      const s = await search(engine, t.fen, t.team, t.ahead, t.nodes);
       tick();
-    }
-    const moves = [];
-    for (const m of pos.moves) {
-      if (mine.cancelled) throw new Error('cancelled');
-      const on = await search(m.child_fen, m.answerer, true, CHILD_NODES); tick();
-      const off = await search(m.child_fen, m.answerer, false, CHILD_NODES); tick();
-      moves.push({ board: m.board, uci: m.uci, on, off });
-    }
+      return s;
+    });
+    const own = ownTasks.flatMap((t, i) => (results[i] ? [{ team: t.team, ahead: t.ahead, search: results[i]! }] : []));
+    const moves = pos.moves.map((m, i) => ({
+      board: m.board, uci: m.uci,
+      on: results[ownTasks.length + 2 * i], off: results[ownTasks.length + 2 * i + 1],
+    }));
     setStatus('Uploading…');
     await bookUpload({ ticket, fen: pos.fen, engine: ENGINE, nodes: OWN_NODES, child_nodes: CHILD_NODES, own, moves });
     setStatus('Added to the book. Thank you.');
@@ -279,7 +302,7 @@ async function analyse() {
 // ── Wiring ────────────────────────────────────────────────────────
 
 el('bdb-analyse').onclick = () => { analyse(); };
-el('bdb-cancel').onclick = () => { if (job) { job.cancelled = true; engine.cancel(); } };
+el('bdb-cancel').onclick = () => { if (job) { job.cancelled = true; pool.cancel(); } };
 el<HTMLFormElement>('bdb-fen-form').onsubmit = (e) => {
   e.preventDefault();
   const dual = setup.read();

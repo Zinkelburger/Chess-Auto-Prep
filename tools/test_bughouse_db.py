@@ -298,6 +298,24 @@ class TestHivemindBook(unittest.TestCase):
         self.assertAlmostEqual(picks["BD"], -hb.to_score(raw[("BD", True)] - off["both"]), places=2)
         self.assertEqual(hb.fill_both(con), 0, "filled once")
 
+    def test_workers_never_claim_the_same_position(self):
+        from bughouse_db import hivemind_book as hb
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "book.db"
+            one, two = hb.open_db(path), hb.open_db(path)
+            dual = hb.DualBoard()
+            hb.enqueue(one, dual, "", 0, -2)
+            dual.push("A", "e4")
+            hb.enqueue(one, dual, "A:e4", 1, -1)
+            one.commit()
+            first, second = hb.claim(one), hb.claim(two)
+            self.assertEqual(first[2], "")  # most-played first
+            self.assertEqual(second[2], "A:e4")
+            self.assertIsNone(hb.claim(one))
+            one.close()
+            two.close()
+
     def test_seats_follow_the_side_to_move(self):
         from bughouse_db import hivemind_book as hb
 

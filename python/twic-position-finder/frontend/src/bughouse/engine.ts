@@ -57,3 +57,54 @@ export class BrowserEngine {
 
   cancel() { this.worker?.postMessage({ action: 'cancel' }); }
 }
+
+/**
+ * Several engines, one per core: each worker runs its own WASM and network
+ * on one thread, so independent searches run side by side without
+ * SharedArrayBuffer or special headers. Workers stay loaded between batches.
+ */
+export class EnginePool {
+  private engines: BrowserEngine[] = [];
+  private stopped = false;
+
+  constructor(private progress: (message: string) => void) {}
+
+  /** Available logical cores, and the default of half of them. */
+  static cores(): number { return Math.max(1, navigator.hardwareConcurrency || 2); }
+  static defaultSize(): number { return Math.max(1, Math.floor(EnginePool.cores() / 2)); }
+
+  private engine(i: number): BrowserEngine {
+    // Only the first worker reports loading progress; the rest would repeat it.
+    while (this.engines.length <= i) this.engines.push(new BrowserEngine(this.engines.length ? () => {} : this.progress));
+    return this.engines[i];
+  }
+
+  /**
+   * `run` for every item on up to `size` workers, results in item order. The
+   * first item runs alone so one worker downloads and caches the network
+   * before the others read it from the cache.
+   */
+  async map<T, R>(size: number, items: T[], run: (engine: BrowserEngine, item: T) => Promise<R>): Promise<R[]> {
+    this.stopped = false;
+    const out: R[] = new Array(items.length);
+    if (!items.length) return out;
+    out[0] = await run(this.engine(0), items[0]);
+    let next = 1;
+    const lane = async (i: number) => {
+      while (next < items.length && !this.stopped) {
+        const index = next++;
+        out[index] = await run(this.engine(i), items[index]);
+      }
+    };
+    // One failed search stops the other workers too.
+    await Promise.all(Array.from({ length: Math.max(1, size) }, (_, i) => lane(i)))
+      .catch((error) => { this.cancel(); throw error; });
+    if (this.stopped) throw new Error('Analysis cancelled.');
+    return out;
+  }
+
+  cancel() {
+    this.stopped = true;
+    for (const engine of this.engines) engine.cancel();
+  }
+}

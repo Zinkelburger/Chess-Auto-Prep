@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS position(
   line      TEXT NOT NULL,        -- first line that reached it: 'A:e4 B:d4'
   ply       INTEGER NOT NULL,
   priority  REAL NOT NULL,        -- lower is searched first
-  status    TEXT NOT NULL,        -- 'queued' | 'done'
+  status    TEXT NOT NULL,        -- 'queued' | 'running' (claimed by a worker) | 'done'
   nodes     INTEGER,              -- per search of the position itself
   child_nodes INTEGER,            -- per search of each move
   seconds   REAL,
@@ -299,10 +299,46 @@ def mover_value(entry: tuple, seat: str) -> float:
 
 def open_db(path: Path) -> sqlite3.Connection:
     path.parent.mkdir(parents=True, exist_ok=True)
-    con = sqlite3.connect(path)
+    con = sqlite3.connect(path, timeout=60)  # several workers share the file
     con.executescript(SCHEMA)
     con.execute("PRAGMA journal_mode=WAL")
     return con
+
+
+def claim(con: sqlite3.Connection) -> tuple | None:
+    """The next queued position, marked 'running' so no other worker takes it."""
+    with con:
+        con.execute("BEGIN IMMEDIATE")
+        row = con.execute(
+            "SELECT pos, fen, line, ply FROM position WHERE status='queued' "
+            "ORDER BY priority, ply LIMIT 1").fetchone()
+        if row:
+            con.execute("UPDATE position SET status='running' WHERE pos=?", (row[0],))
+    return row
+
+
+def run_workers(args: argparse.Namespace) -> int:
+    """`--workers N`: N builder processes on one queue, each with its own
+    engine (one engine keeps about five cores busy). Positions a stopped run
+    had claimed go back to the queue first."""
+    import subprocess
+
+    con = open_db(args.db)
+    con.execute("UPDATE position SET status='queued' WHERE status='running'")
+    con.commit()
+    con.close()
+    base = [sys.executable, "-u", str(Path(__file__).resolve()), "--db", str(args.db), "run",
+            "--root", args.root, "--nodes", str(args.nodes), "--child-nodes", str(args.child_nodes),
+            "--max-ply", str(args.max_ply), "--follow", args.follow, "--width", str(args.width)]
+    procs = [subprocess.Popen(base + ["--worker", str(i + 1)]) for i in range(args.workers)]
+
+    def forward(sig, _frame):
+        for p in procs:
+            p.send_signal(sig)
+
+    signal.signal(signal.SIGINT, forward)
+    signal.signal(signal.SIGTERM, forward)
+    return max(p.wait() for p in procs)
 
 
 def enqueue(con: sqlite3.Connection, dual: DualBoard, line: str, ply: int, priority: float) -> None:
@@ -314,7 +350,11 @@ def enqueue(con: sqlite3.Connection, dual: DualBoard, line: str, ply: int, prior
 
 
 def run(args: argparse.Namespace) -> int:
+    if args.workers > 1 and not args.worker:
+        return run_workers(args)
     con = open_db(args.db)
+    if not args.worker:
+        con.execute("UPDATE position SET status='queued' WHERE status='running'")
     root = DualBoard()
     for tag in (args.root or "").split():
         b, text = tag.split(":", 1)
@@ -336,9 +376,7 @@ def run(args: argparse.Namespace) -> int:
     started, done_here = time.time(), 0
     try:
         while not stop["now"]:
-            row = con.execute(
-                "SELECT pos, fen, line, ply FROM position WHERE status='queued' "
-                "ORDER BY priority, ply LIMIT 1").fetchone()
+            row = claim(con)
             if row is None:
                 print("queue empty", flush=True)
                 break
@@ -361,7 +399,7 @@ def run(args: argparse.Namespace) -> int:
             done_here += 1
             queued = con.execute("SELECT COUNT(*) FROM position WHERE status='queued'").fetchone()[0]
             total = con.execute("SELECT COUNT(*) FROM position WHERE status='done'").fetchone()[0]
-            print(f"{time.strftime('%H:%M:%S')}  done {total:5d}  queue {queued:5d}  "
+            print(f"{time.strftime('%H:%M:%S')}  {f'w{args.worker} ' if args.worker else ''}done {total:5d}  queue {queued:5d}  "
                   f"ply {ply}  {len(scores):3d} moves  {time.time() - t0:5.0f}s  "
                   f"{line or '(start)'}", flush=True)
     finally:
@@ -564,6 +602,9 @@ def main(argv: list[str] | None = None) -> int:
                    help="queue the most-played FICS moves, or the engine's best")
     r.add_argument("--width", type=int, default=4,
                    help="moves queued after each position (engine: per board)")
+    r.add_argument("--workers", type=int, default=1,
+                   help="builder processes sharing the queue; each engine uses about 5 cores")
+    r.add_argument("--worker", type=int, default=0, help=argparse.SUPPRESS)
     s = sub.add_parser("show", help="print one position's table")
     s.add_argument("line", nargs="?", default="")
     sub.add_parser("stats")

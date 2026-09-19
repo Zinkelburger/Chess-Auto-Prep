@@ -21,6 +21,7 @@ const TURNSTILE = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
           <div class="bdb-missing-row">
             <button id="bdb-analyse" class="btn btn-primary" title="Run Hivemind in this browser and add the position to the book for everyone">Analyze locally</button>
             <button id="bdb-cancel" class="btn btn-outline" hidden>Cancel</button>
+            <label class="bdb-cores" title="Searches run side by side, one per core. More cores finish sooner.">Cores <input id="bdb-cores" type="number" min="1" step="1" inputmode="numeric" /></label>
             <span id="bdb-missing-text" class="dim">Not in the book yet.</span>
           </div>
           {TURNSTILE && <div class="cf-turnstile" data-sitekey={TURNSTILE} data-appearance="interaction-only"></div>}
