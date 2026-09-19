@@ -4,17 +4,19 @@
  *
  * The server (bughousedb.py) owns positions, legal moves and every derived
  * score; this page renders what it returns and, for a missing position, runs
- * the raw searches the server asks for and uploads them unchanged.
+ * the raw searches the server asks for and uploads them unchanged. Boards,
+ * move lists and setup boxes are shared with Bughouse Lab (../bughouse/boards).
  */
 import { BrowserEngine, type NodeSearchResult } from '../bughouse/engine';
+import {
+  BOARDS, Boards, LineView, Lines, SEAT, SetupBoxes, readBoard, squaresOf,
+  type BoardName, type BoardView, type Colour,
+} from '../bughouse/boards';
 import {
   ApiError, bookPosition, bookTicket, bookUpload,
   type BookMove, type BookPosition, type BookScore, type Clock, type RawSearch, type Team,
 } from '../lib/api';
-import { balance, checkFen, parseReserve, splitBoard } from './setup';
 
-type BoardName = 'A' | 'B';
-type Colour = 'white' | 'black';
 /** A table column, from the mover's side: their team ahead, even or behind. */
 type Column = 'ahead' | 'even' | 'behind';
 
@@ -27,54 +29,32 @@ const OWN_NODES = 200;    // each search of the position itself
 const CHILD_NODES = 16;   // each search after one move (1 would leave q = -1)
 const SECONDS_PER_NODE = 0.085;
 const ENGINE = 'hivemind-web';
+const BOTTOM: Record<BoardName, Colour> = { A: 'white', B: 'black' };
 
 const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const root = el('bughousedb');
 const engine = new BrowserEngine((message) => setStatus(message));
 
-/** Seats: board A has A (White) and B (Black); board B has D (White) and C (Black). */
-const SEAT: Record<BoardName, Record<Colour, string>> = { A: { white: 'A', black: 'B' }, B: { white: 'D', black: 'C' } };
-const BOTTOM: Record<BoardName, Colour> = { A: 'white', B: 'black' };
-const PIECE_NAMES: Record<string, string> = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' };
-
-/**
- * The game is one interleaved line of moves, like a FICS bpgn; each board's
- * history shows only its own moves. `ply` is the position on screen, and the
- * moves after it stay in the line until a different move replaces them.
- */
-interface Step { fen: string; board: BoardName | null; colour: Colour | null; num: number; uci: string; san: string }
-let line: Step[] = [{ fen: START_DUAL, board: null, colour: null, num: 0, uci: '', san: '' }];
-let ply = 0;
+const lines = new Lines(START_DUAL);
+/** The last line the server accepted, to step back to if it refuses one. */
+let accepted = lines.snapshot();
 let cur: BookPosition | null = null;
-let selected: { board: BoardName; from?: string; drop?: string } | null = null;
 let hover: BookMove | null = null;
 let job: { fen: string; cancelled: boolean } | null = null;
-/** A piece being dragged from a square or a pocket; `ghost` exists once it has moved. */
-let drag: { board: BoardName; from?: string; drop?: string; piece: string; x: number; y: number; ghost?: HTMLImageElement } | null = null;
-let swallowClick = false;
 
-// ── Reading a dual FEN for display ────────────────────────────────
+const boards = new Boards('bdb', { view, play: playUci });
+const lineView = new LineView('bdb', lines, () => { void load(); });
+const setup = new SetupBoxes('bdb');
 
-function parseBoard(fen: string): { pieces: Record<string, string>; pockets: Record<Colour, string> } {
-  const field = fen.split(' ')[0];
-  const open = field.indexOf('[');
-  const placement = (open >= 0 ? field.slice(0, open) : field).replace(/~/g, '');
-  const pocket = open >= 0 ? field.slice(open + 1, field.indexOf(']', open)) : '';
-  const pieces: Record<string, string> = {};
-  placement.split('/').forEach((rank, r) => {
-    let file = 0;
-    for (const ch of rank) {
-      if (/\d/.test(ch)) { file += Number(ch); continue; }
-      pieces['abcdefgh'[file] + String(8 - r)] = ch;
-      file += 1;
-    }
-  });
-  return { pieces, pockets: { white: [...pocket].filter((c) => c === c.toUpperCase()).join(''), black: [...pocket].filter((c) => c !== c.toUpperCase()).join('') } };
-}
-
-function boardsOf(fen: string): Record<BoardName, ReturnType<typeof parseBoard>> {
-  const [a, b] = fen.split('|');
-  return { A: parseBoard(a), B: parseBoard(b) };
+function view(name: BoardName): BoardView {
+  const data = readBoard((cur?.fen ?? lines.root).split('|')[name === 'A' ? 0 : 1] ?? '');
+  const last = lines.current(name);
+  return {
+    ...data, bottom: BOTTOM[name], turn: cur?.turn[name] ?? null,
+    legal: cur ? cur.moves.filter((m) => m.board === name).map((m) => m.uci) : [],
+    last: last ? squaresOf(last.uci) : [],
+    arrow: hover?.board === name ? hover.uci : null,
+  };
 }
 
 function moveNumber(fen: string, board: BoardName): number {
@@ -112,123 +92,8 @@ function formatScore(s: BookScore | undefined): string {
 
 // ── Rendering ─────────────────────────────────────────────────────
 
-function image(piece: string): HTMLImageElement {
-  const img = document.createElement('img');
-  img.src = `/piece/${piece === piece.toUpperCase() ? 'w' : 'b'}${piece.toUpperCase()}.svg`;
-  img.alt = '';
-  return img;
-}
-
-function squares(uci: string): string[] {
-  return uci.includes('@') ? [uci.slice(2, 4)] : [uci.slice(0, 2), uci.slice(2, 4)];
-}
-
-function lastMove(board: BoardName): Step | undefined {
-  for (let i = ply; i > 0; i--) if (line[i].board === board) return line[i];
-  return undefined;
-}
-
-function candidates(board: BoardName): BookMove[] {
-  if (!cur || selected?.board !== board) return [];
-  return cur.moves.filter((m) => m.board === board && (selected?.drop
-    ? m.uci.startsWith(`${selected.drop}@`)
-    : !m.uci.includes('@') && m.uci.startsWith(selected?.from ?? '?')));
-}
-
-/** Square centre in the board's 8×8 view box. */
-function centre(board: BoardName, square: string): [number, number] {
-  const file = 'abcdefgh'.indexOf(square[0]);
-  const rank = Number(square[1]);
-  return BOTTOM[board] === 'white' ? [file + 0.5, 8 - rank + 0.5] : [7 - file + 0.5, rank - 0.5];
-}
-
-/** Hovering a table row draws the move, as Lichess's explorer does. */
-function renderArrow(board: BoardName) {
-  const svg = el(`bdb-arrow-${board}`);
-  if (!hover || hover.board !== board) { svg.innerHTML = ''; return; }
-  const [to] = squares(hover.uci).slice(-1);
-  const [x2, y2] = centre(board, to);
-  const brush = 'stroke="#003088" stroke-opacity="0.5"';
-  if (hover.uci.includes('@')) {
-    svg.innerHTML = `<circle cx="${x2}" cy="${y2}" r="0.44" fill="none" ${brush} stroke-width="0.08"/>`;
-    return;
-  }
-  const [x1, y1] = centre(board, hover.uci.slice(0, 2));
-  const len = Math.hypot(x2 - x1, y2 - y1);
-  const [ex, ey] = [x2 - ((x2 - x1) / len) * 0.3, y2 - ((y2 - y1) / len) * 0.3];
-  svg.innerHTML = `<defs><marker id="bdb-head-${board}" orient="auto" markerWidth="4" markerHeight="4" refX="2.05" refY="2">`
-    + `<path d="M0,0 V4 L3,2 Z" fill="#003088" fill-opacity="0.5"/></marker></defs>`
-    + `<line x1="${x1}" y1="${y1}" x2="${ex}" y2="${ey}" ${brush} stroke-width="0.2" stroke-linecap="round" marker-end="url(#bdb-head-${board})"/>`;
-}
-
-function renderBoard(name: BoardName) {
-  const data = boardsOf(cur?.fen ?? line[ply].fen)[name];
-  const bottom = BOTTOM[name];
-  const files = bottom === 'white' ? 'abcdefgh' : 'hgfedcba';
-  const ranks = bottom === 'white' ? '87654321' : '12345678';
-  const container = el(`bdb-board-${name}`);
-  container.replaceChildren();
-  const last = lastMove(name);
-  const marks = last ? squares(last.uci) : [];
-  const targets = candidates(name).map((m) => m.uci.slice(2, 4));
-  for (let row = 0; row < 8; row++) for (let col = 0; col < 8; col++) {
-    const square = files[col] + ranks[row];
-    const piece = data.pieces[square];
-    const button = document.createElement('button');
-    button.type = 'button';  // inside the setup form
-    button.className = `bdb-square${(row + col) % 2 ? ' dark' : ''}`;
-    if (marks.includes(square)) button.classList.add('last');
-    if (selected?.board === name && selected.from === square) button.classList.add('selected');
-    if (targets.includes(square)) button.classList.add('target');
-    if (drag?.ghost && drag.board === name && drag.from === square) button.classList.add('dragging');
-    button.dataset.board = name;
-    button.dataset.square = square;
-    if (piece && cur?.moves.some((m) => m.board === name && m.uci.startsWith(square))) {
-      button.onpointerdown = (e) => startDrag(e, { board: name, from: square, piece });
-    }
-    button.setAttribute('aria-label', `Board ${name === 'A' ? 1 : 2} ${square}${piece ? ` ${piece === piece.toUpperCase() ? 'white' : 'black'} ${PIECE_NAMES[piece.toLowerCase()]}` : ''}`);
-    if (piece) button.append(image(piece));
-    if (row === 7) { const f = document.createElement('span'); f.className = 'bdb-coord file'; f.textContent = files[col]; button.append(f); }
-    if (col === 0) { const r = document.createElement('span'); r.className = 'bdb-coord rank'; r.textContent = ranks[row]; button.append(r); }
-    button.onclick = () => clickSquare(name, square);
-    container.append(button);
-  }
-  renderArrow(name);
-  const turn = cur?.turn[name];
-  for (const [where, colour] of [['top', bottom === 'white' ? 'black' : 'white'], ['bottom', bottom]] as const) {
-    const box = el(`bdb-player-${where}-${name}`);
-    box.replaceChildren();
-    box.classList.toggle('to-move', turn === colour);
-    const dot = document.createElement('span');
-    dot.className = `turn ${colour}`;
-    dot.title = `${colour === 'white' ? 'White' : 'Black'} to move`;
-    const who = document.createElement('span');
-    who.className = 'who';
-    who.textContent = `Player ${SEAT[name][colour]}`;
-    box.append(dot, who);
-    const pocket = data.pockets[colour];
-    for (const p of ['p', 'n', 'b', 'r', 'q']) {
-      const count = [...pocket].filter((c) => c.toLowerCase() === p).length;
-      if (!count) continue;
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'bdb-pocket';
-      const letter = p.toUpperCase();
-      button.append(image(colour === 'white' ? letter : p), document.createTextNode(String(count)));
-      button.setAttribute('aria-label', `Player ${SEAT[name][colour]}: ${count} ${PIECE_NAMES[p]} in reserve`);
-      button.setAttribute('aria-pressed', String(selected?.board === name && selected.drop === letter));
-      button.disabled = turn !== colour || !cur?.moves.some((m) => m.board === name && m.uci.startsWith(`${letter}@`));
-      button.onclick = () => { selected = selected?.board === name && selected.drop === letter ? null : { board: name, drop: letter }; renderBoards(); };
-      if (!button.disabled) button.onpointerdown = (e) => startDrag(e, { board: name, drop: letter, piece: colour === 'white' ? letter : p });
-      box.append(button);
-    }
-  }
-}
-
-function renderBoards() { renderBoard('A'); renderBoard('B'); }
-
 function renderTables() {
-  for (const name of ['A', 'B'] as BoardName[]) {
+  for (const name of BOARDS) {
     const body = el(`bdb-moves-${name}`);
     body.replaceChildren();
     const turn = cur?.turn[name];
@@ -254,47 +119,10 @@ function renderTables() {
       tr.onmouseenter = tr.onfocus = () => setHover(m);
       tr.onmouseleave = tr.onblur = () => setHover(null);
       tr.onclick = () => play(m);
-      tr.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); play(m); } };
+      tr.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); play(m); } };
       body.append(tr);
     });
   }
-}
-
-/** Each board's own moves, numbered as that board counts them. */
-function renderHistory(name: BoardName) {
-  const list = el(`bdb-history-${name}`);
-  list.replaceChildren();
-  const current = lastMove(name);
-  let row: HTMLLIElement | null = null;
-  line.forEach((step, i) => {
-    if (step.board !== name) return;
-    if (!row || step.colour === 'white') {
-      row = document.createElement('li');
-      const num = document.createElement('span');
-      num.className = 'num';
-      num.textContent = `${step.num}.`;
-      row.append(num);
-      if (step.colour === 'black') { const gap = document.createElement('span'); gap.className = 'none'; gap.textContent = '…'; row.append(gap); }
-      list.append(row);
-    }
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.textContent = step.san;
-    b.title = `Player ${SEAT[name][step.colour!]}`;
-    if (i > ply) b.classList.add('future');
-    b.setAttribute('aria-current', String(step === current));
-    b.onclick = () => go(i);
-    row.append(b);
-    if (step.colour === 'black') row = null;
-  });
-  list.querySelector('[aria-current="true"]')?.scrollIntoView({ block: 'nearest' });
-}
-
-function renderNav() {
-  el<HTMLButtonElement>('bdb-first').disabled = ply === 0;
-  el<HTMLButtonElement>('bdb-prev').disabled = ply === 0;
-  el<HTMLButtonElement>('bdb-next').disabled = ply === line.length - 1;
-  el<HTMLButtonElement>('bdb-last').disabled = ply === line.length - 1;
 }
 
 function renderMissing() {
@@ -317,13 +145,13 @@ function estimate(): string {
 }
 
 function render() {
-  renderBoards(); renderTables(); renderHistory('A'); renderHistory('B'); renderNav(); renderMissing();
+  boards.render(); lineView.render(); renderTables(); renderMissing();
   // Only a browser analysis is worth a note: it is much shallower than the book.
   el('bdb-source').textContent = cur?.meta && cur.meta.source !== 'desktop' ? 'Analyzed in a browser: a quick, shallower search.' : '';
-  fillSetup(cur?.fen ?? line[ply].fen);
+  setup.fill(cur?.fen ?? lines.root);
 }
 
-function setHover(m: BookMove | null) { hover = m; renderArrow('A'); renderArrow('B'); }
+function setHover(m: BookMove | null) { hover = m; boards.renderArrows(); }
 
 function setStatus(text: string, error = false) {
   const s = el('bdb-status');
@@ -333,169 +161,54 @@ function setStatus(text: string, error = false) {
 
 // ── Navigation ────────────────────────────────────────────────────
 
+/**
+ * The position for the moves each board has kept. A step the server refuses
+ * (one board's drop needed the other's capture) goes back to the last line
+ * it accepted.
+ */
 async function load() {
-  const step = line[ply];
-  selected = null; hover = null;
-  history.replaceState(null, '', step.fen === START_DUAL ? location.pathname : `?fen=${encodeURIComponent(step.fen)}`);
+  const asked = lines.snapshot();
+  boards.selected = null; hover = null;
   try {
-    const pos = await bookPosition(step.fen);
-    if (line[ply] !== step) return;  // navigated on while this was loading
+    const pos = await bookPosition(lines.root, lines.tokens());
+    if (JSON.stringify(lines.snapshot()) !== JSON.stringify(asked)) return;  // moved on meanwhile
     cur = pos;
+    accepted = asked;
     if (!job) setStatus('');
-    el('bdb-fen-error-A').textContent = '';
+    setup.error('');
+    history.replaceState(null, '', pos.fen === START_DUAL ? location.pathname : `?fen=${encodeURIComponent(pos.fen)}`);
   } catch (e) {
-    if (line[ply] !== step) return;
-    cur = null;
-    // Shown under the setup boxes: the missing-position strip is hidden without a position.
-    el('bdb-fen-error-A').textContent = e instanceof ApiError ? e.message : 'Could not reach the book.';
+    if (JSON.stringify(lines.snapshot()) !== JSON.stringify(asked)) return;
+    const message = e instanceof ApiError ? e.message : 'Could not reach the book.';
+    if (e instanceof ApiError && e.status === 400 && lines.moves.length) {
+      lines.restore(accepted);
+      setup.error(`Can’t step there: ${message} A drop may need the capture on the other board.`);
+    } else {
+      cur = null;
+      setup.error(message);
+    }
   }
   render();
 }
 
-function go(to: number) {
-  const next = Math.max(0, Math.min(line.length - 1, to));
-  if (next === ply) return;
-  ply = next;
-  load();
-}
-
 function play(m: BookMove) {
   if (!cur) return;
-  const ahead = line[ply + 1];
-  if (ahead && ahead.board === m.board && ahead.uci === m.uci) { go(ply + 1); return; }
-  line = line.slice(0, ply + 1);
-  line.push({ fen: m.child_fen, board: m.board, colour: cur.turn[m.board], num: moveNumber(cur.fen, m.board), uci: m.uci, san: m.san });
-  go(line.length - 1);
+  lines.play({ board: m.board, uci: m.uci, san: m.san, colour: cur.turn[m.board], num: moveNumber(cur.fen, m.board) });
+  void load();
+}
+
+/** From the board: several moves only when a pawn promotes; the book takes the queen. */
+function playUci(name: BoardName, ucis: string[]) {
+  const uci = ucis.find((u) => u.endsWith('q')) ?? ucis[0];
+  const m = cur?.moves.find((x) => x.board === name && x.uci === uci);
+  if (m) play(m);
 }
 
 function reset(fen: string) {
-  line = [{ fen, board: null, colour: null, num: 0, uci: '', san: '' }];
-  ply = 0;
-  load();
+  lines.reset(fen);
+  accepted = lines.snapshot();
+  void load();
 }
-
-function clickSquare(board: BoardName, square: string) {
-  if (!cur) return;
-  const own = cur.moves.filter((m) => m.board === board);
-  if (selected?.board === board) {
-    const hit = candidates(board).filter((m) => m.uci.slice(2, 4) === square);
-    if (hit.length) { play(hit.find((m) => m.uci.endsWith('q')) ?? hit[0]); return; }
-  }
-  selected = own.some((m) => !m.uci.includes('@') && m.uci.startsWith(square)) ? { board, from: square } : null;
-  renderBoards();
-}
-
-// ── Setting a position by hand ────────────────────────────────────
-
-const input = (id: string) => el<HTMLInputElement>(id);
-
-function fillSetup(dual: string) {
-  const boards = dual.split('|');
-  (['A', 'B'] as BoardName[]).forEach((name, i) => {
-    const setup = splitBoard(boards[i] ?? '');
-    input(`bdb-fen-${name}`).value = setup.fen;
-    input(`bdb-reserve-${name}-white`).value = setup.white;
-    input(`bdb-reserve-${name}-black`).value = setup.black;
-  });
-  renderBalance();
-}
-
-/** What the setup boxes leave unplaced, live as they are edited. */
-function renderBalance() {
-  const reserves = (['A', 'B'] as BoardName[]).flatMap((name) => (['white', 'black'] as Colour[]).map((colour) => {
-    const r = parseReserve(input(`bdb-reserve-${name}-${colour}`).value);
-    return 'error' in r ? '' : colour === 'white' ? r.pieces : r.pieces.toLowerCase();
-  })).join('');
-  const b = balance([input('bdb-fen-A').value, input('bdb-fen-B').value], reserves);
-  const out = el('bdb-balance');
-  out.replaceChildren();
-  if (!b) return;
-  const part = (label: string, sides: Record<Colour, string>, cls: string) => {
-    const text = (['white', 'black'] as Colour[]).filter((c) => sides[c]).map((c) => `${c === 'white' ? 'White' : 'Black'}: ${sides[c]}`).join(' · ');
-    if (!text) return;
-    const span = document.createElement('span');
-    span.className = cls;
-    span.textContent = `${label} ${text}`;
-    out.append(span);
-  };
-  part('Pieces outstanding:', b.missing, 'missing');
-  part('Too many:', b.extra, 'extra');
-  if (!out.childElementCount) out.textContent = 'Pieces outstanding: none';
-}
-
-/** Both boards from their boxes; a pasted dual FEN in either box fills both. */
-function setPosition() {
-  for (const name of ['A', 'B'] as BoardName[]) {
-    const pasted = input(`bdb-fen-${name}`).value;
-    if (pasted.includes('|')) { fillSetup(pasted); break; }
-  }
-  const boards: string[] = [];
-  let ok = true;
-  for (const name of ['A', 'B'] as BoardName[]) {
-    const errors: string[] = [];
-    const fen = checkFen(input(`bdb-fen-${name}`).value);
-    input(`bdb-fen-${name}`).setAttribute('aria-invalid', String('error' in fen));
-    if ('error' in fen) errors.push(fen.error);
-    const pockets: string[] = [];
-    for (const colour of ['white', 'black'] as Colour[]) {
-      const box = input(`bdb-reserve-${name}-${colour}`);
-      const reserve = parseReserve(box.value);
-      box.setAttribute('aria-invalid', String('error' in reserve));
-      if ('error' in reserve) errors.push(`Player ${SEAT[name][colour]}: ${reserve.error}`);
-      else pockets.push(colour === 'white' ? reserve.pieces : reserve.pieces.toLowerCase());
-    }
-    // A pocket pasted in brackets counts too, beside what the reserve boxes say.
-    if (!('error' in fen)) boards.push(`${fen.placement}[${pockets.join('')}${fen.pocket}] ${fen.rest}`);
-    el(`bdb-fen-error-${name}`).textContent = errors.join(' ');
-    ok &&= errors.length === 0;
-  }
-  if (ok) reset(boards.join('|'));
-}
-
-// ── Drag and drop ─────────────────────────────────────────────────
-// A press that moves more than a few pixels becomes a drag; a still press
-// stays a click, so click-to-move keeps working.
-
-function startDrag(e: PointerEvent, from: { board: BoardName; from?: string; drop?: string; piece: string }) {
-  if (e.button !== 0 || !cur) return;
-  e.preventDefault();
-  drag = { ...from, x: e.clientX, y: e.clientY };
-}
-
-document.addEventListener('pointermove', (e) => {
-  if (!drag) return;
-  if (!drag.ghost) {
-    if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 5) return;
-    const size = el(`bdb-board-${drag.board}`).getBoundingClientRect().width / 8;
-    drag.ghost = image(drag.piece);
-    drag.ghost.className = 'bdb-ghost';
-    drag.ghost.style.width = drag.ghost.style.height = `${size}px`;
-    document.body.append(drag.ghost);
-    selected = { board: drag.board, from: drag.from, drop: drag.drop };
-    renderBoards();
-  }
-  drag.ghost.style.left = `${e.clientX}px`;
-  drag.ghost.style.top = `${e.clientY}px`;
-});
-
-function endDrag(e: PointerEvent) {
-  const d = drag;
-  drag = null;
-  if (!d?.ghost) return;
-  d.ghost.remove();
-  swallowClick = true;
-  setTimeout(() => { swallowClick = false; });
-  const target = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest<HTMLElement>('.bdb-square');
-  const hit = target?.dataset.board === d.board
-    ? candidates(d.board).filter((m) => m.uci.slice(2, 4) === target.dataset.square) : [];
-  if (hit.length) { play(hit.find((m) => m.uci.endsWith('q')) ?? hit[0]); return; }
-  selected = null;
-  renderBoards();
-}
-document.addEventListener('pointerup', endDrag);
-document.addEventListener('pointercancel', () => { drag?.ghost?.remove(); drag = null; selected = null; renderBoards(); });
-// The click that ends a drag is not a second, separate click.
-document.addEventListener('click', (e) => { if (swallowClick) { swallowClick = false; e.stopPropagation(); e.preventDefault(); } }, true);
 
 // ── Analysing a missing position in this browser ──────────────────
 
@@ -571,20 +284,11 @@ async function analyse() {
 
 el('bdb-analyse').onclick = () => { analyse(); };
 el('bdb-cancel').onclick = () => { if (job) { job.cancelled = true; engine.cancel(); } };
-el('bdb-first').onclick = () => go(0);
-el('bdb-prev').onclick = () => go(ply - 1);
-el('bdb-next').onclick = () => go(ply + 1);
-el('bdb-last').onclick = () => go(line.length - 1);
-el<HTMLFormElement>('bdb-fen-form').onsubmit = (e) => { e.preventDefault(); setPosition(); };
-for (const input of document.querySelectorAll<HTMLInputElement>('.bdb-setup input')) {
-  input.oninput = () => { input.removeAttribute('aria-invalid'); renderBalance(); };
-}
-document.addEventListener('keydown', (e) => {
-  const t = e.target as HTMLElement;
-  if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA') return;
-  const to = { ArrowLeft: ply - 1, ArrowRight: ply + 1, Home: 0, End: line.length - 1 }[e.key];
-  if (to !== undefined) { e.preventDefault(); go(to); }
-  else if (e.key === 'Escape' && selected) { selected = null; renderBoards(); }
-});
+el<HTMLFormElement>('bdb-fen-form').onsubmit = (e) => {
+  e.preventDefault();
+  const dual = setup.read();
+  if (dual) reset(dual);
+};
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') boards.deselect(); });
 
 reset(new URLSearchParams(location.search).get('fen') || START_DUAL);

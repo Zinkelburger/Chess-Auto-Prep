@@ -105,6 +105,9 @@ def db() -> Iterator[sqlite3.Connection]:
 # piece keeps its colour and goes to the partner's pocket on the other board.
 
 
+MAX_LINE = 400
+
+
 class BadPosition(ValueError):
     pass
 
@@ -315,9 +318,29 @@ def derive(boards: list[CrazyhouseBoard], own: dict[tuple[str, bool], Search],
 # ── Reading ───────────────────────────────────────────────────────────
 
 
-def read_position(conn: sqlite3.Connection, fen: str) -> dict:
+def play_line(boards: list[CrazyhouseBoard], moves: str) -> list[CrazyhouseBoard]:
+    """`moves` played in order: board-tagged UCI such as "A:e2e4 B:P@e6"."""
+    tokens = moves.split()
+    if len(tokens) > MAX_LINE:
+        raise BadPosition(f"Use up to {MAX_LINE} moves.")
+    for token in tokens:
+        tag, _, uci = token.partition(":")
+        if tag not in ("A", "B") or not uci:
+            raise BadPosition(f"Tag each move with its board, like A:e2e4, not {token[:12]!r}.")
+        which = "AB".index(tag)
+        try:
+            move = boards[which].parse_uci(uci)
+        except ValueError:
+            move = None
+        if move is None or move not in boards[which].legal_moves:
+            raise BadPosition(f"{token} is not legal there.")
+        boards = push(boards, which, move)
+    return boards
+
+
+def read_position(conn: sqlite3.Connection, fen: str, moves: str = "") -> dict:
     try:
-        boards = parse_dual(fen)
+        boards = play_line(parse_dual(fen), moves)
     except BadPosition as e:
         raise HTTPException(400, str(e)) from None
     key = position_key(boards)
@@ -346,8 +369,11 @@ def read_position(conn: sqlite3.Connection, fen: str) -> dict:
 
 
 @router.get("/position")
-def get_position(fen: str = Query(..., max_length=400), conn=Depends(db)):
-    return read_position(conn, fen)
+def get_position(fen: str = Query(..., max_length=400), moves: str = Query("", max_length=4000),
+                 conn=Depends(db)):
+    """The position after `moves` (board-tagged UCI) from `fen`: each board
+    can be stepped through on its own by replaying the moves kept."""
+    return read_position(conn, fen, moves)
 
 
 # ── Browser uploads ───────────────────────────────────────────────────

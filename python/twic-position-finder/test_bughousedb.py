@@ -46,6 +46,13 @@ class PositionTests(unittest.TestCase):
         self.assertEqual(bh.centipawns(0.14), 77)
         self.assertEqual(bh.centipawns(-0.55), -336)
 
+    def test_a_line_is_replayed_with_captures_crossing(self):
+        boards = bh.play_line(bh.parse_dual(DUAL), "A:e2e4 A:d7d5 A:e4d5 B:e2e4 B:P@e6")
+        self.assertEqual(boards[1].piece_at(bh.chess.E6).symbol(), "p")
+        with self.assertRaises(bh.BadPosition):
+            # Without the capture on board A, board B has no pawn to drop.
+            bh.play_line(bh.parse_dual(DUAL), "A:e2e4 A:d7d5 B:e2e4 B:P@e6")
+
     def test_bad_positions_are_refused(self):
         for fen in ("", START, "8/8/8/8/8/8/8/8 w - - 0 1|" + START):
             with self.assertRaises(bh.BadPosition):

@@ -1,80 +1,5 @@
-/* Lichess's brown board and square highlights (lila ui/lib/css/theme/board). */
-#bughousedb {
-  --light: #f0d9b5; --dark: #b58863;
-  --last-move: rgb(155 199 0 / 0.41); --selected: rgb(20 85 30 / 0.5); --dest: rgb(20 85 30 / 0.5);
-  /* Both boards and their histories fit beside the tables on one screen. */
-  --board: clamp(240px, min(calc(100dvh - var(--nav-h) - 420px), calc((100vw - 640px) / 2)), 480px);
-  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 28px; flex: 1; min-height: 0;
-}
-
-.bdb-left { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
-.bdb-boards { display: flex; gap: 20px; }
-.bdb-board-panel { width: var(--board); display: flex; flex-direction: column; min-height: 0; }
-
-.bdb-player { display: flex; align-items: center; gap: 6px; height: 40px; }
-.bdb-player .who { color: var(--text-dim); font-size: 14px; white-space: nowrap; margin-right: 4px; }
-.bdb-player .turn { width: 11px; height: 11px; border-radius: 50%; flex: none; visibility: hidden; }
-.bdb-player .turn.white { background: #fff; }
-.bdb-player .turn.black { background: #000; box-shadow: 0 0 0 1.5px var(--text-dim); }
-.bdb-player.to-move .turn { visibility: visible; }
-.bdb-player.to-move .who { color: var(--text); }
-
-.bdb-board-wrap { position: relative; width: var(--board); height: var(--board); flex: none; }
-.bdb-board { display: grid; grid-template: repeat(8, 1fr) / repeat(8, 1fr); width: 100%; height: 100%; }
-.bdb-square { position: relative; min-width: 0; min-height: 0; padding: 0; border: 0; border-radius: 0; background: var(--light); cursor: pointer; }
-.bdb-square.dark { background: var(--dark); }
-.bdb-square.dragging img { opacity: 0.3; }
-.bdb-board, .bdb-pocket:not(:disabled) { touch-action: none; }
-.bdb-ghost { position: fixed; z-index: 1000; pointer-events: none; transform: translate(-50%, -50%); cursor: grabbing; }
-.bdb-square::before { content: ''; position: absolute; inset: 0; }
-.bdb-square.last::before { background: var(--last-move); }
-.bdb-square.selected::before { background: var(--selected); }
-.bdb-square.target::after { content: ''; position: absolute; inset: 0; background: radial-gradient(var(--dest) 19%, transparent 20%); z-index: 2; }
-.bdb-square.target:has(img)::after { background: radial-gradient(transparent 79%, rgb(20 85 0 / 0.3) 80%); }
-.bdb-square img { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
-.bdb-square:focus-visible { z-index: 3; outline: 3px solid var(--accent); outline-offset: -3px; }
-.bdb-coord { position: absolute; font-size: 11px; font-weight: 700; line-height: 1; pointer-events: none; z-index: 1; color: #946f51; }
-.bdb-square.dark .bdb-coord { color: var(--light); }
-.bdb-coord.file { right: 2px; bottom: 2px; }
-.bdb-coord.rank { left: 2px; top: 2px; }
-.bdb-arrow { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 4; }
-
-.bdb-pocket { display: flex; align-items: center; padding: 0 5px 0 0; border: 1px solid transparent; border-radius: 4px; background: none; color: var(--text); font-size: 13px; font-variant-numeric: tabular-nums; cursor: pointer; }
-.bdb-pocket img { width: 30px; height: 30px; }
-.bdb-pocket:hover:not(:disabled) { background: var(--bg-raised); }
-.bdb-pocket[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-bg); }
-.bdb-pocket:disabled { cursor: default; }
-
-.bdb-history { list-style: none; margin: 6px 0 0; padding: 4px 0; height: 92px; overflow-y: auto; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 13px; }
-.bdb-history:empty::before { content: 'No moves yet'; display: block; padding: 2px 6px; color: var(--text-faint); font-family: var(--sans); }
-.bdb-history li { display: grid; grid-template-columns: 2.6em 1fr 1fr; align-items: center; }
-.bdb-history .num { color: var(--text-faint); }
-.bdb-history button { border: 0; background: none; color: var(--text); font: inherit; text-align: left; padding: 2px 6px; border-radius: 3px; cursor: pointer; }
-.bdb-history button:hover { background: var(--bg-raised); }
-.bdb-history button.future { color: var(--text-faint); }
-.bdb-history button[aria-current="true"] { background: var(--accent-bg); color: var(--accent); font-weight: 600; }
-.bdb-history .none { color: var(--text-faint); padding: 2px 6px; }
-
-.bdb-controls { display: flex; gap: 12px; align-items: center; justify-content: space-between; }
-.bdb-nav { display: flex; gap: 4px; }
-.bdb-nav .btn-icon { width: 34px; height: 34px; padding: 8px; }
-.bdb-nav .btn-icon:disabled { opacity: 0.3; }
-.bdb-nav svg { width: 16px; height: 16px; }
-
-.bdb-setup { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
-.bdb-setup input { width: 100%; min-width: 0; padding: 6px 8px; font-size: 12px; }
-.bdb-setup input[aria-invalid="true"] { border-color: var(--danger); }
-.bdb-reserves { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.bdb-reserves label { display: flex; align-items: center; gap: 6px; margin: 0; }
-.bdb-reserves span { color: var(--text-dim); font-size: 13px; }
-.bdb-fen-error { margin: 0; font-size: 13px; color: var(--danger); }
-.bdb-outstanding { display: flex; align-items: center; gap: 8px; }
-.bdb-balance { margin: 0; font-size: 13px; color: var(--text-dim); display: flex; flex-wrap: wrap; gap: 2px 12px; }
-.bdb-balance .extra { color: var(--danger); }
-.bdb-info { flex: none; display: grid; place-items: center; width: 20px; height: 20px; border: 1px solid var(--border-strong); border-radius: 50%; color: var(--text-dim); font: italic 600 12px/1 Georgia, serif; cursor: help; }
-.bdb-fen-error:empty { display: none; }
-
-.bdb-right { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+/* BughouseDB's right-hand side: the move tables and the analyse strip.
+   Boards, move lists and setup boxes: bughouse-board.css. */
 .bdb-source { margin: 0 0 6px; font-size: 13px; }
 .bdb-source:empty { display: none; }
 .bdb-tables { display: grid; grid-template-columns: 1fr 1fr; gap: 0; flex: 1; min-height: 0; }
@@ -111,9 +36,6 @@
 
 /* Narrow or short screens: one column that scrolls. */
 @media (max-width: 1000px), (max-height: 600px) {
-  #bughousedb { --board: min(calc(100vw - 32px), 460px); grid-template-columns: minmax(0, 1fr); }
-  .bdb-boards { flex-direction: column; align-items: center; }
-  .bdb-controls { flex-wrap: wrap; justify-content: center; }
   .bdb-tables { grid-template-columns: minmax(0, 1fr); }
   .bdb-table-panel, .bdb-table-panel + .bdb-table-panel { padding: 0; border-left: 0; }
   .bdb-table-panel + .bdb-table-panel { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border-strong); }

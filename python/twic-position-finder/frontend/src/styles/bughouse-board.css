@@ -1,0 +1,86 @@
+/* Shared by Bughouse Lab and BughouseDB: two boards on the left with their
+   move lists and setup boxes, the page's own panel on the right, one screen.
+   Board colours and highlights are Lichess's brown (lila ui/lib/css/theme/board). */
+.bb-app {
+  --light: #f0d9b5; --dark: #b58863;
+  --last-move: rgb(155 199 0 / 0.41); --selected: rgb(20 85 30 / 0.5); --dest: rgb(20 85 30 / 0.5);
+  --board: clamp(240px, min(calc(100dvh - var(--nav-h) - 440px), calc((100vw - 640px) / 2)), 480px);
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 28px; flex: 1; min-height: 0;
+}
+.bb-left { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.bb-right { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.bb-boards { display: flex; gap: 20px; }
+.bb-board-panel { width: var(--board); display: flex; flex-direction: column; min-height: 0; }
+
+.bb-player { display: flex; align-items: center; gap: 6px; height: 40px; }
+.bb-player .who { color: var(--text-dim); font-size: 14px; white-space: nowrap; margin-right: 4px; }
+.bb-player .turn { width: 11px; height: 11px; border-radius: 50%; flex: none; visibility: hidden; }
+.bb-player .turn.white { background: #fff; }
+.bb-player .turn.black { background: #000; border: 1px solid var(--border-strong); }
+.bb-player.to-move .turn { visibility: visible; }
+.bb-player.to-move .who { color: var(--text); }
+
+.bb-board-wrap { position: relative; width: var(--board); height: var(--board); flex: none; }
+.bb-board { display: grid; grid-template: repeat(8, 1fr) / repeat(8, 1fr); width: 100%; height: 100%; }
+.bb-square { position: relative; min-width: 0; min-height: 0; padding: 0; border: 0; border-radius: 0; background: var(--light); cursor: pointer; }
+.bb-square.dark { background: var(--dark); }
+.bb-square:disabled { opacity: 1; cursor: default; }
+.bb-square.dragging img { opacity: 0.3; }
+.bb-board, .bb-pocket:not(:disabled) { touch-action: none; }
+.bb-ghost { position: fixed; z-index: 1000; pointer-events: none; transform: translate(-50%, -50%); }
+.bb-square::before { content: ''; position: absolute; inset: 0; }
+.bb-square.last::before { background: var(--last-move); }
+.bb-square.selected::before { background: var(--selected); }
+.bb-square.target::after { content: ''; position: absolute; inset: 0; background: radial-gradient(var(--dest) 19%, transparent 20%); z-index: 2; }
+.bb-square.target:has(img)::after { background: radial-gradient(transparent 79%, rgb(20 85 0 / 0.3) 80%); }
+.bb-square img { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+.bb-square:focus-visible { z-index: 3; outline: 3px solid var(--accent); outline-offset: -3px; }
+.bb-coord { position: absolute; font-size: 11px; font-weight: 700; line-height: 1; pointer-events: none; z-index: 1; color: #946f51; }
+.bb-square.dark .bb-coord { color: var(--light); }
+.bb-coord.file { right: 2px; bottom: 2px; }
+.bb-coord.rank { left: 2px; top: 2px; }
+.bb-arrow { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 4; }
+
+.bb-pocket { display: flex; align-items: center; padding: 0 5px 0 0; border: 1px solid transparent; border-radius: 4px; background: none; color: var(--text); font-size: 13px; font-variant-numeric: tabular-nums; cursor: pointer; }
+.bb-pocket img { width: 30px; height: 30px; }
+.bb-pocket:hover:not(:disabled) { background: var(--bg-raised); }
+.bb-pocket[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-bg); }
+.bb-pocket:disabled { opacity: 1; cursor: default; }
+
+.bb-history { list-style: none; margin: 6px 0 0; padding: 4px 0; height: 80px; overflow-y: auto; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 13px; }
+.bb-history:empty::before { content: 'No moves yet'; display: block; padding: 2px 6px; color: var(--text-faint); font-family: var(--sans); }
+.bb-history li { display: grid; grid-template-columns: 2.6em 1fr 1fr; align-items: center; }
+.bb-history .num { color: var(--text-faint); }
+.bb-history button, .bb-history .ply { border: 0; background: none; color: var(--text); font: inherit; text-align: left; padding: 2px 6px; border-radius: 3px; }
+.bb-history button { cursor: pointer; }
+.bb-history button:hover { background: var(--bg-raised); }
+.bb-history button.future { color: var(--text-faint); }
+.bb-history button[aria-current="true"], .bb-history .ply.current { background: var(--accent-bg); color: var(--accent); font-weight: 600; }
+.bb-history .none { color: var(--text-faint); padding: 2px 6px; }
+
+.bb-setup { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.bb-setup input { width: 100%; min-width: 0; padding: 6px 8px; font-size: 12px; }
+.bb-setup input[aria-invalid="true"] { border-color: var(--danger); }
+.bb-reserves { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.bb-reserves label { display: flex; align-items: center; gap: 6px; margin: 0; }
+.bb-reserves span { color: var(--text-dim); font-size: 13px; }
+.bb-fen-error { margin: 0; font-size: 13px; color: var(--danger); }
+.bb-fen-error:empty { display: none; }
+.bb-outstanding { display: flex; align-items: center; gap: 8px; }
+.bb-set { margin-left: auto; flex: none; }
+.bb-balance { margin: 0; font-size: 13px; color: var(--text-dim); display: flex; flex-wrap: wrap; gap: 2px 12px; }
+.bb-balance .extra { color: var(--danger); }
+.bb-info { flex: none; display: grid; place-items: center; width: 20px; height: 20px; border: 1px solid var(--border-strong); border-radius: 50%; color: var(--text-dim); font: italic 600 12px/1 Georgia, serif; cursor: help; }
+
+.bb-nav { display: flex; gap: 4px; margin-top: 6px; }
+.bb-nav .btn-icon { width: 30px; height: 28px; padding: 6px; }
+.bb-nav .btn-icon:disabled { opacity: 0.3; }
+.bb-nav svg { width: 14px; height: 14px; }
+/* The board the arrow keys step through. */
+.bb-board-panel.focused .bb-history { border-top-color: var(--accent); }
+
+/* Narrow or short screens: one column that scrolls. */
+@media (max-width: 1000px), (max-height: 600px) {
+  .bb-app { --board: min(calc(100vw - 32px), 460px); grid-template-columns: minmax(0, 1fr); }
+  .bb-boards { flex-direction: column; align-items: center; }
+}

@@ -309,8 +309,10 @@ export interface BookUpload {
   moves: { board: 'A' | 'B'; uci: string; on: RawSearch | null; off: RawSearch | null }[];
 }
 
-export function bookPosition(fen: string): Promise<BookPosition> {
-  return request(`/api/bughousedb/position?fen=${encodeURIComponent(fen)}`, { fallback: 'Could not load the position.' });
+/** The position after `moves` (board-tagged UCI, e.g. ["A:e2e4", "B:P@e6"]) from `fen`. */
+export function bookPosition(fen: string, moves: string[] = []): Promise<BookPosition> {
+  const line = moves.length ? `&moves=${encodeURIComponent(moves.join(' '))}` : '';
+  return request(`/api/bughousedb/position?fen=${encodeURIComponent(fen)}${line}`, { fallback: 'Could not load the position.' });
 }
 
 export function bookTicket(fen: string, turnstileToken: string): Promise<{ ticket: string; key: string; expires_in: number }> {

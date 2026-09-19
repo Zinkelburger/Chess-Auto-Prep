@@ -1,63 +1,20 @@
 ---
 import Base from '../layouts/Base.astro';
+import BughouseBoards from '../components/BughouseBoards.astro';
+import '../styles/bughouse-board.css';
 import '../styles/bughousedb.css';
 const TURNSTILE = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
-const NAV = [
-  { id: 'first', label: 'First move (Home)', path: 'M6 5v14M19 5l-9 7 9 7z' },
-  { id: 'prev', label: 'Previous move (←)', path: 'M16 5l-9 7 9 7z' },
-  { id: 'next', label: 'Next move (→)', path: 'M8 5l9 7-9 7z' },
-  { id: 'last', label: 'Last move (End)', path: 'M18 5v14M5 5l9 7-9 7z' },
-];
 ---
 <Base title="BughouseDB" description="Every legal bughouse move scored by Hivemind for three clock situations. Click through positions; analyse missing ones in your browser." fill>
-  <div id="bughousedb" data-turnstile={TURNSTILE ?? ''}>
+  <div id="bughousedb" class="bb-app" data-turnstile={TURNSTILE ?? ''}>
     <h1 class="visually-hidden">BughouseDB</h1>
     <noscript><p class="alert alert-error">Enable JavaScript to browse the book.</p></noscript>
 
-    <form id="bdb-fen-form" class="bdb-left" novalidate>
-      <div class="bdb-boards">
-        {['A', 'B'].map((name, i) => (
-          <section class="bdb-board-panel" aria-label={`Board ${i + 1}`}>
-            <div id={`bdb-player-top-${name}`} class="bdb-player"></div>
-            <div class="bdb-board-wrap">
-              <div id={`bdb-board-${name}`} class="bdb-board"></div>
-              <svg id={`bdb-arrow-${name}`} class="bdb-arrow" viewBox="0 0 8 8" aria-hidden="true"></svg>
-            </div>
-            <div id={`bdb-player-bottom-${name}`} class="bdb-player"></div>
-            <ol id={`bdb-history-${name}`} class="bdb-history" aria-label={`Moves on board ${i + 1}`}></ol>
-            <div class="bdb-setup">
-              <input id={`bdb-fen-${name}`} class="mono" spellcheck="false" autocomplete="off" placeholder={`Board ${i + 1} FEN`} aria-label={`Board ${i + 1} FEN`} />
-              <div class="bdb-reserves">
-                {(name === 'A' ? [['white', 'A'], ['black', 'B']] : [['white', 'D'], ['black', 'C']]).map(([colour, seat]) => (
-                  <label>
-                    <span>{seat}</span>
-                    <input id={`bdb-reserve-${name}-${colour}`} class="mono" spellcheck="false" autocomplete="off" aria-label={`Player ${seat}'s reserve`} title={`Player ${seat}'s reserve`} />
-                  </label>
-                ))}
-              </div>
-              <p id={`bdb-fen-error-${name}`} class="bdb-fen-error" role="alert"></p>
-            </div>
-          </section>
-        ))}
-      </div>
-      <div class="bdb-outstanding">
-        <span class="bdb-info" tabindex="0" role="img" aria-label="How to set a position"
-          title={'Each long box takes one board’s ordinary FEN. The boxes marked A, B, C and D are those players’ reserves: pieces written P, N, B, R, Q, with a count for more than one (2N means two knights).\nPasting a two-board FEN (board 1 | board 2) fills both boards.\nBughouse never loses a piece, so all 64 are on a board or in a reserve; the line beside this shows what is still to place.'}>i</span>
-        <p id="bdb-balance" class="bdb-balance" aria-live="polite"></p>
-      </div>
-      <div class="bdb-controls">
-        <div class="bdb-nav">
-          {NAV.map((b) => (
-            <button type="button" id={`bdb-${b.id}`} class="btn btn-outline btn-icon" title={b.label} aria-label={b.label}>
-              <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d={b.path} /></svg>
-            </button>
-          ))}
-        </div>
-        <button class="btn btn-outline" type="submit">Set position</button>
-      </div>
+    <form id="bdb-fen-form" class="bb-left" novalidate>
+      <BughouseBoards prefix="bdb" />
     </form>
 
-    <div class="bdb-right">
+    <div class="bb-right">
       <p id="bdb-source" class="bdb-source dim"></p>
       <div class="bdb-tables">
         <section id="bdb-missing" class="bdb-missing" hidden>

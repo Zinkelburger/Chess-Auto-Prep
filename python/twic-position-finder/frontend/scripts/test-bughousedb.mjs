@@ -30,7 +30,7 @@ try {
   assert.ok(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight), 'fits without scrolling');
   assert.match(start[0][2], /^[+−]?\d+\.\d\d$/, 'Even is in pawns');
   assert.equal(await page.$eval('#bdb-missing', (n) => n.hidden), true);
-  assert.equal(await page.$$eval('.bdb-square img', (imgs) => imgs.length), 64);
+  assert.equal(await page.$$eval('.bb-square img', (imgs) => imgs.length), 64);
   await page.screenshot({ path: path.join(output, 'bughousedb-start.png') });
 
   // Hover draws the move; each score keeps its line as a tooltip.
@@ -50,9 +50,32 @@ try {
   await page.mouse.up();
   await page.waitForFunction(() => document.querySelector('#bdb-mover-A').textContent === 'Move: Player B');
   assert.equal(await page.$eval('#bdb-history-A button', (b) => b.textContent), 'e4');
-  assert.equal(await page.$$eval('.bdb-ghost', (g) => g.length), 0);
+  assert.equal(await page.$$eval('.bb-ghost', (g) => g.length), 0);
   await page.keyboard.press('ArrowLeft');
   await page.waitForFunction(() => document.querySelector('#bdb-mover-A').textContent === 'Move: Player A');
+
+  // Each board steps on its own; a step that would strand a drop is refused.
+  const playRow = async (board, san, mover) => {
+    await page.$$eval(`#bdb-moves-${board} tr`, (trs, want) => trs.find((tr) => tr.cells[0].textContent === want).click(), san);
+    await page.waitForFunction((b, m) => document.querySelector(`#bdb-mover-${b}`).textContent === `Move: Player ${m}`, {}, board, mover);
+  };
+  await playRow('A', 'e4', 'B'); await playRow('A', 'd5', 'A'); await playRow('A', 'exd5', 'B');
+  await playRow('B', 'e4', 'C');
+  await page.click('#bdb-player-bottom-B .bb-pocket');  // C's pawn from the capture on board 1
+  await page.click('#bdb-board-B [data-square="e6"]');
+  await page.waitForFunction(() => document.querySelector('#bdb-mover-B').textContent === 'Move: Player D');
+  await page.click('#bdb-prev-A');
+  await page.waitForFunction(() => /Can’t step there/.test(document.querySelector('#bdb-fen-error-A').textContent));
+  assert.equal(await page.$$eval('#bdb-history-A button.future', (b) => b.length), 0, 'board 1 stays put');
+  await page.click('#bdb-first-B');
+  await page.waitForFunction(() => document.querySelector('#bdb-mover-B').textContent === 'Move: Player D'
+    && document.querySelectorAll('#bdb-history-B button.future').length === 2);
+  await page.click('#bdb-prev-A');  // now allowed: nothing on board 2 needs the pawn
+  await page.waitForFunction(() => document.querySelectorAll('#bdb-history-A button.future').length === 1);
+  assert.equal(await page.$eval('#bdb-mover-A', (n) => n.textContent), 'Move: Player A');
+  await page.click('#bdb-first-A');
+  await page.waitForFunction(() => document.querySelector('#bdb-mover-A').textContent === 'Move: Player A'
+    && document.querySelectorAll('#bdb-history-A button.future').length === 3);
 
   // A move with no stored analysis (the first rare move no earlier run
   // uploaded): the tables still list its replies.
@@ -64,13 +87,13 @@ try {
     await page.waitForFunction(() => document.querySelector('#bdb-mover-A').textContent === 'Move: Player B');
     missing = !(await page.$eval('#bdb-missing', (n) => n.hidden));
     if (missing) break;
-    await page.click('#bdb-prev');
+    await page.click('#bdb-prev-A');
     await page.waitForFunction(() => document.querySelector('#bdb-mover-A').textContent === 'Move: Player A');
   }
   assert.ok(missing, 'every candidate is already in the book');
   // The move is marked on its board and listed in that board's history only.
   assert.equal(await page.$$eval('#bdb-board-A .last', (s) => s.length), 2);
-  assert.equal(await page.$$eval('#bdb-history-B button', (b) => b.length), 0);
+  assert.equal(await page.$$eval('#bdb-history-B button:not(.future)', (b) => b.length), 0);
   assert.equal((await rows('A'))[0][2], '—');
   await page.screenshot({ path: path.join(output, 'bughousedb-missing.png') });
 
