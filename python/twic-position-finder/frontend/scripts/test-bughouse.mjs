@@ -28,26 +28,34 @@ try {
     assert.ok(await page.$('.bh-table'), await page.$eval('#bh-status', (node) => node.textContent));
   };
   await ready();
-  assert.equal(await page.$$eval('.bh-square', (squares) => squares.length), 128);
-  assert.equal(await page.$$eval('.bh-square img', (pieces) => pieces.length), 64);
+  assert.equal(await page.$$eval('.bb-square', (squares) => squares.length), 128);
+  assert.equal(await page.$$eval('.bb-square img', (pieces) => pieces.length), 64);
   const square = (board, sq) => `#bh-board-${board} [data-square="${sq}"]`;
   async function move(board, from, to) {
     await page.click(square(board, from));
     await page.click(square(board, to));
     await ready();
   }
+  const pawnC = '[aria-label="Player C: 1 pawn in reserve"]';
   await move('A', 'e2', 'e4');
   await move('A', 'd7', 'd5');
   await move('A', 'e4', 'd5');
   await move('B', 'e2', 'e4');
-  assert.equal(await page.$eval('[aria-label="B: black pawn reserve, 1"]', (button) => button.disabled), false);
-  await page.click('[aria-label="B: black pawn reserve, 1"]');
+  assert.equal(await page.$eval(pawnC, (button) => button.disabled), false);
+  await page.click(pawnC);
   await page.click(square('B', 'e6'));
   await ready();
   assert.match(await page.$eval(square('B', 'e6'), (button) => button.getAttribute('aria-label')), /black pawn/);
-  assert.equal(await page.$('[aria-label="B: black pawn reserve, 1"]'), null);
-  await page.click('#bh-undo'); await ready();
-  assert.ok(await page.$('[aria-label="B: black pawn reserve, 1"]'));
+  assert.equal(await page.$(pawnC), null);
+  // Each board steps on its own: board 2 back one returns the pawn; board 1 keeps its moves.
+  await page.click('#bh-prev-B'); await ready();
+  assert.ok(await page.$(pawnC));
+  assert.equal(await page.$$eval('#bh-history-A button:not(.future)', (b) => b.length), 3);
+  // Board 1 cannot step back past the capture while board 2 still uses the pawn.
+  await page.click('#bh-next-B'); await ready();
+  await page.click('#bh-prev-A'); await ready();
+  assert.match(await page.$eval('#bh-fen-error-A', (n) => n.textContent), /Can’t step there/);
+  assert.equal(await page.$$eval('#bh-history-A button.future', (b) => b.length), 0);
   await page.click('#bh-flip');
   assert.equal(await page.$eval('#bh-board-A button', (b) => b.dataset.square), 'h1');
   await page.click('#bh-flip');
@@ -74,24 +82,23 @@ try {
   await page.click('#bh-analyse');
   await analysisReady();
   console.log('Static neural analysis and board controls passed.');
-  assert.ok((await page.$eval('#bh-result', (node) => node.textContent)).includes('Both teams searched'));
-  await page.evaluate(() => scrollTo(0, 0));
-  await page.screenshot({ path: path.join(output, 'bughouse-desktop.png'), fullPage: true });
-  await page.click('.bh-table button'); await ready();
-  assert.notEqual(await page.$eval('#bh-movetext-A', (node) => node.textContent), 'Starting position');
+  assert.match(await page.$eval('#bh-result', (node) => node.textContent), /A \+ C: [+−]?\d+\.\d\d|Mate/);
+  await page.hover('.bh-table tbody tr');
+  assert.ok(await page.$('.bb-arrow line, .bb-arrow circle'), 'hovering a suggestion draws it');
+  await page.screenshot({ path: path.join(output, 'bughouse-desktop.png') });
+  await page.click('.bh-table tbody tr'); await ready();
+  assert.ok(await page.$$eval('.bb-history button', (b) => b.length) > 0);
 
-  // Pasted positions are transactional: invalid input cannot replace the board.
-  await page.click('.bh-editor summary');
-  await page.$eval('#bh-fen', (input) => { input.value = 'invalid fen'; });
-  await page.$eval('#bh-moves', (input) => { input.value = ''; });
-  await page.click('#bh-position-form button[type=submit]');
-  await ready();
-  assert.equal(await page.$eval('#bh-status', (node) => node.dataset.error), 'true');
-  assert.notEqual(await page.$eval('#bh-movetext-A', (node) => node.textContent), 'Starting position');
+  // A position that doesn't parse is refused before it reaches the boards.
+  await page.$eval('#bh-fen-B', (input) => { input.value = 'invalid fen'; });
+  await page.click('.bb-set');
+  assert.match(await page.$eval('#bh-fen-error-B', (n) => n.textContent), /ranks/);
 
-  const start = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1';
-  await page.$eval('#bh-fen', (input, value) => { input.value = value; }, `7k/P7/8/8/8/8/8/7K[] w - - 0 1|${start}`);
-  await page.click('#bh-position-form button[type=submit]'); await ready();
+  const start = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+  await page.$eval('#bh-fen-A', (input) => { input.value = '7k/P7/8/8/8/8/8/7K w - - 0 1'; });
+  await page.$eval('#bh-fen-B', (input, value) => { input.value = value; }, start);
+  for (const id of ['#bh-reserve-A-white', '#bh-reserve-A-black', '#bh-reserve-B-white', '#bh-reserve-B-black']) await page.$eval(id, (input) => { input.value = ''; });
+  await page.click('.bb-set'); await ready();
   await page.click(square('A', 'a7')); await page.click(square('A', 'a8'));
   assert.equal(await page.$$eval('#bh-promotion-options button', (buttons) => buttons.length), 4);
   await page.$$eval('#bh-promotion-options button', (buttons) => buttons.find((button) => button.textContent === 'knight').click());
@@ -100,37 +107,30 @@ try {
 
   // Stop interrupts a real long search and leaves the worker reusable.
   await page.click('#bh-reset'); await ready();
-  await page.select('#bh-budget', '30000');
+  await page.click('#bh-analyse-form input[value="30000"] + span');
   await page.click('#bh-analyse');
   await page.waitForFunction(() => document.querySelector('#bh-status').textContent.includes('searching for our team'));
   await page.click('#bh-stop'); await ready();
   assert.match(await page.$eval('#bh-status', (node) => node.textContent), /cancelled/);
-  await page.select('#bh-budget', '3000');
+  await page.click('#bh-analyse-form input[value="3000"] + span');
   console.log('Cancellation and recovery passed.');
 
   // Once loaded, moves and actual neural searches work with ALL networking off.
   await page.setOfflineMode(true);
-  await page.click('#bh-example'); await ready();
-  console.log('Offline example loaded:', page.url());
-  await page.click('.bh-editor summary');
-  await page.select('#bh-team', 'black');
-  // Collapsing the editor can leave scroll anchoring under the sticky nav.
-  await page.evaluate(async () => {
-    scrollTo(0, 0);
-    await new Promise(requestAnimationFrame);
-    await new Promise(requestAnimationFrame);
-  });
+  await move('A', 'e2', 'e4');
+  await move('B', 'd2', 'd4');
+  console.log('Offline moves played:', page.url());
+  await page.click('#bh-analyse-form input[value="black"] + span');
   await page.locator('#bh-analyse').click();
   await analysisReady();
-  await page.evaluate(() => scrollTo(0, 0));
-  await page.screenshot({ path: path.join(output, 'bughouse-capture-drop.png'), fullPage: true });
+  await page.screenshot({ path: path.join(output, 'bughouse-offline.png') });
   await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 });
   await page.evaluate(() => scrollTo(0, 0));
   await page.screenshot({ path: path.join(output, 'bughouse-mobile.png'), fullPage: true });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Mobile page overflows horizontally');
   assert.deepEqual(errors, []);
   assert.deepEqual(apiRequests, [], 'Static Bughouse must never call an API or POST a position');
-  console.log('STATIC browser passed: 128 squares, captures, partner drops, undo, flip, download retry, real WASM + ONNX analysis/play, invalid FEN, underpromotion, Stop/recovery, offline analysis, phone layout. No API requests.');
+  console.log('STATIC browser passed: 128 squares, captures, partner drops, per-board steps, flip, download retry, real WASM + ONNX analysis/play, invalid FEN, underpromotion, Stop/recovery, offline analysis, phone layout. No API requests.');
   console.log(`Screenshots: ${output}`);
 } catch (error) {
   if (page) {

@@ -136,7 +136,8 @@ diagonal clock, with a principal variation. `bughousedb.py` owns it, in its
 own SQLite file (`BUGHOUSEDB_PATH`, default `bughousedb.db` beside the app).
 The server runs no engine:
 
-- `GET /api/bughousedb/position?fen=` — the position's legal moves (SAN,
+- `GET /api/bughousedb/position?fen=&moves=` — the position after `moves`
+  (optional, board-tagged UCI such as `A:e2e4 B:P@e6`), its legal moves (SAN,
   seat, resulting FEN, which team answers) and, when stored, their scores:
   Hivemind's calibrated Q plus a Lichess-style `cp = 543.17·atanh(Q)`.
 - `POST /api/bughousedb/ticket` — a one-time ticket for one missing

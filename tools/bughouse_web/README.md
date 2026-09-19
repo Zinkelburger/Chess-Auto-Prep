@@ -5,9 +5,13 @@ serves static files. There is no analysis API, paid compute service, Pages
 Function, R2 bucket, database or account. Positions are never uploaded.
 
 The page supports both boards, captures sent to the partner's reserve, legal
-drops, promotions, undo, board flipping, SAN/UCI move sequences, dual FEN,
-joint Hivemind recommendations, clock-advantage/required-board settings and
-Stop. It is an analysis tool, not a four-player online game with live clocks.
+drops (click or drag), promotions, board flipping, a move list and step
+buttons per board (each board steps back and forth on its own), a FEN and
+reserve boxes per board, joint Hivemind recommendations, clock-advantage and
+required-board settings, and Stop. It is an analysis tool, not a four-player
+online game with live clocks. The boards, move lists and setup boxes are
+shared with `/bughousedb` (`src/bughouse/boards.ts`,
+`src/components/BughouseBoards.astro`, `src/styles/bughouse-board.css`).
 
 ## Deploy on Cloudflare Pages
 
@@ -138,7 +142,7 @@ promoted captures and invalid input recovery. It needs the development
 The browser check uses a **plain Python static file server**, Chrome via the
 existing `puppeteer-core` dependency (`CHROME_BIN` selects the executable),
 and the real WASM engine/neural model. It tests moves, cross-board capture
-and drops, undo, promotion, invalid input, real recommendations/play,
+and drops, per-board stepping, promotion, invalid input, real recommendations/play,
 download failure/retry, cancellation/recovery, phone layout and analysis with all networking off.
 It fails if the page makes an API request or sends any POST. The server and
 browser are closed afterward. Screenshots go to ignored
