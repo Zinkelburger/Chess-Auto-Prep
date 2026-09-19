@@ -418,9 +418,9 @@ function renderBalance() {
     span.textContent = `${label} ${text}`;
     out.append(span);
   };
-  part('To place —', b.missing, 'missing');
-  part('Too many —', b.extra, 'extra');
-  if (!out.childElementCount) out.textContent = 'All 64 pieces placed';
+  part('Pieces outstanding:', b.missing, 'missing');
+  part('Too many:', b.extra, 'extra');
+  if (!out.childElementCount) out.textContent = 'Pieces outstanding: none';
 }
 
 /** Both boards from their boxes; a pasted dual FEN in either box fills both. */

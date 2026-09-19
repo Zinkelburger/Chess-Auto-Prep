@@ -68,8 +68,8 @@
 .bdb-reserves label { display: flex; align-items: center; gap: 6px; margin: 0; }
 .bdb-reserves span { color: var(--text-dim); font-size: 13px; }
 .bdb-fen-error { margin: 0; font-size: 13px; color: var(--danger); }
-.bdb-balance { flex: 1; min-width: 0; margin: 0; font-size: 13px; color: var(--text-dim); display: flex; flex-wrap: wrap; gap: 2px 12px; justify-content: flex-end; }
-.bdb-balance .missing { color: var(--text); }
+.bdb-outstanding { display: flex; align-items: center; gap: 8px; }
+.bdb-balance { margin: 0; font-size: 13px; color: var(--text-dim); display: flex; flex-wrap: wrap; gap: 2px 12px; }
 .bdb-balance .extra { color: var(--danger); }
 .bdb-info { flex: none; display: grid; place-items: center; width: 20px; height: 20px; border: 1px solid var(--border-strong); border-radius: 50%; color: var(--text-dim); font: italic 600 12px/1 Georgia, serif; cursor: help; }
 .bdb-fen-error:empty { display: none; }
