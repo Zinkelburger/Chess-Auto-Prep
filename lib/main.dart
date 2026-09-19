@@ -57,6 +57,8 @@ import 'services/engine/engine_lifecycle.dart';
 import 'services/eval_cache.dart';
 import 'services/master_games/master_games_service.dart';
 import 'services/bundled_licenses.dart';
+import 'infrastructure/diagnostics/app_log_file.dart';
+import 'utils/log.dart';
 import 'widgets/escape_to_pop_scope.dart';
 
 void main() {
@@ -64,6 +66,9 @@ void main() {
     runZonedGuarded(
       () async {
         WidgetsFlutterBinding.ensureInitialized();
+        // Before anything that can fail: a startup failure is exactly the
+        // one a user cannot read off the screen.
+        await AppLogFile.install();
         installFreshDesktopPreferencesStore();
         registerBundledLicenses();
         // No-op unless --dart-define=AGENT_DRIVER=true in a debug build.
@@ -71,7 +76,12 @@ void main() {
 
         FlutterError.onError = (FlutterErrorDetails details) {
           FlutterError.presentError(details);
-          debugPrint('FlutterError: ${details.exceptionAsString()}');
+          log.e(
+            'Flutter error while ${details.context ?? 'running'}',
+            name: 'Flutter',
+            error: details.exception,
+            stackTrace: details.stack,
+          );
         };
 
         try {
@@ -82,12 +92,17 @@ void main() {
             ChessAutoPrepApp(runtimeSettings: runtime, engineRuntime: engines),
           );
         } catch (error, stackTrace) {
-          debugPrint('Startup failed: $error\n$stackTrace');
+          log.e(
+            'Startup failed',
+            name: 'Startup',
+            error: error,
+            stackTrace: stackTrace,
+          );
           runApp(StartupErrorApp(error: error, stackTrace: stackTrace));
         }
       },
       (error, stackTrace) {
-        debugPrint('Uncaught async error: $error\n$stackTrace');
+        log.e('Uncaught async error', error: error, stackTrace: stackTrace);
       },
     ),
   );

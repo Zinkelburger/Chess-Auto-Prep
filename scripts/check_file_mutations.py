@@ -32,6 +32,10 @@ APPROVED: dict[str, tuple[int, str]] = {
     "lib/services/storage/sqlite_recovery.dart": (1, "SQLite recovery adapter"),
     "lib/services/game_store/game_store_service.dart": (1, "one-time database migration"),
     "lib/debug/agent_driver.dart": (1, "debug screenshot output"),
+    "lib/infrastructure/diagnostics/app_log_file.dart": (
+        3,
+        "append-only rotating diagnostic log; disposable and never user data",
+    ),
     "lib/features/bughouse/services/bughouse_bundle.dart": (
         13,
         "reproducible extracted engine bundle",

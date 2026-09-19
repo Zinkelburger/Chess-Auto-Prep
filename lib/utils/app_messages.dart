@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'log.dart';
+
 /// All user-facing notification strings in one place for easy auditing.
 ///
 /// Messages are grouped by how they're displayed:
@@ -91,6 +93,12 @@ void showAppSnackBar(
   Duration? duration,
 }) {
   if (!isError && !requiresAttention) return;
+  // What the user was shown belongs in the log too: a report of "some red
+  // message" is otherwise unanswerable, and the message names the action
+  // that failed even when the cause was caught and handled.
+  if (isError) {
+    log.w(message, name: 'UI');
+  }
   final screenWidth = MediaQuery.sizeOf(context).width;
   ScaffoldMessenger.of(context).clearSnackBars();
   ScaffoldMessenger.of(context).showSnackBar(

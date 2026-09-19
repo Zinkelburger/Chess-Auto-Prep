@@ -41,6 +41,8 @@ import '../widgets/settings/settings_widgets.dart';
 import '../widgets/settings/settings_navigation.dart';
 import '../widgets/settings/keyboard_shortcuts_section.dart';
 import '../widgets/shortcut_tooltip.dart';
+import '../infrastructure/diagnostics/app_log_file.dart';
+import '../utils/open_in_file_manager.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
@@ -488,6 +490,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  /// Show the user where the app writes what went wrong, so a bug report can
+  /// carry the log instead of a remembered colour.
+  Future<void> _openLogFolder() async {
+    var opened = false;
+    try {
+      opened = await openInFileManager((await AppLogFile.directory()).path);
+    } catch (_) {
+      opened = false;
+    }
+    if (!opened && mounted) {
+      showAppSnackBar(context, 'Could not open the log folder', isError: true);
+    }
+  }
+
   Widget _buildAboutSection() {
     return SettingsGroup(
       title: 'About & open source',
@@ -505,6 +521,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
           subtitle: const Text('Source code, releases, and issue tracker'),
           trailing: const Icon(Icons.open_in_new, size: 17),
           onTap: () => unawaited(_openProject()),
+        ),
+        const Divider(
+          height: 1,
+          indent: 20,
+          endIndent: 20,
+          color: AppColors.divider,
+        ),
+        ListTile(
+          key: const Key('settings-open-log-folder'),
+          titleTextStyle: AppTextStyles.bodyStrong,
+          subtitleTextStyle: AppTextStyles.muted,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 8,
+          ),
+          leading: const Icon(Icons.article_outlined, size: 22),
+          title: const Text('Open log folder'),
+          subtitle: const Text(
+            'Errors are written to app.log — attach it to a bug report',
+          ),
+          trailing: const Icon(Icons.open_in_new, size: 17),
+          onTap: () => unawaited(_openLogFolder()),
         ),
         const Divider(
           height: 1,

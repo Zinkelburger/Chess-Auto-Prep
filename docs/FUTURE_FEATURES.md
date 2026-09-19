@@ -189,6 +189,19 @@ feature backlog; update step status there and feature status here.
 | Additional auto-update formats and cleanup | **Partial** | Windows Setup, deb/rpm and marked Linux portable bundles supported. Flatpak/Windows ZIP/macOS use manual updates; install logs, downloaded releases and previous portable bundles need a retention UI. |
 | Native update smoke matrix | **Partial** | Linux portable helper tests and Windows helper tests with disposable fake programs are gated. Test actual Windows Setup and Linux authorization/cancellation before publishing. |
 
+### Diagnostics and error reporting
+
+Warnings and errors already reach the console and `<support>/logs/app.log`, and
+every red snackbar is logged with its message — see
+[Diagnostics log](COMPONENT_MAP.md#diagnostics-log).
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Remaining `debugPrint` call sites | **Partial** | ~130 direct `debugPrint` calls in `lib/` bypass the log file; convert the ones that report a failure to `log.w` / `log.e` as their owning workflow is touched. |
+| Caught failures shown only inline | **Partial** | Panels that set an `_error` string (player table, tournaments, study links) show the failure but do not log it. Log at the catch site so the file says what the screen said. |
+| Copy or attach the log from the app | **Not started** | Settings opens the folder; a "copy diagnostics" action (log tail + version + OS, like the bughouse engine report) would make a bug report one click. |
+| Retention beyond one rotation | **Deferred** | `app.log` + `app.log.1` at 512 KiB each is deliberate; per-session files or a longer history need a cleanup policy first. |
+
 ### Global settings completeness
 
 | Item | Status | Notes |

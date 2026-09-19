@@ -423,6 +423,7 @@ and "infinite traps" class of bugs.
 
 ```
 main.dart
+  ├─ AppLogFile.install()    // <support>/logs/app.log receives every warning and error
   ├─ RuntimeSettings.load()  // engine, bulk, display and evaluation preferences
   ├─ EvalCache.instance.init()  // SQLite eval + Maia cache ready for interactive writes
   ├─ EngineLifecycle.loadPersistedState()  // marks engine idle (no process spawn); workers created lazily on first eval
@@ -432,9 +433,33 @@ main.dart
 
 | File | Purpose |
 |------|---------|
-| `lib/main.dart` | `WidgetsFlutterBinding`, `FlutterError.onError`, `runZonedGuarded` startup, window manager, settings init, `EvalCache.instance.init()`, `MaterialApp` dark theme, `AppState` provider (`loadUsernames` on create) |
+| `lib/main.dart` | `WidgetsFlutterBinding`, `AppLogFile.install()`, `FlutterError.onError` and the `runZonedGuarded` handler (both routed through `log.e`), `runZonedGuarded` startup, window manager, settings init, `EvalCache.instance.init()`, `MaterialApp` dark theme, `AppState` provider (`loadUsernames` on create) |
 | `lib/core/app_state.dart` | Global mode enum, usernames, board position, builder↔trainer pending path/line handoff, `pendingGenerationPgnPaths` for PGN-viewer→builder seeding |
 | `lib/screens/main_screen.dart` | `IndexedStack` of mode views; engine suspend/resume on leaving/entering interactive-engine modes and on `paused`/`hidden`/`detached` |
+
+### Diagnostics log
+
+A failure the user hit on their own machine has to leave a trace they can
+send. `lib/utils/log.dart` is the facade: `log.d/i/w/e`. Debug and info reach
+an attached debugger only and are dropped in release; **a warning or an error
+is also written as one plain line** — `2026-09-19 14:42:10 ERROR Downloads:
+message`, the error, and up to 12 stack frames.
+
+| Destination | Reaches |
+|---|---|
+| `dart:developer.log` | an attached debugger / DevTools |
+| Console (`debugPrint`, every build mode) | the systemd journal for a desktop-entry launch on Linux, the terminal otherwise |
+| `<support>/logs/app.log` | the user — Settings ▸ App ▸ **Open log folder** |
+
+`lib/infrastructure/diagnostics/app_log_file.dart` is the file sink: serialized
+appends, a session banner naming the version and OS, and rotation to
+`app.log.1` at 512 KiB, so two files is all the log ever occupies. `main`
+installs it, so unit tests and isolates write nothing; every write failure is
+swallowed, because a broken log must not break the app reporting through it.
+
+`showAppSnackBar(..., isError: true)` logs the message it shows, so a report of
+"some red error message" can be answered from the log. Remaining `debugPrint`
+call sites are listed as a cleanup in [FUTURE_FEATURES](FUTURE_FEATURES.md).
 
 ### App modes (`AppMode`)
 
@@ -2931,6 +2956,7 @@ removed. The notation surface retains its clipping, border and child geometry.
 | `ease_utils.dart` | Ease display formatting |
 | `eval_constants.dart` | Eval display thresholds |
 | `chesscom_lichess_elo.dart` | Chess.com blitz → Lichess blitz Elo table + `chessComBlitzToLichessBlitz()` for Maia (tactics Chess.com import) |
+| `log.dart` | `log.d/i/w/e` facade and `formatLogLine`; warnings and errors also go to the console and to `Log.sink` (the log file). See [Diagnostics log](#diagnostics-log) |
 | `app_messages.dart` | Routine success notifications are silent. Snackbars are reserved for errors and explicitly flagged notices requiring attention. Adding to a study finishes quietly; explicit Edit in study opens the editor directly. |
 | `keyboard_shortcut_utils.dart` | Shared `KeyBinding` dispatch, `isTextInputFocused()` and modifier guards, plus the SAN/UCI key classification used for move capture and move-safe navigation; shortcut chords and tooltip labels remain in `app_shortcuts.dart` |
 | `file_text_reader.dart` | UTF-8 file read with Latin-1 fallback (`decodeTextBytes`, `decodeTextBytesDetailed`, sync/async helpers) for PGN / text imports |
