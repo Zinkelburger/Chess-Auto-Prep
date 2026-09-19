@@ -1,0 +1,53 @@
+---
+// Both boards with their players, move lists, step buttons and setup boxes,
+// and the "Pieces outstanding" line under them. Place it inside a <form>:
+// "Set position" submits it. src/bughouse/boards.ts drives it;
+// `prefix` keeps each page's element ids apart.
+interface Props { prefix: string }
+const { prefix } = Astro.props;
+const STEPS = [
+  { id: 'first', label: 'First move (Home)', path: 'M6 5v14M19 5l-9 7 9 7z' },
+  { id: 'prev', label: 'Back (←)', path: 'M16 5l-9 7 9 7z' },
+  { id: 'next', label: 'Forward (→)', path: 'M8 5l9 7-9 7z' },
+  { id: 'last', label: 'Last move (End)', path: 'M18 5v14M5 5l9 7-9 7z' },
+];
+const SEATS = { A: [['white', 'A'], ['black', 'B']], B: [['white', 'D'], ['black', 'C']] } as const;
+const HELP = 'Reserves: P N B R Q, e.g. 2N Q. Outstanding = pieces not on a board or in a reserve.';
+---
+<div class="bb-boards">
+  {(['A', 'B'] as const).map((name, i) => (
+    <section id={`${prefix}-panel-${name}`} class="bb-board-panel" aria-label={`Board ${i + 1}`}>
+      <div id={`${prefix}-player-top-${name}`} class="bb-player"></div>
+      <div class="bb-board-wrap">
+        <div id={`${prefix}-board-${name}`} class="bb-board" role="group" aria-label={`Board ${i + 1} squares`}></div>
+        <svg id={`${prefix}-arrow-${name}`} class="bb-arrow" viewBox="0 0 8 8" aria-hidden="true"></svg>
+      </div>
+      <div id={`${prefix}-player-bottom-${name}`} class="bb-player"></div>
+      <ol id={`${prefix}-history-${name}`} class="bb-history" aria-label={`Moves on board ${i + 1}`}></ol>
+      <div class="bb-nav">
+        {STEPS.map((b) => (
+          <button type="button" id={`${prefix}-${b.id}-${name}`} class="btn btn-outline btn-icon" title={`${b.label}, board ${i + 1}`} aria-label={`${b.label}, board ${i + 1}`} disabled>
+            <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d={b.path} /></svg>
+          </button>
+        ))}
+      </div>
+      <div class="bb-setup">
+        <input id={`${prefix}-fen-${name}`} class="mono" spellcheck="false" autocomplete="off" placeholder={`Board ${i + 1} FEN`} aria-label={`Board ${i + 1} FEN`} />
+        <div class="bb-reserves">
+          {SEATS[name].map(([colour, seat]) => (
+            <label>
+              <span>{seat}</span>
+              <input id={`${prefix}-reserve-${name}-${colour}`} class="mono" spellcheck="false" autocomplete="off" aria-label={`Player ${seat}'s reserve`} title={`Player ${seat}'s reserve`} />
+            </label>
+          ))}
+        </div>
+        <p id={`${prefix}-fen-error-${name}`} class="bb-fen-error" role="alert"></p>
+      </div>
+    </section>
+  ))}
+</div>
+<div class="bb-outstanding">
+  <span class="bb-info" tabindex="0" role="img" aria-label="How to set a position" title={HELP}>i</span>
+  <p id={`${prefix}-balance`} class="bb-balance" aria-live="polite"></p>
+  <button class="btn btn-outline bb-set" type="submit">Set position</button>
+</div>

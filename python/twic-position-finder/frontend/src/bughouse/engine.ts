@@ -1,3 +1,29 @@
+/** Payload of the worker's `search` action: one node-budgeted Hivemind search. */
+export interface NodeSearchPayload {
+  dual_fen: string;
+  /** Our colour on board A (partner plays the other colour on board B). */
+  team: 'white' | 'black';
+  time_advantage: boolean;
+  /** Node budget, 1..100000. */
+  nodes: number;
+  /** Time cap in ms, 1..120000 (default 60000). */
+  movetime_ms?: number;
+}
+
+export interface JointMove { A: string; B: string; uci: string }
+
+/** Raw `search` result. q is in [-1, 1] from `team`'s side; mate is in plies. */
+export interface NodeSearchResult {
+  q: number;
+  mate: number | null;
+  nodes: number;
+  elapsed_ms: number;
+  best: JointMove | null;
+  /** Native UCI pv tokens, e.g. "(d2d4,pass)", "(P@f7,e2e4)". */
+  pv: string[];
+  lines: { best: JointMove }[];
+}
+
 /** One browser worker owns both Hivemind WASM and ONNX inference. No API. */
 export class BrowserEngine {
   private worker: Worker | null = null;

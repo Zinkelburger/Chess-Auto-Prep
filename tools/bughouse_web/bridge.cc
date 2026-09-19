@@ -132,6 +132,100 @@ std::string joint_json(Board& board, const JointActionCandidate& action) {
 
 EM_JS(int, cancelled, (), { return Module.cancelled ? 1 : 0; });
 
+namespace {
+// Principal variation in the native UCI "pv" text format: joint actions
+// "(moveA,moveB)" with "pass" for a sitting board. Mirrors native
+// Agent::extract_pv_from_child: the first step is the reported best root
+// child, then each expanded node follows get_best_move_idx_with_q_weight
+// (solver-aware, Q veto/weight), falling back to its most-visited child.
+std::string pv_json(const Board& start_board, const std::shared_ptr<Node>& root, int best,
+                    const SearchParams::RuntimeConfig& config, int max_depth) {
+    std::string out = "[";
+    if (best < 0 || !root->is_expanded()) return out + "]";
+    Board board(start_board);
+    std::shared_ptr<Node> node = root;
+    int index = best;
+    for (int depth = 0; depth < max_depth; depth++) {
+        if (depth > 0) {
+            if (!node || !node->is_expanded()) break;
+            auto children = node->get_children();
+            auto visits = node->get_child_visits();
+            if (children.empty() || visits.empty()) break;
+            index = node->get_best_move_idx_with_q_weight(config.qVetoDelta, config.qValueWeight);
+            if (index < 0) {
+                index = 0;
+                int most = 0;
+                for (size_t i = 0; i < children.size() && i < visits.size(); i++)
+                    if (visits[i] > most) { most = visits[i]; index = static_cast<int>(i); }
+            }
+        }
+        const JointActionCandidate action = node->get_joint_action(index);
+        if (depth) out += ',';
+        out += quote("(" + move_uci(board, 0, action.moveA) + "," + move_uci(board, 1, action.moveB) + ")");
+        board.make_moves(action.moveA, action.moveB);
+        node = node->get_child(index);
+    }
+    return out + "]";
+}
+
+// One bounded MCTS search. bh_search keeps its exact stopping rule and output;
+// bh_search_nodes (detailed) adds a node budget, a root-aware q and a PV.
+std::string run_search(const char* fen, int team, int timeAdvantage, int required,
+                       int nodeCap, int millis, bool detailed) {
+    auto board = load_board(fen);
+    Color side = static_cast<Color>(team);
+    if (required && (board->side_to_move(required - 1) != (required == 1 ? side : ~side)
+        || !board->has_any_legal_move(required - 1)))
+        throw std::runtime_error("Our team cannot move on the required board.");
+    if (!((board->side_to_move(0) == side && board->has_any_legal_move(0))
+        || (board->side_to_move(1) == ~side && board->has_any_legal_move(1))))
+        throw std::runtime_error("This team has no move available. Choose the other team or update the position.");
+    g_requiredMoveBoard = static_cast<RequiredMoveBoard>(required);
+    Engine engine(0, 1);
+    SearchParams::RuntimeConfig config;
+    auto root = std::make_shared<Node>(side);
+    root->configure_root_search(config, false);
+    SearchInfo info(std::chrono::steady_clock::now(), millis);
+    SearchThread search;
+    search.set_search_info(&info); search.set_root_node(root); search.set_runtime_config(config);
+    // No background native threads or permanent-brain loop in the web build.
+    do {
+        search.run_iteration(*board, &engine, timeAdvantage);
+    } while (!cancelled() && info.nodes < nodeCap && root->get_node_type() == NodeType::UNSOLVED
+             && (info.nodes < 2 || info.remaining_time() > 0));
+    search.finish_pending_iteration(*board, &engine, timeAdvantage);
+    const int best = root->get_best_move_idx_with_q_weight();
+    std::vector<int> visits = root->get_child_visits();
+    std::vector<int> order(visits.size());
+    std::iota(order.begin(), order.end(), 0);
+    std::sort(order.begin(), order.end(), [&](int a, int b) {
+        if (a == best || b == best) return a == best && b != best;
+        return visits[a] > visits[b];
+    });
+    auto type = root->get_node_type();
+    std::string mate = "null";
+    if (type == NodeType::WIN || type == NodeType::LOSS)
+        mate = std::to_string((type == NodeType::WIN ? 1 : -1) * std::max(1, root->get_end_in_ply()));
+    // q is from the searched team's side (the root node's side). Native UCI
+    // "score cp" is 180*tan(1.56*q) where q is the reported best child's edge
+    // Q, except that a solved root reports its own proof (win 1, loss -1,
+    // draw 0). The detailed search follows that rule exactly.
+    float q = best >= 0 ? root->get_child_q(best) : root->Q();
+    if (detailed && type != NodeType::UNSOLVED) q = root->Q();
+    std::string out = "{\"q\":" + std::to_string(q)
+        + ",\"mate\":" + mate + ",\"nodes\":" + std::to_string(info.nodes.load())
+        + ",\"elapsed_ms\":" + std::to_string(info.elapsed()) + ",\"best\":"
+        + (best < 0 ? "null" : joint_json(*board, root->get_joint_action(best)));
+    if (detailed) out += ",\"pv\":" + pv_json(*board, root, best, config, 8);
+    out += ",\"lines\":[";
+    for (size_t i = 0; i < std::min<size_t>(3, order.size()); i++) {
+        if (i) out += ',';
+        out += "{\"best\":" + joint_json(*board, root->get_joint_action(order[i])) + '}';
+    }
+    return out + "]}";
+}
+}
+
 extern "C" {
 void bh_init() {
     pieceMap.init(); variants.init(); Bitboards::init(); Position::init();
@@ -204,50 +298,18 @@ const char* bh_position(const char* fen, const char* moves, int team) {
 }
 
 const char* bh_search(const char* fen, int team, int timeAdvantage, int required, int millis) {
+    try { result = run_search(fen, team, timeAdvantage, required, 10000, std::clamp(millis, 250, 30000), false); }
+    catch (const std::exception& e) { result = "{\"error\":" + quote(e.what()) + '}'; }
+    return result.c_str();
+}
+
+// Stops at the node budget (1..100000), the time cap (1..120000 ms), a solved
+// root or Stop, whichever comes first. Adds "pv" to bh_search's output.
+const char* bh_search_nodes(const char* fen, int team, int timeAdvantage, int required,
+                            int nodes, int millisCap) {
     try {
-        auto board = load_board(fen);
-        Color side = static_cast<Color>(team);
-        if (required && (board->side_to_move(required - 1) != (required == 1 ? side : ~side)
-            || !board->has_any_legal_move(required - 1)))
-            throw std::runtime_error("Our team cannot move on the required board.");
-        if (!((board->side_to_move(0) == side && board->has_any_legal_move(0))
-            || (board->side_to_move(1) == ~side && board->has_any_legal_move(1))))
-            throw std::runtime_error("This team has no move available. Choose the other team or update the position.");
-        g_requiredMoveBoard = static_cast<RequiredMoveBoard>(required);
-        Engine engine(0, 1);
-        SearchParams::RuntimeConfig config;
-        auto root = std::make_shared<Node>(side);
-        root->configure_root_search(config, false);
-        SearchInfo info(std::chrono::steady_clock::now(), std::clamp(millis, 250, 30000));
-        SearchThread search;
-        search.set_search_info(&info); search.set_root_node(root); search.set_runtime_config(config);
-        // No background native threads or permanent-brain loop in the web build.
-        do {
-            search.run_iteration(*board, &engine, timeAdvantage);
-        } while (!cancelled() && info.nodes < 10000 && root->get_node_type() == NodeType::UNSOLVED
-                 && (info.nodes < 2 || info.remaining_time() > 0));
-        search.finish_pending_iteration(*board, &engine, timeAdvantage);
-        const int best = root->get_best_move_idx_with_q_weight();
-        std::vector<int> visits = root->get_child_visits();
-        std::vector<int> order(visits.size());
-        std::iota(order.begin(), order.end(), 0);
-        std::sort(order.begin(), order.end(), [&](int a, int b) {
-            if (a == best || b == best) return a == best && b != best;
-            return visits[a] > visits[b];
-        });
-        auto type = root->get_node_type();
-        std::string mate = "null";
-        if (type == NodeType::WIN || type == NodeType::LOSS)
-            mate = std::to_string((type == NodeType::WIN ? 1 : -1) * std::max(1, root->get_end_in_ply()));
-        result = "{\"q\":" + std::to_string(best >= 0 ? root->get_child_q(best) : root->Q())
-            + ",\"mate\":" + mate + ",\"nodes\":" + std::to_string(info.nodes.load())
-            + ",\"elapsed_ms\":" + std::to_string(info.elapsed()) + ",\"best\":"
-            + (best < 0 ? "null" : joint_json(*board, root->get_joint_action(best))) + ",\"lines\":[";
-        for (size_t i = 0; i < std::min<size_t>(3, order.size()); i++) {
-            if (i) result += ',';
-            result += "{\"best\":" + joint_json(*board, root->get_joint_action(order[i])) + '}';
-        }
-        result += "]}";
+        result = run_search(fen, team, timeAdvantage, required, std::clamp(nodes, 1, 100000),
+                            std::clamp(millisCap, 1, 120000), true);
     } catch (const std::exception& e) { result = "{\"error\":" + quote(e.what()) + '}'; }
     return result.c_str();
 }

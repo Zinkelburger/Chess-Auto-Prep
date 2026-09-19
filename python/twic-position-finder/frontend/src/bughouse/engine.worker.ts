@@ -9,9 +9,9 @@ interface Wasm {
 }
 interface Chunk { file: string; sha256: string; bytes: number }
 interface Manifest { model_sha256: string; chunks: Chunk[]; input: string; outputs: Record<string, string> }
-interface Payload { dual_fen?: string | null; moves?: string[]; team?: string; time_advantage?: boolean; require_move_on?: string; movetime_ms?: number }
+interface Payload { dual_fen?: string | null; moves?: string[]; team?: string; time_advantage?: boolean; their_time_advantage?: boolean; require_move_on?: string; movetime_ms?: number; nodes?: number }
 interface Search {
-  q: number; mate: number | null; nodes: number; best: unknown; lines: unknown[]; error?: string;
+  q: number; mate: number | null; nodes: number; elapsed_ms?: number; best: unknown; pv?: string[]; lines: unknown[]; error?: string;
 }
 let modulePromise: Promise<Wasm> | null = null;
 let sessionPromise: Promise<ort.InferenceSession> | null = null;
@@ -120,6 +120,18 @@ async function request(action: string, payload: Payload) {
   }
   await session(engine);
   if (cancelled) throw new Error('Analysis cancelled.');
+  if (action === 'search') {
+    // Exactly one node-budgeted search for `team`; raw result including pv.
+    const text = await engine.ccall('bh_search_nodes', 'string',
+      ['string', 'number', 'number', 'number', 'number', 'number'],
+      [payload.dual_fen ?? '', team, Number(payload.time_advantage ?? false), 0,
+        payload.nodes ?? 1000, payload.movetime_ms ?? 60000], { async: true });
+    const answer: Search = JSON.parse(text as string);
+    if (engine.inferenceError) { const error = engine.inferenceError; engine.inferenceError = undefined; throw new Error(error); }
+    if (answer.error) throw new Error(answer.error);
+    if (cancelled) throw new Error('Analysis cancelled.');
+    return answer;
+  }
   const search = async (side: number, ahead: boolean, required: number): Promise<Search> => {
     const text = await engine.ccall('bh_search', 'string', ['string', 'number', 'number', 'number', 'number'],
       [payload.dual_fen ?? '', side, Number(ahead), required, payload.movetime_ms ?? 1500], { async: true });
@@ -132,7 +144,9 @@ async function request(action: string, payload: Payload) {
   if (ours.error) throw new Error(ours.error);
   if (cancelled) throw new Error('Analysis cancelled.');
   progress('Comparing the other team’s position…');
-  const theirs = await search(1 - team, false, 0);
+  // Hivemind's clock input is one bit per team: "ahead". Equal clocks are
+  // both bits off; behind is theirs on. The calibration searches them with it.
+  const theirs = await search(1 - team, payload.their_time_advantage ?? false, 0);
   if (cancelled) throw new Error('Analysis cancelled.');
   const measured = !theirs.error && ours.mate === null && theirs.mate === null;
   return { ...ours, advantage: measured ? (ours.q - theirs.q) / 2 : null,
