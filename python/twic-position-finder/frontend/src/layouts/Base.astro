@@ -6,11 +6,14 @@
 interface Props {
   title: string;
   wide?: boolean;
+  /** A one-screen app: full width, main fills the window without scrolling. */
+  fill?: boolean;
   description?: string;
 }
 const {
   title,
   wide = false,
+  fill = false,
   description = 'Chess Auto Prep — TWIC alerts, tactics from your games, Bughouse Lab, and the Charles Clock.',
 } = Astro.props;
 const path = Astro.url.pathname.replace(/\/$/, '') || '/';
@@ -51,7 +54,7 @@ const NAV = [
       </div>
     </div>
   </nav>
-  <main id="content" class:list={[{ wide }]}>
+  <main id="content" class:list={[{ wide, fill }]}>
     <slot />
   </main>
   <footer class="site-footer">
@@ -186,6 +189,8 @@ const NAV = [
   /* ── Main / footer ───────────────────────────────────────────────── */
   main { flex: 1; width: 100%; max-width: 900px; margin: 0 auto; padding: 36px 24px 56px; }
   main.wide { max-width: 1100px; }
+  main.fill { max-width: 1680px; padding: 14px 24px; display: flex; flex-direction: column; min-height: 0; }
+  @media (min-width: 1001px) and (min-height: 601px) { body:has(main.fill) { height: 100dvh; min-height: 0; } }
   @media (max-width: 560px) { main { padding: 20px 16px 40px; } }
   .site-footer {
     border-top: 1px solid var(--border);

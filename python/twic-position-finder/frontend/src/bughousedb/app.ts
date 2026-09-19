@@ -9,15 +9,17 @@
 import { BrowserEngine, type NodeSearchResult } from '../bughouse/engine';
 import {
   ApiError, bookPosition, bookTicket, bookUpload,
-  type BookMove, type BookPosition, type Clock, type RawSearch, type Team,
+  type BookMove, type BookPosition, type BookScore, type Clock, type RawSearch, type Team,
 } from '../lib/api';
 
 type BoardName = 'A' | 'B';
 type Colour = 'white' | 'black';
+/** A table column, from the mover's side: their team ahead, even or behind. */
+type Column = 'ahead' | 'even' | 'behind';
 
 const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1';
 const START_DUAL = `${START}|${START}`;
-const CLOCKS: Clock[] = ['ahead', 'even', 'behind'];
+const COLUMNS: Column[] = ['ahead', 'even', 'behind'];
 // The browser engine runs one network evaluation (about 80 ms) per node, so a
 // browser analysis is far shallower than the desktop builder's 1500/200.
 const OWN_NODES = 200;    // each search of the position itself
@@ -34,8 +36,14 @@ const SEAT: Record<BoardName, Record<Colour, string>> = { A: { white: 'A', black
 const BOTTOM: Record<BoardName, Colour> = { A: 'white', B: 'black' };
 const PIECE_NAMES: Record<string, string> = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' };
 
-interface Step { fen: string; seat: string | null; san: string | null }
-let path: Step[] = [{ fen: START_DUAL, seat: null, san: null }];
+/**
+ * The game is one interleaved line of moves, like a FICS bpgn; each board's
+ * history shows only its own moves. `ply` is the position on screen, and the
+ * moves after it stay in the line until a different move replaces them.
+ */
+interface Step { fen: string; board: BoardName | null; colour: Colour | null; num: number; uci: string; san: string }
+let line: Step[] = [{ fen: START_DUAL, board: null, colour: null, num: 0, uci: '', san: '' }];
+let ply = 0;
 let cur: BookPosition | null = null;
 let selected: { board: BoardName; from?: string; drop?: string } | null = null;
 let hover: BookMove | null = null;
@@ -65,21 +73,32 @@ function boardsOf(fen: string): Record<BoardName, ReturnType<typeof parseBoard>>
   return { A: parseBoard(a), B: parseBoard(b) };
 }
 
+function moveNumber(fen: string, board: BoardName): number {
+  const fields = fen.split('|')[board === 'A' ? 0 : 1].trim().split(/\s+/);
+  return Number(fields[5]) || 1;
+}
+
 // ── Scores ────────────────────────────────────────────────────────
 
-function forMover(m: BookMove, clock: Clock): number {
+const moverTeam = (m: BookMove): Team => (m.seat === 'A' || m.seat === 'C' ? 'AC' : 'BD');
+
+/** Stored scores are for A + C and A + C's clock; the tables read from the mover's side. */
+function moverScore(m: BookMove, column: Column): BookScore | undefined {
+  const ac = moverTeam(m) === 'AC';
+  const clock: Clock = column === 'even' ? 'even' : (column === 'ahead') === ac ? 'ahead' : 'behind';
   const s = m.scores?.[clock];
+  if (!s || ac) return s;
+  return { ...s, q: s.q === null ? null : -s.q, cp: s.cp === null ? null : -s.cp, mate: s.mate === null ? null : -s.mate };
+}
+
+function rank(m: BookMove): number {
+  const s = moverScore(m, 'even');
   if (!s) return -Infinity;
-  const ours = s.mate !== null ? Math.sign(s.mate) * (2 - Math.abs(s.mate) / 1000) : (s.q ?? -Infinity);
-  return m.seat === 'A' || m.seat === 'C' ? ours : -ours;
+  return s.mate !== null ? Math.sign(s.mate) * (2 - Math.abs(s.mate) / 1000) : (s.q ?? -Infinity);
 }
 
-function scoreText(m: BookMove, clock: Clock): string {
-  return formatScore(m.scores?.[clock]);
-}
-
-/** Lichess-style pawns, or a mate count; + is good for A + C. */
-function formatScore(s: { cp: number | null; mate: number | null } | undefined): string {
+/** Lichess-style pawns, or a mate count; + is good for the mover. */
+function formatScore(s: BookScore | undefined): string {
   if (!s) return '—';
   if (s.mate !== null) return `#${s.mate}`;
   if (s.cp === null) return '—';
@@ -96,10 +115,13 @@ function image(piece: string): HTMLImageElement {
   return img;
 }
 
-function highlightSquares(board: BoardName): string[] {
-  if (!hover || hover.board !== board) return [];
-  const u = hover.uci;
-  return u.includes('@') ? [u.slice(2, 4)] : [u.slice(0, 2), u.slice(2, 4)];
+function squares(uci: string): string[] {
+  return uci.includes('@') ? [uci.slice(2, 4)] : [uci.slice(0, 2), uci.slice(2, 4)];
+}
+
+function lastMove(board: BoardName): Step | undefined {
+  for (let i = ply; i > 0; i--) if (line[i].board === board) return line[i];
+  return undefined;
 }
 
 function candidates(board: BoardName): BookMove[] {
@@ -109,21 +131,48 @@ function candidates(board: BoardName): BookMove[] {
     : !m.uci.includes('@') && m.uci.startsWith(selected?.from ?? '?')));
 }
 
+/** Square centre in the board's 8×8 view box. */
+function centre(board: BoardName, square: string): [number, number] {
+  const file = 'abcdefgh'.indexOf(square[0]);
+  const rank = Number(square[1]);
+  return BOTTOM[board] === 'white' ? [file + 0.5, 8 - rank + 0.5] : [7 - file + 0.5, rank - 0.5];
+}
+
+/** Hovering a table row draws the move, as Lichess's explorer does. */
+function renderArrow(board: BoardName) {
+  const svg = el(`bdb-arrow-${board}`);
+  if (!hover || hover.board !== board) { svg.innerHTML = ''; return; }
+  const [to] = squares(hover.uci).slice(-1);
+  const [x2, y2] = centre(board, to);
+  const brush = 'stroke="#003088" stroke-opacity="0.5"';
+  if (hover.uci.includes('@')) {
+    svg.innerHTML = `<circle cx="${x2}" cy="${y2}" r="0.44" fill="none" ${brush} stroke-width="0.08"/>`;
+    return;
+  }
+  const [x1, y1] = centre(board, hover.uci.slice(0, 2));
+  const len = Math.hypot(x2 - x1, y2 - y1);
+  const [ex, ey] = [x2 - ((x2 - x1) / len) * 0.3, y2 - ((y2 - y1) / len) * 0.3];
+  svg.innerHTML = `<defs><marker id="bdb-head-${board}" orient="auto" markerWidth="4" markerHeight="4" refX="2.05" refY="2">`
+    + `<path d="M0,0 V4 L3,2 Z" fill="#003088" fill-opacity="0.5"/></marker></defs>`
+    + `<line x1="${x1}" y1="${y1}" x2="${ex}" y2="${ey}" ${brush} stroke-width="0.2" stroke-linecap="round" marker-end="url(#bdb-head-${board})"/>`;
+}
+
 function renderBoard(name: BoardName) {
-  const data = cur ? boardsOf(cur.fen)[name] : boardsOf(path[path.length - 1].fen)[name];
+  const data = boardsOf(cur?.fen ?? line[ply].fen)[name];
   const bottom = BOTTOM[name];
   const files = bottom === 'white' ? 'abcdefgh' : 'hgfedcba';
   const ranks = bottom === 'white' ? '87654321' : '12345678';
   const container = el(`bdb-board-${name}`);
   container.replaceChildren();
-  const marks = highlightSquares(name);
+  const last = lastMove(name);
+  const marks = last ? squares(last.uci) : [];
   const targets = candidates(name).map((m) => m.uci.slice(2, 4));
   for (let row = 0; row < 8; row++) for (let col = 0; col < 8; col++) {
     const square = files[col] + ranks[row];
     const piece = data.pieces[square];
     const button = document.createElement('button');
     button.className = `bdb-square${(row + col) % 2 ? ' dark' : ''}`;
-    if (marks.includes(square)) button.classList.add('hl');
+    if (marks.includes(square)) button.classList.add('last');
     if (selected?.board === name && selected.from === square) button.classList.add('selected');
     if (targets.includes(square)) button.classList.add('target');
     button.setAttribute('aria-label', `Board ${name === 'A' ? 1 : 2} ${square}${piece ? ` ${piece === piece.toUpperCase() ? 'white' : 'black'} ${PIECE_NAMES[piece.toLowerCase()]}` : ''}`);
@@ -133,15 +182,19 @@ function renderBoard(name: BoardName) {
     button.onclick = () => clickSquare(name, square);
     container.append(button);
   }
+  renderArrow(name);
   const turn = cur?.turn[name];
-  el(`bdb-turn-${name}`).textContent = turn ? `${SEAT[name][turn]} to move` : '';
   for (const [where, colour] of [['top', bottom === 'white' ? 'black' : 'white'], ['bottom', bottom]] as const) {
-    const box = el(`bdb-reserve-${where}-${name}`);
+    const box = el(`bdb-player-${where}-${name}`);
     box.replaceChildren();
+    box.classList.toggle('to-move', turn === colour);
+    const dot = document.createElement('span');
+    dot.className = `turn ${colour}`;
+    dot.title = `${colour === 'white' ? 'White' : 'Black'} to move`;
     const who = document.createElement('span');
-    who.className = `who${turn === colour ? ' to-move' : ''}`;
-    who.textContent = SEAT[name][colour];
-    box.append(who);
+    who.className = 'who';
+    who.textContent = `Player ${SEAT[name][colour]}`;
+    box.append(dot, who);
     const pocket = data.pockets[colour];
     for (const p of ['p', 'n', 'b', 'r', 'q']) {
       const count = [...pocket].filter((c) => c.toLowerCase() === p).length;
@@ -150,7 +203,7 @@ function renderBoard(name: BoardName) {
       button.className = 'bdb-pocket';
       const letter = p.toUpperCase();
       button.append(image(colour === 'white' ? letter : p), document.createTextNode(String(count)));
-      button.setAttribute('aria-label', `${SEAT[name][colour]}: ${count} ${PIECE_NAMES[p]} in reserve`);
+      button.setAttribute('aria-label', `Player ${SEAT[name][colour]}: ${count} ${PIECE_NAMES[p]} in reserve`);
       button.setAttribute('aria-pressed', String(selected?.board === name && selected.drop === letter));
       button.disabled = turn !== colour || !cur?.moves.some((m) => m.board === name && m.uci.startsWith(`${letter}@`));
       button.onclick = () => { selected = selected?.board === name && selected.drop === letter ? null : { board: name, drop: letter }; renderBoards(); };
@@ -165,21 +218,23 @@ function renderTables() {
   for (const name of ['A', 'B'] as BoardName[]) {
     const body = el(`bdb-moves-${name}`);
     body.replaceChildren();
+    const turn = cur?.turn[name];
+    el(`bdb-mover-${name}`).textContent = turn ? `Move: Player ${SEAT[name][turn]}` : 'Move';
     if (!cur) continue;
     const rows = cur.moves.filter((m) => m.board === name);
-    rows.sort(cur.found ? (x, y) => forMover(y, 'even') - forMover(x, 'even') : (x, y) => x.san.localeCompare(y.san));
+    rows.sort(cur.found ? (x, y) => rank(y) - rank(x) : (x, y) => x.san.localeCompare(y.san));
     rows.forEach((m, i) => {
       const tr = document.createElement('tr');
       tr.tabIndex = 0;
       if (cur?.found && i === 0) tr.classList.add('best');
       const move = document.createElement('td');
-      const seat = document.createElement('span'); seat.className = 'seat'; seat.textContent = m.seat;
-      move.append(seat, document.createTextNode(m.san));
+      move.textContent = m.san;
       tr.append(move);
-      for (const clock of CLOCKS) {
+      for (const column of COLUMNS) {
         const td = document.createElement('td');
-        td.textContent = scoreText(m, clock);
-        if (m.scores) td.title = m.scores[clock].pv;
+        const s = moverScore(m, column);
+        td.textContent = formatScore(s);
+        if (s) td.title = s.pv;
         else td.classList.add('none');
         tr.append(td);
       }
@@ -192,19 +247,40 @@ function renderTables() {
   }
 }
 
-function renderPath() {
-  const nav = el('bdb-path');
-  nav.replaceChildren();
-  path.forEach((step, i) => {
-    if (i) { const sep = document.createElement('span'); sep.className = 'sep'; sep.textContent = '›'; nav.append(sep); }
+/** Each board's own moves, numbered as that board counts them. */
+function renderHistory(name: BoardName) {
+  const list = el(`bdb-history-${name}`);
+  list.replaceChildren();
+  const current = lastMove(name);
+  let row: HTMLLIElement | null = null;
+  line.forEach((step, i) => {
+    if (step.board !== name) return;
+    if (!row || step.colour === 'white') {
+      row = document.createElement('li');
+      const num = document.createElement('span');
+      num.className = 'num';
+      num.textContent = `${step.num}.`;
+      row.append(num);
+      if (step.colour === 'black') { const gap = document.createElement('span'); gap.className = 'none'; gap.textContent = '…'; row.append(gap); }
+      list.append(row);
+    }
     const b = document.createElement('button');
-    b.setAttribute('aria-current', String(i === path.length - 1));
-    if (step.seat) { const s = document.createElement('span'); s.className = 'seat'; s.textContent = step.seat; b.append(s); }
-    b.append(document.createTextNode(step.san ?? 'Start'));
-    b.onclick = () => { path = path.slice(0, i + 1); load(); };
-    nav.append(b);
+    b.textContent = step.san;
+    b.title = `Player ${SEAT[name][step.colour!]}`;
+    if (i > ply) b.classList.add('future');
+    b.setAttribute('aria-current', String(step === current));
+    b.onclick = () => go(i);
+    row.append(b);
+    if (step.colour === 'black') row = null;
   });
-  el<HTMLButtonElement>('bdb-back').disabled = path.length < 2;
+  list.querySelector('[aria-current="true"]')?.scrollIntoView({ block: 'nearest' });
+}
+
+function renderNav() {
+  el<HTMLButtonElement>('bdb-first').disabled = ply === 0;
+  el<HTMLButtonElement>('bdb-prev').disabled = ply === 0;
+  el<HTMLButtonElement>('bdb-next').disabled = ply === line.length - 1;
+  el<HTMLButtonElement>('bdb-last').disabled = ply === line.length - 1;
 }
 
 function renderMissing() {
@@ -226,19 +302,14 @@ function estimate(): string {
   return `${minutes} minute${minutes === 1 ? '' : 's'}`;
 }
 
-function renderMeta() {
-  const meta = cur?.meta;
-  el('bdb-meta').textContent = meta
-    ? `Hivemind · ${meta.nodes.toLocaleString()} nodes a position, ${meta.child_nodes.toLocaleString()} a move · ${meta.source === 'desktop' ? 'desktop engine' : 'computed in a browser'}`
-    : '';
-}
-
 function render() {
-  renderPath(); renderMeta(); renderBoards(); renderTables(); renderMissing();
-  el<HTMLInputElement>('bdb-fen').value = cur?.fen ?? path[path.length - 1].fen;
+  renderBoards(); renderTables(); renderHistory('A'); renderHistory('B'); renderNav(); renderMissing();
+  // Only a browser analysis is worth a note: it is much shallower than the book.
+  el('bdb-source').textContent = cur?.meta && cur.meta.source !== 'desktop' ? 'Analyzed in a browser: a quick, shallower search.' : '';
+  el<HTMLInputElement>('bdb-fen').value = cur?.fen ?? line[ply].fen;
 }
 
-function setHover(m: BookMove | null) { hover = m; renderBoards(); }
+function setHover(m: BookMove | null) { hover = m; renderArrow('A'); renderArrow('B'); }
 
 function setStatus(text: string, error = false) {
   const s = el('bdb-status');
@@ -249,11 +320,13 @@ function setStatus(text: string, error = false) {
 // ── Navigation ────────────────────────────────────────────────────
 
 async function load() {
-  const step = path[path.length - 1];
+  const step = line[ply];
   selected = null; hover = null;
   history.replaceState(null, '', step.fen === START_DUAL ? location.pathname : `?fen=${encodeURIComponent(step.fen)}`);
   try {
-    cur = await bookPosition(step.fen);
+    const pos = await bookPosition(step.fen);
+    if (line[ply] !== step) return;  // navigated on while this was loading
+    cur = pos;
     if (!job) setStatus('');
   } catch (e) {
     cur = null;
@@ -262,8 +335,25 @@ async function load() {
   render();
 }
 
+function go(to: number) {
+  const next = Math.max(0, Math.min(line.length - 1, to));
+  if (next === ply) return;
+  ply = next;
+  load();
+}
+
 function play(m: BookMove) {
-  path.push({ fen: m.child_fen, seat: m.seat, san: m.san });
+  if (!cur) return;
+  const ahead = line[ply + 1];
+  if (ahead && ahead.board === m.board && ahead.uci === m.uci) { go(ply + 1); return; }
+  line = line.slice(0, ply + 1);
+  line.push({ fen: m.child_fen, board: m.board, colour: cur.turn[m.board], num: moveNumber(cur.fen, m.board), uci: m.uci, san: m.san });
+  go(line.length - 1);
+}
+
+function reset(fen: string) {
+  line = [{ fen, board: null, colour: null, num: 0, uci: '', san: '' }];
+  ply = 0;
   load();
 }
 
@@ -352,21 +442,21 @@ async function analyse() {
 
 el('bdb-analyse').onclick = () => { analyse(); };
 el('bdb-cancel').onclick = () => { if (job) { job.cancelled = true; engine.cancel(); } };
-el('bdb-start').onclick = () => { path = [path[0]]; load(); };
-el('bdb-back').onclick = () => { if (path.length > 1) { path.pop(); load(); } };
+el('bdb-first').onclick = () => go(0);
+el('bdb-prev').onclick = () => go(ply - 1);
+el('bdb-next').onclick = () => go(ply + 1);
+el('bdb-last').onclick = () => go(line.length - 1);
 el<HTMLFormElement>('bdb-fen-form').onsubmit = (e) => {
   e.preventDefault();
   const fen = el<HTMLInputElement>('bdb-fen').value.trim();
-  if (fen) { path = [{ fen, seat: null, san: null }]; load(); }
+  if (fen) reset(fen);
 };
 document.addEventListener('keydown', (e) => {
   const t = e.target as HTMLElement;
   if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA') return;
-  if (e.key === 'ArrowLeft' && path.length > 1) { e.preventDefault(); path.pop(); load(); }
-  else if (e.key === 'Home') { e.preventDefault(); path = [path[0]]; load(); }
+  const to = { ArrowLeft: ply - 1, ArrowRight: ply + 1, Home: 0, End: line.length - 1 }[e.key];
+  if (to !== undefined) { e.preventDefault(); go(to); }
   else if (e.key === 'Escape' && selected) { selected = null; renderBoards(); }
 });
 
-const initial = new URLSearchParams(location.search).get('fen');
-if (initial) path = [{ fen: initial, seat: null, san: null }];
-load();
+reset(new URLSearchParams(location.search).get('fen') || START_DUAL);

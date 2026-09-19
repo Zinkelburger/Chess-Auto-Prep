@@ -2,63 +2,75 @@
 import Base from '../layouts/Base.astro';
 import '../styles/bughousedb.css';
 const TURNSTILE = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
+const NAV = [
+  { id: 'first', label: 'First move (Home)', path: 'M6 5v14M19 5l-9 7 9 7z' },
+  { id: 'prev', label: 'Previous move (←)', path: 'M16 5l-9 7 9 7z' },
+  { id: 'next', label: 'Next move (→)', path: 'M8 5l9 7-9 7z' },
+  { id: 'last', label: 'Last move (End)', path: 'M18 5v14M5 5l9 7-9 7z' },
+];
 ---
-<Base title="BughouseDB" description="Every legal bughouse move scored by Hivemind for three clock situations. Click through positions; analyse missing ones in your browser." wide>
+<Base title="BughouseDB" description="Every legal bughouse move scored by Hivemind for three clock situations. Click through positions; analyse missing ones in your browser." fill>
   <div id="bughousedb" data-turnstile={TURNSTILE ?? ''}>
-    <header class="bdb-header">
-      <div><p class="eyebrow">Hivemind · precomputed</p><h1>BughouseDB</h1></div>
-      <div class="bdb-actions">
-        <button id="bdb-start" class="btn btn-outline" title="Start position (Home)">Start</button>
-        <button id="bdb-back" class="btn btn-outline" title="Back (←)" disabled>Back</button>
-      </div>
-    </header>
-    <nav id="bdb-path" class="bdb-path" aria-label="Moves played"></nav>
-    <p id="bdb-meta" class="bdb-meta dim"></p>
+    <h1 class="visually-hidden">BughouseDB</h1>
     <noscript><p class="alert alert-error">Enable JavaScript to browse the book.</p></noscript>
 
-    <section id="bdb-missing" class="bdb-missing card" hidden>
-      <p id="bdb-missing-text">No data for this position.</p>
-      {TURNSTILE && <div class="cf-turnstile" data-sitekey={TURNSTILE} data-appearance="interaction-only"></div>}
-      <div class="btn-row">
-        <button id="bdb-analyse" class="btn btn-primary">Analyze on this computer</button>
-        <button id="bdb-cancel" class="btn btn-outline" hidden>Cancel</button>
+    <div class="bdb-left">
+      <div class="bdb-boards">
+        {['A', 'B'].map((name, i) => (
+          <section class="bdb-board-panel" aria-label={`Board ${i + 1}`}>
+            <div id={`bdb-player-top-${name}`} class="bdb-player"></div>
+            <div class="bdb-board-wrap">
+              <div id={`bdb-board-${name}`} class="bdb-board"></div>
+              <svg id={`bdb-arrow-${name}`} class="bdb-arrow" viewBox="0 0 8 8" aria-hidden="true"></svg>
+            </div>
+            <div id={`bdb-player-bottom-${name}`} class="bdb-player"></div>
+            <ol id={`bdb-history-${name}`} class="bdb-history" aria-label={`Moves on board ${i + 1}`}></ol>
+          </section>
+        ))}
       </div>
-      <div id="bdb-progress" class="bdb-progress" hidden><i></i></div>
-      <p id="bdb-status" class="bdb-status dim" role="status"></p>
-    </section>
-
-    <div class="bdb-grid">
-      {['A', 'B'].map((name, i) => (
-        <section class="bdb-board-panel" aria-label={`Board ${i + 1}`}>
-          <div class="bdb-board-heading"><h2>Board {i + 1}</h2><span id={`bdb-turn-${name}`} class="dim"></span></div>
-          <div id={`bdb-reserve-top-${name}`} class="bdb-reserve"></div>
-          <div id={`bdb-board-${name}`} class="bdb-board"></div>
-          <div id={`bdb-reserve-bottom-${name}`} class="bdb-reserve"></div>
-        </section>
-      ))}
-
-      {['A', 'B'].map((name, i) => (
-        <table class="bdb-table" aria-label={`Moves on board ${i + 1}`}>
-          <thead><tr><th scope="col">Move</th><th scope="col" title="A + C ahead on the diagonal clock">Ahead</th><th scope="col" title="Equal clocks">Even</th><th scope="col" title="A + C behind on the diagonal clock">Behind</th></tr></thead>
-          <tbody id={`bdb-moves-${name}`}></tbody>
-        </table>
-      ))}
+      <div class="bdb-controls">
+        <div class="bdb-nav">
+          {NAV.map((b) => (
+            <button id={`bdb-${b.id}`} class="btn btn-outline btn-icon" title={b.label} aria-label={b.label}>
+              <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d={b.path} /></svg>
+            </button>
+          ))}
+        </div>
+        <form id="bdb-fen-form" class="bdb-fen">
+          <input id="bdb-fen" class="mono" spellcheck="false" placeholder="FEN board 1 | FEN board 2" aria-label="Position: FEN of board 1 | FEN of board 2" />
+          <button class="btn btn-outline" type="submit">Load</button>
+        </form>
+      </div>
     </div>
 
-    <details class="bdb-position">
-      <summary>Position</summary>
-      <form id="bdb-fen-form" class="bdb-fen">
-        <input id="bdb-fen" class="mono" spellcheck="false" aria-label="Dual FEN, board 1 | board 2" />
-        <button class="btn btn-outline" type="submit">Load</button>
-      </form>
-    </details>
-
-    <p class="bdb-footnote dim">
-      Scores are Hivemind's, for A + C (White on board 1, Black on board 2), in Lichess-style pawns:
-      +1.00 wins as often as a +1.00 chess position does on Lichess. Ahead, Even and Behind are
-      A + C's diagonal clock; only the team ahead may sit on both boards. A missing position is
-      analysed by Hivemind in your browser and the result is added to the book for everyone.
-    </p>
+    <div class="bdb-right">
+      <section id="bdb-missing" class="bdb-missing card" hidden>
+        <p id="bdb-missing-text">No data for this position.</p>
+        {TURNSTILE && <div class="cf-turnstile" data-sitekey={TURNSTILE} data-appearance="interaction-only"></div>}
+        <div class="btn-row">
+          <button id="bdb-analyse" class="btn btn-primary">Analyze on this computer</button>
+          <button id="bdb-cancel" class="btn btn-outline" hidden>Cancel</button>
+        </div>
+        <div id="bdb-progress" class="bdb-progress" hidden><i></i></div>
+        <p id="bdb-status" class="bdb-status dim" role="status"></p>
+      </section>
+      <p id="bdb-source" class="bdb-source dim"></p>
+      <div class="bdb-tables">
+        {['A', 'B'].map((name, i) => (
+          <div class="bdb-table-wrap">
+            <table class="bdb-table" aria-label={`Moves on board ${i + 1}`}>
+              <thead><tr>
+                <th scope="col" id={`bdb-mover-${name}`}>Move</th>
+                <th scope="col" title="The mover's team is ahead on the diagonal clock">Ahead on time</th>
+                <th scope="col" title="Equal clocks">Even on time</th>
+                <th scope="col" title="The mover's team is behind on the diagonal clock">Behind on time</th>
+              </tr></thead>
+              <tbody id={`bdb-moves-${name}`}></tbody>
+            </table>
+          </div>
+        ))}
+      </div>
+    </div>
   </div>
   {TURNSTILE && <script is:inline src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>}
 </Base>
