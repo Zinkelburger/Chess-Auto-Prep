@@ -25,6 +25,7 @@ from models import (
 )
 from email_sender import send_verification_email, send_login_email
 from booking import router as booking_router, init_booking_db
+import bughousedb
 
 log = logging.getLogger(__name__)
 
@@ -55,6 +56,7 @@ app.add_middleware(
 )
 
 app.include_router(booking_router)
+app.include_router(bughousedb.router)
 
 
 @app.on_event("startup")
@@ -504,6 +506,32 @@ if DEBUG:
         login_token = create_email_token(conn, user["id"], "login")
         return {"login_url": f"{FRONTEND_ORIGIN}/twic-notifications?token={login_token}",
                 "token": login_token}
+
+
+
+# ── BughouseDB uploads (reads and imports live in bughousedb.py) ───────
+
+
+@app.post("/api/bughousedb/ticket")
+@limiter.limit("20/minute", key_func=bughousedb.client_ip)
+def bughousedb_ticket(req: bughousedb.TicketRequest, request: Request):
+    if TURNSTILE_SECRET and not verify_turnstile(req.cf_turnstile_token, _client_ip(request)):
+        raise HTTPException(400, "CAPTCHA verification failed. Please try again.")
+    conn = bughousedb.connect()
+    try:
+        return bughousedb.issue_ticket(conn, req.fen, bughousedb.contributor_of(request))
+    finally:
+        conn.close()
+
+
+@app.post("/api/bughousedb/position")
+@limiter.limit("20/minute", key_func=bughousedb.client_ip)
+def bughousedb_upload(up: bughousedb.PositionUpload, request: Request):
+    conn = bughousedb.connect()
+    try:
+        return bughousedb.store_upload(conn, up, bughousedb.contributor_of(request))
+    finally:
+        conn.close()
 
 
 if __name__ == "__main__":

@@ -35,6 +35,7 @@ Usage (from the repository root)::
     python3 tools/bughouse_db/hivemind_book.py run --child-nodes 400 --max-ply 10
     python3 tools/bughouse_db/hivemind_book.py show "A:e4 B:d4"
     python3 tools/bughouse_db/hivemind_book.py stats
+    python3 tools/bughouse_db/hivemind_book.py push --url https://api.chessautoprep.com
 
 Which positions get searched
 ----------------------------
@@ -52,6 +53,7 @@ when all of its moves are done.
 from __future__ import annotations
 
 import argparse
+import math
 import signal
 import sqlite3
 import sys
@@ -434,9 +436,13 @@ def show(args: argparse.Namespace) -> int:
 
 
 def fmt(score, mate) -> str:
+    """Lichess-style pawns: the chess evaluation that wins as often."""
     if mate is not None:
         return f"#{mate}"
-    return "—" if score is None else f"{score:+.2f}"
+    if score is None:
+        return "—"
+    q = max(-0.9999, min(0.9999, to_q(score * 100)))
+    return f"{543.17 * math.atanh(q) / 100:+.2f}"
 
 
 def stats(args: argparse.Namespace) -> int:
@@ -448,6 +454,53 @@ def stats(args: argparse.Namespace) -> int:
         print(f"  ply {ply}: {n}")
     print(con.execute("SELECT COUNT(*) FROM move WHERE clock='even'").fetchone()[0], "moves scored")
     return 0
+
+
+def push(args: argparse.Namespace) -> int:
+    """Send finished positions to BughouseDB (python/twic-position-finder/
+    bughousedb.py). Scores go as Hivemind's calibrated Q for A + C, which the
+    stored engine-scale score converts back to exactly."""
+    import json
+    import os
+    import urllib.request
+
+    key = args.key or os.environ.get("BUGHOUSEDB_ADMIN_KEY", "")
+    if not key:
+        print("set --key or BUGHOUSEDB_ADMIN_KEY", file=sys.stderr)
+        return 2
+    con = open_db(args.db)
+    done = con.execute("SELECT pos, fen, nodes, child_nodes FROM position WHERE status='done' "
+                       "ORDER BY done_at").fetchall()
+
+    def q(score):
+        return None if score is None else round(to_q(score * 100), 5)
+
+    totals = {"added": 0, "skipped": 0, "errors": 0}
+    for start in range(0, len(done), args.batch):
+        batch = []
+        for pos, fen, nodes, child_nodes in done[start:start + args.batch]:
+            picks = [{"clock": c, "team": t, "best": b or "", "q": q(sc), "mate": m, "pv": pv or ""}
+                     for c, t, b, sc, m, pv in con.execute(
+                         "SELECT clock, team, best, score, mate, pv FROM pick WHERE pos=?", (pos,))]
+            moves = [{"board": mv[0], "uci": u, "clock": c, "q": q(sc), "mate": m, "pv": pv or ""}
+                     for mv, u, c, sc, m, pv in con.execute(
+                         "SELECT move, uci, clock, score, mate, pv FROM move WHERE pos=?", (pos,))]
+            batch.append({"fen": fen, "engine": "hivemind-native", "nodes": nodes,
+                          "child_nodes": child_nodes, "picks": picks, "moves": moves})
+        req = urllib.request.Request(
+            args.url.rstrip("/") + "/api/bughousedb/import",
+            data=json.dumps({"positions": batch, "replace": args.replace}).encode(),
+            headers={"Content-Type": "application/json", "X-API-Key": key}, method="POST")
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            out = json.load(resp)
+        totals["added"] += out["added"]
+        totals["skipped"] += out["skipped"]
+        totals["errors"] += len(out["errors"])
+        for err in out["errors"]:
+            print("  error:", err, file=sys.stderr)
+        print(f"{start + len(batch):5d}/{len(done)}  added {totals['added']}  "
+              f"already there {totals['skipped']}  errors {totals['errors']}", flush=True)
+    return 0 if not totals["errors"] else 1
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -466,8 +519,13 @@ def main(argv: list[str] | None = None) -> int:
     s = sub.add_parser("show", help="print one position's table")
     s.add_argument("line", nargs="?", default="")
     sub.add_parser("stats")
+    p = sub.add_parser("push", help="upload finished positions to BughouseDB")
+    p.add_argument("--url", default="https://api.chessautoprep.com")
+    p.add_argument("--key", default="", help="admin key (or BUGHOUSEDB_ADMIN_KEY)")
+    p.add_argument("--batch", type=int, default=40)
+    p.add_argument("--replace", action="store_true", help="overwrite positions already there")
     args = ap.parse_args(argv)
-    return {"run": run, "show": show, "stats": stats}[args.cmd](args)
+    return {"run": run, "show": show, "stats": stats, "push": push}[args.cmd](args)
 
 
 if __name__ == "__main__":

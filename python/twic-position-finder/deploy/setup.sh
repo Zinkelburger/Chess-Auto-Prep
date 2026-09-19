@@ -24,7 +24,7 @@ id -u "$APP_USER" &>/dev/null || useradd --system --create-home "$APP_USER"
 echo "==> Setting up app directory"
 mkdir -p "$APP_DIR"
 cp models.py downloader.py ingest.py query.py server.py weekly.py \
-   email_sender.py lichess.py requirements.txt "$APP_DIR/"
+   email_sender.py lichess.py booking.py bughousedb.py requirements.txt "$APP_DIR/"
 
 echo "==> Creating Python virtualenv"
 python3 -m venv "$APP_DIR/venv"

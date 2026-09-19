@@ -128,6 +128,31 @@ Booking uses the same API server and `PUBLIC_API_URL`. Schedule env (defaults ta
 
 Endpoints: `GET /health`, `GET /api/slots` (returns window, `blocked_dates`, `available_weekdays`, `available_date_exceptions`, slot grid metadata, and open `slots`), `POST /api/book`, `GET /api/bookings` (admin, `X-API-Key`). Offered times use a 90-minute grid from noon; each lesson is 90 minutes and the last start is 7:30 PM (ends 9 PM). Weekends are closed except dates listed in `BOOKING_AVAILABLE_DATES`. See `booking-service/README.md` for full API notes.
 
+### BughouseDB (`/bughousedb`)
+
+A shared, precomputed Hivemind book for bughouse, like chessdb.cn: every
+legal move on both boards, scored for A + C ahead, even and behind on the
+diagonal clock, with a principal variation. `bughousedb.py` owns it, in its
+own SQLite file (`BUGHOUSEDB_PATH`, default `bughousedb.db` beside the app).
+The server runs no engine:
+
+- `GET /api/bughousedb/position?fen=` — the position's legal moves (SAN,
+  seat, resulting FEN, which team answers) and, when stored, their scores:
+  Hivemind's calibrated Q plus a Lichess-style `cp = 543.17·atanh(Q)`.
+- `POST /api/bughousedb/ticket` — a one-time ticket for one missing
+  position, behind Turnstile, 20/minute per IP.
+- `POST /api/bughousedb/position` — the browser's raw searches for that
+  position (the page runs the static WASM Hivemind). The server requires
+  exactly the legal move set, derives every score itself, rejects reused or
+  expired tickets and uploads faster than the searches could run.
+- `POST /api/bughousedb/import` — positions computed on the owner's machine
+  (`python3 tools/bughouse_db/hivemind_book.py push`), `X-API-Key:
+  $BUGHOUSEDB_ADMIN_KEY`.
+
+A browser cannot prove it computed honestly, so each upload records its
+ticket and a hash of the uploader's IP. `python3 bughousedb.py stats` lists
+contributors; `python3 bughousedb.py purge --contributor HASH` removes one.
+
 ### Weekly Cron Job
 
 ```bash
@@ -162,6 +187,8 @@ Add to crontab for automatic weekly runs:
 | `LICHESS_API_TOKEN` | Optional | Lichess PAT for game import |
 | `TWIC_DB_PATH` | Optional | Custom database path |
 | `TWIC_FRONTEND_ORIGIN` | Optional | CORS origin for the frontend |
+| `BUGHOUSEDB_PATH` | Optional | BughouseDB SQLite path |
+| `BUGHOUSEDB_ADMIN_KEY` | For imports | Admin key for `POST /api/bughousedb/import` |
 
 ## How It Works
 

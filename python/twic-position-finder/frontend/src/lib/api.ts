@@ -265,6 +265,64 @@ export async function logout(token: string): Promise<void> {
   }
 }
 
+// ── BughouseDB (bughousedb.py) ─────────────────────────────────────
+
+export type Clock = 'ahead' | 'even' | 'behind';
+export type Team = 'AC' | 'BD';
+
+export interface BookScore { q: number | null; cp: number | null; mate: number | null; pv: string }
+
+export interface BookMove {
+  board: 'A' | 'B';
+  uci: string;
+  san: string;
+  seat: 'A' | 'B' | 'C' | 'D';
+  /** The team that searches the position after this move. */
+  answerer: Team;
+  child_fen: string;
+  scores: Record<Clock, BookScore> | null;
+}
+
+export interface BookPick { clock: Clock; team: Team; best: string; q: number | null; cp: number | null; mate: number | null; pv: string }
+
+export interface BookPosition {
+  key: string;
+  fen: string;
+  found: boolean;
+  turn: { A: 'white' | 'black'; B: 'white' | 'black' };
+  /** Teams with a legal move somewhere. */
+  teams: Team[];
+  moves: BookMove[];
+  picks: BookPick[];
+  meta: { source: string; engine: string; nodes: number; child_nodes: number; created_at: number } | null;
+}
+
+export interface RawSearch { q: number | null; mate: number | null; pv: string[]; best: string | null; nodes: number }
+
+export interface BookUpload {
+  ticket: string;
+  fen: string;
+  engine: string;
+  nodes: number;
+  child_nodes: number;
+  own: { team: Team; ahead: boolean; search: RawSearch }[];
+  moves: { board: 'A' | 'B'; uci: string; on: RawSearch | null; off: RawSearch | null }[];
+}
+
+export function bookPosition(fen: string): Promise<BookPosition> {
+  return request(`/api/bughousedb/position?fen=${encodeURIComponent(fen)}`, { fallback: 'Could not load the position.' });
+}
+
+export function bookTicket(fen: string, turnstileToken: string): Promise<{ ticket: string; key: string; expires_in: number }> {
+  return request('/api/bughousedb/ticket', {
+    method: 'POST', body: { fen, cf_turnstile_token: turnstileToken }, fallback: 'Could not start the analysis.',
+  });
+}
+
+export function bookUpload(body: BookUpload): Promise<{ key: string; moves: number }> {
+  return request('/api/bughousedb/position', { method: 'POST', body, fallback: 'Could not upload the analysis.' });
+}
+
 // ── Small DOM helpers shared by the alert pages ───────────────────
 
 export type AlertKind = 'success' | 'error' | 'info' | 'warn';

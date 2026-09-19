@@ -1,0 +1,74 @@
+---
+import Base from '../layouts/Base.astro';
+import '../styles/bughousedb.css';
+const TURNSTILE = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
+---
+<Base title="BughouseDB" description="Every legal bughouse move scored by Hivemind for three clock situations. Click through positions; analyse missing ones in your browser." wide>
+  <div id="bughousedb" data-turnstile={TURNSTILE ?? ''}>
+    <header class="bdb-header">
+      <div><p class="eyebrow">Hivemind · precomputed</p><h1>BughouseDB</h1></div>
+      <div class="bdb-actions">
+        <button id="bdb-start" class="btn btn-outline" title="Start position (Home)">Start</button>
+        <button id="bdb-back" class="btn btn-outline" title="Back (←)" disabled>Back</button>
+      </div>
+    </header>
+    <nav id="bdb-path" class="bdb-path" aria-label="Moves played"></nav>
+    <p id="bdb-meta" class="bdb-meta dim"></p>
+    <noscript><p class="alert alert-error">Enable JavaScript to browse the book.</p></noscript>
+
+    <section id="bdb-missing" class="bdb-missing card" hidden>
+      <p id="bdb-missing-text">No data for this position.</p>
+      {TURNSTILE && <div class="cf-turnstile" data-sitekey={TURNSTILE} data-appearance="interaction-only"></div>}
+      <div class="btn-row">
+        <button id="bdb-analyse" class="btn btn-primary">Analyze on this computer</button>
+        <button id="bdb-cancel" class="btn btn-outline" hidden>Cancel</button>
+      </div>
+      <div id="bdb-progress" class="bdb-progress" hidden><i></i></div>
+      <p id="bdb-status" class="bdb-status dim" role="status"></p>
+    </section>
+
+    <div class="bdb-grid">
+      {['A', 'B'].map((name, i) => (
+        <section class="bdb-board-panel" aria-label={`Board ${i + 1}`}>
+          <div class="bdb-board-heading"><h2>Board {i + 1}</h2><span id={`bdb-turn-${name}`} class="dim"></span></div>
+          <div id={`bdb-reserve-top-${name}`} class="bdb-reserve"></div>
+          <div id={`bdb-board-${name}`} class="bdb-board"></div>
+          <div id={`bdb-reserve-bottom-${name}`} class="bdb-reserve"></div>
+        </section>
+      ))}
+
+      <section id="bdb-pv" class="bdb-pv" aria-live="polite">
+        <div class="bdb-pv-row"><span class="bdb-pv-label">Ahead</span><span id="bdb-pv-ahead"></span></div>
+        <div class="bdb-pv-row"><span class="bdb-pv-label">Even</span><span id="bdb-pv-even"></span></div>
+        <div class="bdb-pv-row"><span class="bdb-pv-label">Behind</span><span id="bdb-pv-behind"></span></div>
+      </section>
+
+      {['A', 'B'].map((name, i) => (
+        <table class="bdb-table" aria-label={`Moves on board ${i + 1}`}>
+          <thead><tr><th scope="col">Move</th><th scope="col" title="A + C ahead on the diagonal clock">Ahead</th><th scope="col" title="Equal clocks">Even</th><th scope="col" title="A + C behind on the diagonal clock">Behind</th></tr></thead>
+          <tbody id={`bdb-moves-${name}`}></tbody>
+        </table>
+      ))}
+    </div>
+
+    <details class="bdb-position">
+      <summary>Position</summary>
+      <form id="bdb-fen-form" class="bdb-fen">
+        <input id="bdb-fen" class="mono" spellcheck="false" aria-label="Dual FEN, board 1 | board 2" />
+        <button class="btn btn-outline" type="submit">Load</button>
+      </form>
+    </details>
+
+    <p class="bdb-footnote dim">
+      Scores are Hivemind's, for A + C (White on board 1, Black on board 2), in Lichess-style pawns:
+      +1.00 wins as often as a +1.00 chess position does on Lichess. Ahead, Even and Behind are
+      A + C's diagonal clock; only the team ahead may sit on both boards. A missing position is
+      analysed by Hivemind in your browser and the result is added to the book for everyone.
+    </p>
+  </div>
+  {TURNSTILE && <script is:inline src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>}
+</Base>
+
+<script>
+  import '../bughousedb/app';
+</script>
