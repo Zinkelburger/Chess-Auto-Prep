@@ -121,6 +121,26 @@ class UploadTests(unittest.TestCase):
             bh.store_upload(self.conn, self.upload(self.ticket(), bad_pv=True), "tester")
         self.assertEqual(e.exception.status_code, 422)
 
+    def test_text_in_the_best_move_is_refused(self):
+        up = self.upload(self.ticket())
+        up.own[0].search.best = "(visit-my-site,pass)"
+        with self.assertRaises(HTTPException) as e:
+            bh.store_upload(self.conn, up, "tester")
+        self.assertEqual(e.exception.status_code, 422)
+
+    def test_an_illegal_best_move_is_not_shown(self):
+        boards = bh.parse_dual(DUAL)
+        self.assertEqual(bh.joint_text(boards, "(e2e5,pass)", "AC"), "")
+        self.assertEqual(bh.joint_text(boards, "(e2e4,pass)", "AC"), "A e4")
+
+    def test_the_contributor_ip_ignores_forwarded_for(self):
+        from starlette.requests import Request
+        def request(headers):
+            return Request({"type": "http", "client": ("10.0.0.9", 1),
+                            "headers": [(k.lower().encode(), v.encode()) for k, v in headers.items()]})
+        self.assertEqual(bh.client_ip(request({"X-Forwarded-For": "1.2.3.4"})), "10.0.0.9")
+        self.assertEqual(bh.client_ip(request({"CF-Connecting-IP": "5.6.7.8"})), "5.6.7.8")
+
     def test_no_ticket_for_a_position_already_in_the_book(self):
         bh.store_upload(self.conn, self.upload(self.ticket()), "tester")
         with self.assertRaises(HTTPException) as e:

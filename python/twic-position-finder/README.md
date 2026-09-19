@@ -149,8 +149,11 @@ The server runs no engine:
   (`python3 tools/bughouse_db/hivemind_book.py push`), `X-API-Key:
   $BUGHOUSEDB_ADMIN_KEY`.
 
-A browser cannot prove it computed honestly, so each upload records its
-ticket and a hash of the uploader's IP. `python3 bughousedb.py stats` lists
+Uploads carry numbers and moves only: move text is rebuilt on the server
+from legal moves, and the page renders everything as text. A browser cannot
+prove it computed honestly, so each upload records its ticket and a hash of
+the uploader's IP (`CF-Connecting-IP`; keep the origin reachable only through
+Cloudflare, or the header can be forged). `python3 bughousedb.py stats` lists
 contributors; `python3 bughousedb.py purge --contributor HASH` removes one.
 
 ### Weekly Cron Job

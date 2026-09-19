@@ -227,9 +227,11 @@ def joint_text(boards: list[CrazyhouseBoard], joint: str | None, team: str) -> s
             parts.append(f"{who} sits")
             continue
         try:
-            parts.append(f"{who} {san(board, board.parse_uci(uci))}")
+            move = board.parse_uci(uci)
         except ValueError:
-            parts.append(f"{who} {uci}")
+            continue
+        if move in board.legal_moves:
+            parts.append(f"{who} {san(board, move)}")
     return " · ".join(parts)
 
 
@@ -253,7 +255,7 @@ class Search(BaseModel):
     q: float | None = Field(default=None, ge=-1, le=1)
     mate: int | None = Field(default=None, ge=-500, le=500)
     pv: list[str] = Field(default_factory=list, max_length=16)
-    best: str | None = None
+    best: str | None = Field(default=None, max_length=32)
     nodes: int | None = Field(default=None, ge=0, le=10_000_000)
 
 
@@ -352,8 +354,9 @@ def get_position(fen: str = Query(..., max_length=400), conn=Depends(db)):
 
 
 def client_ip(request: Request) -> str:
+    """Cloudflare sets CF-Connecting-IP and overwrites any the client sent;
+    X-Forwarded-For keeps the client's own first entry, so it is not used."""
     return (request.headers.get("CF-Connecting-IP")
-            or request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
             or (request.client.host if request.client else "") or "unknown")
 
 
@@ -428,7 +431,7 @@ def store_upload(conn: sqlite3.Connection, up: PositionUpload, contributor: str)
         raise HTTPException(422, "The upload must score exactly the legal moves of this position.")
     own = {}
     for o in up.own:
-        _check_joints(o.search.pv)
+        _check_joints(o.search.pv + ([o.search.best] if o.search.best else []))
         own[(o.team, o.ahead)] = o.search
     for team in TEAMS:
         if team_can_move(boards, team) and not all((team, bit) in own for bit in (True, False)):
