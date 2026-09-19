@@ -37,12 +37,6 @@ const TURNSTILE = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
         </section>
       ))}
 
-      <section id="bdb-pv" class="bdb-pv" aria-live="polite">
-        <div class="bdb-pv-row"><span class="bdb-pv-label">Ahead</span><span id="bdb-pv-ahead"></span></div>
-        <div class="bdb-pv-row"><span class="bdb-pv-label">Even</span><span id="bdb-pv-even"></span></div>
-        <div class="bdb-pv-row"><span class="bdb-pv-label">Behind</span><span id="bdb-pv-behind"></span></div>
-      </section>
-
       {['A', 'B'].map((name, i) => (
         <table class="bdb-table" aria-label={`Moves on board ${i + 1}`}>
           <thead><tr><th scope="col">Move</th><th scope="col" title="A + C ahead on the diagonal clock">Ahead</th><th scope="col" title="Equal clocks">Even</th><th scope="col" title="A + C behind on the diagonal clock">Behind</th></tr></thead>

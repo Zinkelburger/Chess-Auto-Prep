@@ -11,7 +11,6 @@
 
 .bdb-meta { min-height: 1.5em; margin: -4px 0 10px; font-size: 13px; }
 .bdb-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 28px; align-items: start; }
-.bdb-grid > .bdb-pv { grid-column: 1 / -1; }
 .bdb-board-panel { min-width: 0; }
 .bdb-board-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .bdb-board-heading h2 { font-size: 1.1rem; }
@@ -48,10 +47,6 @@
 .bdb-table tr.best td:first-child { font-weight: 600; }
 .bdb-table td.none { color: var(--text-faint); }
 
-.bdb-pv { margin-top: 8px; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); font-family: var(--mono); font-size: 13.5px; }
-.bdb-pv-row { display: grid; grid-template-columns: 5.5em 1fr; gap: 10px; min-height: 24px; align-items: baseline; }
-.bdb-pv-row span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bdb-pv-label { color: var(--text-dim); font-family: var(--sans); font-size: 13px; }
 
 .bdb-missing { margin: 0 0 16px; padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
 .bdb-missing p { margin: 0; }
@@ -68,7 +63,6 @@
 
 @media (max-width: 760px) {
   .bdb-grid { grid-template-columns: 1fr; }
-  .bdb-grid > .bdb-pv { order: 3; }
   .bdb-grid > .bdb-board-panel:nth-of-type(2) { order: 4; }
   .bdb-grid > .bdb-table:last-of-type { order: 5; }
   .bdb-table td, .bdb-table th { padding-inline: 5px; }

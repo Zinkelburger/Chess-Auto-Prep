@@ -31,10 +31,10 @@ try {
   assert.equal(await page.$$eval('.bdb-square img', (imgs) => imgs.length), 64);
   await page.screenshot({ path: path.join(output, 'bughousedb-start.png') });
 
-  // Hover lights the move and fills the three PV lines.
+  // Hover lights the move; each score keeps its line as a tooltip.
   await page.hover('#bdb-moves-A tr:first-child');
   assert.equal(await page.$$eval('#bdb-board-A .hl', (s) => s.length), 2);
-  assert.ok((await page.$eval('#bdb-pv-even', (n) => n.textContent)).length > 5);
+  assert.ok((await page.$eval('#bdb-moves-A tr:first-child td:nth-child(3)', (n) => n.title)).length > 5);
 
   // A move with no stored analysis (the first rare move no earlier run
   // uploaded): the tables still list its replies.

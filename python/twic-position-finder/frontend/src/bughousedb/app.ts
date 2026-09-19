@@ -179,7 +179,8 @@ function renderTables() {
       for (const clock of CLOCKS) {
         const td = document.createElement('td');
         td.textContent = scoreText(m, clock);
-        if (!m.scores) td.classList.add('none');
+        if (m.scores) td.title = m.scores[clock].pv;
+        else td.classList.add('none');
         tr.append(td);
       }
       tr.onmouseenter = tr.onfocus = () => setHover(m);
@@ -188,21 +189,6 @@ function renderTables() {
       tr.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); play(m); } };
       body.append(tr);
     });
-  }
-}
-
-function renderPv() {
-  for (const clock of CLOCKS) {
-    const out = el(`bdb-pv-${clock}`);
-    if (hover) {
-      out.textContent = hover.scores ? `${scoreText(hover, clock)}  ${hover.scores[clock].pv}` : '';
-      continue;
-    }
-    // At rest: Hivemind's own pick for the team to move on board 1.
-    const team: Team | undefined = cur ? (cur.turn.A === 'white' ? 'AC' : 'BD') : undefined;
-    const pick = cur?.picks.find((p) => p.clock === clock && p.team === team)
-      ?? cur?.picks.find((p) => p.clock === clock);
-    out.textContent = pick ? `${formatScore(pick)}  ${pick.pv || pick.best}` : '';
   }
 }
 
@@ -248,11 +234,11 @@ function renderMeta() {
 }
 
 function render() {
-  renderPath(); renderMeta(); renderBoards(); renderTables(); renderPv(); renderMissing();
+  renderPath(); renderMeta(); renderBoards(); renderTables(); renderMissing();
   el<HTMLInputElement>('bdb-fen').value = cur?.fen ?? path[path.length - 1].fen;
 }
 
-function setHover(m: BookMove | null) { hover = m; renderBoards(); renderPv(); }
+function setHover(m: BookMove | null) { hover = m; renderBoards(); }
 
 function setStatus(text: string, error = false) {
   const s = el('bdb-status');
