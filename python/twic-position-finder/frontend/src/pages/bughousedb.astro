@@ -57,7 +57,9 @@ const NAV = [
           <p id="bdb-status" class="bdb-status dim" role="status"></p>
         </section>
         {['A', 'B'].map((name, i) => (
-          <div class="bdb-table-wrap">
+          <section class="bdb-table-panel" aria-label={`Board ${i + 1} moves`}>
+            <h2 class="bdb-table-title">Board {i + 1}</h2>
+            <div class="bdb-table-wrap">
             <table class="bdb-table" aria-label={`Moves on board ${i + 1}`}>
               <thead><tr>
                 <th scope="col" id={`bdb-mover-${name}`}>Move</th>
@@ -67,7 +69,8 @@ const NAV = [
               </tr></thead>
               <tbody id={`bdb-moves-${name}`}></tbody>
             </table>
-          </div>
+            </div>
+          </section>
         ))}
       </div>
     </div>
