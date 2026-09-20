@@ -61,14 +61,20 @@ Valuation weightedSum(Iterable<(double, Valuation)> replies) {
   var value = 0.0;
   var lower = 0.0;
   var upper = 0.0;
+  var mass = 0.0;
   for (final (probability, reply) in replies) {
     value += probability * reply.value;
     lower += probability * reply.lower;
     upper += probability * reply.upper;
+    mass += probability;
   }
-  return Valuation(
-    value: value.clamp(0, 1),
-    lower: lower.clamp(0, 1),
-    upper: upper.clamp(0, 1),
+  // The shares come from Policy.sharesOver, which normalises them, so this
+  // is a check on that promise rather than something to correct for: a sum
+  // that has drifted means the caller weighted the replies itself, and
+  // silently clamping the answer back into [0, 1] would hide it.
+  assert(
+    (mass - 1).abs() < 1e-9,
+    'the replies of one node must share one whole move, not $mass',
   );
+  return Valuation(value: value, lower: lower, upper: upper);
 }
