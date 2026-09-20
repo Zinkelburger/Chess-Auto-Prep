@@ -226,11 +226,77 @@ void main() {
     expect(session.chapter?.gameCount, 2);
   });
 
+  group('the cursor after an undo', () {
+    /// What the session has open: `e4` is the first move listed and `d4` the
+    /// second.
+    const open = '''
+// Color: White
+
+[Event "One"]
+[Result "*"]
+
+1. e4 e5 *
+
+[Event "Two"]
+[Result "*"]
+
+1. d4 *
+''';
+
+    /// What the file held before the last save: the same two moves the other
+    /// way round, so every path into the tree above names another move.
+    const earlier = '''
+// Color: White
+
+[Event "One"]
+[Result "*"]
+
+1. d4 d5 *
+
+[Event "Two"]
+[Result "*"]
+
+1. e4 *
+''';
+
+    /// Opens [open] with the cursor at [at], edits it once over a file that
+    /// held [earlier], then takes the edit back.
+    Future<DocumentSession> undoneAt(NodePath at) async {
+      final local = await openSession(open);
+      addTearDown(local.dispose);
+      local.session.goTo(at);
+      local.store.hold = true;
+      local.session.setComment(const NodePath.root(), 'a note');
+      // The store's receipt says what the file held when the save replaced
+      // it, and an undo puts exactly that back.
+      local.store.documents[local.ref] = Opened(
+        earlier,
+        scriptedRevision(open),
+      );
+      local.store.releaseAll();
+      await pumpEventQueue();
+      local.store.hold = false;
+      await local.session.undo();
+      return local.session;
+    }
+
+    test('stays on the move it was on, wherever the file lists it', () async {
+      final restored = await undoneAt(NodePath.of([1]));
+      expect(restored.currentMove?.san, 'd4');
+      expect(restored.cursor, NodePath.of([0]));
+    });
+
+    test('falls back to the deepest move the file still has', () async {
+      final restored = await undoneAt(NodePath.of([0, 0]));
+      expect(restored.currentMove?.san, 'e4');
+      expect(restored.cursor, NodePath.of([1]));
+    });
+  });
+
   test('nothing to undo is not an error', () async {
     await session.undo();
     expect(saver.state, isA<Saved>());
   });
-
   test('a copy refused while another chapter opened still says so', () async {
     final other = chapterRef('KID', 'Other');
     fixture.store.documents[other] = Opened(
