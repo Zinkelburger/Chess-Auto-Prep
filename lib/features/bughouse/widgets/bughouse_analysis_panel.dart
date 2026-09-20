@@ -626,7 +626,7 @@ class _TableRules extends StatelessWidget {
         // engine plays completely differently when told so. Three cases and no
         // more: both boards start together and one clock per board runs, so
         // both diagonals carry the same margin and a team is up, level or
-        // down. The engine takes one bit, so "Equal" and "They may sit" run
+        // down. The engine takes one bit, so "Even" and "C + D may sit" run
         // the same search; the genuinely distinct third case is the must-move
         // constraint below.
         const BughousePanelLabel('Clock'),
@@ -691,9 +691,9 @@ class _TableRules extends StatelessWidget {
           message:
               'See how the best moves and your team’s evaluation change '
               'in this position when:\n'
-              '• We may sit, so we can wait rather than move.\n'
-              '• Equal, or they may sit and we cannot outwait them.\n'
-              '• We must move on Board 1.\n'
+              '• A + B may sit, and can wait rather than move.\n'
+              '• Even, or C + D may sit and we cannot outwait them.\n'
+              '• A + B must move on Board 1.\n'
               'Results open in the Engine tab under Clock scenarios. '
               'Your clocks and position stay the same.',
           child: OutlinedButton.icon(

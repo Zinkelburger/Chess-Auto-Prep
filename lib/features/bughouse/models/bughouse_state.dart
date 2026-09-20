@@ -180,16 +180,22 @@ extension BughouseTimeStanceX on BughouseTimeStance {
 
   /// Both partners share one margin — being up on your own diagonal means
   /// your partner is up by exactly the same amount against theirs — so the
-  /// stance is the sign of a single number and reads from our side without
-  /// naming a seat. Our seats are always A + B, so "we" is unambiguous here.
+  /// stance is the sign of a single number and one team holds it or neither
+  /// does.
+  ///
+  /// It names the teams by their letters rather than as "we" and "they",
+  /// which is what the seat chips beside the boards and the BughouseDB page
+  /// both do. [BughouseState.seatLetter] is relative to the team you chose,
+  /// so ours is A + B whichever side of board 1 you take; these must match
+  /// [BughouseState.teamLetters].
   ///
   /// It names the sit rather than the margin because that is what a player
   /// is deciding. The hint carries the caveat the label cannot: sitting is
   /// only available to whoever is on move.
   String get label => switch (this) {
-    BughouseTimeStance.ahead => 'We may sit',
-    BughouseTimeStance.level => 'Equal',
-    BughouseTimeStance.behind => 'They may sit',
+    BughouseTimeStance.ahead => 'A + B may sit',
+    BughouseTimeStance.level => 'Even',
+    BughouseTimeStance.behind => 'C + D may sit',
   };
 
   String get shortLabel => label;
@@ -200,11 +206,11 @@ extension BughouseTimeStanceX on BughouseTimeStance {
   /// the other cannot sit whatever its time.
   String get hint => switch (this) {
     BughouseTimeStance.ahead =>
-      'We are up on the diagonal clock, so we can wait rather than move',
+      'A + B are up on the diagonal clock, so they can wait rather than move',
     BughouseTimeStance.level =>
       'Neither team is up on the clock: both have to move',
     BughouseTimeStance.behind =>
-      'They are up on the diagonal clock, so they can wait rather than move',
+      'C + D are up on the diagonal clock, so they can wait rather than move',
   };
 }
 
