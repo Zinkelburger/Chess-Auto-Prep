@@ -197,6 +197,22 @@ void main() {
     );
   });
 
+  test('a quote inside an unquoted path is a character, not a field', () async {
+    final quoted = fixture.ref('repertoires/KID/My "best line.pgn');
+    write(
+      _progress,
+      '$_progressHeader\n${_progressRow(quoted.path)}\n'
+      '${_progressRow(benko.path)}\n',
+    );
+    final renamed = fixture.ref('repertoires/KID/Classical.pgn');
+    expect(
+      (await records.repoint(quoted, renamed) as Repointed).rowsChanged,
+      1,
+    );
+    expect(read(_progress), contains(_progressRow(renamed.path)));
+    expect(read(_progress), contains(_progressRow(benko.path)));
+  });
+
   test('only the logged answers that named the chapter change', () async {
     writeAll();
     final renamed = fixture.ref('repertoires/KID/Classical.pgn');
