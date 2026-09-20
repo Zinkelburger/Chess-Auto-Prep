@@ -40,10 +40,27 @@ const int pureAlgorithmVersion = 3;
 
 /// [root] and [config] as a v4 document, with [complete] saying whether the
 /// search reached the horizon everywhere.
+///
+/// [startMoves] is the line in SAN from the initial position down to [root],
+/// and is left out when the root is the initial position. The old app plays
+/// it back to place its board before it continues a saved build, and without
+/// it a build can only be resumed from a board that already stands on the
+/// root.
+///
+/// [evalDepth] and [opponentRating] are the engine depth and the Maia rating
+/// this tree was built with. The search itself is handed an evaluator and a
+/// policy rather than the numbers behind them, so whoever owns those numbers
+/// passes them here. A tree written without them stays readable everywhere —
+/// they are settings, not values — but the old app cannot resume it: its
+/// resume check requires the saved settings to equal the current ones, and an
+/// absent setting never does.
 String encodeTreeV4(
   SearchNode root,
   SearchConfig config, {
   required bool complete,
+  List<String> startMoves = const [],
+  int? evalDepth,
+  int? opponentRating,
 }) {
   final writer = _Writer(ourSide: config.side);
   final tree = writer.write(
@@ -59,7 +76,8 @@ String encodeTreeV4(
     'total_nodes': writer.nodes,
     'max_depth': writer.deepest,
     'build_complete': complete,
-    'config': _configJson(config),
+    if (startMoves.isNotEmpty) 'start_moves': startMoves.join(' '),
+    'config': _configJson(config, evalDepth, opponentRating),
     'tree': tree,
   });
 }
@@ -70,10 +88,14 @@ String encodeTreeV4(
 /// policy alone, with no opening book and no master games behind the
 /// opponent's replies. The old app's own snapshot has some seventy further
 /// keys, for modes this search does not have; every one of them defaults when
-/// it is absent, so they are left out rather than invented. The engine depth
-/// is one of those: the search is handed an evaluator, not a depth, so it has
-/// no honest number to write.
-Map<String, Object?> _configJson(SearchConfig config) => <String, Object?>{
+/// it is absent, so they are left out rather than invented. The two the
+/// caller may know, [evalDepth] and [opponentRating], are written when it
+/// does and left out when it does not.
+Map<String, Object?> _configJson(
+  SearchConfig config,
+  int? evalDepth,
+  int? opponentRating,
+) => <String, Object?>{
   'algorithm_version': pureAlgorithmVersion,
   'search_algorithm': 'pure',
   'build_mode': 'stockfishExpectimax',
@@ -85,6 +107,8 @@ Map<String, Object?> _configJson(SearchConfig config) => <String, Object?>{
   'max_depth': config.horizonPlies,
   'max_eval_loss_cp': config.lossLimitCp,
   'max_nodes': ?config.nodeBudget,
+  'eval_depth': ?evalDepth,
+  'maia_elo': ?opponentRating,
 };
 
 /// Walks the tree once, numbering the nodes and counting them as it goes.

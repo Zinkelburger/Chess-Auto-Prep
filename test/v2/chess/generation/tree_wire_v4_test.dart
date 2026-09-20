@@ -204,6 +204,42 @@ void main() {
     });
   });
 
+  test('a document without the resume settings leaves them out', () async {
+    const config = SearchConfig(side: Side.white, horizonPlies: 2);
+    final tree = await _treeFrom(_kingAndPawn, config: config);
+
+    final document = _asJson(encodeTreeV4(tree, config, complete: true));
+    final saved = document['config']! as Map<String, Object?>;
+
+    expect(document.containsKey('start_moves'), isFalse);
+    expect(saved.containsKey('eval_depth'), isFalse);
+    expect(saved.containsKey('maia_elo'), isFalse);
+  });
+
+  test(
+    'the settings the old app resumes from are written when known',
+    () async {
+      const config = SearchConfig(side: Side.white, horizonPlies: 2);
+      final tree = await _treeFrom(_kingAndPawn, config: config);
+
+      final document = _asJson(
+        encodeTreeV4(
+          tree,
+          config,
+          complete: false,
+          startMoves: const ['e4', 'c5'],
+          evalDepth: 18,
+          opponentRating: 1900,
+        ),
+      );
+      final saved = document['config']! as Map<String, Object?>;
+
+      expect(document['start_moves'], 'e4 c5');
+      expect(saved['eval_depth'], 18);
+      expect(saved['maia_elo'], 1900);
+    },
+  );
+
   test('a tree from the heuristic search is refused, not read', () {
     final result = decodeTreeV4(
       _document(tree: {..._oneNode}..remove('history_aware')),

@@ -375,6 +375,27 @@ void main() {
     expect(old.configSnapshot['max_eval_loss_cp'], 200);
   });
 
+  test('the old app gets the line and the settings it resumes from', () async {
+    final tree = await _newSearchTree();
+
+    final old = deserializeTree(
+      encodeTreeV4(
+        tree,
+        _config,
+        complete: false,
+        startMoves: const ['e4', 'c5'],
+        evalDepth: 18,
+        opponentRating: 1900,
+      ),
+    );
+
+    // Without these three a resume either refuses or exports its lines from
+    // the wrong place: the prefix is how the old app knows where the root is.
+    expect(old.startMoves, 'e4 c5');
+    expect(old.configSnapshot['eval_depth'], 18);
+    expect(old.configSnapshot['maia_elo'], 1900);
+  });
+
   test('the old app reads the same numbers off every node', () async {
     final tree = await _newSearchTree();
     final chosen = (tree as OurNode).chosen;
