@@ -623,11 +623,13 @@ class _TableRules extends StatelessWidget {
 
         // The clock relationship is a rule input, not a statistic: a team that
         // is ahead on the diagonal may legally sit on both boards, and the
-        // engine plays completely differently when told so. Three cases are
-        // offered because that is how players think, but the engine takes one
-        // bit — "Equal" and "CD may sit" run the same search. The genuinely
-        // distinct third case is the must-move constraint below.
-        const BughousePanelLabel('Priority'),
+        // engine plays completely differently when told so. Three cases and no
+        // more: both boards start together and one clock per board runs, so
+        // both diagonals carry the same margin and a team is up, level or
+        // down. The engine takes one bit, so "Equal" and "We're down" run the
+        // same search; the genuinely distinct third case is the must-move
+        // constraint below.
+        const BughousePanelLabel('Clock'),
         SegmentedButton<BughouseTimeStance>(
           style: const ButtonStyle(visualDensity: VisualDensity.compact),
           segments: [
@@ -689,9 +691,9 @@ class _TableRules extends StatelessWidget {
           message:
               'See how the best moves and your team’s evaluation change '
               'in this position when:\n'
-              '• Your team is ahead on time and may wait (sit).\n'
-              '• Your team is level or behind on time.\n'
-              '• Your team must move on Board 1.\n'
+              '• We’re up on the clock, so we can wait rather than move.\n'
+              '• We’re equal or down, so we cannot outwait them.\n'
+              '• We must move on Board 1.\n'
               'Results open in the Engine tab under Clock scenarios. '
               'Your clocks and position stay the same.',
           child: OutlinedButton.icon(

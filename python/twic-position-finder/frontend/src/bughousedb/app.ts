@@ -20,10 +20,16 @@ import {
 const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1';
 const START_DUAL = `${START}|${START}`;
 /**
- * Which team may choose not to move. The tables show one column, for the
- * priority picked below them; `both` is stored and served but never offered,
- * since no clock gives both teams the choice and with neither obliged to move
- * it lands within about a tenth of a pawn of Equal.
+ * Which team is up on the diagonal clock, and so may wait rather than move
+ * while it is on move. The tables show one column, for the clock picked below
+ * them.
+ *
+ * Three states, not four. Both boards start together and exactly one clock per
+ * board runs, so `tA + tC = tB + tD` and therefore `tA - tD = tB - tC`: the two
+ * diagonal margins are one number, and a team is up, level or down. `both` is
+ * stored and served but never offered, because it would need that number to be
+ * positive and negative at once; it is the same two searches as `ahead` and
+ * `behind` read against a different offset, so it lands on top of Equal.
  */
 const PRIORITIES: Clock[] = ['ahead', 'even', 'behind'];
 let priority: Clock = 'even';
