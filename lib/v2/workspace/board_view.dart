@@ -1,11 +1,11 @@
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/gestures.dart' show DragStartBehavior;
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 import '../chess/fen.dart';
 import '../chess/pgn/tree_edit.dart';
 import '../ui/theme.dart';
+import 'piece_image.dart';
 import 'promotion_picker.dart';
 
 /// A board showing one position, and the way a move is played on it.
@@ -47,12 +47,24 @@ class _BoardViewState extends State<BoardView> {
   _Drag? _drag;
   NormalMove? _promoting;
 
+  /// The pieces of [BoardView.fen], read when the position changes rather
+  /// than on every build: a drag rebuilds the board on every pointer sample
+  /// and the position does not move under it.
+  List<(Square, Piece)> _pieces = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _pieces = _piecesOf(widget.fen);
+  }
+
   @override
   void didUpdateWidget(BoardView old) {
     super.didUpdateWidget(old);
     // Another position: nothing selected on it, and a promotion nobody
     // answered is off.
     if (old.fen != widget.fen) {
+      _pieces = _piecesOf(widget.fen);
       _selected = null;
       _drag = null;
       _promoting = null;
@@ -75,6 +87,7 @@ class _BoardViewState extends State<BoardView> {
             onPanStart: (details) => _pickUp(details.localPosition, square),
             onPanUpdate: (details) => _moveTo(details.localPosition),
             onPanEnd: (_) => _drop(square),
+            onPanCancel: _letGo,
             child: Stack(children: _layers(context, square)),
           );
         },
@@ -85,19 +98,18 @@ class _BoardViewState extends State<BoardView> {
   /// The squares, then the pieces, then whatever is being carried or asked,
   /// which is the order they sit in front of each other.
   List<Widget> _layers(BuildContext context, double square) {
-    final pieces = _pieces(widget.fen);
     return [
       Positioned.fill(child: CustomPaint(painter: _painter(context))),
-      for (final (at, piece) in pieces)
+      for (final (at, piece) in _pieces)
         if (at != _drag?.from)
           Positioned(
             left: _column(at, widget.orientation) * square,
             top: _row(at, widget.orientation) * square,
             width: square,
             height: square,
-            child: _PieceImage(piece: piece),
+            child: PieceImage(piece: piece),
           ),
-      if (_dragged(pieces) case final piece?) _inHand(piece, square),
+      if (_dragged case final piece?) _inHand(piece, square),
       if (_promoting case final move?) _picker(move, square),
     ];
   }
@@ -107,7 +119,7 @@ class _BoardViewState extends State<BoardView> {
     top: _drag!.at.dy - square / 2,
     width: square,
     height: square,
-    child: IgnorePointer(child: _PieceImage(piece: piece)),
+    child: IgnorePointer(child: PieceImage(piece: piece)),
   );
 
   Widget _picker(NormalMove move, double square) {
@@ -129,17 +141,17 @@ class _BoardViewState extends State<BoardView> {
     selected: _selected ?? _drag?.from,
   );
 
-  Piece? _dragged(Iterable<(Square, Piece)> pieces) {
+  Piece? get _dragged {
     final from = _drag?.from;
     if (from == null) return null;
-    for (final (at, piece) in pieces) {
+    for (final (at, piece) in _pieces) {
       if (at == from) return piece;
     }
     return null;
   }
 
-  void _tapped(Square square) {
-    if (_promoting != null) return;
+  void _tapped(Square? square) {
+    if (_promoting != null || square == null) return;
     final from = _selected;
     if (from != null && from != square && _offer(from, square)) return;
     setState(() => _selected = _mine(square) ? square : null);
@@ -148,7 +160,7 @@ class _BoardViewState extends State<BoardView> {
   void _pickUp(Offset at, double square) {
     if (_promoting != null) return;
     final from = _squareAt(at, square);
-    if (!_mine(from)) return;
+    if (from == null || !_mine(from)) return;
     setState(() {
       _selected = null;
       _drag = (from: from, at: at);
@@ -166,8 +178,18 @@ class _BoardViewState extends State<BoardView> {
     if (drag == null) return;
     setState(() => _drag = null);
     final to = _squareAt(drag.at, square);
+    // Let go away from the board: the piece goes back and no move is played,
+    // the way a piece dropped off the table is not a move.
+    if (to == null) return;
     if (to != drag.from && _offer(drag.from, to)) return;
     setState(() => _selected = drag.from);
+  }
+
+  /// The drag was taken away from us, by a second pointer or by the board
+  /// going away. The piece goes back where it came from.
+  void _letGo() {
+    if (_drag == null) return;
+    setState(() => _drag = null);
   }
 
   /// Plays `from`–`to` if it is legal, or asks which piece a promoting pawn
@@ -206,9 +228,11 @@ class _BoardViewState extends State<BoardView> {
     return position != null && position.board.sideAt(square) == position.turn;
   }
 
-  Square _squareAt(Offset at, double square) {
-    final column = (at.dx / square).floor().clamp(0, 7);
-    final row = (at.dy / square).floor().clamp(0, 7);
+  /// The square [at] falls on, or null when the pointer is off the board.
+  Square? _squareAt(Offset at, double square) {
+    final column = (at.dx / square).floor();
+    final row = (at.dy / square).floor();
+    if (column < 0 || column > 7 || row < 0 || row > 7) return null;
     final white = widget.orientation == Side.white;
     return Square.fromCoords(
       File(white ? column : 7 - column),
@@ -225,8 +249,8 @@ int _column(Square square, Side orientation) =>
 int _row(Square square, Side orientation) =>
     orientation == Side.white ? 7 - square.rank.value : square.rank.value;
 
-Iterable<(Square, Piece)> _pieces(Fen fen) =>
-    Setup.parseFen(fen.value).board.pieces;
+List<(Square, Piece)> _piecesOf(Fen fen) =>
+    Setup.parseFen(fen.value).board.pieces.toList(growable: false);
 
 Set<Square> _squaresOf(String? uci) {
   if (uci == null) return const {};
@@ -235,21 +259,6 @@ Set<Square> _squaresOf(String? uci) {
     DropMove(:final to) => {to},
     null => const {},
   };
-}
-
-class _PieceImage extends StatelessWidget {
-  const _PieceImage({required this.piece});
-
-  final Piece piece;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = piece.color == Side.white ? 'w' : 'b';
-    return SvgPicture.asset(
-      'assets/pieces/$color${piece.role.uppercaseLetter}.svg',
-      fit: BoxFit.contain,
-    );
-  }
 }
 
 class _SquaresPainter extends CustomPainter {
@@ -299,7 +308,7 @@ class _SquaresPainter extends CustomPainter {
   /// File letters along the bottom edge and rank digits up the left edge, in
   /// the square's corner the way Lichess draws them.
   void _paintCoordinates(Canvas canvas, double side) {
-    final style = TextStyle(color: colors.coordinate, fontSize: side * 0.18);
+    final style = colors.coordinateStyle(side);
     for (var i = 0; i < 8; i++) {
       final file = orientation == Side.white ? i : 7 - i;
       final rank = orientation == Side.white ? 7 - i : i;

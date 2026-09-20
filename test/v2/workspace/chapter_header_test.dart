@@ -1,12 +1,13 @@
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart'
-    show Collision, IoFailure;
+    show Collision, Conflict, IoFailure, Opened;
 import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:chess_auto_prep/v2/workspace/chapter_header.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/fixtures.dart';
+import '../support/scripted_store.dart';
 import '../support/session_fixture.dart';
 
 void main() {
@@ -81,6 +82,19 @@ void main() {
     expect(find.text('Saved'), findsOneWidget);
   });
 
+  testWidgets('an undo that could not happen says so', (tester) async {
+    await pump(tester);
+    edit('one');
+    await tester.pumpAndSettle();
+    // The store refuses and names the revision the document already has: the
+    // entry is out of date and there is nothing to take back through it.
+    fixture.store.saves.add(Conflict(scriptedRevision(fixture.onDisk)));
+    await tester.tap(find.widgetWithIcon(IconButton, Icons.undo));
+    await tester.pumpAndSettle();
+    expect(find.text('Nothing to undo right now'), findsOneWidget);
+    expect(find.text('Saved'), findsOneWidget);
+  });
+
   /// Somebody else writes the file, then this window saves over it.
   Future<void> conflict(WidgetTester tester) async {
     fixture.externalEdit('// Color: Black\n\n[Event "Theirs"]\n\n1. e4 *\n');
@@ -131,5 +145,23 @@ void main() {
       find.text('That name is taken. Nothing was replaced.'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('a notice is not carried to the next chapter', (tester) async {
+    await conflict(tester);
+    await tester.tap(find.text('Save a copy…'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Main draft');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save a copy'));
+    await tester.pumpAndSettle();
+    expect(find.text('Saved a copy as Main draft.pgn'), findsOneWidget);
+    final other = chapterRef('KID', 'Other');
+    fixture.store.documents[other] = Opened(
+      whiteChapter,
+      scriptedRevision(whiteChapter),
+    );
+    await fixture.session.open(other);
+    await tester.pumpAndSettle();
+    expect(find.text('Saved a copy as Main draft.pgn'), findsNothing);
   });
 }

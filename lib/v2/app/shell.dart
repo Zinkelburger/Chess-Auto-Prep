@@ -60,7 +60,7 @@ class _ShellState extends State<Shell> {
             child: Row(
               children: [
                 SizedBox(
-                  width: 260,
+                  width: libraryPanelWidth,
                   child: ListenableBuilder(
                     listenable: widget.session,
                     builder: (context, _) => LibraryPanel(
@@ -126,14 +126,14 @@ class _TopBar extends StatelessWidget {
                 MenuItemButton(
                   onPressed: name == _currentMode ? _stayHere : null,
                   leadingIcon: name == _currentMode
-                      ? const Icon(Icons.check, size: 16)
-                      : const SizedBox(width: 16),
+                      ? const Icon(Icons.check, size: IconSize.menu)
+                      : const SizedBox(width: IconSize.menu),
                   child: Text(name),
                 ),
             ],
             builder: (context, controller, _) => TextButton.icon(
               onPressed: controller.isOpen ? controller.close : controller.open,
-              icon: const Icon(Icons.menu, size: 18),
+              icon: const Icon(Icons.menu, size: IconSize.action),
               label: const Text(_currentMode),
             ),
           ),

@@ -58,6 +58,31 @@ void main() {
     expect(fixture.onDisk, contains('{Our Sicilian [%eval 0.30]}'));
   });
 
+  testWidgets('words typed are written when the panel goes away', (
+    tester,
+  ) async {
+    fixture.session.goTo(sicilian);
+    await pump(tester);
+    await tester.enterText(find.byType(TextField).first, 'Our Sicilian');
+    await tester.pumpWidget(
+      const MaterialApp(home: Scaffold(body: SizedBox())),
+    );
+    await tester.pumpAndSettle();
+    expect(fixture.session.commentAt(sicilian), 'Our Sicilian [%eval 0.30]');
+    expect(fixture.onDisk, contains('{Our Sicilian [%eval 0.30]}'));
+  });
+
+  testWidgets('the lines the user broke stay broken', (tester) async {
+    fixture.session.goTo(sicilian);
+    await pump(tester);
+    await tester.enterText(find.byType(TextField).first, 'One\nTwo');
+    await blur(tester);
+    await tester.pumpAndSettle();
+    final field = tester.widget<EditableText>(find.byType(EditableText).first);
+    expect(field.controller.text, 'One\nTwo');
+    expect(fixture.session.commentAt(sicilian), 'One\nTwo [%eval 0.30]');
+  });
+
   testWidgets('the words follow the cursor', (tester) async {
     await pump(tester);
     expect(find.text('The Sicilian'), findsNothing);

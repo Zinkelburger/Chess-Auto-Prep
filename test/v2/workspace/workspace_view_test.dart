@@ -101,6 +101,37 @@ void main() {
     expect(session.cursor.isRoot, isTrue);
   });
 
+  testWidgets('typing in the comment keeps the arrows and Ctrl+Z', (
+    tester,
+  ) async {
+    final sicilian = NodePath.of([0]);
+    await pump(tester);
+    session.goTo(sicilian);
+    session.setComment(sicilian, 'Mine'); // one edit there is to take back
+    await tester.pumpAndSettle();
+    final field = find.byType(TextField);
+    await tester.tap(field);
+    await tester.enterText(field, 'Mine words');
+    await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    expect(session.cursor, sicilian, reason: 'the arrow moved the caret');
+    final editing = tester.widget<EditableText>(find.byType(EditableText));
+    expect(editing.controller.selection.baseOffset, 'Mine words'.length - 1);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyZ);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(
+      session.commentAt(sicilian),
+      contains('Mine'),
+      reason: 'Ctrl+Z belongs to the field, not the document',
+    );
+    expect(saver.canUndo, isTrue);
+  });
+
   testWidgets('with nothing open it asks for a chapter', (tester) async {
     final empty = ScriptedDocumentStore();
     saver = DocumentSaver(empty);

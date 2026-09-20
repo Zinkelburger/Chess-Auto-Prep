@@ -1,8 +1,8 @@
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 import '../ui/theme.dart';
+import 'piece_image.dart';
 
 /// The four pieces a pawn can become, in the order the old app and Lichess
 /// offer them.
@@ -76,7 +76,6 @@ class _Choice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = piece.color == Side.white ? 'w' : 'b';
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
@@ -88,10 +87,7 @@ class _Choice extends StatelessWidget {
             color: BoardTheme.of(context).promotionChoice,
             shape: BoxShape.circle,
           ),
-          child: SvgPicture.asset(
-            'assets/pieces/$color${piece.role.uppercaseLetter}.svg',
-            fit: BoxFit.contain,
-          ),
+          child: PieceImage(piece: piece),
         ),
       ),
     );

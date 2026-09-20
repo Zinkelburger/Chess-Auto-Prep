@@ -46,7 +46,9 @@ FUNCTION_START = re.compile(
 )
 IMPORT = re.compile(r"^import\s+'([^']+)'")
 # Visual values live in ui/theme.dart so the look can change in one place.
-LITERAL_STYLE = re.compile(r"Color\(0x|fontSize:\s*\d|fontFamily:\s*'")
+# A size written on one line of an `Icon(...)` is caught; one spread over
+# several lines is not, which is the limit of a line-by-line check.
+LITERAL_STYLE = re.compile(r"Color\(0x|fontSize:|fontFamily:\s*'|Icon\([^)]*\bsize:\s*[\d.]")
 WIDGET_IMPORT = re.compile(r"^import 'package:flutter/(?:material|widgets|cupertino)\.dart'")
 WRITE_CALL = re.compile(r"\b(writeAsString|writeAsBytes|openWrite|\.create\(|\.delete\(|rename\()")
 
@@ -131,7 +133,7 @@ def check_file(path: Path, findings: list[str]) -> None:
         if re.search(r"\bdynamic\b", code):
             findings.append(f"{where}:{n}: `dynamic`")
         if is_lib and folder != "ui" and LITERAL_STYLE.search(code):
-            findings.append(f"{where}:{n}: literal colour or font outside ui/ (add a token to ui/theme.dart)")
+            findings.append(f"{where}:{n}: literal colour, font or icon size outside ui/ (add a token to ui/theme.dart)")
         if is_lib and re.search(r"\blate\b", code) and "late final" not in code:
             findings.append(f"{where}:{n}: `late` that is not `late final`")
         writer = is_lib and (folder == "storage" or str(path.relative_to(LIB)) in WRITERS_ALLOWED)

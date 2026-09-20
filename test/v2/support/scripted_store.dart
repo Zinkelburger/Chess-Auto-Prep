@@ -3,7 +3,9 @@ import 'dart:convert';
 
 import 'package:chess_auto_prep/v2/storage/document_ref.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/v2/storage/training_records.dart';
 import 'package:crypto/crypto.dart';
+import 'package:path/path.dart' as p;
 
 /// A document store whose answers the test writes, for owners and widgets
 /// that must never touch a real file.
@@ -27,6 +29,9 @@ final class ScriptedDocumentStore implements PgnDocumentStore {
   final requestedSaves = <SaveRequest>[];
 
   bool hold = false;
+
+  /// What a move or delete says became of the training rows.
+  RepointResult repoint = const NothingToRepoint();
 
   final _waiting = <Completer<void>>[];
 
@@ -89,10 +94,11 @@ final class ScriptedDocumentStore implements PgnDocumentStore {
     DocumentRef ref,
     String name, {
     required Revision expected,
-  }) async {
-    await _turn();
-    return _next(moves) ?? Moved(expected);
-  }
+  }) => move(
+    ref,
+    DocumentRef(p.join(p.dirname(ref.path), name)),
+    expected: expected,
+  );
 
   @override
   Future<MoveResult> move(
@@ -101,7 +107,15 @@ final class ScriptedDocumentStore implements PgnDocumentStore {
     required Revision expected,
   }) async {
     await _turn();
-    return _next(moves) ?? Moved(expected);
+    final queued = _next(moves);
+    if (queued != null) return queued;
+    final current = documents[ref];
+    if (current is! Opened) return const Conflict(null);
+    if (current.revision != expected) return Conflict(current.revision);
+    if (documents.containsKey(destination)) return const Collision();
+    documents.remove(ref);
+    documents[destination] = current;
+    return Moved(current.revision, training: repoint);
   }
 
   @override
@@ -110,7 +124,13 @@ final class ScriptedDocumentStore implements PgnDocumentStore {
     required Revision expected,
   }) async {
     await _turn();
-    return _next(deletes) ?? Deleted('${ref.path}.deleted');
+    final queued = _next(deletes);
+    if (queued != null) return queued;
+    final current = documents[ref];
+    if (current is! Opened) return const Conflict(null);
+    if (current.revision != expected) return Conflict(current.revision);
+    documents.remove(ref);
+    return Deleted('${ref.path}.recovered', training: repoint);
   }
 
   T? _next<T>(List<T> queued) => queued.isEmpty ? null : queued.removeAt(0);

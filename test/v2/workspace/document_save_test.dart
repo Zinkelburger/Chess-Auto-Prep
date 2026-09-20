@@ -1,6 +1,6 @@
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart'
-    show Collision, IoFailure, Opened;
+    show Collision, Conflict, IoFailure, Opened;
 import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -52,6 +52,23 @@ void main() {
     expect(fixture.onDisk, isNot(contains('two')));
   });
 
+  test('flush waits for the newest draft to reach the file', () async {
+    fixture.store.hold = true;
+    edit('one');
+    edit('two'); // collapses behind the write already going out
+    var landed = false;
+    final flushed = saver.flush().then((_) => landed = true);
+    await pumpEventQueue();
+    expect(landed, isFalse);
+    fixture.store.releaseAll(); // the first write
+    await pumpEventQueue();
+    expect(landed, isFalse, reason: 'the newest text is still on its way');
+    fixture.store.releaseAll(); // the second
+    await flushed;
+    expect(saver.state, isA<Saved>());
+    expect(fixture.onDisk, contains('{two [%eval 0.30]}'));
+  });
+
   test('a save landing after another chapter is open is discarded', () async {
     final other = chapterRef('KID', 'Other');
     fixture.store.documents[other] = Opened(
@@ -68,6 +85,49 @@ void main() {
     await pumpEventQueue();
     expect(saver.canUndo, isFalse, reason: 'its receipt belongs to nothing');
     expect(saver.state, isA<Saved>());
+  });
+
+  test(
+    'a save landing after the same chapter is opened again is kept',
+    () async {
+      fixture.store.hold = true;
+      edit('one');
+      final reopening = session.reloadFromDisk(); // reads what is there now
+      fixture.store.releaseLast(); // the read answers first
+      await pumpEventQueue();
+      expect(await reopening, isA<DocumentOpened>());
+      fixture.store.releaseAll(); // the save for the same file lands now
+      await pumpEventQueue();
+      fixture.store.hold = false;
+      edit('two');
+      await pumpEventQueue();
+      expect(
+        saver.state,
+        isA<Saved>(),
+        reason: 'the document knows the revision its own write committed',
+      );
+      expect(fixture.onDisk, contains('{two [%eval 0.30]}'));
+    },
+  );
+
+  test('a conflict keeps no draft waiting behind it', () async {
+    edit('A');
+    await pumpEventQueue();
+    fixture.store.hold = true;
+    edit('B'); // goes out
+    edit('C'); // waits behind it
+    fixture.externalEdit('// Color: Black\n\n1. d4 *\n');
+    fixture.store.releaseAll();
+    await pumpEventQueue();
+    expect(saver.state, isA<SaveConflict>());
+    fixture.store.hold = false;
+    fixture.store.requestedSaves.clear();
+    expect(await saver.undo(), isA<UndoRefused>());
+    expect(
+      fixture.store.requestedSaves,
+      hasLength(1),
+      reason: 'the undo was asked for, not refused over a draft nobody wants',
+    );
   });
 
   test('a conflict keeps the draft and stops writing', () async {
@@ -112,6 +172,21 @@ void main() {
     expect(saver.state, isA<Saved>());
   });
 
+  test('an undo the document has left behind refuses and saves on', () async {
+    edit('B');
+    await pumpEventQueue();
+    // The store refuses and names the revision the document already has: it
+    // is the entry that is out of date, not the file.
+    fixture.store.saves.add(Conflict(scriptedRevision(fixture.onDisk)));
+    expect(await saver.undo(), isA<UndoRefused>());
+    expect(saver.state, isA<Saved>());
+    expect(saver.canUndo, isTrue, reason: 'nothing was taken back');
+    edit('C');
+    await pumpEventQueue();
+    expect(saver.state, isA<Saved>());
+    expect(fixture.onDisk, contains('{C [%eval 0.30]}'));
+  });
+
   test('an undo the file no longer expects is refused, history kept', () async {
     edit('B');
     await pumpEventQueue();
@@ -136,6 +211,21 @@ void main() {
   test('nothing to undo is not an error', () async {
     await session.undo();
     expect(saver.state, isA<Saved>());
+  });
+
+  test('a copy refused while another chapter opened still says so', () async {
+    final other = chapterRef('KID', 'Other');
+    fixture.store.documents[other] = Opened(
+      whiteChapter,
+      scriptedRevision(whiteChapter),
+    );
+    fixture.store.creates.add(const Collision());
+    fixture.store.hold = true;
+    final copying = session.saveCopy('Main draft');
+    final opening = session.open(other);
+    fixture.store.releaseAll();
+    await opening;
+    expect(await copying, isA<CopyNameTaken>());
   });
 
   group('the ways out of a conflict', () {
