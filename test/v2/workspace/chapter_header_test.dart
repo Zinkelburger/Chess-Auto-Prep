@@ -169,7 +169,7 @@ void main() {
     fixture.dispose();
     fixture = await openSession(unreadableGameChapter);
     await pump(tester);
-    expect(find.text('White · 1 lines, 1 could not be read'), findsOneWidget);
+    expect(find.text('White · 1 line, 1 could not be read'), findsOneWidget);
   });
   testWidgets('says when a line could not be read in full', (tester) async {
     fixture.dispose();

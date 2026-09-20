@@ -138,7 +138,9 @@ class _ChapterHeaderState extends State<ChapterHeader> {
 /// that shows fewer lines than the file has must say so.
 String _summary(Chapter chapter) {
   final side = chapter.side == Side.white ? 'White' : 'Black';
-  final lines = '${chapter.gameCount} lines';
+  final lines = chapter.gameCount == 1
+      ? '1 line'
+      : '${chapter.gameCount} lines';
   final skipped = chapter.skippedGames == 0
       ? ''
       : ', ${chapter.skippedGames} from another position';
