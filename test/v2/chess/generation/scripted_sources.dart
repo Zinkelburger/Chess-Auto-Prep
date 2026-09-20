@@ -68,6 +68,25 @@ final class ScriptedPolicy implements OpponentPolicy {
       PolicyFound(Policy(weights));
 }
 
+/// An engine adapter that breaks rather than answering, the way a dead
+/// process or a decoder does.
+final class ThrowingEvaluator implements PositionEvaluator {
+  const ThrowingEvaluator();
+
+  @override
+  Future<EvaluationResult> evaluate(Position position) async =>
+      throw StateError('the engine process is gone');
+}
+
+/// An opponent model that breaks the same way.
+final class ThrowingPolicy implements OpponentPolicy {
+  const ThrowingPolicy();
+
+  @override
+  Future<PolicyResult> policyFor(Position position) async =>
+      throw StateError('the model file is truncated');
+}
+
 /// An opponent model that is not available at all.
 final class AbsentPolicy implements OpponentPolicy {
   const AbsentPolicy();

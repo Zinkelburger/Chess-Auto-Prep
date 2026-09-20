@@ -14,6 +14,33 @@ abstract interface class PositionEvaluator {
   Future<EvaluationResult> evaluate(Position position);
 }
 
+/// The engine's answer about [position], with a throw counted as one.
+///
+/// An adapter sits on a process, a socket or a decoder, and those fail in
+/// ways it did not think of. An exception out of one of them means exactly
+/// what [EvaluationUnavailable] means, and letting it escape the search
+/// instead would take a whole build's tree with it, so the search asks
+/// through here and never calls [PositionEvaluator.evaluate] directly.
+Future<EvaluationResult> evaluationOf(
+  PositionEvaluator evaluator,
+  Position position,
+) async {
+  try {
+    return await evaluator.evaluate(position);
+  } catch (error) {
+    return EvaluationUnavailable('$error');
+  }
+}
+
+/// The model's answer about [position], on the same terms as [evaluationOf].
+Future<PolicyResult> policyOf(OpponentPolicy policy, Position position) async {
+  try {
+    return await policy.policyFor(position);
+  } catch (error) {
+    return PolicyUnavailable('$error');
+  }
+}
+
 /// What [PositionEvaluator.evaluate] answered. An engine that cannot score a
 /// position is an expected outcome of a long build, not an exception.
 sealed class EvaluationResult {

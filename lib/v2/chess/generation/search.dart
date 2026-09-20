@@ -163,7 +163,7 @@ final class _Search {
   Future<_Leaf> _leaf(SearchPath path) async {
     final kind = terminalKind(path.position, path.history);
     if (kind != null) return _Scored(_terminal(path, kind));
-    final evaluation = await evaluator.evaluate(path.position);
+    final evaluation = await evaluationOf(evaluator, path.position);
     switch (evaluation) {
       case EvaluationUnavailable(:final reason):
         return _Unscored(reason);
@@ -267,7 +267,7 @@ final class _Search {
   /// probability distribution behind.
   Future<Expansion?> _replies(SearchPath path) async {
     final legal = legalMovesOf(path.position);
-    final result = await policy.policyFor(path.position);
+    final result = await policyOf(policy, path.position);
     if (_stopping()) return null;
     final shares = switch (result) {
       PolicyFound(:final policy) => policy.sharesOver(
