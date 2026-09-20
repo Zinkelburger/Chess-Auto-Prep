@@ -9,9 +9,10 @@ import '../diagnostics/log.dart';
 import 'atomic_write.dart';
 
 /// Every version the store replaces, kept where a mistake in Documents cannot
-/// reach it: `<support>/backups/<document id>/`, one gzipped copy per version
+/// reach it: `<support>/backups/<document id>/`, one plain copy per version
 /// named by its commit time and content hash, plus an `index.json` listing
-/// them oldest first.
+/// them oldest first. Earlier builds kept versions gzipped; those are still
+/// read, by their magic bytes rather than their name.
 ///
 /// Versions follow the document's identity rather than its name, so a rename
 /// or move made through the store carries the history with it ([adopt]). A
@@ -29,26 +30,6 @@ final class BackupArchive {
   /// Where the versions of the document with [id] are kept, for telling
   /// someone where to find them.
   Directory folderFor(String id) => Directory(p.join(root.path, id));
-
-  /// The bytes of the newest version kept for [id], or null when there is
-  /// none or it cannot be read back.
-  ///
-  /// A save asks for this after recording what it is about to replace, so
-  /// that it replaces the file only when the copy that makes the write
-  /// undoable is really on the disk and really readable.
-  Future<List<int>?> newestVersion(String id) async {
-    final folder = folderFor(id);
-    try {
-      final newest = (await _readIndex(folder)).lastOrNull;
-      if (newest == null) return null;
-      return gzip.decode(
-        await File(p.join(folder.path, newest.file)).readAsBytes(),
-      );
-    } on Object catch (error) {
-      log.e('read the newest kept version in ${folder.path}', error);
-      return null;
-    }
-  }
 
   /// When the document with [id] has a version whose bytes hash to [hash],
   /// what is known about it; null when it has none.
@@ -87,7 +68,7 @@ final class BackupArchive {
       }
       final time = DateTime.now().toUtc();
       final name = '${_stamp(time)}-${hash.substring(0, 8)}$_versionSuffix';
-      await replaceFile(p.join(folder.path, name), gzip.encode(bytes));
+      await File(p.join(folder.path, name)).writeAsBytes(bytes);
       final version = BackupVersion(
         file: name,
         time: time,
@@ -209,7 +190,7 @@ final class BackupArchive {
   Future<List<BackupVersion>> _rebuilt(Directory folder) async {
     final versions = <BackupVersion>[];
     await for (final entry in folder.list()) {
-      if (entry is! File || !entry.path.endsWith(_versionSuffix)) continue;
+      if (entry is! File || !_isVersion(entry.path)) continue;
       final version = await _describe(entry);
       if (version != null) versions.add(version);
     }
@@ -219,7 +200,7 @@ final class BackupArchive {
 
   Future<BackupVersion?> _describe(File file) async {
     try {
-      final bytes = gzip.decode(await file.readAsBytes());
+      final bytes = versionBytes(await file.readAsBytes());
       final name = p.basename(file.path);
       return BackupVersion(
         file: name,
@@ -263,8 +244,21 @@ final class BackupArchive {
 
 const _indexName = 'index.json';
 
-/// One kept version: the gzipped bytes of the document as they were.
-const _versionSuffix = '.pgn.gz';
+/// One kept version: the bytes of the document as they were.
+const _versionSuffix = '.pgn';
+
+/// What earlier builds named a kept version, which held the same bytes
+/// gzipped.
+const _compressedSuffix = '.pgn.gz';
+
+bool _isVersion(String path) =>
+    path.endsWith(_versionSuffix) || path.endsWith(_compressedSuffix);
+
+/// The document a kept version file holds, whichever build kept it.
+List<int> versionBytes(List<int> stored) =>
+    stored.length >= 2 && stored[0] == 0x1f && stored[1] == 0x8b
+    ? gzip.decode(stored)
+    : stored;
 
 /// What an index nobody could read, and a history the id it lived under now
 /// belongs to another document, are renamed to. Both keep a commit stamp so
@@ -343,7 +337,7 @@ final class BackupVersion {
   final DateTime time;
   final int size;
 
-  /// SHA-256 of the uncompressed bytes.
+  /// SHA-256 of the document's bytes.
   final String hash;
 
   Map<String, Object?> toJson() => {

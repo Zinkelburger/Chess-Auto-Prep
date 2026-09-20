@@ -82,7 +82,8 @@ void main() {
     () async {
       fixture.store.hold = true;
       edit('first');
-      session.setComment(NodePath.of([0, 1]), 'second');
+      await pumpEventQueue(); // the write goes out and is held
+      session.setComment(NodePath.of([0, 1]), 'second'); // waits behind it
       fixture.store.saves.add(
         const SaveRefused('game 3 would change but the edit was to game 1'),
       );
@@ -132,7 +133,8 @@ void main() {
     () async {
       fixture.store.hold = true;
       edit('first');
-      session.setComment(NodePath.of([0, 1]), 'second');
+      await pumpEventQueue(); // the write goes out and is held
+      session.setComment(NodePath.of([0, 1]), 'second'); // waits behind it
       fixture.store.saves.add(
         const SaveRefused('game 3 would change but the edit was to game 1'),
       );

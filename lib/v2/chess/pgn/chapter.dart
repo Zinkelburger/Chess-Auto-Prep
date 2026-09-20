@@ -1,4 +1,4 @@
-import 'dart:convert';
+import 'dart:isolate';
 
 import 'package:dartchess/dartchess.dart' show Side;
 
@@ -91,6 +91,20 @@ final class ChapterIssue {
   String toString() => 'game $game, $issue';
 }
 
+/// [text] as a chapter, read where the screen does not wait for it.
+///
+/// A small chapter is parsed here and now; a large one — a generated book
+/// of thousands of lines — on another isolate, so opening it never holds the
+/// window. Same result either way.
+Future<Chapter> readChapter({required String name, required String text}) =>
+    text.length < readOffThreadFrom
+    ? Future.value(parseChapter(name: name, text: text))
+    : Isolate.run(() => parseChapter(name: name, text: text));
+
+/// Below this many characters a chapter is parsed on the calling isolate:
+/// the trip to another one costs more than the parse.
+const readOffThreadFrom = 64 * 1024;
+
 Chapter parseChapter({required String name, required String text}) {
   final document = splitChapterText(text);
   final lines = <ChapterLine>[];
@@ -110,7 +124,7 @@ Chapter parseChapter({required String name, required String text}) {
   }
   return Chapter(
     name: name,
-    side: _side(document.preamble),
+    side: chapterSide(document.preamble),
     preamble: document.preamble,
     lines: List.unmodifiable(lines),
     tree: mergeLines(lines),
@@ -196,14 +210,23 @@ String writeChapter(Chapter chapter) {
   return buffer.toString();
 }
 
-/// `// Color: Black` in the preamble reads as Black; anything else,
-/// including no line at all, is White. The old app wrote it that way and
-/// reads it the same way.
-Side _side(String preamble) {
-  for (final line in const LineSplitter().convert(preamble)) {
-    final trimmed = line.trim();
-    if (!trimmed.startsWith('// Color:')) continue;
-    final color = trimmed.substring('// Color:'.length).trim().toLowerCase();
+/// `// Color: Black` in the `//` lines above the first game reads as Black;
+/// anything else, including no line at all, is White. The old app wrote it
+/// that way and reads it the same way.
+///
+/// Only the heading is looked at, so asking a large chapter costs nothing:
+/// the first line that is neither blank nor a `//` line ends the search.
+Side chapterSide(String text) {
+  var at = 0;
+  while (at < text.length) {
+    var end = text.indexOf('\n', at);
+    if (end < 0) end = text.length;
+    final line = text.substring(at, end).trim();
+    at = end + 1;
+    if (line.isEmpty) continue;
+    if (!line.startsWith('//')) break;
+    if (!line.startsWith('// Color:')) continue;
+    final color = line.substring('// Color:'.length).trim().toLowerCase();
     return color == 'black' ? Side.black : Side.white;
   }
   return Side.white;

@@ -90,6 +90,7 @@ void main() {
       local.session.goTo(at);
       local.store.hold = true;
       local.session.setComment(const NodePath.root(), 'a note');
+      await pumpEventQueue(); // the write goes out and is held
       // The store's receipt says what the file held when the save replaced
       // it, and an undo puts exactly that back.
       local.store.documents[local.ref] = Opened(

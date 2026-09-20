@@ -19,32 +19,26 @@ base class DocumentRef {
   String toString() => path;
 }
 
-/// What a document looked like when it was read: the SHA-256 of the exact
-/// bytes, and the file's native identity (device and inode on Linux) from the
-/// same open handle.
+/// What a document held when it was read: the SHA-256 of the exact bytes.
 ///
-/// A save proceeds only when both still match. New bytes under the same name
-/// mean someone else edited the document; the same bytes in a different file
-/// mean the name now points somewhere else. Either way the user's save would
-/// be writing over an answer it never saw, so both are a conflict.
+/// A save proceeds only when the file still hashes to this. Other bytes under
+/// the name mean someone else edited the document, and the user's save would
+/// be writing over an answer it never saw, so that is a conflict. The same
+/// bytes are the same document, whichever file they arrived in: replacing
+/// them with the user's draft loses nothing.
 final class Revision {
-  const Revision({required this.contentHash, required this.identity});
+  const Revision(this.contentHash);
 
   /// Lowercase hex SHA-256 of the file's bytes.
   final String contentHash;
 
-  /// The native object identity, opaque and only ever compared.
-  final String identity;
-
   @override
   bool operator ==(Object other) =>
-      other is Revision &&
-      other.contentHash == contentHash &&
-      other.identity == identity;
+      other is Revision && other.contentHash == contentHash;
 
   @override
-  int get hashCode => Object.hash(contentHash, identity);
+  int get hashCode => contentHash.hashCode;
 
   @override
-  String toString() => '${contentHash.substring(0, 8)}@$identity';
+  String toString() => contentHash.substring(0, 8);
 }

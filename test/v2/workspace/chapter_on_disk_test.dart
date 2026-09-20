@@ -30,7 +30,7 @@ void main() {
       path: files.ref('repertoires/KID/Main.pgn').path,
     );
     await files.put(chapter, whiteChapter);
-    saver = DocumentSaver(files.store);
+    saver = DocumentSaver(files.store, delay: Duration.zero);
     session = DocumentSession(files.store, saver);
     await session.open(chapter);
   });

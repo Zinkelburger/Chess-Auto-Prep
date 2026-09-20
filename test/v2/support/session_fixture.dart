@@ -41,16 +41,21 @@ ChapterRef chapterRef(String repertoire, String name) => ChapterRef(
 /// Opens [text] as chapter [name] and returns everything a test needs to
 /// drive it. [readOnly] opens it the way the store opens a file this app
 /// may not write.
+///
+/// [delay] is how long the saver waits after an edit. Zero, unless a test is
+/// about the wait itself: a draft then goes out on the next turn of the
+/// event loop, which `pumpEventQueue` gives it.
 Future<SessionFixture> openSession(
   String text, {
   String name = 'Main',
   String repertoire = 'KID',
   String? readOnly,
+  Duration delay = Duration.zero,
 }) async {
   final ref = chapterRef(repertoire, name);
   final store = ScriptedDocumentStore()
     ..documents[ref] = Opened(text, scriptedRevision(text), readOnly: readOnly);
-  final saver = DocumentSaver(store);
+  final saver = DocumentSaver(store, delay: delay);
   final session = DocumentSession(store, saver);
   final fixture = SessionFixture._(store, saver, session, ref);
   await session.open(ref);

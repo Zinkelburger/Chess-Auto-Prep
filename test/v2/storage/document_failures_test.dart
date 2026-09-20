@@ -65,21 +65,24 @@ void main() {
     },
   );
 
-  test('undo is a save of the receipt, and the next undo uses the receipt it '
-      'returned', () async {
+  test('undo is a save of the receipt, and the next undo steps back through '
+      'the receipt before it', () async {
     final ref = fixture.ref('KID/Main.pgn');
     final first = await fixture.put(ref, a);
     final toB = (await fixture.edit(ref, b, first) as Saved).receipt;
     final toC = (await fixture.edit(ref, c, toB.committed) as Saved).receipt;
     final undoneC = await fixture.restore(ref, toC.before, toC.committed);
     expect(await File(ref.path).readAsString(), b);
-    // The entry for B now expects what undoing C committed, not the old rB.
+    // Undoing C put B's bytes back, and a revision is the bytes: the entry
+    // for B expects exactly what is on disk again.
+    expect((undoneC as Saved).receipt.committed, toB.committed);
+    expect(await fixture.restore(ref, toB.before, toB.committed), isA<Saved>());
+    expect(await File(ref.path).readAsString(), a);
+    // And an entry that names bytes the file no longer holds is refused.
     expect(
-      await fixture.restore(ref, toB.before, toB.committed),
+      await fixture.restore(ref, toC.before, toC.committed),
       isA<Conflict>(),
     );
-    final rearmed = (undoneC as Saved).receipt.committed;
-    expect(await fixture.restore(ref, toB.before, rearmed), isA<Saved>());
     expect(await File(ref.path).readAsString(), a);
   });
 

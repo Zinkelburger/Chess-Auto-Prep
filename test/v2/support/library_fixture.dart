@@ -60,7 +60,7 @@ Future<LibraryFixture> openLibrary(
       store.documents[chapter] = Opened(text, scriptedRevision(text));
     }
   }
-  final saver = DocumentSaver(store);
+  final saver = DocumentSaver(store, delay: Duration.zero);
   final session = DocumentSession(store, saver);
   final library = Library(
     files: files,

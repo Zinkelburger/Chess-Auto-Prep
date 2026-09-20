@@ -93,12 +93,9 @@ final class DocumentSession extends ChangeNotifier {
     if (_disposed || ticket != _opens) return const OpenOvertaken();
     switch (read) {
       case store.Opened(:final text, :final revision, :final readOnly):
-        _show(
-          parseChapter(name: ref.name, text: text),
-          ref,
-          revision,
-          readOnly,
-        );
+        final chapter = await readChapter(name: ref.name, text: text);
+        if (_disposed || ticket != _opens) return const OpenOvertaken();
+        _show(chapter, ref, revision, readOnly);
         return const DocumentOpened();
       case store.Absent():
         return _openFailed(ref, '${ref.name} is no longer on disk');
@@ -262,8 +259,9 @@ final class DocumentSession extends ChangeNotifier {
     final result = await _saver.undo();
     if (_disposed || ticket != _opens) return const UndoRefused();
     if (result case Restored(:final text)) {
+      final restored = await readChapter(name: ref.name, text: text);
+      if (_disposed || ticket != _opens) return const UndoRefused();
       final before = _chapter?.tree;
-      final restored = parseChapter(name: ref.name, text: text);
       _chapter = restored;
       _cursor = before == null
           ? const NodePath.root()
@@ -318,8 +316,7 @@ final class DocumentSession extends ChangeNotifier {
     return switch (created) {
       store.Created() => CopySaved(file),
       store.Collision() => const CopyNameTaken(),
-      store.IoFailure(:final detail) ||
-      store.WriteUnverified(:final detail) => CopyFailed(detail),
+      store.IoFailure(:final detail) => CopyFailed(detail),
     };
   }
 

@@ -101,10 +101,19 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
   @override
   void initState() {
     super.initState();
-    _lifecycle = AppLifecycleListener(onExitRequested: _leave);
+    _lifecycle = AppLifecycleListener(
+      onExitRequested: _leave,
+      // Leaving the window is the moment a draft stops waiting for its
+      // clock: whatever the user switches to might be the old app, opening
+      // the same file.
+      onInactive: _flushDraft,
+      onHide: _flushDraft,
+    );
     unawaited(_library.refresh());
     unawaited(_analysis.enable());
   }
+
+  void _flushDraft() => unawaited(_saver.flush());
 
   /// The window can be asked to close again while the first answer is still
   /// being worked out: a second click on the close button, or one made while

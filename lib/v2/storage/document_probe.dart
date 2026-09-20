@@ -10,10 +10,15 @@ sealed class Probe {
 }
 
 final class FileFound extends Probe {
-  const FileFound(this.bytes, this.revision);
+  const FileFound(this.bytes, this.revision, {required this.identity});
 
   final Uint8List bytes;
   final Revision revision;
+
+  /// The native object identity (device and inode on Linux), from the same
+  /// open handle as the bytes. A move writes it down so that a move which
+  /// stopped half way can be finished by the file rather than by its name.
+  final String identity;
 }
 
 final class FileMissing extends Probe {
@@ -29,9 +34,9 @@ final class FileUnreadable extends Probe {
   final String detail;
 }
 
-/// Reads bytes and native identity from one open handle, so the revision
-/// describes the bytes it came with rather than whatever the name points at
-/// by the time the caller looks again.
+/// Reads bytes, hash and native identity from one open handle, on another
+/// isolate, so the revision describes the bytes it came with rather than
+/// whatever the name points at by the time the caller looks again.
 Future<Probe> probeDocument(String path) async {
   try {
     return _interpret(await observeFile(path));
@@ -48,7 +53,7 @@ Probe _interpret(NativeFileObservation observation) {
   if (bytes == null || hash == null || identity == null) {
     return FileUnreadable(_reason(observation));
   }
-  return FileFound(bytes, Revision(contentHash: hash, identity: identity));
+  return FileFound(bytes, Revision(hash), identity: identity);
 }
 
 const _missing = 1;

@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:document_file_io/document_file_io.dart';
@@ -23,26 +25,25 @@ import 'training_records.dart' as training;
 /// Every mutation runs under the directory lock the old app also takes, so the
 /// two apps cannot write one folder at once, and publishes through the atomic
 /// writer, so a reader never sees half a document. Reads take no lock: the
-/// native probe takes bytes and identity from one open handle, and a
-/// publication is one rename, so a reader gets the whole old file or the whole
-/// new one either way.
+/// native probe takes bytes and hash from one open handle, and a publication
+/// is one rename, so a reader gets the whole old file or the whole new one
+/// either way.
 ///
 /// What that does and does not promise. Against the old app and against
 /// another copy of this one, which take the same lock, a mutation is
 /// exclusive and neither side can lose the other's write. Against a program
 /// that does not take the lock — a text editor, a sync client — the file is
-/// read again immediately before it is replaced and the mutation refuses on
-/// any change, but that check and the rename are two system calls, so a write
-/// that lands between them is replaced rather than reported. What was
-/// replaced is kept in Support before the rename, so even then nothing is
-/// gone for good.
+/// read under the lock and the mutation refuses on any change since the
+/// caller's read, but that check and the rename are separate system calls,
+/// so a write that lands between them is replaced rather than reported. What
+/// was replaced is kept in Support before the rename, so even then nothing
+/// is gone for good.
 ///
 /// A save also has to survive the app itself. It says which games it means
 /// to change ([EditScope]); before anything is written, the text is compared
 /// with the version on disk game by game and a change to any other game
-/// stops the write; after the rename, the file is read again and refused as
-/// unverified if it does not hold the bytes that went out. Either way the
-/// version being replaced is already in Support, so nothing is gone.
+/// stops the write. That comparison, and everything else that touches every
+/// byte of the file, runs on another isolate.
 ///
 /// Renaming, moving and deleting change where a document lives rather than
 /// what is in it; they are in [DocumentRelocation].
@@ -83,7 +84,7 @@ final class PgnFileStore implements PgnDocumentStore {
         log.w('open ${ref.path}', detail);
         return Unreadable(detail);
       case FileFound(:final bytes, :final revision):
-        switch (readDocumentText(bytes)) {
+        switch (await _decoded(bytes)) {
           case PlainText(:final text):
             return Opened(text, revision);
           case ForeignText(:final text, :final detail):
@@ -118,21 +119,17 @@ final class PgnFileStore implements PgnDocumentStore {
   }
 
   Future<CreateResult> _create(DocumentRef ref, String text) async {
+    final bytes = await _encoded(text);
     try {
       await removeStaleTemporaries(folderOf(ref));
-      await createFileExclusively(ref.path, utf8.encode(text));
+      await createFileExclusively(ref.path, bytes.bytes);
     } on NativeNameCollision {
       return const Collision();
     } on Object catch (error) {
       log.e('create ${ref.path}', error);
       return IoFailure(failureDetail(error));
     }
-    final revision = await _revisionOf(ref.path, 'create ${ref.path}');
-    if (revision != null) return Created(revision);
-    // The file is there — it was just written — so this is not the document
-    // being as it was. Whoever asked has to be told the name is taken by
-    // something nobody has read.
-    return WriteUnverified('$_unread; it is at ${ref.path}');
+    return Created(Revision(bytes.hash));
   }
 
   @override
@@ -169,93 +166,57 @@ final class PgnFileStore implements PgnDocumentStore {
   Future<SaveResult> _replace(
     DocumentRef ref,
     String text,
-    List<int> current,
+    Uint8List current,
     Revision revision,
     EditScope scope,
   ) async {
-    final read = readDocumentText(current);
-    // A document this app cannot read is not one it may replace: a save over
-    // a compressed chapter would leave bytes neither app can open.
-    if (read case NotText(:final detail)) {
-      log.w('save ${ref.path}', detail);
-      return IoFailure(detail);
-    }
-    // Nor one it had to guess at: this writes UTF-8, so putting a Latin-1
-    // file back would change every game holding an accented letter.
-    if (read case ForeignText(:final detail)) {
-      log.w('save ${ref.path}', detail);
-      return NotWritable(detail);
-    }
-    final before = (read as PlainText).text;
-    final bytes = utf8.encode(text);
-    final written = sha256.convert(bytes).toString();
-    // Nothing to replace, so nothing to keep and nothing to write.
-    if (written == revision.contentHash) {
-      return Saved(_receipt(before, revision, revision));
-    }
-    final refused = await _onlyWhatWasDeclared(ref, current, bytes, scope);
-    if (refused != null) return refused;
-    final unkept = await keepReplacedVersion(
-      backups: _backups,
-      documents: documents,
-      ref: ref,
-      bytes: current,
-      hash: revision.contentHash,
+    final prepared = await Isolate.run(
+      () => _prepare(current, revision.contentHash, text, scope),
     );
-    if (unkept != null) return unkept;
-    if (!await _keptIsTheVersionBeingReplaced(ref, revision)) {
-      log.e('save ${ref.path}', _unkept);
-      return const IoFailure(_unkept);
+    switch (prepared) {
+      case _NotReplaceable(:final result, :final detail):
+        log.w('save ${ref.path}', detail);
+        return result;
+      case _OutsideScope(:final detail):
+        log.e('save ${ref.path}', detail);
+        return SaveRefused(detail);
+      case _Unchanged(:final before):
+        // Nothing to replace, so nothing to keep and nothing to write.
+        return Saved(_receipt(before, revision, revision));
+      case _Ready(:final before, :final bytes, :final hash, :final undeclared):
+        if (undeclared) log.w('save ${ref.path}', _undeclared);
+        if (scope is RestoredVersion) {
+          final refused = await _keptHere(ref, hash);
+          if (refused != null) return refused;
+        }
+        final unkept = await keepReplacedVersion(
+          backups: _backups,
+          documents: documents,
+          ref: ref,
+          bytes: current,
+          hash: revision.contentHash,
+        );
+        if (unkept != null) return unkept;
+        try {
+          await removeStaleTemporaries(folderOf(ref));
+          await replaceFile(ref.path, bytes);
+        } on Object catch (error) {
+          log.e('save ${ref.path}', error);
+          return IoFailure(failureDetail(error));
+        }
+        return Saved(_receipt(before, revision, Revision(hash)));
     }
-    // Keeping the replaced version awaited the disk, and an editor outside
-    // the lock could have written the file meanwhile.
-    final changed = await _recheck(ref, revision);
-    if (changed != null) return changed;
-    try {
-      await removeStaleTemporaries(folderOf(ref));
-      await replaceFile(ref.path, bytes);
-    } on Object catch (error) {
-      log.e('save ${ref.path}', error);
-      return IoFailure(failureDetail(error));
-    }
-    return _committed(ref, before, revision, written);
   }
 
-  /// Why [next] may not be written over [current], or null when it changes
-  /// only what [scope] declared. A save that replaces the whole document is
-  /// not refused — there is nothing to compare it against — but it is
-  /// logged, so a caller that rewrites a chapter without saying what it
-  /// edited is visible.
-  Future<SaveResult?> _onlyWhatWasDeclared(
-    DocumentRef ref,
-    List<int> current,
-    List<int> next,
-    EditScope scope,
-  ) async {
-    if (scope is RestoredVersion) return _keptHere(ref, next);
-    final outside = changeOutsideScope(
-      previous: current,
-      next: next,
-      scope: scope,
-    );
-    if (outside != null) {
-      log.e('save ${ref.path}', outside);
-      return SaveRefused(outside);
-    }
-    if (scope is WholeDocument) log.w('save ${ref.path}', _undeclared);
-    return null;
-  }
-
-  /// Why [bytes] are not a version this store kept for [ref], or null when
-  /// they are one.
+  /// Why [hash] is not a version this store kept for [ref], or null when it
+  /// is one.
   ///
   /// A restore is the one write with nothing to compare against, so it is
   /// compared against the archive instead: bytes that hash to no version
   /// kept for this document are not a version being put back, whatever the
   /// caller called them.
-  Future<SaveResult?> _keptHere(DocumentRef ref, List<int> bytes) async {
+  Future<SaveResult?> _keptHere(DocumentRef ref, String hash) async {
     final id = documentBackupIdFor(documents, ref);
-    final hash = sha256.convert(bytes).toString();
     final kept = id == null ? null : await _backups.versionWithHash(id, hash);
     if (kept == null) {
       log.e('restore ${ref.path}', _unkeptVersion);
@@ -263,77 +224,6 @@ final class PgnFileStore implements PgnDocumentStore {
     }
     log.i('restore ${ref.path} to the version of ${kept.time}');
     return null;
-  }
-
-  /// Whether the version just recorded is on the disk, readable, and the one
-  /// this save is replacing.
-  ///
-  /// The text compared above came out of the bytes the revision describes,
-  /// so a kept copy hashing to that revision holds those same bytes: the
-  /// comparison stands for the copy in Support as much as for the file, and
-  /// the write only goes ahead once the previous version is safe somewhere
-  /// else.
-  Future<bool> _keptIsTheVersionBeingReplaced(
-    DocumentRef ref,
-    Revision revision,
-  ) async {
-    final id = documentBackupIdFor(documents, ref);
-    final kept = id == null ? null : await _backups.newestVersion(id);
-    return kept != null &&
-        sha256.convert(kept).toString() == revision.contentHash;
-  }
-
-  /// The receipt of a write that landed, or the failure that says the file
-  /// does not hold the bytes [written] names.
-  ///
-  /// The file is read again rather than assumed: a rename that reported
-  /// success over a filesystem that lied, or anything that wrote the name
-  /// between the rename and now, would otherwise be a silent loss. A file
-  /// nothing can read now is the same news: the rename happened, so the
-  /// document is not as it was, and saying it failed would leave the app
-  /// expecting the old revision and calling this app's own write somebody
-  /// else's.
-  Future<SaveResult> _committed(
-    DocumentRef ref,
-    String before,
-    Revision was,
-    String written,
-  ) async {
-    final committed = await _revisionOf(ref.path, 'save ${ref.path}');
-    if (committed == null) return WriteUnverified(_notHeld(ref, _unread));
-    if (committed.contentHash != written) {
-      return WriteUnverified(
-        _notHeld(ref, 'the file does not hold what was just written to it'),
-      );
-    }
-    return Saved(_receipt(before, was, committed));
-  }
-
-  String _notHeld(DocumentRef ref, String detail) {
-    final said =
-        '$detail; the version it replaced is kept in '
-        '${_keptFolder(ref)}';
-    log.e('save ${ref.path}', said);
-    return said;
-  }
-
-  String _keptFolder(DocumentRef ref) {
-    final id = documentBackupIdFor(documents, ref);
-    return id == null ? _backups.root.path : _backups.folderFor(id).path;
-  }
-
-  /// What to answer with when [ref] no longer holds [expected]; null while it
-  /// still does.
-  Future<SaveResult?> _recheck(DocumentRef ref, Revision expected) async {
-    switch (await probeDocument(ref.path)) {
-      case FileMissing():
-        return const Conflict(null);
-      case FileUnreadable(:final detail):
-        log.w('save ${ref.path}', detail);
-        return IoFailure(detail);
-      case FileFound(:final revision):
-        return revision == expected ? null : Conflict(revision);
-    }
   }
 
   @override
@@ -358,22 +248,115 @@ final class PgnFileStore implements PgnDocumentStore {
   Future<DeleteResult> delete(DocumentRef ref, {required Revision expected}) =>
       _relocation.delete(ref, expected: expected);
 
-  Future<Revision?> _revisionOf(String path, String action) async {
-    final probe = await probeDocument(path);
-    if (probe case FileFound(:final revision)) return revision;
-    log.e(action, _unread);
-    return null;
-  }
-
   Receipt _receipt(String before, Revision was, Revision committed) =>
       Receipt(committed: committed, before: before, beforeRevision: was);
 }
 
-const _unread = 'the file could not be read back after writing';
+/// [bytes] as a document. A small file is decoded here; a large one on
+/// another isolate, because decoding megabytes is work the screen would
+/// otherwise wait for.
+Future<DocumentText> _decoded(Uint8List bytes) => bytes.length < _offThreadFrom
+    ? Future.value(readDocumentText(bytes))
+    : Isolate.run(() => readDocumentText(bytes));
 
-const _unkept =
-    'the version being replaced could not be read back from the copy kept '
-    'for it';
+/// [text] as the bytes a file will hold, and their hash.
+Future<({Uint8List bytes, String hash})> _encoded(String text) =>
+    text.length < _offThreadFrom
+    ? Future.value(_encode(text))
+    : Isolate.run(() => _encode(text));
+
+({Uint8List bytes, String hash}) _encode(String text) {
+  final bytes = utf8.encode(text);
+  return (bytes: bytes, hash: sha256.convert(bytes).toString());
+}
+
+/// Below this many bytes or characters, the work is done where it is asked
+/// for: the trip to another isolate costs more than the work.
+const _offThreadFrom = 64 * 1024;
+
+/// Everything a save works out before it touches the disk: whether the
+/// current bytes may be replaced at all, whether the new text changes only
+/// what the scope declared, and the bytes and hash to write.
+sealed class _Prepared {
+  const _Prepared();
+}
+
+/// The file on disk is not one this app may replace; [result] says so.
+final class _NotReplaceable extends _Prepared {
+  const _NotReplaceable(this.result, this.detail);
+
+  final SaveResult result;
+  final String detail;
+}
+
+/// The text would change a game the save did not declare.
+final class _OutsideScope extends _Prepared {
+  const _OutsideScope(this.detail);
+
+  final String detail;
+}
+
+/// The text is already what the file holds.
+final class _Unchanged extends _Prepared {
+  const _Unchanged(this.before);
+
+  final String before;
+}
+
+final class _Ready extends _Prepared {
+  const _Ready({
+    required this.before,
+    required this.bytes,
+    required this.hash,
+    required this.undeclared,
+  });
+
+  /// The text being replaced, as it was read from disk.
+  final String before;
+
+  final Uint8List bytes;
+  final String hash;
+
+  /// Whether the save replaced the whole document without saying which
+  /// game it changed, which is logged so that a writer that does it is
+  /// visible.
+  final bool undeclared;
+}
+
+/// Runs on another isolate: everything about a save that reads every byte.
+_Prepared _prepare(
+  Uint8List current,
+  String currentHash,
+  String text,
+  EditScope scope,
+) {
+  final read = readDocumentText(current);
+  // A document this app cannot read is not one it may replace: a save over
+  // a compressed chapter would leave bytes neither app can open.
+  if (read case NotText(:final detail)) {
+    return _NotReplaceable(IoFailure(detail), detail);
+  }
+  // Nor one it had to guess at: this writes UTF-8, so putting a Latin-1
+  // file back would change every game holding an accented letter.
+  if (read case ForeignText(:final detail)) {
+    return _NotReplaceable(NotWritable(detail), detail);
+  }
+  final before = (read as PlainText).text;
+  final encoded = _encode(text);
+  if (encoded.hash == currentHash) return _Unchanged(before);
+  final outside = changeOutsideScope(
+    previous: current,
+    next: encoded.bytes,
+    scope: scope,
+  );
+  if (outside != null) return _OutsideScope(outside);
+  return _Ready(
+    before: before,
+    bytes: encoded.bytes,
+    hash: encoded.hash,
+    undeclared: scope is WholeDocument,
+  );
+}
 
 const _unkeptVersion =
     'the save said it was putting a kept version back, and these are not the '

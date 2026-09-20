@@ -338,6 +338,39 @@ void main() {
       expect(await File(ref.path).readAsString(), threeGames);
     });
 
+    test('is not logged as a guess', () async {
+      final entries = <LogEntry>[];
+      void collect(LogEntry entry) => entries.add(entry);
+      log.install(collect);
+      addTearDown(() => log.remove(collect));
+      final ref = fixture.ref('KID/Main.pgn');
+      final revision = await fixture.put(ref, threeGames);
+      final saved =
+          await fixture.edit(
+                ref,
+                chapterOf([
+                  gameOf(1, '1. d4 Nf6'),
+                  gameOf(2, '1. e4'),
+                  gameOf(3, '1. c4'),
+                ]),
+                revision,
+              )
+              as Saved;
+
+      final undone = await fixture.restore(
+        ref,
+        saved.receipt.before,
+        saved.receipt.committed,
+      );
+
+      expect(undone, isA<Saved>());
+      expect(await File(ref.path).readAsString(), threeGames);
+      expect(
+        entries.map((entry) => '${entry.error}'),
+        isNot(contains(contains('did not say which game'))),
+      );
+    });
+
     test('is refused when nothing kept those bytes', () async {
       final ref = fixture.ref('KID/Main.pgn');
       final revision = await fixture.put(ref, threeGames);

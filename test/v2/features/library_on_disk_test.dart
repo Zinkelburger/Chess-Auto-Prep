@@ -44,7 +44,7 @@ void main() {
     support = await Directory.systemTemp.createTemp('v2-library-support-');
     final root = p.join(documents.path, 'repertoires');
     final store = PgnFileStore(documents: documents, support: support);
-    saver = DocumentSaver(store);
+    saver = DocumentSaver(store, delay: Duration.zero);
     session = DocumentSession(store, saver);
     library = Library(
       files: ChapterDirectory(Directory(root)),

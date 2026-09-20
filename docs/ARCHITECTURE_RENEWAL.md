@@ -361,9 +361,12 @@ this section, not a mistake the user made.
   of the file it replaced. That content is what gets recorded. A write whose
   backup could not be recorded does not proceed; it returns an I/O failure like
   any other.
-- **Backups live in Support**, under `backups/<document id>/`, one gzipped file
+- **Backups live in Support**, under `backups/<document id>/`, one plain copy
   per version named by commit time and content hash, with a small index per
-  document. They are never written into Documents: a synced folder must not
+  document. Copies are not compressed: PGN is small, disk is cheap, and a
+  compressed copy is one more thing that has to work before a save may go
+  ahead (versions an earlier build gzipped are still read, by their magic
+  bytes). They are never written into Documents: a synced folder must not
   gain files the user did not make, and a restore must work when Documents is
   the thing that went wrong.
 - **Identity, not path.** Versions follow the document's identity, so a rename
@@ -395,7 +398,7 @@ else in `v2` calls `File.writeAsString`.
 
 | Intent | Contract |
 |---|---|
-| Open | Returns identity, revision and content. Absent, unreadable and malformed are distinct results; a failed read is never an empty document. |
+| Open | Returns revision and content. Absent, unreadable and malformed are distinct results; a failed read is never an empty document. |
 | Create or save a copy | Exclusive create; a name collision returns a collision and replaces nothing. |
 | Save | Requires the loaded revision and the scope of the edit. If the file changed on disk, return a conflict. There is no overwrite flag. |
 | Append, import or edit | A locked transformation of current content. Returns the validated before-content and the committed revision together. |
@@ -417,22 +420,36 @@ whatever the writer did and leave nothing to refuse. Before anything is written,
 text and the version on disk are cut into games with the chapter reader's own
 splitter and compared: a game the scope does not name that would change, a game
 that would disappear, or a changed `//` heading refuses the save, names the
-first game that would have changed and writes nothing. The write goes ahead
-only once the version being replaced is readable again in Support under the
-hash the save checked. After the rename the file is read again, and one that
-does not hold the bytes that went out is reported as unverified, naming the
-folder the previous version is kept in. A create has no previous version, so
-there is nothing to declare and nothing to compare.
+first game that would have changed and writes nothing. Then the version being
+replaced is copied into Support, and only then is the file replaced. A create
+has no previous version, so there is nothing to declare and nothing to compare.
 
-A revision is the SHA-256 of the exact bytes on disk plus the observed file
-identity (the native probe in `packages/document_file_io`). A changed or
-missing identity means a conflict, never permission to replace.
+That is the whole of a save. The store does not read the file back after the
+rename, and does not read its own backup back before it: a temp-and-rename on
+a local disk does not fail silently, and a check that reads every byte again
+buys nothing the revision check and the kept copy do not already give. What
+the store keeps is the protection against the two things that really happen —
+another writer, and a bug in this app's own writer.
+
+**Nothing waits for the disk.** Reading bytes and hashing them happen on
+another isolate (the native probe in `packages/document_file_io`), and so do
+decoding a large file, encoding and hashing the text to write, and the
+game-by-game comparison. Parsing a chapter into its tree happens on another
+isolate once the text is larger than a few tens of kilobytes. A large
+generated book opens and saves without the window pausing.
+
+A revision is the SHA-256 of the exact bytes on disk. The same bytes are the
+same document, whichever file they arrived in; different bytes are a conflict,
+never permission to replace. (The native file identity the probe also returns
+is used by moves, which write it down so that a move interrupted half way can
+be finished by the file rather than by its name.)
 
 Undo history is built from store receipts (actual before-content and committed
 revision), never from controller memory. Edits A → B → C leave rC on disk. Undo
-C checks rC, restores B and gets rB2; B's entry then expects rB2. If an external
-edit E happened before C, undo C restores E and the older B entry stays
-disarmed. A failed or uncertain undo never pops history.
+C checks rC and restores B, and because a revision is the bytes, B's entry
+expects exactly what is on disk again. If an external edit E happened before
+C, undo C restores E and the older B entry stays disarmed. A failed or
+uncertain undo never pops history.
 
 **Reading and writing a game.** `v2/chess/pgn/` owns the PGN grammar; dartchess
 is used for legality and positions, never for text. Reading a game yields its
@@ -463,6 +480,17 @@ numbers and the marker; it normalises redundant move numbers, several comments
 on one move into one, `;` comments into `{}`, symbolic annotations into their
 numbers, and `e.p.`. Each normalisation reads back as the same game, which the
 gate proves, and writing twice gives the same bytes.
+
+**When the file is written.** The workspace does not write on every move.
+An edit starts a one-second clock, every edit inside it restarts the clock,
+and the file is written once when it runs out, with the newest text: a burst
+of moves is one write. Anything that needs the file now ends the wait at
+once — opening another document, a rename, the window losing focus or
+closing, and undo, which writes the waiting draft before it steps back.
+Only one write is in flight at a time and edits made during it collapse into
+a single pending save, so there is never a queue of stale snapshots. This is
+what Obsidian and VS Code do, and for the same reason: the file is never
+more than a moment behind the screen, and a keystroke never costs a write.
 
 ### Required failure tests (step 2)
 
@@ -618,7 +646,7 @@ settings, lint and Widgetbook appear inside the row that first needs them.
 |---|---|---|---|
 | 0 | **Board on screen.** `main_v2.dart`, a window with the mode menu stub, board widget, move-tree widget; open a real chapter from Documents `repertoires/` read-only; click and arrow through moves. Only the theme values a board and a move list need. | Screenshot of a real chapter | Done 2026-09-19: 1.5k lines, 23 tests; second-agent review the same day, its findings fixed (typed file results, open race, move-list rewrite, 18 more tests) |
 | 1 | **Engine.** Supervisor, one Stockfish, engine pane with MultiPV lines at 200 ms, kill-on-exit test on Linux. First step that can fail, so it also installs the log: facade in `diagnostics/`, file sink in `storage/`, installed by `main_v2` before the engine starts. | Live evaluation on the board, and an engine that will not start named in `app.log` | Done 2026-09-19: 1.6k lines, 41 tests; a real Stockfish dies with a SIGKILLed parent on Linux (`test/v2/engines/stockfish_exit_test.dart`); a start failure is an `E start …` line in `app.log` |
-| 2 | **Document store.** `PgnDocumentStore` (open, save, create, rename, move, recoverable delete) with revisions; add moves and comments in the workspace; save; undo from receipts; every replaced version recorded per [Backups](#backups); the required failure tests; the old app sees the edit. | Edit a chapter, reopen it in the old app | Done 2026-09-19 (owner has not yet seen the screenshot): 6.4k lib lines total, 217 tests; store with revisions, backups and the cross-process lock proof; moves, comments, autosave, undo and conflict handling in the workspace; the old app reads the edit. Not built: retention/pruning, Windows `ReplaceFileW`, delete/promote/NAG edits |
+| 2 | **Document store.** `PgnDocumentStore` (open, save, create, rename, move, recoverable delete) with revisions; add moves and comments in the workspace; save; undo from receipts; every replaced version recorded per [Backups](#backups); the required failure tests; the old app sees the edit. | Edit a chapter, reopen it in the old app | Done 2026-09-19 (owner has not yet seen the screenshot): 6.4k lib lines total, 217 tests; store with revisions, backups and the cross-process lock proof; moves, comments, autosave, undo and conflict handling in the workspace; the old app reads the edit. 2026-09-20: saves settle a second after the last edit instead of going out per move, backups are plain copies, the post-write read-back and backup read-back are gone, and every byte-wide step runs off the UI isolate. Not built: retention/pruning, Windows `ReplaceFileW`, delete/promote/NAG edits |
 | 3 | **Library.** Repertoire list, search, create, rename, move, recoverable delete; training references follow chapter changes. | Screenshot | Done 2026-09-19 (owner has not yet seen the screenshot): 7.7k lib lines total, 264 tests; repertoire folders with chapter counts and search, create, rename, move a chapter, recoverable delete of a chapter or a whole repertoire with the training rows following each file, shared name and confirm dialogs. Not built: Open PGN file and Paste PGN import, the Recovery view, the folder Organize view and outline drag and drop, course chapters, studies, the picker other modes push, late writes from an active trainer session re-adding an old path (no v2 trainer yet) |
 | 4 | **Chapters and Study.** Chapter outline panel, chapter operations, per-chapter orientation, Lichess study import and export, quiz markers. | Screenshot | Not started |
 | 5 | **Trainer.** Training session over the workspace, scheduling, history and bulk actions on the existing CSV/JSONL formats. | Screenshot and one completed session | Not started |

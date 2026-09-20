@@ -1,7 +1,7 @@
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/storage/edit_scope.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart'
-    show Collision, IoFailure, Opened, SaveRefused, WriteUnverified;
+    show Collision, IoFailure, Opened, SaveRefused;
 import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
 import 'package:chess_auto_prep/v2/workspace/save_state.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
@@ -72,32 +72,58 @@ void main() {
     );
   });
 
-  test(
-    'a copy the store could not read back is not a copy that was made',
-    () async {
-      fixture.store.creates.add(
-        const WriteUnverified('the file could not be read back after writing'),
-      );
-      final result = await session.saveCopy('Main draft');
-      expect((result as CopyFailed).detail, contains('could not be read back'));
-    },
-  );
-
-  test('an edit is saved at once and says so', () async {
+  test('an edit is unsaved until its clock runs out, then saved', () async {
     expect(saver.state, isA<Saved>());
     edit('one');
-    expect(saver.state, isA<Saving>());
+    expect(saver.state, isA<Unsaved>());
+    expect(fixture.store.requestedSaves, isEmpty, reason: 'the clock runs');
     await pumpEventQueue();
     expect(saver.state, isA<Saved>());
     expect(fixture.onDisk, contains('{one [%eval 0.30]}'));
   });
 
-  test('edits during a save collapse into one save of the newest', () async {
-    fixture.store.hold = true;
+  test('edits before the clock runs out are one write of the newest', () async {
     edit('one');
     edit('two');
     edit('three');
+    await pumpEventQueue();
     expect(fixture.store.requestedSaves, hasLength(1));
+    expect(saver.state, isA<Saved>());
+    expect(fixture.onDisk, contains('{three [%eval 0.30]}'));
+    expect(fixture.onDisk, isNot(contains('two')));
+  });
+
+  test('every edit restarts the clock, and a flush ends it', () async {
+    const tick = Duration(milliseconds: 40);
+    final slow = await openSession(blackChapter, delay: tick * 2);
+    addTearDown(slow.dispose);
+    void editSlow(String words) => slow.session.setComment(sicilian, words);
+    editSlow('one');
+    await Future<void>.delayed(tick);
+    editSlow('two');
+    await Future<void>.delayed(tick);
+    expect(
+      slow.store.requestedSaves,
+      isEmpty,
+      reason: 'the second edit restarted the clock',
+    );
+    await Future<void>.delayed(tick * 2);
+    expect(slow.store.requestedSaves, hasLength(1));
+    expect(slow.onDisk, contains('{two [%eval 0.30]}'));
+    editSlow('three');
+    await slow.saver.flush();
+    expect(slow.store.requestedSaves, hasLength(2), reason: 'flushed at once');
+    expect(slow.onDisk, contains('{three [%eval 0.30]}'));
+    expect(slow.saver.state, isA<Saved>());
+  });
+
+  test('edits during a save collapse into one save of the newest', () async {
+    fixture.store.hold = true;
+    edit('one');
+    await pumpEventQueue(); // the clock runs out and the write goes out
+    expect(fixture.store.requestedSaves, hasLength(1));
+    edit('two');
+    edit('three');
     expect(saver.state, isA<Unsaved>());
     fixture.store.releaseAll();
     await pumpEventQueue();
@@ -112,6 +138,7 @@ void main() {
   test('flush waits for the newest draft to reach the file', () async {
     fixture.store.hold = true;
     edit('one');
+    await pumpEventQueue(); // the write goes out
     edit('two'); // collapses behind the write already going out
     var landed = false;
     final flushed = saver.flush().then((_) => landed = true);
@@ -189,7 +216,8 @@ void main() {
     edit('A');
     await pumpEventQueue();
     fixture.store.hold = true;
-    edit('B'); // goes out
+    edit('B');
+    await pumpEventQueue(); // goes out
     edit('C'); // waits behind it
     fixture.externalEdit('// Color: Black\n\n1. d4 *\n');
     fixture.store.releaseAll();

@@ -222,8 +222,7 @@ final class Library extends ChangeNotifier {
     return switch (await _store.create(ref, text)) {
       store.Created() => const LibraryDone(),
       store.Collision() => const LibraryNameTaken(),
-      store.IoFailure(:final detail) ||
-      store.WriteUnverified(:final detail) => LibraryFailure(detail),
+      store.IoFailure(:final detail) => LibraryFailure(detail),
     };
   }
 
@@ -354,7 +353,7 @@ final class Library extends ChangeNotifier {
   Future<Side> _sideOf(RepertoireFolder folder) async {
     for (final chapter in folder.chapters) {
       if (await _store.open(chapter) case store.Opened(:final text)) {
-        return parseChapter(name: chapter.name, text: text).side;
+        return chapterSide(text);
       }
     }
     return Side.white;

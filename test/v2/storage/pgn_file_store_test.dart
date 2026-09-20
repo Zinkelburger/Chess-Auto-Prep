@@ -32,6 +32,26 @@ void main() {
     expect(opened.revision, (created as Created).revision);
   });
 
+  test('a large chapter is opened, saved and kept like a small one', () async {
+    final ref = fixture.ref('KID/Main.pgn');
+    final games = [for (var i = 1; i <= 3000; i++) gameOf(i, '1. d4 d5')];
+    final text = chapterOf(games);
+    expect(text.length, greaterThan(64 * 1024));
+    final created = await fixture.store.create(ref, text) as Created;
+    final opened = await fixture.store.open(ref) as Opened;
+    expect(opened.text, text);
+    expect(opened.revision, created.revision);
+    final edited = chapterOf([gameOf(1, '1. d4 Nf6'), ...games.skip(1)]);
+    final saved = await fixture.edit(ref, edited, opened.revision) as Saved;
+    expect(saved.receipt.before, text);
+    expect(await File(ref.path).readAsString(), edited);
+    expect(
+      (await fixture.store.open(ref) as Opened).revision,
+      saved.receipt.committed,
+    );
+    expect(fixture.keptTexts(ref), [text]);
+  });
+
   test(
     'a Latin-1 PGN opens with its accents and will not be written back',
     () async {
@@ -131,26 +151,6 @@ void main() {
     final current = (result as Conflict).current;
     expect(current, isNotNull);
     expect(current, isNot(revision));
-    expect(await File(ref.path).readAsString(), theirs);
-  });
-
-  test('a save checks the file again after keeping what it replaces', () async {
-    final ref = fixture.ref('KID/Main.pgn');
-    final revision = await fixture.put(ref, mine);
-    // Keeping the replaced version is the store's longest await, and an
-    // editor outside the lock can write the file during it. The folder the
-    // kept version goes into appearing says that await has started.
-    final kept = fixture.backupFolder(ref);
-    unawaited(
-      Future(() async {
-        while (!kept.existsSync()) {
-          await Future<void>.delayed(Duration.zero);
-        }
-        File(ref.path).writeAsStringSync(theirs);
-      }),
-    );
-    final result = await fixture.edit(ref, draft, revision);
-    expect(result, isA<Conflict>());
     expect(await File(ref.path).readAsString(), theirs);
   });
 

@@ -27,6 +27,10 @@ abstract interface class PgnDocumentStore {
   /// change. A save whose text would change any other game is refused before
   /// anything is written; a caller that cannot say passes [WholeDocument]
   /// and the store logs that it did.
+  ///
+  /// The heavy part — decoding, hashing and comparing two versions — runs
+  /// on another isolate, so a save of a large chapter never holds the
+  /// screen.
   Future<SaveResult> save(
     DocumentRef ref,
     String text, {
@@ -236,17 +240,6 @@ final class RestoreRefused extends SaveDidNotLand {
 /// backstop for a caller that asked anyway.
 final class NotWritable extends SaveDidNotLand {
   const NotWritable(super.detail);
-}
-
-/// The bytes were written and nothing can say the file holds them: it holds
-/// something else, or it cannot be read at all.
-///
-/// Not an [IoFailure], because the document is *not* as it was — the write
-/// landed. The version it replaced is kept, and [detail] says where, so it
-/// can be put back by hand until the restore screen exists. A create says
-/// where the new file is instead; it replaced nothing.
-final class WriteUnverified extends SaveDidNotLand implements CreateResult {
-  const WriteUnverified(super.detail);
 }
 
 /// The operation could not be carried out. The document is as it was.

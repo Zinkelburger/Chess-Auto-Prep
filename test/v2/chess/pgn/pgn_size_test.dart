@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:chess_auto_prep/v2/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/pgn_reader.dart';
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/pgn_round_trip.dart';
@@ -109,5 +110,25 @@ void main() {
     expect(writeChapter(chapter), text);
     reportTiming('5 MB chapter: ${clock.elapsedMilliseconds}ms');
     expect(clock.elapsed.inSeconds, lessThan(30));
+  });
+
+  test('a large chapter is read on another isolate, the same', () async {
+    final text = bigChapter(2000);
+    expect(text.length, greaterThan(readOffThreadFrom));
+    final read = await readChapter(name: 'Big', text: text);
+    expect(read.lines, hasLength(2000));
+    expect(read.issues, isEmpty);
+    expect(writeChapter(read), text);
+    expect(read.side, parseChapter(name: 'Big', text: text).side);
+  });
+
+  test('the side is read off the heading without reading the games', () {
+    expect(
+      chapterSide('// Main\n// Color: Black\n\n[Event "x"]\n'),
+      Side.black,
+    );
+    expect(chapterSide('// Color: White\n'), Side.white);
+    expect(chapterSide('[Event "x"]\n// Color: Black\n'), Side.white);
+    expect(chapterSide(''), Side.white);
   });
 }

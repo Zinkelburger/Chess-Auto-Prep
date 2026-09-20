@@ -3,6 +3,7 @@
 // in a disposable Documents folder.
 import 'dart:io';
 
+import 'package:chess_auto_prep/v2/storage/document_probe.dart';
 import 'package:chess_auto_prep/v2/storage/document_ref.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/storage/relocation_notes.dart';
@@ -35,16 +36,22 @@ void main() {
         '$_header\n${chapters.map((c) => _row(c.path)).join('\n')}\n',
       );
 
-  /// A chapter on disk with a training row naming it, and its identity.
+  /// A chapter on disk with a training row naming it, and its revision.
   Future<Revision> chapter(DocumentRef ref) =>
       fixture.put(ref, '[Event "x"]\n\n1. d4 *\n');
+
+  /// The native identity of the file at [ref], which is what a note
+  /// carries.
+  Future<String> identityOf(DocumentRef ref) async =>
+      (await probeDocument(ref.path) as FileFound).identity;
 
   test(
     'a note for a move that never happened is dropped, rows and all',
     () async {
       final kid = fixture.ref('repertoires/KID/Main.pgn');
       final slav = fixture.ref('repertoires/Slav/Main.pgn');
-      final revision = await chapter(kid);
+      await chapter(kid);
+      final identity = await identityOf(kid);
       final other = await chapter(slav);
       writeRows([kid]);
       // The machine stopped after the note and before the rename: the chapter
@@ -53,7 +60,7 @@ void main() {
         'stopped-early',
         from: kid.path,
         to: fixture.ref('repertoires/KID/Renamed.pgn').path,
-        identity: revision.identity,
+        identity: identity,
         folder: false,
       );
 
@@ -94,7 +101,8 @@ void main() {
     () async {
       final kid = fixture.ref('repertoires/KID/Main.pgn');
       final slav = fixture.ref('repertoires/Slav/Main.pgn');
-      final revision = await chapter(kid);
+      await chapter(kid);
+      final identity = await identityOf(kid);
       final other = await chapter(slav);
       final renamed = fixture.ref('repertoires/KID/Renamed.pgn');
       writeRows([kid]);
@@ -104,7 +112,7 @@ void main() {
         'landed',
         from: kid.path,
         to: renamed.path,
-        identity: revision.identity,
+        identity: identity,
         folder: false,
       );
 

@@ -104,9 +104,9 @@ final class DocumentRelocation {
       case FileUnreadable(:final detail):
         log.w('move ${ref.path}', detail);
         return IoFailure(detail);
-      case FileFound(:final revision):
+      case FileFound(:final revision, :final identity):
         if (revision != expected) return Conflict(revision);
-        return _relocate(note, ref, destination, from, to, revision);
+        return _relocate(note, ref, destination, from, to, revision, identity);
     }
   }
 
@@ -117,6 +117,7 @@ final class DocumentRelocation {
     String from,
     String to,
     Revision revision,
+    String identity,
   ) async {
     final target = Directory(p.dirname(destination.path));
     final made = !await target.exists();
@@ -126,7 +127,7 @@ final class DocumentRelocation {
         note,
         from: ref.path,
         to: destination.path,
-        identity: revision.identity,
+        identity: identity,
         folder: false,
       );
       await movePathNoReplace(ref.path, destination.path);
@@ -291,9 +292,9 @@ final class DocumentRelocation {
       case FileUnreadable(:final detail):
         log.w('delete ${ref.path}', detail);
         return IoFailure(detail);
-      case FileFound(:final bytes, :final revision):
+      case FileFound(:final bytes, :final revision, :final identity):
         if (revision != expected) return Conflict(revision);
-        return _quarantine(note, ref, bytes, revision);
+        return _quarantine(note, ref, bytes, revision, identity);
     }
   }
 
@@ -304,6 +305,7 @@ final class DocumentRelocation {
     DocumentRef ref,
     List<int> bytes,
     Revision revision,
+    String identity,
   ) async {
     final refused = await keepReplacedVersion(
       backups: _backups,
@@ -323,7 +325,7 @@ final class DocumentRelocation {
         note,
         from: ref.path,
         to: target,
-        identity: revision.identity,
+        identity: identity,
         folder: false,
       );
       await movePathNoReplace(ref.path, target);

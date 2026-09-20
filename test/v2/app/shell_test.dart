@@ -44,7 +44,7 @@ void main() {
         '// Color: White\n',
         scriptedRevision('// Color: White\n'),
       );
-    saver = DocumentSaver(store);
+    saver = DocumentSaver(store, delay: Duration.zero);
     session = DocumentSession(store, saver);
     library = Library(
       files: files,

@@ -134,7 +134,7 @@ void main() {
 
   testWidgets('with nothing open it asks for a chapter', (tester) async {
     final empty = ScriptedDocumentStore();
-    saver = DocumentSaver(empty);
+    saver = DocumentSaver(empty, delay: Duration.zero);
     session = DocumentSession(empty, saver);
     analysis.dispose();
     startAnalysis();

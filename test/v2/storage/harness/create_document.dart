@@ -15,8 +15,7 @@ Future<void> main(List<String> args) async {
   stdout.writeln(switch (result) {
     Created() => 'created',
     Collision() => 'collision',
-    IoFailure(:final detail) ||
-    WriteUnverified(:final detail) => 'failed: $detail',
+    IoFailure(:final detail) => 'failed: $detail',
   });
   await stdout.flush();
 }

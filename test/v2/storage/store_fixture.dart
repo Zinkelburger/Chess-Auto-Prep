@@ -86,7 +86,7 @@ final class StoreFixture {
   List<String> keptTexts(DocumentRef ref) => [
     for (final name in keptVersions(ref))
       utf8.decode(
-        gzip.decode(
+        versionBytes(
           File(p.join(backupFolder(ref).path, name)).readAsBytesSync(),
         ),
       ),

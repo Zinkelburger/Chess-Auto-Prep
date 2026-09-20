@@ -30,7 +30,8 @@ void main() {
       revision = saved.receipt.committed;
     }
     expect(fixture.keptTexts(ref), [a, b, c]);
-    expect(fixture.keptVersions(ref).first, endsWith('.pgn.gz'));
+    expect(fixture.keptVersions(ref).first, endsWith('.pgn'));
+    expect(fixture.keptVersions(ref).first, isNot(endsWith('.pgn.gz')));
   });
 
   test('a save that replaces nothing keeps nothing', () async {
@@ -121,12 +122,17 @@ void main() {
     final folder = fixture.backupFolder(ref);
     await folder.create(recursive: true);
     // Versions the same stamp cannot tell apart; only their names can, and
-    // the folder hands them back in whatever order it pleases.
+    // the folder hands them back in whatever order it pleases. Some were
+    // kept gzipped by an earlier build, and are read all the same.
     const names = ['66666666', '55555555', '44444444', '33333333', '22222222'];
-    for (final name in names) {
+    for (final (index, name) in names.indexed) {
+      final bytes = utf8.encode('$name *\n');
       await File(
-        p.join(folder.path, '20260101T000000000Z-$name.pgn.gz'),
-      ).writeAsBytes(gzip.encode(utf8.encode('$name *\n')));
+        p.join(
+          folder.path,
+          '20260101T000000000Z-$name${index.isEven ? '.pgn.gz' : '.pgn'}',
+        ),
+      ).writeAsBytes(index.isEven ? gzip.encode(bytes) : bytes);
     }
     await File(
       p.join(folder.path, 'index.json'),

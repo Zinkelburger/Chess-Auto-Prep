@@ -189,7 +189,5 @@ final class SaveRequest {
 }
 
 /// A revision that two scripted answers about the same text agree on.
-Revision scriptedRevision(String text) => Revision(
-  contentHash: sha256.convert(utf8.encode(text)).toString(),
-  identity: 'scripted',
-);
+Revision scriptedRevision(String text) =>
+    Revision(sha256.convert(utf8.encode(text)).toString());

@@ -96,7 +96,10 @@ void main() {
       final ref = chapterRef('KID', 'Main');
       final store = ScriptedDocumentStore()
         ..documents[ref] = Opened(blackChapter, scriptedRevision(blackChapter));
-      session = DocumentSession(store, DocumentSaver(store));
+      session = DocumentSession(
+        store,
+        DocumentSaver(store, delay: Duration.zero),
+      );
       running(async);
       expect(engine.searches, isEmpty);
       unawaited(session.open(ref));
