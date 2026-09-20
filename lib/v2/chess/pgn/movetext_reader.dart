@@ -1,3 +1,5 @@
+import 'package:dartchess/dartchess.dart' show Position;
+
 import '../fen.dart';
 import 'game_tree.dart';
 import 'pgn_issue.dart';
@@ -13,14 +15,19 @@ typedef MovetextRead = ({
 });
 
 /// Builds the game tree from [tokens], the movetext of a game that starts
-/// from [rootFen]. [text] is the game's own text, for locating issues.
+/// at [root]. [text] is the game's own text, for locating issues.
 ///
 /// Move numbers are ignored: whose move it is comes from the board, never
 /// from the number in front of it. Courses that number Black's ply `5.` are
 /// the commonest shape in a real repertoire folder, and a reader that
 /// believed the number would mis-read all of them.
-MovetextRead readMovetext(String text, List<PgnToken> tokens, Fen rootFen) {
-  final moves = _Moves(text, rootFen);
+///
+/// Each position is carried down from the move that made it rather than
+/// parsed again from its FEN. Reading a position back costs several times
+/// what playing a move does, and a five megabyte file holds millions of
+/// moves.
+MovetextRead readMovetext(String text, List<PgnToken> tokens, Position root) {
+  final moves = _Moves(text, root);
   for (final token in tokens) {
     moves.take(token);
   }
@@ -29,9 +36,13 @@ MovetextRead readMovetext(String text, List<PgnToken> tokens, Fen rootFen) {
 
 /// A move being built. Mutable only in here; the tree handed out is values.
 final class _Node {
-  _Node(this.built);
+  _Node(this.built, this.after);
 
   final MoveNode built;
+
+  /// The position after [built], so the next move is played rather than
+  /// read back out of a FEN.
+  final Position after;
   String? starting;
   String? comment;
   final List<int> nags = [];
@@ -41,13 +52,13 @@ final class _Node {
 /// One level of variation: where the next move goes, and where the last one
 /// went, which is what a `(` opens an alternative to.
 final class _Frame {
-  _Frame(this.siblings, this.fen);
+  _Frame(this.siblings, this.position);
 
   List<_Node> siblings;
-  Fen fen;
+  Position position;
   _Node? node;
   List<_Node>? nodeSiblings;
-  Fen? nodeFen;
+  Position? nodePosition;
   String? starting;
 
   void attach(_Node child) {
@@ -55,20 +66,20 @@ final class _Frame {
     starting = null;
     siblings.add(child);
     nodeSiblings = siblings;
-    nodeFen = fen;
+    nodePosition = position;
     node = child;
     siblings = child.children;
-    fen = child.built.fen;
+    position = child.after;
   }
 }
 
 final class _Moves {
-  _Moves(this.text, this.rootFen) {
-    _stack.add(_Frame(_top, rootFen));
+  _Moves(this.text, this.root) {
+    _stack.add(_Frame(_top, root));
   }
 
   final String text;
-  final Fen rootFen;
+  final Position root;
 
   /// The game's first moves. The root frame's own list moves down the tree
   /// as moves are attached to it, so it is not this one.
@@ -82,9 +93,9 @@ final class _Moves {
   void take(PgnToken token) {
     switch (token) {
       case SanToken(:final text, :final at):
-        _move(_played(_stack.last.fen, text, at), at);
+        _move(_played(_stack.last.position, text, at), at);
       case NullMoveToken(:final text, :final at):
-        _move(_nullPlayed(_stack.last.fen, text, at), at);
+        _move(_nullPlayed(_stack.last.position, text, at), at);
       case CommentToken():
         _comment(token);
       case NagToken(:final value, :final at):
@@ -113,7 +124,7 @@ final class _Moves {
     }
     return (
       tree: GameTree(
-        rootFen: rootFen,
+        rootFen: Fen(root.fen),
         rootComment: _rootComment,
         children: _freeze(_top),
       ),
@@ -122,37 +133,41 @@ final class _Moves {
     );
   }
 
-  /// The node [spelling] makes from [fen], or null with an issue recorded.
-  MoveNode? _played(Fen fen, String spelling, int at) {
-    final position = positionOf(fen);
-    final move = position?.parseSan(parseableSan(spelling));
-    if (position == null || move == null) {
+  /// The node [spelling] makes from [position], or null with an issue
+  /// recorded.
+  _Node? _played(Position position, String spelling, int at) {
+    final move = position.parseSan(parseableSan(spelling));
+    if (move == null) {
       _say(at, (l, c) => IllegalMove(spelling, line: l, column: c));
       return null;
     }
     final (next, san) = position.makeSan(move);
-    return MoveNode(
-      san: san,
-      spelling: san == spelling ? null : spelling,
-      uci: move.uci,
-      fen: Fen(next.fen),
+    return _Node(
+      MoveNode(
+        san: san,
+        spelling: san == spelling ? null : spelling,
+        uci: move.uci,
+        fen: Fen(next.fen),
+      ),
+      next,
     );
   }
 
-  MoveNode? _nullPlayed(Fen fen, String spelling, int at) {
-    final node = nullMoveNode(fen, spelling: spelling);
-    if (node != null) return node;
+  _Node? _nullPlayed(Position position, String spelling, int at) {
+    final node = nullMoveNode(Fen(position.fen), spelling: spelling);
+    final after = node == null ? null : positionOf(node.fen);
+    if (node != null && after != null) return _Node(node, after);
     _say(at, (l, c) => IllegalMove(spelling, line: l, column: c));
     return null;
   }
 
-  void _move(MoveNode? built, int at) {
+  void _move(_Node? played, int at) {
     if (_terminator != null && !_saidMovesFollowed) {
       _saidMovesFollowed = true;
       _say(at, (l, c) => MovesAfterTermination(line: l, column: c));
     }
-    if (built == null) return;
-    _stack.last.attach(_Node(built));
+    if (played == null) return;
+    _stack.last.attach(played);
   }
 
   void _comment(CommentToken token) {
@@ -184,13 +199,13 @@ final class _Moves {
   void _openVariation(int at) {
     final frame = _stack.last;
     final siblings = frame.nodeSiblings;
-    final fen = frame.nodeFen;
-    if (siblings == null || fen == null) {
+    final position = frame.nodePosition;
+    if (siblings == null || position == null) {
       _say(at, (l, c) => StrayVariationStart(line: l, column: c));
-      _stack.add(_Frame([], frame.fen));
+      _stack.add(_Frame([], frame.position));
       return;
     }
-    _stack.add(_Frame(siblings, fen));
+    _stack.add(_Frame(siblings, position));
   }
 
   void _closeVariation(int at) {

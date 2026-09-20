@@ -78,7 +78,7 @@ GameRead readGame(String text) {
       issues: [_unreadablePosition(text, tags, headers)],
     );
   }
-  final read = readMovetext(text, moves, Fen(root.fen));
+  final read = readMovetext(text, moves, root);
   return GameRead(
     tags: tags,
     tree: read.tree,

@@ -42,6 +42,14 @@ final class MoveNode {
   /// The comment the file wrote *before* this move rather than after it,
   /// which is how a variation is introduced: `({A note} 1. d4 d5)`. Kept
   /// apart from [comment] because that is where it has to go back.
+  ///
+  /// Only a move that starts a variation can have one, because `(` is the
+  /// only place a file can put a comment that belongs to the move after it:
+  /// before the game's first move a comment is the introduction,
+  /// [GameTree.rootComment], and anywhere else it reads as the comment on
+  /// the move before. Reading never produces one anywhere else; putting one
+  /// there makes the game unwritable, which the rewrite gate reports rather
+  /// than lets through.
   final String? startingComment;
 
   final String? comment;
