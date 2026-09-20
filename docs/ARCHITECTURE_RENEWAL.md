@@ -136,6 +136,7 @@ lib/main_v2.dart          entry point: flutter run -t lib/main_v2.dart
 lib/v2/
   app/                    composition, window, mode menu, cross-mode requests
   ui/                     theme tokens and shared controls
+  diagnostics/            the log facade every other folder reports through
   chess/                  pure Dart: PGN, positions, moves, evaluation, generation
   storage/                PgnDocumentStore, SQLite stores, settings, credentials
   engines/                UCI supervision, pools, analysis streams
@@ -152,12 +153,14 @@ Allowed imports:
 | `chess/` | Pub packages without Flutter or `dart:io` |
 | `storage/`, `engines/`, `net/` | `chess/`, pub packages, `packages/` |
 | `ui/` | Flutter only; no feature, storage or engine code |
+| `diagnostics/` | Flutter foundation only; nothing else in `v2` |
 | `workspace/` | `chess/`, `storage/`, `engines/`, `net/`, `ui/` |
 | `features/<mode>/` | `workspace/` and everything it may import; never another mode |
 | `app/` | Everything in `v2` |
 
-Nothing in `v2` imports the old `lib/` folders; `scripts/check_v2.py` enforces
-this table. The one exception is `lib/main_v2.dart` importing
+Every folder except `chess/`, which stays pure, may also import
+`diagnostics/`. Nothing in `v2` imports the old `lib/` folders;
+`scripts/check_v2.py` enforces this table. The one exception is `lib/main_v2.dart` importing
 `lib/debug/agent_driver.dart`, the headless-test hook shared with the old app.
 Cross-mode jumps (open this line in the builder, train this chapter) are typed
 requests handled by `app/`.
@@ -181,16 +184,26 @@ requests handled by `app/`.
    failed, done) and typed errors; widgets turn them into text. Widget copy is
    plain English strings. There is no ARB or `gen_l10n` in `v2`; the
    localization section of [the UI guide](agents/ui.md) does not apply here.
-8. **Async work has an owner and a stale check.** Each action declares whether
+8. **A failure is reported twice: to the user and to the log.** At the catch
+   site, `log.w`/`log.e` with the action that failed and the error; at the
+   widget, the typed failure as plain English. Warnings and errors go to the
+   console in every build mode and to `<support>/logs/app.log`, so a user's
+   report of "an error appeared" can be answered without reproducing it. Never
+   log secrets, tokens or file contents — the path and the error are enough.
+   The facade lives in `diagnostics/` and its file sink in `storage/`
+   (`v2` may not reuse the old app's); `main_v2` installs the sink before
+   anything that can fail. Build it in the first step that can report a
+   failure, not before, and never swallow an error into a bare `catch (_) {}`.
+9. **Async work has an owner and a stale check.** Each action declares whether
    a repeat is rejected, merged or queued. A result that arrives after its
    document, position or request changed is discarded. Disposing a widget never
    kills work that should continue, such as a running generation.
-9. **Explain non-obvious algorithms next to the code:** representation, units,
+10. **Explain non-obvious algorithms next to the code:** representation, units,
    score perspective and a small example. Long explanations go in
    [ALGORITHM.md](ALGORITHM.md).
-10. **Build only what the current step's screenshot needs.** No abstractions,
+11. **Build only what the current step's screenshot needs.** No abstractions,
     options or scaffolding for a later step.
-11. Follow [the Dart conventions](agents/dart.md) for paths, helpers and
+12. Follow [the Dart conventions](agents/dart.md) for paths, helpers and
     `SafeChangeNotifier`, and [the UI conventions](agents/ui.md) for controls,
     typography, shortcuts and copy density. Where those guides name old
     folders, the `v2` equivalents apply.
@@ -433,7 +446,7 @@ settings, lint and Widgetbook appear inside the row that first needs them.
 | Step | Scope | Ends with | Status |
 |---|---|---|---|
 | 0 | **Board on screen.** `main_v2.dart`, a window with the mode menu stub, board widget, move-tree widget; open a real chapter from Documents `repertoires/` read-only; click and arrow through moves. Only the theme values a board and a move list need. | Screenshot of a real chapter | Done 2026-09-19: 1.5k lines, 23 tests |
-| 1 | **Engine.** Supervisor, one Stockfish, engine pane with MultiPV lines at 200 ms, kill-on-exit test on Linux. | Live evaluation on the board | Not started |
+| 1 | **Engine.** Supervisor, one Stockfish, engine pane with MultiPV lines at 200 ms, kill-on-exit test on Linux. First step that can fail, so it also installs the log: facade in `diagnostics/`, file sink in `storage/`, installed by `main_v2` before the engine starts. | Live evaluation on the board, and an engine that will not start named in `app.log` | Not started |
 | 2 | **Document store.** `PgnDocumentStore` (open, save, create, rename, move, recoverable delete) with revisions; add moves and comments in the workspace; save; undo from receipts; the required failure tests; the old app sees the edit. | Edit a chapter, reopen it in the old app | Not started |
 | 3 | **Library.** Repertoire list, search, create, rename, move, recoverable delete; training references follow chapter changes. | Screenshot | Not started |
 | 4 | **Chapters and Study.** Chapter outline panel, chapter operations, per-chapter orientation, Lichess study import and export, quiz markers. | Screenshot | Not started |
@@ -445,7 +458,7 @@ settings, lint and Widgetbook appear inside the row that first needs them.
 | 10 | **Players.** Player analysis, opponent search and prep sheets, tournaments, people directory, US Chess lookup. | Screenshot | Not started |
 | 11 | **Databases.** Master games, TWIC import and browser, broadcast collections, Scid export. | Screenshot | Not started |
 | 12 | **Engine tournament and Bughouse lab** on the shared supervisor. | Screenshot | Not started |
-| 13 | **Services.** Settings screen, Lichess and chess.com accounts, updates, diagnostics; theme polish; Widgetbook. | Screenshot | Not started |
+| 13 | **Services.** Settings screen, Lichess and chess.com accounts, updates, diagnostics (**Open log folder**, copy diagnostics); theme polish; Widgetbook. | Screenshot | Not started |
 | 14 | **Switch-over.** `main.dart` starts `v2`; delete the old code, tests, ledgers and checks; move `lib/v2/` to `lib/`; rewrite COMPONENT_MAP and the agent guides. | Old code gone | Not started |
 
 A row that turns out too large for one session is split into two rows here,
@@ -458,7 +471,9 @@ each with its own screenshot; it is not stretched over two sessions.
    dropped it (remove it from the row so it is never ported).
 3. It reads and writes the same data as the old app, and both run at once.
 4. Tests cover its user actions, its failure paths and every write it makes.
-5. Its `v2` code is smaller than the old code for the same features. If it is
+5. Every failure it can hit names the action in the log, and the screen says
+   the same thing in plain English.
+6. Its `v2` code is smaller than the old code for the same features. If it is
    not, stop and review the design before continuing. Tests are counted
    separately.
 

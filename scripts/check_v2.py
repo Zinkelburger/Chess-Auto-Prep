@@ -22,15 +22,18 @@ MAX_FUNCTION_LINES = 50
 MAX_NESTING = 3
 
 # What each top-level v2 folder may import from within v2.
+# `diagnostics/` is the log facade: everything but pure `chess/` reports
+# through it, and it depends on nothing in v2.
 ALLOWED = {
     "chess": {"chess"},
-    "storage": {"chess", "storage"},
-    "engines": {"chess", "engines"},
-    "net": {"chess", "net"},
-    "ui": {"ui"},
-    "workspace": {"chess", "storage", "engines", "net", "ui", "workspace"},
-    "features": {"chess", "storage", "engines", "net", "ui", "workspace", "features"},
-    "app": {"chess", "storage", "engines", "net", "ui", "workspace", "features", "app"},
+    "diagnostics": {"diagnostics"},
+    "storage": {"chess", "storage", "diagnostics"},
+    "engines": {"chess", "engines", "diagnostics"},
+    "net": {"chess", "net", "diagnostics"},
+    "ui": {"ui", "diagnostics"},
+    "workspace": {"chess", "storage", "engines", "net", "ui", "workspace", "diagnostics"},
+    "features": {"chess", "storage", "engines", "net", "ui", "workspace", "features", "diagnostics"},
+    "app": {"chess", "storage", "engines", "net", "ui", "workspace", "features", "app", "diagnostics"},
 }
 FLUTTER_FREE = {"chess"}
 IO_ALLOWED = {"storage", "engines", "app"}
