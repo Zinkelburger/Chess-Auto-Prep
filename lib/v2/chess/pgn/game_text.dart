@@ -3,19 +3,42 @@ import 'dart:convert';
 import 'game_tree.dart';
 import 'move_text.dart';
 
-/// One `[Key "value"]` tag, with the value exactly as the file spells it.
+/// One line of a game's header block, kept in the order the file has it.
 ///
-/// A chapter game carries tags no PGN model knows — `LineID`, the SM-2
-/// review state, `CumProb` — and losing one of them orphans the line, so
-/// they are kept as a list in file order rather than parsed into fields.
-final class PgnTag {
+/// A chapter game carries tags no PGN model knows — `LineID`, the SM-2 review
+/// state, `CumProb` — and losing one of them orphans the line, so the header is
+/// a list rather than a set of fields. A line that is not a tag at all is kept
+/// for the same reason: stopping at it would drop every tag below it too.
+sealed class PgnHeader {
+  const PgnHeader();
+
+  /// The line as it belongs in the file.
+  String get text;
+
+  @override
+  String toString() => text;
+}
+
+/// One `[Key "value"]` tag.
+final class PgnTag extends PgnHeader {
   const PgnTag(this.key, this.value);
 
   final String key;
+
+  /// The value exactly as the file spells it, escapes included.
   final String value;
 
   @override
-  String toString() => '[$key "$value"]';
+  String get text => '[$key "$value"]';
+}
+
+/// A header line this reader cannot parse — a `%` escape, a bracket somebody
+/// mistyped — written back exactly as it was read.
+final class UnparsedHeader extends PgnHeader {
+  const UnparsedHeader(this.text);
+
+  @override
+  final String text;
 }
 
 /// One game as the file holds it: [text] is its verbatim source with no
@@ -66,36 +89,47 @@ bool _isEventLine(String text, int start, int end) {
 bool _isBlank(int unit) =>
     unit == 0x20 || unit == 0x09 || unit == 0x0D || unit == 0xFEFF;
 
-final _tagLine = RegExp(r'^\s*\[(\w+)\s+"([^"]*)"\]\s*$');
+/// A tag name is letters, digits and the punctuation course exports use;
+/// a value may escape a quote or a backslash, so `"` alone cannot end it.
+final _tagLine = RegExp(
+  r'^\s*\[([A-Za-z0-9_+#=:-]+)\s+"((?:[^"\\]|\\.)*)"\]\s*$',
+);
 
-/// The tags at the top of [gameText], in file order; reading stops at the
-/// first line that is neither a tag nor blank.
-List<PgnTag> readTags(String gameText) {
-  final tags = <PgnTag>[];
+/// The header block at the top of [gameText], in file order.
+///
+/// The block ends at the first blank line, which is what separates a header
+/// from its movetext, or at the first line that is neither bracketed nor a `%`
+/// escape, so a game written without that blank line does not swallow its
+/// moves. Every line before that is kept, parsed as a [PgnTag] where it can be
+/// and as an [UnparsedHeader] where it cannot.
+List<PgnHeader> readTags(String gameText) {
+  final header = <PgnHeader>[];
   for (final line in const LineSplitter().convert(gameText)) {
     final match = _tagLine.firstMatch(line);
-    if (match == null) {
-      if (line.trim().isEmpty) continue;
-      break;
+    if (match != null) {
+      header.add(PgnTag(match.group(1)!, match.group(2)!));
+      continue;
     }
-    tags.add(PgnTag(match.group(1)!, match.group(2)!));
+    final rest = line.trimLeft();
+    if (rest.isEmpty || !(rest.startsWith('[') || line.startsWith('%'))) break;
+    header.add(UnparsedHeader(line));
   }
-  return List.unmodifiable(tags);
+  return List.unmodifiable(header);
 }
 
 /// The value of the first tag named [key], or null.
-String? tagValue(List<PgnTag> tags, String key) {
-  for (final tag in tags) {
-    if (tag.key == key) return tag.value;
+String? tagValue(List<PgnHeader> header, String key) {
+  for (final line in header) {
+    if (line is PgnTag && line.key == key) return line.value;
   }
   return null;
 }
 
-/// [tags] then [tree] as one game's text: the tags in the order they are
-/// given, a blank line, and the movetext on one line ending with the value
-/// of the `Result` tag.
-String writeGameText(List<PgnTag> tags, GameTree tree) {
-  final header = [for (final tag in tags) '[${tag.key} "${tag.value}"]'];
-  final moves = writeMoveText(tree, result: tagValue(tags, 'Result') ?? '*');
-  return '${header.join('\n')}\n\n$moves';
+/// [header] then [tree] as one game's text: the header lines in the order
+/// they are given, a blank line, and the movetext on one line ending with the
+/// value of the `Result` tag.
+String writeGameText(List<PgnHeader> header, GameTree tree) {
+  final lines = [for (final line in header) line.text];
+  final moves = writeMoveText(tree, result: tagValue(header, 'Result') ?? '*');
+  return '${lines.join('\n')}\n\n$moves';
 }

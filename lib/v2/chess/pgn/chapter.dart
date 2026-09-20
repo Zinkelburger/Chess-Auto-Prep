@@ -22,7 +22,8 @@ final class ChapterLine {
     required this.trailer,
   });
 
-  final List<PgnTag> tags;
+  /// Every line of the game's header block, in file order.
+  final List<PgnHeader> tags;
   final GameTree tree;
 
   /// The game's source, with no trailing whitespace.
@@ -171,7 +172,7 @@ String writeChapter(Chapter chapter) {
   return buffer.toString();
 }
 
-GameTree _unreadRoot(List<PgnTag> tags) =>
+GameTree _unreadRoot(List<PgnHeader> tags) =>
     GameTree(rootFen: Fen(tagValue(tags, 'FEN') ?? ''));
 
 /// `// Color: Black` in the preamble reads as Black; anything else,

@@ -65,7 +65,7 @@ void main() {
 
   test('a move at a branch point writes a new game', () {
     expect(afterBranch.lines, hasLength(4));
-    expect(branchLine.tags.map((t) => t.key), [
+    expect(branchLine.tags.whereType<PgnTag>().map((t) => t.key), [
       'Event',
       'White',
       'Black',
@@ -137,7 +137,7 @@ void main() {
     expect(writeChapter(afterFirst), endsWith('1. d4 *\n'));
     expect(tagValue(afterFirst.lines.single.tags, 'Event'), 'Repertoire Line');
     expect(
-      afterFirst.lines.single.tags.map((t) => t.key),
+      afterFirst.lines.single.tags.whereType<PgnTag>().map((t) => t.key),
       isNot(contains('FEN')),
     );
   });
