@@ -101,7 +101,7 @@ mixin _RepertoireTabContent
       sourceControl: sourceControl,
       chessDbSource: chessDbSource,
       onShowGenerated: () {
-        if (mounted) setState(() => _databaseSource = 3);
+        if (mounted) unawaited(_layout.setDatabaseSource(3));
       },
       fen: _controller.board.fen,
       databaseName:
@@ -163,7 +163,7 @@ mixin _RepertoireTabContent
     return RepertoireDatabasePane(
       source: _databaseSource,
       onSourceChanged: (source) {
-        if (mounted) setState(() => _databaseSource = source);
+        if (mounted) unawaited(_layout.setDatabaseSource(source));
       },
       evaluationsBuilder: (menu, chessDb) =>
           _buildGenerateTabContent(sourceControl: menu, chessDbSource: chessDb),
