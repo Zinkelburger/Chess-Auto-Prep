@@ -38,6 +38,23 @@ final class ScriptedEvaluator implements PositionEvaluator {
   }
 }
 
+/// An engine that answers nothing but zero, and records how many questions
+/// it was holding at once, so a test can say whether they were asked one
+/// after another or all together.
+final class CountingEvaluator implements PositionEvaluator {
+  int inFlight = 0;
+  int peakInFlight = 0;
+
+  @override
+  Future<EvaluationResult> evaluate(Position position) async {
+    inFlight++;
+    if (inFlight > peakInFlight) peakInFlight = inFlight;
+    await Future<void>.delayed(Duration.zero);
+    inFlight--;
+    return const Evaluated(Eval(0));
+  }
+}
+
 /// An opponent model that answers every position with the same weights, keyed
 /// by standard UCI. A move it does not mention is a move it says will not be
 /// played.

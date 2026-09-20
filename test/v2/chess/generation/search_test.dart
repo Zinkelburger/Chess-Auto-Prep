@@ -208,12 +208,15 @@ void main() {
   });
 
   test('a cancel part-way leaves the node it was expanding alone', () async {
-    var evaluations = 0;
+    // The engine has answered for all six of our moves by the time the
+    // cancel lands: the answers are thrown away and the root is left the
+    // frontier node it was, not half an enumeration.
+    final evaluator = ScriptedEvaluator();
     final result = await searchFrom(
       _kingAndPawn,
       config: const SearchConfig(side: Side.white, horizonPlies: 2),
-      evaluator: ScriptedEvaluator(),
-      isCancelled: () => ++evaluations > 3,
+      evaluator: evaluator,
+      isCancelled: () => evaluator.asked.length > 6,
     );
     expect(result, isA<SearchIncomplete>());
     expect((result as SearchIncomplete).reason, StopReason.cancelled);
@@ -323,6 +326,18 @@ void main() {
       expect(reply.move.uci, 'e8d8');
       expect(reply.child, isA<FrontierNode>());
     }
+  });
+
+  test('one node\'s moves are evaluated together', () async {
+    // The engine is the slow part of a build, and the six positions after
+    // our six moves do not depend on each other.
+    final evaluator = CountingEvaluator();
+    await searchFrom(
+      _kingAndPawn,
+      config: const SearchConfig(side: Side.white, horizonPlies: 1),
+      evaluator: evaluator,
+    );
+    expect(evaluator.peakInFlight, 6);
   });
 
   test('an engine that gives up stops the search', () async {

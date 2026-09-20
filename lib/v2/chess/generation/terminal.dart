@@ -45,3 +45,49 @@ TerminalKind? terminalKind(Position position, List<String> history) {
   final seen = history.where((other) => other == key).length;
   return seen >= _repetitionsForDraw ? TerminalKind.repetition : null;
 }
+
+/// A position being worked on, with the part of its path the rules need.
+///
+/// The path is the point: the same placement reached two ways is two of
+/// these, because a draw claim depends on what came before it. Start at
+/// [SearchPath.root] and walk down with [next]; there is no other way to
+/// make one, so a position can never lose its history on the way.
+final class SearchPath {
+  SearchPath._({
+    required this.position,
+    required this.fen,
+    required this.history,
+    required this.ply,
+  });
+
+  factory SearchPath.root(Position position) {
+    final fen = Fen(position.fen);
+    return SearchPath._(
+      position: position,
+      fen: fen,
+      history: [repetitionKey(fen)],
+      ply: 0,
+    );
+  }
+
+  final Position position;
+  final Fen fen;
+
+  /// [repetitionKey] for every position from the search root to this one,
+  /// this one last.
+  final List<String> history;
+
+  /// Half-moves from the search root.
+  final int ply;
+
+  /// This path with [after] played at the end of it.
+  SearchPath next(Position after) {
+    final fen = Fen(after.fen);
+    return SearchPath._(
+      position: after,
+      fen: fen,
+      history: [...history, repetitionKey(fen)],
+      ply: ply + 1,
+    );
+  }
+}
