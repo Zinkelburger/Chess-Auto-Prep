@@ -126,6 +126,11 @@ one king.").
   retries, 60/120/240 s backoff on 429, 250 ms leading-edge debounce, no request past ply 50 or after
   3 empty answers going deeper; cached in memory only (2000 entries, no TTL, no disk). TWIC answers
   from a local SQLite book with no network; ChessDB is a separate dock source over HTTP.
+- **Explorer offline** — decided: the Lichess database stays online-only and its cache stays in
+  memory. With no connection the dock says `Could not reach the Lichess database — it needs a
+  connection.`, names TWIC when the user has it, and offers **Try again**; it never shows an empty
+  table or a spinner that cannot resolve. This is the one exception to "what a panel displays is
+  persisted" in [Network and offline](../../ARCHITECTURE_RENEWAL.md#network-and-offline).
 - Builder, PGN Viewer, Study, Trainer and Tactics all read and write this, and share the engine
   process and search budget with tree generation.
 
@@ -165,8 +170,9 @@ Quirks worth a verdict:
   branch point becomes the *last* variation, and no move list sees a transposition.
 - Two comment-committing models disagree on whether blanking deletes.
 - "Show legal moves" is off by default, and with no eval bar the score lives in the engine gutter.
-- The explorer shows no average rating or performance though TWIC stores it, its cache never expires
-  or reaches disk, and "Comment current move" has no key on any of its three screens.
+- The explorer shows no average rating or performance though TWIC stores it, and "Comment current
+  move" has no key on any of its three screens. Its cache never expiring or reaching disk is
+  deliberate — see **Explorer offline** above.
 
 ## Questions for the owner
 1. Should the eval bar lead, showing a stored `[%eval]` when the engine is off?
@@ -175,7 +181,3 @@ Quirks worth a verdict:
 4. Should `[%…]` tokens keep their place in a comment instead of being hoisted to the front?
 5. Should the explorer expose average rating, performance and last-played year, and sort?
 6. Is promotion cancellable with Esc?
-7. Should explorer answers persist to disk, so the Database dock still shows a position's games
-   with no connection? The cache is memory-only today, so offline the dock is simply empty — the one
-   surface [Network and offline](../../ARCHITECTURE_RENEWAL.md#network-and-offline) leaves open.
-   TWIC already answers locally.

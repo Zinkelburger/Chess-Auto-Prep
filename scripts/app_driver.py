@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Drive the running Chess Auto Prep desktop app from a shell.
 
-    driver.py start [--src DIR] [--worktree] [--visible] [--target FILE]   build + launch (queues on the
+    driver.py start [--src DIR] [--worktree] [--visible] [--offline] [--target FILE]   build + launch (queues on the
                                                two-slot resource runner), daemonised
     driver.py dump [kinds=text,key,tooltip,field]
     driver.py tap text=Play | tooltip=… | key=… | x=10 y=20 [index=N] [count=2]
@@ -57,10 +57,12 @@ def flutter_bin() -> str:
     return "flutter"
 
 
-def resource_scoped_command(cmd: list[str], visible: bool = False) -> list[str]:
+def resource_scoped_command(cmd: list[str], visible: bool = False, offline: bool = False) -> list[str]:
     runner = [sys.executable, str(REPO / "scripts/agent_job.py"), "run", "--wait-seconds", str(BUILD_TIMEOUT)]
     if not visible:
         runner.append("--headless")
+    if offline:
+        runner.append("--offline")
     return [*runner, "--", *cmd]
 
 
@@ -94,9 +96,14 @@ def pid_alive(pid: int | None) -> bool:
 # Daemon: owns the `flutter run --machine` process and the unix socket
 # ---------------------------------------------------------------------------
 class Daemon:
-    def __init__(self, src: Path, visible: bool = False, target: str = "lib/main.dart"):
+    def __init__(self, src: Path, visible: bool = False, target: str = "lib/main.dart",
+                 offline: bool = False):
         self.src = src
         self.visible = visible
+        # Launch the app with no network at all, to see what a screen says
+        # when a service cannot be reached. The build must already be warm:
+        # a cold build inside the namespace cannot fetch packages.
+        self.offline = offline
         self.target = target
         self.proc: subprocess.Popen | None = None
         self.app_id: str | None = None
@@ -187,8 +194,11 @@ class Daemon:
         cmd = [
             flutter_bin(), "run", "-d", "linux", "--machine",
             "--dart-define=AGENT_DRIVER=true", "--target", self.target,
+            # With no network `pub get` cannot even check the lock file, so an
+            # offline launch runs the packages the last online one resolved.
+            *(["--no-pub"] if self.offline else []),
         ]
-        launch_cmd = resource_scoped_command(cmd, self.visible)
+        launch_cmd = resource_scoped_command(cmd, self.visible, self.offline)
         self.logline(f"launch: {shlex.join(cmd)} (cwd {self.src})")
         write_state(status="starting", pid=os.getpid(), token=agent_job.process_token(os.getpid()), src=str(self.src),
                     appId=None, vmService=None, headless=not self.visible, target=self.target,
@@ -398,7 +408,9 @@ def cmd_start(argv: list[str]) -> None:
                 pass
         APP_LOG.write_text("")
         child = subprocess.Popen(
-            [sys.executable, str(Path(__file__).resolve()), "_serve", str(src), "--target", target, *( ["--visible"] if "--visible" in rest else [])],
+            [sys.executable, str(Path(__file__).resolve()), "_serve", str(src), "--target", target,
+             *(["--visible"] if "--visible" in rest else []),
+             *(["--offline"] if "--offline" in rest else [])],
             start_new_session=True,
             stdin=subprocess.DEVNULL,
             stdout=open(STATE_DIR / "daemon.out", "w"),
@@ -455,7 +467,8 @@ def main(argv: list[str]) -> None:
     if cmd == "_serve":
         src = Path(rest[0])
         target = rest[rest.index("--target") + 1] if "--target" in rest else "lib/main.dart"
-        d = Daemon(src, visible="--visible" in rest, target=target)
+        d = Daemon(src, visible="--visible" in rest, target=target,
+                   offline="--offline" in rest)
         d.launch()
         d.serve()
         return
