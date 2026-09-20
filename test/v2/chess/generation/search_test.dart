@@ -249,6 +249,29 @@ void main() {
     expect((result as SearchIncomplete).reason, StopReason.nodeBudget);
   });
 
+  test('answers every move at the root before any reply to them', () async {
+    // Six moves at the root, one reply to each: twelve nodes buy the root's
+    // whole choice and the answers to it, and nothing below that. Depth-first
+    // would have spent the same budget on one line and left five of our moves
+    // unanswered.
+    final result = await searchFrom(
+      _kingAndPawn,
+      config: const SearchConfig(
+        side: Side.white,
+        horizonPlies: 3,
+        nodeBudget: 12,
+      ),
+    );
+    expect((result as SearchIncomplete).reason, StopReason.nodeBudget);
+    final tree = treeOf(result) as OurNode;
+    expect(tree.candidates, hasLength(6));
+    for (final candidate in tree.candidates) {
+      final reply = (candidate.child as OpponentNode).replies.single;
+      expect(reply.move.uci, 'e8d8');
+      expect(reply.child, isA<FrontierNode>());
+    }
+  });
+
   test('an engine that gives up stops the search', () async {
     final root = positionOf(_kingAndPawn);
     final result = await searchFrom(
