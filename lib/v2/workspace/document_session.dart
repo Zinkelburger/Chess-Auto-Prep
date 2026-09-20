@@ -103,6 +103,11 @@ final class DocumentSession extends ChangeNotifier {
   String? commentAt(NodePath at) =>
       at.isRoot ? tree?.rootComment : tree?.nodeAt(at)?.comment;
 
+  /// The comment the file wrote before the move at [at], which is how a
+  /// variation is introduced. Nothing edits it; it is shown so that a note
+  /// the file holds is not invisible.
+  String? startingCommentAt(NodePath at) => tree?.nodeAt(at)?.startingComment;
+
   /// Reads [ref] through the store, so the session holds the revision every
   /// later save is checked against.
   Future<OpenResult> open(ChapterRef ref) async {

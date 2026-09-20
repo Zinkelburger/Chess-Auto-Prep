@@ -71,6 +71,13 @@ final class _LineBuilder {
     while (true) {
       final node = at.siblings[at.branch];
       final path = at.parent.child(at.branch);
+      // A note the file wrote before the move introduces it, so it is read
+      // before it too, and the move that follows shows its number again.
+      final introduction = displayComment(node.startingComment ?? '');
+      if (introduction.isNotEmpty) {
+        tokens.add(_Comment(text: introduction));
+        numbered = true;
+      }
       tokens.add(_token(node, path, numbered: numbered));
       final comment = displayComment(node.comment ?? '');
       if (comment.isNotEmpty) tokens.add(_Comment(text: comment));

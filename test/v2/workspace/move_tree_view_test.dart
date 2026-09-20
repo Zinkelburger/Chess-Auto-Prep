@@ -13,8 +13,19 @@ const annotatedChapter = '''
 [Event "Annotated"]
 [Result "*"]
 
-{Play the Exchange. [%eval 0.21]} 1. d4 {[%clk 0:29:41] Our move.} d5 *
+{Play the Exchange. [%eval 0.21]} 1. d4 ({A sideline. [%eval 0.05]} 1. c4 e5) 1... d5 {[%clk 0:29:41] Our move.} *
 ''';
+
+Future<void> pumpTree(WidgetTester tester, SessionFixture fixture) async {
+  await tester.binding.setSurfaceSize(const Size(400, 600));
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: darkTheme(),
+      home: Scaffold(body: MoveTreeView(session: fixture.session)),
+    ),
+  );
+  await tester.pump();
+}
 
 void main() {
   testWidgets('shows the introduction without its machine tokens', (
@@ -22,14 +33,7 @@ void main() {
   ) async {
     final fixture = await openSession(annotatedChapter);
     addTearDown(fixture.dispose);
-    await tester.binding.setSurfaceSize(const Size(400, 600));
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: darkTheme(),
-        home: Scaffold(body: MoveTreeView(session: fixture.session)),
-      ),
-    );
-    await tester.pump();
+    await pumpTree(tester, fixture);
 
     expect(find.text('Play the Exchange.'), findsOneWidget);
     expect(find.text('Our move.'), findsOneWidget);
@@ -39,6 +43,25 @@ void main() {
       ),
       findsNothing,
       reason: 'engine tokens belong to the move, not to the reader',
+    );
+  });
+
+  testWidgets('reads a note the file wrote before a move before it', (
+    tester,
+  ) async {
+    final fixture = await openSession(annotatedChapter);
+    addTearDown(fixture.dispose);
+    await pumpTree(tester, fixture);
+
+    final note = tester.getTopLeft(find.text('A sideline.'));
+    final move = tester.getTopLeft(find.textContaining('c4'));
+    expect(note.dy, closeTo(move.dy, 4), reason: 'on the same line');
+    expect(note.dx, lessThan(move.dx), reason: 'and read before it');
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is Text && (widget.data ?? '').contains('[%'),
+      ),
+      findsNothing,
     );
   });
 }
