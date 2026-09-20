@@ -2491,7 +2491,12 @@ The disconnected eval-tree graph, explorer and compact outline are retired.
 `GeneratedRepertoire` retains the generated tree, FEN index, trap index,
 configuration and probes; it no longer builds unused graph snapshots or subtree
 metric caches. Builder's `GeneratePositionPane` uses `positionMoves` over the
-shared FEN index and live generation nodes. `RepertoireLinesBrowser` derives its
+shared FEN index and live generation nodes; its rows show the engine evaluation
+and, in the next column, the stored expectimax value (`PositionMove.expectedCp`,
+White's perspective), ordered by `storedCp` so the move that scores best against
+likely replies is first. The engine continuation is the row's tooltip. While a
+probe runs, the strip above the table shows the phase and the live stat line the
+Jobs panel uses. `RepertoireLinesBrowser` derives its
 line metrics through `services/line_metrics_helpers.dart`, `tree_my_ease.dart`
 and `TrapIndexService`. The chapter/line outline and BuildTree serialization
 remain active. Graph-layout guidance is historical; no graph widget remains.

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../core/generation_session_controller.dart';
 import '../../../services/eval/chessdb_api_provider.dart';
 import '../../../services/eval/db_move_list.dart';
+import '../../../services/jobs/generation_job_display.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../utils/chess_utils.dart';
@@ -178,19 +179,6 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
           chessDb: _dbMoves,
           sortByChessDb: _showChessDb,
         );
-        // The visible score determines the ordering; expected-score analysis
-        // belongs to the generation pipeline, not a second table column.
-        if (!_showChessDb && rows.isNotEmpty) {
-          rows.sort((a, b) {
-            final x = a.evalCp, y = b.evalCp;
-            if (x == null && y != null) return 1;
-            if (y == null && x != null) return -1;
-            final score = x != null && y != null
-                ? (stmWhite ? y.compareTo(x) : x.compareTo(y))
-                : 0;
-            return score != 0 ? score : a.san.compareTo(b.san);
-          });
-        }
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -304,7 +292,8 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
                       child: Tooltip(
                         message: gen.progress.status,
                         child: Text(
-                          '${gen.progress.depthExplored.fold<int>(0, (a, b) => a + b)} positions evaluated',
+                          '${gen.progress.phase.label} · '
+                          '${gen.progress.jobProgress.message}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: AppTextStyles.caption,
@@ -348,22 +337,30 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Row(
                 children: [
-                  const SizedBox(
-                    width: 60,
+                  const Expanded(
                     child: Text('Move', style: AppTextStyles.caption),
                   ),
                   const SizedBox(
                     width: 84,
                     child: Tooltip(
-                      message: 'Evaluation from White’s perspective',
+                      message: 'Engine evaluation, from White’s perspective',
                       child: Text('Evaluation', style: AppTextStyles.caption),
                     ),
                   ),
-                  Expanded(
-                    child: Text(
-                      _showChessDb ? 'Annotation' : 'Continuation',
-                      style: AppTextStyles.caption,
-                    ),
+                  SizedBox(
+                    width: 84,
+                    child: _showChessDb
+                        ? const Text('Annotation', style: AppTextStyles.caption)
+                        : const Tooltip(
+                            message:
+                                'Expectimax: the score expected once the '
+                                'opponent’s likely replies are weighed in, '
+                                'from White’s perspective',
+                            child: Text(
+                              'Expected',
+                              style: AppTextStyles.caption,
+                            ),
+                          ),
                   ),
                   const SizedBox(width: 32),
                 ],
@@ -382,15 +379,24 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
                                   ? null
                                   : dbScore * (stmWhite ? 1 : -1)
                             : row.evalCp;
-                        final fullDetail = _showChessDb
-                            ? row.chessDb?.note ?? ''
-                            : row.pvSan.join(' ');
+                        // The engine continuation is no longer a column of
+                        // its own; it stays reachable as the row's tooltip.
                         final detail = _showChessDb
-                            ? RegExp(
-                                    r'^[!?]+',
-                                  ).stringMatch(fullDetail.trim()) ??
+                            ? RegExp(r'^[!?]+').stringMatch(
+                                    (row.chessDb?.note ?? '').trim(),
+                                  ) ??
                                   ''
-                            : fullDetail;
+                            : row.expectedCp == null
+                            ? ''
+                            : formatPackedEval(row.expectedCp!, decimals: 2);
+                        final tooltip = _showChessDb
+                            ? row.chessDb?.note ?? ''
+                            : row.pvSan.isNotEmpty
+                            ? row.pvSan.join(' ')
+                            : row.expectedCp == null
+                            ? 'Generate from this position to calculate an '
+                                  'expected score.'
+                            : '';
                         return MouseRegion(
                           onEnter: (_) {
                             if (mounted) widget.onHoverMove?.call(row.uci);
@@ -410,8 +416,7 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
                               ),
                               child: Row(
                                 children: [
-                                  SizedBox(
-                                    width: 60,
+                                  Expanded(
                                     child: Text(
                                       row.san,
                                       style: AppTextStyles.bodyStrong,
@@ -435,17 +440,11 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
                                       ),
                                     ),
                                   ),
-                                  Expanded(
-                                    child: Tooltip(
-                                      message: fullDetail,
-                                      child: Text(
-                                        detail.isEmpty ? '—' : detail,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: AppTextStyles.mono.copyWith(
-                                          color: AppColors.onSurfaceMuted,
-                                        ),
-                                      ),
+                                  SizedBox(
+                                    width: 84,
+                                    child: _Detail(
+                                      text: detail,
+                                      tooltip: tooltip,
                                     ),
                                   ),
                                   SizedBox(
@@ -479,5 +478,25 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
         );
       },
     );
+  }
+}
+
+/// The third column's cell: the expected score, or a ChessDB annotation.
+/// An empty tooltip would otherwise show as a blank popup on hover.
+class _Detail extends StatelessWidget {
+  const _Detail({required this.text, required this.tooltip});
+  final String text;
+  final String tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = Text(
+      text.isEmpty ? '—' : text,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: AppTextStyles.mono.copyWith(color: AppColors.onSurfaceMuted),
+    );
+    if (tooltip.isEmpty) return label;
+    return Tooltip(message: tooltip, child: label);
   }
 }
