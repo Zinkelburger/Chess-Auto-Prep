@@ -243,6 +243,40 @@ void main() {
     expect(read(_reviews), contains(_review(kid.path)));
   });
 
+  test('what a repoint replaces is kept where the old app keeps it', () async {
+    writeAll();
+    final before = [read(_reviews), read(_progress), read(_attempts)];
+    final renamed = fixture.ref('repertoires/KID/Classical.pgn');
+    expect(await records.repoint(kid, renamed), isA<Repointed>());
+    final operation = Directory(
+      p.join(fixture.documents.path, '.cap-reference-history'),
+    ).listSync().whereType<Directory>().single;
+    String kept(String name) =>
+        File(p.join(operation.path, name)).readAsStringSync();
+    expect([kept(_reviews), kept(_progress), kept(_attempts)], before);
+    expect(
+      operation.listSync().map((e) => p.basename(e.path)),
+      unorderedEquals([_reviews, _progress, _history, _attempts]),
+    );
+  });
+
+  test('a rewrite nothing can be kept for does not happen', () async {
+    writeAll();
+    final before = read(_reviews);
+    final history = Directory(
+      p.join(fixture.documents.path, '.cap-reference-history'),
+    );
+    await history.create();
+    await Process.run('chmod', ['500', history.path]);
+    final result = await records.repoint(
+      kid,
+      fixture.ref('repertoires/KID/Classical.pgn'),
+    );
+    await Process.run('chmod', ['u+w', history.path]);
+    expect(result, isA<IoFailure>());
+    expect(read(_reviews), before);
+  }, skip: _needsAPlainUser);
+
   test('a folder that cannot be written reports the failure', () async {
     writeAll();
     final before = read(_reviews);
@@ -286,3 +320,8 @@ void main() {
     expect(read(_history), contains(_historyRow(kid.path)));
   });
 }
+
+final Object _needsAPlainUser =
+    !Platform.isLinux || Platform.environment['USER'] == 'root'
+    ? 'needs a Linux user without root'
+    : false;
