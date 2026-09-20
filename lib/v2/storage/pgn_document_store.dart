@@ -1,4 +1,5 @@
 import 'document_ref.dart';
+import 'training_records.dart';
 
 /// The one way `v2` writes a PGN file. The filesystem is a real boundary, so
 /// this is an interface: [PgnFileStore] in the app, a scripted one in tests.
@@ -115,17 +116,26 @@ final class Saved implements SaveResult {
 }
 
 final class Moved implements MoveResult {
-  const Moved(this.revision);
+  const Moved(this.revision, {this.training = const NothingToRepoint()});
 
   /// Unchanged by the move: the same bytes in the same file, under a new name.
   final Revision revision;
+
+  /// Whether the training rows that named the old path followed it. The file
+  /// is not put back when they did not: it is where the user asked for it,
+  /// and this says what is still pointing at the name it left.
+  final RepointResult training;
 }
 
 final class Deleted implements DeleteResult {
-  const Deleted(this.recoveredTo);
+  const Deleted(this.recoveredTo, {this.training = const NothingToRepoint()});
 
   /// Where the file now is, so the user can be told where to find it.
   final String recoveredTo;
+
+  /// Whether the training rows followed the chapter into recovery, so a
+  /// restore brings its schedule back with it.
+  final RepointResult training;
 }
 
 /// The name is taken. Nothing was written.

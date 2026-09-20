@@ -13,6 +13,7 @@ import 'document_probe.dart';
 import 'document_ref.dart';
 import 'file_lock.dart';
 import 'pgn_document_store.dart';
+import 'training_records.dart' as training;
 
 /// The documents root as files on disk.
 ///
@@ -34,12 +35,14 @@ import 'pgn_document_store.dart';
 /// gone for good.
 final class PgnFileStore implements PgnDocumentStore {
   PgnFileStore({required this.documents, required Directory support})
-    : _backups = BackupArchive(Directory(p.join(support.path, 'backups')));
+    : _backups = BackupArchive(Directory(p.join(support.path, 'backups'))),
+      _training = training.TrainingRecords(documents);
 
   /// The folder every document lives under; a ref outside it is refused.
   final Directory documents;
 
   final BackupArchive _backups;
+  final training.TrainingRecords _training;
 
   @override
   Future<DocumentRead> open(DocumentRef ref) async {
@@ -182,12 +185,23 @@ final class PgnFileStore implements PgnDocumentStore {
     DocumentRef ref,
     DocumentRef destination, {
     required Revision expected,
-  }) => _locked(
-    documents,
-    ref,
-    () => _move(ref, destination, expected),
-    IoFailure.new,
-  );
+  }) async {
+    final result = await _locked(
+      documents,
+      ref,
+      () => _move(ref, destination, expected),
+      IoFailure.new,
+    );
+    // Outside the folder lock, which is not re-entrant: the training files
+    // live in the documents root, which can be the folder just locked.
+    if (result case Moved(:final revision)) {
+      return Moved(
+        revision,
+        training: await _training.repoint(ref, destination),
+      );
+    }
+    return result;
+  }
 
   Future<MoveResult> _move(
     DocumentRef ref,
@@ -237,8 +251,24 @@ final class PgnFileStore implements PgnDocumentStore {
   }
 
   @override
-  Future<DeleteResult> delete(DocumentRef ref, {required Revision expected}) =>
-      _locked(_folder(ref), ref, () => _delete(ref, expected), IoFailure.new);
+  Future<DeleteResult> delete(
+    DocumentRef ref, {
+    required Revision expected,
+  }) async {
+    final result = await _locked(
+      _folder(ref),
+      ref,
+      () => _delete(ref, expected),
+      IoFailure.new,
+    );
+    // The rows follow the chapter into recovery, as they do in the old app,
+    // so restoring it brings its schedule and history back with it.
+    if (result case Deleted(:final recoveredTo)) {
+      final moved = await _training.repoint(ref, DocumentRef(recoveredTo));
+      return Deleted(recoveredTo, training: moved);
+    }
+    return result;
+  }
 
   Future<DeleteResult> _delete(DocumentRef ref, Revision expected) async {
     switch (await probeDocument(ref.path)) {
