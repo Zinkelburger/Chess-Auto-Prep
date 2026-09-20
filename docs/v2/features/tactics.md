@@ -127,7 +127,10 @@ Puzzle/Game, Escape leaves editor, then tab, then puzzle. A SAN or UCI letter fo
   analysis. Lichess is one export request with clocks (default last 20 games, or a `since` window);
   Chess.com walks its monthly archives newest-first (default last 10 games, 200-game cap on a dated
   import). The Lichess client backs off on 429 for 60 s, 120 s then 240 s, retrying transport errors
-  after 2 s.
+  after 2 s. A download that does not happen — no connection, a 429 that never clears, an outage —
+  is answered from that cache however stale, including under a forced check for new games, and the
+  header says which site could not be reached; only an account with nothing cached shows an error
+  instead of games. See [Network and offline](../../ARCHITECTURE_RENEWAL.md#network-and-offline).
 - `app_games.db` under app support holds the parsed rows: collection, a canonical game key, players, result,
   date, speed, Elos, ECO, the full headers, the verbatim PGN and when it was imported; a positions table maps
   each position to game and ply, a collections table records freshness, and a trash table keeps deleted games'

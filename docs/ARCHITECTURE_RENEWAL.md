@@ -494,6 +494,45 @@ writing. Tests never touch the user's real profile.
 - Jobs capture their configuration when they start.
 - Secrets never appear in snapshots, logs, Widgetbook or exports.
 
+## Network and offline
+
+The app is usable with no connection. What the user has already downloaded is
+on this computer, and a fetch that does not happen leaves it on the screen.
+The old app broke this by reading its games cache only when a fetch returned
+*empty*: a fetch that threw went past it, and a startup "check for new games"
+that skipped the cache on purpose turned a missing connection into a page with
+no games on it.
+
+- **One client per service** in `net/`, injected at its owner, each with its
+  own retry and backoff policy. Both paths are driven in tests by a fake
+  client; no test reaches the real network, and `flutter test` blocks it
+  anyway by answering every socket with an empty 400.
+- **A failed fetch never takes data away.** The owner keeps what it had, marks
+  it stale with when it came down, and names the service it could not reach.
+  An empty list is a far stronger claim than "could not check".
+- **Refreshing harder still cannot empty the screen.** A forced refresh — the
+  user pressing check-for-new, or a startup check — prefers the network and
+  ignores any freshness window, but never discards the local copy on the way
+  back. Only a request with nothing stored behind it shows an error instead of
+  content.
+- **Two services fail independently.** One site being unreachable never
+  removes the other's rows.
+- **What a panel displays is persisted**, not held for one session, so a
+  second launch offline shows what the first launch fetched. In-memory caches
+  are scratch for a single session.
+- **A stale answer is labelled, not hidden:** one muted line naming the
+  service and the age, beside the content, never instead of it.
+
+**Required failure tests**, in each step that adds a client: a fetch that
+throws, one that returns nothing, and one that returns a 429 and a 500 — each
+against a store that holds content and against one that does not; a forced
+refresh that fails; and two services where one fails and the other does not.
+
+**Confirming it in the running app** belongs to the step's screenshot. The
+accepted screenshot is the online proof; the offline proof is the same screen
+under `unshare -rn bash -c 'ip link set lo up; <driver command>'`, which
+leaves the app its display and loopback but no internet.
+
 ## Engines and background work
 
 - One supervisor owns every engine process, drains stdout and stderr into

@@ -175,3 +175,7 @@ Quirks worth a verdict:
 4. Should `[%…]` tokens keep their place in a comment instead of being hoisted to the front?
 5. Should the explorer expose average rating, performance and last-played year, and sort?
 6. Is promotion cancellable with Esc?
+7. Should explorer answers persist to disk, so the Database dock still shows a position's games
+   with no connection? The cache is memory-only today, so offline the dock is simply empty — the one
+   surface [Network and offline](../../ARCHITECTURE_RENEWAL.md#network-and-offline) leaves open.
+   TWIC already answers locally.
