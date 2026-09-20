@@ -109,6 +109,16 @@ void main() {
     expect(played, ['g1f3']);
   });
 
+  testWidgets('letting go away from the board plays no move', (tester) async {
+    await pump(tester);
+    final gesture = await tester.startGesture(at('g1'));
+    await gesture.moveTo(const Offset(430, 250)); // past the right edge
+    await tester.pump();
+    await gesture.up();
+    await tester.pump();
+    expect(played, isEmpty);
+  });
+
   testWidgets('a promotion waits for the piece and then plays it', (
     tester,
   ) async {

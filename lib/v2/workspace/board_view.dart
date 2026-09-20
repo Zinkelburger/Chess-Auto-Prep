@@ -75,6 +75,7 @@ class _BoardViewState extends State<BoardView> {
             onPanStart: (details) => _pickUp(details.localPosition, square),
             onPanUpdate: (details) => _moveTo(details.localPosition),
             onPanEnd: (_) => _drop(square),
+            onPanCancel: _letGo,
             child: Stack(children: _layers(context, square)),
           );
         },
@@ -138,8 +139,8 @@ class _BoardViewState extends State<BoardView> {
     return null;
   }
 
-  void _tapped(Square square) {
-    if (_promoting != null) return;
+  void _tapped(Square? square) {
+    if (_promoting != null || square == null) return;
     final from = _selected;
     if (from != null && from != square && _offer(from, square)) return;
     setState(() => _selected = _mine(square) ? square : null);
@@ -148,7 +149,7 @@ class _BoardViewState extends State<BoardView> {
   void _pickUp(Offset at, double square) {
     if (_promoting != null) return;
     final from = _squareAt(at, square);
-    if (!_mine(from)) return;
+    if (from == null || !_mine(from)) return;
     setState(() {
       _selected = null;
       _drag = (from: from, at: at);
@@ -166,8 +167,18 @@ class _BoardViewState extends State<BoardView> {
     if (drag == null) return;
     setState(() => _drag = null);
     final to = _squareAt(drag.at, square);
+    // Let go away from the board: the piece goes back and no move is played,
+    // the way a piece dropped off the table is not a move.
+    if (to == null) return;
     if (to != drag.from && _offer(drag.from, to)) return;
     setState(() => _selected = drag.from);
+  }
+
+  /// The drag was taken away from us, by a second pointer or by the board
+  /// going away. The piece goes back where it came from.
+  void _letGo() {
+    if (_drag == null) return;
+    setState(() => _drag = null);
   }
 
   /// Plays `from`–`to` if it is legal, or asks which piece a promoting pawn
@@ -206,9 +217,11 @@ class _BoardViewState extends State<BoardView> {
     return position != null && position.board.sideAt(square) == position.turn;
   }
 
-  Square _squareAt(Offset at, double square) {
-    final column = (at.dx / square).floor().clamp(0, 7);
-    final row = (at.dy / square).floor().clamp(0, 7);
+  /// The square [at] falls on, or null when the pointer is off the board.
+  Square? _squareAt(Offset at, double square) {
+    final column = (at.dx / square).floor();
+    final row = (at.dy / square).floor();
+    if (column < 0 || column > 7 || row < 0 || row > 7) return null;
     final white = widget.orientation == Side.white;
     return Square.fromCoords(
       File(white ? column : 7 - column),
