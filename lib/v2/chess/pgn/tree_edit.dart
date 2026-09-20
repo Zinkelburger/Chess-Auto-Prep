@@ -21,16 +21,16 @@ Position? positionOf(Fen fen) {
   }
 }
 
-/// [san] played from [fen] as a childless node, or null when it is not a
+/// [move] played from [fen] as a childless node, or null when it is not a
 /// legal move there. The SAN comes back as dartchess spells it, so two
-/// spellings of one move cannot become two children.
-MoveNode? moveNode(Fen fen, String san) {
+/// spellings of one move cannot become two children. Callers that start from
+/// text parse it with [positionOf] first; a move is a move however it was
+/// written down.
+MoveNode? moveNode(Fen fen, Move move) {
   final position = positionOf(fen);
-  if (position == null) return null;
-  final move = position.parseSan(san);
-  if (move == null) return null;
-  final (next, normalised) = position.makeSan(move);
-  return MoveNode(san: normalised, uci: move.uci, fen: Fen(next.fen));
+  if (position == null || !position.isLegal(move)) return null;
+  final (next, san) = position.makeSan(move);
+  return MoveNode(san: san, uci: move.uci, fen: Fen(next.fen));
 }
 
 /// The SAN of each move down the main continuation from the root.
@@ -69,7 +69,8 @@ GameTree lineTree(Fen rootFen, List<String> sans) {
   final nodes = <MoveNode>[];
   var fen = rootFen;
   for (final san in sans) {
-    final node = moveNode(fen, san);
+    final move = positionOf(fen)?.parseSan(san);
+    final node = move == null ? null : moveNode(fen, move);
     if (node == null) break;
     nodes.add(node);
     fen = node.fen;

@@ -142,6 +142,17 @@ void main() {
     );
   });
 
+  test('a new move is the last child of the node it was played from', () {
+    // 1. d4 already has d5 and Nf6, so e6 is a branch and a third child.
+    final branched = addMove(white(), at: NodePath.of([0]), uci: 'e7e6');
+    expect((branched as MoveAdded).path, NodePath.of([0, 2]));
+    expect(branched.chapter.tree.nodeAt(NodePath.of([0, 2]))?.san, 'e6');
+    // 1. d4 Nf6 is the end of its game, so Nf3 extends it as an only child.
+    final extended = addMove(white(), at: NodePath.of([0, 1]), uci: 'g1f3');
+    expect((extended as MoveAdded).path, NodePath.of([0, 1, 0]));
+    expect(extended.chapter.tree.nodeAt(NodePath.of([0, 1, 0]))?.san, 'Nf3');
+  });
+
   test('a move the chapter already has moves the cursor and nothing else', () {
     final before = black();
     final result = addMove(before, at: const NodePath.root(), uci: 'c7c5');

@@ -49,21 +49,28 @@ AddMoveResult addMove(
   required NodePath at,
   required String uci,
 }) {
-  final node = _nodeFor(chapter.tree.fenAt(at), uci);
+  final move = Move.parse(uci);
+  final node = move == null ? null : moveNode(chapter.tree.fenAt(at), move);
   if (node == null) return MoveIllegal(uci);
   final siblings = chapter.tree.nodeAt(at)?.children ?? chapter.tree.children;
   final existing = siblings.indexWhere((child) => child.san == node.san);
   if (existing >= 0) {
     return MoveAdded(chapter: chapter, path: at.child(existing));
   }
-  final prefix = [for (final move in chapter.tree.lineTo(at)) move.san];
+  final prefix = [for (final step in chapter.tree.lineTo(at)) step.san];
   final updated =
       (siblings.isEmpty ? _extended(chapter, prefix, node) : null) ??
       _appended(chapter, prefix, node);
-  final path = pathOfSans(updated.tree, [...prefix, node.san]);
-  return path == null
-      ? MoveIllegal(uci)
-      : MoveAdded(chapter: updated, path: path);
+  // Merging keeps the order of the moves a chapter already had and puts the
+  // ones only the edited game plays after them, so a move no sibling matched
+  // is the last child of the node it was played from. There is nowhere else
+  // in the merged tree for it to be.
+  final path = at.child(siblings.length);
+  assert(
+    pathOfSans(updated.tree, [...prefix, node.san]) == path,
+    'a move written into a chapter came back somewhere other than $path',
+  );
+  return MoveAdded(chapter: updated, path: path);
 }
 
 /// Writes [text] as the comment of the node at [at].
@@ -116,14 +123,6 @@ Chapter _withIntroduction(Chapter chapter, String? text) {
     withComment(line.tree, const NodePath.root(), comment),
   );
   return withLines(chapter, lines);
-}
-
-MoveNode? _nodeFor(Fen fen, String uci) {
-  final position = positionOf(fen);
-  final move = Move.parse(uci);
-  if (position == null || move == null || !position.isLegal(move)) return null;
-  final (next, san) = position.makeSan(move);
-  return MoveNode(san: san, uci: move.uci, fen: Fen(next.fen));
 }
 
 /// The chapter with [node] appended to the game whose main line ends at
