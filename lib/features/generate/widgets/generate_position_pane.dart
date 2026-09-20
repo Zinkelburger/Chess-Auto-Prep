@@ -162,6 +162,67 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
     }
   }
 
+  /// The one control for the run: it starts it, then parks and restarts it.
+  /// A greyed-out Generate button while a run is in progress said nothing
+  /// about the run and left Stop as the only live control.
+  Widget _runControl(
+    GenerationSessionController gen, {
+    required bool canStart,
+    required bool extending,
+  }) {
+    if (!gen.isGenerating) {
+      // Not "Resume": a run does not continue where an earlier one stopped,
+      // it scores this position and merges the result into what is saved.
+      return Tooltip(
+        message: extending
+            ? 'Score this position and add it to the saved database'
+            : 'Score this position and start a database beside the chapter',
+        child: TextButton.icon(
+          key: const ValueKey('generation-run-control'),
+          onPressed: canStart ? () => _generate() : null,
+          icon: const Icon(Icons.play_arrow, size: 16),
+          label: Text(
+            _starting
+                ? 'Starting…'
+                : extending
+                ? 'Extend'
+                : 'Generate',
+          ),
+        ),
+      );
+    }
+    if (gen.isPaused) {
+      return TextButton.icon(
+        key: const ValueKey('generation-run-control'),
+        onPressed: gen.isCancelling
+            ? null
+            : () {
+                if (mounted) gen.resumeBuild();
+              },
+        icon: const Icon(Icons.play_arrow, size: 16),
+        label: const Text('Resume'),
+      );
+    }
+    // The remaining phases are short synchronous passes that would ignore a
+    // pause request, so the control says so rather than doing nothing.
+    final pausable = gen.canPause;
+    return Tooltip(
+      message: pausable
+          ? 'Park the run and hand the engine back'
+          : 'This step finishes too quickly to pause',
+      child: TextButton.icon(
+        key: const ValueKey('generation-run-control'),
+        onPressed: pausable
+            ? () {
+                if (mounted) gen.pauseBuild();
+              }
+            : null,
+        icon: const Icon(Icons.pause, size: 16),
+        label: const Text('Pause'),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -170,6 +231,9 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
       builder: (context, _) {
         final gen = widget.generation;
         final busy = gen.isGenerating || _starting;
+        // What a previous run left beside the chapter. A run adds to it; it
+        // never starts the database over.
+        final savedPositions = gen.generatedTreeFenMap?.size ?? 0;
         final stmWhite = widget.fen.split(' ').elementAtOrNull(1) == 'w';
         final rows = positionMoves(
           widget.fen,
@@ -220,10 +284,10 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
                           ),
                         ),
                   ),
-                  TextButton.icon(
-                    onPressed: busy || rows.isEmpty ? null : () => _generate(),
-                    icon: const Icon(Icons.play_arrow, size: 16),
-                    label: Text(_starting ? 'Starting…' : 'Generate'),
+                  _runControl(
+                    gen,
+                    canStart: !busy && rows.isNotEmpty,
+                    extending: savedPositions > 0,
                   ),
                   IconButton(
                     key: const ValueKey('generation-settings'),
@@ -282,8 +346,24 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
                 ],
               ),
             ),
+            if (!gen.isGenerating && savedPositions > 0)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+                child: Text(
+                  'Database on disk · $savedPositions position'
+                  '${savedPositions == 1 ? '' : 's'}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.caption,
+                ),
+              ),
             if (gen.isGenerating) ...[
-              const LinearProgressIndicator(minHeight: 2),
+              LinearProgressIndicator(
+                minHeight: 2,
+                // A bar still sweeping under a parked run would claim work
+                // that is not happening.
+                value: gen.isPaused ? gen.progress.jobProgress.fraction : null,
+              ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Row(
@@ -292,8 +372,8 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
                       child: Tooltip(
                         message: gen.progress.status,
                         child: Text(
-                          '${gen.progress.phase.label} · '
-                          '${gen.progress.jobProgress.message}',
+                          '${gen.isPaused ? 'Paused' : gen.progress.phase.label}'
+                          ' · ${gen.progress.jobProgress.message}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: AppTextStyles.caption,
@@ -431,13 +511,7 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
                                               score,
                                               decimals: 2,
                                             ),
-                                      style: AppTextStyles.mono.copyWith(
-                                        color: score == null || score == 0
-                                            ? AppColors.onSurfaceMuted
-                                            : score > 0
-                                            ? AppColors.evalPositive
-                                            : AppColors.evalNegative,
-                                      ),
+                                      style: AppTextStyles.mono,
                                     ),
                                   ),
                                   SizedBox(
@@ -494,7 +568,7 @@ class _Detail extends StatelessWidget {
       text.isEmpty ? '—' : text,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
-      style: AppTextStyles.mono.copyWith(color: AppColors.onSurfaceMuted),
+      style: AppTextStyles.mono,
     );
     if (tooltip.isEmpty) return label;
     return Tooltip(message: tooltip, child: label);

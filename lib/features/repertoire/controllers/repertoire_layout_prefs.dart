@@ -20,6 +20,15 @@ class RepertoireLayoutPrefs extends ChangeNotifier with SafeChangeNotifier {
   static const String outlineWidthKey = 'repertoire.outline_panel_width';
   static const String databaseHeightKey = 'repertoire.database_height';
 
+  /// Shared with the planner's own copy of the Database pane, which has
+  /// always written this key.
+  static const String databaseSourceKey = 'repertoire.reference_source';
+
+  /// Which source the Database pane shows: 0 Repertoire, 1 Opening explorer,
+  /// 2 Local PGN, 3 Engine evals, 4 ChessDB.
+  static const int defaultDatabaseSource = 3;
+  static const int maxDatabaseSource = 4;
+
   /// Narrowest the outline panel may be dragged before it is worth
   /// collapsing instead.
   static const double minPanelWidth = 220.0;
@@ -49,6 +58,11 @@ class RepertoireLayoutPrefs extends ChangeNotifier with SafeChangeNotifier {
   bool _outlinePanelCollapsed = false;
   double? _outlinePanelWidth;
   double? _databaseHeight;
+  int _databaseSource = defaultDatabaseSource;
+
+  /// Which source the Database pane opens on. Restored at startup: picking a
+  /// source is a choice about how you work, not a per-session accident.
+  int get databaseSource => _databaseSource;
 
   bool get analysisCollapsed => _analysisCollapsed;
 
@@ -70,6 +84,7 @@ class RepertoireLayoutPrefs extends ChangeNotifier with SafeChangeNotifier {
       _outlinePanelCollapsed = prefs.getBool(outlineCollapsedKey) ?? false;
       _outlinePanelWidth = prefs.getDouble(outlineWidthKey);
       _databaseHeight = prefs.getDouble(databaseHeightKey);
+      _databaseSource = _clampDatabaseSource(prefs.getInt(databaseSourceKey));
       notifyListeners();
     } catch (e) {
       log.w('Failed to load layout prefs', name: _logName, error: e);
@@ -138,6 +153,21 @@ class RepertoireLayoutPrefs extends ChangeNotifier with SafeChangeNotifier {
     if (height == null) return;
     await _write((prefs) => prefs.setDouble(databaseHeightKey, height));
   }
+
+  Future<void> setDatabaseSource(int source) async {
+    final next = _clampDatabaseSource(source);
+    if (_databaseSource == next) return;
+    _databaseSource = next;
+    notifyListeners();
+    await _write((prefs) => prefs.setInt(databaseSourceKey, next));
+  }
+
+  /// An unset, corrupt or out-of-range key falls back to the default rather
+  /// than indexing the source list out of bounds.
+  static int _clampDatabaseSource(int? source) =>
+      source == null || source < 0 || source > maxDatabaseSource
+      ? defaultDatabaseSource
+      : source;
 
   static double _clampDatabaseHeight(double height, double availableHeight) =>
       height.clamp(

@@ -11,7 +11,9 @@ const STEPS = [
   { id: 'next', label: 'Forward (→)', path: 'M8 5l9 7-9 7z' },
   { id: 'last', label: 'Last move (End)', path: 'M18 5v14M5 5l9 7-9 7z' },
 ];
-const SEATS = { A: [['white', 'A'], ['black', 'B']], B: [['white', 'D'], ['black', 'C']] } as const;
+// Partners hold opposite colours, so the teams read A + B and C + D
+// (kept in step with SEAT in ../bughouse/boards.ts).
+const SEATS = { A: [['white', 'A'], ['black', 'C']], B: [['white', 'D'], ['black', 'B']] } as const;
 const HELP = 'Reserves: P N B R Q, e.g. 2N Q. Outstanding = pieces not on a board or in a reserve.';
 ---
 <div class="bb-boards">

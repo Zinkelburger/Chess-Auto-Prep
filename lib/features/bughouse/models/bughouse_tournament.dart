@@ -10,8 +10,8 @@
 /// Three things follow from that, and they are what this file is:
 ///
 ///   * **A participant is a team, not a player.** Bughouse seats four people;
-///     two of them are partners. A participant here is the pair `A + C` or
-///     `B + D`, and [GameResult.whiteWins] means the pair holding White on
+///     two of them are partners. A participant here is the pair `A + B` or
+///     `C + D`, and [GameResult.whiteWins] means the pair holding White on
 ///     board 1 won — which is also how BPGN reads a `1-0`, so a game exported
 ///     from here and one downloaded from FICS score the same way.
 ///   * **Two identical participants are the normal case.** Self-play from a
@@ -420,8 +420,8 @@ class BughouseGameRecord implements CrosstableGame {
         number: (json['number'] as num?)?.toInt() ?? 1,
         whiteIndex: (json['whiteIndex'] as num?)?.toInt() ?? 0,
         blackIndex: (json['blackIndex'] as num?)?.toInt() ?? 1,
-        whiteName: json['whiteName'] as String? ?? 'A + C',
-        blackName: json['blackName'] as String? ?? 'B + D',
+        whiteName: json['whiteName'] as String? ?? 'A + B',
+        blackName: json['blackName'] as String? ?? 'C + D',
         result: GameResult.values.firstWhere(
           (r) => r.name == json['result'],
           orElse: () => GameResult.unfinished,
