@@ -10,7 +10,9 @@ import 'uci_process.dart';
 ///
 /// Searches are serialised: a new one waits for the previous `bestmove`
 /// before sending `go`, and `info` lines go to whichever search the engine
-/// is on. That is what keeps a stale evaluation off the board.
+/// is on. That is what keeps a stale evaluation off the board. The wait is
+/// bounded: an engine that answers neither `bestmove` nor anything else is
+/// killed rather than waited on.
 final class UciEngine implements Engine {
   UciEngine._(this._process) {
     _process.lines.listen(_onLine, onDone: _onExit);
@@ -80,7 +82,7 @@ final class UciEngine implements Engine {
     Fen fen,
     int multiPv,
   ) async {
-    await previous?.stop();
+    if (previous != null && !await _stopped(previous)) return search.finish();
     if (_exited.isCompleted) return search.finish();
     if (search.isDone) return; // stopped before it began
     _current = search;
@@ -88,6 +90,28 @@ final class UciEngine implements Engine {
     _send('position fen ${fen.value}');
     _send('go infinite');
     search.markRunning();
+  }
+
+  /// Whether [previous] really stopped, waiting as long as an engine that is
+  /// working can take to answer `stop` with `bestmove`.
+  ///
+  /// One that answers neither would otherwise hold every later search behind
+  /// it for as long as the process lives, leaving the pane on a position the
+  /// board has left. It is killed instead: its exit ends the searches it was
+  /// holding up, the supervisor drops it, and the next enable starts a fresh
+  /// one.
+  Future<bool> _stopped(_UciSearch previous) async {
+    try {
+      await previous.stop().timeout(_stopPatience);
+      return true;
+    } on TimeoutException {
+      log.e(
+        'stop a search on $_name',
+        const EngineFailure('the engine did not answer stop'),
+      );
+      await _process.kill();
+      return false;
+    }
   }
 
   @override
@@ -128,6 +152,11 @@ final class UciEngine implements Engine {
     _exited.complete();
   }
 }
+
+/// How long a search that has been told to stop may take to say `bestmove`.
+/// Stockfish answers within milliseconds; seconds of silence mean the engine
+/// is not coming back.
+const _stopPatience = Duration(seconds: 5);
 
 /// A search as the engine sees it: queued, running, or finished once
 /// `bestmove` arrived.
