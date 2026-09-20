@@ -107,7 +107,7 @@ final class BackupArchive {
   Future<List<BackupVersion>> _readIndex(Directory folder) async {
     final file = File(p.join(folder.path, _indexName));
     try {
-      if (!await file.exists()) return _rebuilt(folder);
+      if (!await file.exists()) return await _rebuilt(folder);
       return _listed(await file.readAsString());
     } on FormatException catch (error) {
       log.e('read the kept versions in ${folder.path}', error);

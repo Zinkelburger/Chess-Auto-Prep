@@ -11,6 +11,8 @@ import 'backups.dart';
 import 'document_probe.dart';
 import 'document_ref.dart';
 import 'document_relocation.dart';
+import 'mutation_guards.dart';
+import 'pending_repoint.dart';
 import 'pgn_document_store.dart';
 import 'training_records.dart' as training;
 
@@ -48,6 +50,7 @@ final class PgnFileStore implements PgnDocumentStore {
         documents: documents,
         backups: backups,
         records: training.TrainingRecords(documents),
+        unfinished: PendingRepoints(support),
       ),
     );
   }

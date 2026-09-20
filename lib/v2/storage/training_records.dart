@@ -29,7 +29,6 @@ import '../diagnostics/log.dart';
 import 'atomic_write.dart';
 import 'csv_records.dart';
 import 'document_ref.dart';
-import 'file_lock.dart';
 
 /// The training records under one Documents folder.
 final class TrainingRecords {
@@ -40,6 +39,11 @@ final class TrainingRecords {
 
   /// Rewrites every record that named [from] so it names [to] instead.
   ///
+  /// The caller holds the lock on [documents]: this is the second half of a
+  /// relocation, and the two halves run under one set of locks so no other
+  /// writer sees the chapter moved and its rows not. There is no lock taken
+  /// here, so calling this while holding that lock is what it is for.
+  ///
   /// Every file is read and checked before any of them is written, so a
   /// malformed record in the last one leaves the others as they were, and
   /// what each one held is kept ([_keepReplaced]) before any of them is
@@ -47,15 +51,7 @@ final class TrainingRecords {
   /// between two of them sees whole files, never half a row.
   Future<RepointResult> repoint(DocumentRef from, DocumentRef to) async {
     if (p.equals(from.path, to.path)) return const NothingToRepoint();
-    try {
-      return await withDirectoryLock(
-        documents,
-        () => _rewrite(from.path, to.path),
-      );
-    } on FileSystemException catch (error) {
-      log.e('lock the documents folder to repoint ${from.path}', error);
-      return IoFailure(_detail(error));
-    }
+    return _rewrite(from.path, to.path);
   }
 
   Future<RepointResult> _rewrite(String from, String to) async {
