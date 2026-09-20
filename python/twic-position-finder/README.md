@@ -131,13 +131,14 @@ Endpoints: `GET /health`, `GET /api/slots` (returns window, `blocked_dates`, `av
 ### BughouseDB (`/bughousedb`)
 
 A shared, precomputed Hivemind book for bughouse, like chessdb.cn: every
-legal move on both boards, scored for the four clock cases Hivemind can
-tell apart (A > D, equal, B > C, both; its clock input is one bit per team),
-with a principal variation. The page's tables show the first three: with
-both sit bits on the advantage cancels, so `both` stays within about a tenth
-of a pawn of `equal` while the other two are pawns apart. It is still stored
-and served, and costs nothing to keep — all four cases are read off the same
-two searches per move. `bughousedb.py` owns it, in its
+legal move on both boards, scored for the priority cases Hivemind can tell
+apart, with a principal variation. Seats are lettered A and C on board 1, D
+and B on board 2, so the teams read **A + B** and **C + D**. *Priority* is the
+right to choose whether to move at all, which the team up on the diagonal
+clock has; the tables show one column for the case picked above them —
+`AB may sit`, `Equal` (the default) or `CD may sit`. A fourth stored case,
+`both`, is never offered: no clock gives both teams the choice, and it lands
+within about a tenth of a pawn of `equal`. `bughousedb.py` owns it, in its
 own SQLite file (`BUGHOUSEDB_PATH`, default `bughousedb.db` beside the app).
 The server runs no engine:
 

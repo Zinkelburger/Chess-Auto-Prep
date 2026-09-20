@@ -164,20 +164,20 @@ function playJoint(joint: Joint) {
 
 /**
  * Hivemind's clock input is one bit per team, from its board-1 player's
- * diagonal: A + C is "ahead" when A has more time than D, B + D when B has
- * more than C (hivemind src/domain/board2planes.py). Ours goes to our
+ * diagonal: A + B has priority when A has more time than D, C + D when C has
+ * more than B (hivemind src/domain/board2planes.py). Ours goes to our
  * search, theirs to the calibration search of the other team.
  */
 function clockBits(): { time_advantage: boolean; their_time_advantage: boolean } {
   const clock = choice('clock');
-  const ad = clock === 'AD' || clock === 'both';
-  const bc = clock === 'BC' || clock === 'both';
+  const ad = clock === 'AB';
+  const bc = clock === 'CD';
   return choice('team') === 'white'
     ? { time_advantage: ad, their_time_advantage: bc }
     : { time_advantage: bc, their_time_advantage: ad };
 }
 
-const teamLabel = () => (choice('team') === 'white' ? 'A + C' : 'B + D');
+const teamLabel = () => (choice('team') === 'white' ? 'A + B' : 'C + D');
 
 function pawns(q: number): string {
   const cp = (2 / LICHESS_K) * Math.atanh(Math.max(-0.9999, Math.min(0.9999, q)));

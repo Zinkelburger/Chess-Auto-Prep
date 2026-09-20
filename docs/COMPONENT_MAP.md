@@ -321,14 +321,21 @@ share; `BughouseHistory.play` is the one path a move takes onto a line.
 `services/bughouse_engine_protocol.dart` parses Hivemind's lines and
 `services/bughouse_engine_report.dart` assembles the diagnostic block.
 
+Seats are lettered so that a team's letters run together: **A** and **C** face
+each other on board 1, **D** and **B** on board 2, making the teams **A + B**
+and **C + D** (partners hold opposite colours). *Priority* — the right to
+choose whether to move at all, which the team up on the diagonal clock has —
+replaces the older "clock advantage" wording throughout the Lab, the book and
+BughouseDB: `AB may sit`, `Equal` (the default) or `CD may sit`.
+
 `tools/bughouse_db/hivemind_book.py` builds a precomputed Hivemind book beside
 the FICS book (`~/.local/share/chess-prep/bughouse-db/hivemind_book.db`, same
-position key): every legal move on both boards, each scored for the four
-clock cases Hivemind can tell apart (A > D, equal, B > C, both), with a
-principal variation. All four come from the same two searches per move, so
-`both` is free to store; the web tables leave it out because it lands within
-about a tenth of a pawn of `equal`. One engine, one search at a time,
-resumable; by default
+position key): every legal move on both boards, scored for the priority cases
+Hivemind can tell apart. A run searches `even` alone unless given
+`--priority all`, which halves the work — one search per move instead of two,
+and two of the position instead of four. (`both`, where each team has the bit
+on, is a curiosity no clock produces and lands within about a tenth of a pawn
+of `even`.) One engine, one search at a time, resumable; by default
 it follows the four most-played FICS moves of each position to ply 10.
 `push` uploads it to BughouseDB (`/bughousedb` on the site); the desktop Lab
 does not read it yet.

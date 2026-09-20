@@ -20,12 +20,13 @@ import {
 const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1';
 const START_DUAL = `${START}|${START}`;
 /**
- * The table's columns: A > D, Equal, B > C. The fourth case both teams may
- * sit is stored and uploaded, but not shown: with both sit bits on the
- * advantage cancels, so it lands within about a tenth of a pawn of Equal
- * while A > D and B > C are pawns apart.
+ * Which team may choose not to move. The tables show one column, for the
+ * priority picked below them; `both` is stored and served but never offered,
+ * since no clock gives both teams the choice and with neither obliged to move
+ * it lands within about a tenth of a pawn of Equal.
  */
-const COLUMNS: Clock[] = ['ahead', 'even', 'behind'];
+const PRIORITIES: Clock[] = ['ahead', 'even', 'behind'];
+let priority: Clock = 'even';
 // The browser engine runs one network evaluation (about 80 ms) per node, so a
 // browser analysis is far shallower than the desktop builder's 1500/200.
 const OWN_NODES = 200;    // each search of the position itself
@@ -67,17 +68,17 @@ function moveNumber(fen: string, board: BoardName): number {
 
 // ── Scores ────────────────────────────────────────────────────────
 
-const moverTeam = (m: BookMove): Team => (m.seat === 'A' || m.seat === 'C' ? 'AC' : 'BD');
+const moverTeam = (m: BookMove): Team => (m.seat === 'A' || m.seat === 'B' ? 'AB' : 'CD');
 
-/** Stored scores are for A + C; the tables read them from the mover's side. */
+/** Stored scores are for A + B; the tables read them from the mover's side. */
 function moverScore(m: BookMove, clock: Clock): BookScore | undefined {
   const s = m.scores?.[clock];
-  if (!s || moverTeam(m) === 'AC') return s;
+  if (!s || moverTeam(m) === 'AB') return s;
   return { ...s, q: s.q === null ? null : -s.q, cp: s.cp === null ? null : -s.cp, mate: s.mate === null ? null : -s.mate };
 }
 
 function rank(m: BookMove): number {
-  const s = moverScore(m, 'even');
+  const s = moverScore(m, priority);
   if (!s) return -Infinity;
   return s.mate !== null ? Math.sign(s.mate) * (2 - Math.abs(s.mate) / 1000) : (s.q ?? -Infinity);
 }
@@ -109,14 +110,12 @@ function renderTables() {
       const move = document.createElement('td');
       move.textContent = m.san;
       tr.append(move);
-      for (const column of COLUMNS) {
-        const td = document.createElement('td');
-        const s = moverScore(m, column);
-        td.textContent = formatScore(s);
-        if (s) td.title = s.pv;
-        else td.classList.add('none');
-        tr.append(td);
-      }
+      const td = document.createElement('td');
+      const s = moverScore(m, priority);
+      td.textContent = formatScore(s);
+      if (s) td.title = s.pv;
+      else td.classList.add('none');
+      tr.append(td);
       tr.onmouseenter = tr.onfocus = () => setHover(m);
       tr.onmouseleave = tr.onblur = () => setHover(null);
       tr.onclick = () => play(m);
@@ -313,7 +312,7 @@ function turnstileToken(): string {
 async function search(engine: BrowserEngine, fen: string, team: Team, ahead: boolean, nodes: number): Promise<RawSearch | null> {
   try {
     const r = await engine.request<NodeSearchResult>('search', {
-      dual_fen: fen, team: team === 'AC' ? 'white' : 'black', time_advantage: ahead, nodes,
+      dual_fen: fen, team: team === 'AB' ? 'white' : 'black', time_advantage: ahead, nodes,
     });
     return { q: r.mate === null ? r.q : null, mate: r.mate, pv: r.pv, best: r.best?.uci ?? null, nodes: r.nodes };
   } catch (e) {
@@ -383,6 +382,13 @@ el<HTMLFormElement>('bdb-fen-form').onsubmit = (e) => {
   const dual = setup.read();
   if (dual) reset(dual);
 };
+for (const input of document.querySelectorAll<HTMLInputElement>('input[name="bdb-priority"]')) {
+  input.addEventListener('change', () => {
+    if (!input.checked) return;
+    priority = PRIORITIES.find((p) => p === input.value) ?? 'even';
+    render();
+  });
+}
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') boards.deselect(); });
 
 const opened = new URLSearchParams(location.search);

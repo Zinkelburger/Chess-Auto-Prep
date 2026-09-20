@@ -4,11 +4,12 @@ import BughouseBoards from '../components/BughouseBoards.astro';
 import '../styles/bughouse-board.css';
 import '../styles/bughouse.css';
 const CHOICES = [
-  { name: 'team', label: 'Our team', checked: 0, options: [['white', 'A + C'], ['black', 'B + D']] },
+  { name: 'team', label: 'Our team', checked: 0, options: [['white', 'A + B'], ['black', 'C + D']] },
   { name: 'required', label: 'Must move on', checked: 0, options: [['none', 'Either'], ['A', 'Board 1'], ['B', 'Board 2']] },
   { name: 'budget', label: 'Search', checked: 0, options: [['3000', '3 s'], ['10000', '10 s'], ['30000', '30 s']] },
-  // Hivemind's only clock inputs: A vs D and B vs C, the two diagonals.
-  { name: 'clock', label: 'Clock', checked: 1, options: [['AD', 'A > D', 'A has more time than D'], ['even', 'Equal', 'Neither A > D nor B > C'], ['BC', 'B > C', 'B has more time than C'], ['both', 'Both', 'A > D and B > C']] },
+  // Hivemind's only clock inputs are the two diagonals, A vs D and C vs B:
+  // the team that is up may choose not to move.
+  { name: 'clock', label: 'Priority', checked: 1, options: [['AB', 'AB may sit', 'A + B are up on the clock, so they may sit rather than move'], ['even', 'Equal', 'Nobody is up on the clock: both teams have to move'], ['CD', 'CD may sit', 'C + D are up on the clock, so they may sit rather than move']] },
 ];
 ---
 <Base title="Bughouse Lab" description="Explore two-board bughouse positions with Hivemind. Move, drop, and analyse in your browser." fill>
@@ -24,7 +25,7 @@ const CHOICES = [
       <form id="bh-analyse-form" class="bh-find" aria-label="Find a move">
         {CHOICES.map((c) => (
           <div class="bh-row">
-            <span class="bh-label">{c.label}{c.name === 'clock' && <span class="bb-info" tabindex="0" role="img" aria-label="About the clock" title="Who has more time than their partner's opponent. Hivemind compares only A with D and B with C; the team that is up may sit on both boards.">i</span>}</span>
+            <span class="bh-label">{c.label}{c.name === 'clock' && <span class="bb-info" tabindex="0" role="img" aria-label="About priority" title="The team up on the diagonal clock may choose not to move. Hivemind compares only A with D and C with B; without priority a team has to move.">i</span>}</span>
             <div class="choice-row" role="radiogroup" aria-label={c.label}>
               {c.options.map(([value, text, hint], i) => (
                 <label class="choice" title={hint}><input type="radio" name={c.name} value={value} checked={i === c.checked} /><span>{text}</span></label>

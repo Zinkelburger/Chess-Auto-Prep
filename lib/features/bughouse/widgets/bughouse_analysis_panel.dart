@@ -623,11 +623,11 @@ class _TableRules extends StatelessWidget {
 
         // The clock relationship is a rule input, not a statistic: a team that
         // is ahead on the diagonal may legally sit on both boards, and the
-        // engine plays completely differently when told so. Three stances are
+        // engine plays completely differently when told so. Three cases are
         // offered because that is how players think, but the engine takes one
-        // bit — "Level" and "Behind" run the same search. The genuinely
+        // bit — "Equal" and "CD may sit" run the same search. The genuinely
         // distinct third case is the must-move constraint below.
-        const BughousePanelLabel('Your team’s clock advantage'),
+        const BughousePanelLabel('Priority'),
         SegmentedButton<BughouseTimeStance>(
           style: const ButtonStyle(visualDensity: VisualDensity.compact),
           segments: [
@@ -656,7 +656,7 @@ class _TableRules extends StatelessWidget {
         ),
         if (derived)
           const Text(
-            'Both diagonal clock pairs must agree by more than 5 seconds. Mixed clocks use Level; clocks do not run in this model.',
+            'Both diagonal clock pairs must agree by more than 5 seconds. Mixed clocks use Equal; clocks do not run in this model.',
             style: AppTextStyles.muted,
           ),
         const SizedBox(height: 4),
