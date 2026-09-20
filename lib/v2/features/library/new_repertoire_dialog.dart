@@ -11,84 +11,48 @@ typedef NewRepertoire = ({String name, Side side});
 ///
 /// The side is asked for here rather than later because it is written into
 /// the chapter file as it is created, and a chapter with no moves has nothing
-/// else to say which side it belongs to.
-Future<NewRepertoire?> showNewRepertoireDialog(BuildContext context) =>
-    showDialog<NewRepertoire>(
-      context: context,
-      builder: (context) => const _NewRepertoireDialog(),
-    );
-
-class _NewRepertoireDialog extends StatefulWidget {
-  const _NewRepertoireDialog();
-
-  @override
-  State<_NewRepertoireDialog> createState() => _NewRepertoireDialogState();
+/// else to say which side it belongs to. It rides along under the shared name
+/// dialog's field, which owns the name, its validation and the buttons.
+Future<NewRepertoire?> showNewRepertoireDialog(BuildContext context) async {
+  var side = Side.white;
+  final name = await showNameDialog(
+    context,
+    title: 'Create repertoire',
+    label: 'Repertoire name',
+    hint: 'My Sicilian',
+    confirm: 'Create',
+    extra: (context, changed) => _SidePicker(
+      side: side,
+      onChanged: (chosen) {
+        side = chosen;
+        changed();
+      },
+    ),
+  );
+  return name == null ? null : (name: name, side: side);
 }
 
-class _NewRepertoireDialogState extends State<_NewRepertoireDialog> {
-  final _field = TextEditingController();
-  Side _side = Side.white;
-  String? _problem;
+class _SidePicker extends StatelessWidget {
+  const _SidePicker({required this.side, required this.onChanged});
 
-  @override
-  void dispose() {
-    _field.dispose();
-    super.dispose();
-  }
-
-  void _submit() {
-    final problem = nameProblem(_field.text);
-    if (problem != null) {
-      setState(() => _problem = problem);
-      return;
-    }
-    Navigator.of(context).pop((name: _field.text.trim(), side: _side));
-  }
+  final Side side;
+  final ValueChanged<Side> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Create repertoire'),
-      content: SizedBox(
-        width: nameDialogWidth,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              controller: _field,
-              autofocus: true,
-              decoration: InputDecoration(
-                labelText: 'Repertoire name',
-                hintText: 'My Sicilian',
-                errorText: _problem,
-              ),
-              onChanged: (_) {
-                if (_problem != null) setState(() => _problem = null);
-              },
-              onSubmitted: (_) => _submit(),
-            ),
-            const SizedBox(height: Space.l),
-            Text('Playing side', style: Theme.of(context).textTheme.labelSmall),
-            const SizedBox(height: Space.xs),
-            SegmentedButton<Side>(
-              segments: const [
-                ButtonSegment(value: Side.white, label: Text('White')),
-                ButtonSegment(value: Side.black, label: Text('Black')),
-              ],
-              selected: {_side},
-              onSelectionChanged: (chosen) =>
-                  setState(() => _side = chosen.first),
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Playing side', style: Theme.of(context).textTheme.labelSmall),
+        const SizedBox(height: Space.xs),
+        SegmentedButton<Side>(
+          segments: const [
+            ButtonSegment(value: Side.white, label: Text('White')),
+            ButtonSegment(value: Side.black, label: Text('Black')),
           ],
+          selected: {side},
+          onSelectionChanged: (chosen) => onChanged(chosen.first),
         ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(onPressed: _submit, child: const Text('Create')),
       ],
     );
   }

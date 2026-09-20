@@ -176,33 +176,69 @@ void main() {
     expect(fixture.store.documents, isEmpty);
   });
 
+  /// Opens the Move-to dialog on the chapter row at [row], counting the
+  /// repertoire rows and chapter rows on screen from the top.
+  Future<void> openMoveDialog(WidgetTester tester, int row) async {
+    await tester.tap(find.byIcon(Icons.more_horiz).at(row));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Move to…'));
+    await tester.pumpAndSettle();
+  }
+
   testWidgets('a name already taken is said in a sentence', (tester) async {
     await show(tester, [benko, kid]);
     await tester.tap(find.text('benko'));
     await tester.pumpAndSettle();
     // benko's row, then its one chapter, then KID's row.
-    await tester.tap(find.byIcon(Icons.more_horiz).at(1));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Move to…'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(MenuItemButton, 'KID'));
+    await openMoveDialog(tester, 1);
+    await tester.tap(find.widgetWithText(ListTile, 'KID'));
     await tester.pumpAndSettle();
     expect(find.text('A chapter named "Main" already exists.'), findsOneWidget);
   });
 
-  testWidgets('a chapter moves into the repertoire chosen from the menu', (
+  testWidgets('a chapter moves into the repertoire chosen from the list', (
     tester,
   ) async {
     await show(tester, [benko, kid]);
     await tester.tap(find.text('KID'));
     await tester.pumpAndSettle();
     // KID's row, then Classical, then Main.
-    await tester.tap(find.byIcon(Icons.more_horiz).at(2));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Move to…'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(MenuItemButton, 'benko'));
+    await openMoveDialog(tester, 2);
+    await tester.tap(find.widgetWithText(ListTile, 'benko'));
     await tester.pumpAndSettle();
     expect(fixture.textAt('/repertoires/benko/Classical.pgn'), isNotNull);
+  });
+
+  testWidgets('with nowhere to move it to, the list says so', (tester) async {
+    await show(tester, [benko]);
+    await tester.tap(find.text('benko'));
+    await tester.pumpAndSettle();
+    await openMoveDialog(tester, 1);
+    expect(
+      find.text('There is no other repertoire to move it to.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('the move list is searchable and enter takes the one match', (
+    tester,
+  ) async {
+    final sidelines = folder('Sidelines', ['Odds']);
+    await show(tester, [benko, kid, sidelines]);
+    await tester.tap(find.text('KID'));
+    await tester.pumpAndSettle();
+    // KID's row, then Classical, then Main; benko and Sidelines are above it.
+    await openMoveDialog(tester, 2);
+    expect(
+      find.widgetWithText(ListTile, 'KID'),
+      findsNothing,
+      reason: 'the chapter is already in KID',
+    );
+    await tester.enterText(find.byType(TextField).last, 'side');
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(ListTile, 'benko'), findsNothing);
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(fixture.textAt('/repertoires/Sidelines/Classical.pgn'), isNotNull);
   });
 }

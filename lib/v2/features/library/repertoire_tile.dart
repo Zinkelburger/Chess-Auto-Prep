@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../storage/chapter_files.dart';
+import '../../ui/choice_dialog.dart';
 import '../../ui/confirm_dialog.dart';
 import '../../ui/name_dialog.dart';
 import '../../ui/relative_time.dart';
@@ -201,24 +202,42 @@ class _ChapterRow extends StatelessWidget {
       thing: 'chapter',
       name: name,
       failed: 'Could not rename the chapter.',
+      reload: library.reloadOpenChapter,
     );
   }
 
-  Future<void> _move(BuildContext context, RepertoireFolder to) => announce(
-    context,
-    library.moveChapter(chapter, to),
-    thing: 'chapter',
-    name: chapter.name,
-    failed: 'Could not move the chapter.',
-  );
+  /// The repertoires this chapter is not already in, picked from a searchable
+  /// list rather than a menu of every one of them.
+  Future<void> _move(BuildContext context) async {
+    final to = await showChoiceDialog<RepertoireFolder>(
+      context,
+      title: 'Move "${chapter.name}" to',
+      options: [
+        for (final folder in library.repertoires)
+          if (folder.name != chapter.repertoire) folder,
+      ],
+      label: (folder) => folder.name,
+      hint: 'Search repertoires',
+      empty: 'There is no other repertoire to move it to.',
+    );
+    if (to == null || !context.mounted) return;
+    await announce(
+      context,
+      library.moveChapter(chapter, to),
+      thing: 'chapter',
+      name: chapter.name,
+      failed: 'Could not move the chapter.',
+      reload: library.reloadOpenChapter,
+    );
+  }
 
   Future<void> _delete(BuildContext context) async {
     final yes = await confirmAction(
       context,
       title: 'Delete chapter "${chapter.name}"?',
       message:
-          'The chapter will be removed from this folder and kept in '
-          'recovery storage.',
+          'The chapter, including edits you have just made, will be removed '
+          'from this folder and kept in recovery storage.',
       confirm: 'Delete',
     );
     if (!yes || !context.mounted) return;
@@ -228,23 +247,8 @@ class _ChapterRow extends StatelessWidget {
       thing: 'chapter',
       name: chapter.name,
       failed: 'Could not delete the chapter.',
+      reload: library.reloadOpenChapter,
     );
-  }
-
-  /// The repertoires this chapter is not already in. With none, the submenu
-  /// says so rather than opening on nothing.
-  List<Widget> _moveTargets(BuildContext context) {
-    final elsewhere = [
-      for (final folder in library.repertoires)
-        if (folder.name != chapter.repertoire) folder,
-    ];
-    if (elsewhere.isEmpty) {
-      return const [MenuItemButton(child: Text('No other repertoire'))];
-    }
-    return [
-      for (final folder in elsewhere)
-        _action(folder.name, () => _move(context, folder), busy: library.busy),
-    ];
   }
 
   @override
@@ -273,10 +277,7 @@ class _ChapterRow extends StatelessWidget {
                     () => _rename(context),
                     busy: library.busy,
                   ),
-                  SubmenuButton(
-                    menuChildren: _moveTargets(context),
-                    child: const Text('Move to…'),
-                  ),
+                  _action('Move to…', () => _move(context), busy: library.busy),
                   _action(
                     'Delete…',
                     () => _delete(context),

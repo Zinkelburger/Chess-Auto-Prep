@@ -38,6 +38,15 @@ String? nameProblem(String name) {
   return null;
 }
 
+/// One more control under the name field, for a dialog that asks for a little
+/// more than a name — the side a new repertoire plays.
+///
+/// It is given a way to ask the dialog to rebuild, so the caller keeps the
+/// value its control collects and does not write the name field, its
+/// validation and its buttons again to do it.
+typedef NameDialogExtra =
+    Widget Function(BuildContext context, VoidCallback changed);
+
 /// Asks for a name and answers the trimmed one, or null when the user backed
 /// out. A name the filesystem would refuse never leaves this dialog.
 Future<String?> showNameDialog(
@@ -46,6 +55,8 @@ Future<String?> showNameDialog(
   required String label,
   required String confirm,
   String initial = '',
+  String? hint,
+  NameDialogExtra? extra,
 }) => showDialog<String>(
   context: context,
   builder: (context) => _NameDialog(
@@ -53,6 +64,8 @@ Future<String?> showNameDialog(
     label: label,
     confirm: confirm,
     initial: initial,
+    hint: hint,
+    extra: extra,
   ),
 );
 
@@ -62,12 +75,16 @@ class _NameDialog extends StatefulWidget {
     required this.label,
     required this.confirm,
     required this.initial,
+    required this.hint,
+    required this.extra,
   });
 
   final String title;
   final String label;
   final String confirm;
   final String initial;
+  final String? hint;
+  final NameDialogExtra? extra;
 
   @override
   State<_NameDialog> createState() => _NameDialogState();
@@ -92,23 +109,39 @@ class _NameDialogState extends State<_NameDialog> {
     Navigator.of(context).pop(_field.text.trim());
   }
 
+  void _changed() {
+    if (mounted) setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
+    final extra = widget.extra;
     return AlertDialog(
       title: Text(widget.title),
       content: SizedBox(
         width: nameDialogWidth,
-        child: TextField(
-          controller: _field,
-          autofocus: true,
-          decoration: InputDecoration(
-            labelText: widget.label,
-            errorText: _problem,
-          ),
-          onChanged: (_) {
-            if (_problem != null) setState(() => _problem = null);
-          },
-          onSubmitted: (_) => _submit(),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _field,
+              autofocus: true,
+              decoration: InputDecoration(
+                labelText: widget.label,
+                hintText: widget.hint,
+                errorText: _problem,
+              ),
+              onChanged: (_) {
+                if (_problem != null) setState(() => _problem = null);
+              },
+              onSubmitted: (_) => _submit(),
+            ),
+            if (extra != null) ...[
+              const SizedBox(height: Space.l),
+              extra(context, _changed),
+            ],
+          ],
         ),
       ),
       actions: [

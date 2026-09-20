@@ -37,9 +37,6 @@ void main() {
 
   test('a name longer than the cap is refused', () {
     expect(nameProblem('a' * 120), isNull);
-    expect(
-      nameProblem('a' * 121),
-      'Names must be 120 characters or fewer.',
-    );
+    expect(nameProblem('a' * 121), 'Names must be 120 characters or fewer.');
   });
 }

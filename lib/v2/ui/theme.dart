@@ -15,6 +15,10 @@ const libraryPanelWidth = 300.0;
 /// long chapter name, narrow enough not to fill the window.
 const nameDialogWidth = 360.0;
 
+/// How tall a dialog that asks the user to pick from a list is. Fixed, so the
+/// list does not grow and shrink under the pointer as the search narrows it.
+const choiceDialogHeight = 280.0;
+
 /// How big an icon is. Icons sit with the text they label, so they follow
 /// the type scale rather than Material's default 24.
 abstract final class IconSize {

@@ -123,6 +123,92 @@ void main() {
     expect(reviews(), contains('.cap-pgn-history'));
   });
 
+  /// A repertoire as generation leaves it: two chapters, the raw-game sidecar
+  /// written beside one of them, and the bundle folder under it.
+  Future<void> generatedRepertoire() async {
+    await library.createRepertoire('Benoni', Side.black);
+    await library.createChapter(named('Benoni'), 'Modern');
+    File(at('repertoires/Benoni/Modern_raw_games.pgn'))
+      ..createSync()
+      ..writeAsStringSync('[Event "?"]\n\n1. d4 *\n');
+    Directory(at('repertoires/Benoni/.cap-generation')).createSync();
+    File(
+      at('repertoires/Benoni/.cap-generation/run.json'),
+    ).writeAsStringSync('{}');
+    await library.refresh();
+  }
+
+  test('a renamed repertoire takes everything in it', () async {
+    await generatedRepertoire();
+    trainOn('repertoires/Benoni/Main.pgn');
+    expect(
+      await library.renameRepertoire(named('Benoni'), 'Modern Benoni'),
+      isA<LibraryDone>(),
+    );
+    expect(exists('repertoires/Modern Benoni/Main.pgn'), isTrue);
+    expect(exists('repertoires/Modern Benoni/Modern.pgn'), isTrue);
+    expect(exists('repertoires/Modern Benoni/Modern_raw_games.pgn'), isTrue);
+    expect(
+      File(
+        at('repertoires/Modern Benoni/.cap-generation/run.json'),
+      ).existsSync(),
+      isTrue,
+    );
+    // Nothing of the old folder is left, not even the folder.
+    expect(Directory(at('repertoires/Benoni')).existsSync(), isFalse);
+  });
+
+  test('the training rows of every chapter follow the folder', () async {
+    await generatedRepertoire();
+    File(at('repertoire_reviews.csv')).writeAsStringSync(
+      'repertoire_id,line_id,due\n'
+      '"${at('repertoires/Benoni/Main.pgn')}","line_1","2026-09-20"\n'
+      '"${at('repertoires/Benoni/Modern.pgn')}","line_2","2026-09-21"\n',
+    );
+    expect(
+      await library.renameRepertoire(named('Benoni'), 'Modern Benoni'),
+      isA<LibraryDone>(),
+    );
+    expect(reviews(), contains(at('repertoires/Modern Benoni/Main.pgn')));
+    expect(reviews(), contains(at('repertoires/Modern Benoni/Modern.pgn')));
+    expect(reviews(), isNot(contains(at('repertoires/Benoni/'))));
+  });
+
+  test('a repertoire rename onto a folder in use replaces nothing', () async {
+    await library.createRepertoire('Benoni', Side.black);
+    await library.createRepertoire('Sidelines', Side.white);
+    // The list has both, so this is refused before it reaches the disk; the
+    // store refuses it again if it ever gets there.
+    expect(
+      await library.renameRepertoire(named('Benoni'), 'Sidelines'),
+      isA<LibraryNameTaken>(),
+    );
+    expect(
+      File(at('repertoires/Sidelines/Main.pgn')).readAsStringSync(),
+      contains('// Color: White'),
+    );
+    expect(exists('repertoires/Benoni/Main.pgn'), isTrue);
+  });
+
+  test('the open chapter autosaves to its renamed folder', () async {
+    await library.createRepertoire('Benoni', Side.black);
+    expect(
+      await session.open(chapter('Benoni', 'Main')),
+      isA<DocumentOpened>(),
+    );
+    expect(
+      await library.renameRepertoire(named('Benoni'), 'Modern Benoni'),
+      isA<LibraryDone>(),
+    );
+    expect(session.source?.path, at('repertoires/Modern Benoni/Main.pgn'));
+    session.playMove('d2d4');
+    await saver.flush();
+    expect(
+      File(at('repertoires/Modern Benoni/Main.pgn')).readAsStringSync(),
+      contains('d4'),
+    );
+  });
+
   test('a repertoire whose name is taken is refused', () async {
     await library.createRepertoire('Benoni', Side.white);
     expect(

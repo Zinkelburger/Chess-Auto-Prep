@@ -19,6 +19,9 @@ String? libraryMessage(
   LibraryNameTaken() => 'A $thing named "$name" already exists.',
   LibraryStale() =>
     'That $thing changed on disk. The list has been refreshed; try again.',
+  LibraryConflicted() =>
+    'That $thing changed on disk while it was open. Reload it to take the '
+        'version on disk, then try again.',
   LibraryBusy() => 'Another change is still running.',
   LibraryFailure() => failed,
   LibraryStoppedAt(:final chapter) => '$failed It stopped at "$chapter".',
@@ -41,20 +44,33 @@ String? _stillPointingAtTheOldName(records.RepointResult result) =>
 /// The messenger is taken before the await: the row that asked for the change
 /// is rebuilt by the refresh that follows it, and a widget that is gone
 /// cannot be asked for its scaffold.
+///
+/// [reload] is offered beside the sentence when the change refused because
+/// the open chapter changed on disk, because telling the user to reload
+/// without giving them the button is telling them to go and find it.
 Future<void> announce(
   BuildContext context,
   Future<LibraryResult> command, {
   required String thing,
   required String name,
   required String failed,
+  Future<void> Function()? reload,
 }) async {
   final messenger = ScaffoldMessenger.of(context);
+  final result = await command;
   final message = libraryMessage(
-    await command,
+    result,
     thing: thing,
     name: name,
     failed: failed,
   );
   if (message == null) return;
-  messenger.showSnackBar(SnackBar(content: Text(message)));
+  messenger.showSnackBar(
+    SnackBar(
+      content: Text(message),
+      action: result is LibraryConflicted && reload != null
+          ? SnackBarAction(label: 'Reload', onPressed: reload)
+          : null,
+    ),
+  );
 }

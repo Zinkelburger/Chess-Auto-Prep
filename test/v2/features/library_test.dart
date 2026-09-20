@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:chess_auto_prep/v2/features/library/library.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
@@ -176,18 +178,122 @@ void main() {
     expect(fixture.files.removed, isEmpty);
   });
 
+  test('renaming a repertoire moves the folder whole', () async {
+    await start([kid]);
+    expect(
+      await fixture.library.renameRepertoire(kid, "King's Indian"),
+      isA<LibraryDone>(),
+    );
+    expect(fixture.textAt("/repertoires/King's Indian/Main.pgn"), isNotNull);
+    expect(
+      fixture.textAt("/repertoires/King's Indian/Classical.pgn"),
+      isNotNull,
+    );
+    expect(fixture.textAt('/repertoires/KID/Main.pgn'), isNull);
+    // Nothing is left behind to take away: the folder itself moved.
+    expect(fixture.files.removed, isEmpty);
+  });
+
+  test('a repertoire rename onto a name in use replaces nothing', () async {
+    await start([benko, kid]);
+    expect(
+      await fixture.library.renameRepertoire(kid, 'BENKO'),
+      isA<LibraryNameTaken>(),
+    );
+    expect(fixture.textAt('/repertoires/KID/Main.pgn'), isNotNull);
+    expect(fixture.textAt('/repertoires/benko/Main.pgn'), isNotNull);
+  });
+
+  test('a repertoire can be renamed to another spelling of itself', () async {
+    await start([kid]);
+    expect(
+      await fixture.library.renameRepertoire(kid, 'kid'),
+      isA<LibraryDone>(),
+    );
+    expect(fixture.textAt('/repertoires/kid/Main.pgn'), isNotNull);
+  });
+
+  test('the workspace follows a chapter whose repertoire is renamed', () async {
+    final open = ref('KID', 'Main');
+    fixture = await openLibrary([kid], open: open);
+    fixture.session.playMove('e2e4');
+    await pumpEventQueue();
+    expect(
+      await fixture.library.renameRepertoire(kid, "King's Indian"),
+      isA<LibraryDone>(),
+    );
+    expect(fixture.session.source?.path, "/repertoires/King's Indian/Main.pgn");
+    // The autosave that follows goes to the file's new home.
+    fixture.session.playMove('e7e5');
+    await pumpEventQueue();
+    expect(
+      fixture.textAt("/repertoires/King's Indian/Main.pgn"),
+      contains('e5'),
+    );
+  });
+
+  test('a rename of the open chapter that conflicts says to reload', () async {
+    final open = ref('benko', 'Main');
+    fixture = await openLibrary([benko], open: open);
+    // Somebody else wrote the file while the workspace held it open.
+    const elsewhere = '// Main\n// Color: White\n\n1. e4 *\n';
+    fixture.store.documents[open] = Opened(
+      elsewhere,
+      scriptedRevision(elsewhere),
+    );
+    expect(
+      await fixture.library.renameChapter(open, 'Mainline'),
+      isA<LibraryConflicted>(),
+    );
+    // Trying again cannot help; taking the version on disk can.
+    expect(
+      await fixture.library.renameChapter(open, 'Mainline'),
+      isA<LibraryConflicted>(),
+    );
+    await fixture.library.reloadOpenChapter();
+    expect(
+      await fixture.library.renameChapter(open, 'Mainline'),
+      isA<LibraryDone>(),
+    );
+    expect(fixture.textAt('/repertoires/benko/Mainline.pgn'), isNotNull);
+  });
+
   test(
-    'renaming a repertoire moves every chapter into the new folder',
+    'a change refused by a hold already running is busy, not stale',
     () async {
-      await start([kid]);
+      final open = ref('benko', 'Main');
+      fixture = await openLibrary([benko], open: open);
+      final holding = Completer<void>();
+      final other = fixture.saver.holdStill((_) => holding.future);
+      await pumpEventQueue();
       expect(
-        await fixture.library.renameRepertoire(kid, "King's Indian"),
-        isA<LibraryDone>(),
+        await fixture.library.renameChapter(open, 'Mainline'),
+        isA<LibraryBusy>(),
       );
-      expect(fixture.textAt("/repertoires/King's Indian/Main.pgn"), isNotNull);
-      expect(fixture.files.removed, ['/repertoires/KID']);
+      holding.complete();
+      await other;
     },
   );
+
+  test('an edit made during a rename is not lost by opening another', () async {
+    final open = ref('KID', 'Main');
+    fixture = await openLibrary([kid], open: open);
+    fixture.store.hold = true;
+    final renamed = fixture.library.renameChapter(open, 'Mainline');
+    await pumpEventQueue();
+    fixture.session.playMove('d2d4');
+    // The user gives up waiting and clicks the other chapter.
+    final opening = fixture.session.open(ref('KID', 'Classical'));
+    await pumpEventQueue();
+    fixture.store.hold = false;
+    fixture.store.releaseAll();
+    await renamed;
+    await pumpEventQueue();
+    fixture.store.releaseAll();
+    await opening;
+    expect(fixture.textAt('/repertoires/KID/Mainline.pgn'), contains('d4'));
+    expect(fixture.session.source?.name, 'Classical');
+  });
 
   test('one change at a time', () async {
     await start([kid]);

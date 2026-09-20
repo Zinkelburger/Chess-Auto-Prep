@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../storage/chapter_files.dart';
+import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
 import 'library.dart';
 import 'library_messages.dart';
@@ -147,42 +148,12 @@ class _Toolbar extends StatelessWidget {
             ],
           ),
           const SizedBox(height: Space.xs),
-          _SearchField(controller: search, onChanged: onSearch),
+          SearchField(
+            controller: search,
+            hint: 'Search repertoires',
+            onChanged: onSearch,
+          ),
         ],
-      ),
-    );
-  }
-}
-
-class _SearchField extends StatelessWidget {
-  const _SearchField({required this.controller, required this.onChanged});
-
-  final TextEditingController controller;
-  final ValueChanged<String> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return ValueListenableBuilder(
-      valueListenable: controller,
-      builder: (context, value, _) => TextField(
-        controller: controller,
-        onChanged: onChanged,
-        decoration: InputDecoration(
-          isDense: true,
-          hintText: 'Search repertoires',
-          prefixIcon: const Icon(Icons.search, size: IconSize.action),
-          suffixIcon: value.text.isEmpty
-              ? null
-              : IconButton(
-                  icon: const Icon(Icons.close, size: IconSize.menu),
-                  tooltip: 'Clear search',
-                  onPressed: () {
-                    controller.clear();
-                    onChanged('');
-                  },
-                ),
-          border: const OutlineInputBorder(),
-        ),
       ),
     );
   }
