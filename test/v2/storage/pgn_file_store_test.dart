@@ -1,6 +1,7 @@
 // Real files in a disposable directory: the store is the filesystem, so
 // there is nothing here to fake.
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:chess_auto_prep/v2/storage/document_ref.dart';
@@ -23,6 +24,33 @@ void main() {
     final opened = await fixture.store.open(ref);
     expect((opened as Opened).text, '1. d4 Nf6 *\n');
     expect(opened.revision, (created as Created).revision);
+  });
+
+  test(
+    'a Latin-1 PGN opens with its accents and saves back as UTF-8',
+    () async {
+      final ref = fixture.ref('KID/Main.pgn');
+      final text = '[White "Réti"]\n\n1. Nf3 *\n';
+      await Directory(p.dirname(ref.path)).create(recursive: true);
+      await File(ref.path).writeAsBytes(latin1.encode(text));
+      final opened = await fixture.store.open(ref);
+      expect((opened as Opened).text, text);
+      final edited = text.replaceFirst('Nf3', 'd4');
+      final saved =
+          await fixture.store.save(ref, edited, expected: opened.revision)
+              as Saved;
+      expect(saved.receipt.before, text);
+      expect(await File(ref.path).readAsBytes(), utf8.encode(edited));
+    },
+  );
+
+  test('a mostly good UTF-8 file keeps its UTF-8 reading', () async {
+    final ref = fixture.ref('KID/Main.pgn');
+    final text = '[Event "’’’’’’’’"]\n';
+    await Directory(p.dirname(ref.path)).create(recursive: true);
+    await File(ref.path).writeAsBytes([...utf8.encode(text), 0x9d]);
+    final opened = await fixture.store.open(ref);
+    expect((opened as Opened).text, '$text�');
   });
 
   test('a document that is not there is absent, not empty', () async {

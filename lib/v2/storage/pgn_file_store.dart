@@ -69,12 +69,7 @@ final class PgnFileStore implements PgnDocumentStore {
         log.w('open ${ref.path}', detail);
         return Unreadable(detail);
       case FileFound(:final bytes, :final revision):
-        final text = _decode(bytes);
-        if (text == null) {
-          log.w('open ${ref.path}', _notText);
-          return const Unreadable(_notText);
-        }
-        return Opened(text, revision);
+        return Opened(_decode(bytes), revision);
     }
   }
 
@@ -149,7 +144,6 @@ final class PgnFileStore implements PgnDocumentStore {
     Revision revision,
   ) async {
     final before = _decode(current);
-    if (before == null) return const IoFailure(_notText);
     final bytes = utf8.encode(text);
     // Nothing to replace, so nothing to keep and nothing to write.
     if (sha256.convert(bytes).toString() == revision.contentHash) {
@@ -226,13 +220,39 @@ final class PgnFileStore implements PgnDocumentStore {
       Receipt(committed: committed, before: before, beforeRevision: was);
 }
 
-const _notText = 'the file is not UTF-8 text';
 const _unread = 'the file could not be read back after writing';
 
-String? _decode(List<int> bytes) {
+/// Valid non-ASCII characters per stray byte for a file to keep its UTF-8
+/// reading. The old app's number, and both apps must read one file the same
+/// way.
+const _validToStrayRatio = 8;
+
+/// The text in [bytes], read as the old app reads the same files, so every
+/// PGN it opens opens here too. Whatever came in, a save writes UTF-8 back.
+///
+/// Strict UTF-8 first. A file that fails it is one of two things. A Latin-1
+/// file fails on its first accented letter and holds no valid multi-byte
+/// sequence anywhere, so it is decoded as Latin-1. A UTF-8 file with a few
+/// damaged bytes among thousands of good ones — a course export with four
+/// control bytes in ten megabytes of curly quotes — keeps its UTF-8 reading
+/// with the stray bytes as U+FFFD, because reading it as Latin-1 would turn
+/// every one of those quotes into mojibake.
+String _decode(List<int> bytes) {
   try {
     return utf8.decode(bytes);
   } on FormatException {
-    return null;
+    final tolerant = utf8.decode(bytes, allowMalformed: true);
+    var strays = 0;
+    var valid = 0;
+    for (final unit in tolerant.codeUnits) {
+      if (unit == 0xFFFD) {
+        strays++;
+      } else if (unit > 0x7F) {
+        valid++;
+      }
+    }
+    return valid >= strays * _validToStrayRatio
+        ? tolerant
+        : latin1.decode(bytes);
   }
 }
