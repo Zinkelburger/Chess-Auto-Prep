@@ -26,6 +26,30 @@ final class BackupArchive {
   /// The `backups` directory under Support.
   final Directory root;
 
+  /// Where the versions of the document with [id] are kept, for telling
+  /// someone where to find them.
+  Directory folderFor(String id) => Directory(p.join(root.path, id));
+
+  /// The bytes of the newest version kept for [id], or null when there is
+  /// none or it cannot be read back.
+  ///
+  /// A save asks for this after recording what it is about to replace, so
+  /// that it replaces the file only when the copy that makes the write
+  /// undoable is really on the disk and really readable.
+  Future<List<int>?> newestVersion(String id) async {
+    final folder = folderFor(id);
+    try {
+      final newest = (await _readIndex(folder)).lastOrNull;
+      if (newest == null) return null;
+      return gzip.decode(
+        await File(p.join(folder.path, newest.file)).readAsBytes(),
+      );
+    } on Object catch (error) {
+      log.e('read the newest kept version in ${folder.path}', error);
+      return null;
+    }
+  }
+
   /// Records [bytes] as the newest version of the document with [id], unless
   /// they are already the newest one recorded.
   ///
@@ -38,7 +62,7 @@ final class BackupArchive {
     required List<int> bytes,
     required String hash,
   }) async {
-    final folder = Directory(p.join(root.path, id));
+    final folder = folderFor(id);
     try {
       await folder.create(recursive: true);
       final index = await _readIndex(folder);
@@ -70,10 +94,10 @@ final class BackupArchive {
     required String to,
     required String documentPath,
   }) async {
-    final source = Directory(p.join(root.path, from));
+    final source = folderFor(from);
     if (!await source.exists()) return;
     try {
-      final destination = Directory(p.join(root.path, to));
+      final destination = folderFor(to);
       if (await destination.exists()) {
         await _adoptOverOccupant(source, destination);
       } else {

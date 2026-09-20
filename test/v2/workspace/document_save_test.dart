@@ -2,6 +2,7 @@ import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart'
     show Collision, IoFailure, Opened;
 import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
+import 'package:chess_auto_prep/v2/workspace/save_state.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
 import 'package:flutter_test/flutter_test.dart';
 

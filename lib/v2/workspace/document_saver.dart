@@ -2,59 +2,18 @@ import 'package:flutter/foundation.dart';
 
 import '../diagnostics/log.dart';
 import '../storage/document_ref.dart';
+import '../storage/edit_scope.dart';
 import '../storage/pgn_document_store.dart' as store;
+import 'save_state.dart';
 import 'undo_history.dart';
 
-/// What the file on disk is doing. Only [Saved] says it holds what the
-/// screen shows.
-sealed class SaveState {
-  const SaveState();
-}
-
-final class Saved extends SaveState {
-  const Saved();
-}
-
-final class Saving extends SaveState {
-  const Saving();
-}
-
-/// Edited and not written yet, either waiting for a save in flight or on its
-/// way out this instant.
-final class Unsaved extends SaveState {
-  const Unsaved();
-}
-
-final class SaveFailed extends SaveState {
-  const SaveFailed(this.detail);
-
-  /// The operating system's words; the widget writes the sentence.
-  final String detail;
-}
-
-/// Someone else wrote the file. The draft is kept and nothing more is
-/// written until the user chooses what to do with it.
-final class SaveConflict extends SaveState {
-  const SaveConflict();
-}
-
-sealed class UndoResult {
-  const UndoResult();
-}
-
-/// The file is back at [text]; the caller reads its document from it again.
-final class Restored extends UndoResult {
-  const Restored(this.text);
-
-  final String text;
-}
-
-/// Nothing was undone, and the history is as it was.
-final class UndoRefused extends UndoResult {
-  const UndoRefused();
-}
-
 typedef _Target = ({DocumentRef ref, Revision revision});
+
+/// Words waiting for the disk and the games they change. Two edits waiting
+/// at once are one write of the newer words, so the scope is both of theirs:
+/// the earlier edit is in that text too, and the store checks the text
+/// against the file, not against the draft in between.
+typedef _Draft = ({String text, EditScope scope});
 
 /// Keeps one document's file matching the draft the user is editing.
 ///
@@ -69,7 +28,7 @@ final class DocumentSaver extends ChangeNotifier {
   final store.PgnDocumentStore _store;
   _Target? _target;
   SaveState _state = const Saved();
-  String? _pending;
+  _Draft? _pending;
   bool _writing = false;
 
   /// The write going out and everything that collapses behind it, so the
@@ -120,11 +79,22 @@ final class DocumentSaver extends ChangeNotifier {
   /// every undo for the life of the document — but the conflict itself says
   /// the document is not [settled], so nothing takes the file for the
   /// document.
-  void save(String text) {
+  void save(String text, EditScope scope) {
     if (_state is SaveConflict) return;
-    _pending = text;
+    _queue(text, scope);
     _set(const Unsaved());
     _start();
+  }
+
+  /// Puts [text] in the queue under a scope covering this edit and whatever
+  /// else is still waiting: one write goes out and the file it replaces is
+  /// the version all of them were typed over.
+  void _queue(String text, EditScope scope) {
+    final waiting = _pending;
+    _pending = (
+      text: text,
+      scope: waiting == null ? scope : scopeOfBoth(waiting.scope, scope),
+    );
   }
 
   /// Waits until nothing is on its way any more: the write in flight, the
@@ -199,13 +169,18 @@ final class DocumentSaver extends ChangeNotifier {
 
   Future<void> _write() async {
     final target = _target;
-    final text = _pending;
-    if (_held || _writing || target == null || text == null) return;
+    final draft = _pending;
+    if (_held || _writing || target == null || draft == null) return;
     _pending = null;
     _writing = true;
     _set(const Saving());
     final ticket = _opens;
-    final result = await _put(target.ref, text, target.revision);
+    final result = await _put(
+      target.ref,
+      draft.text,
+      target.revision,
+      draft.scope,
+    );
     _writing = false;
     if (_disposed) return;
     if (ticket != _opens) {
@@ -215,12 +190,22 @@ final class DocumentSaver extends ChangeNotifier {
       await _write();
       return;
     }
-    // Words a write could not put on disk stay with the saver, so a later
-    // try has them and so the document knows it is not settled. Nothing
-    // tries again on its own: the same failure would only happen again.
-    if (result is store.IoFailure && _pending == null) _pending = text;
+    if (result is store.SaveDidNotLand) _returned(draft);
     _adopt(result, target.ref);
     if (_writable) await _write();
+  }
+
+  /// A draft the store did not take. The words stay with the saver, so a
+  /// later write has them and so the document knows it is not settled;
+  /// nothing tries again on its own, because the same answer would only come
+  /// back. Words typed meanwhile are newer and win, and they take this
+  /// draft's scope with them: the file still holds the version both were
+  /// typed over.
+  void _returned(_Draft draft) {
+    final waiting = _pending;
+    _pending = waiting == null
+        ? draft
+        : (text: waiting.text, scope: scopeOfBoth(waiting.scope, draft.scope));
   }
 
   /// Whether a write may go out now. A conflicted file takes nothing until
@@ -236,9 +221,10 @@ final class DocumentSaver extends ChangeNotifier {
     DocumentRef ref,
     String text,
     Revision expected,
+    EditScope scope,
   ) async {
     try {
-      return await _store.save(ref, text, expected: expected);
+      return await _store.save(ref, text, expected: expected, scope: scope);
     } on Object catch (error) {
       log.e('save ${ref.path}', error);
       return store.IoFailure('$error');
@@ -269,7 +255,7 @@ final class DocumentSaver extends ChangeNotifier {
         // there, so it is named here.
         log.w('save ${ref.path}', 'the file changed on disk');
         _conflicted();
-      case store.IoFailure(:final detail):
+      case store.SaveDidNotLand(:final detail):
         _set(SaveFailed(detail));
     }
   }
@@ -311,7 +297,14 @@ final class DocumentSaver extends ChangeNotifier {
     _writing = true;
     _set(const Saving());
     final ticket = _opens;
-    final result = await _put(target.ref, entry.before, entry.committed);
+    // Putting a version back writes the whole file, games the edit being
+    // undone never touched included, so there is nothing narrower to say.
+    final result = await _put(
+      target.ref,
+      entry.before,
+      entry.committed,
+      const WholeDocument(),
+    );
     _writing = false;
     if (_disposed) return const UndoRefused();
     if (ticket != _opens) {
@@ -363,7 +356,7 @@ final class DocumentSaver extends ChangeNotifier {
         log.w('undo ${ref.path}', 'the file changed on disk');
         _conflicted();
         return const UndoRefused();
-      case store.IoFailure(:final detail):
+      case store.SaveDidNotLand(:final detail):
         _set(SaveFailed(detail));
         return const UndoRefused();
     }

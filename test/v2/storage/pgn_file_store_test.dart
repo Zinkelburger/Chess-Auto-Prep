@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:chess_auto_prep/v2/storage/document_ref.dart';
+import 'package:chess_auto_prep/v2/storage/edit_scope.dart';
 import 'package:chess_auto_prep/v2/storage/file_lock.dart';
 import 'package:chess_auto_prep/v2/storage/mutation_guards.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
@@ -39,7 +40,12 @@ void main() {
       expect((opened as Opened).text, text);
       final edited = text.replaceFirst('Nf3', 'd4');
       final saved =
-          await fixture.store.save(ref, edited, expected: opened.revision)
+          await fixture.store.save(
+                ref,
+                edited,
+                expected: opened.revision,
+                scope: const WholeDocument(),
+              )
               as Saved;
       expect(saved.receipt.before, text);
       expect(await File(ref.path).readAsBytes(), utf8.encode(edited));
@@ -60,7 +66,12 @@ void main() {
     // read, and a save with the one on disk is refused too.
     final revision = await fixture.revisionOf(ref);
     expect(
-      await fixture.store.save(ref, 'mine *\n', expected: revision),
+      await fixture.store.save(
+        ref,
+        'mine *\n',
+        expected: revision,
+        scope: const WholeDocument(),
+      ),
       isA<IoFailure>(),
     );
     expect(await File(ref.path).readAsBytes(), compressed);
@@ -104,6 +115,7 @@ void main() {
       ref,
       'after *\n',
       expected: revision,
+      scope: const WholeDocument(),
     );
     final receipt = (saved as Saved).receipt;
     expect(receipt.before, 'before *\n');
@@ -119,7 +131,12 @@ void main() {
   test('saving the same text again changes nothing', () async {
     final ref = fixture.ref('KID/Main.pgn');
     final revision = await fixture.put(ref, 'same *\n');
-    final saved = await fixture.store.save(ref, 'same *\n', expected: revision);
+    final saved = await fixture.store.save(
+      ref,
+      'same *\n',
+      expected: revision,
+      scope: const WholeDocument(),
+    );
     expect((saved as Saved).receipt.committed, revision);
     expect(fixture.keptVersions(ref), isEmpty);
   });
@@ -133,6 +150,7 @@ void main() {
       ref,
       'draft *\n',
       expected: revision,
+      scope: const WholeDocument(),
     );
     final current = (result as Conflict).current;
     expect(current, isNotNull);
@@ -159,6 +177,7 @@ void main() {
       ref,
       'draft *\n',
       expected: revision,
+      scope: const WholeDocument(),
     );
     expect(result, isA<Conflict>());
     expect(await File(ref.path).readAsString(), 'theirs *\n');
@@ -173,6 +192,7 @@ void main() {
       ref,
       'draft *\n',
       expected: revision,
+      scope: const WholeDocument(),
     );
     expect((result as Conflict).current, isNull);
   });
@@ -305,7 +325,12 @@ void main() {
     final revision = await fixture.put(main, 'first *\n');
     await fixture.put(classical, '1. d4 *\n');
     // A version to carry: the store keeps what a save replaced.
-    await fixture.store.save(main, 'second *\n', expected: revision);
+    await fixture.store.save(
+      main,
+      'second *\n',
+      expected: revision,
+      scope: const WholeDocument(),
+    );
     expect(
       await fixture.store.moveFolder(
         p.dirname(main.path),

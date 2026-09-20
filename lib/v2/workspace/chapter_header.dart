@@ -5,6 +5,7 @@ import '../chess/pgn/chapter.dart';
 import '../storage/chapter_files.dart';
 import '../ui/theme.dart';
 import 'document_saver.dart';
+import 'save_state.dart';
 import 'document_session.dart';
 
 /// What is open and whether it is on disk: the chapter's name and side, then

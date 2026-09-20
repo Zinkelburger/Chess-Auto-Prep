@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:chess_auto_prep/v2/storage/atomic_write.dart';
+import 'package:chess_auto_prep/v2/storage/edit_scope.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -52,13 +53,23 @@ void main() {
       await File(ref.path).writeAsString('edited elsewhere *\n');
       const draft = 'my draft *\n';
       expect(
-        await fixture.store.save(ref, draft, expected: loaded),
+        await fixture.store.save(
+          ref,
+          draft,
+          expected: loaded,
+          scope: const WholeDocument(),
+        ),
         isA<Conflict>(),
       );
       expect(await File(ref.path).readAsString(), 'edited elsewhere *\n');
       final current = (await fixture.store.open(ref) as Opened).revision;
       expect(
-        await fixture.store.save(ref, draft, expected: current),
+        await fixture.store.save(
+          ref,
+          draft,
+          expected: current,
+          scope: const WholeDocument(),
+        ),
         isA<Saved>(),
       );
       expect(await File(ref.path).readAsString(), draft);
@@ -70,26 +81,48 @@ void main() {
     final ref = fixture.ref('KID/Main.pgn');
     final first = await fixture.put(ref, 'A *\n');
     final toB =
-        (await fixture.store.save(ref, 'B *\n', expected: first) as Saved)
+        (await fixture.store.save(
+                  ref,
+                  'B *\n',
+                  expected: first,
+                  scope: const WholeDocument(),
+                )
+                as Saved)
             .receipt;
     final toC =
-        (await fixture.store.save(ref, 'C *\n', expected: toB.committed)
+        (await fixture.store.save(
+                  ref,
+                  'C *\n',
+                  expected: toB.committed,
+                  scope: const WholeDocument(),
+                )
                 as Saved)
             .receipt;
     final undoneC = await fixture.store.save(
       ref,
       toC.before,
       expected: toC.committed,
+      scope: const WholeDocument(),
     );
     expect(await File(ref.path).readAsString(), 'B *\n');
     // The entry for B now expects what undoing C committed, not the old rB.
     expect(
-      await fixture.store.save(ref, toB.before, expected: toB.committed),
+      await fixture.store.save(
+        ref,
+        toB.before,
+        expected: toB.committed,
+        scope: const WholeDocument(),
+      ),
       isA<Conflict>(),
     );
     final rearmed = (undoneC as Saved).receipt.committed;
     expect(
-      await fixture.store.save(ref, toB.before, expected: rearmed),
+      await fixture.store.save(
+        ref,
+        toB.before,
+        expected: rearmed,
+        scope: const WholeDocument(),
+      ),
       isA<Saved>(),
     );
     expect(await File(ref.path).readAsString(), 'A *\n');
@@ -100,20 +133,42 @@ void main() {
     final ref = fixture.ref('KID/Main.pgn');
     final first = await fixture.put(ref, 'A *\n');
     final toB =
-        (await fixture.store.save(ref, 'B *\n', expected: first) as Saved)
+        (await fixture.store.save(
+                  ref,
+                  'B *\n',
+                  expected: first,
+                  scope: const WholeDocument(),
+                )
+                as Saved)
             .receipt;
     await File(ref.path).writeAsString('E *\n');
     final reopened = (await fixture.store.open(ref) as Opened).revision;
     final toC =
-        (await fixture.store.save(ref, 'C *\n', expected: reopened) as Saved)
+        (await fixture.store.save(
+                  ref,
+                  'C *\n',
+                  expected: reopened,
+                  scope: const WholeDocument(),
+                )
+                as Saved)
             .receipt;
     expect(
-      await fixture.store.save(ref, toC.before, expected: toC.committed),
+      await fixture.store.save(
+        ref,
+        toC.before,
+        expected: toC.committed,
+        scope: const WholeDocument(),
+      ),
       isA<Saved>(),
     );
     expect(await File(ref.path).readAsString(), 'E *\n');
     expect(
-      await fixture.store.save(ref, toB.before, expected: toB.committed),
+      await fixture.store.save(
+        ref,
+        toB.before,
+        expected: toB.committed,
+        scope: const WholeDocument(),
+      ),
       isA<Conflict>(),
     );
     expect(await File(ref.path).readAsString(), 'E *\n');
@@ -128,7 +183,12 @@ void main() {
       await staged.writeAsString('half written');
       expect((await fixture.store.open(ref) as Opened).text, 'real *\n');
       expect(
-        await fixture.store.save(ref, 'newer *\n', expected: revision),
+        await fixture.store.save(
+          ref,
+          'newer *\n',
+          expected: revision,
+          scope: const WholeDocument(),
+        ),
         isA<Saved>(),
       );
       expect(await File(ref.path).readAsString(), 'newer *\n');
@@ -146,7 +206,12 @@ void main() {
       expect(opened, isA<Unreadable>());
       expect((opened as Unreadable).detail, isNotEmpty);
       expect(
-        await fixture.store.save(ref, 'mine *\n', expected: revision),
+        await fixture.store.save(
+          ref,
+          'mine *\n',
+          expected: revision,
+          scope: const WholeDocument(),
+        ),
         isA<IoFailure>(),
       );
     },
@@ -163,6 +228,7 @@ void main() {
         ref,
         'new *\n',
         expected: revision,
+        scope: const WholeDocument(),
       );
       expect(result, isA<IoFailure>());
       expect((result as IoFailure).detail, isNotEmpty);

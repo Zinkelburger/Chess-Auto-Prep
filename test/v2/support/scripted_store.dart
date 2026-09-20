@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:chess_auto_prep/v2/storage/document_ref.dart';
+import 'package:chess_auto_prep/v2/storage/edit_scope.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/storage/training_records.dart';
 import 'package:crypto/crypto.dart';
@@ -76,8 +77,9 @@ final class ScriptedDocumentStore implements PgnDocumentStore {
     DocumentRef ref,
     String text, {
     required Revision expected,
+    required EditScope scope,
   }) async {
-    requestedSaves.add(SaveRequest(ref, text, expected));
+    requestedSaves.add(SaveRequest(ref, text, expected, scope));
     await _turn();
     final thrown = throwOnSave;
     if (thrown != null) {
@@ -176,11 +178,14 @@ final class ScriptedDocumentStore implements PgnDocumentStore {
 }
 
 final class SaveRequest {
-  const SaveRequest(this.ref, this.text, this.expected);
+  const SaveRequest(this.ref, this.text, this.expected, this.scope);
 
   final DocumentRef ref;
   final String text;
   final Revision expected;
+
+  /// What the save said it was changing.
+  final EditScope scope;
 }
 
 /// A revision that two scripted answers about the same text agree on.

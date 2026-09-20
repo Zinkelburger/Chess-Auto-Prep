@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
@@ -9,8 +11,10 @@ import '../chess/pgn/game_tree.dart';
 import '../diagnostics/log.dart';
 import '../storage/chapter_files.dart';
 import '../storage/document_ref.dart';
+import '../storage/edit_scope.dart';
 import '../storage/pgn_document_store.dart' as store;
 import 'document_saver.dart';
+import 'save_state.dart';
 
 sealed class OpenResult {
   const OpenResult();
@@ -198,7 +202,7 @@ final class DocumentSession extends ChangeNotifier {
       case edits.MoveAdded(chapter: final edited, :final path):
         _refused = null;
         _cursor = path;
-        if (!identical(edited, chapter)) _replace(edited);
+        if (!identical(edited, chapter)) _replace(chapter, edited);
         notifyListeners();
     }
   }
@@ -227,7 +231,7 @@ final class DocumentSession extends ChangeNotifier {
         if (identical(edited, chapter)) {
           if (!hadRefusal) return;
         } else {
-          _replace(edited);
+          _replace(chapter, edited);
         }
     }
     notifyListeners();
@@ -285,9 +289,9 @@ final class DocumentSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _replace(Chapter chapter) {
-    _chapter = chapter;
-    _saver.save(writeChapter(chapter));
+  void _replace(Chapter before, Chapter edited) {
+    _chapter = edited;
+    _saver.save(writeChapter(edited), _gamesRewritten(before, edited));
   }
 
   OpenFailed _openFailed(ChapterRef ref, String reason) {
@@ -319,4 +323,24 @@ final class DocumentSession extends ChangeNotifier {
     _disposed = true;
     super.dispose();
   }
+}
+
+/// The games [edited] writes again where [before] kept the bytes the file
+/// had.
+///
+/// A chapter's persistent unit is the game: an edit writes the games it
+/// changed and every other one keeps its own text, so the two chapters
+/// compared say exactly which games the file is about to change. The store
+/// is told that and refuses the write if the text does anything else — a
+/// game gone, a game rewritten that nobody edited.
+EditScope _gamesRewritten(Chapter before, Chapter edited) {
+  final games = <int>{};
+  final shared = math.min(before.lines.length, edited.lines.length);
+  for (var index = 0; index < shared; index++) {
+    if (edited.lines[index].text != before.lines[index].text) games.add(index);
+  }
+  // Never negative: no edit here removes a game, and a chapter that lost one
+  // is the mistake the store is meant to catch rather than a scope to claim.
+  final added = edited.lines.length - before.lines.length;
+  return GamesEdited(games, appended: added > 0 ? added : 0);
 }

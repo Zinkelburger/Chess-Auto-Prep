@@ -1,4 +1,5 @@
 import 'document_ref.dart';
+import 'edit_scope.dart';
 import 'training_records.dart';
 
 /// The one way `v2` writes a PGN file. The filesystem is a real boundary, so
@@ -15,13 +16,22 @@ abstract interface class PgnDocumentStore {
 
   /// Writes a document that does not exist yet. Replaces nothing: if the name
   /// is taken, even by a file created a moment ago, this is a [Collision].
+  ///
+  /// There is no [EditScope] here and nothing to compare against: a create
+  /// replaces no version, so there is no game of anybody's it could damage.
   Future<CreateResult> create(DocumentRef ref, String text);
 
   /// Replaces [ref] with [text], having read [expected].
+  ///
+  /// [scope] says which games of the version on disk this save means to
+  /// change. A save whose text would change any other game is refused before
+  /// anything is written; a caller that cannot say passes [WholeDocument]
+  /// and the store logs that it did.
   Future<SaveResult> save(
     DocumentRef ref,
     String text, {
     required Revision expected,
+    required EditScope scope,
   });
 
   /// Gives [ref] a new file name, such as `Main.pgn`, in the same folder.
@@ -188,11 +198,36 @@ final class Conflict implements SaveResult, MoveResult, DeleteResult {
   final Revision? current;
 }
 
-/// The operation could not be carried out. The document is as it was.
-final class IoFailure
-    implements CreateResult, SaveResult, MoveResult, DeleteResult {
-  const IoFailure(this.detail);
+/// A save that did not put the words on disk, for a reason that is not
+/// somebody else writing the file first. The draft is still the user's and
+/// the document is not saved.
+sealed class SaveDidNotLand implements SaveResult {
+  const SaveDidNotLand(this.detail);
 
   /// For the log; the widget writes the sentence.
   final String detail;
+}
+
+/// The text would have changed a game the save did not declare, so nothing
+/// was written. The file and the versions kept for it are as they were.
+///
+/// This is a mistake in whatever produced the text rather than anything the
+/// user did or can fix by trying again, so [detail] names the game that
+/// would have changed and what the save said it was changing.
+final class SaveRefused extends SaveDidNotLand {
+  const SaveRefused(super.detail);
+}
+
+/// The bytes were written and the file does not hold them.
+///
+/// The version this write replaced is kept, and [detail] says where, so the
+/// document can be put back by hand until the restore screen exists.
+final class WriteUnverified extends SaveDidNotLand {
+  const WriteUnverified(super.detail);
+}
+
+/// The operation could not be carried out. The document is as it was.
+final class IoFailure extends SaveDidNotLand
+    implements CreateResult, MoveResult, DeleteResult {
+  const IoFailure(super.detail);
 }

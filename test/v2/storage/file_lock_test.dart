@@ -3,6 +3,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:chess_auto_prep/v2/storage/edit_scope.dart';
 import 'package:chess_auto_prep/v2/storage/file_lock.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -80,7 +81,7 @@ void main() {
       other.execute('BEGIN IMMEDIATE');
       var done = false;
       final save = fixture.store
-          .save(ref, 'B *\n', expected: revision)
+          .save(ref, 'B *\n', expected: revision, scope: const WholeDocument())
           .whenComplete(() => done = true);
       await Future<void>.delayed(const Duration(milliseconds: 300));
       expect(done, isFalse, reason: 'the other writer still holds the folder');
