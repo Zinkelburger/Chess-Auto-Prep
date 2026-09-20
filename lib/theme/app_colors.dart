@@ -407,8 +407,12 @@ abstract final class AppColors {
   static const boardSelected = Color(0x669BC700);
   static const boardHighlight = Color(0x556496FF);
 
-  /// Quiet destination dots / capture rings, visible on both board colours.
-  static const boardLegalMove = Color(0x55000000);
+  /// Where the piece in hand may land. A tint rather than a dot or a ring:
+  /// a marker drawn over the square either hides the piece standing there or
+  /// has to dodge it, and the destinations then read as two different marks
+  /// instead of one set. Lighter than [boardSelected] so the square you
+  /// picked up still leads.
+  static const boardLegalMove = Color(0x3D9BC700);
 
   /// Subtle tint kept on the from/to squares of the most recent half-moves
   /// (Chessable-style trail). Quieter than [boardSelected] so it reads as

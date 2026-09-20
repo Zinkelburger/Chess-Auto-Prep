@@ -59,7 +59,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
 import '../utils/fen_utils.dart';
-import '../utils/chess_utils.dart' show playSanOrNullMove;
+import '../utils/chess_utils.dart' show playSanOrNullMove, uciHighlightSquares;
 import '../utils/app_shortcuts.dart';
 import '../utils/keyboard_shortcut_utils.dart';
 import '../widgets/app_breadcrumb_trail.dart';

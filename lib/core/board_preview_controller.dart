@@ -10,7 +10,7 @@ import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 
-import '../models/board_annotation.dart';
+import '../utils/chess_utils.dart' show uciHighlightSquares;
 import '../utils/safe_change_notifier.dart';
 
 /// Where the active preview is rendered.
@@ -41,18 +41,24 @@ class BoardPreviewController extends ChangeNotifier with SafeChangeNotifier {
   Object? get ownerTag => _ownerTag;
   bool get isPreview => _previewFen != null;
 
-  BoardAnnotation? _hoverArrow;
+  Set<String> _hoverSquares = const {};
 
-  /// Arrow echoing the move under the pointer in a move list (opening
-  /// explorer, repertoire tree), drawn over the committed board the way
-  /// Lichess previews an explorer row. Null when nothing is hovered.
-  BoardAnnotation? get hoverArrow => _hoverArrow;
+  /// From/to squares of the move under the pointer in a move list (opening
+  /// explorer, repertoire tree, generated candidates), tinted on the
+  /// committed board. Empty when nothing is hovered.
+  ///
+  /// A tint rather than an arrow: the board already answers "which move is
+  /// this" with the same two squares it uses for the move you just played,
+  /// so a hovered move and a played move read alike instead of introducing
+  /// a second vocabulary drawn on top of the pieces.
+  Set<String> get hoverSquares => _hoverSquares;
 
-  /// Show [arrow] on the board, or clear it with null. Immediate — a hover
+  /// Echo [uci]'s from/to squares, or clear with null. Immediate — a hover
   /// echo that lagged behind the pointer would feel broken, not calm.
-  void setHoverArrow(BoardAnnotation? arrow) {
-    if (arrow == _hoverArrow) return;
-    _hoverArrow = arrow;
+  void setHoverMove(String? uci) {
+    final next = uci == null ? const <String>{} : uciHighlightSquares(uci);
+    if (setEquals(next, _hoverSquares)) return;
+    _hoverSquares = next;
     notifyListeners();
   }
 
