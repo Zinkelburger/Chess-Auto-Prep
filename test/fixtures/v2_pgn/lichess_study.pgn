@@ -1,0 +1,21 @@
+[Event "Sicilian Najdorf: 6.Bg5"]
+[Site "https://lichess.org/study/abc12345/def67890"]
+[Result "*"]
+[UTCDate "2026.09.12"]
+[UTCTime "14:22:07"]
+[Variant "Standard"]
+[ECO "B96"]
+[Opening "Sicilian Defense: Najdorf Variation"]
+[Annotator "https://lichess.org/@/falstan"]
+[StudyName "Najdorf"]
+[ChapterName "6.Bg5 e6"]
+[UTCDate "2026.09.12"]
+
+{ Our main line against the Najdorf. } 1. e4 { [%eval 0.24] [%clk 0:03:00] } c5 { [%eval 0.31] [%clk 0:02:58] } 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 a6 6. Bg5 e6 7. f4 Be7 (7... Qb6 $6 { The poisoned pawn. } 8. Qd2 Qxb2 9. Rb1 Qa3 { [%cal Ga3e7,Gb1b7] [%csl Rb7] }) 8. Qf3 Qc7 9. O-O-O Nbd7 $14 *
+
+[Event "Sicilian Najdorf: 6.Bg5"]
+[Site "https://lichess.org/study/abc12345/aaa11111"]
+[Result "*"]
+[ChapterName "6.Bg5 Nbd7"]
+
+1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 a6 6. Bg5 Nbd7 7. Bc4 { A move order trick. } *

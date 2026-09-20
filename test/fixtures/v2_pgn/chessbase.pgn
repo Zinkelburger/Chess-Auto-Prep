@@ -1,0 +1,15 @@
+[Event "Bundesliga"]
+[Site "Berlin GER"]
+[Date "2019.03.10"]
+[Round "11.2"]
+[White "Vitiugov, N"]
+[Black "Meier, G"]
+[Result "1-0"]
+[WhiteElo "2732"]
+[BlackElo "2628"]
+[ECO "D37"]
+[EventDate "2019.03.09"]
+[PlyCount "15"]
+
+1. d4 Nf6 2. c4 e6 3. Nf3 d5 4. Nc3 Be7 5. Bf4 O-O 6. e3 Nbd7 $13 (6... c5 $5
+7. dxc5 Bxc5 $11 (7... Nc6 $14 8. cxd5 exd5 $132)) 7. c5 $16 c6 8. Bd3 1-0

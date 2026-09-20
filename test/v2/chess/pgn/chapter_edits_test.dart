@@ -303,7 +303,6 @@ void main() {
       expect(after.lines[2].text, chapter.lines[2].text);
       expect(writeChapter(after), contains('1. d4 e6 -- 2. c4 {also vital} *'));
     });
-
   });
 
   group('a game reading could not finish, in other places', () {

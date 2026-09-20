@@ -1,0 +1,23 @@
+[Event "Every spelling a file may use"]
+[Result "*"]
+[Site "C:\\games\\notes"]
+[White "He said \"go\""]
+[Result "1-0"]
+
+1.e4 1...e5 2. Nf3 2... Nc6 3. Bb5 a6 4. Ba4 Nf6 5. 0-0 Be7 6. Re1 b5 7. Bb3 d6 8. c3 0-0 9. h3 Na5 *
+
+[Event "Written out en passant and a promotion"]
+[FEN "8/4P3/8/8/8/8/6k1/K7 w - - 0 60"]
+[SetUp "1"]
+
+60. e8Q Kg3 61. Qe3+ Kg2 *
+
+[Event "A semicolon comment and a big move number"]
+[Result "*"]
+
+10000. e4 ; the king pawn
+10000... e5 *
+
+[Event "Deep nesting and a game with no marker"]
+
+1. d4 (1. e4 (1. c4 (1. Nf3 (1. g3 d5))) ) d5 2. c4 e6
