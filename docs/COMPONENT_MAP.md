@@ -1098,6 +1098,31 @@ This path serves both the catalog and legacy My books creation on Linux.
 Existing-chapter splitting/editing and non-Linux creation remain legacy; private
 staging retention/inspection UI and process-kill durability gates remain open.
 
+#### Board square feedback (unified September 2026)
+
+Every board marks squares by tinting them; nothing is painted over the pieces.
+`BoardSquarePainter` composites one tint per square in a fixed precedence:
+the selected square, then `highlightedSquares` (an explicit hint or the move
+under the pointer), then `legalMoveSquares` (where the piece in hand may land,
+enabled by **Board & moves → Show legal moves**), then `recentMoveSquares`
+(the from/to trail of the last half-move, or two in training). Destinations
+are whole-square tints rather than dots and capture rings, so a marker never
+hides the piece standing on the square it marks.
+
+Hovering a move in a list — an opening-explorer row, the repertoire tree, a
+local PGN reference, a generated candidate, a planner row — tints that move's
+from/to squares through `BoardPreviewController.setHoverMove(uci)` /
+`hoverSquares`, giving a hovered move the same mark a played one leaves. The
+repertoire builder and planner boards show the trail of the move that reached
+the position on them. A preview that swaps the board's position
+(`setPreview(fen, lastMoveUci: …)`) tints the move that produced it instead
+of the cursor's own trail.
+
+`ChessBoardWidget.annotations` stays reserved for marks that mean something
+other than "this move": red engine threats, the yellow solitaire hint ring,
+bughouse drop rings with their piece letter, and the arrows and circles the
+user draws with a right-drag or a PGN `[%cal]` / `[%csl]` comment.
+
 #### App bar conventions (unified June 2026)
 
 Every mode screen uses `Scaffold` + `AppBar` with consistent conventions:
