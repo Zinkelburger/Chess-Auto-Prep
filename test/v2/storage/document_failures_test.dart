@@ -13,6 +13,12 @@ import 'store_fixture.dart';
 
 void main() {
   late StoreFixture fixture;
+  // One-game chapters, so every save below says which game it is editing and
+  // runs under the check that refuses a save changing any other.
+  final a = oneGame('1. d4');
+  final b = oneGame('1. e4');
+  final c = oneGame('1. c4');
+  final theirs = oneGame('1. f4');
 
   setUp(() async => fixture = await StoreFixture.create());
   tearDown(() => fixture.dispose());
@@ -48,19 +54,13 @@ void main() {
     'a conflicted save keeps the draft, which saves once it is rebased',
     () async {
       final ref = fixture.ref('KID/Main.pgn');
-      final loaded = await fixture.put(ref, 'theirs *\n');
-      await File(ref.path).writeAsString('edited elsewhere *\n');
-      const draft = 'my draft *\n';
-      expect(
-        await fixture.store.save(ref, draft, expected: loaded),
-        isA<Conflict>(),
-      );
-      expect(await File(ref.path).readAsString(), 'edited elsewhere *\n');
+      final loaded = await fixture.put(ref, a);
+      await File(ref.path).writeAsString(theirs);
+      final draft = oneGame('1. d4 Nf6');
+      expect(await fixture.edit(ref, draft, loaded), isA<Conflict>());
+      expect(await File(ref.path).readAsString(), theirs);
       final current = (await fixture.store.open(ref) as Opened).revision;
-      expect(
-        await fixture.store.save(ref, draft, expected: current),
-        isA<Saved>(),
-      );
+      expect(await fixture.edit(ref, draft, current), isA<Saved>());
       expect(await File(ref.path).readAsString(), draft);
     },
   );
@@ -68,70 +68,48 @@ void main() {
   test('undo is a save of the receipt, and the next undo uses the receipt it '
       'returned', () async {
     final ref = fixture.ref('KID/Main.pgn');
-    final first = await fixture.put(ref, 'A *\n');
-    final toB =
-        (await fixture.store.save(ref, 'B *\n', expected: first) as Saved)
-            .receipt;
-    final toC =
-        (await fixture.store.save(ref, 'C *\n', expected: toB.committed)
-                as Saved)
-            .receipt;
-    final undoneC = await fixture.store.save(
-      ref,
-      toC.before,
-      expected: toC.committed,
-    );
-    expect(await File(ref.path).readAsString(), 'B *\n');
+    final first = await fixture.put(ref, a);
+    final toB = (await fixture.edit(ref, b, first) as Saved).receipt;
+    final toC = (await fixture.edit(ref, c, toB.committed) as Saved).receipt;
+    final undoneC = await fixture.restore(ref, toC.before, toC.committed);
+    expect(await File(ref.path).readAsString(), b);
     // The entry for B now expects what undoing C committed, not the old rB.
     expect(
-      await fixture.store.save(ref, toB.before, expected: toB.committed),
+      await fixture.restore(ref, toB.before, toB.committed),
       isA<Conflict>(),
     );
     final rearmed = (undoneC as Saved).receipt.committed;
-    expect(
-      await fixture.store.save(ref, toB.before, expected: rearmed),
-      isA<Saved>(),
-    );
-    expect(await File(ref.path).readAsString(), 'A *\n');
+    expect(await fixture.restore(ref, toB.before, rearmed), isA<Saved>());
+    expect(await File(ref.path).readAsString(), a);
   });
 
   test('an edit from outside between B and C: undoing C restores it and the '
       'older entry stays disarmed', () async {
     final ref = fixture.ref('KID/Main.pgn');
-    final first = await fixture.put(ref, 'A *\n');
-    final toB =
-        (await fixture.store.save(ref, 'B *\n', expected: first) as Saved)
-            .receipt;
-    await File(ref.path).writeAsString('E *\n');
+    final first = await fixture.put(ref, a);
+    final toB = (await fixture.edit(ref, b, first) as Saved).receipt;
+    await File(ref.path).writeAsString(theirs);
     final reopened = (await fixture.store.open(ref) as Opened).revision;
-    final toC =
-        (await fixture.store.save(ref, 'C *\n', expected: reopened) as Saved)
-            .receipt;
+    final toC = (await fixture.edit(ref, c, reopened) as Saved).receipt;
+    expect(await fixture.restore(ref, toC.before, toC.committed), isA<Saved>());
+    expect(await File(ref.path).readAsString(), theirs);
     expect(
-      await fixture.store.save(ref, toC.before, expected: toC.committed),
-      isA<Saved>(),
-    );
-    expect(await File(ref.path).readAsString(), 'E *\n');
-    expect(
-      await fixture.store.save(ref, toB.before, expected: toB.committed),
+      await fixture.restore(ref, toB.before, toB.committed),
       isA<Conflict>(),
     );
-    expect(await File(ref.path).readAsString(), 'E *\n');
+    expect(await File(ref.path).readAsString(), theirs);
   });
 
   test(
     'a staged copy left by an interrupted write is never the document',
     () async {
       final ref = fixture.ref('KID/Main.pgn');
-      final revision = await fixture.put(ref, 'real *\n');
+      final revision = await fixture.put(ref, a);
       final staged = File(temporaryPathFor(ref.path));
       await staged.writeAsString('half written');
-      expect((await fixture.store.open(ref) as Opened).text, 'real *\n');
-      expect(
-        await fixture.store.save(ref, 'newer *\n', expected: revision),
-        isA<Saved>(),
-      );
-      expect(await File(ref.path).readAsString(), 'newer *\n');
+      expect((await fixture.store.open(ref) as Opened).text, a);
+      expect(await fixture.edit(ref, b, revision), isA<Saved>());
+      expect(await File(ref.path).readAsString(), b);
       expect(await staged.exists(), isFalse);
     },
   );
@@ -140,15 +118,12 @@ void main() {
     'a file this process may not read is unreadable, and saving over it fails',
     () async {
       final ref = fixture.ref('KID/Main.pgn');
-      final revision = await fixture.put(ref, 'secret *\n');
+      final revision = await fixture.put(ref, a);
       await Process.run('chmod', ['000', ref.path]);
       final opened = await fixture.store.open(ref);
       expect(opened, isA<Unreadable>());
       expect((opened as Unreadable).detail, isNotEmpty);
-      expect(
-        await fixture.store.save(ref, 'mine *\n', expected: revision),
-        isA<IoFailure>(),
-      );
+      expect(await fixture.edit(ref, b, revision), isA<IoFailure>());
     },
     skip: _needsAPlainUser,
   );
@@ -157,16 +132,12 @@ void main() {
     'a save into a folder that cannot be written fails and changes nothing',
     () async {
       final ref = fixture.ref('KID/Main.pgn');
-      final revision = await fixture.put(ref, 'kept *\n');
+      final revision = await fixture.put(ref, a);
       await Process.run('chmod', ['500', p.dirname(ref.path)]);
-      final result = await fixture.store.save(
-        ref,
-        'new *\n',
-        expected: revision,
-      );
+      final result = await fixture.edit(ref, b, revision);
       expect(result, isA<IoFailure>());
       expect((result as IoFailure).detail, isNotEmpty);
-      expect(await File(ref.path).readAsString(), 'kept *\n');
+      expect(await File(ref.path).readAsString(), a);
     },
     skip: _needsAPlainUser,
   );

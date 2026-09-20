@@ -15,6 +15,10 @@ import 'store_fixture.dart';
 
 void main() {
   late StoreFixture fixture;
+  // One-game chapters, so a save can say which game it is editing.
+  final mine = oneGame('1. d4');
+  final draft = oneGame('1. d4 Nf6');
+  final theirs = oneGame('1. e4');
 
   setUp(() async => fixture = await StoreFixture.create());
   tearDown(() => fixture.dispose());
@@ -39,8 +43,7 @@ void main() {
       expect((opened as Opened).text, text);
       final edited = text.replaceFirst('Nf3', 'd4');
       final saved =
-          await fixture.store.save(ref, edited, expected: opened.revision)
-              as Saved;
+          await fixture.replace(ref, edited, opened.revision) as Saved;
       expect(saved.receipt.before, text);
       expect(await File(ref.path).readAsBytes(), utf8.encode(edited));
     },
@@ -59,10 +62,7 @@ void main() {
     // Nothing to save against: there is no revision the caller could have
     // read, and a save with the one on disk is refused too.
     final revision = await fixture.revisionOf(ref);
-    expect(
-      await fixture.store.save(ref, 'mine *\n', expected: revision),
-      isA<IoFailure>(),
-    );
+    expect(await fixture.replace(ref, 'mine *\n', revision), isA<IoFailure>());
     expect(await File(ref.path).readAsBytes(), compressed);
   });
 
@@ -99,17 +99,13 @@ void main() {
   test('a save with the loaded revision commits and hands back what it '
       'replaced', () async {
     final ref = fixture.ref('KID/Main.pgn');
-    final revision = await fixture.put(ref, 'before *\n');
-    final saved = await fixture.store.save(
-      ref,
-      'after *\n',
-      expected: revision,
-    );
+    final revision = await fixture.put(ref, mine);
+    final saved = await fixture.edit(ref, draft, revision);
     final receipt = (saved as Saved).receipt;
-    expect(receipt.before, 'before *\n');
+    expect(receipt.before, mine);
     expect(receipt.beforeRevision, revision);
     expect(receipt.committed, isNot(revision));
-    expect(await File(ref.path).readAsString(), 'after *\n');
+    expect(await File(ref.path).readAsString(), draft);
     expect(
       (await fixture.store.open(ref) as Opened).revision,
       receipt.committed,
@@ -118,8 +114,8 @@ void main() {
 
   test('saving the same text again changes nothing', () async {
     final ref = fixture.ref('KID/Main.pgn');
-    final revision = await fixture.put(ref, 'same *\n');
-    final saved = await fixture.store.save(ref, 'same *\n', expected: revision);
+    final revision = await fixture.put(ref, mine);
+    final saved = await fixture.edit(ref, mine, revision);
     expect((saved as Saved).receipt.committed, revision);
     expect(fixture.keptVersions(ref), isEmpty);
   });
@@ -127,22 +123,18 @@ void main() {
   test('a save against a revision the file no longer has is a conflict, and '
       'the file keeps what is on disk', () async {
     final ref = fixture.ref('KID/Main.pgn');
-    final revision = await fixture.put(ref, 'mine *\n');
-    await File(ref.path).writeAsString('theirs *\n');
-    final result = await fixture.store.save(
-      ref,
-      'draft *\n',
-      expected: revision,
-    );
+    final revision = await fixture.put(ref, mine);
+    await File(ref.path).writeAsString(theirs);
+    final result = await fixture.edit(ref, draft, revision);
     final current = (result as Conflict).current;
     expect(current, isNotNull);
     expect(current, isNot(revision));
-    expect(await File(ref.path).readAsString(), 'theirs *\n');
+    expect(await File(ref.path).readAsString(), theirs);
   });
 
   test('a save checks the file again after keeping what it replaces', () async {
     final ref = fixture.ref('KID/Main.pgn');
-    final revision = await fixture.put(ref, 'mine *\n');
+    final revision = await fixture.put(ref, mine);
     // Keeping the replaced version is the store's longest await, and an
     // editor outside the lock can write the file during it. The folder the
     // kept version goes into appearing says that await has started.
@@ -152,28 +144,20 @@ void main() {
         while (!kept.existsSync()) {
           await Future<void>.delayed(Duration.zero);
         }
-        File(ref.path).writeAsStringSync('theirs *\n');
+        File(ref.path).writeAsStringSync(theirs);
       }),
     );
-    final result = await fixture.store.save(
-      ref,
-      'draft *\n',
-      expected: revision,
-    );
+    final result = await fixture.edit(ref, draft, revision);
     expect(result, isA<Conflict>());
-    expect(await File(ref.path).readAsString(), 'theirs *\n');
+    expect(await File(ref.path).readAsString(), theirs);
   });
 
   test('a save on a document that was deleted is a conflict with nothing to '
       'compare against', () async {
     final ref = fixture.ref('KID/Main.pgn');
-    final revision = await fixture.put(ref, 'mine *\n');
+    final revision = await fixture.put(ref, mine);
     await File(ref.path).delete();
-    final result = await fixture.store.save(
-      ref,
-      'draft *\n',
-      expected: revision,
-    );
+    final result = await fixture.edit(ref, draft, revision);
     expect((result as Conflict).current, isNull);
   });
 
@@ -305,7 +289,7 @@ void main() {
     final revision = await fixture.put(main, 'first *\n');
     await fixture.put(classical, '1. d4 *\n');
     // A version to carry: the store keeps what a save replaced.
-    await fixture.store.save(main, 'second *\n', expected: revision);
+    await fixture.replace(main, 'second *\n', revision);
     expect(
       await fixture.store.moveFolder(
         p.dirname(main.path),

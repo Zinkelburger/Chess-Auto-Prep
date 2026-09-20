@@ -397,15 +397,32 @@ else in `v2` calls `File.writeAsString`.
 |---|---|
 | Open | Returns identity, revision and content. Absent, unreadable and malformed are distinct results; a failed read is never an empty document. |
 | Create or save a copy | Exclusive create; a name collision returns a collision and replaces nothing. |
-| Save | Requires the loaded revision. If the file changed on disk, return a conflict. There is no overwrite flag. |
+| Save | Requires the loaded revision and the scope of the edit. If the file changed on disk, return a conflict. There is no overwrite flag. |
 | Append, import or edit | A locked transformation of current content. Returns the validated before-content and the committed revision together. |
 | Undo | Validates that storage still holds the revision the undo entry expects; restores that entry's before-content. On mismatch it rejects and keeps history. |
 | Rename, move, delete | The same store and lock, with collision checks, and training references updated in the same operation. Delete is recoverable. |
 
-Results are typed: saved, conflict, collision, invalid document or I/O failure.
-Only *saved* clears the dirty state. A conflict keeps the user's draft and
-offers keep editing, save a copy or reload. Dismissing a dialog never grants
-overwrite permission.
+Results are typed: saved, conflict, collision, invalid document, refused or
+I/O failure. Only *saved* clears the dirty state. A conflict keeps the user's
+draft and offers keep editing, save a copy or reload. Dismissing a dialog never
+grants overwrite permission.
+
+A save also declares what it is changing. `save` takes an `EditScope`: the
+games of the version on disk it writes again and how many it adds at the end,
+or `WholeDocument` for a restore, an import or a caller that cannot say, which
+is logged as a warning so it is visible. The scope comes from the edit that
+produced the text — `addMove` and `setComment` report the games they wrote —
+never from comparing the new text with the old, which would agree with
+whatever the writer did and leave nothing to refuse. Before anything is written, the new
+text and the version on disk are cut into games with the chapter reader's own
+splitter and compared: a game the scope does not name that would change, a game
+that would disappear, or a changed `//` heading refuses the save, names the
+first game that would have changed and writes nothing. The write goes ahead
+only once the version being replaced is readable again in Support under the
+hash the save checked. After the rename the file is read again, and one that
+does not hold the bytes that went out is reported as unverified, naming the
+folder the previous version is kept in. A create has no previous version, so
+there is nothing to declare and nothing to compare.
 
 A revision is the SHA-256 of the exact bytes on disk plus the observed file
 identity (the native probe in `packages/document_file_io`). A changed or

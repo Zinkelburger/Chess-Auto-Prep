@@ -11,6 +11,8 @@ import 'backups.dart';
 import 'document_probe.dart';
 import 'document_ref.dart';
 import 'document_relocation.dart';
+import 'document_text.dart';
+import 'edit_scope.dart';
 import 'mutation_guards.dart';
 import 'relocation_notes.dart';
 import 'pgn_document_store.dart';
@@ -34,6 +36,13 @@ import 'training_records.dart' as training;
 /// that lands between them is replaced rather than reported. What was
 /// replaced is kept in Support before the rename, so even then nothing is
 /// gone for good.
+///
+/// A save also has to survive the app itself. It says which games it means
+/// to change ([EditScope]); before anything is written, the text is compared
+/// with the version on disk game by game and a change to any other game
+/// stops the write; after the rename, the file is read again and refused as
+/// unverified if it does not hold the bytes that went out. Either way the
+/// version being replaced is already in Support, so nothing is gone.
 ///
 /// Renaming, moving and deleting change where a document lives rather than
 /// what is in it; they are in [DocumentRelocation].
@@ -74,10 +83,10 @@ final class PgnFileStore implements PgnDocumentStore {
         log.w('open ${ref.path}', detail);
         return Unreadable(detail);
       case FileFound(:final bytes, :final revision):
-        switch (_read(bytes)) {
-          case _PlainText(:final text):
+        switch (readDocumentText(bytes)) {
+          case PlainText(:final text):
             return Opened(text, revision);
-          case _NotText(:final detail):
+          case NotText(:final detail):
             log.w('open ${ref.path}', detail);
             return Unreadable(detail);
         }
@@ -116,7 +125,11 @@ final class PgnFileStore implements PgnDocumentStore {
       return IoFailure(failureDetail(error));
     }
     final revision = await _revisionOf(ref.path, 'create ${ref.path}');
-    return revision == null ? const IoFailure(_unread) : Created(revision);
+    if (revision != null) return Created(revision);
+    // The file is there — it was just written — so this is not the document
+    // being as it was. Whoever asked has to be told the name is taken by
+    // something nobody has read.
+    return WriteUnverified('$_unread; it is at ${ref.path}');
   }
 
   @override
@@ -124,10 +137,11 @@ final class PgnFileStore implements PgnDocumentStore {
     DocumentRef ref,
     String text, {
     required Revision expected,
+    required EditScope scope,
   }) => lockedForDocument(
     folderOf(ref),
     ref,
-    () => _save(ref, text, expected),
+    () => _save(ref, text, expected, scope),
     IoFailure.new,
   );
 
@@ -135,6 +149,7 @@ final class PgnFileStore implements PgnDocumentStore {
     DocumentRef ref,
     String text,
     Revision expected,
+    EditScope scope,
   ) async {
     switch (await probeDocument(ref.path)) {
       case FileMissing():
@@ -144,7 +159,7 @@ final class PgnFileStore implements PgnDocumentStore {
         return IoFailure(detail);
       case FileFound(:final bytes, :final revision):
         if (revision != expected) return Conflict(revision);
-        return _replace(ref, text, bytes, revision);
+        return _replace(ref, text, bytes, revision, scope);
     }
   }
 
@@ -153,28 +168,36 @@ final class PgnFileStore implements PgnDocumentStore {
     String text,
     List<int> current,
     Revision revision,
+    EditScope scope,
   ) async {
-    final read = _read(current);
+    final read = readDocumentText(current);
     // A document this app cannot read is not one it may replace: a save over
     // a compressed chapter would leave bytes neither app can open.
-    if (read case _NotText(:final detail)) {
+    if (read case NotText(:final detail)) {
       log.w('save ${ref.path}', detail);
       return IoFailure(detail);
     }
-    final before = (read as _PlainText).text;
+    final before = (read as PlainText).text;
     final bytes = utf8.encode(text);
+    final written = sha256.convert(bytes).toString();
     // Nothing to replace, so nothing to keep and nothing to write.
-    if (sha256.convert(bytes).toString() == revision.contentHash) {
+    if (written == revision.contentHash) {
       return Saved(_receipt(before, revision, revision));
     }
-    final refused = await keepReplacedVersion(
+    final refused = _onlyWhatWasDeclared(ref, current, bytes, scope);
+    if (refused != null) return refused;
+    final unkept = await keepReplacedVersion(
       backups: _backups,
       documents: documents,
       ref: ref,
       bytes: current,
       hash: revision.contentHash,
     );
-    if (refused != null) return refused;
+    if (unkept != null) return unkept;
+    if (!await _keptIsTheVersionBeingReplaced(ref, revision)) {
+      log.e('save ${ref.path}', _unkept);
+      return const IoFailure(_unkept);
+    }
     // Keeping the replaced version awaited the disk, and an editor outside
     // the lock could have written the file meanwhile.
     final changed = await _recheck(ref, revision);
@@ -186,9 +209,88 @@ final class PgnFileStore implements PgnDocumentStore {
       log.e('save ${ref.path}', error);
       return IoFailure(failureDetail(error));
     }
+    return _committed(ref, before, revision, written);
+  }
+
+  /// Why [next] may not be written over [current], or null when it changes
+  /// only what [scope] declared. A save that replaces the whole document is
+  /// not refused — there is nothing to compare it against — but it is
+  /// logged, so a caller that rewrites a chapter without saying what it
+  /// edited is visible.
+  SaveResult? _onlyWhatWasDeclared(
+    DocumentRef ref,
+    List<int> current,
+    List<int> next,
+    EditScope scope,
+  ) {
+    final outside = changeOutsideScope(
+      previous: current,
+      next: next,
+      scope: scope,
+    );
+    if (outside != null) {
+      log.e('save ${ref.path}', outside);
+      return SaveRefused(outside);
+    }
+    if (scope is WholeDocument) log.w('save ${ref.path}', _undeclared);
+    return null;
+  }
+
+  /// Whether the version just recorded is on the disk, readable, and the one
+  /// this save is replacing.
+  ///
+  /// The text compared above came out of the bytes the revision describes,
+  /// so a kept copy hashing to that revision holds those same bytes: the
+  /// comparison stands for the copy in Support as much as for the file, and
+  /// the write only goes ahead once the previous version is safe somewhere
+  /// else.
+  Future<bool> _keptIsTheVersionBeingReplaced(
+    DocumentRef ref,
+    Revision revision,
+  ) async {
+    final id = documentBackupIdFor(documents, ref);
+    final kept = id == null ? null : await _backups.newestVersion(id);
+    return kept != null &&
+        sha256.convert(kept).toString() == revision.contentHash;
+  }
+
+  /// The receipt of a write that landed, or the failure that says the file
+  /// does not hold the bytes [written] names.
+  ///
+  /// The file is read again rather than assumed: a rename that reported
+  /// success over a filesystem that lied, or anything that wrote the name
+  /// between the rename and now, would otherwise be a silent loss. A file
+  /// nothing can read now is the same news: the rename happened, so the
+  /// document is not as it was, and saying it failed would leave the app
+  /// expecting the old revision and calling this app's own write somebody
+  /// else's.
+  Future<SaveResult> _committed(
+    DocumentRef ref,
+    String before,
+    Revision was,
+    String written,
+  ) async {
     final committed = await _revisionOf(ref.path, 'save ${ref.path}');
-    if (committed == null) return const IoFailure(_unread);
-    return Saved(_receipt(before, revision, committed));
+    if (committed == null) return WriteUnverified(_notHeld(ref, _unread));
+    if (committed.contentHash != written) {
+      return WriteUnverified(
+        _notHeld(ref, 'the file does not hold what was just written to it'),
+      );
+    }
+    return Saved(_receipt(before, was, committed));
+  }
+
+  String _notHeld(DocumentRef ref, String detail) {
+    final said =
+        '$detail; the version it replaced is kept in '
+        '${_keptFolder(ref)}';
+    log.e('save ${ref.path}', said);
+    return said;
+  }
+
+  String _keptFolder(DocumentRef ref) {
+    final id = documentBackupIdFor(documents, ref);
+    return id == null ? _backups.root.path : _backups.folderFor(id).path;
   }
 
   /// What to answer with when [ref] no longer holds [expected]; null while it
@@ -240,97 +342,10 @@ final class PgnFileStore implements PgnDocumentStore {
 
 const _unread = 'the file could not be read back after writing';
 
-/// Valid non-ASCII characters per stray byte for a file to keep its UTF-8
-/// reading. The old app's number, and both apps must read one file the same
-/// way.
-const _validToStrayRatio = 8;
+const _unkept =
+    'the version being replaced could not be read back from the copy kept '
+    'for it';
 
-/// What a file holds: a document, or a reason this app will not treat it as
-/// one. Never a document made out of bytes that are not text.
-sealed class _Read {
-  const _Read();
-}
-
-final class _PlainText extends _Read {
-  const _PlainText(this.text);
-
-  final String text;
-}
-
-final class _NotText extends _Read {
-  const _NotText(this.detail);
-
-  /// For the log and for the user; the widget writes the sentence around it.
-  final String detail;
-}
-
-/// A gzipped chapter, which the old app writes and reads by the two magic
-/// bytes of RFC 1952 rather than by extension.
-const _compressed =
-    'this chapter is compressed; open and save it in the old app to '
-    'store it uncompressed';
-
-const _notText = 'the file is not text';
-
-/// Control bytes per byte read at which a file stops being text. Tab, line
-/// feed and carriage return are text; a stray escape or two in a course
-/// export is not enough to refuse the file.
-const _controlLimit = 0.01;
-
-/// How much of a file is looked at to decide whether it is text at all.
-const _sampled = 8192;
-
-/// The text in [bytes], read as the old app reads the same files, so every
-/// PGN it opens opens here too. Whatever came in, a save writes UTF-8 back.
-///
-/// Bytes that are not text at all are refused rather than decoded: a
-/// gzipped chapter read as Latin-1 would open as mojibake and the first save
-/// would replace it with bytes neither app could read.
-///
-/// Otherwise strict UTF-8 first. A file that fails it is one of two things. A
-/// Latin-1 file fails on its first accented letter and holds no valid
-/// multi-byte sequence anywhere, so it is decoded as Latin-1. A UTF-8 file
-/// with a few damaged bytes among thousands of good ones — a course export
-/// with four control bytes in ten megabytes of curly quotes — keeps its UTF-8
-/// reading with the stray bytes as U+FFFD, because reading it as Latin-1
-/// would turn every one of those quotes into mojibake.
-_Read _read(List<int> bytes) {
-  final refusal = _binary(bytes);
-  if (refusal != null) return _NotText(refusal);
-  return _PlainText(_decode(bytes));
-}
-
-/// Why [bytes] are not a text document, or null when they could be one.
-String? _binary(List<int> bytes) {
-  if (bytes.length >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b) {
-    return _compressed;
-  }
-  final sample = bytes.length < _sampled ? bytes.length : _sampled;
-  var controls = 0;
-  for (var i = 0; i < sample; i++) {
-    final byte = bytes[i];
-    if (byte == 0) return _notText;
-    if (byte < 0x20 && byte != 0x09 && byte != 0x0a && byte != 0x0d) controls++;
-  }
-  return controls > sample * _controlLimit ? _notText : null;
-}
-
-String _decode(List<int> bytes) {
-  try {
-    return utf8.decode(bytes);
-  } on FormatException {
-    final tolerant = utf8.decode(bytes, allowMalformed: true);
-    var strays = 0;
-    var valid = 0;
-    for (final unit in tolerant.codeUnits) {
-      if (unit == 0xFFFD) {
-        strays++;
-      } else if (unit > 0x7F) {
-        valid++;
-      }
-    }
-    return valid >= strays * _validToStrayRatio
-        ? tolerant
-        : latin1.decode(bytes);
-  }
-}
+const _undeclared =
+    'the whole document was replaced; the save did not say which game it '
+    'changed';

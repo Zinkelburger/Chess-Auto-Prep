@@ -6,6 +6,7 @@ import 'chapter.dart';
 import 'comment_text.dart';
 import 'game_text.dart';
 import 'game_tree.dart';
+import 'games_written.dart';
 import 'line_id.dart';
 import 'move_label.dart';
 import 'tree_edit.dart';
@@ -23,10 +24,18 @@ sealed class AddMoveResult {
 /// The move is in the chapter at [path]. [chapter] is unchanged when the
 /// move was already there and the caller only has to move its cursor.
 final class MoveAdded extends AddMoveResult {
-  const MoveAdded({required this.chapter, required this.path});
+  const MoveAdded({
+    required this.chapter,
+    required this.path,
+    required this.written,
+  });
 
   final Chapter chapter;
   final NodePath path;
+
+  /// The games this edit wrote; none of them when the move was already
+  /// there.
+  final GamesWritten written;
 }
 
 /// [uci] is not a legal move in the position the path asked for. The
@@ -44,9 +53,13 @@ sealed class CommentResult {
 /// The comment is in the chapter. [chapter] is the same object when the
 /// words would have left the file exactly as it was.
 final class CommentWritten extends CommentResult {
-  const CommentWritten(this.chapter);
+  const CommentWritten(this.chapter, {required this.written});
 
   final Chapter chapter;
+
+  /// The games this edit wrote; a move several games play is written into
+  /// all of them.
+  final GamesWritten written;
 }
 
 /// Nothing was changed. The screen has to say so: an edit that silently
@@ -87,10 +100,14 @@ AddMoveResult addMove(
   final siblings = chapter.tree.nodeAt(at)?.children ?? chapter.tree.children;
   final existing = siblings.indexWhere((child) => child.san == node.san);
   if (existing >= 0) {
-    return MoveAdded(chapter: chapter, path: at.child(existing));
+    return MoveAdded(
+      chapter: chapter,
+      path: at.child(existing),
+      written: GamesWritten.nothing,
+    );
   }
   final prefix = [for (final step in chapter.tree.lineTo(at)) step.san];
-  final updated =
+  final edited =
       (siblings.isEmpty ? _extended(chapter, prefix, node) : null) ??
       _appended(chapter, prefix, node);
   // Merging keeps the order of the moves a chapter already had and puts the
@@ -99,10 +116,14 @@ AddMoveResult addMove(
   // in the merged tree for it to be.
   final path = at.child(siblings.length);
   assert(
-    pathOfSans(updated.tree, [...prefix, node.san]) == path,
+    pathOfSans(edited.chapter.tree, [...prefix, node.san]) == path,
     'a move written into a chapter came back somewhere other than $path',
   );
-  return MoveAdded(chapter: updated, path: path);
+  return MoveAdded(
+    chapter: edited.chapter,
+    path: path,
+    written: edited.written,
+  );
 }
 
 /// Writes [text] as the comment of the node at [at].
@@ -131,15 +152,20 @@ CommentResult setComment(
   if (unwritable != null) return CommentUnwritable(unwritable);
   if (at.isRoot) return _withIntroduction(chapter, text);
   final sans = [for (final node in chapter.tree.lineTo(at)) node.san];
-  if (sans.isEmpty) return CommentWritten(chapter);
+  if (sans.isEmpty) return _unchanged(chapter);
   if (_playedByAPartialGame(chapter, sans)) return const GameNotWhole();
   final lines = [
     for (final line in chapter.lines) _commented(chapter, line, sans, text),
   ];
-  final changed = lines.indexed.any(
-    (entry) => !identical(entry.$2, chapter.lines[entry.$1]),
+  final written = <int>{
+    for (final (index, line) in lines.indexed)
+      if (!identical(line, chapter.lines[index])) index,
+  };
+  if (written.isEmpty) return _unchanged(chapter);
+  return CommentWritten(
+    withLines(chapter, lines),
+    written: GamesWritten(rewritten: written),
   );
-  return CommentWritten(changed ? withLines(chapter, lines) : chapter);
 }
 
 /// Whether a game reading could not finish plays [sans].
@@ -175,22 +201,36 @@ CommentResult _withIntroduction(Chapter chapter, String? text) {
   final first = chapter.lines.firstWhereOrNull(
     (line) => chapter.treeInChapter(line) != null,
   );
-  if (first == null) return CommentWritten(chapter);
+  if (first == null) return _unchanged(chapter);
   final tree = chapter.writableTree(first);
   if (tree == null) return const GameNotWhole();
   final comment = withProse(tree.rootComment, text);
-  if (comment == tree.rootComment) return CommentWritten(chapter);
-  final lines = [...chapter.lines];
-  lines[chapter.lines.indexOf(first)] = rewritten(
+  if (comment == tree.rootComment) return _unchanged(chapter);
+  final line = rewritten(
     first,
     withComment(tree, const NodePath.root(), comment),
   );
-  return CommentWritten(withLines(chapter, lines));
+  if (identical(line, first)) return _unchanged(chapter);
+  final index = chapter.lines.indexOf(first);
+  final lines = [...chapter.lines];
+  lines[index] = line;
+  return CommentWritten(
+    withLines(chapter, lines),
+    written: GamesWritten(rewritten: {index}),
+  );
 }
+
+/// The chapter as it was, because the words would have left the file
+/// exactly as it is.
+CommentResult _unchanged(Chapter chapter) =>
+    CommentWritten(chapter, written: GamesWritten.nothing);
 
 /// A game an edit may write again, its moves, and where it sits in
 /// [Chapter.lines].
 typedef _Writable = ({int index, ChapterLine line, GameTree tree});
+
+/// A chapter an edit produced and the games it wrote to produce it.
+typedef _Edited = ({Chapter chapter, GamesWritten written});
 
 /// The games of [chapter] an edit may write again, in file order.
 Iterable<_Writable> _writableGames(Chapter chapter) sync* {
@@ -206,14 +246,13 @@ Iterable<_Writable> _writableGames(Chapter chapter) sync* {
 /// a variation inside a game does not, and neither does a game that was not
 /// read whole, so in both cases that branch becomes a game of its own and
 /// nothing already in the file is written again.
-Chapter? _extended(Chapter chapter, List<String> prefix, MoveNode node) {
+_Edited? _extended(Chapter chapter, List<String> prefix, MoveNode node) {
   final found = _writableGames(chapter).firstWhereOrNull(
     (game) =>
         const ListEquality<String>().equals(mainlineSans(game.tree), prefix),
   );
   if (found == null) return null;
-  final lines = [...chapter.lines];
-  lines[found.index] = rewritten(
+  final line = rewritten(
     found.line,
     withChildAdded(
       found.tree,
@@ -221,7 +260,17 @@ Chapter? _extended(Chapter chapter, List<String> prefix, MoveNode node) {
       node,
     ),
   );
-  return withLines(chapter, lines);
+  final lines = [...chapter.lines];
+  lines[found.index] = line;
+  return (
+    chapter: withLines(chapter, lines),
+    // The gate gives the game back untouched when writing it again would
+    // not read as the same game, and a game that keeps its bytes is not a
+    // game this edit may change.
+    written: identical(line, found.line)
+        ? GamesWritten.nothing
+        : GamesWritten(rewritten: {found.index}),
+  );
 }
 
 /// The chapter with a new game for [prefix] plus [node] at the end of the
@@ -230,10 +279,12 @@ Chapter? _extended(Chapter chapter, List<String> prefix, MoveNode node) {
 /// Written straight rather than through the rewrite gate: a new game
 /// replaces no bytes, so there is nothing here for a bad write to lose. That
 /// it reads back as itself is what the assertion in [addMove] checks.
-Chapter _appended(Chapter chapter, List<String> prefix, MoveNode node) {
+_Edited _appended(Chapter chapter, List<String> prefix, MoveNode node) {
   final tree = lineTree(chapter.tree.rootFen, [...prefix, node.san]);
   final tags = _newTags(chapter, prefix, tree, node);
   final lines = [...chapter.lines];
+  // The game before it only gains the blank line that puts the new one on a
+  // line of its own, which is not a game written again.
   if (lines.isNotEmpty) lines.last = _spacedAfter(lines.last);
   lines.add(
     ChapterLine(
@@ -245,10 +296,15 @@ Chapter _appended(Chapter chapter, List<String> prefix, MoveNode node) {
       separator: '\n',
     ),
   );
-  return withLines(
-    chapter,
-    lines,
-    preamble: chapter.lines.isEmpty ? _spacedPreamble(chapter.preamble) : null,
+  return (
+    chapter: withLines(
+      chapter,
+      lines,
+      preamble: chapter.lines.isEmpty
+          ? _spacedPreamble(chapter.preamble)
+          : null,
+    ),
+    written: GamesWritten(appended: 1),
   );
 }
 

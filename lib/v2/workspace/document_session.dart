@@ -5,12 +5,15 @@ import 'package:path/path.dart' as p;
 import '../chess/fen.dart';
 import '../chess/pgn/chapter.dart';
 import '../chess/pgn/chapter_edits.dart' as edits;
+import '../chess/pgn/games_written.dart';
 import '../chess/pgn/game_tree.dart';
 import '../diagnostics/log.dart';
 import '../storage/chapter_files.dart';
 import '../storage/document_ref.dart';
+import '../storage/edit_scope.dart';
 import '../storage/pgn_document_store.dart' as store;
 import 'document_saver.dart';
+import 'save_state.dart';
 
 sealed class OpenResult {
   const OpenResult();
@@ -196,10 +199,10 @@ final class DocumentSession extends ChangeNotifier {
     switch (edits.addMove(chapter, at: _cursor, uci: uci)) {
       case edits.MoveIllegal():
         return;
-      case edits.MoveAdded(chapter: final edited, :final path):
+      case edits.MoveAdded(chapter: final edited, :final path, :final written):
         _refused = null;
         _cursor = path;
-        if (!identical(edited, chapter)) _replace(edited);
+        if (!identical(edited, chapter)) _replace(edited, written);
         notifyListeners();
     }
   }
@@ -221,12 +224,12 @@ final class DocumentSession extends ChangeNotifier {
       case final edits.CommentRefused refusal:
         log.w('comment ${_source?.path}', _refusalDetail(refusal));
         _refused = refusal;
-      case edits.CommentWritten(chapter: final edited):
+      case edits.CommentWritten(chapter: final edited, :final written):
         _refused = null;
         if (identical(edited, chapter)) {
           if (!hadRefusal) return;
         } else {
-          _replace(edited);
+          _replace(edited, written);
         }
     }
     notifyListeners();
@@ -278,7 +281,8 @@ final class DocumentSession extends ChangeNotifier {
     return switch (created) {
       store.Created() => CopySaved(file),
       store.Collision() => const CopyNameTaken(),
-      store.IoFailure(:final detail) => CopyFailed(detail),
+      store.IoFailure(:final detail) ||
+      store.WriteUnverified(:final detail) => CopyFailed(detail),
     };
   }
 
@@ -291,9 +295,15 @@ final class DocumentSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _replace(Chapter chapter) {
-    _chapter = chapter;
-    _saver.save(writeChapter(chapter));
+  /// Shows [edited] and puts it on disk, saying which games the edit wrote.
+  ///
+  /// The scope is what the edit reported, never what the new text turned out
+  /// to look like: a scope worked out from the text would agree with the
+  /// text, so a writer that rewrote a game nobody edited would declare that
+  /// game and the store would have nothing to refuse.
+  void _replace(Chapter edited, GamesWritten written) {
+    _chapter = edited;
+    _saver.save(writeChapter(edited), GamesEdited(written));
   }
 
   OpenFailed _openFailed(ChapterRef ref, String reason) {

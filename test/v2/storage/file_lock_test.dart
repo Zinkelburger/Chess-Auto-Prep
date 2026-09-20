@@ -73,22 +73,24 @@ void main() {
     'a save waits while another app holds the folder, then goes through',
     () async {
       final ref = fixture.ref('KID/Main.pgn');
-      final revision = await fixture.put(ref, 'A *\n');
+      final before = oneGame('1. d4');
+      final after = oneGame('1. d4 Nf6');
+      final revision = await fixture.put(ref, before);
       final folder = Directory(p.dirname(ref.path));
       final other = sqlite3.open(await _lockPath(folder));
       other.execute('PRAGMA busy_timeout = 0');
       other.execute('BEGIN IMMEDIATE');
       var done = false;
-      final save = fixture.store
-          .save(ref, 'B *\n', expected: revision)
+      final save = fixture
+          .edit(ref, after, revision)
           .whenComplete(() => done = true);
       await Future<void>.delayed(const Duration(milliseconds: 300));
       expect(done, isFalse, reason: 'the other writer still holds the folder');
-      expect(await File(ref.path).readAsString(), 'A *\n');
+      expect(await File(ref.path).readAsString(), before);
       other.execute('ROLLBACK');
       other.close();
       expect(await save, isA<Saved>());
-      expect(await File(ref.path).readAsString(), 'B *\n');
+      expect(await File(ref.path).readAsString(), after);
     },
   );
 }
