@@ -13,12 +13,16 @@ import '../support/fixtures.dart';
 
 void main() {
   late DocumentSession session;
+  late EngineAnalysis analysis;
 
   /// The engine stays off; its pane has its own test.
-  EngineAnalysis analysis() => EngineAnalysis(
-    session,
-    () async => const StartFailed('no engine in this test'),
-  );
+  void workOn(DocumentSession opened) {
+    session = opened;
+    analysis = EngineAnalysis(
+      session,
+      () async => const StartFailed('no engine in this test'),
+    );
+  }
 
   Future<void> pump(WidgetTester tester) async {
     await tester.binding.setSurfaceSize(const Size(1200, 700));
@@ -26,7 +30,7 @@ void main() {
       MaterialApp(
         theme: darkTheme(),
         home: Scaffold(
-          body: WorkspaceView(session: session, analysis: analysis()),
+          body: WorkspaceView(session: session, analysis: analysis),
         ),
       ),
     );
@@ -34,8 +38,14 @@ void main() {
   }
 
   setUp(() {
-    session = DocumentSession()
-      ..open(parseChapter(name: 'Main', text: blackChapter));
+    workOn(
+      DocumentSession()..open(parseChapter(name: 'Main', text: blackChapter)),
+    );
+  });
+
+  tearDown(() {
+    analysis.dispose();
+    session.dispose();
   });
 
   testWidgets('shows the chapter, its lines and its variations', (
@@ -84,7 +94,9 @@ void main() {
   });
 
   testWidgets('with nothing open it asks for a chapter', (tester) async {
-    session = DocumentSession();
+    analysis.dispose();
+    session.dispose();
+    workOn(DocumentSession());
     await pump(tester);
     expect(find.text('Open a chapter'), findsOneWidget);
     expect(find.text('No moves'), findsOneWidget);
