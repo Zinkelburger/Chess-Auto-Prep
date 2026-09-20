@@ -178,24 +178,29 @@ extension BughouseTimeStanceX on BughouseTimeStance {
   /// What the engine is told. Only [ahead] unlocks sitting on both boards.
   bool get givesTimeAdvantage => this == BughouseTimeStance.ahead;
 
-  /// Priority is the right to choose whether to move at all, which the team
-  /// up on the diagonal clock has. Our seats are always A + B, so the two
-  /// teams can be named rather than described.
+  /// Both partners share one margin — being up on your own diagonal means
+  /// your partner is up by exactly the same amount against theirs — so the
+  /// stance is the sign of a single number and reads from our side without
+  /// naming a seat. Our seats are always A + B, so "we" is unambiguous here.
   String get label => switch (this) {
-    BughouseTimeStance.ahead => 'AB may sit',
+    BughouseTimeStance.ahead => 'We’re up',
     BughouseTimeStance.level => 'Equal',
-    BughouseTimeStance.behind => 'CD may sit',
+    BughouseTimeStance.behind => 'We’re down',
   };
 
   String get shortLabel => label;
 
-  /// A tooltip, not a lesson. [level] and [behind] read the same because they
-  /// search the same — the engine's clock model is one bit — and two identical
-  /// hints say that more quietly than a paragraph explaining it would.
+  /// A tooltip, not a lesson. It names being up on the clock rather than
+  /// sitting, because sitting is what being up lets you do only while you are
+  /// on move: when one team holds both moves the other is not on the clock at
+  /// all and cannot sit whatever its time.
   String get hint => switch (this) {
-    BughouseTimeStance.ahead => 'A + B are up on the clock, so they may sit rather than move',
-    BughouseTimeStance.level => 'Nobody is up on the clock: both teams have to move',
-    BughouseTimeStance.behind => 'C + D are up on the clock, so they may sit rather than move',
+    BughouseTimeStance.ahead =>
+      'We are up on the diagonal clock, so we can outwait them',
+    BughouseTimeStance.level =>
+      'Neither team is up on the clock: both have to move',
+    BughouseTimeStance.behind =>
+      'They are up on the diagonal clock, so they can outwait us',
   };
 }
 
