@@ -218,6 +218,58 @@ void main() {
     );
   });
 
+  test('a moved folder carries every document and its versions', () async {
+    final main = fixture.ref('KID/Main.pgn');
+    final classical = fixture.ref('KID/Classical.pgn');
+    final revision = await fixture.put(main, 'first *\n');
+    await fixture.put(classical, '1. d4 *\n');
+    // A version to carry: the store keeps what a save replaced.
+    await fixture.store.save(main, 'second *\n', expected: revision);
+    expect(
+      await fixture.store.moveFolder(
+        p.dirname(main.path),
+        p.join(fixture.documents.path, "King's Indian"),
+      ),
+      isA<FolderMoved>(),
+    );
+    final moved = fixture.ref("King's Indian/Main.pgn");
+    expect(await File(moved.path).readAsString(), 'second *\n');
+    expect(
+      await File(fixture.ref("King's Indian/Classical.pgn").path).exists(),
+      isTrue,
+    );
+    expect(await Directory(p.dirname(main.path)).exists(), isFalse);
+    expect(fixture.keptTexts(moved), ['first *\n']);
+  });
+
+  test('a folder move onto a name that is taken moves nothing', () async {
+    final main = fixture.ref('KID/Main.pgn');
+    await fixture.put(main, 'first *\n');
+    await fixture.put(fixture.ref('Benoni/Main.pgn'), 'other *\n');
+    expect(
+      await fixture.store.moveFolder(
+        p.dirname(main.path),
+        p.join(fixture.documents.path, 'Benoni'),
+      ),
+      isA<FolderNameTaken>(),
+    );
+    expect(await File(main.path).readAsString(), 'first *\n');
+    expect(
+      await File(fixture.ref('Benoni/Main.pgn').path).readAsString(),
+      'other *\n',
+    );
+  });
+
+  test('a folder outside the documents root is refused', () async {
+    expect(
+      await fixture.store.moveFolder(
+        p.join(fixture.root.path, 'Elsewhere'),
+        p.join(fixture.documents.path, 'KID'),
+      ),
+      isA<FolderMoveFailed>(),
+    );
+  });
+
   test('a path outside the documents folder is refused', () async {
     final outside = DocumentRef(p.join(fixture.root.path, 'elsewhere.pgn'));
     expect(await fixture.store.create(outside, 'x *\n'), isA<IoFailure>());

@@ -125,6 +125,82 @@ final class DocumentRelocation {
     return Moved(revision);
   }
 
+  /// Moves a whole folder of documents — a repertoire — in one rename.
+  ///
+  /// The lock is the documents root, as [move] takes it: no one folder covers
+  /// both ends of a move, and here neither end is a folder anything else
+  /// locks. The kept versions follow each document inside, because a
+  /// document's history is kept under a hash of its path rather than under
+  /// its folder's; a history that cannot be moved is left where it is and
+  /// never fails the move, exactly as it does for one document.
+  Future<FolderMoveResult> moveFolder(String from, String to) async {
+    final result = await lockedForDocument(
+      documents,
+      DocumentRef(from),
+      () => _moveFolder(from, to),
+      FolderMoveFailed.new,
+    );
+    // Outside the folder lock, which is not re-entrant: the training files
+    // live in the documents root, which is the folder just locked. `repoint`
+    // rewrites every row inside a folder that moved, not just exact matches.
+    if (result is FolderMoved) {
+      return FolderMoved(
+        training: await _training.repoint(DocumentRef(from), DocumentRef(to)),
+      );
+    }
+    return result;
+  }
+
+  Future<FolderMoveResult> _moveFolder(String from, String to) async {
+    if (!p.isWithin(documents.path, from) || !p.isWithin(documents.path, to)) {
+      return const FolderMoveFailed(outsideRoot);
+    }
+    // Read before the move, because afterwards the old names are gone.
+    final documentNames = await _documentsIn(from);
+    if (documentNames == null) return const FolderMoveFailed(_unlistable);
+    try {
+      await movePathNoReplace(from, to);
+    } on NativeNameCollision {
+      return const FolderNameTaken();
+    } on Object catch (error) {
+      log.e('move the folder $from', error);
+      return FolderMoveFailed(failureDetail(error));
+    }
+    await _adoptAll(documentNames, from, to);
+    await _sync(Directory(p.dirname(from)));
+    await _sync(Directory(p.dirname(to)));
+    return const FolderMoved();
+  }
+
+  /// Hands each document's kept versions to the name it now has.
+  Future<void> _adoptAll(List<String> names, String from, String to) async {
+    for (final name in names) {
+      final moved = p.join(to, name);
+      await _backups.adopt(
+        from: backupId(p.relative(p.join(from, name), from: documents.path)),
+        to: backupId(p.relative(moved, from: documents.path)),
+        documentPath: moved,
+      );
+    }
+  }
+
+  /// The PGN file names directly in [folder], or null when it cannot be
+  /// listed — which is a reason not to move it at all.
+  Future<List<String>?> _documentsIn(String folder) async {
+    final names = <String>[];
+    try {
+      await for (final entry in Directory(folder).list()) {
+        if (entry is File && p.extension(entry.path) == '.pgn') {
+          names.add(p.basename(entry.path));
+        }
+      }
+    } on FileSystemException catch (error) {
+      log.e('list $folder before moving it', error);
+      return null;
+    }
+    return names;
+  }
+
   /// Moves [ref] into the recovery folder beside it.
   Future<DeleteResult> delete(
     DocumentRef ref, {
@@ -212,6 +288,8 @@ final class DocumentRelocation {
 const _recoveryFolder = '.cap-pgn-history';
 
 const outsideRoot = 'that path is outside the documents folder';
+
+const _unlistable = 'the folder could not be read';
 
 /// The folder [ref] lives in, which is the scope of its lock.
 Directory folderOf(DocumentRef ref) => Directory(p.dirname(ref.path));

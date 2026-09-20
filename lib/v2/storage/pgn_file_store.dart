@@ -208,6 +208,10 @@ final class PgnFileStore implements PgnDocumentStore {
   }) => _relocation.move(ref, destination, expected: expected);
 
   @override
+  Future<FolderMoveResult> moveFolder(String from, String to) =>
+      _relocation.moveFolder(from, to);
+
+  @override
   Future<DeleteResult> delete(DocumentRef ref, {required Revision expected}) =>
       _relocation.delete(ref, expected: expected);
 
