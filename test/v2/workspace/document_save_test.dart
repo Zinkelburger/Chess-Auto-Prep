@@ -1,6 +1,6 @@
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart'
-    show Collision, IoFailure, Opened;
+    show Collision, Conflict, IoFailure, Opened;
 import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -110,6 +110,21 @@ void main() {
     expect(session.commentAt(sicilian), 'The Sicilian [%eval 0.30]');
     expect(saver.canUndo, isFalse);
     expect(saver.state, isA<Saved>());
+  });
+
+  test('an undo the document has left behind refuses and saves on', () async {
+    edit('B');
+    await pumpEventQueue();
+    // The store refuses and names the revision the document already has: it
+    // is the entry that is out of date, not the file.
+    fixture.store.saves.add(Conflict(scriptedRevision(fixture.onDisk)));
+    expect(await saver.undo(), isA<UndoRefused>());
+    expect(saver.state, isA<Saved>());
+    expect(saver.canUndo, isTrue, reason: 'nothing was taken back');
+    edit('C');
+    await pumpEventQueue();
+    expect(saver.state, isA<Saved>());
+    expect(fixture.onDisk, contains('{C [%eval 0.30]}'));
   });
 
   test('an undo the file no longer expects is refused, history kept', () async {

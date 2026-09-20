@@ -162,6 +162,7 @@ final class DocumentSaver extends ChangeNotifier {
       return const UndoRefused();
     }
     final entry = _undo.last;
+    final resting = _state;
     _writing = true;
     _set(const Saving());
     final ticket = _opens;
@@ -172,8 +173,21 @@ final class DocumentSaver extends ChangeNotifier {
     );
     _writing = false;
     if (_disposed || ticket != _opens) return const UndoRefused();
+    if (_outOfDate(result, target)) {
+      _set(resting);
+      return const UndoRefused();
+    }
     return _undone(result, entry, target.ref);
   }
+
+  /// Whether the store refused because the entry names a revision the
+  /// document has left behind rather than because the file changed: what is
+  /// on disk is the revision this saver already holds.
+  ///
+  /// Only this entry is out of reach. The draft is still the file's, so the
+  /// document is not conflicted and saving goes on.
+  bool _outOfDate(store.SaveResult result, _Target target) =>
+      result is store.Conflict && result.current == target.revision;
 
   UndoResult _undone(
     store.SaveResult result,
