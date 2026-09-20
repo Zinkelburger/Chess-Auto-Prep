@@ -51,7 +51,7 @@ void main() {
     await pump(tester);
     expect(find.text('Main'), findsOneWidget);
     expect(
-      find.text('Black · 2 lines, 1 from another position'),
+      find.text('2 lines, 1 from another position'),
       findsOneWidget,
     );
     expect(find.text('Saved'), findsOneWidget);
@@ -72,7 +72,7 @@ void main() {
       );
       await tester.pump();
       expect(
-        find.text('White · 2 lines, 1 cannot be edited here'),
+        find.text('2 lines, 1 cannot be edited here'),
         findsOneWidget,
       );
     });
@@ -253,7 +253,7 @@ void main() {
     fixture.dispose();
     fixture = await openSession(unreadableGameChapter);
     await pump(tester);
-    expect(find.text('White · 1 line, 1 could not be read'), findsOneWidget);
+    expect(find.text('1 line, 1 could not be read'), findsOneWidget);
   });
   testWidgets('says when a line could not be read in full', (tester) async {
     fixture.dispose();

@@ -4,10 +4,14 @@ import 'package:path/path.dart' as p;
 
 import '../chess/fen.dart';
 import '../chess/pgn/chapter.dart';
+import '../chess/pgn/branch_edits.dart' as edits;
+import '../chess/pgn/chapter_edit.dart' as edits;
 import '../chess/pgn/chapter_edits.dart' as edits;
 import '../chess/pgn/comment_edits.dart' as edits;
+import '../chess/pgn/line_edits.dart' as edits;
 import '../chess/pgn/games_written.dart';
 import '../chess/pgn/game_tree.dart';
+import '../chess/pgn/tree_edit.dart';
 import '../diagnostics/log.dart';
 import '../storage/chapter_files.dart';
 import '../storage/document_ref.dart';
@@ -207,8 +211,8 @@ final class DocumentSession extends ChangeNotifier {
     final hadRefusal = _refused != null;
     switch (edits.setComment(chapter, at: at, text: text)) {
       case final edits.CommentRefused refusal:
-        log.w('comment ${_source?.path}', _refusalDetail(refusal));
-        _refused = _refusalOf(refusal);
+        log.w('comment ${_source?.path}', refusalDetail(refusal));
+        _refused = refusalOf(refusal);
       case edits.CommentWritten(chapter: final edited, :final written):
         _clearRefusal();
         if (identical(edited, chapter)) {
@@ -219,18 +223,6 @@ final class DocumentSession extends ChangeNotifier {
     }
     notifyListeners();
   }
-
-  /// What the log should say about a refused edit; the screen says its own
-  /// version of the same thing.
-  String _refusalDetail(edits.CommentRefused refusal) => switch (refusal) {
-    edits.GameNotWhole() => 'the game holding that move was not read whole',
-    edits.CommentUnwritable(:final reason) => reason,
-  };
-
-  EditRefused _refusalOf(edits.CommentRefused refusal) => switch (refusal) {
-    edits.GameNotWhole() => const LineNotWhole(),
-    edits.CommentUnwritable(:final reason) => WordsRefused(reason),
-  };
 
   /// Whether this document opened to read, in which case the edit does not
   /// happen and the screen says why again.
@@ -265,7 +257,7 @@ final class DocumentSession extends ChangeNotifier {
       _chapter = restored;
       _cursor = before == null
           ? const NodePath.root()
-          : _sameMoves(before, restored.tree, _cursor);
+          : samePathIn(before, restored.tree, _cursor);
       notifyListeners();
     }
     return result;
@@ -351,23 +343,52 @@ final class DocumentSession extends ChangeNotifier {
     return OpenFailed(reason);
   }
 
-  /// Where the moves [path] names in [before] are in [after].
+  /// Renames the line at [game] — its `[Event]` tag, and nothing else in the
+  /// file.
+  void renameLine(int game, String name) =>
+      _apply((chapter) => edits.renamedLine(chapter, game: game, name: name));
+
+  /// Takes the line at [game] out of the file. Undo puts it back.
+  void deleteLine(int game) =>
+      _apply((chapter) => edits.lineDeleted(chapter, game: game));
+
+  /// Plays the chapter from [side]: the `// Color:` line, and the board.
+  void setSide(Side side) => _apply((chapter) => edits.sideSet(chapter, side));
+
+  /// Takes the move at [at] out of the chapter, and everything under it.
+  void deleteFrom(NodePath at) =>
+      _apply((chapter) => edits.movesDeleted(chapter, at: at));
+
+  /// Makes the move at [at] the first of the moves that share its parent.
+  void promoteVariation(NodePath at) =>
+      _apply((chapter) => edits.variationPromoted(chapter, at: at));
+
+  /// Makes the move at [at] part of the main line from the first move on.
+  void makeMainLine(NodePath at) =>
+      _apply((chapter) => edits.madeMainLine(chapter, at: at));
+
+  /// Shows what [edit] made of the open chapter and writes the games it says
+  /// it wrote, or says why it did not happen.
   ///
-  /// The moves are followed by name, not by their places in the lists: a
-  /// path is only a route through a particular tree, and the same numbers in
-  /// a file the user just took back can name entirely different moves. A move
-  /// the restored file does not have leaves the cursor on the deepest move
-  /// above it that it does.
-  NodePath _sameMoves(GameTree before, GameTree after, NodePath path) {
-    final kept = <int>[];
-    var siblings = after.children;
-    for (final step in before.lineTo(path)) {
-      final index = siblings.indexWhere((node) => node.san == step.san);
-      if (index < 0) break;
-      kept.add(index);
-      siblings = siblings[index].children;
+  /// These edits move and remove whole games, so the cursor is followed by
+  /// the moves it was on rather than by its path, which after a rearrangement
+  /// would name somebody else's move.
+  void _apply(edits.ChapterEdit Function(Chapter chapter) edit) {
+    final chapter = _chapter;
+    if (chapter == null || _refuseWhenReadOnly()) return;
+    switch (edit(chapter)) {
+      case edits.ChapterUnchanged():
+        return;
+      case edits.ChapterEditRefused(:final reason):
+        log.w('edit ${_source?.path}', reason);
+        _refused = EditNotWritten(reason);
+      case edits.ChapterEdited(chapter: final edited, :final games):
+        _clearRefusal();
+        _chapter = edited;
+        _cursor = samePathIn(chapter.tree, edited.tree, _cursor);
+        _saver.save(writeChapter(edited), GamesRearranged(games));
     }
-    return NodePath.of(kept);
+    notifyListeners();
   }
 
   @override

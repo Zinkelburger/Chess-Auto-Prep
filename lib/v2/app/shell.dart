@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../features/library/chapter_outline.dart';
 import '../features/library/library.dart';
 import '../features/library/library_panel.dart';
+import '../features/library/outline_panel.dart';
 import '../storage/chapter_files.dart';
 import '../ui/theme.dart';
 import '../workspace/document_saver.dart';
@@ -18,6 +20,7 @@ class Shell extends StatefulWidget {
   const Shell({
     super.key,
     required this.library,
+    required this.outline,
     required this.session,
     required this.saver,
     required this.analysis,
@@ -25,6 +28,7 @@ class Shell extends StatefulWidget {
   });
 
   final Library library;
+  final ChapterOutline outline;
   final DocumentSession session;
   final DocumentSaver saver;
   final EngineAnalysis analysis;
@@ -89,6 +93,17 @@ class _ShellState extends State<Shell> {
                   ),
                 ),
                 const VerticalDivider(width: 1),
+                ListenableBuilder(
+                  listenable: widget.session,
+                  builder: (context, _) => widget.session.source == null
+                      ? const SizedBox.shrink()
+                      : _OutlineColumn(
+                          outline: widget.outline,
+                          library: widget.library,
+                          session: widget.session,
+                          onOpen: _open,
+                        ),
+                ),
                 Expanded(
                   child: WorkspaceView(
                     session: widget.session,
@@ -103,6 +118,39 @@ class _ShellState extends State<Shell> {
       ),
     );
   }
+}
+
+/// The outline between the library and the board, with the rule that it is
+/// only there when a chapter is: its rows are that chapter's repertoire and
+/// its lines.
+class _OutlineColumn extends StatelessWidget {
+  const _OutlineColumn({
+    required this.outline,
+    required this.library,
+    required this.session,
+    required this.onOpen,
+  });
+
+  final ChapterOutline outline;
+  final Library library;
+  final DocumentSession session;
+  final ValueChanged<ChapterRef> onOpen;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      SizedBox(
+        width: outlineColumnWidth,
+        child: OutlinePanel(
+          outline: outline,
+          library: library,
+          session: session,
+          onOpen: onOpen,
+        ),
+      ),
+      const VerticalDivider(width: 1),
+    ],
+  );
 }
 
 /// Modes not yet in v2 are listed but disabled, so the menu shows the whole

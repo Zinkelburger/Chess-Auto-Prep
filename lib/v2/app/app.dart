@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 
 import '../diagnostics/log.dart';
 import '../engines/engine_supervisor.dart';
+import '../features/library/chapter_outline.dart';
 import '../features/library/library.dart';
 import '../storage/chapter_files.dart';
 import '../storage/pgn_file_store.dart';
@@ -59,6 +60,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     saver: _saver,
     root: _repertoires,
   );
+  late final _outline = ChapterOutline(library: _library, session: _session);
   final _engines = EngineSupervisor();
   late final _analysis = EngineAnalysis(
     _session,
@@ -153,6 +155,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
   void dispose() {
     _lifecycle.dispose();
     _analysis.dispose();
+    _outline.dispose();
     _library.dispose();
     _session.dispose();
     _saver.dispose();
@@ -170,6 +173,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
       home: Shell(
         leaving: _exit,
         library: _library,
+        outline: _outline,
         session: _session,
         saver: _saver,
         analysis: _analysis,

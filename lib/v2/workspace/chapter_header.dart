@@ -114,7 +114,10 @@ class _ChapterHeaderState extends State<ChapterHeader> {
             children: [
               Text(chapter.name, style: text.titleMedium),
               const SizedBox(height: Space.xs),
-              Text(_summary(chapter), style: text.bodySmall),
+              _SideAndLines(
+                chapter: chapter,
+                onSide: widget.session.setSide,
+              ),
               const SizedBox(height: Space.xs),
               Row(
                 children: [
@@ -148,14 +151,64 @@ String _refusalNotice(EditRefused refusal) => switch (refusal) {
         'in the old app.',
   WordsRefused(:final reason) =>
     'The note was not saved: $reason. Take it out and try again.',
+  EditNotWritten(:final reason) =>
+    'That change was not made: $reason. The chapter is as it was.',
   MoveLost() => 'That move could not be written, so nothing was saved.',
 };
 
-/// Whose chapter it is and how many games of the file it holds: the games
-/// merged into the tree, then the ones left out and why, because a chapter
-/// that shows fewer lines than the file has must say so.
+/// Whose chapter it is, and how much of the file it holds.
+class _SideAndLines extends StatelessWidget {
+  const _SideAndLines({required this.chapter, required this.onSide});
+
+  final Chapter chapter;
+  final ValueChanged<Side> onSide;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      _SideChoice(side: chapter.side, onChanged: onSide),
+      const SizedBox(width: Space.s),
+      Expanded(
+        child: Text(
+          _summary(chapter),
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ),
+    ],
+  );
+}
+
+/// Which side the chapter is played from, and the way to change it. It is
+/// two things, so it is two buttons: the answer is always in front of the
+/// user rather than behind a menu they have to open to read it.
+class _SideChoice extends StatelessWidget {
+  const _SideChoice({required this.side, required this.onChanged});
+
+  final Side side;
+  final ValueChanged<Side> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SegmentedButton<Side>(
+      segments: const [
+        ButtonSegment(value: Side.white, label: Text('White')),
+        ButtonSegment(value: Side.black, label: Text('Black')),
+      ],
+      selected: {side},
+      showSelectedIcon: false,
+      style: const ButtonStyle(
+        visualDensity: VisualDensity.compact,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      onSelectionChanged: (chosen) => onChanged(chosen.first),
+    );
+  }
+}
+
+/// How many games of the file the chapter holds: the games merged into the
+/// tree, then the ones left out and why, because a chapter that shows fewer
+/// lines than the file has must say so.
 String _summary(Chapter chapter) {
-  final side = chapter.side == Side.white ? 'White' : 'Black';
   final lines = chapter.gameCount == 1
       ? '1 line'
       : '${chapter.gameCount} lines';
@@ -170,7 +223,7 @@ String _summary(Chapter chapter) {
   final protected = chapter.protectedGames == 0
       ? ''
       : ', ${chapter.protectedGames} cannot be edited here';
-  return '$side · $lines$skipped$unreadable$protected';
+  return '$lines$skipped$unreadable$protected';
 }
 
 /// The last edit, taken back. Disabled when there is nothing to take back,

@@ -11,6 +11,17 @@ abstract final class Space {
 /// How wide the library panel beside the workspace is.
 const libraryPanelWidth = 300.0;
 
+/// How wide the chapter outline between the library and the board is.
+///
+/// The old app's column is 18% of the window's body clamped to 220–280 and
+/// draggable; this one is fixed, at a width from inside that range.
+const outlineColumnWidth = 240.0;
+
+/// How tall one row of the outline is, and how far a line sits in under the
+/// chapter it belongs to. Both are the old app's values.
+const outlineRowHeight = 30.0;
+const outlineIndent = 14.0;
+
 /// How wide a dialog that asks for one line of text is. Wide enough for a
 /// long chapter name, narrow enough not to fill the window.
 const nameDialogWidth = 360.0;

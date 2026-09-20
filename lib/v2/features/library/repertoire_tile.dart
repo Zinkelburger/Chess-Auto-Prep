@@ -4,6 +4,7 @@ import '../../storage/chapter_files.dart';
 import '../../ui/choice_dialog.dart';
 import '../../ui/confirm_dialog.dart';
 import '../../ui/name_dialog.dart';
+import '../../ui/row_actions.dart';
 import '../../ui/relative_time.dart';
 import '../../ui/theme.dart';
 import 'library.dart';
@@ -153,7 +154,7 @@ class _RepertoireRow extends StatelessWidget {
                 ],
               ),
             ),
-            _RowActions(
+            RowActions(
               children: [
                 _action('Rename…', () => _rename(context), busy: library.busy),
                 _action(
@@ -270,7 +271,7 @@ class _ChapterRow extends StatelessWidget {
               Expanded(
                 child: Text(chapter.name, overflow: TextOverflow.ellipsis),
               ),
-              _RowActions(
+              RowActions(
                 children: [
                   _action(
                     'Rename…',
@@ -298,22 +299,3 @@ class _ChapterRow extends StatelessWidget {
 /// out as well.
 MenuItemButton _action(String label, VoidCallback run, {required bool busy}) =>
     MenuItemButton(onPressed: busy ? null : run, child: Text(label));
-
-/// The `⋯` menu on a row.
-class _RowActions extends StatelessWidget {
-  const _RowActions({required this.children});
-
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return MenuAnchor(
-      menuChildren: children,
-      builder: (context, controller, _) => IconButton(
-        icon: const Icon(Icons.more_horiz, size: IconSize.action),
-        tooltip: 'Actions',
-        onPressed: controller.isOpen ? controller.close : controller.open,
-      ),
-    );
-  }
-}

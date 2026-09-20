@@ -184,6 +184,36 @@ Chapter renamedChapter(Chapter chapter, String name) => Chapter(
   tree: chapter.tree,
 );
 
+/// [chapter] played from the other side of the board.
+///
+/// The side is not a field of the games; it is one `//` line above them, so
+/// changing it rewrites that line and leaves every game exactly as it is.
+Chapter withSide(Chapter chapter, Side side) => Chapter(
+  name: chapter.name,
+  side: side,
+  preamble: preambleWithSide(chapter.preamble, side),
+  lines: chapter.lines,
+  tree: chapter.tree,
+);
+
+/// [preamble] with its `// Color:` line saying [side].
+///
+/// Upserted in place: a file that has the line keeps everything around it
+/// where it was, and one that has none — an imported PGN, a chapter an older
+/// build wrote — gains it above whatever the preamble already said, which is
+/// where [chapterSide] looks for it.
+String preambleWithSide(String preamble, Side side) {
+  final wanted = '// Color: ${side == Side.white ? 'White' : 'Black'}';
+  final lines = preamble.split('\n');
+  final at = lines.indexWhere((line) => line.trim().startsWith('// Color:'));
+  if (at < 0) return '$wanted\n$preamble';
+  // A file written on Windows ends that line with a carriage return, and the
+  // line beside it keeps one: replacing the words is not a reason to change
+  // how the heading ends its lines.
+  lines[at] = lines[at].endsWith('\r') ? '$wanted\r' : wanted;
+  return lines.join('\n');
+}
+
 /// A chapter file with no games yet: the `//` preamble and nothing else.
 ///
 /// The colour line is the only record of which side the chapter is for, so it

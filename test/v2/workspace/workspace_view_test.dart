@@ -62,7 +62,7 @@ void main() {
     await pump(tester);
     expect(find.text('Main'), findsOneWidget);
     expect(
-      find.text('Black · 2 lines, 1 from another position'),
+      find.text('2 lines, 1 from another position'),
       findsOneWidget,
     );
     expect(find.textContaining('c5'), findsOneWidget);

@@ -110,6 +110,20 @@ final class _LineBuilder {
       san: node.san + node.nags.map(nagGlyph).nonNulls.join(),
       selected: session.cursor == path,
       onTap: () => session.goTo(path),
+      actions: [
+        MenuItemButton(
+          onPressed: () => session.promoteVariation(path),
+          child: const Text('Promote variation'),
+        ),
+        MenuItemButton(
+          onPressed: () => session.makeMainLine(path),
+          child: const Text('Make main line'),
+        ),
+        MenuItemButton(
+          onPressed: () => session.deleteFrom(path),
+          child: const Text('Delete from here'),
+        ),
+      ],
     );
   }
 }
@@ -147,14 +161,15 @@ class _VariationBlock extends StatelessWidget {
   }
 }
 
-/// One clickable move. When it becomes the selected one it scrolls itself
-/// into view.
+/// One clickable move, with what can be done to it on the right button.
+/// When it becomes the selected one it scrolls itself into view.
 class _MoveToken extends StatefulWidget {
   const _MoveToken({
     required this.label,
     required this.san,
     required this.selected,
     required this.onTap,
+    required this.actions,
   });
 
   final String label;
@@ -162,11 +177,16 @@ class _MoveToken extends StatefulWidget {
   final bool selected;
   final VoidCallback onTap;
 
+  /// What the right button offers for this move.
+  final List<Widget> actions;
+
   @override
   State<_MoveToken> createState() => _MoveTokenState();
 }
 
 class _MoveTokenState extends State<_MoveToken> {
+  final _menu = MenuController();
+
   @override
   void initState() {
     super.initState();
@@ -191,32 +211,40 @@ class _MoveTokenState extends State<_MoveToken> {
     });
   }
 
+  /// The right button, and a long press for a pointer that has no right
+  /// button, open what can be done to this move.
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return InkWell(
-      onTap: widget.onTap,
-      borderRadius: BorderRadius.circular(3),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-        decoration: BoxDecoration(
-          color: widget.selected
-              ? scheme.primary.withValues(alpha: 0.35)
-              : null,
-          borderRadius: BorderRadius.circular(3),
-        ),
-        child: Text.rich(
-          TextSpan(
-            children: [
-              if (widget.label.isNotEmpty)
-                TextSpan(
-                  text: '${widget.label} ',
-                  style: TextStyle(color: scheme.onSurfaceVariant),
-                ),
-              TextSpan(text: widget.san),
-            ],
+    return MenuAnchor(
+      controller: _menu,
+      menuChildren: widget.actions,
+      child: InkWell(
+        onTap: widget.onTap,
+        onSecondaryTap: _menu.open,
+        onLongPress: _menu.open,
+        borderRadius: BorderRadius.circular(3),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+          decoration: BoxDecoration(
+            color: widget.selected
+                ? scheme.primary.withValues(alpha: 0.35)
+                : null,
+            borderRadius: BorderRadius.circular(3),
           ),
-          style: monoText.copyWith(color: scheme.onSurface),
+          child: Text.rich(
+            TextSpan(
+              children: [
+                if (widget.label.isNotEmpty)
+                  TextSpan(
+                    text: '${widget.label} ',
+                    style: TextStyle(color: scheme.onSurfaceVariant),
+                  ),
+                TextSpan(text: widget.san),
+              ],
+            ),
+            style: monoText.copyWith(color: scheme.onSurface),
+          ),
         ),
       ),
     );

@@ -141,6 +141,46 @@ GameTree lineTree(Fen rootFen, List<String> sans) {
 GameTree withChildAdded(GameTree tree, NodePath at, MoveNode node) =>
     _rebuilt(tree, at.indexes, (children) => [...children, node]);
 
+/// [tree] with the child at [index] of the node at [parent] first among its
+/// siblings, the others keeping their order. That is what promoting a
+/// variation means inside one game: the first child is the main line.
+GameTree withChildFirst(GameTree tree, NodePath parent, int index) =>
+    _rebuilt(tree, parent.indexes, (children) {
+      if (index <= 0 || index >= children.length) return children;
+      return [
+        children[index],
+        ...children.take(index),
+        ...children.skip(index + 1),
+      ];
+    });
+
+/// [tree] without the child at [index] of the node at [parent], and without
+/// everything under it.
+GameTree withChildRemoved(GameTree tree, NodePath parent, int index) =>
+    _rebuilt(tree, parent.indexes, (children) {
+      if (index < 0 || index >= children.length) return children;
+      return [...children]..removeAt(index);
+    });
+
+/// Where the moves [path] names in [before] are in [after].
+///
+/// The moves are followed by name, not by their places in the lists: a path
+/// is only a route through a particular tree, and the same numbers in a tree
+/// an edit has just rearranged can name entirely different moves. A move
+/// [after] does not have leaves the path on the deepest move above it that
+/// it does have.
+NodePath samePathIn(GameTree before, GameTree after, NodePath path) {
+  final kept = <int>[];
+  var siblings = after.children;
+  for (final step in before.lineTo(path)) {
+    final index = siblings.indexWhere((node) => node.san == step.san);
+    if (index < 0) break;
+    kept.add(index);
+    siblings = siblings[index].children;
+  }
+  return NodePath.of(kept);
+}
+
 /// [tree] with the comment of the node at [at] replaced; the root path sets
 /// the comment before the first move.
 GameTree withComment(GameTree tree, NodePath at, String? comment) {
