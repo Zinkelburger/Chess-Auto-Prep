@@ -17,12 +17,12 @@ export 'library_state.dart';
 /// The user's repertoires: the list, the search over it, and every change
 /// that adds, renames, moves or removes one.
 ///
-/// Every write goes through the document store, one chapter file at a time,
-/// because that is what carries the training records with it: a chapter's
-/// reviews, progress and history are keyed by its path, and the store
-/// repoints them inside the same operation. So renaming a repertoire is
-/// moving its chapters, and deleting one is deleting its chapters; the folder
-/// itself is only what is left when they are gone.
+/// Every write goes through the document store, because that is what carries
+/// the training records with it: a chapter's reviews, progress and history
+/// are keyed by its path, and the store repoints them inside the same
+/// operation. A chapter changes one file at a time; a repertoire renames as
+/// one folder, so it cannot end up split in two, and deletes chapter by
+/// chapter, because each one is quarantined separately.
 ///
 /// One change at a time ([busy]). The list is read again after each of them,
 /// so what the screen shows is what the disk holds rather than what this
@@ -135,49 +135,61 @@ final class Library extends ChangeNotifier {
   Future<LibraryResult> deleteChapter(ChapterRef ref) =>
       _run('delete ${ref.path}', () => _remove(ref));
 
-  /// Every chapter moves into the new folder, one store operation each, and
-  /// the old folder goes once it is empty. A chapter that refuses stops the
-  /// rename where it is: the ones already moved are where the user asked them
-  /// to be, and the result names the one that did not follow.
+  /// The folder moves whole, in one rename: its chapters, the raw-game
+  /// sidecars written beside them and the generation bundles under it. A
+  /// chapter-at-a-time rename that stopped half way would split one
+  /// repertoire across two folders and strand the rest of its files in the
+  /// one that then vanishes from the list.
   Future<LibraryResult> renameRepertoire(
     RepertoireFolder folder,
     String name,
   ) => _run('rename the repertoire ${folder.name}', () async {
-    if (_named(name) != null) return const LibraryNameTaken();
-    final target = p.join(_root, name);
-    return _everyChapter(
-      folder,
-      (chapter) => _relocate(
-        chapter,
-        DocumentRef(p.join(target, p.basename(chapter.path))),
-      ),
-    );
+    // The folder is not in the way of its own new name: on a case-sensitive
+    // filesystem `kid` to `KID` is a rename like any other.
+    if (_named(name, except: folder) != null) return const LibraryNameTaken();
+    Future<LibraryResult> move() =>
+        _movedFolder(folder.path, p.join(_root, name));
+    final open = _session.source;
+    if (open == null || !p.isWithin(folder.path, open.path)) return move();
+    // The chapter in the workspace is inside the folder, so its autosave is
+    // held still for the length of the move, as its own rename holds it.
+    return await _saver.holdStill((_) => move()) ?? const LibraryBusy();
   });
 
   /// Recoverable: each chapter goes to the recovery folder through the store,
-  /// so its training rows follow it there and come back with it.
-  Future<LibraryResult> deleteRepertoire(RepertoireFolder folder) => _run(
-    'delete the repertoire ${folder.name}',
-    () => _everyChapter(folder, _remove),
-  );
+  /// so its training rows follow it there and come back with it. A chapter
+  /// that refuses stops the delete where it is — the ones already gone are in
+  /// recovery — and the folder stays, because the rest is still in it.
+  Future<LibraryResult> deleteRepertoire(RepertoireFolder folder) =>
+      _run('delete the repertoire ${folder.name}', () async {
+        final repointed = <records.RepointResult>[];
+        for (final chapter in folder.chapters) {
+          final result = await _remove(chapter);
+          if (result case LibraryDone(:final training)) {
+            repointed.add(training);
+            continue;
+          }
+          return LibraryStoppedAt(chapter.name, result);
+        }
+        await _files.removeIfEmpty(folder.path);
+        return LibraryDone(training: foldedRepoint(repointed));
+      });
 
-  /// Runs [each] over the folder's chapters until one refuses, then takes the
-  /// folder away if nothing is left in it.
-  Future<LibraryResult> _everyChapter(
-    RepertoireFolder folder,
-    Future<LibraryResult> Function(ChapterRef) each,
-  ) async {
-    final repointed = <records.RepointResult>[];
-    for (final chapter in folder.chapters) {
-      final result = await each(chapter);
-      if (result case LibraryDone(:final training)) {
-        repointed.add(training);
-        continue;
-      }
-      return LibraryStoppedAt(chapter.name, result);
+  /// Reads the open chapter from disk again, throwing the draft away. This is
+  /// the way out of [LibraryConflicted]: the workspace takes the version that
+  /// is on disk, and the change the user asked for can be made against it.
+  Future<void> reloadOpenChapter() => _session.reloadFromDisk();
+
+  Future<LibraryResult> _movedFolder(String from, String to) async {
+    switch (await _store.moveFolder(from, to)) {
+      case store.FolderMoved(:final training):
+        _followedFolder(from, to);
+        return LibraryDone(training: training);
+      case store.FolderNameTaken():
+        return const LibraryNameTaken();
+      case store.FolderMoveFailed(:final detail):
+        return LibraryFailure(detail);
     }
-    await _files.removeIfEmpty(folder.path);
-    return LibraryDone(training: _allOf(repointed));
   }
 
   Future<LibraryResult> _created(
@@ -201,7 +213,7 @@ final class Library extends ChangeNotifier {
       _withRevision(ref, (revision) async {
         switch (await _store.move(ref, to, expected: revision)) {
           case store.Moved(:final training):
-            _followed(ref, _chapterAt(to));
+            _followed(ref, ChapterRef.at(to.path));
             return LibraryDone(training: training);
           case store.Collision():
             return const LibraryNameTaken();
@@ -230,16 +242,18 @@ final class Library extends ChangeNotifier {
   /// The chapter open in the workspace is held still by its saver for the
   /// length of the operation, so a rename cannot land between an autosave and
   /// its answer. Any other chapter is read from disk, which is also the check
-  /// that it is still there.
+  /// that it is still there — and the whole file, because a revision is a
+  /// hash of the bytes and there is nothing cheaper to read.
   Future<LibraryResult> _withRevision(
     ChapterRef ref,
     Future<LibraryResult> Function(Revision revision) write,
   ) async {
-    if (_session.source == ref) {
-      return await _saver.holdStill(write) ?? const LibraryStale();
-    }
+    if (_session.source == ref) return _held(write);
     switch (await _store.open(ref)) {
       case store.Opened(:final revision):
+        // The user may have opened this very chapter while it was being read,
+        // and from here on its writes belong behind the saver's hold.
+        if (_session.source == ref) return _held(write);
         return write(revision);
       case store.Absent():
         return const LibraryStale();
@@ -249,11 +263,34 @@ final class Library extends ChangeNotifier {
     }
   }
 
+  /// Runs [write] with the open chapter held still by its saver.
+  ///
+  /// The revision it writes against is the saver's, so a refusal means the
+  /// file changed under the workspace. Trying again cannot help while the
+  /// workspace still holds the old revision, which is why that is a result of
+  /// its own rather than the retryable [LibraryStale].
+  Future<LibraryResult> _held(
+    Future<LibraryResult> Function(Revision revision) write,
+  ) async {
+    final result = await _saver.holdStill(write);
+    if (result == null) return const LibraryBusy();
+    return result is LibraryStale ? const LibraryConflicted() : result;
+  }
+
   /// The workspace follows the chapter it has open. The user may have opened
   /// another one while this change was in flight, which is why the file it
   /// started on is checked again rather than remembered.
   void _followed(ChapterRef ref, ChapterRef to) {
     if (_session.source == ref) _session.relocated(to);
+  }
+
+  /// The workspace follows a chapter whose whole folder moved under it.
+  void _followedFolder(String from, String to) {
+    final open = _session.source;
+    if (open == null || !p.isWithin(from, open.path)) return;
+    _session.relocated(
+      ChapterRef.at(p.join(to, p.relative(open.path, from: from))),
+    );
   }
 
   void _closedIfOpen(ChapterRef ref) {
@@ -274,6 +311,7 @@ final class Library extends ChangeNotifier {
       result = await body();
     } finally {
       _busy = false;
+      if (!_disposed) notifyListeners();
     }
     if (_disposed) return result;
     _report(action, result);
@@ -287,7 +325,7 @@ final class Library extends ChangeNotifier {
         return;
       case LibraryNameTaken():
         log.w(action, 'the name is taken');
-      case LibraryStale():
+      case LibraryStale() || LibraryConflicted():
         log.w(action, 'the file changed on disk');
       case LibraryFailure(:final detail):
         log.e(action, detail);
@@ -297,9 +335,13 @@ final class Library extends ChangeNotifier {
     }
   }
 
-  RepertoireFolder? _named(String name) {
+  /// The repertoire called [name], compared without case because a user who
+  /// has `KID` did not mean to make a second `kid`. [except] is the folder
+  /// being renamed, which is never in the way of its own name.
+  RepertoireFolder? _named(String name, {RepertoireFolder? except}) {
     final wanted = name.toLowerCase();
     for (final folder in repertoires) {
+      if (folder.path == except?.path) continue;
       if (folder.name.toLowerCase() == wanted) return folder;
     }
     return null;
@@ -315,12 +357,6 @@ final class Library extends ChangeNotifier {
     }
     return Side.white;
   }
-
-  ChapterRef _chapterAt(DocumentRef ref) => ChapterRef(
-    repertoire: p.basename(p.dirname(ref.path)),
-    name: p.basenameWithoutExtension(ref.path),
-    path: ref.path,
-  );
 
   LibraryLoadFailed _loadFailed(String detail) {
     log.w('list the repertoires under $_root', detail);
@@ -338,21 +374,4 @@ final class Library extends ChangeNotifier {
     _disposed = true;
     super.dispose();
   }
-}
-
-/// Every repoint folded into one answer: a problem if any chapter had one,
-/// otherwise the rows that followed.
-records.RepointResult _allOf(List<records.RepointResult> results) {
-  var rows = 0;
-  for (final result in results) {
-    switch (result) {
-      case records.Repointed(:final rowsChanged):
-        rows += rowsChanged;
-      case records.NothingToRepoint():
-        continue;
-      case records.Malformed() || records.IoFailure():
-        return result;
-    }
-  }
-  return rows == 0 ? const records.NothingToRepoint() : records.Repointed(rows);
 }

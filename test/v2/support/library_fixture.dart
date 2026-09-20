@@ -4,6 +4,7 @@ import 'package:chess_auto_prep/v2/storage/document_ref.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
+import 'package:path/path.dart' as p;
 
 import 'scripted_files.dart';
 import 'scripted_store.dart';
@@ -45,8 +46,15 @@ Future<LibraryFixture> openLibrary(
   String text = '// Main\n// Color: White\n\n',
   ChapterRef? open,
 }) async {
-  final files = ScriptedFiles(listing: Repertoires(folders));
   final store = ScriptedDocumentStore();
+  // A folder is empty when the store holds no document inside it, so
+  // "the folder went too" is an assertion about what was written rather than
+  // about which calls were made.
+  final files = ScriptedFiles(
+    listing: Repertoires(folders),
+    isEmpty: (folder) =>
+        !store.documents.keys.any((ref) => p.isWithin(folder, ref.path)),
+  );
   for (final folder in folders) {
     for (final chapter in folder.chapters) {
       store.documents[chapter] = Opened(text, scriptedRevision(text));

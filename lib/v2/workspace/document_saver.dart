@@ -92,6 +92,11 @@ final class DocumentSaver extends ChangeNotifier {
 
   /// A document was opened. It is what the saver writes from now on, and
   /// nothing of the last one — its draft, its receipts — is carried over.
+  ///
+  /// The draft of the document being replaced must already be on disk, which
+  /// is why the caller waits for [flush] first: a draft waiting behind a hold
+  /// belongs to the file it was typed into, and this cannot write it there
+  /// once the target has changed.
   void opened(DocumentRef ref, Revision revision) {
     _opens++;
     _target = (ref: ref, revision: revision);
@@ -132,8 +137,11 @@ final class DocumentSaver extends ChangeNotifier {
     final held = _hold(action);
     // The hold and the draft waiting behind it are now what the draft is
     // waiting on, so a flush waits for the whole of it rather than for a
-    // write that finished before the hold began.
-    _inFlight = held;
+    // write that finished before the hold began. What is kept here can only
+    // complete, never fail: an action that throws is the caller's to handle,
+    // and a failed future left here would throw again at every later flush
+    // and at the end of every later hold.
+    _inFlight = held.then<void>((_) {}, onError: (Object _) {});
     return held;
   }
 

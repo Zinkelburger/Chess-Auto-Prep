@@ -38,6 +38,17 @@ abstract interface class PgnDocumentStore {
     required Revision expected,
   });
 
+  /// Moves the folder at [from] to [to] with everything in it, in one
+  /// exclusive rename.
+  ///
+  /// A repertoire is a folder: chapters, the raw-game sidecars written beside
+  /// them and the generation bundles under it. Moving it a document at a time
+  /// could stop half way and leave one repertoire in two folders with the
+  /// rest of its files stranded, so this moves all of it or none of it. There
+  /// is no revision to name, because the documents inside are not read or
+  /// written — only the name of the folder above them changes.
+  Future<FolderMoveResult> moveFolder(String from, String to);
+
   /// Moves [ref] into the recovery folder the old app also deletes into, so
   /// the user has one place to look and nothing is unlinked.
   Future<DeleteResult> delete(DocumentRef ref, {required Revision expected});
@@ -101,6 +112,32 @@ sealed class MoveResult {
 
 sealed class DeleteResult {
   const DeleteResult();
+}
+
+sealed class FolderMoveResult {
+  const FolderMoveResult();
+}
+
+/// The folder and everything under it is at the new path.
+final class FolderMoved extends FolderMoveResult {
+  const FolderMoved({this.training = const NothingToRepoint()});
+
+  /// Whether the training rows naming documents inside the folder followed
+  /// it. One answer for the whole folder: the rows are rewritten in one pass.
+  final RepointResult training;
+}
+
+/// Something of that name is already there. Nothing was moved.
+final class FolderNameTaken extends FolderMoveResult {
+  const FolderNameTaken();
+}
+
+/// The folder could not be moved. It is where it was, whole.
+final class FolderMoveFailed extends FolderMoveResult {
+  const FolderMoveFailed(this.detail);
+
+  /// For the log; the widget writes the sentence.
+  final String detail;
 }
 
 final class Created implements CreateResult {

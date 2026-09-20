@@ -23,6 +23,7 @@ final class ScriptedDocumentStore implements PgnDocumentStore {
   final creates = <CreateResult>[];
   final saves = <SaveResult>[];
   final moves = <MoveResult>[];
+  final folderMoves = <FolderMoveResult>[];
   final deletes = <DeleteResult>[];
 
   /// Every save that was asked for, in the order it was asked.
@@ -116,6 +117,27 @@ final class ScriptedDocumentStore implements PgnDocumentStore {
     documents.remove(ref);
     documents[destination] = current;
     return Moved(current.revision, training: repoint);
+  }
+
+  /// Every document under [from] takes the new folder's name at once, as one
+  /// rename of the folder does; a name already taken moves nothing.
+  @override
+  Future<FolderMoveResult> moveFolder(String from, String to) async {
+    await _turn();
+    final queued = _next(folderMoves);
+    if (queued != null) return queued;
+    final inside = documents.keys
+        .where((ref) => p.isWithin(from, ref.path))
+        .toList();
+    final moved = <DocumentRef, DocumentRead>{};
+    for (final ref in inside) {
+      final target = DocumentRef(p.join(to, p.relative(ref.path, from: from)));
+      if (documents.containsKey(target)) return const FolderNameTaken();
+      moved[target] = documents[ref]!;
+    }
+    inside.forEach(documents.remove);
+    documents.addAll(moved);
+    return FolderMoved(training: repoint);
   }
 
   @override

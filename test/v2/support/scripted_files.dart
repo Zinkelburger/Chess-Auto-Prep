@@ -5,14 +5,19 @@ import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 /// A repertoire listing the test writes, whose timing the test controls:
 /// every call waits until the test releases it.
 final class ScriptedFiles implements ChapterFiles {
-  ScriptedFiles({this.listing = const Repertoires([])});
+  ScriptedFiles({this.listing = const Repertoires([]), this.isEmpty});
 
   RepertoireListing listing;
+
+  /// Whether a folder has nothing left in it, which the real listing answers
+  /// from the disk the store just wrote to. Without it every folder counts as
+  /// empty, so a test that asserts a folder went has to say so itself.
+  final bool Function(String folder)? isEmpty;
 
   /// With this set, every call waits until the test releases it.
   bool hold = false;
 
-  /// The folders [removeIfEmpty] was asked about, in order.
+  /// The folders that were actually taken away, in order.
   final removed = <String>[];
 
   final _pending = <Completer<void>>[];
@@ -38,7 +43,9 @@ final class ScriptedFiles implements ChapterFiles {
   }
 
   @override
-  Future<void> removeIfEmpty(String folder) async => removed.add(folder);
+  Future<void> removeIfEmpty(String folder) async {
+    if (isEmpty?.call(folder) ?? true) removed.add(folder);
+  }
 
   Future<void> _wait() {
     if (!hold) return Future<void>.value();

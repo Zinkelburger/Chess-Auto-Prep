@@ -14,6 +14,15 @@ final class ChapterRef extends DocumentRef {
     required String path,
   }) : super(path);
 
+  /// The chapter a file path names: the file without `.pgn`, in the folder
+  /// whose name is the repertoire's. One rule, so a listing and a move cannot
+  /// disagree about what a path means.
+  factory ChapterRef.at(String path) => ChapterRef(
+    repertoire: p.basename(p.dirname(path)),
+    name: p.basenameWithoutExtension(path),
+    path: path,
+  );
+
   /// The folder name under `repertoires/`.
   final String repertoire;
 
@@ -133,13 +142,7 @@ final class ChapterDirectory implements ChapterFiles {
     var modified = (await folder.stat()).modified;
     await for (final file in folder.list()) {
       if (file is! File || !_isChapter(file.path)) continue;
-      chapters.add(
-        ChapterRef(
-          repertoire: name,
-          name: p.basenameWithoutExtension(file.path),
-          path: file.path,
-        ),
-      );
+      chapters.add(ChapterRef.at(file.path));
       final touched = (await file.stat()).modified;
       if (touched.isAfter(modified)) modified = touched;
     }
