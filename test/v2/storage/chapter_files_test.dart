@@ -67,6 +67,23 @@ void main() {
     expect(((await files.list()) as Repertoires).folders, isEmpty);
   });
 
+  test(
+    'a repertoire this app may not read is named, and the rest are listed',
+    () async {
+      await put('KID/Main.pgn', '*');
+      await put('Benko/Main.pgn', '*');
+      final closed = p.join(root.path, 'Benko');
+      await Process.run('chmod', ['000', closed]);
+      addTearDown(() => Process.run('chmod', ['u+rwx', closed]));
+      final listing = (await ChapterDirectory(root).list()) as Repertoires;
+      expect(listing.folders.map((f) => f.name), ['KID']);
+      expect(listing.unreadable.single.name, 'Benko');
+      expect(listing.unreadable.single.path, closed);
+      expect(listing.unreadable.single.detail, isNotEmpty);
+    },
+    skip: _needsAPlainUser,
+  );
+
   test('an empty folder is removed, one with anything in it is not', () async {
     await put('Gone/.cap-pgn-history/1-2-Main.pgn', '*');
     final empty = Directory(p.join(root.path, 'Empty'));
@@ -78,3 +95,8 @@ void main() {
     expect(Directory(p.join(root.path, 'Gone')).existsSync(), isTrue);
   });
 }
+
+final Object _needsAPlainUser =
+    !Platform.isLinux || Platform.environment['USER'] == 'root'
+    ? 'needs a Linux user without root'
+    : false;

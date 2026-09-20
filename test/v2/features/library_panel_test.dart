@@ -101,6 +101,29 @@ void main() {
     expect(find.text('KID'), findsOneWidget);
   });
 
+  testWidgets('a repertoire that cannot be read is named, not dropped', (
+    tester,
+  ) async {
+    await show(tester, [kid]);
+    fixture.files.listing = Repertoires(
+      [kid],
+      unreadable: const [
+        UnreadableFolder(
+          name: 'Benko',
+          path: '/repertoires/Benko',
+          detail: 'Permission denied',
+        ),
+      ],
+    );
+    await fixture.library.refresh();
+    await tester.pumpAndSettle();
+    expect(find.text('KID'), findsOneWidget);
+    expect(
+      find.text('Benko could not be read: Permission denied'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('a new repertoire is named and sided in one dialog', (
     tester,
   ) async {

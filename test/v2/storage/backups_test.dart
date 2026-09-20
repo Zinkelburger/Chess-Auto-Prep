@@ -1,4 +1,5 @@
 // The versions a write replaces, kept under Support.
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
@@ -61,6 +62,128 @@ void main() {
     );
     expect(after, isA<Saved>());
     expect(fixture.keptTexts(renamed), ['A *\n', 'B *\n']);
+  });
+
+  test('a list of versions nobody can read is written again', () async {
+    final ref = fixture.ref('KID/Main.pgn');
+    var revision = await fixture.put(ref, 'A *\n');
+    revision =
+        (await fixture.store.save(ref, 'B *\n', expected: revision) as Saved)
+            .receipt
+            .committed;
+    final kept = fixture.keptVersions(ref);
+    final index = File(p.join(fixture.backupFolder(ref).path, 'index.json'));
+    await index.writeAsString('{"versions": [{"fi');
+
+    final saved = await fixture.store.save(ref, 'C *\n', expected: revision);
+
+    expect(saved, isA<Saved>(), reason: 'a broken list is not a lost save');
+    expect(await File(ref.path).readAsString(), 'C *\n');
+    // Both versions the file still holds are listed again, with the new one.
+    expect(fixture.keptTexts(ref), ['A *\n', 'B *\n']);
+    expect(fixture.keptVersions(ref), containsAll(kept));
+    final aside = fixture
+        .backupFolder(ref)
+        .listSync()
+        .map((e) => p.basename(e.path));
+    expect(aside, contains(startsWith('index.json.corrupt-')));
+  });
+
+  test('a history already kept under the new name is not braided in', () async {
+    // A chapter that used to have the name, removed outside this app, so its
+    // versions are still kept under the id that name hashes to.
+    final taken = fixture.ref('KID/Mainline.pgn');
+    final first = await fixture.put(taken, 'older *\n');
+    await fixture.store.save(taken, 'newer *\n', expected: first);
+    await File(taken.path).delete();
+
+    final ref = fixture.ref('KID/Main.pgn');
+    final revision = await fixture.put(ref, 'A *\n');
+    final saved =
+        await fixture.store.save(ref, 'B *\n', expected: revision) as Saved;
+    final moved = await fixture.store.rename(
+      ref,
+      'Mainline.pgn',
+      expected: saved.receipt.committed,
+    );
+
+    expect(moved, isA<Moved>());
+    expect(fixture.keptTexts(taken), ['A *\n']);
+    final superseded = Directory(p.join(fixture.support.path, 'backups'))
+        .listSync()
+        .whereType<Directory>()
+        .where((d) => p.basename(d.path).contains('.superseded-'))
+        .single;
+    expect(superseded.listSync(), hasLength(2));
+  });
+
+  test('versions committed in one millisecond keep one order', () async {
+    final ref = fixture.ref('KID/Main.pgn');
+    final revision = await fixture.put(ref, 'A *\n');
+    final folder = fixture.backupFolder(ref);
+    await folder.create(recursive: true);
+    // Versions the same stamp cannot tell apart; only their names can, and
+    // the folder hands them back in whatever order it pleases.
+    const names = ['66666666', '55555555', '44444444', '33333333', '22222222'];
+    for (final name in names) {
+      await File(
+        p.join(folder.path, '20260101T000000000Z-$name.pgn.gz'),
+      ).writeAsBytes(gzip.encode(utf8.encode('$name *\n')));
+    }
+    await File(
+      p.join(folder.path, 'index.json'),
+    ).writeAsString('not a list of versions');
+
+    expect(
+      await fixture.store.save(ref, 'B *\n', expected: revision),
+      isA<Saved>(),
+    );
+
+    expect(fixture.keptTexts(ref).take(names.length), [
+      for (final name in names.reversed) '$name *\n',
+    ]);
+    expect(fixture.keptTexts(ref).last, 'A *\n');
+  });
+
+  test('an adoption that cannot be made moves no history at all', () async {
+    final taken = fixture.ref('KID/Mainline.pgn');
+    final first = await fixture.put(taken, 'older *\n');
+    await fixture.store.save(taken, 'newer *\n', expected: first);
+    await File(taken.path).delete();
+    final occupied = fixture.backupFolder(taken);
+    final occupantHeld = occupied.listSync().map((e) => p.basename(e.path));
+
+    final ref = fixture.ref('KID/Main.pgn');
+    final revision = await fixture.put(ref, 'A *\n');
+    final saved =
+        await fixture.store.save(ref, 'B *\n', expected: revision) as Saved;
+    final mineHeld = fixture
+        .backupFolder(ref)
+        .listSync()
+        .map((e) => p.basename(e.path));
+    // The name the incoming history has to wait under is taken, by what an
+    // adoption that was interrupted left behind.
+    await Directory('${occupied.path}.adopting').create();
+
+    final moved = await fixture.store.rename(
+      ref,
+      'Mainline.pgn',
+      expected: saved.receipt.committed,
+    );
+
+    expect(moved, isA<Moved>(), reason: 'the chapter still moves');
+    // Neither history was disturbed, and nothing was set aside.
+    expect(occupied.listSync().map((e) => p.basename(e.path)), occupantHeld);
+    expect(
+      fixture.backupFolder(ref).listSync().map((e) => p.basename(e.path)),
+      mineHeld,
+    );
+    expect(
+      Directory(
+        p.join(fixture.support.path, 'backups'),
+      ).listSync().where((e) => p.basename(e.path).contains('.superseded-')),
+      isEmpty,
+    );
   });
 
   test(

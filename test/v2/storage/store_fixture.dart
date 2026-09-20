@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:chess_auto_prep/v2/storage/backups.dart';
+import 'package:chess_auto_prep/v2/storage/document_probe.dart';
 import 'package:chess_auto_prep/v2/storage/document_ref.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_file_store.dart';
@@ -43,6 +44,10 @@ final class StoreFixture {
       backupId(p.relative(ref.path, from: documents.path)),
     ),
   );
+
+  /// What is on disk at [ref] now, for a test that put it there itself.
+  Future<Revision> revisionOf(DocumentRef ref) async =>
+      (await probeDocument(ref.path) as FileFound).revision;
 
   /// The versions kept for [ref], oldest first, as the index lists them.
   List<String> keptVersions(DocumentRef ref) {

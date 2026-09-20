@@ -197,6 +197,22 @@ void main() {
     );
   });
 
+  test('a quote inside an unquoted path is a character, not a field', () async {
+    final quoted = fixture.ref('repertoires/KID/My "best line.pgn');
+    write(
+      _progress,
+      '$_progressHeader\n${_progressRow(quoted.path)}\n'
+      '${_progressRow(benko.path)}\n',
+    );
+    final renamed = fixture.ref('repertoires/KID/Classical.pgn');
+    expect(
+      (await records.repoint(quoted, renamed) as Repointed).rowsChanged,
+      1,
+    );
+    expect(read(_progress), contains(_progressRow(renamed.path)));
+    expect(read(_progress), contains(_progressRow(benko.path)));
+  });
+
   test('only the logged answers that named the chapter change', () async {
     writeAll();
     final renamed = fixture.ref('repertoires/KID/Classical.pgn');
@@ -227,6 +243,40 @@ void main() {
     expect(read(_reviews), contains(_review(kid.path)));
   });
 
+  test('what a repoint replaces is kept where the old app keeps it', () async {
+    writeAll();
+    final before = [read(_reviews), read(_progress), read(_attempts)];
+    final renamed = fixture.ref('repertoires/KID/Classical.pgn');
+    expect(await records.repoint(kid, renamed), isA<Repointed>());
+    final operation = Directory(
+      p.join(fixture.documents.path, '.cap-reference-history'),
+    ).listSync().whereType<Directory>().single;
+    String kept(String name) =>
+        File(p.join(operation.path, name)).readAsStringSync();
+    expect([kept(_reviews), kept(_progress), kept(_attempts)], before);
+    expect(
+      operation.listSync().map((e) => p.basename(e.path)),
+      unorderedEquals([_reviews, _progress, _history, _attempts]),
+    );
+  });
+
+  test('a rewrite nothing can be kept for does not happen', () async {
+    writeAll();
+    final before = read(_reviews);
+    final history = Directory(
+      p.join(fixture.documents.path, '.cap-reference-history'),
+    );
+    await history.create();
+    await Process.run('chmod', ['500', history.path]);
+    final result = await records.repoint(
+      kid,
+      fixture.ref('repertoires/KID/Classical.pgn'),
+    );
+    await Process.run('chmod', ['u+w', history.path]);
+    expect(result, isA<IoFailure>());
+    expect(read(_reviews), before);
+  }, skip: _needsAPlainUser);
+
   test('a folder that cannot be written reports the failure', () async {
     writeAll();
     final before = read(_reviews);
@@ -253,6 +303,35 @@ void main() {
     expect(read(_history), contains(_historyRow(renamed.path)));
   });
 
+  test('rows a move could not rewrite are rewritten by the next one', () async {
+    writeAll();
+    final revision = await fixture.put(kid, '[Event "KID"]\n\n1. d4 *\n');
+    // The rename lands and the rows cannot follow, which is what a machine
+    // stopping between the two writes would leave behind.
+    await Process.run('chmod', ['a-w', fixture.documents.path]);
+    final moved =
+        await fixture.store.rename(kid, 'Mainline.pgn', expected: revision)
+            as Moved;
+    await Process.run('chmod', ['u+w', fixture.documents.path]);
+    expect(moved.training, isA<IoFailure>());
+    expect(read(_progress), contains(_progressRow(kid.path)));
+
+    final renamed = fixture.ref('repertoires/KID/Mainline.pgn');
+    final again =
+        await fixture.store.rename(
+              renamed,
+              'Classical.pgn',
+              expected: moved.revision,
+            )
+            as Moved;
+
+    expect(again.training, isA<Repointed>());
+    final classical = fixture.ref('repertoires/KID/Classical.pgn');
+    expect(read(_progress), contains(_progressRow(classical.path)));
+    expect(read(_history), contains(_historyRow(classical.path)));
+    expect(read(_progress), isNot(contains(_progressRow(kid.path))));
+  }, skip: _needsAPlainUser);
+
   test('deleting a chapter sends its rows into recovery with it', () async {
     writeAll();
     final revision = await fixture.put(kid, '[Event "KID"]\n\n1. d4 *\n');
@@ -270,3 +349,8 @@ void main() {
     expect(read(_history), contains(_historyRow(kid.path)));
   });
 }
+
+final Object _needsAPlainUser =
+    !Platform.isLinux || Platform.environment['USER'] == 'root'
+    ? 'needs a Linux user without root'
+    : false;

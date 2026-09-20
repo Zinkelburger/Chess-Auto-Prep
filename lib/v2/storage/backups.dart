@@ -46,7 +46,7 @@ final class BackupArchive {
         return const BackupSkipped();
       }
       final time = DateTime.now().toUtc();
-      final name = '${_stamp(time)}-${hash.substring(0, 8)}.pgn.gz';
+      final name = '${_stamp(time)}-${hash.substring(0, 8)}$_versionSuffix';
       await replaceFile(p.join(folder.path, name), gzip.encode(bytes));
       final version = BackupVersion(
         file: name,
@@ -74,7 +74,11 @@ final class BackupArchive {
     if (!await source.exists()) return;
     try {
       final destination = Directory(p.join(root.path, to));
-      await movePathNoReplace(source.path, destination.path);
+      if (await destination.exists()) {
+        await _adoptOverOccupant(source, destination);
+      } else {
+        await movePathNoReplace(source.path, destination.path);
+      }
       final index = await _readIndex(destination);
       await _writeIndex(destination, documentPath, index);
     } on Object catch (error) {
@@ -82,15 +86,123 @@ final class BackupArchive {
     }
   }
 
+  /// A history already kept under the id a document is moving to belongs to
+  /// whatever used to have that path: a chapter deleted from it, or one moved
+  /// away. Ids are a hash of the path, so the two would otherwise braid into
+  /// one list and a restore would offer one document's text as a version of
+  /// another. The older history is set aside under a name of its own, whole
+  /// and still readable, rather than added to or written over.
+  ///
+  /// Nothing is set aside until the move that needs the name can be made:
+  /// the incoming history goes to a name beside it first, which is what
+  /// proves the move is possible. Whatever fails, every step taken is put
+  /// back, so both histories end up where they started.
+  Future<void> _adoptOverOccupant(
+    Directory source,
+    Directory destination,
+  ) async {
+    final staged = '${destination.path}$_adoptingSuffix';
+    await movePathNoReplace(source.path, staged);
+    final aside =
+        '${destination.path}$_supersededSuffix'
+        '${_stamp(DateTime.now().toUtc())}';
+    try {
+      await movePathNoReplace(destination.path, aside);
+    } on Object {
+      await movePathNoReplace(staged, source.path);
+      rethrow;
+    }
+    try {
+      await movePathNoReplace(staged, destination.path);
+    } on Object {
+      await movePathNoReplace(aside, destination.path);
+      await movePathNoReplace(staged, source.path);
+      rethrow;
+    }
+    log.w('set aside the versions already kept at ${destination.path}');
+  }
+
+  /// The versions listed for [folder], repairing an index that is gone or
+  /// that nothing can read.
+  ///
+  /// An index is a list of files that are on the disk anyway, so it can be
+  /// written again from them. Letting a truncated one stand would instead
+  /// fail every later save and delete of that document, for good.
   Future<List<BackupVersion>> _readIndex(Directory folder) async {
     final file = File(p.join(folder.path, _indexName));
-    if (!await file.exists()) return const [];
-    final json = jsonDecode(await file.readAsString()) as Map<String, Object?>;
-    final versions = json['versions'] as List<Object?>;
-    return [
-      for (final version in versions)
-        BackupVersion.fromJson(version as Map<String, Object?>),
-    ];
+    try {
+      if (!await file.exists()) return await _rebuilt(folder);
+      return _listed(await file.readAsString());
+    } on FormatException catch (error) {
+      log.e('read the kept versions in ${folder.path}', error);
+      await _putAside(file);
+      return _rebuilt(folder);
+    }
+  }
+
+  List<BackupVersion> _listed(String text) {
+    final json = jsonDecode(text);
+    final versions = json is Map<String, Object?> ? json['versions'] : null;
+    if (versions is! List) {
+      throw const FormatException('the kept versions are not a list');
+    }
+    final listed = <BackupVersion>[];
+    for (final version in versions) {
+      if (version is! Map<String, Object?>) {
+        throw const FormatException('a kept version is not an object');
+      }
+      listed.add(BackupVersion.fromJson(version));
+    }
+    return listed;
+  }
+
+  /// What the version files in [folder] say, oldest first.
+  ///
+  /// The order is by commit time and then by file name, so it is total: two
+  /// versions committed in the same millisecond would otherwise come back in
+  /// whatever order the directory listed them, and the newest of them decides
+  /// what a save compares against and what a restore offers first.
+  ///
+  /// A version file whose bytes cannot be read is **left out of the index**,
+  /// and logged. It stays on the disk, where it can still be recovered by
+  /// hand, but nothing here can say when it was written or what it held.
+  Future<List<BackupVersion>> _rebuilt(Directory folder) async {
+    final versions = <BackupVersion>[];
+    await for (final entry in folder.list()) {
+      if (entry is! File || !entry.path.endsWith(_versionSuffix)) continue;
+      final version = await _describe(entry);
+      if (version != null) versions.add(version);
+    }
+    versions.sort(_byTimeThenName);
+    return versions;
+  }
+
+  Future<BackupVersion?> _describe(File file) async {
+    try {
+      final bytes = gzip.decode(await file.readAsBytes());
+      final name = p.basename(file.path);
+      return BackupVersion(
+        file: name,
+        time: _timeIn(name) ?? (await file.stat()).modified.toUtc(),
+        size: bytes.length,
+        hash: sha256.convert(bytes).toString(),
+      );
+    } on Object catch (error) {
+      log.e('list the kept version ${file.path}', error);
+      return null;
+    }
+  }
+
+  Future<void> _putAside(File index) async {
+    final aside =
+        '${index.path}$_corruptSuffix'
+        '${_stamp(DateTime.now().toUtc())}';
+    try {
+      await index.rename(aside);
+      log.w('put the unreadable list of kept versions aside at $aside');
+    } on FileSystemException catch (error) {
+      log.w('put ${index.path} aside', error);
+    }
   }
 
   Future<void> _writeIndex(
@@ -110,6 +222,43 @@ final class BackupArchive {
 }
 
 const _indexName = 'index.json';
+
+/// One kept version: the gzipped bytes of the document as they were.
+const _versionSuffix = '.pgn.gz';
+
+/// What an index nobody could read, and a history the id it lived under now
+/// belongs to another document, are renamed to. Both keep a commit stamp so
+/// they never collide, and neither is ever read again by this code.
+const _corruptSuffix = '.corrupt-';
+const _supersededSuffix = '.superseded-';
+
+/// Where an incoming history waits while the name it is taking is cleared.
+/// One name per id, so a leftover from an interrupted adoption stops the next
+/// one rather than being written over: both histories are then still whole,
+/// each under its own id.
+const _adoptingSuffix = '.adopting';
+
+/// Commit time decides, and the file name breaks a tie; both are part of the
+/// name a version was written under, so the order is the same on every run.
+int _byTimeThenName(BackupVersion a, BackupVersion b) {
+  final byTime = a.time.compareTo(b.time);
+  return byTime != 0 ? byTime : a.file.compareTo(b.file);
+}
+
+/// The commit time a version file's name carries, or null when the name is
+/// not one this app wrote. See [_stamp] for the spelling.
+DateTime? _timeIn(String name) {
+  final stamp = _stamped.firstMatch(name);
+  if (stamp == null) return null;
+  return DateTime.tryParse(
+    '${stamp[1]}-${stamp[2]}-${stamp[3]}T'
+    '${stamp[4]}:${stamp[5]}:${stamp[6]}.${stamp[7]}Z',
+  );
+}
+
+final _stamped = RegExp(
+  r'^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(\d{3,6})Z-',
+);
 
 /// The id a document's versions are kept under: a hash of its path relative to
 /// the documents root, with separators spelled the same way on every platform.
@@ -132,12 +281,23 @@ final class BackupVersion {
     required this.hash,
   });
 
-  factory BackupVersion.fromJson(Map<String, Object?> json) => BackupVersion(
-    file: json['file']! as String,
-    time: DateTime.parse(json['time']! as String),
-    size: json['size']! as int,
-    hash: json['hash']! as String,
-  );
+  /// Throws a [FormatException] on anything that is not a version this app
+  /// wrote, so a damaged index is repaired rather than believed.
+  factory BackupVersion.fromJson(Map<String, Object?> json) {
+    final file = json['file'];
+    final time = json['time'];
+    final size = json['size'];
+    final hash = json['hash'];
+    if (file is! String || time is! String || size is! int || hash is! String) {
+      throw const FormatException('a kept version is missing its fields');
+    }
+    return BackupVersion(
+      file: file,
+      time: DateTime.parse(time),
+      size: size,
+      hash: hash,
+    );
+  }
 
   final String file;
   final DateTime time;

@@ -21,6 +21,7 @@ library;
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:path/path.dart' as p;
 
@@ -28,7 +29,6 @@ import '../diagnostics/log.dart';
 import 'atomic_write.dart';
 import 'csv_records.dart';
 import 'document_ref.dart';
-import 'file_lock.dart';
 
 /// The training records under one Documents folder.
 final class TrainingRecords {
@@ -39,25 +39,23 @@ final class TrainingRecords {
 
   /// Rewrites every record that named [from] so it names [to] instead.
   ///
+  /// The caller holds the lock on [documents]: this is the second half of a
+  /// relocation, and the two halves run under one set of locks so no other
+  /// writer sees the chapter moved and its rows not. There is no lock taken
+  /// here, so calling this while holding that lock is what it is for.
+  ///
   /// Every file is read and checked before any of them is written, so a
-  /// malformed record in the last one leaves the others as they were. The
-  /// files are replaced one atomic publication each; a reader between two of
-  /// them sees whole files, never half a row.
+  /// malformed record in the last one leaves the others as they were, and
+  /// what each one held is kept ([_keepReplaced]) before any of them is
+  /// replaced. The files are replaced one atomic publication each; a reader
+  /// between two of them sees whole files, never half a row.
   Future<RepointResult> repoint(DocumentRef from, DocumentRef to) async {
     if (p.equals(from.path, to.path)) return const NothingToRepoint();
-    try {
-      return await withDirectoryLock(
-        documents,
-        () => _rewrite(from.path, to.path),
-      );
-    } on FileSystemException catch (error) {
-      log.e('lock the documents folder to repoint ${from.path}', error);
-      return IoFailure(_detail(error));
-    }
+    return _rewrite(from.path, to.path);
   }
 
   Future<RepointResult> _rewrite(String from, String to) async {
-    final planned = <String, String>{};
+    final planned = <_Rewrite>[];
     var rows = 0;
     for (final name in _files) {
       switch (await _plan(name, from, to)) {
@@ -65,9 +63,9 @@ final class TrainingRecords {
           continue;
         case _Refused(:final result):
           return result;
-        case _Rewrite(:final text, :final rowsChanged):
-          planned[p.join(documents.path, name)] = text;
-          rows += rowsChanged;
+        case final _Rewrite rewrite:
+          planned.add(rewrite);
+          rows += rewrite.rowsChanged;
       }
     }
     if (planned.isEmpty) return const NothingToRepoint();
@@ -93,17 +91,37 @@ final class TrainingRecords {
     return _planText(text, name, from, to);
   }
 
-  Future<RepointResult> _commit(Map<String, String> planned, int rows) async {
+  Future<RepointResult> _commit(List<_Rewrite> planned, int rows) async {
+    final operation =
+        '${DateTime.now().microsecondsSinceEpoch}-'
+        '${Random.secure().nextInt(1 << 32).toRadixString(16)}';
     try {
       await removeStaleTemporaries(documents);
-      for (final entry in planned.entries) {
-        await replaceFile(entry.key, utf8.encode(entry.value));
+      for (final file in planned) {
+        await _keepReplaced(file, operation);
+      }
+      for (final file in planned) {
+        await replaceFile(
+          p.join(documents.path, file.name),
+          utf8.encode(file.text),
+        );
       }
     } on Object catch (error) {
       log.e('write the training records under ${documents.path}', error);
       return IoFailure(_detail(error));
     }
     return Repointed(rows);
+  }
+
+  /// Keeps the bytes this rewrite is about to replace where the old app keeps
+  /// them: `.cap-reference-history/<operation>/<file>` under Documents, one
+  /// folder per relocation. A schedule is a year of the user's reviews, and
+  /// the four files are the only copy of it, so nothing replaces one of them
+  /// until what it held is somewhere else.
+  Future<void> _keepReplaced(_Rewrite file, String operation) async {
+    final kept = p.join(documents.path, _replacedFolder, operation, file.name);
+    await Directory(p.dirname(kept)).create(recursive: true);
+    await createFileExclusively(kept, utf8.encode(file.original));
   }
 }
 
@@ -157,6 +175,11 @@ const _files = [
 /// The log of answered moves: one JSON object per line, only ever appended.
 const _attempts = 'repertoire_move_attempts.jsonl';
 
+/// Where the old app keeps what a relocation replaced, under Documents, one
+/// folder per operation. Both apps read it, so the name and the shape stay
+/// as they are.
+const _replacedFolder = '.cap-reference-history';
+
 /// The first column of every one of the three CSVs, and of their headers.
 const _idColumn = 'repertoire_id';
 
@@ -175,7 +198,18 @@ final class _Keep extends _Plan {
 }
 
 final class _Rewrite extends _Plan {
-  const _Rewrite(this.text, this.rowsChanged);
+  const _Rewrite({
+    required this.name,
+    required this.original,
+    required this.text,
+    required this.rowsChanged,
+  });
+
+  /// The file's name, such as `repertoire_reviews.csv`.
+  final String name;
+
+  /// What the file holds now, kept before the rewrite replaces it.
+  final String original;
 
   final String text;
   final int rowsChanged;
@@ -192,7 +226,7 @@ _Plan _planText(String text, String name, String from, String to) {
     case CsvUnreadable(:final line):
       return _Refused(Malformed(name, line));
     case CsvParsed(:final records):
-      return _planRecords(records, name, from, to);
+      return _planRecords(records, name, text, from, to);
   }
 }
 
@@ -210,7 +244,13 @@ _Plan _planAttempts(String text, String from, String to) {
     if (rewritten != lines[i]) rows++;
     lines[i] = rewritten;
   }
-  return rows == 0 ? const _Keep() : _Rewrite(lines.join('\n'), rows);
+  if (rows == 0) return const _Keep();
+  return _Rewrite(
+    name: _attempts,
+    original: text,
+    text: lines.join('\n'),
+    rowsChanged: rows,
+  );
 }
 
 /// One logged answer pointing at its chapter, or null when the line is not
@@ -235,6 +275,7 @@ String? _movedAttempt(String line, String from, String to) {
 _Plan _planRecords(
   List<CsvRecord> records,
   String name,
+  String text,
   String from,
   String to,
 ) {
@@ -257,7 +298,13 @@ _Plan _planRecords(
       ..write(text)
       ..write(record.terminator);
   }
-  return rows == 0 ? const _Keep() : _Rewrite(out.toString(), rows);
+  if (rows == 0) return const _Keep();
+  return _Rewrite(
+    name: name,
+    original: text,
+    text: out.toString(),
+    rowsChanged: rows,
+  );
 }
 
 /// The cells of a record that names a chapter, or null for the header and

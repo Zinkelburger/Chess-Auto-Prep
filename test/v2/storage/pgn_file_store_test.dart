@@ -1,9 +1,12 @@
 // Real files in a disposable directory: the store is the filesystem, so
 // there is nothing here to fake.
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:chess_auto_prep/v2/storage/document_ref.dart';
+import 'package:chess_auto_prep/v2/storage/file_lock.dart';
+import 'package:chess_auto_prep/v2/storage/mutation_guards.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -23,6 +26,60 @@ void main() {
     final opened = await fixture.store.open(ref);
     expect((opened as Opened).text, '1. d4 Nf6 *\n');
     expect(opened.revision, (created as Created).revision);
+  });
+
+  test(
+    'a Latin-1 PGN opens with its accents and saves back as UTF-8',
+    () async {
+      final ref = fixture.ref('KID/Main.pgn');
+      const text = '[White "Réti"]\n\n1. Nf3 *\n';
+      await Directory(p.dirname(ref.path)).create(recursive: true);
+      await File(ref.path).writeAsBytes(latin1.encode(text));
+      final opened = await fixture.store.open(ref);
+      expect((opened as Opened).text, text);
+      final edited = text.replaceFirst('Nf3', 'd4');
+      final saved =
+          await fixture.store.save(ref, edited, expected: opened.revision)
+              as Saved;
+      expect(saved.receipt.before, text);
+      expect(await File(ref.path).readAsBytes(), utf8.encode(edited));
+    },
+  );
+
+  test('a gzipped chapter is refused, opening and saving alike', () async {
+    final ref = fixture.ref('KID/Main.pgn');
+    const text = '[Event "KID"]\n\n1. d4 Nf6 *\n';
+    final compressed = gzip.encode(utf8.encode(text));
+    await Directory(p.dirname(ref.path)).create(recursive: true);
+    await File(ref.path).writeAsBytes(compressed);
+
+    final opened = await fixture.store.open(ref);
+    expect(opened, isA<Unreadable>());
+    expect((opened as Unreadable).detail, contains('compressed'));
+    // Nothing to save against: there is no revision the caller could have
+    // read, and a save with the one on disk is refused too.
+    final revision = await fixture.revisionOf(ref);
+    expect(
+      await fixture.store.save(ref, 'mine *\n', expected: revision),
+      isA<IoFailure>(),
+    );
+    expect(await File(ref.path).readAsBytes(), compressed);
+  });
+
+  test('a chapter full of control bytes is not a document', () async {
+    final ref = fixture.ref('KID/Main.pgn');
+    await Directory(p.dirname(ref.path)).create(recursive: true);
+    await File(ref.path).writeAsBytes([0x5b, 0x00, 0x01, 0x02, 0x03, 0x04]);
+    expect(await fixture.store.open(ref), isA<Unreadable>());
+  });
+
+  test('a mostly good UTF-8 file keeps its UTF-8 reading', () async {
+    final ref = fixture.ref('KID/Main.pgn');
+    const text = '[Event "’’’’’’’’"]\n';
+    await Directory(p.dirname(ref.path)).create(recursive: true);
+    await File(ref.path).writeAsBytes([...utf8.encode(text), 0x9d]);
+    final opened = await fixture.store.open(ref);
+    expect((opened as Opened).text, '$text�');
   });
 
   test('a document that is not there is absent, not empty', () async {
@@ -132,6 +189,30 @@ void main() {
     expect(await File(ref.path).exists(), isFalse);
     final renamed = fixture.ref('KID/Mainline.pgn');
     expect((await fixture.store.open(renamed) as Opened).text, 'moves *\n');
+  });
+
+  test('a rename waits for the folder a save has taken', () async {
+    final ref = fixture.ref('KID/Main.pgn');
+    final revision = await fixture.put(ref, 'A *\n');
+    final release = Completer<void>();
+    var renamed = false;
+    // The scope a save holds. A rename that did not take it too could move
+    // the file out from under a save that has already passed its checks, and
+    // the save would then publish its copy onto the name just vacated.
+    final held = withDirectoryLock(folderOf(ref), () => release.future);
+    final renaming = fixture.store
+        .rename(ref, 'Mainline.pgn', expected: revision)
+        .then((_) => renamed = true);
+
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    expect(renamed, isFalse, reason: 'a writer still holds the folder');
+    expect(File(ref.path).existsSync(), isTrue);
+
+    release.complete();
+    await held;
+    await renaming;
+    expect(File(fixture.ref('KID/Mainline.pgn').path).existsSync(), isTrue);
+    expect(File(ref.path).existsSync(), isFalse);
   });
 
   test('rename onto a taken name collides and moves nothing', () async {

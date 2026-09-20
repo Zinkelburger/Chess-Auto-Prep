@@ -65,29 +65,93 @@ final class CsvUnreadable extends CsvRead {
 
 /// Reads [text] as records, each remembering the characters it came from.
 CsvRead readCsvRecords(String text) {
+  final splitter = _RecordSplitter(text);
+  final unclosed = splitter.split();
+  if (unclosed != null) return CsvUnreadable(unclosed, _unclosed);
   final records = <CsvRecord>[];
-  var start = 0;
-  var startLine = 1;
-  var line = 1;
-  var quoted = false;
-  for (var i = 0; i < text.length; i++) {
-    if (text[i] == '"') quoted = !quoted;
-    if (text[i] != '\n') continue;
-    line++;
-    if (quoted) continue;
-    final crlf = i > start && text[i - 1] == '\r';
-    final source = text.substring(start, crlf ? i - 1 : i);
-    final record = _record(source, crlf ? '\r\n' : '\n', startLine);
-    if (record == null) return CsvUnreadable(startLine, _oneRecord);
+  for (final span in splitter.spans) {
+    final source = text.substring(span.start, span.end);
+    final record = _record(source, span.terminator, span.line);
+    if (record == null) return CsvUnreadable(span.line, _oneRecord);
     records.add(record);
-    start = i + 1;
-    startLine = line;
   }
-  if (quoted) return CsvUnreadable(startLine, _unclosed);
-  if (start == text.length) return CsvParsed(records);
-  final last = _record(text.substring(start), '', startLine);
-  if (last == null) return CsvUnreadable(startLine, _oneRecord);
-  return CsvParsed(records..add(last));
+  return CsvParsed(records);
+}
+
+/// The characters one record occupies, and the line it starts on.
+typedef _Span = ({int start, int end, String terminator, int line});
+
+/// Where one record ends and the next begins.
+///
+/// RFC 4180 decides when a double quote opens a field: only at the start of
+/// one. Everywhere else in an unquoted field it is an ordinary character, so
+/// `/chess/My "KID" line.pgn` is a path and not the beginning of a quoted
+/// field that swallows the rest of the file. Inside a quoted field `""` is a
+/// quote and a lone `"` closes the field, after which a line feed ends the
+/// record as it does anywhere else.
+final class _RecordSplitter {
+  _RecordSplitter(this.text);
+
+  final String text;
+  final spans = <_Span>[];
+  var _start = 0;
+  var _startLine = 1;
+  var _line = 1;
+  var _quoted = false;
+  var _fieldStart = true;
+
+  /// The line a quoted field was opened on and never closed, or null when
+  /// every record ends where the text says it does.
+  int? split() {
+    for (var i = 0; i < text.length; i++) {
+      final char = text[i];
+      if (char == '\n') _line++;
+      if (_quoted) {
+        i = _inQuotes(i);
+      } else if (char == '"' && _fieldStart) {
+        _quoted = true;
+      } else if (char == ',') {
+        _fieldStart = true;
+      } else if (char == '\n') {
+        _end(i);
+      } else {
+        _fieldStart = false;
+      }
+    }
+    if (_quoted) return _startLine;
+    if (_start < text.length) _end(text.length);
+    return null;
+  }
+
+  /// The last index this call consumed at [i], which is inside a quoted
+  /// field: one more when `""` spells a quote, [i] itself otherwise.
+  int _inQuotes(int i) {
+    if (text[i] != '"') return i;
+    if (i + 1 < text.length && text[i + 1] == '"') return i + 1;
+    _quoted = false;
+    _fieldStart = false;
+    return i;
+  }
+
+  /// Closes the record at [newline], which is the line feed that ends it or,
+  /// for a last record written without one, the end of the text.
+  void _end(int newline) {
+    final crlf =
+        newline < text.length && newline > _start && text[newline - 1] == '\r';
+    spans.add((
+      start: _start,
+      end: crlf ? newline - 1 : newline,
+      terminator: newline == text.length
+          ? ''
+          : crlf
+          ? '\r\n'
+          : '\n',
+      line: _startLine,
+    ));
+    _start = newline + 1;
+    _startLine = _line;
+    _fieldStart = true;
+  }
 }
 
 /// One record as a line of CSV, without a terminator.

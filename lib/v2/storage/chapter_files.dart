@@ -59,9 +59,31 @@ sealed class RepertoireListing {
 }
 
 final class Repertoires extends RepertoireListing {
-  const Repertoires(this.folders);
+  const Repertoires(this.folders, {this.unreadable = const []});
 
   final List<RepertoireFolder> folders;
+
+  /// The folders the listing had to pass over. One folder the operating
+  /// system will not open is not a reason to show the user an empty library.
+  final List<UnreadableFolder> unreadable;
+}
+
+/// A folder under `repertoires/` that could not be read, so whatever
+/// chapters are in it are missing from the listing rather than deleted.
+final class UnreadableFolder {
+  const UnreadableFolder({
+    required this.name,
+    required this.path,
+    required this.detail,
+  });
+
+  /// The folder's name, which is what the user called the repertoire.
+  final String name;
+
+  final String path;
+
+  /// The operating system's message, for the log; the UI writes the sentence.
+  final String detail;
 }
 
 /// The repertoires folder exists but could not be read.
@@ -103,10 +125,14 @@ final class ChapterDirectory implements ChapterFiles {
   @override
   Future<RepertoireListing> list() async {
     if (!await root.exists()) return const Repertoires([]);
+    final skipped = <UnreadableFolder>[];
     try {
-      final folders = await _scan();
+      final folders = await _scan(skipped);
       folders.sort(_byName);
-      return Repertoires(List.unmodifiable(folders));
+      return Repertoires(
+        List.unmodifiable(folders),
+        unreadable: List.unmodifiable(skipped),
+      );
     } on FileSystemException catch (e) {
       return RepertoiresUnreadable(_detail(e));
     }
@@ -122,13 +148,29 @@ final class ChapterDirectory implements ChapterFiles {
     }
   }
 
-  Future<List<RepertoireFolder>> _scan() async {
+  Future<List<RepertoireFolder>> _scan(List<UnreadableFolder> skipped) async {
     final folders = <RepertoireFolder>[];
     await for (final entry in root.list()) {
       if (entry is! Directory) continue;
       final name = p.basename(entry.path);
       if (name.startsWith('.')) continue;
-      final folder = await _read(entry, name);
+      // One folder the app may not open is that repertoire's problem, not
+      // the library's: the others are still listed and the user is told
+      // which one is missing.
+      final RepertoireFolder folder;
+      try {
+        folder = await _read(entry, name);
+      } on FileSystemException catch (error) {
+        log.w('list the repertoire ${entry.path}', error);
+        skipped.add(
+          UnreadableFolder(
+            name: name,
+            path: entry.path,
+            detail: _detail(error),
+          ),
+        );
+        continue;
+      }
       // A folder with no chapters is not a repertoire. It is what a deleted
       // one leaves behind — the recovery folder its chapters went into — and
       // showing "0 chapters" after a delete would say the delete failed.
