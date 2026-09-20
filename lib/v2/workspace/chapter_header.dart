@@ -142,7 +142,7 @@ class _UndoButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => IconButton(
     onPressed: onPressed,
-    icon: const Icon(Icons.undo, size: 18),
+    icon: const Icon(Icons.undo, size: IconSize.action),
     tooltip: 'Undo (Ctrl+Z)',
     visualDensity: VisualDensity.compact,
   );
