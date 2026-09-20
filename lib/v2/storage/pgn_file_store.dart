@@ -51,6 +51,9 @@ final class PgnFileStore implements PgnDocumentStore {
 
   @override
   Future<CreateResult> create(DocumentRef ref, String text) async {
+    // Before anything reaches the disk: a ref outside the root must not make
+    // folders outside the root either.
+    if (_idFor(ref) == null) return const IoFailure(_outsideRoot);
     try {
       await _folder(ref).create(recursive: true);
     } on FileSystemException catch (error) {
@@ -61,7 +64,6 @@ final class PgnFileStore implements PgnDocumentStore {
   }
 
   Future<CreateResult> _create(DocumentRef ref, String text) async {
-    if (_idFor(ref) == null) return const IoFailure(_outsideRoot);
     try {
       await removeStaleTemporaries(_folder(ref));
       await createFileExclusively(ref.path, utf8.encode(text));

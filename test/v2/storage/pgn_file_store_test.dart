@@ -180,4 +180,15 @@ void main() {
     expect(await fixture.store.create(outside, 'x *\n'), isA<IoFailure>());
     expect(await File(outside.path).exists(), isFalse);
   });
+
+  test('a refused path leaves no folders behind outside the root', () async {
+    final outside = DocumentRef(
+      p.join(fixture.root.path, 'Elsewhere', 'Deeper', 'x.pgn'),
+    );
+    expect(await fixture.store.create(outside, 'x *\n'), isA<IoFailure>());
+    expect(
+      await Directory(p.join(fixture.root.path, 'Elsewhere')).exists(),
+      isFalse,
+    );
+  });
 }
