@@ -349,7 +349,44 @@ recovery files.
 | Training | Review, progress and history CSVs and attempt JSONL, keyed by chapter path | Scheduling and history across chapter rename, move, split and delete |
 | Generation output | Versioned bundles via the artifact repository, plus legacy chapter-side files | Readability of old artifacts; user edits to companion PGNs |
 | Settings and accounts | SharedPreferences keys | Existing keys and values |
-| Recovery | Atomic-write journals and backups, quarantine, PGN recovery snapshots, SQL `game_trash`, schema-upgrade backups | Each keeps its purpose; none is a version history |
+| Recovery | Atomic-write journals, quarantine, PGN recovery snapshots, SQL `game_trash`, schema-upgrade backups | Each keeps its purpose; none of them is the version history — see [Backups](#backups) |
+
+### Backups
+
+The user never asks for a backup and never names one. Losing work is a bug in
+this section, not a mistake the user made.
+
+- **Every replaced byte is kept.** A save, append, import, rename or delete goes
+  through the store, and the store already returns the validated before-content
+  of the file it replaced. That content is what gets recorded. A write whose
+  backup could not be recorded does not proceed; it returns an I/O failure like
+  any other.
+- **Backups live in Support**, under `backups/<document id>/`, one gzipped file
+  per version named by commit time and content hash, with a small index per
+  document. They are never written into Documents: a synced folder must not
+  gain files the user did not make, and a restore must work when Documents is
+  the thing that went wrong.
+- **Identity, not path.** Versions follow the document's identity, so a rename
+  or a move keeps one history instead of starting a second one.
+- **Unchanged content costs nothing.** A save whose bytes hash to the newest
+  stored version records nothing.
+- **Retention** is by age, then by size: everything from the last day, hourly
+  for a week, daily for a month, weekly for a year. A byte cap prunes oldest
+  first. The newest version of a document is never pruned, and pruning runs on
+  its own schedule, never inside a save.
+- **Restore is a normal save.** Settings ▸ Data lists each document's versions
+  with time, size and move count, previews one, and restores by writing it
+  through the store — so the restore is itself backed up and undoable. Nothing
+  is ever replaced without the user choosing it.
+- **SQLite** (`app_games.db`) is snapshotted with SQLite's backup API, not by
+  copying db/WAL/SHM, when the newest snapshot is older than a day.
+- **What it is not:** not the undo history (store receipts, in-session), not the
+  generation artifact history (versioned bundles, per run), not the recovery
+  files above (interrupted writes and deletes). Those keep their own purposes.
+
+Step 2 owns the write path and the recording; the restore screen ships with
+step 13's Settings, and until then a version is recoverable from Support by
+hand.
 
 ### PGN document store
 
@@ -440,6 +477,43 @@ writing. Tests never touch the user's real profile.
 - Typeable choice fields instead of dropdowns, visible search inputs, shared
   confirmation and name dialogs, shortcuts in tooltips.
 
+## Keeping the UI replaceable
+
+The owner will change the look of `v2` often, so the rule that makes that
+cheap comes first: **a widget file can be deleted and rewritten from its
+owner's public API and the theme alone.**
+
+- Owners (the `ChangeNotifier`s in `workspace/` and `features/`) import
+  `package:flutter/foundation.dart` at most, never widgets. They expose
+  values, typed states and commands; they know nothing of layout, text or
+  colour.
+- A widget is a function of one or two owners: it reads their values, calls
+  their commands, and keeps only view state (hover, scroll position, an open
+  menu). State that two widgets need lives in an owner.
+- Only `Shell` and `WorkspaceView` know which panel sits where. Every other
+  widget lays out its own contents and nothing else.
+- Colours, font sizes, font families and spacing come from `ui/theme.dart`
+  (`darkTheme()`, `BoardTheme`, `Space`, `monoText`, `scoreText`). Literal
+  `Color(0x…)`, `fontSize:` and `fontFamily:` appear only under `ui/`;
+  `scripts/check_v2.py` rejects them elsewhere. A widget that needs a new
+  value adds a named token to the theme.
+- A widget file (one importing `package:flutter/material.dart` or
+  `widgets.dart`) never imports `dart:io` or `net/`; the checker rejects
+  that. From `storage/` and `engines/` it takes value types only
+  (`ChapterRef`, `Score`, `EngineLine`), never an adapter or a process.
+- Every owner has a test without widgets. Every widget test uses a scripted
+  owner or double from `test/v2/support/` and never a real file or engine.
+- **Keep the current look.** The values in `ui/theme.dart` are the old
+  app's: Inter and Source Code Pro, sizes 18/14/13/12, surface `1B1B1D`,
+  accent `5F93CC`, board `F0D9B5`/`B58863`. When a step needs a colour, size,
+  layout or control the old app has, screenshot the old mode with the
+  driver or read `lib/design_system/theme/` and copy the *value*, never the
+  code. Do not redesign; the redesign comes later, through the theme and the
+  panel files, and a design that is built into owners would block it.
+- The reviewer's test for a step: could the new widget file be rewritten from
+  scratch by someone who read only the owner's public API and the theme?
+  If not, state or layout leaked into the wrong place.
+
 ## Order of work
 
 One row is one agent session. Each row ends with a headless screenshot the
@@ -451,7 +525,7 @@ settings, lint and Widgetbook appear inside the row that first needs them.
 |---|---|---|---|
 | 0 | **Board on screen.** `main_v2.dart`, a window with the mode menu stub, board widget, move-tree widget; open a real chapter from Documents `repertoires/` read-only; click and arrow through moves. Only the theme values a board and a move list need. | Screenshot of a real chapter | Done 2026-09-19: 1.5k lines, 23 tests; second-agent review the same day, its findings fixed (typed file results, open race, move-list rewrite, 18 more tests) |
 | 1 | **Engine.** Supervisor, one Stockfish, engine pane with MultiPV lines at 200 ms, kill-on-exit test on Linux. First step that can fail, so it also installs the log: facade in `diagnostics/`, file sink in `storage/`, installed by `main_v2` before the engine starts. | Live evaluation on the board, and an engine that will not start named in `app.log` | Done 2026-09-19: 1.6k lines, 41 tests; a real Stockfish dies with a SIGKILLed parent on Linux (`test/v2/engines/stockfish_exit_test.dart`); a start failure is an `E start …` line in `app.log` |
-| 2 | **Document store.** `PgnDocumentStore` (open, save, create, rename, move, recoverable delete) with revisions; add moves and comments in the workspace; save; undo from receipts; the required failure tests; the old app sees the edit. | Edit a chapter, reopen it in the old app | Not started |
+| 2 | **Document store.** `PgnDocumentStore` (open, save, create, rename, move, recoverable delete) with revisions; add moves and comments in the workspace; save; undo from receipts; every replaced version recorded per [Backups](#backups); the required failure tests; the old app sees the edit. | Edit a chapter, reopen it in the old app | Not started |
 | 3 | **Library.** Repertoire list, search, create, rename, move, recoverable delete; training references follow chapter changes. | Screenshot | Not started |
 | 4 | **Chapters and Study.** Chapter outline panel, chapter operations, per-chapter orientation, Lichess study import and export, quiz markers. | Screenshot | Not started |
 | 5 | **Trainer.** Training session over the workspace, scheduling, history and bulk actions on the existing CSV/JSONL formats. | Screenshot and one completed session | Not started |
@@ -495,6 +569,8 @@ Each belongs to the step that owns it:
   generation publishes only against its source and run identity, never over an
   edited companion PGN. Legacy artifacts stay readable; legacy runs are not
   resumed.
+- **Step 2:** a backup that cannot be recorded must fail the write without
+  leaving a half-applied change, and retention must never race a save.
 - **Step 13:** tokens are plaintext in SharedPreferences. Migrate one account
   at a time: write the vault, read it back, then remove the old key.
 - **Platforms:** engine cleanup after a killed app is verified only on Linux.
@@ -541,7 +617,66 @@ from the worktree, then copy a chapter into the profile's
   [reviewer checklist](#reviewer-checklist) when a row is marked done.
 - **After a context reset**, re-read this file and `git log -- lib/v2`.
 - **Ask the product owner** about scope, dropping something and visible design.
-  Decide implementation details without asking.
+  Decide implementation details without asking. In an
+  [unattended run](#unattended-runs) a visible-design question defaults to
+  what the old app shows for that mode, and the question goes in the report.
+- **When unsure, do the smaller thing.** Unsure whether to add a class: do
+  not. Unsure whether something is an owner: only if it holds mutable state
+  that outlives a widget; otherwise it is a value or a function. Unsure where
+  a file goes: the import table decides, and a file that needs two folders is
+  two jobs. Unsure about a screen: match the old app's screen for it.
+
+### Unattended runs
+
+When the owner is away, one session works through several rows with this
+prompt. It is the brief above plus the review, the stop rules and the
+report; nothing in it lets the agent choose scope.
+
+```text
+Work through docs/ARCHITECTURE_RENEWAL.md, "Order of work", one row at a
+time, starting at the first row whose status is Not started. First read the
+whole file, then `git log --oneline -- lib/v2`, then every file in its
+style-reference table. For each row, in this order:
+
+1. Review the previous row: spawn one subagent with the reviewer checklist
+   and the "Keeping the UI replaceable" section over
+   `git diff <first commit of that row>^..HEAD -- lib/v2 test/v2`. Fix every
+   must-fix finding in a commit of its own before starting the new row.
+2. Make a worktree: `python3 scripts/agent_worktree.py v2-stepN`.
+3. Build the row exactly as written; nothing for later rows. When it needs a
+   value the old app has (a colour, a size, a file format, a layout), read
+   the old code or screenshot the old mode and copy the value, never the
+   code. Owners first, with their tests; widgets last, from the owners.
+4. See it: `python3 scripts/app_driver.py start --target lib/main_v2.dart`,
+   seed the profile the driver reports (copy a chapter from the old app's
+   Documents/repertoires; never point v2 at the real folder from a test),
+   drive the feature, take a screenshot and open the PNG yourself. Check:
+   the row's feature works on a real chapter, nothing overflows, only Inter
+   and Source Code Pro, no colour without meaning, nothing below 12px.
+5. Checks: `python3 scripts/check_v2.py`, `scripts/ci.sh analyze lint`,
+   `scripts/ci.sh test test/v2`. All clean, no skips you added.
+6. Stop the preview. Commit, push, `python3 scripts/agent_worktree.py
+   --verify .`, `python3 scripts/agent_integrate.py`, then `--verify`. Set
+   the row's status cell to `Done <date>: <lib lines>, <tests>` and change
+   nothing else in docs.
+7. End the row with a five-line note: what works, the screenshot path, what
+   was left out, what you were unsure about, the commit on main.
+
+Then start the next row.
+
+Stop and wait for the owner when:
+- a row needs a design or scope decision the plan does not make: say what
+  the choice is, do not pick;
+- a row has taken more than three hours: integrate what runs, report;
+- a row would write to user data (step 2 onwards) and its required failure
+  tests are not green;
+- the reviewer reports the same kind of problem in two rows running;
+- a tool (driver, runner, engine) has failed twice in a row.
+
+Never: work on the old app, add a pub package, write documents beyond the
+status cell, run the old app's full suite, copy old code, or start a row
+because the previous one "mostly" works.
+```
 
 ## References
 
