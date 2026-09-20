@@ -31,7 +31,6 @@ final class DocumentSaver extends ChangeNotifier {
   Future<void>? _inFlight;
   final _undo = UndoHistory();
   String? _committed;
-  String? _refusedDraft;
   int _opens = 0;
   bool _disposed = false;
 
@@ -45,47 +44,47 @@ final class DocumentSaver extends ChangeNotifier {
 
   /// Whether the file holds the words the user has typed. False while a
   /// write is going out, while a draft waits behind one, and for as long as
-  /// a save has been refused or has failed: those leave words on the screen
-  /// that are in no file. Closing the window asks this, because [flush] only
-  /// says that nothing is on its way, not that anything arrived.
-  bool get settled => _state is Saved && _pending.isEmpty;
+  /// a save has been stopped or has failed: those leave words on the screen
+  /// that are in no file. A document that opened to read is settled — it
+  /// took no words to lose. Closing the window asks this, because [flush]
+  /// only says that nothing is on its way, not that anything arrived.
+  bool get settled =>
+      (_state is Saved || _state is DocumentReadOnly) && _pending.isEmpty;
 
   /// The file being written, for a log line or a sentence about it.
   String? get documentPath => _target?.ref.path;
 
-  /// A document was opened, holding [text]. It is what the saver writes
-  /// from now on, and nothing of the last one — its draft, its receipts —
-  /// is carried over.
+  /// A document was opened, holding [text], which is what the saver writes
+  /// from now on; nothing of the last one is carried over. [readOnly] is
+  /// why the file may not be written at all, or null when it may.
   ///
   /// The draft of the document being replaced must already be on disk, which
   /// is why the caller waits for [flush] first: a draft waiting behind a hold
   /// belongs to the file it was typed into, and this cannot write it there
   /// once the target has changed.
-  void opened(DocumentRef ref, Revision revision, String text) {
+  void opened(
+    DocumentRef ref,
+    Revision revision,
+    String text, {
+    String? readOnly,
+  }) {
     _opens++;
     _target = (ref: ref, revision: revision);
     _committed = text;
-    _refusedDraft = null;
     _pending.clear();
     _undo.clear();
-    _set(const Saved());
+    _set(readOnly == null ? const Saved() : DocumentReadOnly(readOnly));
   }
 
-  /// The text the file is known to hold; a stopped save goes back to it.
+  /// The text the file is known to hold, which is what a reload takes.
   String? get committedText => _committed;
 
-  /// The text the store stopped, kept only so it can be written somewhere
-  /// else. It is not the document any more.
-  String? get refusedDraft => _refusedDraft;
-
-  /// Puts [text] on disk. While the file is conflicted nothing is written:
-  /// the user reloads, saves a copy, or keeps editing a draft that is theirs
-  /// to keep. The text is not remembered then — keeping it would refuse
-  /// every undo for the life of the document — but the conflict itself says
-  /// the document is not [settled], so nothing takes the file for the
-  /// document.
+  /// Puts [text] on disk, unless this saver has stopped writing the file:
+  /// conflicted, stopped, or not writable at all. Nothing is remembered
+  /// here then — the words are on the screen, where Save a copy can have
+  /// them — and the state says the document is not [settled].
   void save(String text, EditScope scope) {
-    if (_state is SaveConflict) return;
+    if (!_takesWords) return;
     _pending.typed(text, scope);
     _set(const Unsaved());
     _start();
@@ -100,9 +99,8 @@ final class DocumentSaver extends ChangeNotifier {
 
   /// Runs [action] against the revision the file has now, with the file held
   /// still: the write on its way out finishes first, and a save asked for
-  /// while [action] runs waits behind it and goes to wherever the document
-  /// ends up. Answers null when there is nothing open or another hold is
-  /// running.
+  /// while [action] runs waits behind it. Answers null when there is nothing
+  /// open or another hold is running.
   ///
   /// This is how a rename, move or delete of the open chapter is serialised
   /// with autosave. The alternative — letting the save go and renaming
@@ -150,7 +148,6 @@ final class DocumentSaver extends ChangeNotifier {
     _opens++;
     _target = null;
     _committed = null;
-    _refusedDraft = null;
     _pending.clear();
     _undo.clear();
     _set(const Saved());
@@ -192,13 +189,18 @@ final class DocumentSaver extends ChangeNotifier {
     if (_writable) await _write();
   }
 
-  /// Whether a write may go out now. A conflicted file takes nothing until
-  /// the user decides what to do with it, and a failed or stopped one is not
-  /// written again until the user edits something.
-  bool get _writable =>
+  /// Whether a write may go out now: a failed file is written again with
+  /// the next edit, and [_takesWords] covers the rest.
+  bool get _writable => _takesWords && _state is! SaveFailed;
+
+  /// Whether this saver is still writing this document at all. A stopped
+  /// save freezes it: the words stay on the screen, where Save a copy can
+  /// have them, and nothing else goes to disk under a scope that does not
+  /// name their games.
+  bool get _takesWords =>
       _state is! SaveConflict &&
-      _state is! SaveFailed &&
-      _state is! SaveStopped;
+      _state is! SaveStopped &&
+      _state is! DocumentReadOnly;
 
   /// The store's answer to one write, with an exception it was not supposed
   /// to throw turned into the failure it is. A throw that got out would
@@ -220,8 +222,7 @@ final class DocumentSaver extends ChangeNotifier {
 
   /// A write that landed after its document was opened again. When it wrote
   /// the file that is open now, the revision it committed is the newest
-  /// there is and the next save must expect it; without that the document
-  /// would conflict with this app's own write. Its receipt belongs to the
+  /// there is and the next save must expect it. Its receipt belongs to the
   /// open that asked for it, so it is not history here.
   void _catchUp(store.SaveResult result, DocumentRef ref) {
     final target = _target;
@@ -236,7 +237,6 @@ final class DocumentSaver extends ChangeNotifier {
       case store.Saved(:final receipt):
         _target = (ref: ref, revision: receipt.committed);
         _committed = text;
-        _refusedDraft = null;
         _undo.keep(receipt);
         _set(const Saved());
       case store.Conflict():
@@ -245,9 +245,11 @@ final class DocumentSaver extends ChangeNotifier {
         log.w('save ${ref.path}', 'the file changed on disk');
         _conflicted();
       case store.SaveRefused():
-        _stopped(text);
+        _stopped();
       case store.NotWritable(:final detail):
         _stopWriting(DocumentReadOnly(detail));
+      case store.RestoreRefused():
+        _set(const RestoreStopped());
       case store.IoFailure(:final detail) ||
           store.WriteUnverified(:final detail):
         _set(SaveFailed(detail));
@@ -255,23 +257,20 @@ final class DocumentSaver extends ChangeNotifier {
   }
 
   /// Puts the version before the last save back, through the store, so the
-  /// undo is itself a save: it is refused if the file changed underneath and
-  /// it is recorded like any other write.
+  /// undo is itself a save: refused if the file changed underneath, and
+  /// recorded like any other write.
   ///
   /// Waits for a draft on its way out: there is nothing to undo to while the
-  /// newest text is still going to disk.
-  ///
-  /// It is a write like any other to whatever is waiting for the file, too:
-  /// a flush, a hold and the closing window wait for the undo, and for the
-  /// draft typed while it was going out.
+  /// newest text is still going to disk. A flush, a hold and the closing
+  /// window wait for the undo, and for the draft typed while it went out.
   ///
   /// Words typed while the undo is being written are newer than the version
   /// being put back, so they win: the draft goes to disk, the undo is
-  /// refused, and the version it wrote becomes the next step back. Pressing
-  /// undo again then does what the refused press meant.
+  /// refused, and the version it wrote becomes the next step back.
   Future<UndoResult> undo() {
     final target = _target;
     final entry = _undo.newest;
+    if (_state is SaveStopped) return Future<UndoResult>.value(undoFrozen);
     if (target == null ||
         entry == null ||
         _held ||
@@ -344,6 +343,7 @@ final class DocumentSaver extends ChangeNotifier {
       case store.Saved(:final receipt):
         _undo.tookBack(entry, receipt);
         _target = (ref: ref, revision: receipt.committed);
+        _committed = entry.before;
         _set(const Saved());
         return Restored(entry.before);
       case store.Conflict():
@@ -351,7 +351,10 @@ final class DocumentSaver extends ChangeNotifier {
         _conflicted();
         return const UndoRefused();
       case store.SaveRefused():
-        _stopped(entry.before);
+        _stopped();
+        return const UndoRefused();
+      case store.RestoreRefused():
+        _set(const RestoreStopped());
         return const UndoRefused();
       case store.NotWritable(:final detail):
         _stopWriting(DocumentReadOnly(detail));
@@ -373,14 +376,11 @@ final class DocumentSaver extends ChangeNotifier {
 
   void _conflicted() => _stopWriting(const SaveConflict());
 
-  /// The store stopped the save. Carrying that text into the next edit's
-  /// save would put its bytes on disk under a scope that does not cover
-  /// them, so it stops being the document and is kept only for
-  /// [refusedDraft]; the session goes back to [committedText].
-  void _stopped(String text) {
-    _refusedDraft = text;
-    _stopWriting(const SaveStopped());
-  }
+  /// The store stopped the save. Nothing is taken away: the words are on
+  /// the screen and whatever was typed behind this write is still waiting,
+  /// so Save a copy has all of them. Nothing more goes to disk until the
+  /// user reloads or saves a copy.
+  void _stopped() => _set(const SaveStopped());
 
   void _set(SaveState state) {
     if (_disposed) return;

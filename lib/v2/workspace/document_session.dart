@@ -14,6 +14,7 @@ import '../storage/document_ref.dart';
 import '../storage/edit_scope.dart';
 import '../storage/pgn_document_store.dart' as store;
 import 'document_saver.dart';
+import 'edit_refused.dart';
 import 'save_state.dart';
 
 sealed class OpenResult {
@@ -68,17 +69,15 @@ final class CopyFailed extends CopyResult {
 /// [DocumentSaver] this session was given: an edit replaces the chapter and
 /// hands the saver the new file text.
 final class DocumentSession extends ChangeNotifier {
-  DocumentSession(this._store, this._saver) {
-    _saver.addListener(_saverChanged);
-  }
+  DocumentSession(this._store, this._saver);
 
   final store.PgnDocumentStore _store;
   final DocumentSaver _saver;
   Chapter? _chapter;
   ChapterRef? _source;
+  String? _readOnly;
   NodePath _cursor = const NodePath.root();
-  edits.CommentRefused? _refused;
-  SaveState _lastSaveState = const Saved();
+  EditRefused? _refused;
   int _opens = 0;
   bool _disposed = false;
 
@@ -88,9 +87,13 @@ final class DocumentSession extends ChangeNotifier {
   ///
   /// A game reading could not finish keeps its own bytes and is never
   /// generated again, so an edit that would have to write it is refused, and
-  /// so are words a PGN file cannot hold. The next edit, and opening another
-  /// document, clears this.
-  edits.CommentRefused? get refusedEdit => _refused;
+  /// so are words a PGN file cannot hold and every edit to a file this app
+  /// may not write. The next edit that lands, and opening another document,
+  /// clears this.
+  EditRefused? get refusedEdit => _refused;
+
+  /// Why this document cannot be written, or null when it can.
+  String? get readOnly => _readOnly;
 
   /// The file the chapter was read from.
   ChapterRef? get source => _source;
@@ -130,8 +133,14 @@ final class DocumentSession extends ChangeNotifier {
     final read = await _store.open(ref);
     if (_disposed || ticket != _opens) return const OpenOvertaken();
     switch (read) {
-      case store.Opened(:final text, :final revision):
-        _show(parseChapter(name: ref.name, text: text), ref, revision, text);
+      case store.Opened(:final text, :final revision, :final readOnly):
+        _show(
+          parseChapter(name: ref.name, text: text),
+          ref,
+          revision,
+          text,
+          readOnly,
+        );
         return const DocumentOpened();
       case store.Absent():
         return _openFailed(ref, '${ref.name} is no longer on disk');
@@ -201,11 +210,14 @@ final class DocumentSession extends ChangeNotifier {
   void playMove(String uci) {
     final chapter = _chapter;
     if (chapter == null) return;
+    if (_refuseWhenReadOnly()) return;
     switch (edits.addMove(chapter, at: _cursor, uci: uci)) {
       case edits.MoveIllegal():
         return;
       case edits.MoveNotWritten():
         log.e('move ${_source?.path}', 'the chapter came back without $uci');
+        _refused = const MoveLost();
+        notifyListeners();
         return;
       case edits.MoveAdded(chapter: final edited, :final path, :final written):
         _refused = null;
@@ -227,11 +239,12 @@ final class DocumentSession extends ChangeNotifier {
   void setComment(NodePath at, String? text) {
     final chapter = _chapter;
     if (chapter == null) return;
+    if (_refuseWhenReadOnly()) return;
     final hadRefusal = _refused != null;
     switch (edits.setComment(chapter, at: at, text: text)) {
       case final edits.CommentRefused refusal:
         log.w('comment ${_source?.path}', _refusalDetail(refusal));
-        _refused = refusal;
+        _refused = _refusalOf(refusal);
       case edits.CommentWritten(chapter: final edited, :final written):
         _refused = null;
         if (identical(edited, chapter)) {
@@ -249,6 +262,21 @@ final class DocumentSession extends ChangeNotifier {
     edits.GameNotWhole() => 'the game holding that move was not read whole',
     edits.CommentUnwritable(:final reason) => reason,
   };
+
+  EditRefused _refusalOf(edits.CommentRefused refusal) => switch (refusal) {
+    edits.GameNotWhole() => const LineNotWhole(),
+    edits.CommentUnwritable(:final reason) => WordsRefused(reason),
+  };
+
+  /// Whether this document opened to read, in which case the edit does not
+  /// happen and the screen says why again.
+  bool _refuseWhenReadOnly() {
+    final reason = _readOnly;
+    if (reason == null) return false;
+    _refused = NotEditable(reason);
+    notifyListeners();
+    return true;
+  }
 
   /// Puts the file back as it was before the last edit and shows what came
   /// back. A refused undo leaves the document and the history alone, and
@@ -285,11 +313,10 @@ final class DocumentSession extends ChangeNotifier {
     }
     final file = p.extension(name) == '.pgn' ? name : '$name.pgn';
     final target = DocumentRef(p.join(p.dirname(ref.path), file));
-    // After a stopped save the document on screen is what the file holds
-    // again, and the words the store refused are the ones the user wanted
-    // somewhere else. They are what a copy writes.
-    final text = _saver.refusedDraft ?? writeChapter(chapter);
-    final created = await _store.create(target, text);
+    // Whatever is on the screen, saved or not: a copy is the one way out of
+    // a stopped save and of a file this app may not write, and it is the
+    // words the user is looking at that they want kept.
+    final created = await _store.create(target, writeChapter(chapter));
     return switch (created) {
       store.Created() => CopySaved(file),
       store.Collision() => const CopyNameTaken(),
@@ -298,38 +325,19 @@ final class DocumentSession extends ChangeNotifier {
     };
   }
 
-  void _show(Chapter chapter, ChapterRef ref, Revision revision, String text) {
+  void _show(
+    Chapter chapter,
+    ChapterRef ref,
+    Revision revision,
+    String text,
+    String? readOnly,
+  ) {
     _chapter = chapter;
     _source = ref;
     _cursor = const NodePath.root();
-    _refused = null;
-    _lastSaveState = const Saved();
-    _saver.opened(ref, revision, text);
-    notifyListeners();
-  }
-
-  /// A save that was stopped takes the document back to what the file holds.
-  ///
-  /// The words the store refused were never written, and keeping them on
-  /// screen puts them into the next edit's save too — under a scope that
-  /// names only the game that edit touched, so either every later save is
-  /// stopped as well or the refused bytes land under somebody else's name.
-  /// They are not lost: Save a copy still writes them.
-  void _saverChanged() {
-    final state = _saver.state;
-    final was = _lastSaveState;
-    _lastSaveState = state;
-    if (state is! SaveStopped || was is SaveStopped || _disposed) return;
-    final ref = _source;
-    final committed = _saver.committedText;
-    if (ref == null || committed == null) return;
-    final restored = parseChapter(name: ref.name, text: committed);
-    _cursor = _sameMoves(
-      _chapter?.tree ?? restored.tree,
-      restored.tree,
-      _cursor,
-    );
-    _chapter = restored;
+    _readOnly = readOnly;
+    _refused = readOnly == null ? null : NotEditable(readOnly);
+    _saver.opened(ref, revision, text, readOnly: readOnly);
     notifyListeners();
   }
 
@@ -371,7 +379,6 @@ final class DocumentSession extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
-    _saver.removeListener(_saverChanged);
     super.dispose();
   }
 }

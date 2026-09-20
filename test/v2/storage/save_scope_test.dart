@@ -269,6 +269,36 @@ void main() {
     },
   );
 
+  test('two byte-order marks stay two', () async {
+    // The decoder eats one, so one goes back on; a file written with two is
+    // a file with two, and giving one back would leave every scoped save
+    // three bytes short of the heading it is replacing.
+    final ref = fixture.ref('KID/Main.pgn');
+    final text = '\uFEFF\uFEFF${chapterOf([gameOf(1, '1. d4')])}';
+    await Directory(p.dirname(ref.path)).create(recursive: true);
+    await File(ref.path).writeAsBytes(utf8.encode(text));
+    final revision = await fixture.revisionOf(ref);
+    final opened = await fixture.store.open(ref) as Opened;
+    expect(opened.text, text);
+
+    final saved = await fixture.store.save(
+      ref,
+      opened.text.replaceFirst('1. d4 *', '1. d4 Nf6 *'),
+      expected: revision,
+      scope: GamesEdited(GamesWritten(rewritten: {0})),
+    );
+
+    expect(saved, isA<Saved>());
+    expect((await File(ref.path).readAsBytes()).take(6), [
+      0xEF,
+      0xBB,
+      0xBF,
+      0xEF,
+      0xBB,
+      0xBF,
+    ]);
+  });
+
   test('a byte-order mark comes through a whole-document save too', () async {
     final ref = fixture.ref('KID/Main.pgn');
     final text = '\uFEFF${chapterOf([gameOf(1, '1. d4')])}';
@@ -318,7 +348,10 @@ void main() {
         revision,
       );
 
-      expect((made as SaveRefused).detail, contains('kept for this document'));
+      expect(
+        (made as RestoreRefused).detail,
+        contains('kept for this document'),
+      );
       expect(await File(ref.path).readAsString(), threeGames);
     });
   });

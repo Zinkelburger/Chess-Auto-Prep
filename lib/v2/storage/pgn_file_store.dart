@@ -259,7 +259,7 @@ final class PgnFileStore implements PgnDocumentStore {
     final kept = id == null ? null : await _backups.versionWithHash(id, hash);
     if (kept == null) {
       log.e('restore ${ref.path}', _unkeptVersion);
-      return const SaveRefused(_unkeptVersion);
+      return const RestoreRefused(_unkeptVersion);
     }
     log.i('restore ${ref.path} to the version of ${kept.time}');
     return null;

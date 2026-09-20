@@ -130,10 +130,11 @@ final class ExitGuard {
       SaveStopped() =>
         'The last save of $file was stopped because the app would have '
             'changed a line you did not edit. Your words are still on '
-            'screen.',
-      DocumentReadOnly() =>
-        '$file is not a file this app can write, so nothing you changed in '
-            'it has been saved.',
+            'screen, and closing now loses them unless you save a copy '
+            'first.',
+      RestoreStopped() =>
+        'The last undo of $file did not go through, so your words have not '
+            'been saved.',
       _ =>
         'The save of $file has not finished after ${wait.inSeconds} '
             'seconds.',

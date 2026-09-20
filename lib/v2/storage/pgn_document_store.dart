@@ -223,6 +223,13 @@ final class SaveRefused extends SaveDidNotLand {
   const SaveRefused(super.detail);
 }
 
+/// The save said it was putting a kept version back and the bytes are not
+/// one: nothing this store ever recorded for this document hashes to them.
+/// The file and its versions are as they were.
+final class RestoreRefused extends SaveDidNotLand {
+  const RestoreRefused(super.detail);
+}
+
 /// The file is not one this app may write at all, whatever it was asked to
 /// write: it could only put it back in another encoding, changing games
 /// nobody edited. The user is told when the document opens; this is the

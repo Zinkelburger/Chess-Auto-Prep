@@ -156,17 +156,16 @@ void main() {
     expect(
       find.text(
         'The app tried to change a line you did not edit, so the save was '
-        'stopped. Nothing was written and the document is back as the file '
-        'has it.',
+        'stopped. Nothing was written and nothing more will be: your words '
+        'are still on screen.',
       ),
       findsOneWidget,
     );
-    expect(find.text('Reload'), findsOneWidget);
+    expect(find.text('Reload and lose the words on screen'), findsOneWidget);
     expect(find.text('Save a copy…'), findsOneWidget);
-    // The words were never written, so the document goes back to what the
-    // file holds rather than carrying them into the next save. Save a copy
-    // is where they are still to be had.
-    expect(fixture.session.commentAt(sicilian), isNot(contains('mine')));
+    // Nothing is taken away: the words are on screen for Save a copy, and
+    // the file never took them.
+    expect(fixture.session.commentAt(sicilian), contains('mine'));
     expect(fixture.onDisk, isNot(contains('mine')));
   });
 

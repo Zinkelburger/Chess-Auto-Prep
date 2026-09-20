@@ -48,6 +48,12 @@ final class SaveConflict extends SaveState {
   const SaveConflict();
 }
 
+/// An undo asked for a version the store never kept, so nothing went back.
+/// The file and the document are as they were.
+final class RestoreStopped extends SaveState {
+  const RestoreStopped();
+}
+
 /// The file is not one this app may write at all. Nothing was edited and
 /// nothing will be: the document opened to read.
 final class DocumentReadOnly extends SaveState {
@@ -68,7 +74,17 @@ final class Restored extends UndoResult {
   final String text;
 }
 
-/// Nothing was undone, and the history is as it was.
+/// Nothing was undone, and the history is as it was. [reason] is a sentence
+/// for the user when there is more to say than "not now".
 final class UndoRefused extends UndoResult {
-  const UndoRefused();
+  const UndoRefused([this.reason]);
+
+  final String? reason;
 }
+
+/// Nothing goes back while a stopped save is waiting to be dealt with: the
+/// file holds a version the words on screen were never written over.
+const undoFrozen = UndoRefused(
+  'The last save was stopped, so there is nothing to take back yet. Save a '
+  'copy or reload first.',
+);

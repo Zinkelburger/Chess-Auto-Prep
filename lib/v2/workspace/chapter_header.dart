@@ -2,10 +2,10 @@ import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
 
 import '../chess/pgn/chapter.dart';
-import '../chess/pgn/comment_edits.dart';
 import '../storage/chapter_files.dart';
 import '../ui/theme.dart';
 import 'document_saver.dart';
+import 'edit_refused.dart';
 import 'save_state.dart';
 import 'document_session.dart';
 
@@ -58,7 +58,7 @@ class _ChapterHeaderState extends State<ChapterHeader> {
     setState(
       () => _notice = switch (result) {
         Restored() => null,
-        UndoRefused() => 'Nothing to undo right now',
+        UndoRefused(:final reason) => reason ?? 'Nothing to undo right now',
       },
     );
   }
@@ -119,9 +119,12 @@ class _ChapterHeaderState extends State<ChapterHeader> {
                   _UndoButton(onPressed: widget.saver.canUndo ? _undo : null),
                 ],
               ),
-              if (widget.saver.state is SaveConflict ||
-                  widget.saver.state is SaveStopped)
-                _ConflictActions(onReload: _reload, onSaveCopy: _saveCopy),
+              if (_waysOut(widget.saver.state) case final reload?)
+                _WaysOut(
+                  reload: reload,
+                  onReload: _reload,
+                  onSaveCopy: _saveCopy,
+                ),
               if (widget.session.refusedEdit case final refusal?)
                 _Notice(_refusalNotice(refusal)),
               if (_notice case final notice?) _Notice(notice),
@@ -134,12 +137,16 @@ class _ChapterHeaderState extends State<ChapterHeader> {
 }
 
 /// What the screen tells the user about an edit that did not happen.
-String _refusalNotice(CommentRefused refusal) => switch (refusal) {
-  GameNotWhole() =>
+String _refusalNotice(EditRefused refusal) => switch (refusal) {
+  NotEditable() =>
+    'This file is not UTF-8, so it opened to read. Save a copy to edit it '
+        'here, or open and save it in the old app to convert it.',
+  LineNotWhole() =>
     'That line could not be read in full, so it is left as it is. Edit it '
         'in the old app.',
-  CommentUnwritable(:final reason) =>
+  WordsRefused(:final reason) =>
     'The note was not saved: $reason. Take it out and try again.',
+  MoveLost() => 'That move could not be written, so nothing was saved.',
 };
 
 /// Whose chapter it is and how many games of the file it holds: the games
@@ -194,6 +201,7 @@ class _SaveLine extends StatelessWidget {
         state is SaveFailed ||
         state is SaveConflict ||
         state is SaveStopped ||
+        state is RestoreStopped ||
         state is DocumentReadOnly;
     return Text(
       switch (state) {
@@ -204,11 +212,14 @@ class _SaveLine extends StatelessWidget {
         SaveConflict() => 'The file changed on disk',
         SaveStopped() =>
           'The app tried to change a line you did not edit, so the save was '
-              'stopped. Nothing was written and the document is back as the '
-              'file has it.',
+              'stopped. Nothing was written and nothing more will be: your '
+              'words are still on screen.',
+        RestoreStopped() =>
+          'Could not go back: that version is not among the ones kept for '
+              'this file.',
         DocumentReadOnly() =>
-          'This file is not UTF-8, so it opened to read. Open and save it in '
-              'the old app to convert it, then edit it here.',
+          'This file is not UTF-8, so it opened to read. Save a copy to edit '
+              'it here, or open and save it in the old app to convert it.',
       },
       style: theme.textTheme.bodySmall?.copyWith(
         color: trouble ? theme.colorScheme.error : null,
@@ -217,18 +228,39 @@ class _SaveLine extends StatelessWidget {
   }
 }
 
-class _ConflictActions extends StatelessWidget {
-  const _ConflictActions({required this.onReload, required this.onSaveCopy});
+/// What the Reload button says in [state], or null when the document is not
+/// one the user has to choose about.
+///
+/// A stopped save says what reloading costs, because the words on screen are
+/// in no file and nothing is going to write them: taking what is on disk
+/// throws them away. A file that opened to read has nothing to lose, so its
+/// only real way out is a copy.
+String? _waysOut(SaveState state) => switch (state) {
+  SaveConflict() => 'Reload',
+  SaveStopped() => 'Reload and lose the words on screen',
+  DocumentReadOnly() => 'Reload',
+  _ => null,
+};
 
+class _WaysOut extends StatelessWidget {
+  const _WaysOut({
+    required this.reload,
+    required this.onReload,
+    required this.onSaveCopy,
+  });
+
+  final String reload;
   final VoidCallback onReload;
   final VoidCallback onSaveCopy;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    // Wrapped rather than a row: one of these labels says what reloading
+    // costs, which is longer than a narrow panel has room for.
+    return Wrap(
+      spacing: Space.s,
       children: [
-        TextButton(onPressed: onReload, child: const Text('Reload')),
-        const SizedBox(width: Space.s),
+        TextButton(onPressed: onReload, child: Text(reload)),
         TextButton(onPressed: onSaveCopy, child: const Text('Save a copy…')),
       ],
     );

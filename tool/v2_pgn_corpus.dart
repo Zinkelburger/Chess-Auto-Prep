@@ -32,6 +32,7 @@ typedef FileReport = ({
   bool sameBytes,
   int milliseconds,
   List<String> losses,
+  BranchTry branch,
 });
 
 void main(List<String> arguments) {
@@ -47,11 +48,10 @@ void main(List<String> arguments) {
     return;
   }
   final shown = _intFlag(arguments, '--losses') ?? 10;
-  final files = _pgnFiles(folder);
-  final reports = [for (final file in files) _read(file)];
+  final reports = [for (final file in _pgnFiles(folder)) _read(file)];
   _printTable(reports);
   _printLosses(reports, shown);
-  _printBranching(files);
+  _printBranching(reports);
 }
 
 List<File> _pgnFiles(Directory folder) {
@@ -84,6 +84,7 @@ FileReport _read(File file) {
       sameBytes: false,
       milliseconds: 0,
       losses: ['${file.path}: ${(read as NotText).detail}'],
+      branch: (tried: false, failure: null),
     );
   }
   final clock = Stopwatch()..start();
@@ -118,6 +119,9 @@ FileReport _read(File file) {
     sameBytes: rebuilt.toString() == text,
     milliseconds: clock.elapsedMilliseconds,
     losses: losses,
+    branch: read is PlainText
+        ? tryBranchingBelowANullMove(file.path, text)
+        : (tried: false, failure: null),
   );
 }
 
@@ -245,15 +249,12 @@ void _printLosses(List<FileReport> reports, int shown) {
 }
 
 /// One move played below a null move in every file that has one, in memory.
-void _printBranching(List<File> files) {
+void _printBranching(List<FileReport> reports) {
   var tried = 0;
   final trouble = <String>[];
-  for (final file in files) {
-    final read = readDocumentText(file.readAsBytesSync());
-    if (read is! PlainText) continue;
-    final attempt = tryBranchingBelowANullMove(file.path, read.text);
-    if (attempt.tried) tried++;
-    if (attempt.failure case final failure?) trouble.add(failure);
+  for (final report in reports) {
+    if (report.branch.tried) tried++;
+    if (report.branch.failure case final failure?) trouble.add(failure);
   }
   stdout.writeln(
     '\nbranching below a null move: $tried files have one, '

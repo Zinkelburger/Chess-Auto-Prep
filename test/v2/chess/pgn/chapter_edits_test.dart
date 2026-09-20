@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/v2/chess/fen.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/chapter_edits.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/comment_edits.dart';
@@ -5,6 +6,7 @@ import 'package:chess_auto_prep/v2/chess/pgn/game_text.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/move_text.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/tree_edit.dart';
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';
@@ -197,6 +199,26 @@ void main() {
       final e5 = after.tree.children.single.children.single;
       expect(e5.children.map((node) => node.san), ['Nf3', 'd4', 'c4']);
     });
+  });
+
+  test('a chapter that comes back without the move says so', () {
+    // A tree claiming a move no game of it can replay: writing the branch
+    // would give a game that does not hold the move the user just played,
+    // and saying it did is the one answer that loses their work.
+    const impossible = Chapter(
+      name: 'Impossible',
+      side: Side.white,
+      preamble: '',
+      lines: [],
+      tree: GameTree(
+        rootFen: Fen.initial,
+        children: [MoveNode(san: 'Ke3', uci: 'e1e3', fen: Fen.initial)],
+      ),
+    );
+    expect(
+      addMove(impossible, at: NodePath.of([0]), uci: 'e2e4'),
+      isA<MoveNotWritten>(),
+    );
   });
 
   test('a move that cannot be played is reported, not written', () {

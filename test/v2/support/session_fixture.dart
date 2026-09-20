@@ -39,15 +39,17 @@ ChapterRef chapterRef(String repertoire, String name) => ChapterRef(
 );
 
 /// Opens [text] as chapter [name] and returns everything a test needs to
-/// drive it.
+/// drive it. [readOnly] opens it the way the store opens a file this app
+/// may not write.
 Future<SessionFixture> openSession(
   String text, {
   String name = 'Main',
   String repertoire = 'KID',
+  String? readOnly,
 }) async {
   final ref = chapterRef(repertoire, name);
   final store = ScriptedDocumentStore()
-    ..documents[ref] = Opened(text, scriptedRevision(text));
+    ..documents[ref] = Opened(text, scriptedRevision(text), readOnly: readOnly);
   final saver = DocumentSaver(store);
   final session = DocumentSession(store, saver);
   final fixture = SessionFixture._(store, saver, session, ref);

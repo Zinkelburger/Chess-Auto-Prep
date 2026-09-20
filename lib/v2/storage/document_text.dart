@@ -103,6 +103,12 @@ DocumentText readDocumentText(List<int> bytes) {
 const _bom = '\uFEFF';
 
 /// [bytes] as UTF-8 with nothing guessed, or null when they are not.
+///
+/// The decoder eats exactly one leading mark, so exactly one goes back on
+/// whenever the bytes start with one — not only when the decoding came back
+/// without one. A file written with two marks is a file with two, and
+/// handing it back with one is three bytes a scoped save would find missing
+/// from the heading of every game it was not asked to change.
 String? _strictUtf8(List<int> bytes) {
   try {
     final text = utf8.decode(bytes);
@@ -111,7 +117,7 @@ String? _strictUtf8(List<int> bytes) {
         bytes[0] == 0xEF &&
         bytes[1] == 0xBB &&
         bytes[2] == 0xBF;
-    return marked && !text.startsWith(_bom) ? '$_bom$text' : text;
+    return marked ? '$_bom$text' : text;
   } on FormatException {
     return null;
   }

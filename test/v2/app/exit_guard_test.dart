@@ -65,6 +65,8 @@ void main() {
     final question = _Question(answer: DraftChoice.closeAnyway);
     expect(await guardWith(question).mayClose(), isTrue);
     expect(question.asked.single, contains('was stopped because'));
+    expect(question.asked.single, contains('still on screen'));
+    expect(question.asked.single, contains('closing now loses them'));
     expect(question.asked.single, isNot(contains('has not finished')));
   });
 
