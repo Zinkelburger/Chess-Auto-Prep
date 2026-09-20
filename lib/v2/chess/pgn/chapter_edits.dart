@@ -74,15 +74,15 @@ AddMoveResult addMove(
   final move = Move.parse(uci);
   final node = move == null ? null : moveNode(chapter.tree.fenAt(at), move);
   if (node == null) return MoveIllegal(uci);
-  final siblings = chapter.tree.nodeAt(at)?.children ?? chapter.tree.children;
-  final existing = siblings.indexWhere((child) => child.san == node.san);
-  if (existing >= 0) {
+  final here = playedAlready(chapter, at: at, uci: uci);
+  if (here != null) {
     return MoveAdded(
       chapter: chapter,
-      path: at.child(existing),
+      path: here,
       written: GamesWritten.nothing,
     );
   }
+  final siblings = chapter.tree.nodeAt(at)?.children ?? chapter.tree.children;
   final prefix = [for (final step in chapter.tree.lineTo(at)) step.san];
   final edited =
       (siblings.isEmpty ? _extended(chapter, prefix, node) : null) ??
@@ -101,6 +101,25 @@ AddMoveResult addMove(
     path: path,
     written: edited.written,
   );
+}
+
+/// Where [chapter] already plays [uci] after the node at [at], or null when
+/// it does not play it there.
+///
+/// Following a move the chapter already holds writes nothing, and answering
+/// that costs one move rather than a whole edited chapter, so a caller that
+/// only wants to know whether an edit would write can ask this first.
+NodePath? playedAlready(
+  Chapter chapter, {
+  required NodePath at,
+  required String uci,
+}) {
+  final move = Move.parse(uci);
+  final node = move == null ? null : moveNode(chapter.tree.fenAt(at), move);
+  if (node == null) return null;
+  final siblings = chapter.tree.nodeAt(at)?.children ?? chapter.tree.children;
+  final index = siblings.indexWhere((child) => child.san == node.san);
+  return index < 0 ? null : at.child(index);
 }
 
 /// A game an edit may write again, its moves, and where it sits in

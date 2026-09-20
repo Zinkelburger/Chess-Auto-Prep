@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
@@ -10,6 +12,7 @@ import '../../storage/pgn_document_store.dart' as store;
 import '../../storage/training_records.dart' as records;
 import '../../workspace/document_saver.dart';
 import '../../workspace/document_session.dart';
+import 'library_report.dart';
 import 'library_state.dart';
 
 export 'library_state.dart';
@@ -38,7 +41,9 @@ final class Library extends ChangeNotifier {
        _store = documents,
        _session = session,
        _saver = saver,
-       _root = root;
+       _root = root {
+    _session.addListener(_followTheSession);
+  }
 
   /// The name of the chapter a new repertoire starts with.
   static const firstChapter = 'Main';
@@ -52,6 +57,7 @@ final class Library extends ChangeNotifier {
   final String _root;
 
   LibraryState _state = const LibraryLoading();
+  ChapterRef? _showing;
   String _query = '';
   int _refreshes = 0;
   bool _busy = false;
@@ -326,25 +332,9 @@ final class Library extends ChangeNotifier {
       if (!_disposed) notifyListeners();
     }
     if (_disposed) return result;
-    _report(action, result);
+    reportLibraryResult(action, result);
     await refresh();
     return result;
-  }
-
-  void _report(String action, LibraryResult result) {
-    switch (result) {
-      case LibraryDone() || LibraryBusy():
-        return;
-      case LibraryNameTaken():
-        log.w(action, 'the name is taken');
-      case LibraryStale() || LibraryConflicted():
-        log.w(action, 'the file changed on disk');
-      case LibraryFailure(:final detail):
-        log.e(action, detail);
-      case LibraryStoppedAt(:final chapter, :final cause):
-        log.e(action, 'stopped at $chapter');
-        _report('$action: $chapter', cause);
-    }
   }
 
   /// The repertoire called [name], compared without case because a user who
@@ -381,9 +371,22 @@ final class Library extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// The workspace opened a chapter this list does not have, so the list is
+  /// out of date: saving a copy of a document that can take no more words
+  /// hands the session to the copy, and that file was written a moment ago.
+  /// Reading the folders again is what puts it in the list and selects it.
+  void _followTheSession() {
+    final open = _session.source;
+    if (open == _showing) return;
+    _showing = open;
+    if (open == null || listsChapter(_state, open.path)) return;
+    unawaited(refresh());
+  }
+
   @override
   void dispose() {
     _disposed = true;
+    _session.removeListener(_followTheSession);
     super.dispose();
   }
 }

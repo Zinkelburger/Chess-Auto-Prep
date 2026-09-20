@@ -75,18 +75,22 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
   );
 
   /// Writes the words on screen beside the original, under a name the user
-  /// gives, and answers whether they are now in a file. It is the same copy
-  /// the chapter panel offers; the question on the way out points at it
-  /// because that is the one way out that keeps them.
-  Future<bool> _saveCopy() async {
+  /// gives, and answers the file it wrote. The question on the way out
+  /// points at this because it is the one way out that keeps them.
+  ///
+  /// The copy does not take the session over: the user answered this while
+  /// going somewhere else, and the document they are going to is the one
+  /// they asked for.
+  Future<String?> _saveCopy() async {
     final context = _navigator.currentContext;
-    if (context == null) return false;
+    if (context == null) return null;
     final name = await showCopyNameDialog(
       context,
       _session.chapter?.name ?? 'Chapter',
     );
-    if (name == null) return false;
-    return await _session.saveCopy(name) is CopySaved;
+    if (name == null) return null;
+    final written = await _session.copyAside(name);
+    return written is CopySaved ? written.name : null;
   }
 
   /// The answer being worked out for a close that was asked for already.

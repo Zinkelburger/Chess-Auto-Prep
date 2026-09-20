@@ -43,6 +43,58 @@ void main() {
     fixture.store.releaseAll();
   });
 
+  test('a question about leaving does not answer one about closing', () async {
+    fixture.store.saves.add(const IoFailure('No space left on device'));
+    edit('one');
+    await pumpEventQueue();
+    final question = _Question(answer: DraftChoice.closeAnyway, waits: true);
+    final guard = guardWith(question);
+
+    final leaving = guard.mayLeaveDocument();
+    await question.first;
+    final closing = guard.mayClose();
+    question.answerNow(DraftChoice.closeAnyway);
+    expect(await leaving, isTrue);
+    await question.first;
+    question.answerNow(DraftChoice.keepWaiting);
+    expect(await closing, isFalse, reason: 'the close asked its own question');
+    expect(question.asked, hasLength(2));
+  });
+
+  test(
+    'staying on a document does not refuse a close without asking',
+    () async {
+      fixture.store.saves.add(const IoFailure('No space left on device'));
+      edit('one');
+      await pumpEventQueue();
+      final question = _Question(answer: DraftChoice.keepWaiting, waits: true);
+      final guard = guardWith(question);
+
+      final leaving = guard.mayLeaveDocument();
+      await question.first;
+      final closing = guard.mayClose();
+      question.answerNow(DraftChoice.keepWaiting);
+      expect(await leaving, isFalse);
+      await question.first;
+      question.answerNow(DraftChoice.closeAnyway);
+      expect(await closing, isTrue, reason: 'the close asked its own question');
+      expect(question.asked, hasLength(2));
+    },
+  );
+
+  test('a conflicted document is not told that waiting will help', () async {
+    fixture.externalEdit('// Color: Black\n\n1. d4 *\n');
+    edit('one');
+    await pumpEventQueue();
+    final question = _Question(answer: DraftChoice.closeAnyway);
+    expect(await guardWith(question).mayClose(), isTrue);
+    expect(
+      question.asked.single,
+      contains('Nothing more will be written until you reload or save a copy'),
+    );
+    expect(question.asked.single, isNot(contains('stay until it is saved')));
+  });
+
   test('a save that is only slow says waiting will help', () async {
     fixture.store.hold = true;
     edit('one');
@@ -183,17 +235,24 @@ final class _Question implements DraftQuestion {
   final asked = <String>[];
   var withdrawn = 0;
   Completer<DraftChoice?>? _open;
-  final _first = Completer<void>();
+  Completer<void> _first = Completer<void>();
 
   /// Completes when the question has been put, so a test need not guess how
-  /// long the guard waits before asking.
+  /// long the guard waits before asking. Asking again arms it again.
   Future<void> get first => _first.future;
+
+  /// Answers the question that is up now.
+  void answerNow(DraftChoice choice) {
+    final open = _open;
+    if (open != null && !open.isCompleted) open.complete(choice);
+  }
 
   @override
   Future<DraftChoice?> put(DraftPrompt prompt) {
     asked.add(prompt.body);
     if (!_first.isCompleted) _first.complete();
     if (!waits) return Future<DraftChoice?>.value(answer);
+    _first = Completer<void>();
     return (_open = Completer<DraftChoice?>()).future;
   }
 

@@ -45,17 +45,22 @@ class _ShellState extends State<Shell> {
   ///
   /// Opening a document takes the saver off the one that is open, and a
   /// draft it never wrote goes with it, so the user is asked first — the
-  /// same question the closing window asks.
+  /// same question the closing window asks. When they answered it by saving
+  /// a copy, the bar above says where those words went.
   Future<void> _open(ChapterRef ref) async {
+    // Clicking the chapter that is already open is not leaving it.
+    if (ref == widget.session.source) return;
     if (!await widget.leaving.mayLeaveDocument()) return;
     if (!mounted) return;
+    final copy = widget.leaving.lastCopy;
+    widget.leaving.lastCopy = null;
     final result = await widget.session.open(ref);
     if (!mounted) return;
     switch (result) {
       case OpenOvertaken():
         return;
       case DocumentOpened():
-        setState(() => _error = null);
+        setState(() => _error = copy == null ? null : 'Saved a copy as $copy');
       case OpenFailed(:final reason):
         setState(() => _error = reason);
     }

@@ -74,7 +74,7 @@ final class DocumentSaver extends ChangeNotifier {
   /// here then — the words are on the screen, where Save a copy can have
   /// them — and the state says the document is not [settled].
   void save(String text, EditScope scope) {
-    if (!_takesWords) return;
+    if (!takesWords) return;
     _pending.typed(text, scope);
     _set(const Unsaved());
     _start();
@@ -183,14 +183,15 @@ final class DocumentSaver extends ChangeNotifier {
   }
 
   /// Whether a write may go out now: a failed file is written again with
-  /// the next edit, and [_takesWords] covers the rest.
-  bool get _writable => _takesWords && _state is! SaveFailed;
+  /// the next edit, and [takesWords] covers the rest.
+  bool get _writable => takesWords && _state is! SaveFailed;
 
   /// Whether this saver is still writing this document at all. A stopped
   /// save freezes it: the words stay on the screen, where Save a copy can
   /// have them, and nothing else goes to disk under a scope that does not
-  /// name their games.
-  bool get _takesWords =>
+  /// name their games. A conflicted file and one this app may not write are
+  /// the same to whoever is about to tell the user that waiting will help.
+  bool get takesWords =>
       _state is! SaveConflict &&
       _state is! SaveStopped &&
       _state is! DocumentReadOnly;
@@ -240,10 +241,11 @@ final class DocumentSaver extends ChangeNotifier {
         _stopped();
       case store.NotWritable(:final detail):
         _stopWriting(DocumentReadOnly(detail));
-      case store.RestoreRefused(:final detail):
-        log.e('save ${ref.path}', detail);
-        _set(SaveFailed(detail));
-      case store.IoFailure(:final detail) ||
+      // A restore is the only write that can be refused for not being a
+      // kept version, and only [_undoTo] makes one; here it is a failure
+      // like any other the store could not carry out.
+      case store.RestoreRefused(:final detail) ||
+          store.IoFailure(:final detail) ||
           store.WriteUnverified(:final detail):
         _set(SaveFailed(detail));
     }
@@ -313,7 +315,7 @@ final class DocumentSaver extends ChangeNotifier {
       await _write();
       return const UndoRefused();
     }
-    final outcome = _undone(result, entry, resting);
+    final outcome = _undone(result, entry, target.ref, resting);
     await _write();
     return outcome;
   }
@@ -333,9 +335,9 @@ final class DocumentSaver extends ChangeNotifier {
   UndoResult _undone(
     store.SaveResult result,
     store.Receipt entry,
+    DocumentRef ref,
     SaveState resting,
   ) {
-    final ref = _target!.ref;
     switch (result) {
       case store.Saved(:final receipt):
         _undo.tookBack(entry, receipt);

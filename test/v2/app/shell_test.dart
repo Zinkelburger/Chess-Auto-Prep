@@ -7,6 +7,7 @@ import 'package:chess_auto_prep/v2/features/library/library.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/workspace/save_state.dart';
+import 'package:chess_auto_prep/v2/workspace/session_results.dart';
 import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
@@ -60,6 +61,10 @@ void main() {
     leaving = ExitGuard(
       saver: saver,
       question: question,
+      saveCopy: () async {
+        final written = await session.copyAside('Main copy');
+        return written is CopySaved ? written.name : null;
+      },
       wait: const Duration(milliseconds: 20),
     );
   });
@@ -169,6 +174,43 @@ void main() {
           .where((entry) => entry.level == LogLevel.warning)
           .map((entry) => entry.action),
       contains(contains('leave this document with unsaved words')),
+    );
+  });
+  testWidgets('clicking the chapter that is already open asks nothing', (
+    tester,
+  ) async {
+    await pump(tester);
+    await tester.tap(find.text('Main').last); // KID
+    await tester.pumpAndSettle();
+    store.saves.add(const SaveRefused('game 3 would change'));
+    session.setComment(NodePath.of([0]), 'frozen words');
+    await tester.pumpAndSettle();
+    question.asked.clear();
+
+    await tester.tap(find.text('Main').last); // KID again
+    await tester.pumpAndSettle();
+    expect(question.asked, isEmpty);
+    expect(session.source, kid);
+  });
+
+  testWidgets('saving a copy on the way out says where the words went', (
+    tester,
+  ) async {
+    await pump(tester);
+    await tester.tap(find.text('Main').last); // KID
+    await tester.pumpAndSettle();
+    store.saves.add(const SaveRefused('game 3 would change'));
+    session.setComment(NodePath.of([0]), 'frozen words');
+    await tester.pumpAndSettle();
+
+    question.answer = DraftChoice.saveACopy;
+    await tester.tap(find.text('Main').first); // benko
+    await tester.pumpAndSettle();
+    expect(session.source, benko, reason: 'the click still went through');
+    expect(find.text('Saved a copy as Main copy.pgn'), findsOneWidget);
+    expect(
+      store.documents.keys.map((ref) => ref.path),
+      contains('/repertoires/KID/Main copy.pgn'),
     );
   });
 }

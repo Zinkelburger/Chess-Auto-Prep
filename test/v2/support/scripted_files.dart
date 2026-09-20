@@ -36,8 +36,13 @@ final class ScriptedFiles implements ChapterFiles {
     }
   }
 
+  /// How many times the listing has been read, so a test can say that
+  /// nothing read it again.
+  var listings = 0;
+
   @override
   Future<RepertoireListing> list() async {
+    listings++;
     await _wait();
     return listing;
   }

@@ -35,6 +35,11 @@ void main() {
     await pumpEventQueue();
     expect(fixture.session.cursor, NodePath.of([0]));
     expect(fixture.store.requestedSaves, isEmpty);
+    expect(
+      fixture.session.refusedEdit,
+      isA<NotEditable>(),
+      reason: 'the standing notice stays while the file is open',
+    );
   });
 
   test('takes no move and asks the store for nothing', () async {

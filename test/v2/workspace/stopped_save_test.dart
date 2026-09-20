@@ -153,6 +153,20 @@ void main() {
     },
   );
 
+  test('a copy made on the way out leaves the session where it is', () async {
+    fixture.store.saves.add(
+      const SaveRefused('game 3 would change but the edit was to game 1'),
+    );
+    edit('frozen words');
+    await pumpEventQueue();
+
+    final copy = await session.copyAside('Elsewhere') as CopySaved;
+    expect(copy.nowEditing, isFalse);
+    expect(session.source, fixture.ref, reason: 'still on the original');
+    expect(saver.state, isA<SaveStopped>());
+    expect(_copyText(fixture, 'Elsewhere.pgn'), contains('frozen words'));
+  });
+
   test('a copy of a frozen document becomes the document', () async {
     fixture.store.saves.add(
       const SaveRefused('game 3 would change but the edit was to game 1'),

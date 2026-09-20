@@ -168,6 +168,16 @@ final class DocumentSession extends ChangeNotifier {
   void playMove(String uci) {
     final chapter = _chapter;
     if (chapter == null) return;
+    // A move the chapter already holds writes nothing, so following it is
+    // reading: a file this app may not write still shows its own lines, and
+    // asking costs one move rather than a whole edited chapter.
+    final here = edits.playedAlready(chapter, at: _cursor, uci: uci);
+    if (here != null) {
+      _cursor = here;
+      notifyListeners();
+      return;
+    }
+    if (_refuseWhenReadOnly()) return;
     switch (edits.addMove(chapter, at: _cursor, uci: uci)) {
       case edits.MoveIllegal():
         return;
@@ -177,18 +187,9 @@ final class DocumentSession extends ChangeNotifier {
         notifyListeners();
         return;
       case edits.MoveAdded(chapter: final edited, :final path, :final written):
-        // A move the chapter already holds writes nothing, so following it
-        // is reading, not editing: a file this app may not write still
-        // shows its own lines.
-        if (identical(edited, chapter)) {
-          _cursor = path;
-          notifyListeners();
-          return;
-        }
-        if (_refuseWhenReadOnly()) return;
         _clearRefusal();
         _cursor = path;
-        _replace(edited, written);
+        if (!identical(edited, chapter)) _replace(edited, written);
         notifyListeners();
     }
   }
@@ -279,6 +280,30 @@ final class DocumentSession extends ChangeNotifier {
   /// the user opened while it was being written, the answer is about the
   /// file they asked for and they are told it.
   Future<CopyResult> saveCopy(String name) async {
+    final written = await copyAside(name);
+    if (written is! CopySaved) return written;
+    final ref = _source;
+    // A document that can still take words keeps the session; one that
+    // cannot — frozen by a stopped save, or a file this app may not write —
+    // hands it over, because the copy is now the only place those words can
+    // go on being edited. A conflicted document keeps the session: it can
+    // still be reloaded, and its draft is still the user's.
+    final frozen = _saver.state is SaveStopped || _readOnly != null;
+    if (ref == null || !frozen) return written;
+    final opened = await open(
+      ChapterRef(
+        repertoire: ref.repertoire,
+        name: p.basenameWithoutExtension(written.name),
+        path: p.join(p.dirname(ref.path), written.name),
+      ),
+    );
+    return CopySaved(written.name, nowEditing: opened is DocumentOpened);
+  }
+
+  /// Writes the words on screen beside the original and leaves the session
+  /// where it is, which is what the question on the way out asks for: the
+  /// user is going somewhere else, so the copy is not what they want open.
+  Future<CopyResult> copyAside(String name) async {
     final ref = _source;
     final chapter = _chapter;
     if (ref == null || chapter == null) {
@@ -291,33 +316,11 @@ final class DocumentSession extends ChangeNotifier {
     // words the user is looking at that they want kept.
     final created = await _store.create(target, writeChapter(chapter));
     return switch (created) {
-      store.Created() => await _copied(ref, file, target),
+      store.Created() => CopySaved(file),
       store.Collision() => const CopyNameTaken(),
       store.IoFailure(:final detail) ||
       store.WriteUnverified(:final detail) => CopyFailed(detail),
     };
-  }
-
-  /// The copy is written. A document that can still take words keeps the
-  /// session; one that cannot — frozen by a stopped save, or a file this app
-  /// may not write — hands it over, because the copy is now the only place
-  /// those words can go on being edited. A conflicted document keeps the
-  /// session: it can still be reloaded, and its draft is still the user's.
-  Future<CopyResult> _copied(
-    ChapterRef from,
-    String file,
-    DocumentRef target,
-  ) async {
-    final frozen = _saver.state is SaveStopped || _readOnly != null;
-    if (!frozen) return CopySaved(file);
-    final opened = await open(
-      ChapterRef(
-        repertoire: from.repertoire,
-        name: p.basenameWithoutExtension(file),
-        path: target.path,
-      ),
-    );
-    return CopySaved(file, nowEditing: opened is DocumentOpened);
   }
 
   void _show(

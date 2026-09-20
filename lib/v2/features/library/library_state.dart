@@ -111,3 +111,16 @@ records.RepointResult foldedRepoint(List<records.RepointResult> results) {
   }
   return rows == 0 ? const records.NothingToRepoint() : records.Repointed(rows);
 }
+
+/// Whether [state] already lists a chapter at [path].
+///
+/// A workspace that opened a chapter this list does not hold means the disk
+/// changed under it — a copy written a moment ago — and the list has to be
+/// read again before it can show or select it.
+bool listsChapter(LibraryState state, String path) {
+  if (state is! LibraryLoaded) return false;
+  for (final folder in state.repertoires) {
+    if (folder.chapters.any((chapter) => chapter.path == path)) return true;
+  }
+  return false;
+}

@@ -60,7 +60,7 @@ final class ExitGuard {
   ExitGuard({
     required DocumentSaver saver,
     required DraftQuestion question,
-    Future<bool> Function()? saveCopy,
+    Future<String?> Function()? saveCopy,
     this.wait = const Duration(seconds: 5),
   }) : _saver = saver,
        _question = question,
@@ -69,15 +69,22 @@ final class ExitGuard {
   final DocumentSaver _saver;
   final DraftQuestion _question;
 
-  /// Writes the words somewhere else and answers whether it did. Null when
-  /// this guard has nowhere to write them, and then the question does not
-  /// offer it.
-  final Future<bool> Function()? _saveCopy;
+  /// Writes the words somewhere else and answers the file it wrote, or null
+  /// when it wrote none. Null itself when this guard has nowhere to write
+  /// them, and then the question does not offer it.
+  final Future<String?> Function()? _saveCopy;
 
   /// How long the file is given before the user is asked about it.
   final Duration wait;
 
-  Future<bool>? _deciding;
+  /// One decision at a time per kind. Sharing one across both would let the
+  /// answer to a question about leaving the document grant a close nobody
+  /// asked about.
+  final _deciding = <_Leaving, Future<bool>>{};
+
+  /// The file the last question's copy was written to, for the screen to
+  /// say so once the user has gone where they were going.
+  String? lastCopy;
 
   /// Whether the window may close now.
   ///
@@ -95,8 +102,22 @@ final class ExitGuard {
   /// difference.
   Future<bool> mayLeaveDocument() => _mayGo(_Leaving.document);
 
-  Future<bool> _mayGo(_Leaving kind) =>
-      _deciding ??= _decide(kind).whenComplete(() => _deciding = null);
+  Future<bool> _mayGo(_Leaving kind) {
+    final asked = _deciding[kind];
+    if (asked != null) return asked;
+    // A question already on screen is answered first: two at once, and the
+    // button pressed on one would decide the other.
+    final decided = _afterTheOthers(kind);
+    _deciding[kind] = decided;
+    return decided.whenComplete(() => _deciding.remove(kind));
+  }
+
+  Future<bool> _afterTheOthers(_Leaving kind) async {
+    for (final other in [..._deciding.values]) {
+      await other;
+    }
+    return _decide(kind);
+  }
 
   Future<bool> _decide(_Leaving kind) async {
     // Nothing to wait for and nothing to ask about, so no clock is started:
@@ -150,13 +171,22 @@ final class ExitGuard {
         _question.withdraw();
         return true;
       case _Answer.copy:
-        return _saveCopy?.call() ?? Future<bool>.value(false);
+        return _copied();
       case _Answer.close:
         log.w('${kind.action} with unsaved words', _saver.documentPath);
         return true;
       case _Answer.stay:
         return false;
     }
+  }
+
+  /// Writes the words beside the original and goes on when they are there.
+  /// A copy nobody wrote leaves the user where they were.
+  Future<bool> _copied() async {
+    final copy = _saveCopy;
+    if (copy == null) return false;
+    lastCopy = await copy();
+    return lastCopy != null;
   }
 
   _Answer _answerFor(DraftChoice? choice) => switch (choice) {
@@ -168,18 +198,28 @@ final class ExitGuard {
   /// What is known about why the file is behind and what the answers mean.
   String _body(_Leaving kind) => '${_trouble()}\n\n${_ways(kind)}';
 
-  /// What waiting, copying and going will do. Waiting is worth naming only
-  /// when there is something still on its way; a frozen document is not
-  /// going to write itself.
+  /// What waiting, copying and going will do.
+  ///
+  /// Waiting is worth naming only when the saver is still writing this
+  /// document. It is the saver that says so, not the name of the state: a
+  /// conflicted file and a frozen one both take no more words, and telling
+  /// the user to wait for a save that is never coming is telling them to
+  /// wait for ever.
   String _ways(_Leaving kind) {
     final going = kind == _Leaving.window ? 'Closing now' : 'Leaving now';
-    if (_saver.state is SaveStopped) {
-      return 'Nothing more will be written to that file, so waiting will not '
-          'help. Save a copy to keep the words. $going loses them.';
+    if (_saver.takesWords) {
+      return 'You can stay until it is saved, or save a copy. $going loses '
+          'what you typed since the last save.';
     }
-    return 'You can stay until it is saved, or save a copy. $going loses '
-        'what you typed since the last save.';
+    return '${_whyNoMore()} Save a copy to keep the words. $going loses them.';
   }
+
+  /// Why nothing more is going to be written, as the user would say it.
+  String _whyNoMore() => switch (_saver.state) {
+    SaveConflict() =>
+      'Nothing more will be written until you reload or save a copy.',
+    _ => 'Nothing more will be written to that file, so waiting will not help.',
+  };
 
   /// What is known about why the file is behind, as a sentence. Only what is
   /// known: a save that has not finished may be waiting for anything.
