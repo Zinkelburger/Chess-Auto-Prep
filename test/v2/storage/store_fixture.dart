@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:chess_auto_prep/v2/storage/backups.dart';
 import 'package:chess_auto_prep/v2/storage/document_probe.dart';
 import 'package:chess_auto_prep/v2/storage/document_ref.dart';
+import 'package:chess_auto_prep/v2/storage/edit_scope.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_file_store.dart';
 import 'package:path/path.dart' as p;
@@ -44,6 +45,11 @@ final class StoreFixture {
       backupId(p.relative(ref.path, from: documents.path)),
     ),
   );
+
+  /// Replaces [ref] with [text], the whole document at a time, which is what
+  /// a test that is not about the scope of an edit is doing.
+  Future<SaveResult> replace(DocumentRef ref, String text, Revision expected) =>
+      store.save(ref, text, expected: expected, scope: const WholeDocument());
 
   /// What is on disk at [ref] now, for a test that put it there itself.
   Future<Revision> revisionOf(DocumentRef ref) async =>

@@ -1,4 +1,5 @@
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
+import 'package:chess_auto_prep/v2/storage/edit_scope.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart'
     show Collision, IoFailure, Opened;
 import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
@@ -26,6 +27,35 @@ void main() {
 
   /// Comments the first move, which is one edit of the file.
   void edit(String words) => session.setComment(sicilian, words);
+
+  /// The games the last save told the store it was writing again.
+  Set<int> declared() =>
+      (fixture.store.requestedSaves.last.scope as GamesEdited).games;
+
+  test('a save names the games it writes again', () async {
+    // A note on the first move goes into both lines that play it; one on a
+    // move only the first line plays goes into that line alone.
+    edit('shared');
+    await pumpEventQueue();
+    expect(declared(), {0, 1});
+    session.setComment(NodePath.of([0, 0]), 'this line only');
+    await pumpEventQueue();
+    expect(declared(), {0});
+  });
+
+  test('a save that failed is written again with the next edit, under both '
+      'their games', () async {
+    fixture.store.saves.add(const IoFailure('no space left on device'));
+    session.setComment(NodePath.of([0, 0]), 'first');
+    await pumpEventQueue();
+    expect(saver.state, isA<SaveFailed>());
+    session.setComment(NodePath.of([0, 1]), 'second');
+    await pumpEventQueue();
+    expect(saver.state, isA<Saved>());
+    expect(declared(), {0, 1});
+    expect(fixture.onDisk, contains('{first}'));
+    expect(fixture.onDisk, contains('{second}'));
+  });
 
   test('an edit is saved at once and says so', () async {
     expect(saver.state, isA<Saved>());

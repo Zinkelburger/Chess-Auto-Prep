@@ -5,7 +5,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:chess_auto_prep/v2/storage/atomic_write.dart';
-import 'package:chess_auto_prep/v2/storage/edit_scope.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -52,26 +51,10 @@ void main() {
       final loaded = await fixture.put(ref, 'theirs *\n');
       await File(ref.path).writeAsString('edited elsewhere *\n');
       const draft = 'my draft *\n';
-      expect(
-        await fixture.store.save(
-          ref,
-          draft,
-          expected: loaded,
-          scope: const WholeDocument(),
-        ),
-        isA<Conflict>(),
-      );
+      expect(await fixture.replace(ref, draft, loaded), isA<Conflict>());
       expect(await File(ref.path).readAsString(), 'edited elsewhere *\n');
       final current = (await fixture.store.open(ref) as Opened).revision;
-      expect(
-        await fixture.store.save(
-          ref,
-          draft,
-          expected: current,
-          scope: const WholeDocument(),
-        ),
-        isA<Saved>(),
-      );
+      expect(await fixture.replace(ref, draft, current), isA<Saved>());
       expect(await File(ref.path).readAsString(), draft);
     },
   );
@@ -80,51 +63,18 @@ void main() {
       'returned', () async {
     final ref = fixture.ref('KID/Main.pgn');
     final first = await fixture.put(ref, 'A *\n');
-    final toB =
-        (await fixture.store.save(
-                  ref,
-                  'B *\n',
-                  expected: first,
-                  scope: const WholeDocument(),
-                )
-                as Saved)
-            .receipt;
+    final toB = (await fixture.replace(ref, 'B *\n', first) as Saved).receipt;
     final toC =
-        (await fixture.store.save(
-                  ref,
-                  'C *\n',
-                  expected: toB.committed,
-                  scope: const WholeDocument(),
-                )
-                as Saved)
-            .receipt;
-    final undoneC = await fixture.store.save(
-      ref,
-      toC.before,
-      expected: toC.committed,
-      scope: const WholeDocument(),
-    );
+        (await fixture.replace(ref, 'C *\n', toB.committed) as Saved).receipt;
+    final undoneC = await fixture.replace(ref, toC.before, toC.committed);
     expect(await File(ref.path).readAsString(), 'B *\n');
     // The entry for B now expects what undoing C committed, not the old rB.
     expect(
-      await fixture.store.save(
-        ref,
-        toB.before,
-        expected: toB.committed,
-        scope: const WholeDocument(),
-      ),
+      await fixture.replace(ref, toB.before, toB.committed),
       isA<Conflict>(),
     );
     final rearmed = (undoneC as Saved).receipt.committed;
-    expect(
-      await fixture.store.save(
-        ref,
-        toB.before,
-        expected: rearmed,
-        scope: const WholeDocument(),
-      ),
-      isA<Saved>(),
-    );
+    expect(await fixture.replace(ref, toB.before, rearmed), isA<Saved>());
     expect(await File(ref.path).readAsString(), 'A *\n');
   });
 
@@ -132,43 +82,15 @@ void main() {
       'older entry stays disarmed', () async {
     final ref = fixture.ref('KID/Main.pgn');
     final first = await fixture.put(ref, 'A *\n');
-    final toB =
-        (await fixture.store.save(
-                  ref,
-                  'B *\n',
-                  expected: first,
-                  scope: const WholeDocument(),
-                )
-                as Saved)
-            .receipt;
+    final toB = (await fixture.replace(ref, 'B *\n', first) as Saved).receipt;
     await File(ref.path).writeAsString('E *\n');
     final reopened = (await fixture.store.open(ref) as Opened).revision;
     final toC =
-        (await fixture.store.save(
-                  ref,
-                  'C *\n',
-                  expected: reopened,
-                  scope: const WholeDocument(),
-                )
-                as Saved)
-            .receipt;
-    expect(
-      await fixture.store.save(
-        ref,
-        toC.before,
-        expected: toC.committed,
-        scope: const WholeDocument(),
-      ),
-      isA<Saved>(),
-    );
+        (await fixture.replace(ref, 'C *\n', reopened) as Saved).receipt;
+    expect(await fixture.replace(ref, toC.before, toC.committed), isA<Saved>());
     expect(await File(ref.path).readAsString(), 'E *\n');
     expect(
-      await fixture.store.save(
-        ref,
-        toB.before,
-        expected: toB.committed,
-        scope: const WholeDocument(),
-      ),
+      await fixture.replace(ref, toB.before, toB.committed),
       isA<Conflict>(),
     );
     expect(await File(ref.path).readAsString(), 'E *\n');
@@ -182,15 +104,7 @@ void main() {
       final staged = File(temporaryPathFor(ref.path));
       await staged.writeAsString('half written');
       expect((await fixture.store.open(ref) as Opened).text, 'real *\n');
-      expect(
-        await fixture.store.save(
-          ref,
-          'newer *\n',
-          expected: revision,
-          scope: const WholeDocument(),
-        ),
-        isA<Saved>(),
-      );
+      expect(await fixture.replace(ref, 'newer *\n', revision), isA<Saved>());
       expect(await File(ref.path).readAsString(), 'newer *\n');
       expect(await staged.exists(), isFalse);
     },
@@ -206,12 +120,7 @@ void main() {
       expect(opened, isA<Unreadable>());
       expect((opened as Unreadable).detail, isNotEmpty);
       expect(
-        await fixture.store.save(
-          ref,
-          'mine *\n',
-          expected: revision,
-          scope: const WholeDocument(),
-        ),
+        await fixture.replace(ref, 'mine *\n', revision),
         isA<IoFailure>(),
       );
     },
@@ -224,12 +133,7 @@ void main() {
       final ref = fixture.ref('KID/Main.pgn');
       final revision = await fixture.put(ref, 'kept *\n');
       await Process.run('chmod', ['500', p.dirname(ref.path)]);
-      final result = await fixture.store.save(
-        ref,
-        'new *\n',
-        expected: revision,
-        scope: const WholeDocument(),
-      );
+      final result = await fixture.replace(ref, 'new *\n', revision);
       expect(result, isA<IoFailure>());
       expect((result as IoFailure).detail, isNotEmpty);
       expect(await File(ref.path).readAsString(), 'kept *\n');

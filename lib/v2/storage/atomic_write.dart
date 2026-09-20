@@ -7,6 +7,12 @@
 /// Every caller here holds the directory lock, so the temporary name below is
 /// only ever used by one writer at a time.
 ///
+/// This publishes bytes; it does not decide whether they may be published. A
+/// document's own bytes reach it from [PgnFileStore] alone, which is where a
+/// save is checked against the version it replaces. The other callers write
+/// files beside a document rather than a document: kept versions and their
+/// index, training rows, the note a move leaves behind.
+///
 /// Linux is the tested host; Windows replacement needs `ReplaceFileW` and
 /// retried sharing violations, which this does not do yet, and has no
 /// directory handle to flush, so the final step is skipped there.

@@ -2,7 +2,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:chess_auto_prep/v2/storage/edit_scope.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -19,14 +18,7 @@ void main() {
     final ref = fixture.ref('KID/Main.pgn');
     var revision = await fixture.put(ref, 'A *\n');
     for (final text in ['B *\n', 'C *\n', 'D *\n']) {
-      final saved =
-          await fixture.store.save(
-                ref,
-                text,
-                expected: revision,
-                scope: const WholeDocument(),
-              )
-              as Saved;
+      final saved = await fixture.replace(ref, text, revision) as Saved;
       revision = saved.receipt.committed;
     }
     expect(fixture.keptTexts(ref), ['A *\n', 'B *\n', 'C *\n']);
@@ -36,14 +28,7 @@ void main() {
   test('a save that replaces nothing keeps nothing', () async {
     final ref = fixture.ref('KID/Main.pgn');
     final revision = await fixture.put(ref, 'A *\n');
-    final saved =
-        await fixture.store.save(
-              ref,
-              'A *\n',
-              expected: revision,
-              scope: const WholeDocument(),
-            )
-            as Saved;
+    final saved = await fixture.replace(ref, 'A *\n', revision) as Saved;
     expect(fixture.keptVersions(ref), isEmpty);
     expect(saved.receipt.committed, revision);
   });
@@ -58,14 +43,7 @@ void main() {
   test('a renamed document keeps one history', () async {
     final ref = fixture.ref('KID/Main.pgn');
     final first = await fixture.put(ref, 'A *\n');
-    final saved =
-        await fixture.store.save(
-              ref,
-              'B *\n',
-              expected: first,
-              scope: const WholeDocument(),
-            )
-            as Saved;
+    final saved = await fixture.replace(ref, 'B *\n', first) as Saved;
     final moved = await fixture.store.rename(
       ref,
       'Mainline.pgn',
@@ -74,11 +52,10 @@ void main() {
     final renamed = fixture.ref('KID/Mainline.pgn');
     expect(fixture.keptTexts(renamed), ['A *\n']);
     expect(fixture.backupFolder(ref).existsSync(), isFalse);
-    final after = await fixture.store.save(
+    final after = await fixture.replace(
       renamed,
       'C *\n',
-      expected: (moved as Moved).revision,
-      scope: const WholeDocument(),
+      (moved as Moved).revision,
     );
     expect(after, isA<Saved>());
     expect(fixture.keptTexts(renamed), ['A *\n', 'B *\n']);
@@ -87,26 +64,14 @@ void main() {
   test('a list of versions nobody can read is written again', () async {
     final ref = fixture.ref('KID/Main.pgn');
     var revision = await fixture.put(ref, 'A *\n');
-    revision =
-        (await fixture.store.save(
-                  ref,
-                  'B *\n',
-                  expected: revision,
-                  scope: const WholeDocument(),
-                )
-                as Saved)
-            .receipt
-            .committed;
+    revision = (await fixture.replace(ref, 'B *\n', revision) as Saved)
+        .receipt
+        .committed;
     final kept = fixture.keptVersions(ref);
     final index = File(p.join(fixture.backupFolder(ref).path, 'index.json'));
     await index.writeAsString('{"versions": [{"fi');
 
-    final saved = await fixture.store.save(
-      ref,
-      'C *\n',
-      expected: revision,
-      scope: const WholeDocument(),
-    );
+    final saved = await fixture.replace(ref, 'C *\n', revision);
 
     expect(saved, isA<Saved>(), reason: 'a broken list is not a lost save');
     expect(await File(ref.path).readAsString(), 'C *\n');
@@ -125,24 +90,12 @@ void main() {
     // versions are still kept under the id that name hashes to.
     final taken = fixture.ref('KID/Mainline.pgn');
     final first = await fixture.put(taken, 'older *\n');
-    await fixture.store.save(
-      taken,
-      'newer *\n',
-      expected: first,
-      scope: const WholeDocument(),
-    );
+    await fixture.replace(taken, 'newer *\n', first);
     await File(taken.path).delete();
 
     final ref = fixture.ref('KID/Main.pgn');
     final revision = await fixture.put(ref, 'A *\n');
-    final saved =
-        await fixture.store.save(
-              ref,
-              'B *\n',
-              expected: revision,
-              scope: const WholeDocument(),
-            )
-            as Saved;
+    final saved = await fixture.replace(ref, 'B *\n', revision) as Saved;
     final moved = await fixture.store.rename(
       ref,
       'Mainline.pgn',
@@ -176,15 +129,7 @@ void main() {
       p.join(folder.path, 'index.json'),
     ).writeAsString('not a list of versions');
 
-    expect(
-      await fixture.store.save(
-        ref,
-        'B *\n',
-        expected: revision,
-        scope: const WholeDocument(),
-      ),
-      isA<Saved>(),
-    );
+    expect(await fixture.replace(ref, 'B *\n', revision), isA<Saved>());
 
     expect(fixture.keptTexts(ref).take(names.length), [
       for (final name in names.reversed) '$name *\n',
@@ -195,26 +140,14 @@ void main() {
   test('an adoption that cannot be made moves no history at all', () async {
     final taken = fixture.ref('KID/Mainline.pgn');
     final first = await fixture.put(taken, 'older *\n');
-    await fixture.store.save(
-      taken,
-      'newer *\n',
-      expected: first,
-      scope: const WholeDocument(),
-    );
+    await fixture.replace(taken, 'newer *\n', first);
     await File(taken.path).delete();
     final occupied = fixture.backupFolder(taken);
     final occupantHeld = occupied.listSync().map((e) => p.basename(e.path));
 
     final ref = fixture.ref('KID/Main.pgn');
     final revision = await fixture.put(ref, 'A *\n');
-    final saved =
-        await fixture.store.save(
-              ref,
-              'B *\n',
-              expected: revision,
-              scope: const WholeDocument(),
-            )
-            as Saved;
+    final saved = await fixture.replace(ref, 'B *\n', revision) as Saved;
     final mineHeld = fixture
         .backupFolder(ref)
         .listSync()
@@ -254,12 +187,7 @@ void main() {
         '500',
         p.join(fixture.support.path, 'backups'),
       ]);
-      final result = await fixture.store.save(
-        ref,
-        'B *\n',
-        expected: revision,
-        scope: const WholeDocument(),
-      );
+      final result = await fixture.replace(ref, 'B *\n', revision);
       expect(result, isA<IoFailure>());
       expect((result as IoFailure).detail, contains('could not be kept'));
       expect(await File(ref.path).readAsString(), 'A *\n');
