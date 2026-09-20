@@ -7,6 +7,8 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
+import '../diagnostics/log.dart';
+
 sealed class StockfishLocation {
   const StockfishLocation();
 }
@@ -30,6 +32,10 @@ final class StockfishMissing extends StockfishLocation {
 /// beside a stamp naming the release, so a new release replaces it and an
 /// unchanged one costs one stat. The old app keeps the same file and
 /// stamp, so both apps share one copy.
+///
+/// Nothing here throws: a damaged lock file, a corrupt asset or a support
+/// folder that cannot be written come back as [StockfishMissing], because
+/// the workspace has to be able to say "no engine" and carry on.
 final class StockfishInstall {
   StockfishInstall({required this.supportDirectory, required this.readAsset});
 
@@ -39,9 +45,21 @@ final class StockfishInstall {
   final Future<Uint8List?> Function(String asset) readAsset;
 
   Future<StockfishLocation> locate() async {
-    final release = await _release();
-    if (release == null) {
+    final bytes = await readAsset(_lockAsset);
+    if (bytes == null) {
       return const StockfishMissing('This build has no Stockfish checksums');
+    }
+    final _Release? release;
+    try {
+      release = _release(bytes);
+    } on FormatException catch (e) {
+      log.e('read $_lockAsset', e);
+      return StockfishMissing('$_lockAsset is damaged: $e');
+    }
+    if (release == null) {
+      return StockfishMissing(
+        'This build has no Stockfish checksums for $_lockKey',
+      );
     }
     final binary = File(p.join(supportDirectory.path, _binaryName));
     final stamp = File('${binary.path}.origin');
@@ -51,9 +69,8 @@ final class StockfishInstall {
     return _install(release, binary, stamp);
   }
 
-  Future<_Release?> _release() async {
-    final bytes = await readAsset(_lockAsset);
-    if (bytes == null) return null;
+  /// Throws [FormatException] when the asset is not the JSON it should be.
+  _Release? _release(Uint8List bytes) {
     final lock = jsonDecode(utf8.decode(bytes));
     final entry = lock is Map ? lock[_lockKey] : null;
     if (entry is! Map) return null;

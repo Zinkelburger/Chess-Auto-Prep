@@ -97,4 +97,12 @@ void main() {
     assets.remove('tools/assets.lock.json');
     expect(await install().locate(), isA<StockfishMissing>());
   });
+
+  test('a damaged checksum file is reported, not thrown', () async {
+    assets['tools/assets.lock.json'] = Uint8List.fromList(
+      utf8.encode('{"stockfish-linux": '),
+    );
+    final result = await install().locate();
+    expect((result as StockfishMissing).reason, contains('is damaged'));
+  });
 }
