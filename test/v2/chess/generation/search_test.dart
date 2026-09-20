@@ -98,6 +98,46 @@ void main() {
     expect(tree.valuation.value, 0.5);
   });
 
+  test('a mate beats every ordinary move at the window', () async {
+    // A finished game carries the score an engine would report there, so a
+    // mate is +10000 to us and a two-pawn window keeps nothing else.
+    final result = await searchFrom(
+      '7k/5Q2/6K1/8/8/8/8/8 w - - 0 1',
+      config: const SearchConfig(side: Side.white, horizonPlies: 4),
+    );
+    final tree = treeOf(result) as OurNode;
+    expect(
+      tree.candidates.map((c) => c.child),
+      everyElement(
+        isA<TerminalNode>().having(
+          (node) => node.kind,
+          'kind',
+          TerminalKind.checkmate,
+        ),
+      ),
+    );
+    expect(tree.chosen.evalForUs.cp, mateBaseCp);
+    expect(tree.valuation.value, 1);
+    expect(tree.valuation.isExact, isTrue);
+  });
+
+  test('a draw is a zero on the same scale as an engine score', () async {
+    // The knight can take the last square from a bare king; every other move
+    // is five pawns worse, so the stalemate — zero, like an equal position —
+    // is the only move the two-pawn window keeps.
+    final result = await searchFrom(
+      '7k/8/2N3K1/8/8/p7/P7/8 w - - 0 1',
+      config: const SearchConfig(side: Side.white, horizonPlies: 4),
+      evaluator: ScriptedEvaluator(fallback: 500),
+    );
+    final tree = treeOf(result) as OurNode;
+    expect(tree.candidates, hasLength(1));
+    expect(tree.chosen.move.uci, 'c6e7');
+    expect(tree.chosen.evalForUs.cp, 0);
+    expect(tree.valuation.value, 0.5);
+    expect(tree.valuation.isExact, isTrue);
+  });
+
   test('shares out a policy that does not sum to one', () async {
     final root = positionOf(afterE4);
     final result = await searchFrom(
