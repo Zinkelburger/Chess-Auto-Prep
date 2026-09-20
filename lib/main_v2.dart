@@ -21,7 +21,13 @@ Future<void> main() async {
   final logFile = LogFile(Directory(p.join(support.path, 'logs')));
   await _installLog(logFile);
   log.i('start');
-  runApp(ChessAutoPrepV2(documents: documents, support: support));
+  runApp(
+    ChessAutoPrepV2(
+      documents: documents,
+      support: support,
+      closeLog: logFile.close,
+    ),
+  );
 }
 
 /// A support folder that cannot be written must not keep the app shut: the

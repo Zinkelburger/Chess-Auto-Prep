@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'dart:ui' show AppExitResponse;
 import 'package:path/path.dart' as p;
 
+import '../diagnostics/log.dart';
 import '../engines/engine_supervisor.dart';
 import '../features/library/library.dart';
 import '../storage/chapter_files.dart';
@@ -21,6 +22,7 @@ class ChessAutoPrepV2 extends StatefulWidget {
     super.key,
     required this.documents,
     required this.support,
+    required this.closeLog,
   });
 
   /// The user's Documents directory; repertoires live under it.
@@ -28,6 +30,10 @@ class ChessAutoPrepV2 extends StatefulWidget {
 
   /// The app's own folder, where the engine is installed.
   final Directory support;
+
+  /// Flushes and closes the log file `main_v2` opened. Called on the way
+  /// out, after the engines, so their last words reach the file.
+  final Future<void> Function() closeLog;
 
   @override
   State<ChessAutoPrepV2> createState() => _ChessAutoPrepV2State();
@@ -54,6 +60,8 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     _lifecycle = AppLifecycleListener(
       onExitRequested: () async {
         await _engines.dispose();
+        log.i('exit');
+        await widget.closeLog();
         return AppExitResponse.exit;
       },
     );
