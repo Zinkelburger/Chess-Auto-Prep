@@ -4,6 +4,9 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:chess_auto_prep/v2/chess/pgn/chapter.dart';
+import 'package:chess_auto_prep/v2/chess/pgn/chapter_edits.dart';
+import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/diagnostics/log.dart';
 import 'package:chess_auto_prep/v2/storage/atomic_write.dart';
 import 'package:chess_auto_prep/v2/storage/document_ref.dart';
@@ -64,6 +67,37 @@ void main() {
     expect(result.detail, contains('the edit was to game 1'));
     expect(await File(ref.path).readAsBytes(), before);
     expect(fixture.keptTexts(ref), isEmpty, reason: 'nothing was replaced');
+  });
+
+  test('a writer that rewrites a game the edit never touched is refused, '
+      'whatever the text says', () async {
+    final ref = fixture.ref('KID/Main.pgn');
+    final revision = await fixture.put(ref, _threeGames);
+    final before = await File(ref.path).readAsBytes();
+    // A real edit: a move at the end of the first line, which writes that
+    // game and says so. The scope is the edit's own answer, so a writer that
+    // does more than the edit asked for cannot widen it.
+    final chapter = parseChapter(name: 'Main', text: _threeGames);
+    final edit =
+        addMove(chapter, at: NodePath.of([0]), uci: 'g8f6') as MoveAdded;
+    expect(edit.written.rewritten, {0});
+    final damaged = writeChapter(
+      edit.chapter,
+    ).replaceFirst('1. c4 *', '1. c4 e5 *');
+
+    final result = await fixture.store.save(
+      ref,
+      damaged,
+      expected: revision,
+      scope: GamesEdited(
+        edit.written.rewritten,
+        appended: edit.written.appended,
+      ),
+    );
+
+    expect((result as SaveRefused).detail, contains('game 3 would change'));
+    expect(await File(ref.path).readAsBytes(), before);
+    expect(fixture.keptTexts(ref), isEmpty);
   });
 
   test('a save that would drop a game is refused', () async {

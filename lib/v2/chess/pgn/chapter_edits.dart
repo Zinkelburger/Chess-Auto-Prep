@@ -16,6 +16,26 @@ import 'tree_edit.dart';
 /// is every game merged. So an edit changes one or more games and the tree
 /// is merged again from them; a game nothing touched keeps its bytes.
 
+/// Which games an edit wrote again, and how many it added at the end.
+///
+/// An edit knows this; the text it produced does not say it. A caller that
+/// worked it out by comparing the chapter before with the chapter after
+/// would agree with whatever the edit did, including with a game it should
+/// never have touched, so the edit says it here and whoever writes the file
+/// carries it through to the store.
+final class GamesWritten {
+  const GamesWritten({this.rewritten = const {}, this.appended = 0});
+
+  /// Indexes into the chapter's games as they were before the edit, from 0.
+  final Set<int> rewritten;
+
+  /// How many games the edit added at the end of the chapter.
+  final int appended;
+}
+
+/// Nothing of the file changed.
+const _nothingWritten = GamesWritten();
+
 sealed class AddMoveResult {
   const AddMoveResult();
 }
@@ -23,10 +43,18 @@ sealed class AddMoveResult {
 /// The move is in the chapter at [path]. [chapter] is unchanged when the
 /// move was already there and the caller only has to move its cursor.
 final class MoveAdded extends AddMoveResult {
-  const MoveAdded({required this.chapter, required this.path});
+  const MoveAdded({
+    required this.chapter,
+    required this.path,
+    this.written = _nothingWritten,
+  });
 
   final Chapter chapter;
   final NodePath path;
+
+  /// The games this edit wrote; none of them when the move was already
+  /// there.
+  final GamesWritten written;
 }
 
 /// [uci] is not a legal move in the position the path asked for. The
@@ -44,9 +72,13 @@ sealed class CommentResult {
 /// The comment is in the chapter. [chapter] is the same object when the
 /// words would have left the file exactly as it was.
 final class CommentWritten extends CommentResult {
-  const CommentWritten(this.chapter);
+  const CommentWritten(this.chapter, {this.written = _nothingWritten});
 
   final Chapter chapter;
+
+  /// The games this edit wrote; a move several games play is written into
+  /// all of them.
+  final GamesWritten written;
 }
 
 /// The comment belongs to a game reading could not finish, so writing that
@@ -78,7 +110,7 @@ AddMoveResult addMove(
     return MoveAdded(chapter: chapter, path: at.child(existing));
   }
   final prefix = [for (final step in chapter.tree.lineTo(at)) step.san];
-  final updated =
+  final edited =
       (siblings.isEmpty ? _extended(chapter, prefix, node) : null) ??
       _appended(chapter, prefix, node);
   // Merging keeps the order of the moves a chapter already had and puts the
@@ -87,10 +119,14 @@ AddMoveResult addMove(
   // in the merged tree for it to be.
   final path = at.child(siblings.length);
   assert(
-    pathOfSans(updated.tree, [...prefix, node.san]) == path,
+    pathOfSans(edited.chapter.tree, [...prefix, node.san]) == path,
     'a move written into a chapter came back somewhere other than $path',
   );
-  return MoveAdded(chapter: updated, path: path);
+  return MoveAdded(
+    chapter: edited.chapter,
+    path: path,
+    written: edited.written,
+  );
 }
 
 /// Writes [text] as the comment of the node at [at].
@@ -121,10 +157,15 @@ CommentResult setComment(
   final lines = [
     for (final line in chapter.lines) _commented(chapter, line, sans, text),
   ];
-  final changed = lines.indexed.any(
-    (entry) => !identical(entry.$2, chapter.lines[entry.$1]),
+  final written = <int>{
+    for (final (index, line) in lines.indexed)
+      if (!identical(line, chapter.lines[index])) index,
+  };
+  if (written.isEmpty) return CommentWritten(chapter);
+  return CommentWritten(
+    withLines(chapter, lines),
+    written: GamesWritten(rewritten: written),
   );
-  return CommentWritten(changed ? withLines(chapter, lines) : chapter);
 }
 
 /// Whether a game reading could not finish plays [sans].
@@ -165,17 +206,24 @@ CommentResult _withIntroduction(Chapter chapter, String? text) {
   if (tree == null) return const GameNotWhole();
   final comment = withProse(tree.rootComment, text);
   if (comment == tree.rootComment) return CommentWritten(chapter);
+  final index = chapter.lines.indexOf(first);
   final lines = [...chapter.lines];
-  lines[chapter.lines.indexOf(first)] = rewritten(
+  lines[index] = rewritten(
     first,
     withComment(tree, const NodePath.root(), comment),
   );
-  return CommentWritten(withLines(chapter, lines));
+  return CommentWritten(
+    withLines(chapter, lines),
+    written: GamesWritten(rewritten: {index}),
+  );
 }
 
 /// A game an edit may write again, its moves, and where it sits in
 /// [Chapter.lines].
 typedef _Writable = ({int index, ChapterLine line, GameTree tree});
+
+/// A chapter an edit produced and the games it wrote to produce it.
+typedef _Edited = ({Chapter chapter, GamesWritten written});
 
 /// The games of [chapter] an edit may write again, in file order.
 Iterable<_Writable> _writableGames(Chapter chapter) sync* {
@@ -191,7 +239,7 @@ Iterable<_Writable> _writableGames(Chapter chapter) sync* {
 /// a variation inside a game does not, and neither does a game that was not
 /// read whole, so in both cases that branch becomes a game of its own and
 /// nothing already in the file is written again.
-Chapter? _extended(Chapter chapter, List<String> prefix, MoveNode node) {
+_Edited? _extended(Chapter chapter, List<String> prefix, MoveNode node) {
   final found = _writableGames(chapter).firstWhereOrNull(
     (game) =>
         const ListEquality<String>().equals(mainlineSans(game.tree), prefix),
@@ -206,15 +254,20 @@ Chapter? _extended(Chapter chapter, List<String> prefix, MoveNode node) {
       node,
     ),
   );
-  return withLines(chapter, lines);
+  return (
+    chapter: withLines(chapter, lines),
+    written: GamesWritten(rewritten: {found.index}),
+  );
 }
 
 /// The chapter with a new game for [prefix] plus [node] at the end of the
 /// file, which is where re-reading finds it as the last variation.
-Chapter _appended(Chapter chapter, List<String> prefix, MoveNode node) {
+_Edited _appended(Chapter chapter, List<String> prefix, MoveNode node) {
   final tree = lineTree(chapter.tree.rootFen, [...prefix, node.san]);
   final tags = _newTags(chapter, prefix, tree, node);
   final lines = [...chapter.lines];
+  // The game before it only gains the blank line that puts the new one on a
+  // line of its own, which is not a game written again.
   if (lines.isNotEmpty) lines.last = _spacedAfter(lines.last);
   lines.add(
     ChapterLine(
@@ -225,10 +278,15 @@ Chapter _appended(Chapter chapter, List<String> prefix, MoveNode node) {
       trailer: '\n',
     ),
   );
-  return withLines(
-    chapter,
-    lines,
-    preamble: chapter.lines.isEmpty ? _spacedPreamble(chapter.preamble) : null,
+  return (
+    chapter: withLines(
+      chapter,
+      lines,
+      preamble: chapter.lines.isEmpty
+          ? _spacedPreamble(chapter.preamble)
+          : null,
+    ),
+    written: const GamesWritten(appended: 1),
   );
 }
 
