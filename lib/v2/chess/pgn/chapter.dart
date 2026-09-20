@@ -161,6 +161,20 @@ GameTree mergeLines(List<ChapterLine> lines) {
   );
 }
 
+/// [chapter] under another name.
+///
+/// A chapter is named after its file, so renaming the file renames it. The
+/// `//` preamble is left as it is: it is the file's own record of what it was
+/// called, and rewriting it would be an edit nobody asked for.
+Chapter renamedChapter(Chapter chapter, String name) => Chapter(
+  name: name,
+  side: chapter.side,
+  preamble: chapter.preamble,
+  lines: chapter.lines,
+  tree: chapter.tree,
+  issues: chapter.issues,
+);
+
 /// A chapter file with no games yet: the `//` preamble and nothing else.
 ///
 /// The colour line is the only record of which side the chapter is for, so it

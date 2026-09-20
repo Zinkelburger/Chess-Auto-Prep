@@ -221,6 +221,8 @@ void main() {
     expect(fixture.textAt('/repertoires/benko/Main.pgn'), isNull);
     expect(fixture.textAt('/repertoires/benko/Mainline.pgn'), contains('e4'));
     expect(fixture.session.source?.name, 'Mainline');
+    // The workspace shows the name the file now has, not the one it had open.
+    expect(fixture.session.chapter?.name, 'Mainline');
   });
 
   test('an edit made during the rename goes to the new file', () async {

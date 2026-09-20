@@ -124,8 +124,10 @@ final class DocumentSession extends ChangeNotifier {
   /// same bytes, so only the name the workspace shows and the file later
   /// saves go to change.
   void relocated(ChapterRef ref) {
-    if (_source == null) return;
+    final chapter = _chapter;
+    if (_source == null || chapter == null) return;
     _source = ref;
+    _chapter = renamedChapter(chapter, ref.name);
     _saver.relocated(ref);
     notifyListeners();
   }
