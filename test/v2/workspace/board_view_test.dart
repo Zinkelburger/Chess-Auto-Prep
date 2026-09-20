@@ -63,6 +63,17 @@ void main() {
     expect(find.byType(SvgPicture), findsNothing);
   });
 
+  testWidgets('a position nobody can read is drawn empty, not thrown', (
+    tester,
+  ) async {
+    await pump(tester, fen: const Fen(''));
+    expect(tester.takeException(), isNull);
+    expect(find.byType(SvgPicture), findsNothing);
+    await pump(tester, fen: const Fen('rubbish'));
+    expect(tester.takeException(), isNull);
+    expect(find.byType(SvgPicture), findsNothing);
+  });
+
   /// The centre of a square, with the board 400px wide and White below.
   Offset at(String square) {
     final file = square.codeUnitAt(0) - 'a'.codeUnitAt(0);
