@@ -32,7 +32,6 @@ void main() {
       parseInfoLine('info depth 20 score cp 30 lowerbound pv e2e4'),
       isNull,
     );
-    expect(parseInfoLine('info depth 20 score cp 30 pv'), isNull);
     expect(parseInfoLine('bestmove e2e4 ponder e7e5'), isNull);
   });
 
@@ -58,15 +57,30 @@ void main() {
     expect(const MateIn(-1).expected, 0);
   });
 
+  test('a score with no moves after it is still a score', () {
+    // What Stockfish says about a board that is already checkmate, before
+    // it answers `bestmove (none)`.
+    final mate = parseInfoLine('info depth 0 score mate 0')!;
+    expect(mate.depth, 0);
+    expect(mate.score, const MateIn(0));
+    expect(mate.pv, isEmpty);
+    // And about a stalemate, which is a draw rather than a mate.
+    final stalemate = parseInfoLine('info depth 0 score cp 0')!;
+    expect(stalemate.score, const Centipawns(0));
+    expect(stalemate.pv, isEmpty);
+    expect(stalemate.score.expected, 0.5);
+  });
+
   test('a mate on the board is a loss for the side to move', () {
     // UCI reports `mate 0` for a position that is already checkmate, so the
     // side the score is about is the side that has been mated.
     const mated = MateIn(0);
 
     expect(mated.expected, 0);
-    expect(mated.text, '#-0');
     expect(mated.negated.expected, 1, reason: 'the other side gave the mate');
-    expect(mated.negated.text, '#0');
+    // A mate that has happened has no distance to print, either way round.
+    expect(mated.text, '#');
+    expect(mated.negated.text, '#');
     expect(mated.negated, isNot(mated));
     expect(mated.negated.negated, mated);
   });

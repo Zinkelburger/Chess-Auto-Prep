@@ -71,8 +71,13 @@ final class MateIn extends Score {
   @override
   Score get negated => MateIn._(-moves, mating: !mating);
 
+  /// `#3`, `#-3`, and a bare `#` for a mate that has already happened: there
+  /// is no distance to print, and the bar beside it says whose mate it is.
   @override
-  String get text => mating ? '#$moves' : '#-${moves.abs()}';
+  String get text => switch (moves) {
+    0 => '#',
+    _ => mating ? '#$moves' : '#-${moves.abs()}',
+  };
 
   @override
   double get expected => mating ? 1 : 0;
@@ -102,7 +107,8 @@ final class EngineLine {
   final int depth;
   final Score score;
 
-  /// The moves as UCI, from the analysed position.
+  /// The moves as UCI, from the analysed position. Empty when the engine
+  /// gave a score and no moves, which is what a finished game gets.
   final List<String> pv;
 
   EngineLine forWhite({required bool whiteToMove}) => EngineLine(
@@ -116,6 +122,12 @@ final class EngineLine {
 /// Reads a UCI `info` line. Null for the lines with nothing to show:
 /// `info string`, `currmove` progress, and bound scores (`lowerbound`,
 /// `upperbound`) the engine replaces within milliseconds.
+///
+/// A score with no moves after it is a line all the same. It is what an
+/// engine says about a position that is already over — Stockfish answers
+/// `info depth 0 score mate 0` and then `bestmove (none)` on a board that is
+/// checkmate, and `score cp 0` on a stalemate — and dropping it is what left
+/// the bar at even money on a finished game.
 EngineLine? parseInfoLine(String line) {
   final words = line.trim().split(_spaces);
   if (words.first != 'info') return null;
@@ -138,8 +150,13 @@ EngineLine? parseInfoLine(String line) {
         i = words.length;
     }
   }
-  if (depth == null || score == null || pv == null || pv.isEmpty) return null;
-  return EngineLine(multiPv: multiPv, depth: depth, score: score, pv: pv);
+  if (depth == null || score == null) return null;
+  return EngineLine(
+    multiPv: multiPv,
+    depth: depth,
+    score: score,
+    pv: pv ?? const [],
+  );
 }
 
 String _word(List<String> words, int i) => i < words.length ? words[i] : '';
