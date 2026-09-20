@@ -75,6 +75,11 @@ final class EngineAnalysis extends ChangeNotifier {
   /// Counts the times the engine has been asked for, so a launch that lands
   /// after a [disable] or a second [enable] is dropped instead of adopted.
   int _starts = 0;
+
+  /// Whether an engine that stopped answering has already been replaced
+  /// since the analysis was switched on. One that wedges twice is not going
+  /// to work, and a pane that restarts for ever never says so.
+  bool _replaced = false;
   late final _buffer = _LineBuffer(
     every: const Duration(milliseconds: 200),
     onFlush: _publish,
@@ -90,6 +95,14 @@ final class EngineAnalysis extends ChangeNotifier {
 
   Future<void> enable() async {
     if (enabled) return;
+    _replaced = false;
+    await _start((reason) => reason);
+  }
+
+  /// Asks for an engine and takes it up, or reports why there is none.
+  /// [failure] turns a launch failure into the sentence the pane shows, so a
+  /// restart can say what it was recovering from.
+  Future<void> _start(String Function(String reason) failure) async {
     final ticket = ++_starts;
     _set(const EngineStarting());
     final start = await _launch();
@@ -100,10 +113,10 @@ final class EngineAnalysis extends ChangeNotifier {
     }
     switch (start) {
       case StartFailed(:final reason):
-        _set(EngineFailed(reason));
+        _set(EngineFailed(failure(reason)));
       case Started(:final engine):
         _engine = engine;
-        unawaited(engine.exited.then((_) => _lost(engine)));
+        unawaited(engine.exited.then((exit) => _lost(engine, exit)));
         _set(EngineRunning(engine.name));
         _follow();
     }
@@ -172,13 +185,33 @@ final class EngineAnalysis extends ChangeNotifier {
     _notify();
   }
 
-  void _lost(Engine engine) {
+  /// The engine has gone. One that was killed for saying nothing is replaced
+  /// once, because the position on the board still wants an evaluation and a
+  /// fresh process usually gives one; anything else, and the pane says the
+  /// engine stopped.
+  void _lost(Engine engine, EngineExit exit) {
     if (_engine != engine) return; // we quit it ourselves
+    final name = engine.name;
     _engine = null;
     _stopFollowing();
     _snapshot = null;
-    log.w('engine ${engine.name} exited on its own');
-    _set(EngineFailed('${engine.name} stopped unexpectedly'));
+    if (exit == EngineExit.unresponsive && !_replaced) {
+      _replaced = true;
+      log.w('restart $name', 'it stopped answering and was killed');
+      unawaited(
+        _start(
+          (reason) =>
+              '$name did not answer and was restarted; the '
+              'engine started in its place did not run: $reason',
+        ),
+      );
+      return;
+    }
+    final (action, sentence) = exit == EngineExit.unresponsive
+        ? ('engine $name stopped answering again', '$name is not answering')
+        : ('engine $name exited on its own', '$name stopped unexpectedly');
+    log.w(action);
+    _set(EngineFailed(sentence));
   }
 
   void _set(EngineState state) {

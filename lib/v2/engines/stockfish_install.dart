@@ -33,9 +33,13 @@ final class StockfishMissing extends StockfishLocation {
 /// unchanged one costs one stat. The old app keeps the same file and
 /// stamp, so both apps share one copy.
 ///
-/// Nothing here throws: a damaged lock file, a corrupt asset or a support
-/// folder that cannot be written come back as [StockfishMissing], because
-/// the workspace has to be able to say "no engine" and carry on.
+/// Nothing here throws: a damaged lock file, an unreadable stamp, a corrupt
+/// asset or a support folder that cannot be written come back as
+/// [StockfishMissing], because the workspace has to be able to say "no
+/// engine" and carry on. A release that ships a bad asset costs nobody the
+/// engine they had: the new one is checked under a name of its own and only
+/// then put in place, and a failed install goes back to the engine the
+/// stamp on the disk names.
 final class StockfishInstall {
   StockfishInstall({required this.supportDirectory, required this.readAsset});
 
@@ -63,10 +67,25 @@ final class StockfishInstall {
     }
     final binary = File(p.join(supportDirectory.path, _binaryName));
     final stamp = File('${binary.path}.origin');
-    if (await binary.exists() && await _stamped(stamp) == release.identity) {
+    final String? installed;
+    try {
+      installed = await binary.exists() ? await _stamped(stamp) : null;
+    } on FileSystemException catch (e) {
+      log.e('read ${stamp.path}', e);
+      return StockfishMissing(
+        'Could not read the Stockfish stamp: ${e.message}',
+      );
+    }
+    if (installed == release.identity) return StockfishReady(binary.path);
+    final attempt = await _install(release, binary, stamp);
+    if (attempt case StockfishMissing(:final reason) when installed != null) {
+      // A release that ships a bad asset must not cost the user the engine
+      // that works: what is on the disk is a Stockfish this app installed
+      // and stamped, and it runs until a sound bundle replaces it.
+      log.e('install $_binaryName', '$reason; running $installed instead');
       return StockfishReady(binary.path);
     }
-    return _install(release, binary, stamp);
+    return attempt;
   }
 
   /// Throws [FormatException] when the asset is not the JSON it should be.
@@ -101,9 +120,15 @@ final class StockfishInstall {
     }
   }
 
-  /// Unpacks, makes it runnable, and only then stamps it. The stamp is the
-  /// claim that the binary is installed, so it goes last and the old one
-  /// goes first: no half-written engine can ever carry a matching stamp.
+  /// Unpacks and checks the whole engine under a temporary name, and only
+  /// then puts it in place and stamps it.
+  ///
+  /// Nothing the build already has is touched until the new engine is known
+  /// to be sound, because a release that ships a bad asset would otherwise
+  /// disown the working engine on the disk and fail the same way at every
+  /// later launch. The stamp is the claim that the binary is installed, so
+  /// it goes last: an install interrupted between the two leaves the old
+  /// stamp, which does not match, and the next launch installs again.
   Future<StockfishLocation> _write(
     _Release release,
     String target,
@@ -111,37 +136,53 @@ final class StockfishInstall {
     Uint8List compressed,
   ) async {
     await supportDirectory.create(recursive: true);
-    if (await stamp.exists()) await stamp.delete();
-    final expected = release.assetSha256;
-    final problem = await Isolate.run(
-      () => _unpack(compressed, expected, target),
-    );
-    if (problem != null) return StockfishMissing(problem);
-    if (!Platform.isWindows) {
-      final chmod = await Process.run('chmod', ['+x', target]);
-      if (chmod.exitCode != 0) {
-        return StockfishMissing(
-          'Could not make $_binaryName runnable: ${chmod.stderr}',
-        );
+    // Named after this process: two apps may install at once, and a shared
+    // name would let one rename the other's half-written file into place.
+    final partial = File('$target.$pid.part');
+    try {
+      final expected = release.assetSha256;
+      final problem = await Isolate.run(
+        () => _unpack(compressed, expected, partial.path),
+      );
+      if (problem != null) return StockfishMissing(problem);
+      if (!Platform.isWindows) {
+        final chmod = await Process.run('chmod', ['+x', partial.path]);
+        if (chmod.exitCode != 0) {
+          return StockfishMissing(
+            'Could not make $_binaryName runnable: ${chmod.stderr}',
+          );
+        }
       }
+      await partial.rename(target);
+    } finally {
+      await _discard(partial);
     }
     await stamp.writeAsString(release.identity);
     return StockfishReady(target);
+  }
+
+  /// Removes our own leftover when the install did not get as far as putting
+  /// it in place. A leftover that will not go is a line in the log and
+  /// nothing more: it must never replace the reason the install failed.
+  Future<void> _discard(File partial) async {
+    try {
+      if (await partial.exists()) await partial.delete();
+    } on FileSystemException catch (e) {
+      log.w('remove ${partial.path}', e);
+    }
   }
 }
 
 /// Hashes and inflates 80 MB, so it runs in its own isolate. Returns the
 /// problem, or null; anything else it hits is thrown to [StockfishInstall],
-/// which turns it into a [StockfishMissing]. Writes beside the target and
-/// renames, so an interrupted install never leaves a half engine under the
-/// real name.
-String? _unpack(Uint8List compressed, String expectedSha256, String target) {
+/// which turns it into a [StockfishMissing]. Writes to [partial], which is
+/// nothing the app runs, so a failure here leaves the installed engine and
+/// its stamp exactly as they were.
+String? _unpack(Uint8List compressed, String expectedSha256, String partial) {
   if (sha256.convert(compressed).toString() != expectedSha256) {
     return 'The bundled Stockfish does not match tools/assets.lock.json';
   }
-  final partial = File('$target.part');
-  partial.writeAsBytesSync(gzip.decode(compressed), flush: true);
-  partial.renameSync(target);
+  File(partial).writeAsBytesSync(gzip.decode(compressed), flush: true);
   return null;
 }
 

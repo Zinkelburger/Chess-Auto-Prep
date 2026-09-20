@@ -14,7 +14,9 @@ import 'search_node.dart';
 /// root `tree` node, each node carrying its own `children`. A node names the
 /// move that reached it twice, as `move_uci` and `move_san`, and carries its
 /// `fen`, its `engine_eval_cp` **from the side to move** the way UCI reports
-/// one, its `move_probability` and `cumulative_probability`, its
+/// one — left out entirely by a node no engine has scored, which is how every
+/// reader of this format tells the unscored from the level —, its
+/// `move_probability` and `cumulative_probability`, its
 /// `value_lower` and `value_upper`, and `terminal_value` when the game ended
 /// there. Everything else a node may carry belongs to a mode this search does
 /// not have — master-game counts, book sources, trap and ease scores, prune
@@ -141,7 +143,7 @@ final class _Writer {
       'history_aware': true,
       'fen': node.fen.value,
       'is_white_to_move': node.fen.whiteToMove,
-      'engine_eval_cp': _sideToMoveCp(node),
+      'engine_eval_cp': ?_sideToMoveCp(node),
       'move_probability': probability,
       'cumulative_probability': cumulative,
       if (node is TerminalNode) 'terminal_value': valuation.value,
@@ -206,8 +208,15 @@ final class _Writer {
   /// The file reports an evaluation the way UCI does, from the side to move,
   /// while the search holds it from the repertoire side, so one negation
   /// converts it whenever the opponent is the one on move.
-  int _sideToMoveCp(SearchNode node) =>
-      node.fen.whiteToMove == (ourSide == Side.white)
-      ? node.evalForUs.cp
-      : -node.evalForUs.cp;
+  ///
+  /// A node nobody has evaluated has none to report, and none is written: a
+  /// zero here is a score, and every builder that reads this file takes a
+  /// scored node as one it need never look at again — so a resumed build
+  /// would carry on from an evaluation no engine ever gave.
+  int? _sideToMoveCp(SearchNode node) {
+    if (!node.evaluated) return null;
+    return node.fen.whiteToMove == (ourSide == Side.white)
+        ? node.evalForUs.cp
+        : -node.evalForUs.cp;
+  }
 }

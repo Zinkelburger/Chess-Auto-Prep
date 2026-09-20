@@ -86,7 +86,8 @@ void main() {
       engine.current.emit(line(score: const MateIn(0)));
       engine.current.end();
       async.flushMicrotasks();
-      expect(analysis.snapshot!.best!.score, const MateIn(0));
+      // Black to move and mated, so from White's side White gave the mate.
+      expect(analysis.snapshot!.best!.score, const MateIn(0).negated);
     });
   });
 
@@ -176,6 +177,91 @@ void main() {
       session.forward();
       async.elapse(tick);
       expect(analysis.snapshot, isNull, reason: 'and the cursor has moved on');
+    });
+  });
+
+  test('an engine that stopped answering is replaced by another', () {
+    fakeAsync((async) {
+      final engines = <ScriptedEngine>[];
+      analysis = EngineAnalysis(session, () async {
+        engines.add(ScriptedEngine());
+        return Started(engines.last);
+      });
+      unawaited(analysis.enable());
+      async.flushMicrotasks();
+      expect(engines, hasLength(1));
+
+      engines.first.wedge();
+      async.flushMicrotasks();
+
+      expect(engines, hasLength(2), reason: 'a fresh engine takes over');
+      expect(analysis.state, isA<EngineRunning>());
+      expect(engines.last.current.fen, session.fen, reason: 'and searches');
+      engines.last.current.emit(line(score: const Centipawns(30)));
+      async.elapse(tick);
+      expect(analysis.snapshot!.best!.score, const Centipawns(-30));
+    });
+  });
+
+  test('an engine that will not come back says what happened', () {
+    fakeAsync((async) {
+      var starts = 0;
+      final first = ScriptedEngine();
+      analysis = EngineAnalysis(session, () async {
+        starts++;
+        return starts == 1
+            ? Started(first)
+            : const StartFailed('No Stockfish in this build');
+      });
+      unawaited(analysis.enable());
+      async.flushMicrotasks();
+
+      first.wedge();
+      async.flushMicrotasks();
+
+      final reason = (analysis.state as EngineFailed).reason;
+      expect(reason, contains('Scripted 1 did not answer and was restarted'));
+      expect(reason, contains('No Stockfish in this build'));
+      expect(analysis.enabled, isFalse);
+    });
+  });
+
+  test('an engine that wedges twice is not restarted for ever', () {
+    fakeAsync((async) {
+      final engines = <ScriptedEngine>[];
+      analysis = EngineAnalysis(session, () async {
+        engines.add(ScriptedEngine());
+        return Started(engines.last);
+      });
+      unawaited(analysis.enable());
+      async.flushMicrotasks();
+
+      engines.first.wedge();
+      async.flushMicrotasks();
+      engines.last.wedge();
+      async.flushMicrotasks();
+
+      expect(engines, hasLength(2));
+      expect(
+        (analysis.state as EngineFailed).reason,
+        'Scripted 1 is not answering',
+      );
+    });
+  });
+
+  test('a mate on the board reaches the bar', () {
+    fakeAsync((async) {
+      running(async);
+      // What a real engine says about a position that is already over: a
+      // score, no moves, and then it is done.
+      engine.current.emit(parseInfoLine('info depth 0 score mate 0')!);
+      engine.current.end();
+      async.flushMicrotasks();
+      final best = analysis.snapshot!.best!;
+      expect(best.pv, isEmpty);
+      // Black to move and mated, so the bar is White's from top to bottom.
+      expect(best.score.expected, 1);
+      expect(best.score.text, '#');
     });
   });
 
