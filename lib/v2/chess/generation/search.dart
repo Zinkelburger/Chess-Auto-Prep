@@ -210,11 +210,8 @@ final class _Search {
       final child = frame.next(after);
       final node = await _leaf(child);
       if (node == null) return leaf;
-      frames[CandidateMove(
-            move: MoveRef(uci: named.uci, san: san),
-            child: node,
-          )] =
-          child;
+      final move = MoveRef(uci: named.uci, san: san);
+      frames[CandidateMove(move: move, child: node)] = child;
     }
     final admitted = admittedMoves(
       frames.keys.toList(),
