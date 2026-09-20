@@ -56,7 +56,7 @@ APPROVED: dict[str, tuple[int, str]] = {
     "lib/v2/storage/pgn_file_store.dart": (2, "no filesystem mutation of its own: two calls into DocumentRelocation that the pattern above matches by method name"),
     "lib/v2/storage/chapter_files.dart": (1, "v2 repertoire listing: the one mutation takes away a repertoire folder whose chapters have all been deleted, and only when nothing is left in it"),
     "lib/v2/storage/backups.dart": (1, "v2 kept versions under Support; creates folders, never removes"),
-    "lib/v2/storage/pending_repoint.dart": (1, "v2 note under Support saying which move still owes its training rows; the one mutation takes the note away once they no longer do"),
+    "lib/v2/storage/relocation_notes.dart": (1, "v2 notes under Support saying which moves still owe their training rows; the one mutation takes a note away once its rows no longer do"),
     "lib/services/eval/cdb_snapshot_download.dart": (4, "resumable downloaded snapshot"),
     "lib/services/eval/lichess_eval_controller.dart": (4, "resumable downloaded snapshot"),
     "lib/services/eval/lichess_eval_import.dart": (6, "rebuildable database staging"),

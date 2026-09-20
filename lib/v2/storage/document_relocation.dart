@@ -20,9 +20,8 @@ import 'backups.dart';
 import 'document_probe.dart';
 import 'document_ref.dart';
 import 'mutation_guards.dart';
-import 'pending_repoint.dart';
+import 'relocation_notes.dart';
 import 'pgn_document_store.dart';
-import 'training_records.dart' as training;
 
 /// The rename, move and delete half of [PgnDocumentStore], over the same
 /// documents root, kept versions and training records the store was built
@@ -31,18 +30,15 @@ final class DocumentRelocation {
   DocumentRelocation({
     required this.documents,
     required BackupArchive backups,
-    required training.TrainingRecords records,
-    required PendingRepoints unfinished,
+    required RelocationNotes notes,
   }) : _backups = backups,
-       _training = records,
-       _unfinished = unfinished;
+       _notes = notes;
 
   /// The folder every document lives under; a ref outside it is refused.
   final Directory documents;
 
   final BackupArchive _backups;
-  final training.TrainingRecords _training;
-  final PendingRepoints _unfinished;
+  final RelocationNotes _notes;
 
   /// Gives [ref] a new file name in the same folder, which is a move.
   Future<MoveResult> rename(
@@ -79,15 +75,22 @@ final class DocumentRelocation {
     DocumentRef destination,
     Revision expected,
   ) async {
-    await _finishUnfinishedMove();
-    final result = await _move(ref, destination, expected);
+    await _notes.finishOwed();
+    // Minted here, so this call can take its own note away again whether the
+    // move lands, is refused, or never gets as far as writing one.
+    final note = newMoveNote();
+    final result = await _move(note, ref, destination, expected);
     if (result case Moved(:final revision)) {
-      return Moved(revision, training: await _repoint(ref, destination));
+      return Moved(
+        revision,
+        training: await _notes.repoint(note, ref, destination),
+      );
     }
     return result;
   }
 
   Future<MoveResult> _move(
+    String note,
     DocumentRef ref,
     DocumentRef destination,
     Revision expected,
@@ -103,11 +106,12 @@ final class DocumentRelocation {
         return IoFailure(detail);
       case FileFound(:final revision):
         if (revision != expected) return Conflict(revision);
-        return _relocate(ref, destination, from, to, revision);
+        return _relocate(note, ref, destination, from, to, revision);
     }
   }
 
   Future<MoveResult> _relocate(
+    String note,
     DocumentRef ref,
     DocumentRef destination,
     String from,
@@ -118,16 +122,20 @@ final class DocumentRelocation {
     final made = !await target.exists();
     try {
       if (made) await target.create(recursive: true);
-      await _unfinished.record(ref.path, destination.path);
+      await _notes.record(
+        note,
+        from: ref.path,
+        to: destination.path,
+        identity: revision.identity,
+        folder: false,
+      );
       await movePathNoReplace(ref.path, destination.path);
     } on NativeNameCollision {
-      await _unfinished.clear();
-      await _removeIfMade(target, made);
+      await _abandon(note, target, made);
       return const Collision();
     } on Object catch (error) {
       log.e('move ${ref.path}', error);
-      await _unfinished.clear();
-      await _removeIfMade(target, made);
+      await _abandon(note, target, made);
       return IoFailure(failureDetail(error));
     }
     await _backups.adopt(from: from, to: to, documentPath: destination.path);
@@ -139,12 +147,21 @@ final class DocumentRelocation {
 
   /// Moves a whole folder of documents — a repertoire — in one rename.
   ///
-  /// The lock is the documents root, as [move] takes it: no one folder covers
-  /// both ends of a move, and here neither end is a folder anything else
-  /// locks. The kept versions follow each document inside, because a
-  /// document's history is kept under a hash of its path rather than under
-  /// its folder's; a history that cannot be moved is left where it is and
-  /// never fails the move, exactly as it does for one document.
+  /// The locks are the documents root and both folders, as [move] takes
+  /// them. Here the two folders are the repertoires themselves, which is
+  /// where a save of any chapter inside them takes its lock, so a save cannot
+  /// run while the folder under it is being renamed.
+  ///
+  /// The old app also serialises every repertoire operation behind a lock on
+  /// `<repertoires>/.cap-directory-domain`
+  /// (`repertoire_directory_mutations.dart`), which `v2` does not take yet:
+  /// against the old app these locks stop two writers in one folder, not two
+  /// repertoire-wide operations.
+  ///
+  /// The kept versions follow each document inside, because a document's
+  /// history is kept under a hash of its path rather than under its folder's;
+  /// a history that cannot be moved is left where it is and never fails the
+  /// move, exactly as it does for one document.
   Future<FolderMoveResult> moveFolder(String from, String to) =>
       lockedForRelocation(
         documents,
@@ -157,32 +174,49 @@ final class DocumentRelocation {
   /// `repoint` rewrites every row inside a folder that moved, not just the
   /// rows that name it exactly.
   Future<FolderMoveResult> _moveFolderAndRepoint(String from, String to) async {
-    await _finishUnfinishedMove();
-    final result = await _moveFolder(from, to);
+    await _notes.finishOwed();
+    final note = newMoveNote();
+    final result = await _moveFolder(note, from, to);
     if (result is FolderMoved) {
       return FolderMoved(
-        training: await _repoint(DocumentRef(from), DocumentRef(to)),
+        training: await _notes.repoint(
+          note,
+          DocumentRef(from),
+          DocumentRef(to),
+        ),
       );
     }
     return result;
   }
 
-  Future<FolderMoveResult> _moveFolder(String from, String to) async {
+  Future<FolderMoveResult> _moveFolder(
+    String note,
+    String from,
+    String to,
+  ) async {
     if (!p.isWithin(documents.path, from) || !p.isWithin(documents.path, to)) {
       return const FolderMoveFailed(outsideRoot);
     }
     // Read before the move, because afterwards the old names are gone.
     final documentNames = await _documentsIn(from);
     if (documentNames == null) return const FolderMoveFailed(_unlistable);
+    final identity = (await observeDirectory(from)).identity;
+    if (identity == null) return const FolderMoveFailed(_unidentifiable);
     try {
-      await _unfinished.record(from, to);
+      await _notes.record(
+        note,
+        from: from,
+        to: to,
+        identity: identity,
+        folder: true,
+      );
       await movePathNoReplace(from, to);
     } on NativeNameCollision {
-      await _unfinished.clear();
+      await _notes.discard(note);
       return const FolderNameTaken();
     } on Object catch (error) {
       log.e('move the folder $from', error);
-      await _unfinished.clear();
+      await _notes.discard(note);
       return FolderMoveFailed(failureDetail(error));
     }
     await _adoptAll(documentNames, from, to);
@@ -236,16 +270,21 @@ final class DocumentRelocation {
     DocumentRef ref,
     Revision expected,
   ) async {
-    await _finishUnfinishedMove();
-    final result = await _delete(ref, expected);
+    await _notes.finishOwed();
+    final note = newMoveNote();
+    final result = await _delete(note, ref, expected);
     if (result case Deleted(:final recoveredTo)) {
-      final moved = await _repoint(ref, DocumentRef(recoveredTo));
+      final moved = await _notes.repoint(note, ref, DocumentRef(recoveredTo));
       return Deleted(recoveredTo, training: moved);
     }
     return result;
   }
 
-  Future<DeleteResult> _delete(DocumentRef ref, Revision expected) async {
+  Future<DeleteResult> _delete(
+    String note,
+    DocumentRef ref,
+    Revision expected,
+  ) async {
     switch (await probeDocument(ref.path)) {
       case FileMissing():
         return const Conflict(null);
@@ -254,13 +293,14 @@ final class DocumentRelocation {
         return IoFailure(detail);
       case FileFound(:final bytes, :final revision):
         if (revision != expected) return Conflict(revision);
-        return _quarantine(ref, bytes, revision);
+        return _quarantine(note, ref, bytes, revision);
     }
   }
 
   /// Deleting is moving: into the same folder the old app quarantines
   /// chapters into, so the user has one place to look for what they removed.
   Future<DeleteResult> _quarantine(
+    String note,
     DocumentRef ref,
     List<int> bytes,
     Revision revision,
@@ -279,37 +319,28 @@ final class DocumentRelocation {
     final target = p.join(trash.path, '$stamp-$token-${p.basename(ref.path)}');
     try {
       await trash.create(recursive: true);
-      await _unfinished.record(ref.path, target);
+      await _notes.record(
+        note,
+        from: ref.path,
+        to: target,
+        identity: revision.identity,
+        folder: false,
+      );
       await movePathNoReplace(ref.path, target);
     } on Object catch (error) {
       log.e('delete ${ref.path}', error);
-      await _unfinished.clear();
+      await _notes.discard(note);
       return IoFailure(failureDetail(error));
     }
     await _sync(folderOf(ref));
     return Deleted(target);
   }
 
-  /// Rewrites the training rows that named [from] and, once they owe
-  /// nothing, takes away the note that says this move is half done.
-  Future<training.RepointResult> _repoint(
-    DocumentRef from,
-    DocumentRef to,
-  ) async {
-    final result = await _training.repoint(from, to);
-    if (_rowsSettled(result)) await _unfinished.clear();
-    return result;
-  }
-
-  /// Finishes the rows a move that stopped half way still owes, before this
-  /// relocation moves anything else. A note that cannot be honoured stays
-  /// where it is: the rows are genuinely still pointing at the old name.
-  Future<void> _finishUnfinishedMove() async {
-    final move = await _unfinished.read();
-    if (move == null) return;
-    final result = await _repoint(DocumentRef(move.from), DocumentRef(move.to));
-    if (_rowsSettled(result)) return;
-    log.w('finish the training rows left behind by moving ${move.from}');
+  /// Leaves the tree as this relocation found it: the note it wrote, and a
+  /// destination folder it made that nothing landed in.
+  Future<void> _abandon(String note, Directory target, bool made) async {
+    await _notes.discard(note);
+    await _removeIfMade(target, made);
   }
 
   /// Takes back a destination folder this move created and nothing landed
@@ -332,11 +363,9 @@ final class DocumentRelocation {
   }
 }
 
-/// Whether the training rows still owe this move anything.
-bool _rowsSettled(training.RepointResult result) =>
-    result is training.Repointed || result is training.NothingToRepoint;
-
 /// The old app's chapter quarantine folder; both apps delete into it.
 const _recoveryFolder = '.cap-pgn-history';
 
 const _unlistable = 'the folder could not be read';
+
+const _unidentifiable = 'the folder could not be identified';

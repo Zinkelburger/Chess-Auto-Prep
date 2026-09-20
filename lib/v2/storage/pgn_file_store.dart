@@ -12,7 +12,7 @@ import 'document_probe.dart';
 import 'document_ref.dart';
 import 'document_relocation.dart';
 import 'mutation_guards.dart';
-import 'pending_repoint.dart';
+import 'relocation_notes.dart';
 import 'pgn_document_store.dart';
 import 'training_records.dart' as training;
 
@@ -49,8 +49,10 @@ final class PgnFileStore implements PgnDocumentStore {
       DocumentRelocation(
         documents: documents,
         backups: backups,
-        records: training.TrainingRecords(documents),
-        unfinished: PendingRepoints(support),
+        notes: RelocationNotes(
+          notes: PendingRepoints(support),
+          records: training.TrainingRecords(documents),
+        ),
       ),
     );
   }
