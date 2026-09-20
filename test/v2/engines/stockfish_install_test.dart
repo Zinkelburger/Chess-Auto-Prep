@@ -113,6 +113,70 @@ void main() {
     );
   });
 
+  test('a broken bundle leaves the engine already installed alone', () async {
+    final first = await install().locate() as StockfishReady;
+    final rubbish = Uint8List.fromList(utf8.encode('not a gzip stream'));
+    assets['assets/executables/stockfish-linux.gz'] = rubbish;
+    assets['tools/assets.lock.json'] = Uint8List.fromList(
+      utf8.encode(
+        lockWith(assetSha: sha256.convert(rubbish).toString(), source: 'src2'),
+      ),
+    );
+
+    final result = await install().locate();
+
+    expect(result, isA<StockfishMissing>());
+    expect(await File(first.path).readAsBytes(), engine);
+    expect(
+      await File('${first.path}.origin').readAsString(),
+      'stockfish-linux:src1',
+      reason: 'a bad release must not disown a working engine',
+    );
+    // Which is what makes the next launch of the good release free again.
+    assets['assets/executables/stockfish-linux.gz'] = compressed;
+    assets['tools/assets.lock.json'] = Uint8List.fromList(
+      utf8.encode(lockWith(assetSha: sha256.convert(compressed).toString())),
+    );
+    reads.clear();
+    final back = await install().locate() as StockfishReady;
+    expect(back.path, first.path);
+    expect(reads, ['tools/assets.lock.json'], reason: 'no second unpack');
+  });
+
+  test('a bundle whose checksum is wrong keeps the engine installed', () async {
+    final first = await install().locate() as StockfishReady;
+    assets['tools/assets.lock.json'] = Uint8List.fromList(
+      utf8.encode(lockWith(assetSha: 'not-it', source: 'src2')),
+    );
+
+    final result = await install().locate();
+
+    expect((result as StockfishMissing).reason, contains('does not match'));
+    expect(await File(first.path).readAsBytes(), engine);
+    expect(
+      await File('${first.path}.origin').readAsString(),
+      'stockfish-linux:src1',
+    );
+  });
+
+  test('a stamp that cannot be read is reported, not thrown', () async {
+    final first = await install().locate() as StockfishReady;
+    // A truncated or half-written stamp: bytes that are not text at all.
+    await File(
+      '${first.path}.origin',
+    ).writeAsBytes(Uint8List.fromList(const [0xC3, 0x28]));
+
+    final result = await install().locate();
+
+    expect(result, isA<StockfishMissing>());
+    expect((result as StockfishMissing).reason, contains('stamp'));
+    expect(
+      await File(first.path).readAsBytes(),
+      engine,
+      reason: 'the engine itself is still there',
+    );
+  });
+
   test('a damaged checksum file is reported, not thrown', () async {
     assets['tools/assets.lock.json'] = Uint8List.fromList(
       utf8.encode('{"stockfish-linux": '),

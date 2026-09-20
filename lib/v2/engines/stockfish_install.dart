@@ -33,9 +33,11 @@ final class StockfishMissing extends StockfishLocation {
 /// unchanged one costs one stat. The old app keeps the same file and
 /// stamp, so both apps share one copy.
 ///
-/// Nothing here throws: a damaged lock file, a corrupt asset or a support
-/// folder that cannot be written come back as [StockfishMissing], because
-/// the workspace has to be able to say "no engine" and carry on.
+/// Nothing here throws: a damaged lock file, an unreadable stamp, a corrupt
+/// asset or a support folder that cannot be written come back as
+/// [StockfishMissing], because the workspace has to be able to say "no
+/// engine" and carry on. A release that ships a bad asset says so and leaves
+/// the engine already installed where it is.
 final class StockfishInstall {
   StockfishInstall({required this.supportDirectory, required this.readAsset});
 
@@ -63,9 +65,17 @@ final class StockfishInstall {
     }
     final binary = File(p.join(supportDirectory.path, _binaryName));
     final stamp = File('${binary.path}.origin');
-    if (await binary.exists() && await _stamped(stamp) == release.identity) {
-      return StockfishReady(binary.path);
+    final bool installed;
+    try {
+      installed =
+          await binary.exists() && await _stamped(stamp) == release.identity;
+    } on FileSystemException catch (e) {
+      log.e('read ${stamp.path}', e);
+      return StockfishMissing(
+        'Could not read the Stockfish stamp: ${e.message}',
+      );
     }
+    if (installed) return StockfishReady(binary.path);
     return _install(release, binary, stamp);
   }
 
@@ -91,19 +101,34 @@ final class StockfishInstall {
         'This build has no bundled Stockfish; run tools/fetch_assets.py',
       );
     }
+    final kept = await binary.exists();
     try {
-      return await _write(release, binary.path, stamp, compressed);
+      final result = await _write(release, binary.path, stamp, compressed);
+      return switch (result) {
+        StockfishMissing(:final reason) => StockfishMissing(
+          _kept(reason, kept),
+        ),
+        StockfishReady() => result,
+      };
     } catch (e) {
       // A corrupt asset, a full disk, a read-only support folder: the pane
       // says so and starts without an engine rather than hanging.
       log.e('install $_binaryName', e);
-      return StockfishMissing('Could not install $_binaryName: $e');
+      return StockfishMissing(
+        _kept('Could not install $_binaryName: $e', kept),
+      );
     }
   }
 
-  /// Unpacks, makes it runnable, and only then stamps it. The stamp is the
-  /// claim that the binary is installed, so it goes last and the old one
-  /// goes first: no half-written engine can ever carry a matching stamp.
+  /// Unpacks and checks the whole engine under a temporary name, and only
+  /// then puts it in place and stamps it.
+  ///
+  /// Nothing the build already has is touched until the new engine is known
+  /// to be sound, because a release that ships a bad asset would otherwise
+  /// disown the working engine on the disk and fail the same way at every
+  /// later launch. The stamp is the claim that the binary is installed, so
+  /// it goes last: an install interrupted between the two leaves the old
+  /// stamp, which does not match, and the next launch installs again.
   Future<StockfishLocation> _write(
     _Release release,
     String target,
@@ -111,37 +136,44 @@ final class StockfishInstall {
     Uint8List compressed,
   ) async {
     await supportDirectory.create(recursive: true);
-    if (await stamp.exists()) await stamp.delete();
-    final expected = release.assetSha256;
-    final problem = await Isolate.run(
-      () => _unpack(compressed, expected, target),
-    );
-    if (problem != null) return StockfishMissing(problem);
-    if (!Platform.isWindows) {
-      final chmod = await Process.run('chmod', ['+x', target]);
-      if (chmod.exitCode != 0) {
-        return StockfishMissing(
-          'Could not make $_binaryName runnable: ${chmod.stderr}',
-        );
+    final partial = File('$target.part');
+    try {
+      final expected = release.assetSha256;
+      final problem = await Isolate.run(
+        () => _unpack(compressed, expected, partial.path),
+      );
+      if (problem != null) return StockfishMissing(problem);
+      if (!Platform.isWindows) {
+        final chmod = await Process.run('chmod', ['+x', partial.path]);
+        if (chmod.exitCode != 0) {
+          return StockfishMissing(
+            'Could not make $_binaryName runnable: ${chmod.stderr}',
+          );
+        }
       }
+      await partial.rename(target);
+    } finally {
+      if (await partial.exists()) await partial.delete();
     }
     await stamp.writeAsString(release.identity);
     return StockfishReady(target);
   }
+
+  /// [reason], saying as well that the engine on the disk still runs.
+  String _kept(String reason, bool kept) =>
+      kept ? '$reason; the engine already installed is untouched' : reason;
 }
 
 /// Hashes and inflates 80 MB, so it runs in its own isolate. Returns the
 /// problem, or null; anything else it hits is thrown to [StockfishInstall],
-/// which turns it into a [StockfishMissing]. Writes beside the target and
-/// renames, so an interrupted install never leaves a half engine under the
-/// real name.
-String? _unpack(Uint8List compressed, String expectedSha256, String target) {
+/// which turns it into a [StockfishMissing]. Writes to [partial], which is
+/// nothing the app runs, so a failure here leaves the installed engine and
+/// its stamp exactly as they were.
+String? _unpack(Uint8List compressed, String expectedSha256, String partial) {
   if (sha256.convert(compressed).toString() != expectedSha256) {
     return 'The bundled Stockfish does not match tools/assets.lock.json';
   }
-  final partial = File('$target.part');
-  partial.writeAsBytesSync(gzip.decode(compressed), flush: true);
-  partial.renameSync(target);
+  File(partial).writeAsBytesSync(gzip.decode(compressed), flush: true);
   return null;
 }
 
