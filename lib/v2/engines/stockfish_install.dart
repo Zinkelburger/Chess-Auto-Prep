@@ -36,8 +36,10 @@ final class StockfishMissing extends StockfishLocation {
 /// Nothing here throws: a damaged lock file, an unreadable stamp, a corrupt
 /// asset or a support folder that cannot be written come back as
 /// [StockfishMissing], because the workspace has to be able to say "no
-/// engine" and carry on. A release that ships a bad asset says so and leaves
-/// the engine already installed where it is.
+/// engine" and carry on. A release that ships a bad asset costs nobody the
+/// engine they had: the new one is checked under a name of its own and only
+/// then put in place, and a failed install goes back to the engine the
+/// stamp on the disk names.
 final class StockfishInstall {
   StockfishInstall({required this.supportDirectory, required this.readAsset});
 
@@ -65,18 +67,25 @@ final class StockfishInstall {
     }
     final binary = File(p.join(supportDirectory.path, _binaryName));
     final stamp = File('${binary.path}.origin');
-    final bool installed;
+    final String? installed;
     try {
-      installed =
-          await binary.exists() && await _stamped(stamp) == release.identity;
+      installed = await binary.exists() ? await _stamped(stamp) : null;
     } on FileSystemException catch (e) {
       log.e('read ${stamp.path}', e);
       return StockfishMissing(
         'Could not read the Stockfish stamp: ${e.message}',
       );
     }
-    if (installed) return StockfishReady(binary.path);
-    return _install(release, binary, stamp);
+    if (installed == release.identity) return StockfishReady(binary.path);
+    final attempt = await _install(release, binary, stamp);
+    if (attempt case StockfishMissing(:final reason) when installed != null) {
+      // A release that ships a bad asset must not cost the user the engine
+      // that works: what is on the disk is a Stockfish this app installed
+      // and stamped, and it runs until a sound bundle replaces it.
+      log.e('install $_binaryName', '$reason; running $installed instead');
+      return StockfishReady(binary.path);
+    }
+    return attempt;
   }
 
   /// Throws [FormatException] when the asset is not the JSON it should be.
@@ -101,22 +110,13 @@ final class StockfishInstall {
         'This build has no bundled Stockfish; run tools/fetch_assets.py',
       );
     }
-    final kept = await binary.exists();
     try {
-      final result = await _write(release, binary.path, stamp, compressed);
-      return switch (result) {
-        StockfishMissing(:final reason) => StockfishMissing(
-          _kept(reason, kept),
-        ),
-        StockfishReady() => result,
-      };
+      return await _write(release, binary.path, stamp, compressed);
     } catch (e) {
       // A corrupt asset, a full disk, a read-only support folder: the pane
       // says so and starts without an engine rather than hanging.
       log.e('install $_binaryName', e);
-      return StockfishMissing(
-        _kept('Could not install $_binaryName: $e', kept),
-      );
+      return StockfishMissing('Could not install $_binaryName: $e');
     }
   }
 
@@ -136,7 +136,9 @@ final class StockfishInstall {
     Uint8List compressed,
   ) async {
     await supportDirectory.create(recursive: true);
-    final partial = File('$target.part');
+    // Named after this process: two apps may install at once, and a shared
+    // name would let one rename the other's half-written file into place.
+    final partial = File('$target.$pid.part');
     try {
       final expected = release.assetSha256;
       final problem = await Isolate.run(
@@ -153,15 +155,22 @@ final class StockfishInstall {
       }
       await partial.rename(target);
     } finally {
-      if (await partial.exists()) await partial.delete();
+      await _discard(partial);
     }
     await stamp.writeAsString(release.identity);
     return StockfishReady(target);
   }
 
-  /// [reason], saying as well that the engine on the disk still runs.
-  String _kept(String reason, bool kept) =>
-      kept ? '$reason; the engine already installed is untouched' : reason;
+  /// Removes our own leftover when the install did not get as far as putting
+  /// it in place. A leftover that will not go is a line in the log and
+  /// nothing more: it must never replace the reason the install failed.
+  Future<void> _discard(File partial) async {
+    try {
+      if (await partial.exists()) await partial.delete();
+    } on FileSystemException catch (e) {
+      log.w('remove ${partial.path}', e);
+    }
+  }
 }
 
 /// Hashes and inflates 80 MB, so it runs in its own isolate. Returns the
