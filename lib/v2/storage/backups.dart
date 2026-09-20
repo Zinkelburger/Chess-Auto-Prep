@@ -74,8 +74,11 @@ final class BackupArchive {
     if (!await source.exists()) return;
     try {
       final destination = Directory(p.join(root.path, to));
-      await _retireOccupant(destination);
-      await movePathNoReplace(source.path, destination.path);
+      if (await destination.exists()) {
+        await _adoptOverOccupant(source, destination);
+      } else {
+        await movePathNoReplace(source.path, destination.path);
+      }
       final index = await _readIndex(destination);
       await _writeIndex(destination, documentPath, index);
     } on Object catch (error) {
@@ -89,12 +92,33 @@ final class BackupArchive {
   /// one list and a restore would offer one document's text as a version of
   /// another. The older history is set aside under a name of its own, whole
   /// and still readable, rather than added to or written over.
-  Future<void> _retireOccupant(Directory destination) async {
-    if (!await destination.exists()) return;
+  ///
+  /// Nothing is set aside until the move that needs the name can be made:
+  /// the incoming history goes to a name beside it first, which is what
+  /// proves the move is possible. Whatever fails, every step taken is put
+  /// back, so both histories end up where they started.
+  Future<void> _adoptOverOccupant(
+    Directory source,
+    Directory destination,
+  ) async {
+    final staged = '${destination.path}$_adoptingSuffix';
+    await movePathNoReplace(source.path, staged);
     final aside =
         '${destination.path}$_supersededSuffix'
         '${_stamp(DateTime.now().toUtc())}';
-    await movePathNoReplace(destination.path, aside);
+    try {
+      await movePathNoReplace(destination.path, aside);
+    } on Object {
+      await movePathNoReplace(staged, source.path);
+      rethrow;
+    }
+    try {
+      await movePathNoReplace(staged, destination.path);
+    } on Object {
+      await movePathNoReplace(aside, destination.path);
+      await movePathNoReplace(staged, source.path);
+      rethrow;
+    }
     log.w('set aside the versions already kept at ${destination.path}');
   }
 
@@ -132,9 +156,16 @@ final class BackupArchive {
     return listed;
   }
 
-  /// What the version files in [folder] say, oldest first. A file whose bytes
-  /// cannot be read is left out of the index and left on the disk: this
-  /// repairs a list, it never removes a version.
+  /// What the version files in [folder] say, oldest first.
+  ///
+  /// The order is by commit time and then by file name, so it is total: two
+  /// versions committed in the same millisecond would otherwise come back in
+  /// whatever order the directory listed them, and the newest of them decides
+  /// what a save compares against and what a restore offers first.
+  ///
+  /// A version file whose bytes cannot be read is **left out of the index**,
+  /// and logged. It stays on the disk, where it can still be recovered by
+  /// hand, but nothing here can say when it was written or what it held.
   Future<List<BackupVersion>> _rebuilt(Directory folder) async {
     final versions = <BackupVersion>[];
     await for (final entry in folder.list()) {
@@ -142,7 +173,7 @@ final class BackupArchive {
       final version = await _describe(entry);
       if (version != null) versions.add(version);
     }
-    versions.sort((a, b) => a.time.compareTo(b.time));
+    versions.sort(_byTimeThenName);
     return versions;
   }
 
@@ -157,7 +188,7 @@ final class BackupArchive {
         hash: sha256.convert(bytes).toString(),
       );
     } on Object catch (error) {
-      log.w('read the kept version ${file.path}', error);
+      log.e('list the kept version ${file.path}', error);
       return null;
     }
   }
@@ -200,6 +231,19 @@ const _versionSuffix = '.pgn.gz';
 /// they never collide, and neither is ever read again by this code.
 const _corruptSuffix = '.corrupt-';
 const _supersededSuffix = '.superseded-';
+
+/// Where an incoming history waits while the name it is taking is cleared.
+/// One name per id, so a leftover from an interrupted adoption stops the next
+/// one rather than being written over: both histories are then still whole,
+/// each under its own id.
+const _adoptingSuffix = '.adopting';
+
+/// Commit time decides, and the file name breaks a tie; both are part of the
+/// name a version was written under, so the order is the same on every run.
+int _byTimeThenName(BackupVersion a, BackupVersion b) {
+  final byTime = a.time.compareTo(b.time);
+  return byTime != 0 ? byTime : a.file.compareTo(b.file);
+}
 
 /// The commit time a version file's name carries, or null when the name is
 /// not one this app wrote. See [_stamp] for the spelling.
