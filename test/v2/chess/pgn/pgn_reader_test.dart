@@ -63,4 +63,16 @@ void main() {
     expect(e4.children.single.san, 'd5');
     expect(e4.children.single.children.single.san, 'c4');
   });
+
+  test('keeps a comment written before the move it introduces', () {
+    final read = readGame('1. e4 ({A note} 1. d4 d5) e5 *');
+    final [e4, d4] = read.tree!.children;
+    expect(e4.startingComment, isNull);
+    expect(d4.startingComment, 'A note');
+  });
+
+  test('a brace inside a comment is part of its text', () {
+    final read = readGame('1. e4 {see {this} *');
+    expect(read.tree!.children.single.comment, 'see {this');
+  });
 }

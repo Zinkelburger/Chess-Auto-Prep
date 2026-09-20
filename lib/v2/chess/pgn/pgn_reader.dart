@@ -79,6 +79,7 @@ List<MoveNode> _convert(
         san: san,
         uci: move.uci,
         fen: Fen(next.fen),
+        startingComment: _joined(node.data.startingComments),
         comment: _joined(node.data.comments),
         nags: node.data.nags ?? const [],
         children: _convert(node.children, next, issues),

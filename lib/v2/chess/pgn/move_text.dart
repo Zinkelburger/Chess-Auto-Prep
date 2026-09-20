@@ -10,11 +10,9 @@ import 'game_tree.dart';
 ///
 /// A chapter only writes the games an edit touched; the rest keep their own
 /// bytes. So a regenerated game is normalised to what the tree models, and
-/// three things do not survive the trip: a `{` or `}` a comment held is
-/// dropped, because a brace inside a comment would end it early; a `;`
-/// comment is already gone before this sees it, since the reader keeps `{}`
-/// comments only; and a glyph the file wrote as `!?` comes back as its
-/// numeric annotation, `$5`.
+/// two things do not survive the trip: a `;` comment is already gone before
+/// this sees it, since the reader keeps `{}` comments only; and a glyph the
+/// file wrote as `!?` comes back as its numeric annotation, `$5`.
 String writeMoveText(GameTree tree, {required String result}) {
   final buffer = StringBuffer();
   final comment = tree.rootComment;
@@ -33,8 +31,10 @@ String writeMoveText(GameTree tree, {required String result}) {
 }
 
 /// A comment body that cannot break out of its `{}` block.
-String _sanitised(String comment) =>
-    comment.replaceAll('{', '').replaceAll('}', '');
+///
+/// Only `}` ends a comment, so only `}` is dropped; comments do not nest and
+/// a `{` inside one is ordinary text that every PGN reader keeps.
+String _sanitised(String comment) => comment.replaceAll('}', '');
 
 void _writeNodes(
   StringBuffer buffer,
@@ -65,7 +65,8 @@ void _writeNodes(
   _writeNodes(buffer, main.children, next, !isWhite);
 }
 
-/// One move: its number when [numbered], the SAN, its NAGs and its comment.
+/// One move: the comment written before it, its number when [numbered], the
+/// SAN, its NAGs and the comment written after it.
 void _writeMove(
   StringBuffer buffer,
   MoveNode node,
@@ -73,6 +74,10 @@ void _writeMove(
   bool isWhite, {
   required bool numbered,
 }) {
+  final starting = node.startingComment;
+  if (starting != null && starting.isNotEmpty) {
+    buffer.write('{${_sanitised(starting)}} ');
+  }
   if (numbered) buffer.write(isWhite ? '$moveNumber. ' : '$moveNumber... ');
   buffer.write('${node.san} ');
   for (final nag in node.nags) {

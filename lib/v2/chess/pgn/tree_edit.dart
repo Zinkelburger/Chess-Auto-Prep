@@ -110,6 +110,7 @@ MoveNode _commented(MoveNode node, String? comment) => MoveNode(
   san: node.san,
   uci: node.uci,
   fen: node.fen,
+  startingComment: node.startingComment,
   comment: comment,
   nags: node.nags,
   children: node.children,
