@@ -47,9 +47,8 @@ final class DocumentSaver extends ChangeNotifier {
   int _opens = 0;
   bool _disposed = false;
 
-  /// The file is being renamed, moved or deleted, so nothing is written to it
-  /// until that is done.
-  bool _held = false;
+  /// What a rename, move or delete of the open file is doing to the autosave.
+  _Hold _hold = _Hold.none;
 
   SaveState get state => _state;
 
@@ -108,9 +107,9 @@ final class DocumentSaver extends ChangeNotifier {
   }
 
   /// Runs [action] against the revision the file has now, with the file held
-  /// still: the write on its way out finishes first, and a save asked for
-  /// while [action] runs waits behind it. Answers null when there is nothing
-  /// open or another hold is running.
+  /// still: the draft waiting on the clock is written first, and a save asked
+  /// for while [action] runs waits behind it. Answers null when there is
+  /// nothing open or another hold is running.
   ///
   /// This is how a rename, move or delete of the open chapter is serialised
   /// with autosave. The alternative — letting the save go and renaming
@@ -118,8 +117,9 @@ final class DocumentSaver extends ChangeNotifier {
   /// a lost race means the user is told their file changed on disk when the
   /// only thing that wrote it was this app.
   Future<T?> holdStill<T>(Future<T> Function(Revision revision) action) {
-    if (_held || _disposed) return Future<T?>.value();
-    final held = _hold(action);
+    if (_hold != _Hold.none || _disposed) return Future<T?>.value();
+    _hold = _Hold.settling;
+    final held = _holding(action);
     // The hold and the draft waiting behind it are now what the draft is
     // waiting on, so a flush waits for the whole of it rather than for a
     // write that finished before the hold began. What is kept here can only
@@ -130,15 +130,20 @@ final class DocumentSaver extends ChangeNotifier {
     return held;
   }
 
-  Future<T?> _hold<T>(Future<T> Function(Revision revision) action) async {
-    _held = true;
+  Future<T?> _holding<T>(Future<T> Function(Revision revision) action) async {
     try {
+      // The words waiting on the clock were typed into this file, so they go
+      // to it before [action] renames, moves or deletes it. Written
+      // afterwards they would go to a name that has moved, or — when the file
+      // was deleted and the document closed with it — to no file at all,
+      // leaving the last edit in nothing the user can open again.
       await flush();
+      _hold = _Hold.held;
       final target = _target;
       if (_disposed || target == null) return null;
       return await action(target.revision);
     } finally {
-      _held = false;
+      _hold = _Hold.none;
       await _write();
     }
   }
@@ -168,7 +173,7 @@ final class DocumentSaver extends ChangeNotifier {
   /// waits for neither clock: it goes out as soon as the write or the hold
   /// is over.
   void _start() {
-    if (_held || _writing || _disposed) return;
+    if (_hold != _Hold.none || _writing || _disposed) return;
     if (_waiting != null) {
       _restartClock();
       return;
@@ -211,8 +216,8 @@ final class DocumentSaver extends ChangeNotifier {
   /// document this saver stopped writing cannot be written by any of them.
   Future<void> _write() async {
     final target = _target;
-    if (_disposed || !_writable || _held || _writing || target == null) return;
-    if (_pending.isEmpty) return;
+    if (_disposed || !_writable || _writing || target == null) return;
+    if (_hold == _Hold.held || _pending.isEmpty) return;
     final draft = _pending.take()!;
     _writing = true;
     _set(const Saving());
@@ -330,7 +335,7 @@ final class DocumentSaver extends ChangeNotifier {
     if (_disposed ||
         target == null ||
         entry == null ||
-        _held ||
+        _hold != _Hold.none ||
         _writing ||
         !_pending.isEmpty) {
       return const UndoRefused();
@@ -457,4 +462,18 @@ final class DocumentSaver extends ChangeNotifier {
     _hurry();
     super.dispose();
   }
+}
+
+/// What a rename, move or delete of the open file is doing to the autosave.
+enum _Hold {
+  /// Nothing is holding the file; the clock and the writes run as usual.
+  none,
+
+  /// The draft waiting on the clock is going to the file, before it is
+  /// renamed, moved or deleted. Writes still go out; no second hold begins.
+  settling,
+
+  /// The file is being renamed, moved or deleted. Nothing is written to it
+  /// until that is over.
+  held,
 }
