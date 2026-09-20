@@ -79,14 +79,28 @@ final class HorizonNode extends SearchNode {
   Valuation get valuation => Valuation.exact(expectedScore(evalForUs));
 }
 
-/// A position the search has evaluated but not expanded.
+/// A position the search has reached but not expanded.
 ///
 /// Every leaf of a cancelled or budget-stopped build is one of these, and so
 /// is every legal move of ours while the loss window is deciding which to
 /// keep. Its value is only the engine's opinion, so its bounds stay the whole
 /// interval: the subtree below it could still turn out to be anything.
 final class FrontierNode extends SearchNode {
-  const FrontierNode({required super.fen, required super.evalForUs});
+  const FrontierNode({required super.fen, required super.evalForUs})
+    : evaluated = true;
+
+  /// A position a build attached and stopped before scoring.
+  ///
+  /// No engine has said anything about it, which is not the same as an
+  /// engine calling it level: a build that resumes evaluates this node,
+  /// while a node scored zero is one it would never look at again. It is
+  /// worth the neutral score until someone scores it.
+  const FrontierNode.unevaluated({required super.fen})
+    : evaluated = false,
+      super(evalForUs: const Eval(0));
+
+  /// Whether [evalForUs] is an engine's score or the neutral stand-in.
+  final bool evaluated;
 
   @override
   Valuation get valuation => Valuation.provisional(expectedScore(evalForUs));

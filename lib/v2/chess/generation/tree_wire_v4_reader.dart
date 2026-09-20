@@ -184,15 +184,19 @@ final class _Reader {
 
   /// A childless node. Only an evaluated one at the horizon is settled: an
   /// unevaluated node is where the build stopped, whatever depth it stopped
-  /// at, so its value stays provisional.
+  /// at, so its value stays provisional and it stays unscored, which is how
+  /// it is written out again.
   SearchNode _leaf(
     Fen fen,
     Eval evalForUs, {
     required bool evaluated,
     required int depth,
-  }) => evaluated && depth >= horizonPlies
-      ? HorizonNode(fen: fen, evalForUs: evalForUs)
-      : FrontierNode(fen: fen, evalForUs: evalForUs);
+  }) {
+    if (!evaluated) return FrontierNode.unevaluated(fen: fen);
+    return depth >= horizonPlies
+        ? HorizonNode(fen: fen, evalForUs: evalForUs)
+        : FrontierNode(fen: fen, evalForUs: evalForUs);
+  }
 
   /// A node the file says the game ended at.
   ///
