@@ -6,9 +6,10 @@ import '../fen.dart';
 import 'eval.dart';
 import 'search_config.dart';
 import 'search_node.dart';
+import 'sources.dart';
 import 'terminal.dart';
-import 'tree_wire_v4_config.dart';
 import 'tree_wire_v4.dart';
+import 'tree_wire_v4_config.dart';
 
 /// What [decodeTreeV4] made of a file.
 sealed class TreeReadResult {
@@ -241,32 +242,73 @@ final class _Reader {
     );
   }
 
-  SearchNode _branch(
+  SearchNode? _branch(
     Fen fen,
     Eval evalForUs,
     List<_Edge> edges, {
     required bool ourTurn,
-  }) => ourTurn
-      ? OurNode.over(
-          fen: fen,
-          evalForUs: evalForUs,
-          candidates: [
-            for (final edge in edges)
-              CandidateMove(move: edge.move, child: edge.child),
-          ],
-        )
-      : OpponentNode.over(
-          fen: fen,
-          evalForUs: evalForUs,
-          replies: [
-            for (final edge in edges)
-              ReplyMove(
-                move: edge.move,
-                probability: edge.probability,
-                child: edge.child,
-              ),
-          ],
-        );
+  }) {
+    if (ourTurn) {
+      return OurNode.over(
+        fen: fen,
+        evalForUs: evalForUs,
+        candidates: [
+          for (final edge in edges)
+            CandidateMove(move: edge.move, child: edge.child),
+        ],
+      );
+    }
+    final shares = _sharesOf(edges, fen);
+    if (shares == null) return null;
+    return OpponentNode.over(
+      fen: fen,
+      evalForUs: evalForUs,
+      replies: [
+        for (final edge in edges)
+          ReplyMove(
+            move: edge.move,
+            probability: shares[edge.move.uci]!,
+            child: edge.child,
+          ),
+      ],
+    );
+  }
+
+  /// What each reply in [edges] is worth as a share of this node, or null
+  /// when they cannot be made into shares at all.
+  ///
+  /// `move_probability` is what the opponent model gave the reply when it was
+  /// written, and a file's numbers need not add up to a whole move: a writer
+  /// rounds them, a mode that keeps only part of the policy never had the
+  /// rest, and a reply that was dropped takes its share with it. An opponent
+  /// node is an average over its replies, so the shares are normalised over
+  /// the replies the node actually has — by [Policy.sharesOver], the same
+  /// normalising the search does when it first asks the model, so a tree read
+  /// here and a tree built here weigh a position the one way. Shares that
+  /// already make a whole move come back untouched.
+  Map<String, double>? _sharesOf(List<_Edge> edges, Fen fen) {
+    final stored = <String, double>{};
+    for (final edge in edges) {
+      if (stored.containsKey(edge.move.uci)) {
+        _fail('the node at ${fen.value} plays ${edge.move.san} twice');
+        return null;
+      }
+      stored[edge.move.uci] = edge.probability;
+    }
+    final shares = Policy(stored).sharesOver(stored.keys);
+    if (shares == null) {
+      _fail('the replies of the node at ${fen.value} share no weight at all');
+      return null;
+    }
+    if (shares.length != stored.length) {
+      _fail(
+        'a reply of the node at ${fen.value} was saved with no weight, '
+        'and a node cannot be averaged over a move nobody plays',
+      );
+      return null;
+    }
+    return shares;
+  }
 
   List<_Edge>? _edges(List<Object?> children, int depth) {
     final edges = <_Edge>[];

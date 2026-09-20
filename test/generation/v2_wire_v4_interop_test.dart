@@ -454,7 +454,11 @@ void main() {
     final opponent = root.chosen.child as OpponentNode;
     expect(opponent.fen.value, _afterE4);
     expect(opponent.evalForUs.cp, 25, reason: 'their −25 is our +25');
-    expect(opponent.replies.single.probability, 0.75);
+    expect(
+      opponent.replies.single.probability,
+      1,
+      reason: 'the only reply saved holds the whole of what this node does',
+    );
 
     final horizon = opponent.replies.single.child;
     expect(horizon, isA<HorizonNode>());

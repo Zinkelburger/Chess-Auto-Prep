@@ -250,4 +250,92 @@ void main() {
 
     expect((result as TreeMalformed).detail, contains('name its move'));
   });
+
+  test('replies that add up to less than a move are read as shares', () {
+    // What the file records is what the model gave each reply when it was
+    // written. An opponent node is an average over the replies it has, so
+    // three quarters of a move spread over two of them is still all of what
+    // this node can do.
+    final decoded = decodedTree(
+      wireDocument(
+        tree: {
+          ...oneNode,
+          'children': [
+            {
+              ...oneNode,
+              'id': 2,
+              'depth': 1,
+              'move_uci': 'e2e4',
+              'move_san': 'e4',
+              'fen': afterE4,
+              'is_white_to_move': false,
+              'children': [_reply('e7e5', 0.5, 3), _reply('c7c5', 0.25, 4)],
+            },
+          ],
+        },
+      ),
+    );
+
+    final opponent = (decoded.root as OurNode).chosen.child as OpponentNode;
+    final shares = {
+      for (final reply in opponent.replies) reply.move.uci: reply.probability,
+    };
+    expect(shares['e7e5']! + shares['c7c5']!, closeTo(1, 1e-12));
+    expect(shares['e7e5'], closeTo(2 / 3, 1e-12));
+    expect(shares['c7c5'], closeTo(1 / 3, 1e-12));
+  });
+
+  test('shares that already make a whole move are left alone', () {
+    final decoded = decodedTree(
+      wireDocument(
+        tree: {
+          ...oneNode,
+          'children': [
+            {
+              ...oneNode,
+              'id': 2,
+              'depth': 1,
+              'move_uci': 'e2e4',
+              'move_san': 'e4',
+              'fen': afterE4,
+              'is_white_to_move': false,
+              'children': [_reply('e7e5', 2 / 3, 3), _reply('c7c5', 1 / 3, 4)],
+            },
+          ],
+        },
+      ),
+    );
+
+    final opponent = (decoded.root as OurNode).chosen.child as OpponentNode;
+    expect(
+      opponent.replies.map((reply) => reply.probability),
+      unorderedEquals(<double>[2 / 3, 1 / 3]),
+      reason: 'exactly: the file carries the doubles themselves',
+    );
+  });
+
+  test('a reply saved with no weight at all is malformed', () {
+    final result = decodeTreeV4(
+      wireDocument(
+        tree: {
+          ...oneNode,
+          'is_white_to_move': false,
+          'children': [_reply('e7e5', 1, 2), _reply('c7c5', 0, 3)],
+        },
+      ),
+    );
+
+    expect((result as TreeMalformed).detail, contains('no weight'));
+  });
 }
+
+/// One reply of an opponent node, at the share the file gives it.
+Map<String, Object?> _reply(String uci, double probability, int id) =>
+    <String, Object?>{
+      ...oneNode,
+      'id': id,
+      'depth': 2,
+      'move_uci': uci,
+      'move_san': uci,
+      'move_probability': probability,
+    };
