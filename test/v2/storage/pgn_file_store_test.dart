@@ -1,5 +1,6 @@
 // Real files in a disposable directory: the store is the filesystem, so
 // there is nothing here to fake.
+import 'dart:async';
 import 'dart:io';
 
 import 'package:chess_auto_prep/v2/storage/document_ref.dart';
@@ -79,6 +80,30 @@ void main() {
     final current = (result as Conflict).current;
     expect(current, isNotNull);
     expect(current, isNot(revision));
+    expect(await File(ref.path).readAsString(), 'theirs *\n');
+  });
+
+  test('a save checks the file again after keeping what it replaces', () async {
+    final ref = fixture.ref('KID/Main.pgn');
+    final revision = await fixture.put(ref, 'mine *\n');
+    // Keeping the replaced version is the store's longest await, and an
+    // editor outside the lock can write the file during it. The folder the
+    // kept version goes into appearing says that await has started.
+    final kept = fixture.backupFolder(ref);
+    unawaited(
+      Future(() async {
+        while (!kept.existsSync()) {
+          await Future<void>.delayed(Duration.zero);
+        }
+        File(ref.path).writeAsStringSync('theirs *\n');
+      }),
+    );
+    final result = await fixture.store.save(
+      ref,
+      'draft *\n',
+      expected: revision,
+    );
+    expect(result, isA<Conflict>());
     expect(await File(ref.path).readAsString(), 'theirs *\n');
   });
 
@@ -175,9 +200,38 @@ void main() {
     expect(await File(ref.path).readAsString(), 'changed *\n');
   });
 
+  test('a move that cannot be made leaves no empty folder behind', () async {
+    final ref = fixture.ref('KID/Main.pgn');
+    final revision = await fixture.put(ref, 'moves *\n');
+    // Nothing can leave a folder nobody may write to, so the move fails
+    // after its destination folder has been made.
+    await Process.run('chmod', ['a-w', p.dirname(ref.path)]);
+    final destination = fixture.ref('Benko/Main.pgn');
+    expect(
+      await fixture.store.move(ref, destination, expected: revision),
+      isA<IoFailure>(),
+    );
+    expect(
+      await Directory(p.dirname(destination.path)).exists(),
+      isFalse,
+      reason: 'the folder the move made is not left behind',
+    );
+  });
+
   test('a path outside the documents folder is refused', () async {
     final outside = DocumentRef(p.join(fixture.root.path, 'elsewhere.pgn'));
     expect(await fixture.store.create(outside, 'x *\n'), isA<IoFailure>());
     expect(await File(outside.path).exists(), isFalse);
+  });
+
+  test('a refused path leaves no folders behind outside the root', () async {
+    final outside = DocumentRef(
+      p.join(fixture.root.path, 'Elsewhere', 'Deeper', 'x.pgn'),
+    );
+    expect(await fixture.store.create(outside, 'x *\n'), isA<IoFailure>());
+    expect(
+      await Directory(p.join(fixture.root.path, 'Elsewhere')).exists(),
+      isFalse,
+    );
   });
 }

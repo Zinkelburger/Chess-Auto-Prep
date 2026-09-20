@@ -18,7 +18,26 @@ Future<void> main() async {
   installAgentDriver();
   final documents = await getApplicationDocumentsDirectory();
   final support = await getApplicationSupportDirectory();
-  log.install(await LogFile(Directory(p.join(support.path, 'logs'))).open());
+  final logFile = LogFile(Directory(p.join(support.path, 'logs')));
+  await _installLog(logFile);
   log.i('start');
-  runApp(ChessAutoPrepV2(documents: documents, support: support));
+  runApp(
+    ChessAutoPrepV2(
+      documents: documents,
+      support: support,
+      closeLog: logFile.close,
+    ),
+  );
+}
+
+/// A support folder that cannot be written must not keep the app shut: the
+/// console still carries warnings and errors, and this one says why the
+/// file does not.
+Future<void> _installLog(LogFile file) async {
+  try {
+    log.install(await file.open());
+  } catch (e) {
+    // ignore: avoid_print
+    print('Could not open ${file.file.path}: $e');
+  }
 }

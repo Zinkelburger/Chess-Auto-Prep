@@ -89,7 +89,7 @@ class _BoardWithBar extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final side = min(
-          constraints.maxWidth - EvalBar.width - Space.s,
+          constraints.maxWidth - evalBarWidth - Space.s,
           constraints.maxHeight,
         );
         return Align(
@@ -102,7 +102,7 @@ class _BoardWithBar extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   EvalBar(
-                    score: analysis.snapshot?.best.score,
+                    score: analysis.snapshot?.best?.score,
                     orientation: session.orientation,
                   ),
                   const SizedBox(width: Space.s),

@@ -46,9 +46,14 @@ APPROVED: dict[str, tuple[int, str]] = {
     ),
     "lib/services/engine/stockfish_bundle.dart": (7, "reproducible engine bundle"),
     "lib/v2/storage/log_file.dart": (2, "append-only diagnostic log with one rotated generation; never user data"),
-    "lib/v2/engines/stockfish_install.dart": (3, "reproducible engine bundle, v2: .part write, rename, stamp"),
+    "lib/v2/engines/stockfish_install.dart": (
+        5,
+        "reproducible engine bundle, v2: support dir, stale stamp delete, "
+        ".part write, rename, stamp",
+    ),
     "lib/v2/storage/atomic_write.dart": (4, "v2 atomic publication: staged temporary, rename into place, sweep of interrupted writes"),
-    "lib/v2/storage/pgn_file_store.dart": (3, "v2 document store: the one write path, each mutation revision-checked and backed up"),
+    "lib/v2/storage/document_relocation.dart": (1, "v2 rename, move and quarantine-delete: revision-checked and backed up; the one direct mutation takes back an empty folder a refused move created"),
+    "lib/v2/storage/pgn_file_store.dart": (2, "no filesystem mutation of its own: two calls into DocumentRelocation that the pattern above matches by method name"),
     "lib/v2/storage/backups.dart": (1, "v2 kept versions under Support; creates folders, never removes"),
     "lib/services/eval/cdb_snapshot_download.dart": (4, "resumable downloaded snapshot"),
     "lib/services/eval/lichess_eval_controller.dart": (4, "resumable downloaded snapshot"),

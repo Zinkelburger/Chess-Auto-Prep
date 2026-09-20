@@ -17,12 +17,15 @@ void main() {
   late SessionFixture fixture;
   late DocumentSession session;
   late DocumentSaver saver;
+  late EngineAnalysis analysis;
 
   /// The engine stays off; its pane has its own test.
-  EngineAnalysis analysis() => EngineAnalysis(
-    session,
-    () async => const StartFailed('no engine in this test'),
-  );
+  void startAnalysis() {
+    analysis = EngineAnalysis(
+      session,
+      () async => const StartFailed('no engine in this test'),
+    );
+  }
 
   Future<void> pump(WidgetTester tester) async {
     await tester.binding.setSurfaceSize(const Size(1200, 700));
@@ -33,7 +36,7 @@ void main() {
           body: WorkspaceView(
             session: session,
             saver: saver,
-            analysis: analysis(),
+            analysis: analysis,
           ),
         ),
       ),
@@ -45,9 +48,13 @@ void main() {
     fixture = await openSession(blackChapter);
     session = fixture.session;
     saver = fixture.saver;
+    startAnalysis();
   });
 
-  tearDown(() => fixture.dispose());
+  tearDown(() {
+    analysis.dispose();
+    fixture.dispose();
+  });
 
   testWidgets('shows the chapter, its lines and its variations', (
     tester,
@@ -98,6 +105,8 @@ void main() {
     final empty = ScriptedDocumentStore();
     saver = DocumentSaver(empty);
     session = DocumentSession(empty, saver);
+    analysis.dispose();
+    startAnalysis();
     await pump(tester);
     expect(find.text('Open a chapter'), findsOneWidget);
     expect(find.text('No moves'), findsOneWidget);

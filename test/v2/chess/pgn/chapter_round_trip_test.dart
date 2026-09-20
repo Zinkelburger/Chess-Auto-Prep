@@ -34,7 +34,7 @@ void main() {
 
     test('keep every tag the file gave them, in order', () {
       final tags = chapter.lines.first.tags;
-      expect(tags.map((t) => t.key).take(5), [
+      expect(tags.whereType<PgnTag>().map((t) => t.key).take(5), [
         'Event',
         'White',
         'Black',

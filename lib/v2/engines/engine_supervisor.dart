@@ -30,7 +30,8 @@ final class StartFailed extends EngineStart {
 final class EngineSupervisor {
   final _running = <UciEngine>{};
 
-  /// Process ids of the engines alive right now.
+  /// Process ids of the engines alive right now. Only the tests and the
+  /// exit harness ask: the app never addresses an engine by its pid.
   Iterable<int> get pids => _running.map((engine) => engine.pid);
 
   /// [patience] is how long the handshake may take; a binary that is not a

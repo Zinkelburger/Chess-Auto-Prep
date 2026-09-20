@@ -32,6 +32,8 @@ final class Centipawns extends Score {
     return value < 0 ? pawns : '+$pawns';
   }
 
+  /// Lichess's fit of centipawns to results, `2/(1 + exp(-0.00368208 cp))
+  /// - 1` as a margin, rearranged here to the share of the point.
   @override
   double get expected => 1 / (1 + exp(-0.00368208 * value));
 

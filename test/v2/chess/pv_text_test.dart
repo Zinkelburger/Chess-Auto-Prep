@@ -17,6 +17,12 @@ void main() {
     expect(pvText(Fen.initial, ['zz']), '');
   });
 
+  test('a FEN that is not a position has no line', () {
+    expect(pvText(const Fen('not a position'), ['e2e4']), '');
+    // Enough fields to parse, but no kings: a setup, not a chess position.
+    expect(pvText(const Fen('8/8/8/8/8/8/8/8 w - - 0 1'), ['e2e4']), '');
+  });
+
   test('uses SAN detail: captures, castling, checks', () {
     const italian = Fen(
       'r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4',

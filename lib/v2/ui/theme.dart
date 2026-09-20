@@ -8,6 +8,11 @@ abstract final class Space {
   static const l = 16.0;
 }
 
+/// How wide the evaluation bar beside the board is. A token because the
+/// workspace lays the board out next to it, so the bar can be rewritten
+/// without the layout having to know the widget.
+const evalBarWidth = 12.0;
+
 /// Moves, FENs and evaluations share one monospace style.
 const monoText = TextStyle(fontFamily: 'SourceCodePro', fontSize: 13);
 

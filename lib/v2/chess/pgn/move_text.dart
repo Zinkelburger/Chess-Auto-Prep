@@ -7,6 +7,14 @@ import 'game_tree.dart';
 /// One line, however long, because that is what the old app writes and what
 /// every reader of a chapter file already handles; it also keeps a one-move
 /// edit a one-line diff.
+///
+/// A chapter only writes the games an edit touched; the rest keep their own
+/// bytes. So a regenerated game is normalised to what the tree models, and
+/// three things do not survive the trip: a `{` or `}` a comment held is
+/// dropped, because a brace inside a comment would end it early; a `;`
+/// comment is already gone before this sees it, since the reader keeps `{}`
+/// comments only; and a glyph the file wrote as `!?` comes back as its
+/// numeric annotation, `$5`.
 String writeMoveText(GameTree tree, {required String result}) {
   final buffer = StringBuffer();
   final comment = tree.rootComment;

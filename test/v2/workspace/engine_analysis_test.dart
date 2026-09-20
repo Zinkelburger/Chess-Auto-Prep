@@ -55,9 +55,9 @@ void main() {
       expect(lines.first.score, const Centipawns(-30));
       engine.current.emit(line(multiPv: 1, depth: 12));
       async.flushMicrotasks();
-      expect(analysis.snapshot!.best.depth, 10, reason: 'still the old tick');
+      expect(analysis.snapshot!.best!.depth, 10, reason: 'still the old tick');
       async.elapse(tick);
-      expect(analysis.snapshot!.best.depth, 12);
+      expect(analysis.snapshot!.best!.depth, 12);
       expect(analysis.snapshot!.lines, hasLength(2), reason: 'slot 2 kept');
     });
   });
@@ -76,7 +76,7 @@ void main() {
       old.end();
       async.flushMicrotasks();
       expect(analysis.snapshot!.fen, session.fen);
-      expect(analysis.snapshot!.best.score, const Centipawns(1));
+      expect(analysis.snapshot!.best!.score, const Centipawns(1));
     });
   });
 
@@ -86,7 +86,7 @@ void main() {
       engine.current.emit(line(score: const MateIn(0)));
       engine.current.end();
       async.flushMicrotasks();
-      expect(analysis.snapshot!.best.score, const MateIn(0));
+      expect(analysis.snapshot!.best!.score, const MateIn(0));
     });
   });
 
@@ -161,6 +161,21 @@ void main() {
         hasLength(1),
         reason: 'no search on a dead engine',
       );
+    });
+  });
+
+  test('a dead engine takes its score with it', () {
+    fakeAsync((async) {
+      running(async);
+      engine.current.emit(line(score: const Centipawns(30)));
+      async.elapse(tick);
+      expect(analysis.snapshot, isNotNull);
+      engine.crash();
+      async.flushMicrotasks();
+      expect(analysis.snapshot, isNull, reason: 'nothing is searching it');
+      session.forward();
+      async.elapse(tick);
+      expect(analysis.snapshot, isNull, reason: 'and the cursor has moved on');
     });
   });
 

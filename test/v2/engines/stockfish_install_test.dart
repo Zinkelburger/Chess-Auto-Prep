@@ -97,4 +97,27 @@ void main() {
     assets.remove('tools/assets.lock.json');
     expect(await install().locate(), isA<StockfishMissing>());
   });
+
+  test('a corrupt engine asset leaves nothing stamped as installed', () async {
+    final rubbish = Uint8List.fromList(utf8.encode('not a gzip stream'));
+    assets['assets/executables/stockfish-linux.gz'] = rubbish;
+    assets['tools/assets.lock.json'] = Uint8List.fromList(
+      utf8.encode(lockWith(assetSha: sha256.convert(rubbish).toString())),
+    );
+    final result = await install().locate();
+    expect((result as StockfishMissing).reason, contains('Could not install'));
+    final app = Directory(p.join(support.path, 'app'));
+    expect(
+      await app.list().map((e) => p.basename(e.path)).toList(),
+      isNot(contains('stockfish-linux.origin')),
+    );
+  });
+
+  test('a damaged checksum file is reported, not thrown', () async {
+    assets['tools/assets.lock.json'] = Uint8List.fromList(
+      utf8.encode('{"stockfish-linux": '),
+    );
+    final result = await install().locate();
+    expect((result as StockfishMissing).reason, contains('is damaged'));
+  });
 }
