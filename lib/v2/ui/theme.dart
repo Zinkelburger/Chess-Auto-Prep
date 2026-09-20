@@ -8,6 +8,13 @@ abstract final class Space {
   static const l = 16.0;
 }
 
+/// How wide the library panel beside the workspace is.
+const libraryPanelWidth = 300.0;
+
+/// How wide a dialog that asks for one line of text is. Wide enough for a
+/// long chapter name, narrow enough not to fill the window.
+const nameDialogWidth = 360.0;
+
 /// How wide the evaluation bar beside the board is. A token because the
 /// workspace lays the board out next to it, so the bar can be rewritten
 /// without the layout having to know the widget.

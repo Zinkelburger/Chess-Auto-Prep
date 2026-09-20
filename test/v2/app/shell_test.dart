@@ -25,16 +25,27 @@ void main() {
   late EngineAnalysis analysis;
 
   setUp(() {
-    files = ScriptedFiles(listing: Chapters([benko, kid]));
+    files = ScriptedFiles(
+      listing: Repertoires([
+        folder('benko', ['Main']),
+        folder('KID', ['Main']),
+      ]),
+    );
     store = ScriptedDocumentStore()
       ..documents[kid] = Opened(blackChapter, scriptedRevision(blackChapter))
       ..documents[benko] = Opened(
         '// Color: White\n',
         scriptedRevision('// Color: White\n'),
       );
-    library = Library(files);
     saver = DocumentSaver(store);
     session = DocumentSession(store, saver);
+    library = Library(
+      files: files,
+      documents: store,
+      session: session,
+      saver: saver,
+      root: '/repertoires',
+    );
     analysis = EngineAnalysis(
       session,
       () async => const StartFailed('no engine in this test'),
@@ -61,10 +72,12 @@ void main() {
         ),
       ),
     );
-    final listing = library.refresh();
-    files.releaseNext();
-    await listing;
-    await tester.pump();
+    await library.refresh();
+    await tester.pumpAndSettle();
+    // The rows start closed; the chapters are what this test clicks.
+    await tester.tap(find.text('benko'));
+    await tester.tap(find.text('KID'));
+    await tester.pumpAndSettle();
   }
 
   testWidgets('opening a chapter puts it in the workspace', (tester) async {

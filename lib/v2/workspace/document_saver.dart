@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 
 import '../diagnostics/log.dart';
@@ -79,6 +77,8 @@ final class DocumentSaver extends ChangeNotifier {
   final _undo = <store.Receipt>[];
   int _opens = 0;
   bool _disposed = false;
+  bool _held = false;
+  Future<void>? _running;
 
   SaveState get state => _state;
 
@@ -101,13 +101,64 @@ final class DocumentSaver extends ChangeNotifier {
     if (_state is SaveConflict) return;
     _pending = text;
     _set(const Unsaved());
-    unawaited(_write());
+    _start();
+  }
+
+  /// Runs [action] against the revision the file has now, with the file held
+  /// still: a save on its way out finishes first, and a save asked for while
+  /// [action] runs waits behind it and goes to wherever the document ends up.
+  /// Answers null when there is nothing open or another hold is running.
+  ///
+  /// This is how a rename, move or delete of the open chapter is serialised
+  /// with autosave. The alternative — letting the save go and renaming
+  /// afterwards — would leave the rename racing an answer it cannot see, and
+  /// a lost race means the user is told their file changed on disk when the
+  /// only thing that wrote it was this app.
+  Future<T?> holdStill<T>(Future<T> Function(Revision revision) action) async {
+    if (_held || _disposed) return null;
+    _held = true;
+    try {
+      // At most twice: nothing new starts while the file is held.
+      while (_writing) {
+        await _running;
+      }
+      final target = _target;
+      if (_disposed || target == null) return null;
+      return await action(target.revision);
+    } finally {
+      _held = false;
+      _start();
+    }
+  }
+
+  /// The open document is now at [ref]: the same file with the same bytes
+  /// under another name, so the revision and the undo receipts still stand.
+  void relocated(DocumentRef ref) {
+    final target = _target;
+    if (target == null) return;
+    _target = (ref: ref, revision: target.revision);
+  }
+
+  /// The open document is gone. Nothing more is written to it, and its undo
+  /// history goes with it: the file those receipts name is not there to
+  /// restore into.
+  void closed() {
+    _opens++;
+    _target = null;
+    _pending = null;
+    _undo.clear();
+    _set(const Saved());
+  }
+
+  void _start() {
+    if (_disposed) return;
+    _running = _write();
   }
 
   Future<void> _write() async {
     final target = _target;
     final text = _pending;
-    if (_writing || target == null || text == null) return;
+    if (_held || _writing || target == null || text == null) return;
     _pending = null;
     _writing = true;
     _set(const Saving());
@@ -122,11 +173,11 @@ final class DocumentSaver extends ChangeNotifier {
     if (ticket != _opens) {
       // The answer is about a document nobody has open now; a newer one may
       // have been waiting behind it.
-      unawaited(_write());
+      _start();
       return;
     }
     _adopt(result, target.ref);
-    if (_state is! SaveConflict) unawaited(_write());
+    if (_state is! SaveConflict) _start();
   }
 
   void _adopt(store.SaveResult result, DocumentRef ref) {
@@ -158,7 +209,11 @@ final class DocumentSaver extends ChangeNotifier {
   /// newest text is still going to disk.
   Future<UndoResult> undo() async {
     final target = _target;
-    if (target == null || _undo.isEmpty || _writing || _pending != null) {
+    if (target == null ||
+        _undo.isEmpty ||
+        _held ||
+        _writing ||
+        _pending != null) {
       return const UndoRefused();
     }
     final entry = _undo.last;

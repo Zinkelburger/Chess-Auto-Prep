@@ -1,58 +1,257 @@
 import 'package:chess_auto_prep/v2/features/library/library.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
+import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/v2/storage/training_records.dart' as training;
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/library_fixture.dart';
 import '../support/scripted_files.dart';
+import '../support/scripted_store.dart';
 
 void main() {
-  late ScriptedFiles files;
-  late Library library;
-  final main = ref('KID', 'Main');
+  final kid = folder('KID', ['Classical', 'Main']);
+  final benko = folder('benko', ['Main']);
+  late LibraryFixture fixture;
 
-  setUp(() {
-    files = ScriptedFiles(listing: Chapters([main]));
-    library = Library(files);
-  });
+  Future<void> start([List<RepertoireFolder> folders = const []]) async {
+    fixture = await openLibrary(folders);
+  }
 
-  tearDown(() => library.dispose());
+  tearDown(() => fixture.dispose());
 
-  test('refresh lists the chapters', () async {
-    final done = library.refresh();
-    expect(library.state, isA<LibraryLoading>());
-    files.releaseNext();
-    await done;
-    expect((library.state as LibraryReady).chapters, [main]);
-  });
-
-  test('an overtaken refresh never replaces a newer one', () async {
-    final first = library.refresh();
-    files.listing = const Chapters([]);
-    final second = library.refresh();
-    files.releaseLast(); // the second refresh answers first
-    await second;
-    expect((library.state as LibraryReady).chapters, isEmpty);
-    files.listing = Chapters([main]);
-    files.releaseNext(); // the stale first answer arrives late
-    await first;
-    expect((library.state as LibraryReady).chapters, isEmpty);
-  });
-
-  test('an unreadable folder is a sentence, not an exception', () async {
-    files.listing = const ChaptersUnreadable('Permission denied');
-    final done = library.refresh();
-    files.releaseNext();
-    await done;
+  test('refresh lists the repertoires', () async {
+    await start([benko, kid]);
     expect(
-      (library.state as LibraryFailed).reason,
-      'Could not read the repertoires folder: Permission denied',
+      (fixture.library.state as LibraryLoaded).repertoires.map((f) => f.name),
+      ['benko', 'KID'],
     );
   });
 
+  test('an overtaken refresh never replaces a newer one', () async {
+    await start([kid]);
+    final library = fixture.library;
+    fixture.files
+      ..hold = true
+      ..listing = Repertoires([kid]);
+    final first = library.refresh();
+    fixture.files.listing = const Repertoires([]);
+    final second = library.refresh();
+    fixture.files.releaseLast(); // the second refresh answers first
+    await second;
+    expect(library.repertoires, isEmpty);
+    fixture.files.listing = Repertoires([kid]);
+    fixture.files.releaseNext(); // the stale first answer arrives late
+    await first;
+    expect(library.repertoires, isEmpty);
+  });
+
+  test('an unreadable folder is a typed failure, not an exception', () async {
+    await start();
+    fixture.files.listing = const RepertoiresUnreadable('Permission denied');
+    await fixture.library.refresh();
+    expect(
+      (fixture.library.state as LibraryLoadFailed).detail,
+      'Permission denied',
+    );
+  });
+
+  test('search filters the list by name', () async {
+    await start([benko, kid]);
+    fixture.library.search('ki');
+    expect(fixture.library.visible.map((f) => f.name), ['KID']);
+    expect(fixture.library.repertoires, hasLength(2));
+    fixture.library.search('');
+    expect(fixture.library.visible, hasLength(2));
+  });
+
+  test('a new repertoire is a folder with one empty chapter', () async {
+    await start([kid]);
+    final result = await fixture.library.createRepertoire('Benoni', Side.black);
+    expect(result, isA<LibraryDone>());
+    final text = fixture.textAt('/repertoires/Benoni/Main.pgn');
+    expect(text, startsWith('// Benoni\n// Color: Black\n// Created on '));
+    expect(text, endsWith('\n\n'));
+  });
+
+  test('a repertoire name already in the list is refused', () async {
+    await start([kid]);
+    expect(
+      await fixture.library.createRepertoire('kid', Side.white),
+      isA<LibraryNameTaken>(),
+    );
+    expect(fixture.textAt('/repertoires/kid/Main.pgn'), isNull);
+  });
+
+  test('a new chapter takes the side of its repertoire', () async {
+    await start([benko]);
+    fixture.store.documents[ref('benko', 'Main')] = Opened(
+      '// Main\n// Color: Black\n\n',
+      scriptedRevision('// Main\n// Color: Black\n\n'),
+    );
+    expect(
+      await fixture.library.createChapter(benko, 'Volga'),
+      isA<LibraryDone>(),
+    );
+    expect(
+      fixture.textAt('/repertoires/benko/Volga.pgn'),
+      contains('// Color: Black'),
+    );
+  });
+
+  test('a chapter name already on disk is refused', () async {
+    await start([kid]);
+    expect(
+      await fixture.library.createChapter(kid, 'Main'),
+      isA<LibraryNameTaken>(),
+    );
+  });
+
+  test('renaming a chapter moves its file', () async {
+    await start([benko]);
+    expect(
+      await fixture.library.renameChapter(ref('benko', 'Main'), 'Mainline'),
+      isA<LibraryDone>(),
+    );
+    expect(fixture.textAt('/repertoires/benko/Main.pgn'), isNull);
+    expect(fixture.textAt('/repertoires/benko/Mainline.pgn'), isNotNull);
+  });
+
+  test('a rename is refused when the file changed on disk', () async {
+    await start([benko]);
+    final chapter = ref('benko', 'Main');
+    // Somebody else wrote the chapter after the list was read.
+    fixture.store.moves.add(const Conflict(null));
+    expect(
+      await fixture.library.renameChapter(chapter, 'Mainline'),
+      isA<LibraryStale>(),
+    );
+    expect(fixture.textAt(chapter.path), isNotNull);
+  });
+
+  test('moving a chapter into another repertoire', () async {
+    await start([benko, kid]);
+    expect(
+      await fixture.library.moveChapter(ref('KID', 'Classical'), benko),
+      isA<LibraryDone>(),
+    );
+    expect(fixture.textAt('/repertoires/benko/Classical.pgn'), isNotNull);
+  });
+
+  test('a move onto a name that is taken replaces nothing', () async {
+    await start([benko, kid]);
+    expect(
+      await fixture.library.moveChapter(ref('KID', 'Main'), benko),
+      isA<LibraryNameTaken>(),
+    );
+    expect(fixture.textAt('/repertoires/KID/Main.pgn'), isNotNull);
+  });
+
+  test('deleting a chapter says where the training rows went', () async {
+    await start([kid]);
+    fixture.store.repoint = const training.Repointed(4);
+    final result = await fixture.library.deleteChapter(ref('KID', 'Main'));
+    expect(result, isA<LibraryDone>());
+    expect((result as LibraryDone).training, isA<training.Repointed>());
+    expect(fixture.textAt('/repertoires/KID/Main.pgn'), isNull);
+  });
+
+  test('deleting a repertoire deletes every chapter and the folder', () async {
+    await start([kid]);
+    expect(await fixture.library.deleteRepertoire(kid), isA<LibraryDone>());
+    expect(fixture.store.documents, isEmpty);
+    expect(fixture.files.removed, ['/repertoires/KID']);
+  });
+
+  test('a delete that refuses names the chapter it stopped at', () async {
+    await start([kid]);
+    fixture.store.deletes
+      ..add(const Deleted('/recovered/Classical.pgn'))
+      ..add(const IoFailure('Read-only file system'));
+    final result = await fixture.library.deleteRepertoire(kid);
+    expect(result, isA<LibraryStoppedAt>());
+    expect((result as LibraryStoppedAt).chapter, 'Main');
+    expect(result.cause, isA<LibraryFailure>());
+    // The folder is left where it is: half of it is still in it.
+    expect(fixture.files.removed, isEmpty);
+  });
+
+  test(
+    'renaming a repertoire moves every chapter into the new folder',
+    () async {
+      await start([kid]);
+      expect(
+        await fixture.library.renameRepertoire(kid, "King's Indian"),
+        isA<LibraryDone>(),
+      );
+      expect(fixture.textAt("/repertoires/King's Indian/Main.pgn"), isNotNull);
+      expect(fixture.files.removed, ['/repertoires/KID']);
+    },
+  );
+
+  test('one change at a time', () async {
+    await start([kid]);
+    fixture.store.hold = true;
+    final first = fixture.library.deleteChapter(ref('KID', 'Main'));
+    await pumpEventQueue();
+    expect(fixture.library.busy, isTrue);
+    expect(
+      await fixture.library.deleteChapter(ref('KID', 'Classical')),
+      isA<LibraryBusy>(),
+    );
+    fixture.store.hold = false;
+    fixture.store.releaseAll();
+    await first;
+  });
+
+  test('renaming the open chapter is serialised with its autosave', () async {
+    final open = ref('benko', 'Main');
+    fixture = await openLibrary([benko], open: open);
+    fixture.store.hold = true;
+    fixture.session.playMove('e2e4'); // asks for a save that cannot land yet
+    await pumpEventQueue();
+    expect(fixture.store.requestedSaves, hasLength(1));
+    final renamed = fixture.library.renameChapter(open, 'Mainline');
+    await pumpEventQueue();
+    // Held still: the rename waits rather than racing the save's answer.
+    expect(fixture.textAt('/repertoires/benko/Mainline.pgn'), isNull);
+    fixture.store.hold = false;
+    fixture.store.releaseAll();
+    expect(await renamed, isA<LibraryDone>());
+    expect(fixture.textAt('/repertoires/benko/Main.pgn'), isNull);
+    expect(fixture.textAt('/repertoires/benko/Mainline.pgn'), contains('e4'));
+    expect(fixture.session.source?.name, 'Mainline');
+  });
+
+  test('an edit made during the rename goes to the new file', () async {
+    final open = ref('benko', 'Main');
+    fixture = await openLibrary([benko], open: open);
+    fixture.store.hold = true;
+    final renamed = fixture.library.renameChapter(open, 'Mainline');
+    await pumpEventQueue();
+    fixture.session.playMove('d2d4');
+    fixture.store.hold = false;
+    fixture.store.releaseAll();
+    await renamed;
+    await pumpEventQueue();
+    expect(fixture.textAt('/repertoires/benko/Mainline.pgn'), contains('d4'));
+  });
+
+  test('deleting the open chapter empties the workspace', () async {
+    final open = ref('benko', 'Main');
+    fixture = await openLibrary([benko], open: open);
+    expect(await fixture.library.deleteChapter(open), isA<LibraryDone>());
+    expect(fixture.session.source, isNull);
+    expect(fixture.session.chapter, isNull);
+  });
+
   test('a refresh finishing after dispose stays quiet', () async {
-    final done = library.refresh();
-    library.dispose();
-    files.releaseNext();
+    await start([kid]);
+    fixture.files.hold = true;
+    final done = fixture.library.refresh();
+    fixture.library.dispose();
+    fixture.files.releaseNext();
     await done;
-    library = Library(files); // so tearDown disposes a live one
+    fixture = await openLibrary([kid]); // so tearDown disposes a live one
   });
 }

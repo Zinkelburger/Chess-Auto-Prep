@@ -42,15 +42,20 @@ class ChessAutoPrepV2 extends StatefulWidget {
 }
 
 class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
-  late final Library _library = Library(
-    ChapterDirectory(Directory(p.join(widget.documents.path, 'repertoires'))),
-  );
+  late final _repertoires = p.join(widget.documents.path, 'repertoires');
   late final _store = PgnFileStore(
     documents: widget.documents,
     support: widget.support,
   );
   late final _saver = DocumentSaver(_store);
   late final _session = DocumentSession(_store, _saver);
+  late final Library _library = Library(
+    files: ChapterDirectory(Directory(_repertoires)),
+    documents: _store,
+    session: _session,
+    saver: _saver,
+    root: _repertoires,
+  );
   final _engines = EngineSupervisor();
   late final _analysis = EngineAnalysis(
     _session,

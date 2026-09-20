@@ -60,7 +60,7 @@ class _ShellState extends State<Shell> {
             child: Row(
               children: [
                 SizedBox(
-                  width: 260,
+                  width: libraryPanelWidth,
                   child: ListenableBuilder(
                     listenable: widget.session,
                     builder: (context, _) => LibraryPanel(

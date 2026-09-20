@@ -161,6 +161,21 @@ GameTree mergeLines(List<ChapterLine> lines) {
   );
 }
 
+/// A chapter file with no games yet: the `//` preamble and nothing else.
+///
+/// The colour line is the only record of which side the chapter is for, so it
+/// is written before there are any moves to infer it from. The stamp is the
+/// local time the old app writes, `2026-09-19 14:07:33`, and nothing reads it
+/// back; it is there for someone looking at the file.
+String newChapterText({
+  required String name,
+  required Side side,
+  required DateTime created,
+}) =>
+    '// $name\n'
+    '// Color: ${side == Side.white ? 'White' : 'Black'}\n'
+    '// Created on ${created.toString().split('.').first}\n\n';
+
 /// The chapter file again, byte for byte when nothing was edited.
 String writeChapter(Chapter chapter) {
   final buffer = StringBuffer(chapter.preamble);
