@@ -158,6 +158,21 @@ void main() {
     });
   });
 
+  test('a dead engine takes its score with it', () {
+    fakeAsync((async) {
+      running(async);
+      engine.current.emit(line(score: const Centipawns(30)));
+      async.elapse(tick);
+      expect(analysis.snapshot, isNotNull);
+      engine.crash();
+      async.flushMicrotasks();
+      expect(analysis.snapshot, isNull, reason: 'nothing is searching it');
+      session.forward();
+      async.elapse(tick);
+      expect(analysis.snapshot, isNull, reason: 'and the cursor has moved on');
+    });
+  });
+
   test('dispose stops following and quits', () {
     fakeAsync((async) {
       running(async);

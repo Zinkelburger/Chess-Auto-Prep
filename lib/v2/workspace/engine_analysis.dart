@@ -109,9 +109,15 @@ final class EngineAnalysis extends ChangeNotifier {
   /// the engine idles rather than search a board nobody is looking at.
   void _follow() {
     final engine = _engine;
-    if (engine == null) return;
+    if (engine == null) {
+      // Nothing is searching, so the last score is about a position the
+      // cursor has left; the pane and the bar must not keep showing it.
+      _clearSnapshot();
+      return;
+    }
     if (_session.chapter == null) {
       _stopFollowing();
+      _clearSnapshot();
       return;
     }
     final fen = _session.fen;
@@ -146,10 +152,17 @@ final class EngineAnalysis extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _clearSnapshot() {
+    if (_snapshot == null) return;
+    _snapshot = null;
+    notifyListeners();
+  }
+
   void _lost(Engine engine) {
     if (_engine != engine) return; // we quit it ourselves
     _engine = null;
     _stopFollowing();
+    _snapshot = null;
     log.w('engine ${engine.name} exited on its own');
     _set(EngineFailed('${engine.name} stopped unexpectedly'));
   }
