@@ -1,6 +1,6 @@
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart'
-    show Collision, Conflict, IoFailure, Opened;
+    show Collision, IoFailure, Opened;
 import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -173,62 +173,32 @@ void main() {
     expect(fixture.onDisk, contains('{two [%eval 0.30]}'));
   });
 
-  test('undo takes the edits back one at a time', () async {
-    final first = fixture.onDisk;
-    edit('B');
+  test('a store that throws is a failed save, not a wedged saver', () async {
+    fixture.store.throwOnSave = StateError('the lock database fell over');
+    edit('one');
     await pumpEventQueue();
-    final second = fixture.onDisk;
-    edit('C');
-    await pumpEventQueue();
-    await session.undo();
-    expect(fixture.onDisk, second);
-    expect(session.commentAt(sicilian), 'B [%eval 0.30]');
-    await session.undo();
-    expect(fixture.onDisk, first);
-    expect(session.commentAt(sicilian), 'The Sicilian [%eval 0.30]');
-    expect(saver.canUndo, isFalse);
-    expect(saver.state, isA<Saved>());
-  });
-
-  test('an undo the document has left behind refuses and saves on', () async {
-    edit('B');
-    await pumpEventQueue();
-    // The store refuses and names the revision the document already has: it
-    // is the entry that is out of date, not the file.
-    fixture.store.saves.add(Conflict(scriptedRevision(fixture.onDisk)));
-    expect(await saver.undo(), isA<UndoRefused>());
-    expect(saver.state, isA<Saved>());
-    expect(saver.canUndo, isTrue, reason: 'nothing was taken back');
-    edit('C');
+    expect((saver.state as SaveFailed).detail, contains('the lock database'));
+    expect(saver.settled, isFalse, reason: 'the words are in no file');
+    // The saver is not stuck on a write that never answered, and flushing
+    // does not hand the exception out again.
+    await saver.flush();
+    edit('two');
     await pumpEventQueue();
     expect(saver.state, isA<Saved>());
-    expect(fixture.onDisk, contains('{C [%eval 0.30]}'));
+    expect(saver.settled, isTrue);
+    expect(fixture.onDisk, contains('{two [%eval 0.30]}'));
   });
 
-  test('an undo the file no longer expects is refused, history kept', () async {
-    edit('B');
+  test('a save that failed keeps the words for the next try', () async {
+    fixture.store.saves.add(const IoFailure('No space left on device'));
+    edit('one');
     await pumpEventQueue();
-    fixture.externalEdit('// Color: Black\n\n1. d4 *\n');
-    await session.undo();
-    expect(saver.state, isA<SaveConflict>());
-    expect(saver.canUndo, isTrue);
-    expect(session.commentAt(sicilian), 'B [%eval 0.30]');
-  });
-
-  test('the cursor comes back to a move the file still has', () async {
-    session.goTo(sicilian);
-    session.playMove('c2c3'); // a new line, so a new branch under c5
-    await pumpEventQueue();
-    final added = session.cursor;
-    expect(added, isNot(sicilian));
-    await session.undo();
-    expect(session.cursor, sicilian);
-    expect(session.chapter?.gameCount, 2);
-  });
-
-  test('nothing to undo is not an error', () async {
-    await session.undo();
-    expect(saver.state, isA<Saved>());
+    expect(saver.settled, isFalse);
+    expect(
+      fixture.store.requestedSaves,
+      hasLength(1),
+      reason: 'a failure is not retried on its own',
+    );
   });
 
   test('a copy refused while another chapter opened still says so', () async {

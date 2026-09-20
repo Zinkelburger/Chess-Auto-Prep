@@ -5,6 +5,8 @@
 // writes the format's rules out again; this runs the two implementations
 // against each other. It lives outside `test/v2/` because nothing in
 // `lib/v2/` may see the old app, and its mirror in `test/v2/` may not either.
+import 'dart:convert';
+
 import 'package:chess_auto_prep/chess_core/generation/build_tree_node.dart';
 import 'package:chess_auto_prep/chess_core/generation/tree_serialization.dart';
 import 'package:chess_auto_prep/services/generation/eca_calculator.dart';
@@ -353,6 +355,14 @@ void _expectSameValues(
 BuildTreeNode _childByUci(BuildTreeNode node, String uci) =>
     node.children.firstWhere((child) => child.moveUci == uci);
 
+/// The root node of a written document, as the JSON it is.
+Map<String, Object?> _writtenRoot(String document) =>
+    (jsonDecode(document) as Map<String, Object?>)['tree']!
+        as Map<String, Object?>;
+
+List<Map<String, Object?>> _writtenChildren(Map<String, Object?> node) =>
+    (node['children']! as List).cast<Map<String, Object?>>();
+
 void main() {
   test('the old app reads a tree the new search built', () async {
     final tree = await _newSearchTree();
@@ -485,6 +495,91 @@ void main() {
       expect(reply.child.valuation.isExact, isFalse);
     }
     expect(decoded.root.valuation.isExact, isFalse);
+  });
+
+  test('a paused build goes back unevaluated, not evaluated at zero', () {
+    final decoded =
+        decodeTreeV4(serializeTree(_pausedOldAppTree())) as TreeDecoded;
+
+    final written = encodeTreeV4(decoded.root, decoded.config, complete: false);
+    final again = deserializeTree(written);
+
+    final replies = _childByUci(again.root, 'e2e4').children;
+    expect(replies.map((reply) => reply.moveUci), ['e7e5', 'c7c5']);
+    for (final reply in replies) {
+      // A zero here is an engine's verdict of level, and the old builder
+      // never looks at such a node again: the resume would trust a score
+      // nothing produced.
+      expect(reply.hasEngineEval, isFalse, reason: reply.moveSan);
+    }
+    expect(again.root.engineEvalCp, 25, reason: 'the scored nodes keep theirs');
+    expect(_childByUci(again.root, 'e2e4').engineEvalCp, -25);
+    final e4 = _writtenChildren(_writtenRoot(written)).single;
+    for (final reply in _writtenChildren(e4)) {
+      expect(reply.containsKey('engine_eval_cp'), isFalse);
+    }
+  });
+
+  test('a branch the old app never scored is written unscored too', () {
+    // A node with moves under it and no evaluation of its own: the scores
+    // and the shape of a tree are recorded separately, so one can be
+    // missing while the other is whole.
+    final root = _oldNode(_start, ply: 0, isWhiteToMove: true, nodeId: 1)
+      ..engineEvalCp = 25
+      ..explored = true;
+    final e4 =
+        _oldNode(
+            _afterE4,
+            ply: 1,
+            isWhiteToMove: false,
+            nodeId: 2,
+            uci: 'e2e4',
+            san: 'e4',
+          )
+          ..explored = true
+          ..isRepertoireMove = true;
+    final e5 = _oldNode(
+      _afterE5,
+      ply: 2,
+      isWhiteToMove: true,
+      nodeId: 3,
+      uci: 'e7e5',
+      san: 'e5',
+    )..engineEvalCp = 30;
+    root.children.add(e4);
+    e4.children.add(e5);
+    final decoded =
+        decodeTreeV4(
+              serializeTree(
+                BuildTree(
+                  root: root,
+                  totalNodes: 3,
+                  maxPlyReached: 2,
+                  buildComplete: false,
+                  configSnapshot: const {
+                    'algorithm_version': 3,
+                    'search_algorithm': 'pure',
+                    'play_as_white': true,
+                    'max_depth': 2,
+                    'max_eval_loss_cp': 200,
+                  },
+                ),
+              ),
+            )
+            as TreeDecoded;
+
+    final written = encodeTreeV4(decoded.root, decoded.config, complete: false);
+    final again = deserializeTree(written);
+
+    final branch = _childByUci(again.root, 'e2e4');
+    expect(branch.hasEngineEval, isFalse, reason: 'it never had one');
+    expect(_childByUci(branch, 'e7e5').engineEvalCp, 30);
+    expect(
+      _writtenChildren(
+        _writtenRoot(written),
+      ).single.containsKey('engine_eval_cp'),
+      isFalse,
+    );
   });
 
   test('both searches put the same value on every node of one tree', () {

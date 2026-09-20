@@ -243,9 +243,12 @@ final class DocumentSession extends ChangeNotifier {
     final result = await _saver.undo();
     if (_disposed || ticket != _opens) return const UndoRefused();
     if (result case Restored(:final text)) {
+      final before = _chapter?.tree;
       final restored = parseChapter(name: ref.name, text: text);
       _chapter = restored;
-      _cursor = _within(restored.tree, _cursor);
+      _cursor = before == null
+          ? const NodePath.root()
+          : _sameMoves(before, restored.tree, _cursor);
       notifyListeners();
     }
     return result;
@@ -292,13 +295,19 @@ final class DocumentSession extends ChangeNotifier {
     return OpenFailed(reason);
   }
 
-  /// [path] cut back to the deepest move of it that [tree] still has, so a
-  /// cursor never points into a line an undo took away.
-  NodePath _within(GameTree tree, NodePath path) {
+  /// Where the moves [path] names in [before] are in [after].
+  ///
+  /// The moves are followed by name, not by their places in the lists: a
+  /// path is only a route through a particular tree, and the same numbers in
+  /// a file the user just took back can name entirely different moves. A move
+  /// the restored file does not have leaves the cursor on the deepest move
+  /// above it that it does.
+  NodePath _sameMoves(GameTree before, GameTree after, NodePath path) {
     final kept = <int>[];
-    var siblings = tree.children;
-    for (final index in path.indexes) {
-      if (index >= siblings.length) break;
+    var siblings = after.children;
+    for (final step in before.lineTo(path)) {
+      final index = siblings.indexWhere((node) => node.san == step.san);
+      if (index < 0) break;
       kept.add(index);
       siblings = siblings[index].children;
     }

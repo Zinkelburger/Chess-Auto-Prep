@@ -31,6 +31,11 @@ final class ScriptedDocumentStore implements PgnDocumentStore {
 
   bool hold = false;
 
+  /// Thrown by the next [save] instead of answering it, for the store
+  /// failure that is nobody's typed result — a lock database that will not
+  /// open, say.
+  Object? throwOnSave;
+
   /// What a move or delete says became of the training rows.
   RepointResult repoint = const NothingToRepoint();
 
@@ -74,6 +79,11 @@ final class ScriptedDocumentStore implements PgnDocumentStore {
   }) async {
     requestedSaves.add(SaveRequest(ref, text, expected));
     await _turn();
+    final thrown = throwOnSave;
+    if (thrown != null) {
+      throwOnSave = null;
+      throw thrown;
+    }
     final queued = _next(saves);
     if (queued != null) return queued;
     final before = documents[ref];
