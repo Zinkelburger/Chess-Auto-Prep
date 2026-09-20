@@ -182,25 +182,29 @@ extension BughouseTimeStanceX on BughouseTimeStance {
   /// your partner is up by exactly the same amount against theirs — so the
   /// stance is the sign of a single number and reads from our side without
   /// naming a seat. Our seats are always A + B, so "we" is unambiguous here.
+  ///
+  /// It names the sit rather than the margin because that is what a player
+  /// is deciding. The hint carries the caveat the label cannot: sitting is
+  /// only available to whoever is on move.
   String get label => switch (this) {
-    BughouseTimeStance.ahead => 'We’re up',
+    BughouseTimeStance.ahead => 'We may sit',
     BughouseTimeStance.level => 'Equal',
-    BughouseTimeStance.behind => 'We’re down',
+    BughouseTimeStance.behind => 'They may sit',
   };
 
   String get shortLabel => label;
 
-  /// A tooltip, not a lesson. It names being up on the clock rather than
-  /// sitting, because sitting is what being up lets you do only while you are
-  /// on move: when one team holds both moves the other is not on the clock at
-  /// all and cannot sit whatever its time.
+  /// A tooltip, not a lesson. It adds the two things the label leaves out:
+  /// that the right comes from the diagonal clock, and that it is only there
+  /// to be used while that team is on move — when one team holds both moves
+  /// the other cannot sit whatever its time.
   String get hint => switch (this) {
     BughouseTimeStance.ahead =>
-      'We are up on the diagonal clock, so we can outwait them',
+      'We are up on the diagonal clock, so we can wait rather than move',
     BughouseTimeStance.level =>
       'Neither team is up on the clock: both have to move',
     BughouseTimeStance.behind =>
-      'They are up on the diagonal clock, so they can outwait us',
+      'They are up on the diagonal clock, so they can wait rather than move',
   };
 }
 

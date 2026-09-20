@@ -152,14 +152,14 @@ void main() {
       for (var i = 0; i < 30 && controller.scenarios.isEmpty; i++) {
         await tester.pump(const Duration(milliseconds: 20));
       }
-      expect(find.text('We’re up'), findsOneWidget);
+      expect(find.text('We may sit'), findsOneWidget);
       expect(find.text('Comparing… 1 of 3 ready'), findsOneWidget);
       for (var i = 0; i < 60 && controller.isComparing; i++) {
         await tester.pump(const Duration(milliseconds: 20));
       }
       await tester.pumpAndSettle();
       expect(find.text('Comparison complete'), findsOneWidget);
-      expect(find.text('Equal or we’re down'), findsOneWidget);
+      expect(find.text('Equal or they may sit'), findsOneWidget);
       expect(find.text('Forced to move on 1'), findsOneWidget);
       expect(find.text('Board 1: e4'), findsNWidgets(3));
       expect(

@@ -1195,14 +1195,14 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
 
   /// The rows of a scenario comparison, in the order they are run.
   ///
-  /// The engine's clock model is one bit, so "equal" and "we're down"
+  /// The engine's clock model is one bit, so "equal" and "they may sit"
   /// search identically and are reported as one row. The third row forces a
   /// move, which is the case those two cannot express.
   static const List<({String label, bool advantage, RequireMoveOn require})>
   _scenarioRuns = [
-    (label: 'We’re up', advantage: true, require: RequireMoveOn.none),
+    (label: 'We may sit', advantage: true, require: RequireMoveOn.none),
     (
-      label: 'Equal or we’re down',
+      label: 'Equal or they may sit',
       advantage: false,
       require: RequireMoveOn.none,
     ),
