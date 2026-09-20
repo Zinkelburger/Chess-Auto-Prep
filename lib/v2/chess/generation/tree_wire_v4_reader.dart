@@ -194,17 +194,18 @@ final class _Reader {
         ? Eval(ourTurn ? cp.toInt() : -cp.toInt())
         : const Eval(0);
     final children = json['children'];
-    if (json['terminal_value'] is num ||
-        children is! List ||
-        children.isEmpty) {
-      return _leaf(
-        json,
+    final terminal = json['terminal_value'];
+    if (terminal is num) {
+      return _terminal(
+        terminal.toDouble(),
         fen,
         evalForUs,
         ourTurn: ourTurn,
-        evaluated: cp is num,
-        depth: depth,
+        expanded: children is List && children.isNotEmpty,
       );
+    }
+    if (children is! List || children.isEmpty) {
+      return _leaf(fen, evalForUs, evaluated: cp is num, depth: depth);
     }
     final edges = _edges(children, depth);
     if (edges == null) return null;
@@ -215,25 +216,40 @@ final class _Reader {
   /// unevaluated node is where the build stopped, whatever depth it stopped
   /// at, so its value stays provisional.
   SearchNode _leaf(
-    Map<String, Object?> json,
+    Fen fen,
+    Eval evalForUs, {
+    required bool evaluated,
+    required int depth,
+  }) => evaluated && depth >= horizonPlies
+      ? HorizonNode(fen: fen, evalForUs: evalForUs)
+      : FrontierNode(fen: fen, evalForUs: evalForUs);
+
+  /// A node the file says the game ended at.
+  ///
+  /// A node that both ends the game and has moves after it states two
+  /// incompatible things, and no node here can hold both: a finished game
+  /// offers no moves, so the subtree would have to go, and the value the
+  /// file recorded would have to go with it if the moves stayed. The reader
+  /// names the node instead of choosing one of them for the user.
+  SearchNode? _terminal(
+    double value,
     Fen fen,
     Eval evalForUs, {
     required bool ourTurn,
-    required bool evaluated,
-    required int depth,
+    required bool expanded,
   }) {
-    final terminal = json['terminal_value'];
-    if (terminal is num) {
-      return TerminalNode(
-        fen: fen,
-        evalForUs: evalForUs,
-        kind: _terminalReason(terminal.toDouble(), fen),
-        ourTurn: ourTurn,
+    if (expanded) {
+      _fail(
+        'the node at ${fen.value} both ends the game and has moves after it',
       );
+      return null;
     }
-    return evaluated && depth >= horizonPlies
-        ? HorizonNode(fen: fen, evalForUs: evalForUs)
-        : FrontierNode(fen: fen, evalForUs: evalForUs);
+    return TerminalNode(
+      fen: fen,
+      evalForUs: evalForUs,
+      kind: _terminalReason(value, fen),
+      ourTurn: ourTurn,
+    );
   }
 
   SearchNode _branch(

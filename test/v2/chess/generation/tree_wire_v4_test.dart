@@ -21,6 +21,9 @@ const _kingAndPawn = '4k3/8/8/8/8/8/4P3/4K3 w - - 0 1';
 /// below it ends the game and every pawn move does not.
 const _almostFifty = '4k3/8/8/8/8/8/4P3/4K3 w - - 99 60';
 
+const _start = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+const _afterE4 = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
+
 const _foolsMate =
     'rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3';
 
@@ -62,7 +65,7 @@ const _oneNode = <String, Object?>{
   'id': 1,
   'depth': 0,
   'history_aware': true,
-  'fen': 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+  'fen': _start,
   'is_white_to_move': true,
   'engine_eval_cp': 20,
 };
@@ -288,6 +291,31 @@ void main() {
     final result = decodeTreeV4(_document(tree: {..._oneNode}..remove('fen')));
 
     expect((result as TreeMalformed).detail, contains('no FEN'));
+  });
+
+  test('a node that both ends the game and continues is malformed', () {
+    final result = decodeTreeV4(
+      _document(
+        tree: {
+          ..._oneNode,
+          'terminal_value': 0.5,
+          'children': [
+            {
+              ..._oneNode,
+              'id': 2,
+              'depth': 1,
+              'move_uci': 'e2e4',
+              'move_san': 'e4',
+              'fen': _afterE4,
+            },
+          ],
+        },
+      ),
+    );
+
+    expect(result, isA<TreeMalformed>());
+    expect((result as TreeMalformed).detail, contains('both ends the game'));
+    expect(result.detail, contains(_start), reason: 'which node it was');
   });
 
   test('a child that does not name its move is malformed', () {
