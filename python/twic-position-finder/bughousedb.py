@@ -118,6 +118,12 @@ def relabel_seats(conn: sqlite3.Connection) -> None:
 
     renamed = {"AC": "AB", "BD": "CD"}
     with conn:
+        # Claim it inside the transaction: two requests arriving together after
+        # a restart both pass the check above, and swapping twice would put the
+        # old letters back. The loser of the write lock sees the row and stops.
+        if not conn.execute(
+                "INSERT OR IGNORE INTO meta(key, value) VALUES('seats', 'AB/CD')").rowcount:
+            return
         # `team` is part of the pick key, so those rows are rewritten wholesale.
         picks = conn.execute("SELECT pos, clock, team, best, q, mate, pv FROM pick").fetchall()
         conn.execute("DELETE FROM pick")
@@ -129,7 +135,6 @@ def relabel_seats(conn: sqlite3.Connection) -> None:
         conn.executemany(
             "UPDATE move SET pv=? WHERE pos=? AND board=? AND uci=? AND clock=?",
             [(swap(m["pv"]), m["pos"], m["board"], m["uci"], m["clock"]) for m in moves])
-        conn.execute("INSERT INTO meta(key, value) VALUES('seats', 'AB/CD')")
 
 
 def db() -> Iterator[sqlite3.Connection]:
