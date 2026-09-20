@@ -18,6 +18,7 @@ final class ChapterLine {
   const ChapterLine({
     required this.tags,
     required this.tree,
+    required this.isWhole,
     required this.text,
     required this.trailer,
   });
@@ -29,6 +30,16 @@ final class ChapterLine {
   /// that is not a position. An unread game keeps [text] and is never merged,
   /// edited or generated again, so no edit elsewhere can write over it.
   final GameTree? tree;
+
+  /// Whether [tree] holds everything [text] holds.
+  ///
+  /// Reading stops a branch at the first thing it cannot play — `--`, `Z0`,
+  /// a move that is not legal, a move number a tokeniser misread — and keeps
+  /// what came before it. The moves it dropped are still in the file, so
+  /// generating the game again from [tree] would delete them. A game that was
+  /// not read whole is therefore written back as its own bytes and nothing
+  /// else, and an edit that would have to rewrite it is refused instead.
+  final bool isWhole;
 
   /// The game's source, with no trailing whitespace.
   final String text;
@@ -80,17 +91,23 @@ final class Chapter {
 
   final List<PgnIssue> issues;
 
-  /// [line]'s moves when it is one of the games merged into [tree]; null
+  /// [line]'s own moves when it is one of the games merged into [tree]; null
   /// when it starts somewhere else or could not be read at all.
-  GameTree? mergedTree(ChapterLine line) {
+  GameTree? treeInChapter(ChapterLine line) {
     final lineTree = line.tree;
     return lineTree != null && lineTree.rootFen == tree.rootFen
         ? lineTree
         : null;
   }
 
+  /// [line]'s own moves when an edit may write the game again: it is merged
+  /// into [tree] and reading it lost nothing. Null for a game that has to
+  /// keep its bytes, which an edit refuses rather than truncates.
+  GameTree? writableTree(ChapterLine line) =>
+      line.isWhole ? treeInChapter(line) : null;
+
   /// Whether [line] is one of the games merged into [tree].
-  bool isInTree(ChapterLine line) => mergedTree(line) != null;
+  bool isInTree(ChapterLine line) => treeInChapter(line) != null;
 
   /// Games merged into [tree].
   int get gameCount => lines.where(isInTree).length;
@@ -115,6 +132,7 @@ Chapter parseChapter({required String name, required String text}) {
       ChapterLine(
         tags: readTags(game.text),
         tree: read.tree,
+        isWhole: read.issues.isEmpty,
         text: game.text,
         trailer: game.trailer,
       ),
@@ -152,6 +170,7 @@ Chapter withLines(
 ChapterLine rewritten(ChapterLine line, GameTree tree) => ChapterLine(
   tags: line.tags,
   tree: tree,
+  isWhole: line.isWhole,
   text: writeGameText(line.tags, tree),
   trailer: line.trailer,
 );

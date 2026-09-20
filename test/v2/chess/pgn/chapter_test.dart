@@ -75,8 +75,10 @@ void main() {
     });
 
     test('still has them after an edit writes the game again', () {
-      final edited = setComment(notes, at: NodePath.of([0]), text: 'Mine');
-      expect(writeChapter(edited), contains('d5 2. c4 *'));
+      final edited =
+          setComment(notes, at: NodePath.of([0]), text: 'Mine')
+              as CommentWritten;
+      expect(writeChapter(edited.chapter), contains('d5 2. c4 *'));
     });
   });
 

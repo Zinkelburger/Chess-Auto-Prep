@@ -71,10 +71,18 @@ final class DocumentSession extends ChangeNotifier {
   Chapter? _chapter;
   ChapterRef? _source;
   NodePath _cursor = const NodePath.root();
+  edits.GameNotWhole? _refused;
   int _opens = 0;
   bool _disposed = false;
 
   Chapter? get chapter => _chapter;
+
+  /// Why the last edit did not happen, or null when it did.
+  ///
+  /// A game reading could not finish keeps its own bytes and is never
+  /// generated again, so an edit that would have to write it is refused. The
+  /// next edit, and opening another document, clears this.
+  edits.GameNotWhole? get refusedEdit => _refused;
 
   /// The file the chapter was read from.
   ChapterRef? get source => _source;
@@ -147,6 +155,7 @@ final class DocumentSession extends ChangeNotifier {
     _chapter = null;
     _source = null;
     _cursor = const NodePath.root();
+    _refused = null;
     _saver.closed();
     notifyListeners();
   }
@@ -182,6 +191,7 @@ final class DocumentSession extends ChangeNotifier {
       case edits.MoveIllegal():
         return;
       case edits.MoveAdded(chapter: final edited, :final path):
+        _refused = null;
         _cursor = path;
         if (!identical(edited, chapter)) _replace(edited);
         notifyListeners();
@@ -193,12 +203,28 @@ final class DocumentSession extends ChangeNotifier {
   /// cursor's, so words typed under one move cannot land on another when the
   /// cursor moves first. Text that would leave the file as it is changes
   /// nothing.
+  ///
+  /// A game reading could not finish cannot take the comment, and then
+  /// nothing is written and [refusedEdit] says so.
   void setComment(NodePath at, String? text) {
     final chapter = _chapter;
     if (chapter == null) return;
-    final edited = edits.setComment(chapter, at: at, text: text);
-    if (identical(edited, chapter)) return;
-    _replace(edited);
+    final hadRefusal = _refused != null;
+    switch (edits.setComment(chapter, at: at, text: text)) {
+      case edits.GameNotWhole():
+        log.w(
+          'comment ${_source?.path}',
+          'the game holding that move was not read whole',
+        );
+        _refused = const edits.GameNotWhole();
+      case edits.CommentWritten(chapter: final edited):
+        _refused = null;
+        if (identical(edited, chapter)) {
+          if (!hadRefusal) return;
+        } else {
+          _replace(edited);
+        }
+    }
     notifyListeners();
   }
 
@@ -246,6 +272,7 @@ final class DocumentSession extends ChangeNotifier {
     _chapter = chapter;
     _source = ref;
     _cursor = const NodePath.root();
+    _refused = null;
     _saver.opened(ref, revision);
     notifyListeners();
   }

@@ -1,6 +1,7 @@
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
 
+import '../chess/pgn/chapter.dart';
 import '../storage/chapter_files.dart';
 import '../ui/theme.dart';
 import 'document_saver.dart';
@@ -101,14 +102,6 @@ class _ChapterHeaderState extends State<ChapterHeader> {
             child: Text('Open a chapter', style: text.bodySmall),
           );
         }
-        final side = chapter.side == Side.white ? 'White' : 'Black';
-        final lines = '${chapter.gameCount} lines';
-        final skipped = chapter.skippedGames == 0
-            ? ''
-            : ', ${chapter.skippedGames} from another position';
-        final unreadable = chapter.unreadableGames == 0
-            ? ''
-            : ', ${chapter.unreadableGames} could not be read';
         return Padding(
           padding: const EdgeInsets.all(Space.m),
           child: Column(
@@ -116,7 +109,7 @@ class _ChapterHeaderState extends State<ChapterHeader> {
             children: [
               Text(chapter.name, style: text.titleMedium),
               const SizedBox(height: Space.xs),
-              Text('$side · $lines$skipped$unreadable', style: text.bodySmall),
+              Text(_summary(chapter), style: text.bodySmall),
               const SizedBox(height: Space.xs),
               Row(
                 children: [
@@ -126,6 +119,11 @@ class _ChapterHeaderState extends State<ChapterHeader> {
               ),
               if (widget.saver.state is SaveConflict)
                 _ConflictActions(onReload: _reload, onSaveCopy: _saveCopy),
+              if (widget.session.refusedEdit != null)
+                const _Notice(
+                  'That line could not be read in full, so it is left as it '
+                  'is. Edit it in the old app.',
+                ),
               if (_notice case final notice?) _Notice(notice),
             ],
           ),
@@ -133,6 +131,21 @@ class _ChapterHeaderState extends State<ChapterHeader> {
       },
     );
   }
+}
+
+/// Whose chapter it is and how many games of the file it holds: the games
+/// merged into the tree, then the ones left out and why, because a chapter
+/// that shows fewer lines than the file has must say so.
+String _summary(Chapter chapter) {
+  final side = chapter.side == Side.white ? 'White' : 'Black';
+  final lines = '${chapter.gameCount} lines';
+  final skipped = chapter.skippedGames == 0
+      ? ''
+      : ', ${chapter.skippedGames} from another position';
+  final unreadable = chapter.unreadableGames == 0
+      ? ''
+      : ', ${chapter.unreadableGames} could not be read';
+  return '$side · $lines$skipped$unreadable';
 }
 
 /// The last edit, taken back. Disabled when there is nothing to take back,
