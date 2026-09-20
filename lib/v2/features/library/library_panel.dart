@@ -141,7 +141,7 @@ class _Toolbar extends StatelessWidget {
               ),
               TextButton.icon(
                 onPressed: busy ? null : onCreate,
-                icon: const Icon(Icons.add, size: 16),
+                icon: const Icon(Icons.add, size: IconSize.menu),
                 label: const Text('New repertoire'),
               ),
             ],
@@ -170,11 +170,11 @@ class _SearchField extends StatelessWidget {
         decoration: InputDecoration(
           isDense: true,
           hintText: 'Search repertoires',
-          prefixIcon: const Icon(Icons.search, size: 18),
+          prefixIcon: const Icon(Icons.search, size: IconSize.action),
           suffixIcon: value.text.isEmpty
               ? null
               : IconButton(
-                  icon: const Icon(Icons.close, size: 16),
+                  icon: const Icon(Icons.close, size: IconSize.menu),
                   tooltip: 'Clear search',
                   onPressed: () {
                     controller.clear();

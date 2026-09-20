@@ -32,46 +32,68 @@ class WorkspaceView extends StatelessWidget {
 
   void _undo() => unawaited(session.undo());
 
+  Map<ShortcutActivator, VoidCallback> get _bindings => {
+    const SingleActivator(LogicalKeyboardKey.arrowLeft): session.back,
+    const SingleActivator(LogicalKeyboardKey.arrowRight): session.forward,
+    const SingleActivator(LogicalKeyboardKey.arrowUp): session.toStart,
+    const SingleActivator(LogicalKeyboardKey.arrowDown): session.toEnd,
+    const SingleActivator(LogicalKeyboardKey.keyZ, control: true): _undo,
+    const SingleActivator(LogicalKeyboardKey.keyZ, meta: true): _undo,
+  };
+
+  /// A key the workspace answers to, unless the user is typing: in a text
+  /// field the arrows move the caret and Ctrl+Z takes back a word, and those
+  /// keys are the field's. Ignoring the event leaves it to the field, which
+  /// is why this is not [CallbackShortcuts]: that reports every bound key as
+  /// handled and the field would never see it.
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    if (_typing) return KeyEventResult.ignored;
+    for (final MapEntry(key: activator, value: run) in _bindings.entries) {
+      if (activator.accepts(event, HardwareKeyboard.instance)) {
+        run();
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
+  }
+
+  bool get _typing {
+    final focused = FocusManager.instance.primaryFocus?.context;
+    return focused != null &&
+        focused.findAncestorWidgetOfExactType<EditableText>() != null;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.arrowLeft): session.back,
-        const SingleActivator(LogicalKeyboardKey.arrowRight): session.forward,
-        const SingleActivator(LogicalKeyboardKey.arrowUp): session.toStart,
-        const SingleActivator(LogicalKeyboardKey.arrowDown): session.toEnd,
-        const SingleActivator(LogicalKeyboardKey.keyZ, control: true): _undo,
-        const SingleActivator(LogicalKeyboardKey.keyZ, meta: true): _undo,
-      },
-      child: Focus(
-        autofocus: true,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(Space.l),
-                child: _BoardWithBar(session: session, analysis: analysis),
-              ),
+    return Focus(
+      autofocus: true,
+      onKeyEvent: _onKey,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(Space.l),
+              child: _BoardWithBar(session: session, analysis: analysis),
             ),
-            const VerticalDivider(width: 1),
-            SizedBox(
-              width: 360,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  ChapterHeader(session: session, saver: saver),
-                  const Divider(height: 1),
-                  EnginePane(analysis: analysis),
-                  const Divider(height: 1),
-                  Expanded(child: MoveTreeView(session: session)),
-                  const Divider(height: 1),
-                  CommentPanel(session: session),
-                ],
-              ),
+          ),
+          const VerticalDivider(width: 1),
+          SizedBox(
+            width: 360,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ChapterHeader(session: session, saver: saver),
+                const Divider(height: 1),
+                EnginePane(analysis: analysis),
+                const Divider(height: 1),
+                Expanded(child: MoveTreeView(session: session)),
+                const Divider(height: 1),
+                CommentPanel(session: session),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

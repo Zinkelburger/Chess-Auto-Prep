@@ -15,6 +15,16 @@ const libraryPanelWidth = 300.0;
 /// long chapter name, narrow enough not to fill the window.
 const nameDialogWidth = 360.0;
 
+/// How big an icon is. Icons sit with the text they label, so they follow
+/// the type scale rather than Material's default 24.
+abstract final class IconSize {
+  /// In a button beside body text.
+  static const action = 18.0;
+
+  /// The tick in a menu row, and the gap held for it where there is none.
+  static const menu = 16.0;
+}
+
 /// How wide the evaluation bar beside the board is. A token because the
 /// workspace lays the board out next to it, so the bar can be rewritten
 /// without the layout having to know the widget.
@@ -92,6 +102,14 @@ final class BoardTheme extends ThemeExtension<BoardTheme> {
       promotionChoice: Color.lerp(promotionChoice, other.promotionChoice, t)!,
     );
   }
+
+  /// The file letters and rank digits, sized to a board whose squares are
+  /// [side] wide: a share of the square, so they hold their proportion
+  /// whatever the board is scaled to.
+  TextStyle coordinateStyle(double side) =>
+      TextStyle(color: coordinate, fontSize: side * _coordinateShare);
+
+  static const _coordinateShare = 0.18;
 
   static BoardTheme of(BuildContext context) =>
       Theme.of(context).extension<BoardTheme>()!;

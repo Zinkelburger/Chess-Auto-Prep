@@ -138,7 +138,10 @@ class _RepertoireRow extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(expanded ? Icons.expand_more : Icons.chevron_right, size: 18),
+            Icon(
+              expanded ? Icons.expand_more : Icons.chevron_right,
+              size: IconSize.action,
+            ),
             const SizedBox(width: Space.xs),
             Expanded(
               child: Column(
@@ -306,7 +309,7 @@ class _RowActions extends StatelessWidget {
     return MenuAnchor(
       menuChildren: children,
       builder: (context, controller, _) => IconButton(
-        icon: const Icon(Icons.more_horiz, size: 18),
+        icon: const Icon(Icons.more_horiz, size: IconSize.action),
         tooltip: 'Actions',
         onPressed: controller.isOpen ? controller.close : controller.open,
       ),

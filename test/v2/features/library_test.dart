@@ -239,6 +239,25 @@ void main() {
     expect(fixture.textAt('/repertoires/benko/Mainline.pgn'), contains('d4'));
   });
 
+  test('a flush waits for the rename and the edit behind it', () async {
+    final open = ref('benko', 'Main');
+    fixture = await openLibrary([benko], open: open);
+    fixture.store.hold = true;
+    final renamed = fixture.library.renameChapter(open, 'Mainline');
+    await pumpEventQueue();
+    fixture.session.playMove('d2d4');
+    var flushed = false;
+    final waiting = fixture.saver.flush().then((_) => flushed = true);
+    await pumpEventQueue();
+    // Closing the window here must not cut the edit off.
+    expect(flushed, isFalse);
+    fixture.store.hold = false;
+    fixture.store.releaseAll();
+    await renamed;
+    await waiting;
+    expect(fixture.textAt('/repertoires/benko/Mainline.pgn'), contains('d4'));
+  });
+
   test('deleting the open chapter empties the workspace', () async {
     final open = ref('benko', 'Main');
     fixture = await openLibrary([benko], open: open);

@@ -74,11 +74,17 @@ final class DocumentSaver extends ChangeNotifier {
   SaveState _state = const Saved();
   String? _pending;
   bool _writing = false;
+
+  /// The write going out and everything that collapses behind it, so the
+  /// app can wait for the file to hold the draft before it closes.
+  Future<void>? _inFlight;
   final _undo = <store.Receipt>[];
   int _opens = 0;
   bool _disposed = false;
+
+  /// The file is being renamed, moved or deleted, so nothing is written to it
+  /// until that is done.
   bool _held = false;
-  Future<void>? _running;
 
   SaveState get state => _state;
 
@@ -104,30 +110,43 @@ final class DocumentSaver extends ChangeNotifier {
     _start();
   }
 
+  /// Waits until the draft is on disk: the write in flight, the one that
+  /// collapsed behind it, and a hold that is keeping both waiting. Closing
+  /// the window waits for this, so an edit made a moment before it closed is
+  /// not cut off.
+  Future<void> flush() => _inFlight ?? Future<void>.value();
+
   /// Runs [action] against the revision the file has now, with the file held
-  /// still: a save on its way out finishes first, and a save asked for while
-  /// [action] runs waits behind it and goes to wherever the document ends up.
-  /// Answers null when there is nothing open or another hold is running.
+  /// still: the write on its way out finishes first, and a save asked for
+  /// while [action] runs waits behind it and goes to wherever the document
+  /// ends up. Answers null when there is nothing open or another hold is
+  /// running.
   ///
   /// This is how a rename, move or delete of the open chapter is serialised
   /// with autosave. The alternative — letting the save go and renaming
   /// afterwards — would leave the rename racing an answer it cannot see, and
   /// a lost race means the user is told their file changed on disk when the
   /// only thing that wrote it was this app.
-  Future<T?> holdStill<T>(Future<T> Function(Revision revision) action) async {
-    if (_held || _disposed) return null;
+  Future<T?> holdStill<T>(Future<T> Function(Revision revision) action) {
+    if (_held || _disposed) return Future<T?>.value();
+    final held = _hold(action);
+    // The hold and the draft waiting behind it are now what the draft is
+    // waiting on, so a flush waits for the whole of it rather than for a
+    // write that finished before the hold began.
+    _inFlight = held;
+    return held;
+  }
+
+  Future<T?> _hold<T>(Future<T> Function(Revision revision) action) async {
     _held = true;
     try {
-      // At most twice: nothing new starts while the file is held.
-      while (_writing) {
-        await _running;
-      }
+      await flush();
       final target = _target;
       if (_disposed || target == null) return null;
       return await action(target.revision);
     } finally {
       _held = false;
-      _start();
+      await _write();
     }
   }
 
@@ -150,9 +169,11 @@ final class DocumentSaver extends ChangeNotifier {
     _set(const Saved());
   }
 
+  /// Puts the draft on its way, unless a write is already going — it takes
+  /// the newest text when it lands — or the file is held still.
   void _start() {
-    if (_disposed) return;
-    _running = _write();
+    if (_held || _writing || _disposed) return;
+    _inFlight = _write();
   }
 
   Future<void> _write() async {
@@ -171,13 +192,27 @@ final class DocumentSaver extends ChangeNotifier {
     _writing = false;
     if (_disposed) return;
     if (ticket != _opens) {
-      // The answer is about a document nobody has open now; a newer one may
+      // The answer is about an open nobody is on any more; a newer one may
       // have been waiting behind it.
-      _start();
+      _catchUp(result, target.ref);
+      await _write();
       return;
     }
     _adopt(result, target.ref);
-    if (_state is! SaveConflict) _start();
+    if (_state is! SaveConflict) await _write();
+  }
+
+  /// A write that landed after its document was opened again. When it wrote
+  /// the file that is open now, the revision it committed is the newest
+  /// there is and the next save must expect it; without that the document
+  /// would conflict with this app's own write. Its receipt belongs to the
+  /// open that asked for it, so it is not history here.
+  void _catchUp(store.SaveResult result, DocumentRef ref) {
+    final target = _target;
+    if (target == null || target.ref != ref) return;
+    if (result case store.Saved(:final receipt)) {
+      _target = (ref: ref, revision: receipt.committed);
+    }
   }
 
   void _adopt(store.SaveResult result, DocumentRef ref) {
@@ -190,7 +225,7 @@ final class DocumentSaver extends ChangeNotifier {
         // The store logs what it could not do; a conflict is not a failure
         // there, so it is named here.
         log.w('save ${ref.path}', 'the file changed on disk');
-        _set(const SaveConflict());
+        _conflicted();
       case store.IoFailure(:final detail):
         _set(SaveFailed(detail));
     }
@@ -217,6 +252,7 @@ final class DocumentSaver extends ChangeNotifier {
       return const UndoRefused();
     }
     final entry = _undo.last;
+    final resting = _state;
     _writing = true;
     _set(const Saving());
     final ticket = _opens;
@@ -227,8 +263,21 @@ final class DocumentSaver extends ChangeNotifier {
     );
     _writing = false;
     if (_disposed || ticket != _opens) return const UndoRefused();
+    if (_outOfDate(result, target)) {
+      _set(resting);
+      return const UndoRefused();
+    }
     return _undone(result, entry, target.ref);
   }
+
+  /// Whether the store refused because the entry names a revision the
+  /// document has left behind rather than because the file changed: what is
+  /// on disk is the revision this saver already holds.
+  ///
+  /// Only this entry is out of reach. The draft is still the file's, so the
+  /// document is not conflicted and saving goes on.
+  bool _outOfDate(store.SaveResult result, _Target target) =>
+      result is store.Conflict && result.current == target.revision;
 
   UndoResult _undone(
     store.SaveResult result,
@@ -244,7 +293,7 @@ final class DocumentSaver extends ChangeNotifier {
         return Restored(entry.before);
       case store.Conflict():
         log.w('undo ${ref.path}', 'the file changed on disk');
-        _set(const SaveConflict());
+        _conflicted();
         return const UndoRefused();
       case store.IoFailure(:final detail):
         _set(SaveFailed(detail));
@@ -266,6 +315,14 @@ final class DocumentSaver extends ChangeNotifier {
       before: previous.before,
       beforeRevision: previous.beforeRevision,
     );
+  }
+
+  /// Nothing is written while the file is conflicted, so a draft that was
+  /// waiting its turn is waiting for nothing. Remembering it would refuse
+  /// every undo for the life of the document.
+  void _conflicted() {
+    _pending = null;
+    _set(const SaveConflict());
   }
 
   void _set(SaveState state) {

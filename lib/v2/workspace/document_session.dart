@@ -196,23 +196,29 @@ final class DocumentSession extends ChangeNotifier {
   }
 
   /// Puts the file back as it was before the last edit and shows what came
-  /// back. A refused undo leaves the document and the history alone.
-  Future<void> undo() async {
+  /// back. A refused undo leaves the document and the history alone, and
+  /// says so: nothing happening is something the screen has to tell.
+  Future<UndoResult> undo() async {
     final ref = _source;
-    if (ref == null) return;
+    if (ref == null) return const UndoRefused();
     final ticket = _opens;
     final result = await _saver.undo();
-    if (_disposed || ticket != _opens) return;
+    if (_disposed || ticket != _opens) return const UndoRefused();
     if (result case Restored(:final text)) {
       final restored = parseChapter(name: ref.name, text: text);
       _chapter = restored;
       _cursor = _within(restored.tree, _cursor);
       notifyListeners();
     }
+    return result;
   }
 
   /// Writes the draft beside the original as `<name>.pgn`, replacing
   /// nothing. The session stays on the document it had open.
+  ///
+  /// A copy changes nothing here, so nothing about it goes stale: whatever
+  /// the user opened while it was being written, the answer is about the
+  /// file they asked for and they are told it.
   Future<CopyResult> saveCopy(String name) async {
     final ref = _source;
     final chapter = _chapter;
@@ -221,9 +227,7 @@ final class DocumentSession extends ChangeNotifier {
     }
     final file = p.extension(name) == '.pgn' ? name : '$name.pgn';
     final target = DocumentRef(p.join(p.dirname(ref.path), file));
-    final ticket = _opens;
     final created = await _store.create(target, writeChapter(chapter));
-    if (_disposed || ticket != _opens) return CopySaved(file);
     return switch (created) {
       store.Created() => CopySaved(file),
       store.Collision() => const CopyNameTaken(),
