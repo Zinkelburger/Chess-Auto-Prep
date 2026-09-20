@@ -165,6 +165,43 @@ void main() {
     });
   });
 
+  test('a node the build never evaluated is written without a score', () {
+    // A paused build, the way one is left behind: the reply is attached and
+    // the engine has not looked at it yet.
+    final decoded = decodedTree(
+      wireDocument(
+        tree: <String, Object?>{
+          ...oneNode,
+          'children': [
+            <String, Object?>{
+              'id': 2,
+              'depth': 1,
+              'move_uci': 'e2e4',
+              'move_san': 'e4',
+              'history_aware': true,
+              'fen': afterE4,
+              'is_white_to_move': false,
+            },
+          ],
+        },
+      ),
+    );
+
+    final root =
+        _asJson(
+              encodeTreeV4(decoded.root, decoded.config, complete: false),
+            )['tree']!
+            as Map<String, Object?>;
+    final reply = (root['children']! as List).single as Map<String, Object?>;
+
+    expect(root['engine_eval_cp'], 20, reason: 'the scored node keeps its own');
+    expect(
+      reply.containsKey('engine_eval_cp'),
+      isFalse,
+      reason: 'a written zero is a score no engine gave',
+    );
+  });
+
   test('a document without the resume settings leaves them out', () async {
     const config = SearchConfig(side: Side.white, horizonPlies: 2);
     final tree = await _treeFrom(_kingAndPawn, config: config);

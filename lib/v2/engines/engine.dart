@@ -10,10 +10,21 @@ abstract interface class Engine {
   /// the lines are from the side to move, as UCI gives them.
   Search analyse(Fen fen, {required int multiPv});
 
-  /// Completes when the process has gone, after [quit] or on its own.
-  Future<void> get exited;
+  /// Completes when the process has gone, after [quit] or on its own, with
+  /// why it went.
+  Future<EngineExit> get exited;
 
   Future<void> quit();
+}
+
+/// How an engine's process ended, which is what decides whether starting
+/// another one is worth anything.
+enum EngineExit {
+  /// It quit: because we asked it to, or because it fell over.
+  ended,
+
+  /// It stopped answering and was killed. Another engine may well work.
+  unresponsive,
 }
 
 /// One search. [lines] ends when the search does, so a line from an

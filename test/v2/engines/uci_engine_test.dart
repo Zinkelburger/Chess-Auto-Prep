@@ -165,6 +165,42 @@ void main() {
     });
   });
 
+  test('an engine that never answers stop is killed, not waited on', () {
+    fakeAsync((async) {
+      final process = FakeProcess();
+      final starting = UciEngine.start(process);
+      async.flushMicrotasks();
+      process.answerHandshake();
+      async.flushMicrotasks();
+      late UciEngine engine;
+      unawaited(starting.then((e) => engine = e));
+      async.flushMicrotasks();
+
+      final first = engine.analyse(Fen.initial, multiPv: 1);
+      var firstDone = false;
+      first.lines.listen(null, onDone: () => firstDone = true);
+      async.flushMicrotasks();
+      final second = engine.analyse(after1e4, multiPv: 1);
+      var secondDone = false;
+      second.lines.listen(null, onDone: () => secondDone = true);
+      async.flushMicrotasks();
+      expect(process.sent.last, 'stop');
+
+      // The engine says nothing at all: no `bestmove`, no exit.
+      async.elapse(const Duration(seconds: 30));
+      async.flushMicrotasks();
+
+      expect(process.killed, isTrue, reason: 'the pane cannot wait for ever');
+      expect(firstDone, isTrue);
+      expect(secondDone, isTrue);
+      expect(
+        process.sent,
+        isNot(contains('position fen ${after1e4.value}')),
+        reason: 'nothing is asked of an engine that has gone',
+      );
+    });
+  });
+
   test('an engine that exits mid-handshake fails to start', () async {
     final process = FakeProcess();
     final starting = UciEngine.start(process);
