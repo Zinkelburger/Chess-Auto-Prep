@@ -69,7 +69,7 @@ void main() {
     expect(fixture.onDisk, contains('{two [%eval 0.30]}'));
   });
 
-  test('a save landing after another chapter is open is discarded', () async {
+  test('a draft on its way out lands before another chapter opens', () async {
     final other = chapterRef('KID', 'Other');
     fixture.store.documents[other] = Opened(
       whiteChapter,
@@ -78,37 +78,55 @@ void main() {
     fixture.store.hold = true;
     edit('one');
     final opening = session.open(other);
-    fixture.store.releaseLast(); // the open answers first
     await pumpEventQueue();
+    expect(session.source, fixture.ref, reason: 'it waits for the draft');
+    fixture.store.releaseAll(); // the save for the chapter being left
+    await pumpEventQueue();
+    fixture.store.releaseAll(); // then the read of the new one
     expect(await opening, isA<DocumentOpened>());
-    fixture.store.releaseAll(); // the save for the old chapter lands now
-    await pumpEventQueue();
-    expect(saver.canUndo, isFalse, reason: 'its receipt belongs to nothing');
+    expect(fixture.onDisk, contains('{one [%eval 0.30]}'));
+    expect(
+      saver.canUndo,
+      isFalse,
+      reason: 'the receipt belongs to the chapter that was left',
+    );
     expect(saver.state, isA<Saved>());
   });
 
-  test(
-    'a save landing after the same chapter is opened again is kept',
-    () async {
-      fixture.store.hold = true;
-      edit('one');
-      final reopening = session.reloadFromDisk(); // reads what is there now
-      fixture.store.releaseLast(); // the read answers first
-      await pumpEventQueue();
-      expect(await reopening, isA<DocumentOpened>());
-      fixture.store.releaseAll(); // the save for the same file lands now
-      await pumpEventQueue();
-      fixture.store.hold = false;
-      edit('two');
-      await pumpEventQueue();
-      expect(
-        saver.state,
-        isA<Saved>(),
-        reason: 'the document knows the revision its own write committed',
-      );
-      expect(fixture.onDisk, contains('{two [%eval 0.30]}'));
-    },
-  );
+  test('reloading takes the text the draft going out wrote', () async {
+    fixture.store.hold = true;
+    edit('one');
+    final reopening = session.reloadFromDisk();
+    await pumpEventQueue();
+    fixture.store.releaseAll(); // the save lands first
+    await pumpEventQueue();
+    fixture.store.releaseAll(); // then the read, which sees it
+    expect(await reopening, isA<DocumentOpened>());
+    expect(session.commentAt(sicilian), 'one [%eval 0.30]');
+    fixture.store.hold = false;
+    edit('two');
+    await pumpEventQueue();
+    expect(
+      saver.state,
+      isA<Saved>(),
+      reason: 'the document knows the revision its own write committed',
+    );
+    expect(fixture.onDisk, contains('{two [%eval 0.30]}'));
+  });
+
+  test('a hold whose action throws does not poison the saver', () async {
+    await expectLater(
+      saver.holdStill((_) => Future<void>.error(StateError('no'))),
+      throwsStateError,
+    );
+    // The failure was the caller's, once. Flushing and holding again must not
+    // hand it out for the rest of the document's life.
+    await saver.flush();
+    expect(await saver.holdStill((_) async => 'ok'), 'ok');
+    edit('one');
+    await saver.flush();
+    expect(fixture.onDisk, contains('{one [%eval 0.30]}'));
+  });
 
   test('a conflict keeps no draft waiting behind it', () async {
     edit('A');
@@ -223,6 +241,7 @@ void main() {
     fixture.store.hold = true;
     final copying = session.saveCopy('Main draft');
     final opening = session.open(other);
+    await pumpEventQueue();
     fixture.store.releaseAll();
     await opening;
     expect(await copying, isA<CopyNameTaken>());

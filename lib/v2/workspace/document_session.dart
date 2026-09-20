@@ -99,6 +99,13 @@ final class DocumentSession extends ChangeNotifier {
   /// later save is checked against.
   Future<OpenResult> open(ChapterRef ref) async {
     final ticket = ++_opens;
+    // A rename, move or delete of the document open now may still be running,
+    // with a draft waiting behind it. That draft belongs to the file it was
+    // typed into, so it goes out first — before this document takes the saver
+    // over, and before the read below, which must not answer with text older
+    // than the write still on its way.
+    await _saver.flush();
+    if (_disposed || ticket != _opens) return const OpenOvertaken();
     final read = await _store.open(ref);
     if (_disposed || ticket != _opens) return const OpenOvertaken();
     switch (read) {
