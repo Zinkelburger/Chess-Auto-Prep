@@ -214,7 +214,7 @@ final class _Writer {
   /// scored node as one it need never look at again — so a resumed build
   /// would carry on from an evaluation no engine ever gave.
   int? _sideToMoveCp(SearchNode node) {
-    if (node is FrontierNode && !node.evaluated) return null;
+    if (!node.evaluated) return null;
     return node.fen.whiteToMove == (ourSide == Side.white)
         ? node.evalForUs.cp
         : -node.evalForUs.cp;

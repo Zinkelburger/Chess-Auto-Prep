@@ -159,10 +159,11 @@ final class _Reader {
     final ourTurn =
         (white is bool ? white : fen.whiteToMove) == (ourSide == Side.white);
     final cp = json['engine_eval_cp'];
-    // The file reports from the side to move; the search works from ours.
+    // The file reports from the side to move; the search works from ours. A
+    // node with no score at all keeps none, so it goes back out unscored.
     final evalForUs = cp is num
         ? Eval(ourTurn ? cp.toInt() : -cp.toInt())
-        : const Eval(0);
+        : null;
     final children = json['children'];
     final terminal = json['terminal_value'];
     if (terminal is num) {
@@ -175,7 +176,7 @@ final class _Reader {
       );
     }
     if (children is! List || children.isEmpty) {
-      return _leaf(fen, evalForUs, evaluated: cp is num, depth: depth);
+      return _leaf(fen, evalForUs, depth: depth);
     }
     final edges = _edges(children, depth);
     if (edges == null) return null;
@@ -186,17 +187,10 @@ final class _Reader {
   /// unevaluated node is where the build stopped, whatever depth it stopped
   /// at, so its value stays provisional and it stays unscored, which is how
   /// it is written out again.
-  SearchNode _leaf(
-    Fen fen,
-    Eval evalForUs, {
-    required bool evaluated,
-    required int depth,
-  }) {
-    if (!evaluated) return FrontierNode.unevaluated(fen: fen);
-    return depth >= horizonPlies
-        ? HorizonNode(fen: fen, evalForUs: evalForUs)
-        : FrontierNode(fen: fen, evalForUs: evalForUs);
-  }
+  SearchNode _leaf(Fen fen, Eval? evalForUs, {required int depth}) =>
+      evalForUs != null && depth >= horizonPlies
+      ? HorizonNode(fen: fen, evalForUs: evalForUs)
+      : FrontierNode(fen: fen, evalForUs: evalForUs);
 
   /// A node the file says the game ended at.
   ///
@@ -213,7 +207,7 @@ final class _Reader {
   SearchNode? _terminal(
     double value,
     Fen fen,
-    Eval evalForUs, {
+    Eval? evalForUs, {
     required bool ourTurn,
     required bool expanded,
   }) {
@@ -248,7 +242,7 @@ final class _Reader {
 
   SearchNode? _branch(
     Fen fen,
-    Eval evalForUs,
+    Eval? evalForUs,
     List<_Edge> edges, {
     required bool ourTurn,
   }) {
