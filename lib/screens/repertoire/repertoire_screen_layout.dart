@@ -234,6 +234,11 @@ mixin _RepertoireLayout
               boardFlipped: _boardFlipped,
               onMove: _handleMove,
               annotations: _auditAnnotationsAt(_controller.board.fen),
+              // An ephemeral finding puts a foreign position on the board;
+              // the cursor's trail belongs to a different one.
+              recentMoveSquares: _ephemeralPreview != null
+                  ? const {}
+                  : _controller.board.recentMoveTrail(),
             ),
           ),
         ),

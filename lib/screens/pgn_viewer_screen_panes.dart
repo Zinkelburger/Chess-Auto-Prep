@@ -125,15 +125,14 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
                             orig: solitaire.hintSquare!,
                             brush: AnnotationBrush.yellow,
                           ),
-                        // The explorer row under the pointer, drawn where it goes.
-                        if (_explorerHoverMove case final hover?
-                            when hover.uci.length >= 4)
-                          BoardAnnotation(
-                            orig: hover.uci.substring(0, 2),
-                            dest: hover.uci.substring(2, 4),
-                            brush: AnnotationBrush.green,
-                          ),
                       ],
+                      // The explorer row under the pointer, tinted on the
+                      // squares it would use — the same mark a played move
+                      // leaves, so hovering reads as a rehearsal of it.
+                      highlightedSquares: switch (_explorerHoverMove) {
+                        final hover? => uciHighlightSquares(hover.uci),
+                        null => const {},
+                      },
                       onMove: (move) => _handleBoardMove(move.san),
                       // In solitaire, moves are allowed while guessing and again
                       // once the game completes (free exploration of the annotated

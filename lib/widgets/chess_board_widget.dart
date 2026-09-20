@@ -29,8 +29,8 @@ class ChessBoardWidget extends StatefulWidget {
   /// Borderless square tints for hints and preview emphasis.
   final Set<String> highlightedSquares;
 
-  /// Additional legal destinations, e.g. bughouse drops. Empty squares use
-  /// dots and occupied squares use rings, just like normal move selection.
+  /// Additional legal destinations, e.g. bughouse drops. Tinted like the
+  /// destinations of a piece picked up on this board.
   final Set<String> legalMoveSquares;
 
   /// From/to squares of the most recent half-move (two, in the trainer), kept
@@ -160,10 +160,6 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
                     legalMoveSquares: {
                       ...widget.legalMoveSquares,
                       if (display.showLegalMoves) ..._legalMoveSquares,
-                    },
-                    occupiedSquares: {
-                      for (final (square, _) in widget.position.board.pieces)
-                        toAlgebraic(square),
                     },
                     recentMoveSquares: widget.recentMoveSquares,
                     flipped: widget.flipped,

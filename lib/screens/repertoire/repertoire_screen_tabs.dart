@@ -135,9 +135,7 @@ mixin _RepertoireTabContent
                 ),
               ),
       onPlayMove: _controller.board.playMove,
-      onHoverMove: (uci) => _boardPreview.setHoverArrow(
-        uci == null ? null : BoardAnnotation.arrowFromUci(uci),
-      ),
+      onHoverMove: _boardPreview.setHoverMove,
       onBuildChessDb: () => unawaited(
         _openLineBuildDialog(
           initialConfig: chessDbRepertoirePreset(
@@ -389,21 +387,18 @@ mixin _RepertoireTabContent
     };
   }
 
-  /// Echo the hovered explorer row on the board, the way Lichess arrows a
-  /// hovered explorer move. The API's UCI is standard (`e1g1` castling).
+  /// Tint the hovered explorer row's from/to squares on the board. The
+  /// API's UCI is standard (`e1g1` castling).
   void _onExplorerMoveHover(ExplorerMove? move) {
-    _boardPreview.setHoverArrow(
-      move == null ? null : BoardAnnotation.arrowFromUci(move.uci),
-    );
+    _boardPreview.setHoverMove(move?.uci);
   }
 
   /// Same for the repertoire tree, whose rows only know their SAN: resolve
   /// it against the board position (a tree row that is not legal there —
-  /// the tree can sit one transposition off — simply draws nothing).
+  /// the tree can sit one transposition off — simply tints nothing).
   void _onTreeMoveHover(String? san) {
-    final uci = san == null ? null : sanToUci(_controller.board.fen, san);
-    _boardPreview.setHoverArrow(
-      uci == null ? null : BoardAnnotation.arrowFromUci(uci),
+    _boardPreview.setHoverMove(
+      san == null ? null : sanToUci(_controller.board.fen, san),
     );
   }
 
