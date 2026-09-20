@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../chess/fen.dart';
+import '../diagnostics/log.dart';
 import '../engines/engine.dart';
 import '../engines/engine_line.dart';
 import '../engines/engine_supervisor.dart';
@@ -149,6 +150,7 @@ final class EngineAnalysis extends ChangeNotifier {
     if (_engine != engine) return; // we quit it ourselves
     _engine = null;
     _stopFollowing();
+    log.w('engine ${engine.name} exited on its own');
     _set(EngineFailed('${engine.name} stopped unexpectedly'));
   }
 

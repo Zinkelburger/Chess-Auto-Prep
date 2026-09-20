@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../chess/pgn/chapter.dart';
+import '../../diagnostics/log.dart';
 import '../../storage/chapter_files.dart';
 
 sealed class LibraryState {
@@ -58,6 +59,9 @@ final class Library extends ChangeNotifier {
     _set(const LibraryLoading());
     final listing = await _files.list();
     if (ticket != _refreshes) return;
+    if (listing case ChaptersUnreadable(:final detail)) {
+      log.w('list repertoires', detail);
+    }
     _set(switch (listing) {
       Chapters(:final refs) => LibraryReady(refs),
       ChaptersUnreadable(:final detail) => LibraryFailed(
@@ -69,15 +73,19 @@ final class Library extends ChangeNotifier {
   /// Reads and parses [ref]. Parsing is pure, so the caller may do what it
   /// likes with the chapter; this owner keeps no reference to it.
   Future<OpenResult> open(ChapterRef ref) async {
-    return switch (await _files.read(ref)) {
-      ChapterText(:final text) => Opened(
-        parseChapter(name: ref.name, text: text),
-      ),
-      ChapterAbsent() => OpenFailed('${ref.name} is no longer on disk'),
-      ChapterUnreadable(:final detail) => OpenFailed(
-        'Could not read ${ref.name}: $detail',
-      ),
-    };
+    switch (await _files.read(ref)) {
+      case ChapterText(:final text):
+        return Opened(parseChapter(name: ref.name, text: text));
+      case ChapterAbsent():
+        return _failed(ref, '${ref.name} is no longer on disk');
+      case ChapterUnreadable(:final detail):
+        return _failed(ref, 'Could not read ${ref.name}: $detail');
+    }
+  }
+
+  OpenFailed _failed(ChapterRef ref, String reason) {
+    log.w('open ${ref.path}', reason);
+    return OpenFailed(reason);
   }
 
   void _set(LibraryState state) {

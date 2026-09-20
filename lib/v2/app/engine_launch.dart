@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import '../diagnostics/log.dart';
 import '../engines/engine_supervisor.dart';
 import '../engines/stockfish_install.dart';
 
@@ -20,7 +21,11 @@ Future<EngineStart> launchStockfish({
     supportDirectory: support,
     readAsset: _readAsset,
   );
-  return switch (await install.locate()) {
+  final location = await install.locate();
+  if (location case StockfishMissing(:final reason)) {
+    log.e('install Stockfish', reason);
+  }
+  return switch (location) {
     StockfishMissing(:final reason) => StartFailed(reason),
     StockfishReady(:final path) => engines.start(
       path,
