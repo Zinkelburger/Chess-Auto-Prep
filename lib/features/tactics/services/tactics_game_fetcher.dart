@@ -139,9 +139,6 @@ class TacticsGameFetcher {
 
     progress?.call('Fetching Chess.com game archives for $username…');
 
-    // Use the archives endpoint to discover which months actually have
-    // games, rather than blindly checking the last N months (which fails
-    // for inactive players).
     // What this computer already holds, for the paths below where nothing
     // was downloaded. Offline, these games are the whole answer.
     Future<List<String>?> savedGames() async {
@@ -157,6 +154,9 @@ class TacticsGameFetcher {
       return saved;
     }
 
+    // Use the archives endpoint to discover which months actually have
+    // games, rather than blindly checking the last N months (which fails
+    // for inactive players).
     var archives = const <String>[];
     try {
       archives = await _fetchArchives(username);
