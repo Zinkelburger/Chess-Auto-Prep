@@ -1,103 +1,169 @@
 import 'dart:async';
 
 import 'package:chess_auto_prep/v2/app/exit_guard.dart';
+import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
+import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart'
+    show IoFailure;
 import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/fixtures.dart';
+import '../support/session_fixture.dart';
+
 void main() {
   const moment = Duration(milliseconds: 20);
+  late SessionFixture fixture;
 
-  test('the window closes as soon as the draft is on the file', () async {
-    var asked = 0;
-    final guard = ExitGuard(
-      flush: () async {},
-      ask: () async {
-        asked++;
-        return DraftChoice.closeAnyway;
-      },
-      wait: moment,
-    );
-    expect(await guard.mayClose(), isTrue);
-    expect(asked, 0, reason: 'there was nothing to ask about');
+  setUp(() async {
+    fixture = await openSession(blackChapter);
   });
 
-  test('a save that never lands asks instead of holding the window', () async {
-    final stuck = Completer<void>();
-    addTearDown(stuck.complete);
-    var asked = 0;
-    final guard = ExitGuard(
-      flush: () => stuck.future,
-      ask: () async {
-        asked++;
-        return DraftChoice.closeAnyway;
-      },
-      wait: moment,
-    );
-    expect(await guard.mayClose(), isTrue);
-    expect(asked, 1);
+  tearDown(() => fixture.dispose());
+
+  /// Comments the first move, which is one edit of the file.
+  void edit(String words) =>
+      fixture.session.setComment(NodePath.of([0]), words);
+
+  ExitGuard guardWith(_Question question) =>
+      ExitGuard(saver: fixture.saver, question: question, wait: moment);
+
+  test('the window closes as soon as the file has the words', () async {
+    final question = _Question(answer: DraftChoice.closeAnyway);
+    expect(await guardWith(question).mayClose(), isTrue);
+    expect(question.asked, isEmpty, reason: 'there was nothing to ask about');
   });
 
-  test('waiting again gives the draft the time it needed', () async {
-    final lock = Completer<void>();
-    var asked = 0;
-    final guard = ExitGuard(
-      flush: () => lock.future,
-      ask: () async {
-        asked++;
-        // The other copy of the app lets go while the dialog is up.
-        lock.complete();
-        return DraftChoice.keepWaiting;
-      },
-      wait: moment,
-    );
-    expect(await guard.mayClose(), isTrue);
-    expect(asked, 1);
+  test('a save that is still going is put to the user', () async {
+    fixture.store.hold = true;
+    edit('one');
+    final question = _Question(answer: DraftChoice.closeAnyway);
+    expect(await guardWith(question).mayClose(), isTrue);
+    expect(question.asked.single, contains('has not finished'));
+    fixture.store.releaseAll();
   });
 
-  test('a question nobody answered keeps the window open', () async {
-    final stuck = Completer<void>();
-    addTearDown(stuck.complete);
-    final guard = ExitGuard(
-      flush: () => stuck.future,
-      ask: () async => null,
-      wait: moment,
+  test('a save that failed is not taken for a save', () async {
+    fixture.store.saves.add(const IoFailure('No space left on device'));
+    edit('one');
+    await pumpEventQueue();
+    final question = _Question();
+    expect(
+      await guardWith(question).mayClose(),
+      isFalse,
+      reason: 'the user answered nothing, so the window stays',
     );
-    expect(await guard.mayClose(), isFalse);
+    expect(question.asked.single, contains('No space left on device'));
   });
 
-  test('a save that fails outright is not taken for a save', () async {
-    final guard = ExitGuard(
-      flush: () async => throw StateError('the store fell over'),
-      ask: () async => null,
-      wait: moment,
-    );
-    expect(await guard.mayClose(), isFalse);
+  test('words typed over a conflict are asked about too', () async {
+    fixture.externalEdit('// Color: Black\n\n1. d4 *\n');
+    edit('one');
+    await pumpEventQueue();
+    edit('two'); // never reaches the saver: a conflicted file takes nothing
+    final question = _Question(answer: DraftChoice.closeAnyway);
+    expect(await guardWith(question).mayClose(), isTrue);
+    expect(question.asked.single, contains('was changed somewhere else'));
   });
 
-  testWidgets('the dialog says why and offers both ways out', (tester) async {
-    Future<DraftChoice?>? answer;
+  test('two clicks on the close button ask once', () async {
+    fixture.store.hold = true;
+    edit('one');
+    final question = _Question(answer: DraftChoice.closeAnyway);
+    final guard = guardWith(question);
+    final first = guard.mayClose();
+    final second = guard.mayClose();
+    expect(await first, isTrue);
+    expect(await second, isTrue);
+    expect(question.asked, hasLength(1));
+    fixture.store.releaseAll();
+  });
+
+  test('the question comes down when the save lands', () async {
+    fixture.store.hold = true;
+    edit('one');
+    final question = _Question(waits: true);
+    final closing = guardWith(question).mayClose();
+    await question.first;
+    expect(question.asked, hasLength(1));
+    fixture.store.releaseAll();
+    expect(await closing, isTrue);
+    expect(question.withdrawn, 1);
+  });
+
+  testWidgets('the dialog says what is known and offers both ways', (
+    tester,
+  ) async {
+    final navigator = GlobalKey<NavigatorState>();
     await tester.pumpWidget(
       MaterialApp(
+        navigatorKey: navigator,
         theme: darkTheme(),
-        home: Builder(
-          builder: (context) => TextButton(
-            onPressed: () => answer = askAboutUnsavedDraft(context),
-            child: const Text('leave'),
-          ),
-        ),
+        home: const Scaffold(body: Text('workspace')),
       ),
     );
-    await tester.tap(find.text('leave'));
+    final dialog = DraftDialog(navigator);
+    final answer = dialog.put('The save of Main.pgn has not finished.');
     await tester.pumpAndSettle();
-    expect(
-      find.textContaining('another copy of Chess Auto Prep'),
-      findsOneWidget,
-    );
-    expect(find.text('Close and lose changes'), findsOneWidget);
+    expect(find.textContaining('has not finished'), findsOneWidget);
+    expect(find.text('Leave it open'), findsOneWidget);
 
-    await tester.tap(find.text('Keep waiting'));
+    await tester.tap(find.text('Close and lose changes'));
     await tester.pumpAndSettle();
-    expect(await answer, DraftChoice.keepWaiting);
+    expect(await answer, DraftChoice.closeAnyway);
   });
+
+  testWidgets('a withdrawn question takes its dialog away', (tester) async {
+    final navigator = GlobalKey<NavigatorState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: navigator,
+        theme: darkTheme(),
+        home: const Scaffold(body: Text('workspace')),
+      ),
+    );
+    final dialog = DraftDialog(navigator);
+    final answer = dialog.put('The save of Main.pgn has not finished.');
+    await tester.pumpAndSettle();
+    dialog.withdraw();
+    await tester.pumpAndSettle();
+    expect(find.textContaining('has not finished'), findsNothing);
+    expect(await answer, isNull);
+  });
+}
+
+/// The question as a test puts it: it records what it was asked and answers
+/// what the test said, either at once or only when it is withdrawn.
+final class _Question implements DraftQuestion {
+  _Question({this.answer, this.waits = false});
+
+  /// What the user chooses; null is a question they never answered.
+  final DraftChoice? answer;
+
+  /// Whether the question stays up until something takes it down.
+  final bool waits;
+
+  final asked = <String>[];
+  var withdrawn = 0;
+  Completer<DraftChoice?>? _open;
+  final _first = Completer<void>();
+
+  /// Completes when the question has been put, so a test need not guess how
+  /// long the guard waits before asking.
+  Future<void> get first => _first.future;
+
+  @override
+  Future<DraftChoice?> put(String trouble) {
+    asked.add(trouble);
+    if (!_first.isCompleted) _first.complete();
+    if (!waits) return Future<DraftChoice?>.value(answer);
+    return (_open = Completer<DraftChoice?>()).future;
+  }
+
+  @override
+  void withdraw() {
+    withdrawn++;
+    final open = _open;
+    if (open != null && !open.isCompleted) open.complete(null);
+  }
 }
