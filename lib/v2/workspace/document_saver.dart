@@ -284,6 +284,11 @@ final class DocumentSaver extends ChangeNotifier {
   /// It is a write like any other to whatever is waiting for the file, too:
   /// a flush, a hold and the closing window wait for the undo, and for the
   /// draft typed while it was going out.
+  ///
+  /// Words typed while the undo is being written are newer than the version
+  /// being put back, so they win: the draft goes to disk, the undo is
+  /// refused, and the version it wrote becomes the next step back. Pressing
+  /// undo again then does what the refused press meant.
   Future<UndoResult> undo() {
     final target = _target;
     final entry = _undo.newest;
@@ -318,6 +323,14 @@ final class DocumentSaver extends ChangeNotifier {
     }
     if (_outOfDate(result, target)) {
       _set(resting);
+      await _write();
+      return const UndoRefused();
+    }
+    if (result is store.Saved && _pending != null) {
+      // Typed over: the entry stays where it is, the draft goes out on top
+      // of the version just written, and the receipt the draft brings back
+      // makes that version the next step back.
+      _catchUp(result, target.ref);
       await _write();
       return const UndoRefused();
     }

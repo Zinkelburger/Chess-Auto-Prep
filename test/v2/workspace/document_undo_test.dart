@@ -119,6 +119,36 @@ void main() {
     await session.undo();
     expect(saver.state, isA<Saved>());
   });
+
+  test('words typed during an undo win, and the undo waits', () async {
+    edit('B');
+    await pumpEventQueue();
+    fixture.store.hold = true;
+    final undoing = session.undo();
+    await pumpEventQueue();
+    edit('C'); // typed while the undo is still being written
+    var landed = false;
+    final flushed = saver.flush().then((_) => landed = true);
+    await pumpEventQueue();
+    expect(landed, isFalse, reason: 'the undo is still going out');
+    fixture.store.releaseAll(); // the undo's write
+    await pumpEventQueue();
+    expect(landed, isFalse, reason: 'the newer words are still on their way');
+    expect(saver.state, isNot(isA<Saved>()));
+    fixture.store.releaseAll(); // the words behind it
+    await flushed;
+    expect(await undoing, isA<UndoRefused>(), reason: 'the newer words won');
+    // The file, the screen and the header say the same thing.
+    expect(saver.state, isA<Saved>());
+    expect(fixture.onDisk, contains('{C [%eval 0.30]}'));
+    expect(session.commentAt(sicilian), 'C [%eval 0.30]');
+    // And the press that was refused is the next step back, not a step to
+    // where the file already is.
+    fixture.store.hold = false;
+    await session.undo();
+    expect(session.commentAt(sicilian), 'The Sicilian [%eval 0.30]');
+    expect(fixture.onDisk, contains('{The Sicilian [%eval 0.30]}'));
+  });
 }
 
 /// A chapter where `e4` is the first move listed and `d4` the second.
