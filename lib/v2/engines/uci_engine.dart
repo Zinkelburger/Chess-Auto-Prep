@@ -38,8 +38,11 @@ final class UciEngine implements Engine {
   }
 
   final UciProcess _process;
-  final _exited = Completer<void>();
+  final _exited = Completer<EngineExit>();
   String _name = 'UCI engine';
+
+  /// Set when we kill the engine for saying nothing, so its exit says why.
+  bool _unresponsive = false;
 
   /// The handshake token being waited for and who to wake when it lands.
   ({String token, Completer<void> completer})? _awaited;
@@ -57,7 +60,7 @@ final class UciEngine implements Engine {
   int get pid => _process.pid;
 
   @override
-  Future<void> get exited => _exited.future;
+  Future<EngineExit> get exited => _exited.future;
 
   @override
   Search analyse(Fen fen, {required int multiPv}) {
@@ -97,9 +100,9 @@ final class UciEngine implements Engine {
   ///
   /// One that answers neither would otherwise hold every later search behind
   /// it for as long as the process lives, leaving the pane on a position the
-  /// board has left. It is killed instead: its exit ends the searches it was
-  /// holding up, the supervisor drops it, and the next enable starts a fresh
-  /// one.
+  /// board has left. It is killed instead, and its exit says it was
+  /// [EngineExit.unresponsive], which is what tells the workspace to start
+  /// another engine rather than give up on the session.
   Future<bool> _stopped(_UciSearch previous) async {
     try {
       await previous.stop().timeout(_stopPatience);
@@ -109,6 +112,7 @@ final class UciEngine implements Engine {
         'stop a search on $_name',
         const EngineFailure('the engine did not answer stop'),
       );
+      _unresponsive = true;
       await _process.kill();
       return false;
     }
@@ -118,7 +122,14 @@ final class UciEngine implements Engine {
   Future<void> quit() async {
     if (_exited.isCompleted) return;
     _send('quit');
-    await exited.timeout(const Duration(seconds: 2), onTimeout: _process.kill);
+    await exited.timeout(
+      const Duration(seconds: 2),
+      onTimeout: () async {
+        await _process.kill();
+        // We asked it to go, so a slow goodbye is not a broken engine.
+        return EngineExit.ended;
+      },
+    );
   }
 
   void _send(String line) => _process.send(line);
@@ -149,7 +160,9 @@ final class UciEngine implements Engine {
     _awaited = null;
     _current?.finish();
     _current = null;
-    _exited.complete();
+    _exited.complete(
+      _unresponsive ? EngineExit.unresponsive : EngineExit.ended,
+    );
   }
 }
 

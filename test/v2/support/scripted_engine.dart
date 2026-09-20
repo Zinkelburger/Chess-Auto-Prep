@@ -8,7 +8,7 @@ import 'package:chess_auto_prep/v2/engines/engine_line.dart';
 /// search, as the real one does.
 final class ScriptedEngine implements Engine {
   final searches = <ScriptedSearch>[];
-  final _exited = Completer<void>();
+  final _exited = Completer<EngineExit>();
   bool quitCalled = false;
 
   @override
@@ -24,19 +24,24 @@ final class ScriptedEngine implements Engine {
   }
 
   @override
-  Future<void> get exited => _exited.future;
+  Future<EngineExit> get exited => _exited.future;
 
   @override
   Future<void> quit() async {
     quitCalled = true;
-    searches.lastOrNull?.end();
-    if (!_exited.isCompleted) _exited.complete();
+    _end(EngineExit.ended);
   }
 
   /// The process dies on its own.
-  void crash() {
+  void crash() => _end(EngineExit.ended);
+
+  /// The engine stops answering and is killed for it, the way a real one is
+  /// when it never says `bestmove`.
+  void wedge() => _end(EngineExit.unresponsive);
+
+  void _end(EngineExit exit) {
     searches.lastOrNull?.end();
-    _exited.complete();
+    if (!_exited.isCompleted) _exited.complete(exit);
   }
 }
 
