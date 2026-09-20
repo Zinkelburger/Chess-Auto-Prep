@@ -29,7 +29,10 @@ final class BoardTheme extends ThemeExtension<BoardTheme> {
     required this.lightSquare,
     required this.darkSquare,
     required this.lastMove,
+    required this.selected,
     required this.coordinate,
+    required this.scrim,
+    required this.promotionChoice,
   });
 
   final Color lightSquare;
@@ -38,19 +41,35 @@ final class BoardTheme extends ThemeExtension<BoardTheme> {
   /// Laid over the from and to squares of the move just played.
   final Color lastMove;
 
+  /// Laid over the square the user has picked a piece up from. Stronger
+  /// than [lastMove], which it wins over.
+  final Color selected;
+
   final Color coordinate;
+
+  /// Over the whole board while it is waiting for an answer.
+  final Color scrim;
+
+  /// The disc a promotion choice sits on.
+  final Color promotionChoice;
 
   @override
   BoardTheme copyWith({
     Color? lightSquare,
     Color? darkSquare,
     Color? lastMove,
+    Color? selected,
     Color? coordinate,
+    Color? scrim,
+    Color? promotionChoice,
   }) => BoardTheme(
     lightSquare: lightSquare ?? this.lightSquare,
     darkSquare: darkSquare ?? this.darkSquare,
     lastMove: lastMove ?? this.lastMove,
+    selected: selected ?? this.selected,
     coordinate: coordinate ?? this.coordinate,
+    scrim: scrim ?? this.scrim,
+    promotionChoice: promotionChoice ?? this.promotionChoice,
   );
 
   @override
@@ -60,7 +79,10 @@ final class BoardTheme extends ThemeExtension<BoardTheme> {
       lightSquare: Color.lerp(lightSquare, other.lightSquare, t)!,
       darkSquare: Color.lerp(darkSquare, other.darkSquare, t)!,
       lastMove: Color.lerp(lastMove, other.lastMove, t)!,
+      selected: Color.lerp(selected, other.selected, t)!,
       coordinate: Color.lerp(coordinate, other.coordinate, t)!,
+      scrim: Color.lerp(scrim, other.scrim, t)!,
+      promotionChoice: Color.lerp(promotionChoice, other.promotionChoice, t)!,
     );
   }
 
@@ -106,8 +128,11 @@ ThemeData darkTheme() {
       BoardTheme(
         lightSquare: Color(0xFFF0D9B5),
         darkSquare: Color(0xFFB58863),
-        lastMove: Color(0x669BC700),
+        lastMove: Color(0x559BC700),
+        selected: Color(0x669BC700),
         coordinate: Color(0xCC5A4632),
+        scrim: Color(0x80000000),
+        promotionChoice: Color(0xFFB0B0B0),
       ),
     ],
   );

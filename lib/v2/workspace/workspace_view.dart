@@ -1,28 +1,36 @@
+import 'dart:async';
 import 'dart:math';
 
-import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../ui/theme.dart';
 import 'board_view.dart';
+import 'chapter_header.dart';
+import 'comment_panel.dart';
+import 'document_saver.dart';
 import 'document_session.dart';
 import 'engine_analysis.dart';
 import 'engine_pane.dart';
 import 'eval_bar.dart';
 import 'move_tree_view.dart';
 
-/// The board with its evaluation bar on the left; the chapter, the engine
-/// and the moves on the right; arrow keys to walk the line.
+/// The board with its evaluation bar on the left; the chapter, the engine,
+/// the moves and their comment on the right; arrow keys to walk the line and
+/// Ctrl+Z to take the last edit back.
 class WorkspaceView extends StatelessWidget {
   const WorkspaceView({
     super.key,
     required this.session,
+    required this.saver,
     required this.analysis,
   });
 
   final DocumentSession session;
+  final DocumentSaver saver;
   final EngineAnalysis analysis;
+
+  void _undo() => unawaited(session.undo());
 
   @override
   Widget build(BuildContext context) {
@@ -32,6 +40,8 @@ class WorkspaceView extends StatelessWidget {
         const SingleActivator(LogicalKeyboardKey.arrowRight): session.forward,
         const SingleActivator(LogicalKeyboardKey.arrowUp): session.toStart,
         const SingleActivator(LogicalKeyboardKey.arrowDown): session.toEnd,
+        const SingleActivator(LogicalKeyboardKey.keyZ, control: true): _undo,
+        const SingleActivator(LogicalKeyboardKey.keyZ, meta: true): _undo,
       },
       child: Focus(
         autofocus: true,
@@ -50,11 +60,13 @@ class WorkspaceView extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _ChapterHeader(session: session),
+                  ChapterHeader(session: session, saver: saver),
                   const Divider(height: 1),
                   EnginePane(analysis: analysis),
                   const Divider(height: 1),
                   Expanded(child: MoveTreeView(session: session)),
+                  const Divider(height: 1),
+                  CommentPanel(session: session),
                 ],
               ),
             ),
@@ -100,50 +112,12 @@ class _BoardWithBar extends StatelessWidget {
                       fen: session.fen,
                       orientation: session.orientation,
                       lastMove: session.currentMove?.uci,
+                      onMove: session.playMove,
                     ),
                   ),
                 ],
               ),
             ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _ChapterHeader extends StatelessWidget {
-  const _ChapterHeader({required this.session});
-
-  final DocumentSession session;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    return ListenableBuilder(
-      listenable: session,
-      builder: (context, _) {
-        final chapter = session.chapter;
-        if (chapter == null) {
-          return Padding(
-            padding: const EdgeInsets.all(Space.m),
-            child: Text('Open a chapter', style: text.bodySmall),
-          );
-        }
-        final side = chapter.side == Side.white ? 'White' : 'Black';
-        final lines = '${chapter.gameCount} lines';
-        final skipped = chapter.skippedGames == 0
-            ? ''
-            : ', ${chapter.skippedGames} from another position';
-        return Padding(
-          padding: const EdgeInsets.all(Space.m),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(chapter.name, style: text.titleMedium),
-              const SizedBox(height: Space.xs),
-              Text('$side · $lines$skipped', style: text.bodySmall),
-            ],
           ),
         );
       },

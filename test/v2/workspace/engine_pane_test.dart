@@ -1,4 +1,3 @@
-import 'package:chess_auto_prep/v2/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/v2/engines/engine_line.dart';
 import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/v2/ui/theme.dart';
@@ -9,23 +8,25 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/fixtures.dart';
+import '../support/session_fixture.dart';
 import '../support/scripted_engine.dart';
 
 void main() {
+  late SessionFixture fixture;
   late DocumentSession session;
   late ScriptedEngine engine;
   late EngineAnalysis analysis;
 
-  setUp(() {
-    session = DocumentSession()
-      ..open(parseChapter(name: 'Main', text: blackChapter));
+  setUp(() async {
+    fixture = await openSession(blackChapter);
+    session = fixture.session;
     engine = ScriptedEngine();
     analysis = EngineAnalysis(session, () async => Started(engine));
   });
 
   tearDown(() {
     analysis.dispose();
-    session.dispose();
+    fixture.dispose();
   });
 
   Future<void> pump(WidgetTester tester) => tester.pumpWidget(

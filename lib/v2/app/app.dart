@@ -9,7 +9,9 @@ import '../diagnostics/log.dart';
 import '../engines/engine_supervisor.dart';
 import '../features/library/library.dart';
 import '../storage/chapter_files.dart';
+import '../storage/pgn_file_store.dart';
 import '../ui/theme.dart';
+import '../workspace/document_saver.dart';
 import '../workspace/document_session.dart';
 import '../workspace/engine_analysis.dart';
 import 'engine_launch.dart';
@@ -43,7 +45,12 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
   late final Library _library = Library(
     ChapterDirectory(Directory(p.join(widget.documents.path, 'repertoires'))),
   );
-  final _session = DocumentSession();
+  late final _store = PgnFileStore(
+    documents: widget.documents,
+    support: widget.support,
+  );
+  late final _saver = DocumentSaver(_store);
+  late final _session = DocumentSession(_store, _saver);
   final _engines = EngineSupervisor();
   late final _analysis = EngineAnalysis(
     _session,
@@ -75,6 +82,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     _analysis.dispose();
     _library.dispose();
     _session.dispose();
+    _saver.dispose();
     unawaited(_engines.dispose());
     super.dispose();
   }
@@ -85,7 +93,12 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
       title: 'Chess Auto Prep',
       theme: darkTheme(),
       debugShowCheckedModeBanner: false,
-      home: Shell(library: _library, session: _session, analysis: _analysis),
+      home: Shell(
+        library: _library,
+        session: _session,
+        saver: _saver,
+        analysis: _analysis,
+      ),
     );
   }
 }

@@ -2,7 +2,6 @@ import 'package:chess_auto_prep/v2/features/library/library.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../support/fixtures.dart';
 import '../support/scripted_files.dart';
 
 void main() {
@@ -11,10 +10,7 @@ void main() {
   final main = ref('KID', 'Main');
 
   setUp(() {
-    files = ScriptedFiles(
-      listing: Chapters([main]),
-      texts: {main.path: const ChapterText(blackChapter)},
-    );
+    files = ScriptedFiles(listing: Chapters([main]));
     library = Library(files);
   });
 
@@ -49,28 +45,6 @@ void main() {
     expect(
       (library.state as LibraryFailed).reason,
       'Could not read the repertoires folder: Permission denied',
-    );
-  });
-
-  test('open parses the chapter', () async {
-    final opening = library.open(main);
-    files.releaseNext();
-    final result = await opening as Opened;
-    expect(result.chapter.name, 'Main');
-    expect(result.chapter.gameCount, 2);
-  });
-
-  test('open says when the file is gone or unreadable', () async {
-    files.texts = {};
-    var opening = library.open(main);
-    files.releaseNext();
-    expect((await opening as OpenFailed).reason, 'Main is no longer on disk');
-    files.texts = {main.path: const ChapterUnreadable('Input/output error')};
-    opening = library.open(main);
-    files.releaseNext();
-    expect(
-      (await opening as OpenFailed).reason,
-      'Could not read Main: Input/output error',
     );
   });
 

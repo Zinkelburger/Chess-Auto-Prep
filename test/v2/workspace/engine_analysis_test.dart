@@ -1,8 +1,9 @@
 import 'dart:async';
 
-import 'package:chess_auto_prep/v2/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/v2/engines/engine_line.dart';
 import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
+import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
 import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
 import 'package:fake_async/fake_async.dart';
@@ -10,6 +11,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../support/fixtures.dart';
 import '../support/scripted_engine.dart';
+import '../support/scripted_store.dart';
+import '../support/session_fixture.dart';
 
 void main() {
   late DocumentSession session;
@@ -18,9 +21,8 @@ void main() {
   var notifications = 0;
   const tick = Duration(milliseconds: 200);
 
-  setUp(() {
-    session = DocumentSession()
-      ..open(parseChapter(name: 'Main', text: blackChapter));
+  setUp(() async {
+    session = (await openSession(blackChapter)).session;
     notifications = 0;
   });
 
@@ -90,10 +92,14 @@ void main() {
 
   test('nothing is searched until a chapter is open', () {
     fakeAsync((async) {
-      session = DocumentSession();
+      final ref = chapterRef('KID', 'Main');
+      final store = ScriptedDocumentStore()
+        ..documents[ref] = Opened(blackChapter, scriptedRevision(blackChapter));
+      session = DocumentSession(store, DocumentSaver(store));
       running(async);
       expect(engine.searches, isEmpty);
-      session.open(parseChapter(name: 'Main', text: blackChapter));
+      unawaited(session.open(ref));
+      async.flushMicrotasks();
       expect(engine.searches, hasLength(1));
     });
   });
