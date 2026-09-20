@@ -342,6 +342,12 @@ def relabel_seats(con: sqlite3.Connection) -> None:
         r"\b([BC])\b", lambda m: {"B": "C", "C": "B"}[m.group(1)], text)
     renamed = {"AC": "AB", "BD": "CD"}
     with con:
+        # Claim it inside the transaction: several workers open the same book at
+        # once, and swapping twice would put the old letters back. The loser of
+        # the write lock sees the row and stops.
+        if not con.execute(
+                "INSERT OR IGNORE INTO meta(key, value) VALUES('seats', 'AB/CD')").rowcount:
+            return
         picks = con.execute("SELECT * FROM pick").fetchall()
         con.execute("DELETE FROM pick")
         con.executemany("INSERT INTO pick VALUES(?,?,?,?,?,?,?,?)",
@@ -352,7 +358,6 @@ def relabel_seats(con: sqlite3.Connection) -> None:
         con.executemany("UPDATE move SET seat=?, pv=? WHERE pos=? AND move=? AND clock=?",
                         [(swap(seat), swap(pv), pos, move, clock)
                          for pos, move, seat, clock, pv in moves])
-        con.execute("INSERT INTO meta(key, value) VALUES('seats', 'AB/CD')")
 
 
 def claim(con: sqlite3.Connection) -> tuple | None:
