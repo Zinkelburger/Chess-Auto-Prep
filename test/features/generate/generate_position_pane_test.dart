@@ -72,8 +72,8 @@ void main() {
         ),
       );
       expect(find.text('Depth (half-moves)'), findsNothing);
-      expect(find.text('Expected'), findsNothing);
-      expect(find.text('Continuation'), findsOneWidget);
+      expect(find.text('Expected'), findsOneWidget);
+      expect(find.text('Continuation'), findsNothing);
       expect(find.text('My book / Main'), findsNothing);
       await tester.tap(find.byKey(const ValueKey('generation-actions')));
       await tester.pumpAndSettle();

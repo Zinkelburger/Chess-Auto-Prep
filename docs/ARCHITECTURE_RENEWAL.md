@@ -349,7 +349,44 @@ recovery files.
 | Training | Review, progress and history CSVs and attempt JSONL, keyed by chapter path | Scheduling and history across chapter rename, move, split and delete |
 | Generation output | Versioned bundles via the artifact repository, plus legacy chapter-side files | Readability of old artifacts; user edits to companion PGNs |
 | Settings and accounts | SharedPreferences keys | Existing keys and values |
-| Recovery | Atomic-write journals and backups, quarantine, PGN recovery snapshots, SQL `game_trash`, schema-upgrade backups | Each keeps its purpose; none is a version history |
+| Recovery | Atomic-write journals, quarantine, PGN recovery snapshots, SQL `game_trash`, schema-upgrade backups | Each keeps its purpose; none of them is the version history — see [Backups](#backups) |
+
+### Backups
+
+The user never asks for a backup and never names one. Losing work is a bug in
+this section, not a mistake the user made.
+
+- **Every replaced byte is kept.** A save, append, import, rename or delete goes
+  through the store, and the store already returns the validated before-content
+  of the file it replaced. That content is what gets recorded. A write whose
+  backup could not be recorded does not proceed; it returns an I/O failure like
+  any other.
+- **Backups live in Support**, under `backups/<document id>/`, one gzipped file
+  per version named by commit time and content hash, with a small index per
+  document. They are never written into Documents: a synced folder must not
+  gain files the user did not make, and a restore must work when Documents is
+  the thing that went wrong.
+- **Identity, not path.** Versions follow the document's identity, so a rename
+  or a move keeps one history instead of starting a second one.
+- **Unchanged content costs nothing.** A save whose bytes hash to the newest
+  stored version records nothing.
+- **Retention** is by age, then by size: everything from the last day, hourly
+  for a week, daily for a month, weekly for a year. A byte cap prunes oldest
+  first. The newest version of a document is never pruned, and pruning runs on
+  its own schedule, never inside a save.
+- **Restore is a normal save.** Settings ▸ Data lists each document's versions
+  with time, size and move count, previews one, and restores by writing it
+  through the store — so the restore is itself backed up and undoable. Nothing
+  is ever replaced without the user choosing it.
+- **SQLite** (`app_games.db`) is snapshotted with SQLite's backup API, not by
+  copying db/WAL/SHM, when the newest snapshot is older than a day.
+- **What it is not:** not the undo history (store receipts, in-session), not the
+  generation artifact history (versioned bundles, per run), not the recovery
+  files above (interrupted writes and deletes). Those keep their own purposes.
+
+Step 2 owns the write path and the recording; the restore screen ships with
+step 13's Settings, and until then a version is recoverable from Support by
+hand.
 
 ### PGN document store
 
@@ -451,7 +488,7 @@ settings, lint and Widgetbook appear inside the row that first needs them.
 |---|---|---|---|
 | 0 | **Board on screen.** `main_v2.dart`, a window with the mode menu stub, board widget, move-tree widget; open a real chapter from Documents `repertoires/` read-only; click and arrow through moves. Only the theme values a board and a move list need. | Screenshot of a real chapter | Done 2026-09-19: 1.5k lines, 23 tests; second-agent review the same day, its findings fixed (typed file results, open race, move-list rewrite, 18 more tests) |
 | 1 | **Engine.** Supervisor, one Stockfish, engine pane with MultiPV lines at 200 ms, kill-on-exit test on Linux. First step that can fail, so it also installs the log: facade in `diagnostics/`, file sink in `storage/`, installed by `main_v2` before the engine starts. | Live evaluation on the board, and an engine that will not start named in `app.log` | Done 2026-09-19: 1.6k lines, 41 tests; a real Stockfish dies with a SIGKILLed parent on Linux (`test/v2/engines/stockfish_exit_test.dart`); a start failure is an `E start …` line in `app.log` |
-| 2 | **Document store.** `PgnDocumentStore` (open, save, create, rename, move, recoverable delete) with revisions; add moves and comments in the workspace; save; undo from receipts; the required failure tests; the old app sees the edit. | Edit a chapter, reopen it in the old app | Not started |
+| 2 | **Document store.** `PgnDocumentStore` (open, save, create, rename, move, recoverable delete) with revisions; add moves and comments in the workspace; save; undo from receipts; every replaced version recorded per [Backups](#backups); the required failure tests; the old app sees the edit. | Edit a chapter, reopen it in the old app | Not started |
 | 3 | **Library.** Repertoire list, search, create, rename, move, recoverable delete; training references follow chapter changes. | Screenshot | Not started |
 | 4 | **Chapters and Study.** Chapter outline panel, chapter operations, per-chapter orientation, Lichess study import and export, quiz markers. | Screenshot | Not started |
 | 5 | **Trainer.** Training session over the workspace, scheduling, history and bulk actions on the existing CSV/JSONL formats. | Screenshot and one completed session | Not started |
@@ -495,6 +532,8 @@ Each belongs to the step that owns it:
   generation publishes only against its source and run identity, never over an
   edited companion PGN. Legacy artifacts stay readable; legacy runs are not
   resumed.
+- **Step 2:** a backup that cannot be recorded must fail the write without
+  leaving a half-applied change, and retention must never race a save.
 - **Step 13:** tokens are plaintext in SharedPreferences. Migrate one account
   at a time: write the vault, read it back, then remove the old key.
 - **Platforms:** engine cleanup after a killed app is verified only on Linux.
