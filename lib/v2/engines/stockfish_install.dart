@@ -117,7 +117,14 @@ final class StockfishInstall {
       () => _unpack(compressed, expected, target),
     );
     if (problem != null) return StockfishMissing(problem);
-    if (!Platform.isWindows) await Process.run('chmod', ['+x', target]);
+    if (!Platform.isWindows) {
+      final chmod = await Process.run('chmod', ['+x', target]);
+      if (chmod.exitCode != 0) {
+        return StockfishMissing(
+          'Could not make $_binaryName runnable: ${chmod.stderr}',
+        );
+      }
+    }
     await stamp.writeAsString(release.identity);
     return StockfishReady(target);
   }
