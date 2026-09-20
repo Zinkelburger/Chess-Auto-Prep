@@ -1,6 +1,7 @@
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
 
+import '../storage/chapter_files.dart';
 import '../ui/theme.dart';
 import 'document_saver.dart';
 import 'document_session.dart';
@@ -23,10 +24,40 @@ class _ChapterHeaderState extends State<ChapterHeader> {
   /// The answer to the last thing the user asked for here.
   String? _notice;
 
+  /// The chapter the notice is about; another one makes it somebody else's
+  /// news and it goes.
+  ChapterRef? _about;
+
+  @override
+  void initState() {
+    super.initState();
+    _about = widget.session.source;
+    widget.session.addListener(_onChapter);
+  }
+
+  @override
+  void dispose() {
+    widget.session.removeListener(_onChapter);
+    super.dispose();
+  }
+
+  void _onChapter() {
+    if (!mounted || widget.session.source == _about) return;
+    setState(() {
+      _about = widget.session.source;
+      _notice = null;
+    });
+  }
+
   Future<void> _undo() async {
-    await widget.session.undo();
+    final result = await widget.session.undo();
     if (!mounted) return;
-    setState(() => _notice = null);
+    setState(
+      () => _notice = switch (result) {
+        Restored() => null,
+        UndoRefused() => 'Nothing to undo right now',
+      },
+    );
   }
 
   Future<void> _reload() async {

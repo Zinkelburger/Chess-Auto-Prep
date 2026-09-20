@@ -87,6 +87,49 @@ void main() {
     expect(saver.state, isA<Saved>());
   });
 
+  test(
+    'a save landing after the same chapter is opened again is kept',
+    () async {
+      fixture.store.hold = true;
+      edit('one');
+      final reopening = session.reloadFromDisk(); // reads what is there now
+      fixture.store.releaseLast(); // the read answers first
+      await pumpEventQueue();
+      expect(await reopening, isA<DocumentOpened>());
+      fixture.store.releaseAll(); // the save for the same file lands now
+      await pumpEventQueue();
+      fixture.store.hold = false;
+      edit('two');
+      await pumpEventQueue();
+      expect(
+        saver.state,
+        isA<Saved>(),
+        reason: 'the document knows the revision its own write committed',
+      );
+      expect(fixture.onDisk, contains('{two [%eval 0.30]}'));
+    },
+  );
+
+  test('a conflict keeps no draft waiting behind it', () async {
+    edit('A');
+    await pumpEventQueue();
+    fixture.store.hold = true;
+    edit('B'); // goes out
+    edit('C'); // waits behind it
+    fixture.externalEdit('// Color: Black\n\n1. d4 *\n');
+    fixture.store.releaseAll();
+    await pumpEventQueue();
+    expect(saver.state, isA<SaveConflict>());
+    fixture.store.hold = false;
+    fixture.store.requestedSaves.clear();
+    expect(await saver.undo(), isA<UndoRefused>());
+    expect(
+      fixture.store.requestedSaves,
+      hasLength(1),
+      reason: 'the undo was asked for, not refused over a draft nobody wants',
+    );
+  });
+
   test('a conflict keeps the draft and stops writing', () async {
     fixture.externalEdit('// Color: Black\n\n1. d4 *\n');
     edit('one');

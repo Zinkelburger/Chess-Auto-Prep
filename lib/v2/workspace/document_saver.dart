@@ -127,13 +127,27 @@ final class DocumentSaver extends ChangeNotifier {
     _writing = false;
     if (_disposed) return;
     if (ticket != _opens) {
-      // The answer is about a document nobody has open now; a newer one may
+      // The answer is about an open nobody is on any more; a newer one may
       // have been waiting behind it.
+      _catchUp(result, target.ref);
       await _write();
       return;
     }
     _adopt(result, target.ref);
     if (_state is! SaveConflict) await _write();
+  }
+
+  /// A write that landed after its document was opened again. When it wrote
+  /// the file that is open now, the revision it committed is the newest
+  /// there is and the next save must expect it; without that the document
+  /// would conflict with this app's own write. Its receipt belongs to the
+  /// open that asked for it, so it is not history here.
+  void _catchUp(store.SaveResult result, DocumentRef ref) {
+    final target = _target;
+    if (target == null || target.ref != ref) return;
+    if (result case store.Saved(:final receipt)) {
+      _target = (ref: ref, revision: receipt.committed);
+    }
   }
 
   void _adopt(store.SaveResult result, DocumentRef ref) {
@@ -146,7 +160,7 @@ final class DocumentSaver extends ChangeNotifier {
         // The store logs what it could not do; a conflict is not a failure
         // there, so it is named here.
         log.w('save ${ref.path}', 'the file changed on disk');
-        _set(const SaveConflict());
+        _conflicted();
       case store.IoFailure(:final detail):
         _set(SaveFailed(detail));
     }
@@ -210,7 +224,7 @@ final class DocumentSaver extends ChangeNotifier {
         return Restored(entry.before);
       case store.Conflict():
         log.w('undo ${ref.path}', 'the file changed on disk');
-        _set(const SaveConflict());
+        _conflicted();
         return const UndoRefused();
       case store.IoFailure(:final detail):
         _set(SaveFailed(detail));
@@ -232,6 +246,14 @@ final class DocumentSaver extends ChangeNotifier {
       before: previous.before,
       beforeRevision: previous.beforeRevision,
     );
+  }
+
+  /// Nothing is written while the file is conflicted, so a draft that was
+  /// waiting its turn is waiting for nothing. Remembering it would refuse
+  /// every undo for the life of the document.
+  void _conflicted() {
+    _pending = null;
+    _set(const SaveConflict());
   }
 
   void _set(SaveState state) {

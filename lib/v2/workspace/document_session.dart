@@ -172,19 +172,21 @@ final class DocumentSession extends ChangeNotifier {
   }
 
   /// Puts the file back as it was before the last edit and shows what came
-  /// back. A refused undo leaves the document and the history alone.
-  Future<void> undo() async {
+  /// back. A refused undo leaves the document and the history alone, and
+  /// says so: nothing happening is something the screen has to tell.
+  Future<UndoResult> undo() async {
     final ref = _source;
-    if (ref == null) return;
+    if (ref == null) return const UndoRefused();
     final ticket = _opens;
     final result = await _saver.undo();
-    if (_disposed || ticket != _opens) return;
+    if (_disposed || ticket != _opens) return const UndoRefused();
     if (result case Restored(:final text)) {
       final restored = parseChapter(name: ref.name, text: text);
       _chapter = restored;
       _cursor = _within(restored.tree, _cursor);
       notifyListeners();
     }
+    return result;
   }
 
   /// Writes the draft beside the original as `<name>.pgn`, replacing
