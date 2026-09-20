@@ -5,16 +5,23 @@ import '../features/library/library_panel.dart';
 import '../storage/chapter_files.dart';
 import '../ui/theme.dart';
 import '../workspace/document_session.dart';
+import '../workspace/engine_analysis.dart';
 import '../workspace/workspace_view.dart';
 
 /// The window: a top bar with the mode menu, the library on the left and the
 /// workspace filling the rest. Opening a chapter from the library into the
 /// workspace is the one cross-feature request, and it is handled here.
 class Shell extends StatefulWidget {
-  const Shell({super.key, required this.library, required this.session});
+  const Shell({
+    super.key,
+    required this.library,
+    required this.session,
+    required this.analysis,
+  });
 
   final Library library;
   final DocumentSession session;
+  final EngineAnalysis analysis;
 
   @override
   State<Shell> createState() => _ShellState();
@@ -62,7 +69,12 @@ class _ShellState extends State<Shell> {
                   ),
                 ),
                 const VerticalDivider(width: 1),
-                Expanded(child: WorkspaceView(session: widget.session)),
+                Expanded(
+                  child: WorkspaceView(
+                    session: widget.session,
+                    analysis: widget.analysis,
+                  ),
+                ),
               ],
             ),
           ),

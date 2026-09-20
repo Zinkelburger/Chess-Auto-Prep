@@ -1,8 +1,10 @@
 import 'package:chess_auto_prep/v2/app/shell.dart';
+import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/v2/features/library/library.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
+import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -15,6 +17,7 @@ void main() {
   late ScriptedFiles files;
   late Library library;
   late DocumentSession session;
+  late EngineAnalysis analysis;
 
   setUp(() {
     files = ScriptedFiles(
@@ -26,9 +29,14 @@ void main() {
     );
     library = Library(files);
     session = DocumentSession();
+    analysis = EngineAnalysis(
+      session,
+      () async => const StartFailed('no engine in this test'),
+    );
   });
 
   tearDown(() {
+    analysis.dispose();
     library.dispose();
     session.dispose();
   });
@@ -38,7 +46,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: darkTheme(),
-        home: Shell(library: library, session: session),
+        home: Shell(library: library, session: session, analysis: analysis),
       ),
     );
     final listing = library.refresh();

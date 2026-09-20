@@ -12,5 +12,6 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   installAgentDriver();
   final documents = await getApplicationDocumentsDirectory();
-  runApp(ChessAutoPrepV2(documents: documents));
+  final support = await getApplicationSupportDirectory();
+  runApp(ChessAutoPrepV2(documents: documents, support: support));
 }

@@ -32,8 +32,11 @@ ALLOWED = {
     "features": {"chess", "storage", "engines", "net", "ui", "workspace", "features"},
     "app": {"chess", "storage", "engines", "net", "ui", "workspace", "features", "app"},
 }
-FLUTTER_FREE = {"chess"}
+# engines/ stays pure Dart so a test can run an engine outside Flutter.
+FLUTTER_FREE = {"chess", "engines"}
 IO_ALLOWED = {"storage", "engines", "app"}
+# Writers outside storage/: only the engine installer, which writes a binary, not user data.
+WRITERS_ALLOWED = {"engines/stockfish_install.dart"}
 
 FUNCTION_START = re.compile(
     r"^(\s*)(?:static\s+)?(?:@\w+\s+)*[\w<>?,\s\[\]()]+\s+_?\w+\s*\([^;]*\)\s*(?:async\*?\s*)?\{\s*$"
@@ -120,7 +123,8 @@ def check_file(path: Path, findings: list[str]) -> None:
             findings.append(f"{where}:{n}: `dynamic`")
         if is_lib and re.search(r"\blate\b", code) and "late final" not in code:
             findings.append(f"{where}:{n}: `late` that is not `late final`")
-        if is_lib and folder != "storage" and WRITE_CALL.search(code) and "File(" in "".join(lines):
+        writer = is_lib and (folder == "storage" or str(path.relative_to(LIB)) in WRITERS_ALLOWED)
+        if is_lib and not writer and WRITE_CALL.search(code) and "File(" in "".join(lines):
             findings.append(f"{where}:{n}: file write outside storage/")
     if is_lib:
         check_imports(path, lines, findings)

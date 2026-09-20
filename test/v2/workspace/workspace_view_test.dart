@@ -1,7 +1,9 @@
 import 'package:chess_auto_prep/v2/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/ui/theme.dart';
+import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
+import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
 import 'package:chess_auto_prep/v2/workspace/workspace_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -12,12 +14,20 @@ import '../support/fixtures.dart';
 void main() {
   late DocumentSession session;
 
+  /// The engine stays off; its pane has its own test.
+  EngineAnalysis analysis() => EngineAnalysis(
+    session,
+    () async => const StartFailed('no engine in this test'),
+  );
+
   Future<void> pump(WidgetTester tester) async {
     await tester.binding.setSurfaceSize(const Size(1200, 700));
     await tester.pumpWidget(
       MaterialApp(
         theme: darkTheme(),
-        home: Scaffold(body: WorkspaceView(session: session)),
+        home: Scaffold(
+          body: WorkspaceView(session: session, analysis: analysis()),
+        ),
       ),
     );
     await tester.pump();
