@@ -14,9 +14,15 @@ void main() {
         '\n'
         '1. e4 1-0';
     final header = readTags(game);
-    expect(tagValue(header, 'White'), r'He said \"hi\"');
+    expect(tagValue(header, 'White'), 'He said "hi"');
     expect(tagValue(header, 'Result'), '1-0');
     expect(tagValue(header, 'LineID'), 'line_abc');
+  });
+
+  test('an escaped backslash reads as one backslash', () {
+    final header = readTags('[Site "C:\\\\games"]\n[Result "*"]\n\n*');
+    expect(tagValue(header, 'Site'), r'C:\games');
+    expect(tagValue(header, 'Result'), '*');
   });
 
   test('the keys and values real exports carry are read as they are', () {
@@ -52,14 +58,30 @@ void main() {
     expect(header.map((line) => line.text), ['[Event "A"]']);
   });
 
-  test('a game read and written again keeps its escapes', () {
+  test('a game read and written again is the same bytes', () {
     const game =
         '[Event "A"]\n'
         '[White "He said \\"hi\\""]\n'
+        '[Site "C:\\\\games"]\n'
         '[Result "*"]\n'
         '\n'
         '1. e4 *';
     expect(writeGameText(readTags(game), _treeOf(game)), game);
+  });
+
+  test('a value set with a quote in it does not cut the header off', () {
+    const header = [
+      PgnTag('Event', 'He said "go"'),
+      PgnTag('Result', '*'),
+      PgnTag('LineID', 'line_abc'),
+    ];
+    final written = writeGameText(header, _treeOf('[Event "A"]\n\n1. e4 *'));
+    expect(readTags(written).map((line) => line.text), [
+      r'[Event "He said \"go\""]',
+      '[Result "*"]',
+      '[LineID "line_abc"]',
+    ]);
+    expect(tagValue(readTags(written), 'Event'), 'He said "go"');
   });
 
   test('writing puts a line the reader could not parse back unchanged', () {

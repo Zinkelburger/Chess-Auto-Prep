@@ -25,11 +25,15 @@ final class PgnTag extends PgnHeader {
 
   final String key;
 
-  /// The value exactly as the file spells it, escapes included.
+  /// The value as prose: `\"` in the file is a quote here and `\\` is a
+  /// backslash. Writing escapes them again, so a value the file spelled with
+  /// a bare backslash comes back escaped, which is what the standard asks
+  /// for, and a value this app sets can hold a quote without cutting the
+  /// rest of the header off.
   final String value;
 
   @override
-  String get text => '[$key "$value"]';
+  String get text => '[$key "${_escaped(value)}"]';
 }
 
 /// A header line this reader cannot parse — a `%` escape, a bracket somebody
@@ -107,7 +111,7 @@ List<PgnHeader> readTags(String gameText) {
   for (final line in const LineSplitter().convert(gameText)) {
     final match = _tagLine.firstMatch(line);
     if (match != null) {
-      header.add(PgnTag(match.group(1)!, match.group(2)!));
+      header.add(PgnTag(match.group(1)!, _unescaped(match.group(2)!)));
       continue;
     }
     final rest = line.trimLeft();
@@ -132,4 +136,22 @@ String writeGameText(List<PgnHeader> header, GameTree tree) {
   final lines = [for (final line in header) line.text];
   final moves = writeMoveText(tree, result: tagValue(header, 'Result') ?? '*');
   return '${lines.join('\n')}\n\n$moves';
+}
+
+/// PGN escapes two characters inside a tag value and no others: a backslash
+/// and a quote, each with a backslash in front of it.
+String _escaped(String value) =>
+    value.replaceAll(r'\', r'\\').replaceAll('"', r'\"');
+
+String _unescaped(String value) {
+  if (!value.contains(r'\')) return value;
+  final out = StringBuffer();
+  for (var i = 0; i < value.length; i++) {
+    final char = value[i];
+    final next = i + 1 < value.length ? value[i + 1] : '';
+    final escapes = char == r'\' && (next == r'\' || next == '"');
+    out.write(escapes ? next : char);
+    if (escapes) i++;
+  }
+  return out.toString();
 }

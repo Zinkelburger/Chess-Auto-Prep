@@ -233,4 +233,27 @@ void main() {
     expect(after.lines[0].text, contains('(2... Nc6 {Open Sicilian} 3. d4)'));
     expect(writeChapter(reread(after)), writeChapter(after));
   });
+
+  test('commenting a game whose tags hold an escaped quote keeps them all', () {
+    const file =
+        '[Event "He said \\"go\\""]\n'
+        '[Result "*"]\n'
+        '[LineID "line_abc"]\n'
+        '\n'
+        '1. d4 *\n';
+    final after = setComment(
+      parseChapter(name: 'Quoted', text: file),
+      at: NodePath.of([0]),
+      text: 'Main line',
+    );
+    final line = after.lines.single;
+    expect(line.tags.whereType<PgnTag>().map((t) => t.key), [
+      'Event',
+      'Result',
+      'LineID',
+    ]);
+    expect(line.lineId, 'line_abc');
+    expect(line.text, contains(r'[Event "He said \"go\""]'));
+    expect(line.text, contains('1. d4 {Main line} *'));
+  });
 }
