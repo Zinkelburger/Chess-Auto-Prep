@@ -4,6 +4,7 @@ import '../fen.dart';
 import 'game_text.dart';
 import 'game_tree.dart';
 import 'movetext_reader.dart';
+import 'pgn_chars.dart';
 import 'pgn_issue.dart';
 import 'pgn_lexer.dart';
 import 'pgn_token.dart';
@@ -68,7 +69,7 @@ GameRead readGame(String text) {
   final moves = tokens.skip(headers.length).toList();
   final tags = [for (final token in headers) _header(token)];
   final root = _rootPosition(tags);
-  final separator = _separator(text, headers, moves);
+  final separator = _separator(text, headers);
   if (root == null) {
     return GameRead(
       tags: tags,
@@ -91,14 +92,15 @@ GameRead readGame(String text) {
 bool _isHeader(PgnToken token) => token is TagToken || token is HeaderLineToken;
 
 PgnHeader _header(PgnToken token) => switch (token) {
-  TagToken(:final key, :final value, :final newline) => PgnTag(
+  TagToken(:final key, :final value, :final raw, :final trailer) => PgnTag(
     key,
     value,
-    newline: newline,
+    raw: raw,
+    trailer: trailer,
   ),
-  HeaderLineToken(:final text, :final newline) => UnparsedHeader(
+  HeaderLineToken(:final text, :final trailer) => UnparsedHeader(
     text,
-    newline: newline,
+    trailer: trailer,
   ),
   _ => throw StateError('not a header token'),
 };
@@ -121,12 +123,21 @@ PgnIssue _unreadablePosition(
   return UnreadablePosition(line: place.line, column: place.column);
 }
 
-String _separator(String text, List<PgnToken> headers, List<PgnToken> moves) {
+/// The whitespace between the header block and the movetext.
+///
+/// Read off the text rather than off the first move token: a game ending in
+/// `1. ` has a move number and no move, so the first token is one the model
+/// keeps nothing of, and taking the gap up to it would give a game that
+/// writes one way the first time and another way the second.
+String _separator(String text, List<PgnToken> headers) {
   final start = switch (headers.lastOrNull) {
     TagToken(:final end) => end,
     HeaderLineToken(:final end) => end,
     _ => 0,
   };
-  final end = moves.isEmpty ? start : moves.first.at;
-  return end > start ? text.substring(start, end) : '';
+  var end = start;
+  while (end < text.length && isGameWhitespace(text.codeUnitAt(end))) {
+    end++;
+  }
+  return text.substring(start, end);
 }

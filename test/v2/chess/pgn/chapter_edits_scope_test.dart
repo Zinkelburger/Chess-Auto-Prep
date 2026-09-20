@@ -3,6 +3,7 @@
 // that over-reports lets a bad write through: these are the shapes.
 import 'package:chess_auto_prep/v2/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/chapter_edits.dart';
+import 'package:chess_auto_prep/v2/chess/pgn/comment_edits.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/games_written.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -46,10 +47,11 @@ void main() {
     expect(written.appended, 0);
   });
 
-  test('a comment on a shared move says every game that plays it', () {
-    // 2. c4, which the first two games both play; the third starts 1... Nf6.
+  test('a comment on a shared move says the one game it went into', () {
+    // 2. c4, which the first two games both play and neither comments, so
+    // the note lives in the first of them and the other keeps its bytes.
     final written = wroteCommenting(white(), NodePath.of([0, 0, 0]), 'Ours');
-    expect(written.rewritten, {0, 1});
+    expect(written.rewritten, {0});
     expect(written.appended, 0);
   });
 

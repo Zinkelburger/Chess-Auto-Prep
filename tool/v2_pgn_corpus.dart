@@ -12,6 +12,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:chess_auto_prep/v2/chess/pgn/chapter_line.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_text.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/pgn_reader.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/rewrite_gate.dart';
@@ -78,7 +79,7 @@ FileReport _read(File file) {
   final losses = <String>[];
   var rewritable = 0;
   for (final (index, game) in games.indexed) {
-    final loss = _lossOf(game);
+    final loss = _lossOf(game, document.games[index]);
     if (loss == null) {
       rewritable++;
       continue;
@@ -104,19 +105,24 @@ FileReport _read(File file) {
 }
 
 /// Why [game] could not be written again, or null when it can.
-String? _lossOf(GameRead game) {
+///
+/// It asks the gate the app asks, rather than a second copy of the rule.
+String? _lossOf(GameRead game, GameSpan span) {
   final tree = game.tree;
   if (tree == null) return game.issues.firstOrNull?.toString() ?? 'no position';
-  if (game.issues.isNotEmpty) return game.issues.first.toString();
-  final rewrite = safeGameText(
+  final line = ChapterLine(
     tags: game.tags,
     tree: tree,
+    text: span.text,
+    trailer: span.trailer,
     terminator: game.terminator,
     separator: game.separator,
+    issues: game.issues,
   );
-  return switch (rewrite) {
-    RewriteReady() => null,
-    RewriteRefused(:final reason) => reason,
+  return switch (rewritten(line, tree)) {
+    LineRewritten() => null,
+    LineRefused() when game.issues.isNotEmpty => game.issues.first.toString(),
+    LineRefused(:final reason) => reason,
   };
 }
 

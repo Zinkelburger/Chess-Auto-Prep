@@ -11,29 +11,40 @@ sealed class PgnToken {
 /// One `[Key "value"]` pair. [value] is prose: `\"` and `\\` are already a
 /// quote and a backslash.
 final class TagToken extends PgnToken {
-  const TagToken(super.at, this.end, this.key, this.value, this.newline);
+  const TagToken(
+    super.at,
+    this.end,
+    this.key,
+    this.value,
+    this.raw,
+    this.trailer,
+  );
 
-  /// The offset just past this tag's line ending.
+  /// The offset just past this tag and the whitespace after it.
   final int end;
 
   final String key;
   final String value;
 
-  /// The line ending that followed this tag's line, or the empty string when
-  /// another tag followed it on the same line or the text ended.
-  final String newline;
+  /// The tag exactly as the file wrote it, `[` to `]`.
+  final String raw;
+
+  /// The whitespace between this tag and whatever came next.
+  final String trailer;
 }
 
 /// A line in the header block that is not a tag pair, kept exactly as it was
 /// written so it can go back unchanged.
 final class HeaderLineToken extends PgnToken {
-  const HeaderLineToken(super.at, this.end, this.text, this.newline);
+  const HeaderLineToken(super.at, this.end, this.text, this.trailer);
 
-  /// The offset just past this line's ending.
+  /// The offset just past this line and its ending.
   final int end;
 
   final String text;
-  final String newline;
+
+  /// The line's ending, or the empty string at the end of the text.
+  final String trailer;
 }
 
 /// The text of a `{}` or `;` comment, exactly as the file wrote it between

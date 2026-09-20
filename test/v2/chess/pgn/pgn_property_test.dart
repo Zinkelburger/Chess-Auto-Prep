@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:chess_auto_prep/v2/chess/fen.dart';
+import 'package:chess_auto_prep/v2/chess/pgn/chapter_line.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_text.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/pgn_reader.dart';
@@ -95,18 +96,21 @@ void main() {
         children: growTree(random, Fen.initial, 6),
       );
       const tags = [PgnTag('Event', 'Property'), PgnTag('Result', '*')];
-      final rewrite = safeGameText(
+      final line = ChapterLine(
         tags: tags,
         tree: tree,
+        text: '',
+        trailer: '',
         terminator: '*',
         separator: '\n',
       );
+      final rewrite = rewritten(line, tree);
       expect(
-        rewrite is RewriteReady ? null : (rewrite as RewriteRefused).reason,
+        rewrite is LineRewritten ? null : (rewrite as LineRefused).reason,
         isNull,
         reason: 'seed $seed',
       );
-      final text = (rewrite as RewriteReady).text;
+      final text = (rewrite as LineRewritten).line.text;
       expect(readGame(text).issues, isEmpty, reason: 'seed $seed');
       // Written a second time from what reading gave: the same bytes, so a
       // game cannot drift a little further on every save.

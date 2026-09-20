@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:chess_auto_prep/v2/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/pgn_reader.dart';
-import 'package:chess_auto_prep/v2/chess/pgn/rewrite_gate.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/pgn_round_trip.dart';
@@ -86,10 +85,9 @@ const _normalised = {
 
 void main() {
   test('the fixture folder holds exactly the files the tests name', () {
-    final found = Directory('test/fixtures/v2_pgn')
-        .listSync()
-        .map((entry) => entry.uri.pathSegments.last)
-        .toList();
+    final found = Directory(
+      'test/fixtures/v2_pgn',
+    ).listSync().map((entry) => entry.uri.pathSegments.last).toList();
     expect(found..sort(), [..._fixtures]..sort());
   });
 
@@ -171,21 +169,17 @@ void main() {
     // and neither the old app nor Lichess escapes it — both strip braces
     // instead. So a `}` the user types is text the writer cannot say, and
     // the gate refuses rather than quietly dropping it.
-    final read = readGame('1. e4 *');
-    final tree = read.tree!;
-    final refused = safeGameText(
-      tags: read.tags,
-      terminator: read.terminator,
-      separator: read.separator,
-      tree: GameTree(
-        rootFen: tree.rootFen,
-        children: [tree.children.single.copyWith(comment: 'a } b')],
-      ),
-    );
-    expect(refused, isA<RewriteRefused>());
+    const game = '1. e4 *';
+    final tree = readGame(game).tree!;
     expect(
-      (refused as RewriteRefused).reason,
-      '"b" is not anything a game can hold',
+      refusal(
+        game,
+        GameTree(
+          rootFen: tree.rootFen,
+          children: [tree.children.single.copyWith(comment: 'a } b')],
+        ),
+      ),
+      isNotNull,
     );
   });
 }

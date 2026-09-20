@@ -442,13 +442,20 @@ of named, located issues. **Any issue at all makes the game not whole:** it
 keeps its own bytes, is left out of `Chapter.writableTree`, and every edit
 that would have to rewrite it is refused with a typed reason the screen shows.
 
-**The round-trip gate.** `safeGameText` in `chess/pgn/rewrite_gate.dart` is the
-only way a game already in a file becomes new text. It writes the game, reads
-that text back and compares headers, moves, comments, annotations and marker;
-it answers `RewriteReady(text)` or `RewriteRefused(reason)`. `rewritten` in
-`chapter.dart` goes through it and hands back the untouched game on a refusal,
-so no caller can rewrite a game that fails it. The store needs no hook: a
-chapter that cannot be written never produces text for the store to save.
+**The round-trip gate.** `rewritten` in `chess/pgn/rewrite_gate.dart` is the
+only way a game already in a file becomes new text. It refuses a game reading
+did not take whole; otherwise it writes the game, reads that text back and
+compares headers, separator, moves, comments, annotations and marker, and
+answers `LineRewritten(line)` or `LineRefused(reason)`. An edit commits
+nothing until every game it must write comes back, so a note never lands in
+some games and not others, and a refusal reaches the user as a typed reason.
+The store needs no hook: a chapter that cannot be written never produces text
+for the store to save.
+
+A comment lives where it lived. A move several games play is commented in the
+games that already carry a comment on it, or in the first game that plays it
+when none does; reading merges the comments of every game, so the workspace
+still shows one note.
 
 The writer's canonical form is stated on `writeMoveText`. It keeps the SAN the
 file spelled, every comment's text, the order of moves and variations, the NAG

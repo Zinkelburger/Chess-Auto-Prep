@@ -10,26 +10,36 @@ import 'game_tree.dart';
 /// **The canonical form.** A chapter only writes the games an edit touched;
 /// the rest keep their own bytes. What a rewritten game keeps: the SAN
 /// exactly as the file spelled it, every comment's text, the order of the
-/// moves and variations, the NAG numbers, the termination marker. What it
-/// normalises, each of which reads back as the same game:
+/// moves and variations, the NAG numbers, the termination marker, and each
+/// header line exactly as the file wrote it. What it normalises, all of it
+/// inside the one game the edit touched, and each of which reads back as
+/// the same game:
 ///
 /// * move numbers are written where a reader needs them — before White's
 ///   move and at the start of a variation — and dropped everywhere else, so
-///   a course that numbered Black's ply `5.` comes back numbered `5...`;
+///   a course that numbered Black's ply `5.` comes back numbered `5...`.
+///   They count from the starting position, so a game that opened at
+///   `10000.` from the initial position comes back at `1.`;
 /// * several comments on one move join into one, `{a} {b}` into `{a b}`;
 /// * a `;` comment becomes a `{}` comment;
 /// * a symbolic annotation comes back as its number, `!?` as `$5`;
 /// * `e.p.`, an empty `()` and a `)` that opened nothing are dropped;
-/// * a termination marker written in the middle moves to the end.
+/// * a termination marker written in the middle moves to the end;
+/// * the movetext is one line ending in `\n`, so a game whose moves ran
+///   over several lines, or ended them with CRLF, comes back on one;
+/// * a byte-order mark among the moves is dropped. One at the start of the
+///   file belongs to the file and is kept in its preamble.
 ///
-/// A comment is written exactly as it is held, `}` included. A `}` cannot be
-/// written inside `{}` and there is no escape for it in PGN, so the game
-/// will not read back as itself and `safeGameText` refuses the rewrite; the
-/// text is never quietly thrown away.
+/// A comment is written exactly as it is held, `}` and emptiness included.
+/// A comment with nothing in it is `{}` rather than nothing at all, because
+/// nothing at all is a game that does not read back as itself. A `}` cannot
+/// be written inside `{}` and PGN has no escape for it, so a comment holding
+/// one is a named issue at read and a refused rewrite at write; the text is
+/// never quietly thrown away.
 String writeMoveText(GameTree tree, {required String? terminator}) {
   final buffer = StringBuffer();
   final comment = tree.rootComment;
-  if (comment != null && comment.isNotEmpty) buffer.write('{$comment} ');
+  if (comment != null) buffer.write('{$comment} ');
   _writeLine(
     buffer,
     tree.children,
@@ -87,12 +97,12 @@ void _writeMove(
   required bool numbered,
 }) {
   final starting = node.startingComment;
-  if (starting != null && starting.isNotEmpty) buffer.write('{$starting} ');
+  if (starting != null) buffer.write('{$starting} ');
   if (numbered) buffer.write(isWhite ? '$moveNumber. ' : '$moveNumber... ');
   buffer.write('${node.spelling ?? node.san} ');
   for (final nag in node.nags) {
     buffer.write('\$$nag ');
   }
   final comment = node.comment;
-  if (comment != null && comment.isNotEmpty) buffer.write('{$comment} ');
+  if (comment != null) buffer.write('{$comment} ');
 }

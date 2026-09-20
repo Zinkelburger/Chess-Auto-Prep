@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import '../chess/fen.dart';
 import '../chess/pgn/chapter.dart';
 import '../chess/pgn/chapter_edits.dart' as edits;
+import '../chess/pgn/comment_edits.dart' as edits;
 import '../chess/pgn/games_written.dart';
 import '../chess/pgn/game_tree.dart';
 import '../diagnostics/log.dart';

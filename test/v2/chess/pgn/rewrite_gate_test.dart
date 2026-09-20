@@ -1,5 +1,6 @@
 import 'package:chess_auto_prep/v2/chess/pgn/chapter.dart';
-import 'package:chess_auto_prep/v2/chess/pgn/chapter_edits.dart';
+import 'package:chess_auto_prep/v2/chess/pgn/comment_edits.dart';
+import 'package:chess_auto_prep/v2/chess/pgn/chapter_line.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/pgn_reader.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/rewrite_gate.dart';
@@ -27,50 +28,67 @@ const _oneGame =
     '\n'
     '1. d4 d5 *\n';
 
+ChapterLine lineOf(Chapter chapter) => chapter.lines.single;
+
 void main() {
   test('a game the writer can say comes back with its text', () {
-    final read = readGame('[Event "A"]\n\n1. e4 e5 *');
-    final rewrite = safeGameText(
-      tags: read.tags,
-      tree: treeWithComment('1. e4 e5 *', 'King pawn'),
-      terminator: read.terminator,
-      separator: read.separator,
+    final chapter = parseChapter(name: 'A', text: _oneGame);
+    final rewrite = rewritten(
+      lineOf(chapter),
+      treeWithComment('1. d4 d5 *', 'Queen pawn'),
     );
-    expect(rewrite, isA<RewriteReady>());
+    expect(rewrite, isA<LineRewritten>());
     expect(
-      (rewrite as RewriteReady).text,
-      '[Event "A"]\n\n1. e4 {King pawn} e5 *',
+      (rewrite as LineRewritten).line.text,
+      endsWith('1. d4 {Queen pawn} d5 *'),
     );
   });
 
   test('a comment holding a closing brace is refused, not stripped', () {
-    final read = readGame('[Event "A"]\n\n1. e4 e5 *');
-    final rewrite = safeGameText(
-      tags: read.tags,
-      tree: treeWithComment('1. e4 e5 *', 'careful } here'),
-      terminator: read.terminator,
-      separator: read.separator,
+    final chapter = parseChapter(name: 'A', text: _oneGame);
+    final rewrite = rewritten(
+      lineOf(chapter),
+      treeWithComment('1. d4 d5 *', 'careful } here'),
     );
-    expect(rewrite, isA<RewriteRefused>());
+    expect(rewrite, isA<LineRefused>());
+  });
+
+  test('a game reading could not take whole is refused before anything is '
+      'written', () {
+    final chapter = parseChapter(
+      name: 'Partial',
+      text: '[Event "A"]\n[Result "*"]\n\n1. e4 e5 2. Ke3 Nf6 *\n',
+    );
+    final line = lineOf(chapter);
+    expect(line.isWhole, isFalse);
+    final rewrite = rewritten(line, line.tree!);
+    expect(rewrite, isA<LineRefused>());
+    expect((rewrite as LineRefused).reason, 'the game was not read whole');
   });
 
   test('a chapter rewrite that the gate refuses keeps the game it had', () {
     final chapter = parseChapter(name: 'A', text: _oneGame);
-    final line = chapter.lines.single;
-    final kept = rewritten(line, treeWithComment('1. d4 d5 *', 'a } brace'));
-    expect(identical(kept, line), isTrue);
-    expect(writeChapter(withLines(chapter, [kept])), _oneGame);
+    final kept = rewritten(
+      lineOf(chapter),
+      treeWithComment('1. d4 d5 *', 'a } brace'),
+    );
+    expect(kept, isA<LineRefused>());
+    expect(writeChapter(chapter), _oneGame);
   });
 
   test('a chapter rewrite the gate allows keeps every tag it had', () {
     final chapter = parseChapter(name: 'A', text: _oneGame);
     final line = rewritten(
-      chapter.lines.single,
+      lineOf(chapter),
       treeWithComment('1. d4 d5 *', 'Main line'),
     );
-    expect(line.text, contains('[LineID "line_abc"]'));
-    expect(line.text, endsWith('1. d4 {Main line} d5 *'));
-    expect(writeChapter(withLines(chapter, [line])), contains('{Main line}'));
+    final written = (line as LineRewritten).line;
+    expect(written.text, contains('[LineID "line_abc"]'));
+    expect(written.text, endsWith('1. d4 {Main line} d5 *'));
+    expect(
+      writeChapter(withLines(chapter, [written])),
+      contains('{Main line}'),
+    );
   });
 
   group('an edit whose words a PGN file cannot hold', () {

@@ -11,12 +11,18 @@ import 'game_tree.dart';
 
 /// The position [fen] describes, or null when the text is not a position
 /// a game can be played from.
+///
+/// Every throw is caught, not the two named ones: dartchess answers a
+/// malformed FEN with `FenException`, with `PositionSetupException` and,
+/// from the board parser, with a bare `ArgumentError` — `.NBQKBNR` gives
+/// "Invalid argument(s): -2". Which of them came back is not information
+/// anybody can use, and one stray byte in one game must not take a whole
+/// document, or the list of every repertoire, down with it. The caller
+/// turns null into a located issue.
 Position? positionOf(Fen fen) {
   try {
     return Chess.fromSetup(Setup.parseFen(fen.value));
-  } on FenException {
-    return null;
-  } on PositionSetupException {
+  } on Object {
     return null;
   }
 }
@@ -33,27 +39,34 @@ MoveNode? moveNode(Fen fen, Move move) {
   return MoveNode(san: san, uci: move.uci, fen: Fen(next.fen));
 }
 
-/// A ply where nobody moved, as a childless node, or null when [fen] is not
-/// a position one can be played from.
+/// A ply where nobody moved, played from [position]: the node and the
+/// position after it.
 ///
 /// Chessable writes a whole introduction chapter as `{prose} 1. -- *`, and
 /// its `Z0` waiting plies carry the variations under them, so a reader that
 /// dropped the ply would drop the chapter. Nobody moving advances the clock
-/// and the side, and clears the en-passant square: that is the whole rule.
-MoveNode? nullMoveNode(Fen fen, {required String spelling}) {
-  if (positionOf(fen) == null) return null;
-  final fields = fen.value.split(' ');
-  if (fields.length < 6) return null;
-  final black = fields[1] == 'b';
-  fields[1] = black ? 'w' : 'b';
-  fields[3] = '-';
-  fields[4] = '${(int.tryParse(fields[4]) ?? 0) + 1}';
-  if (black) fields[5] = '${(int.tryParse(fields[5]) ?? 1) + 1}';
-  return MoveNode(
-    san: nullMoveSan,
-    spelling: spelling == nullMoveSan ? null : spelling,
-    uci: '0000',
-    fen: Fen(fields.join(' ')),
+/// and the side, and clears the en-passant square: that is the whole rule,
+/// and it is done on the position rather than on its FEN so no ply costs a
+/// position read back out of text.
+(MoveNode, Position) nullMovePlayed(
+  Position position, {
+  required String spelling,
+}) {
+  final black = position.turn == Side.black;
+  final after = position.copyWith(
+    turn: black ? Side.white : Side.black,
+    epSquare: null,
+    halfmoves: position.halfmoves + 1,
+    fullmoves: black ? position.fullmoves + 1 : position.fullmoves,
+  );
+  return (
+    MoveNode(
+      san: nullMoveSan,
+      spelling: spelling == nullMoveSan ? null : spelling,
+      uci: '0000',
+      fen: Fen(after.fen),
+    ),
+    after,
   );
 }
 

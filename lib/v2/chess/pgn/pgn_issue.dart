@@ -49,6 +49,15 @@ final class UnterminatedComment extends PgnIssue {
   String get detail => 'a comment was never closed';
 }
 
+/// A comment holding a `}`, which only a `;` comment can do and no `{}`
+/// comment can be written back as.
+final class CommentHoldsBrace extends PgnIssue {
+  const CommentHoldsBrace({required super.line, required super.column});
+
+  @override
+  String get detail => 'a comment holding a closing brace';
+}
+
 /// A `(` that the game's text never closed.
 final class UnterminatedVariation extends PgnIssue {
   const UnterminatedVariation({required super.line, required super.column});

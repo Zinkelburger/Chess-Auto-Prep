@@ -1,4 +1,4 @@
-import 'package:dartchess/dartchess.dart' show Position;
+import 'package:dartchess/dartchess.dart' show Move, Position;
 
 import '../fen.dart';
 import 'game_tree.dart';
@@ -95,7 +95,7 @@ final class _Moves {
       case SanToken(:final text, :final at):
         _move(_played(_stack.last.position, text, at), at);
       case NullMoveToken(:final text, :final at):
-        _move(_nullPlayed(_stack.last.position, text, at), at);
+        _move(_nullPlayed(_stack.last.position, text), at);
       case CommentToken():
         _comment(token);
       case NagToken(:final value, :final at):
@@ -136,7 +136,7 @@ final class _Moves {
   /// The node [spelling] makes from [position], or null with an issue
   /// recorded.
   _Node? _played(Position position, String spelling, int at) {
-    final move = position.parseSan(parseableSan(spelling));
+    final move = _parsed(position, spelling);
     if (move == null) {
       _say(at, (l, c) => IllegalMove(spelling, line: l, column: c));
       return null;
@@ -153,12 +153,9 @@ final class _Moves {
     );
   }
 
-  _Node? _nullPlayed(Position position, String spelling, int at) {
-    final node = nullMoveNode(Fen(position.fen), spelling: spelling);
-    final after = node == null ? null : positionOf(node.fen);
-    if (node != null && after != null) return _Node(node, after);
-    _say(at, (l, c) => IllegalMove(spelling, line: l, column: c));
-    return null;
+  _Node _nullPlayed(Position position, String spelling) {
+    final (node, after) = nullMovePlayed(position, spelling: spelling);
+    return _Node(node, after);
   }
 
   void _move(_Node? played, int at) {
@@ -173,6 +170,11 @@ final class _Moves {
   void _comment(CommentToken token) {
     if (!token.closed) {
       _say(token.at, (l, c) => UnterminatedComment(line: l, column: c));
+    }
+    // Only a `;` comment can hold a `}`, and there is no way to write one
+    // back: `{` … `}` ends at the brace and PGN has no escape for it.
+    if (token.text.contains('}')) {
+      _say(token.at, (l, c) => CommentHoldsBrace(line: l, column: c));
     }
     final frame = _stack.last;
     final node = frame.node;
@@ -263,6 +265,21 @@ List<MoveNode> _freeze(List<_Node> nodes) {
     );
   }
   return List.unmodifiable([for (final node in nodes) made[node]!]);
+}
+
+/// The move [spelling] names in [position], or null when it names none.
+///
+/// dartchess answers an unplayable move with null for most spellings and
+/// with a `RangeError` for a few — it reads the first character of a SAN it
+/// has already cut annotations off, so a token like `xe4` leaves it with
+/// nothing to read. A move nobody can play is a move nobody can play; the
+/// caller reports it either way.
+Move? _parsed(Position position, String spelling) {
+  try {
+    return position.parseSan(parseableSan(spelling));
+  } on Object {
+    return null;
+  }
 }
 
 /// [san] in the one spelling dartchess parses: letter-O castling and an

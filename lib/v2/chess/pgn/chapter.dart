@@ -3,77 +3,12 @@ import 'dart:convert';
 import 'package:dartchess/dartchess.dart' show Side;
 
 import '../fen.dart';
+import 'chapter_line.dart';
 import 'game_text.dart';
 import 'game_tree.dart';
 import 'pgn_issue.dart';
 import 'pgn_reader.dart';
-import 'rewrite_gate.dart';
 import 'tree_merge.dart';
-
-/// One game of a chapter file: the line a reader trains and a writer edits.
-///
-/// The game is the persistent unit, so a line keeps everything a write-back
-/// needs — its tags in file order with the endings they had, its own tree
-/// (variations included), the marker the file ended it with, the whitespace
-/// before its moves and its verbatim source. An untouched line is written
-/// back byte for byte; only an edited one is generated again.
-final class ChapterLine {
-  const ChapterLine({
-    required this.tags,
-    required this.tree,
-    required this.text,
-    required this.trailer,
-    required this.terminator,
-    required this.separator,
-    this.issues = const [],
-  });
-
-  /// Every line of the game's header block, in file order.
-  final List<PgnHeader> tags;
-
-  /// The game's moves, or null when nothing could read it — a `[FEN]` header
-  /// that is not a position. An unread game keeps [text] and is never merged,
-  /// edited or generated again, so no edit elsewhere can write over it.
-  final GameTree? tree;
-
-  /// The game's source, with no trailing whitespace.
-  final String text;
-
-  /// The whitespace between this game and the next, kept so a file that is
-  /// read and written again is unchanged.
-  final String trailer;
-
-  /// The game-termination marker the file wrote, or null when it wrote none.
-  final String? terminator;
-
-  /// The whitespace between the header block and the first move.
-  final String separator;
-
-  /// What reading the game could not carry into [tree].
-  final List<PgnIssue> issues;
-
-  /// Whether [tree] holds everything [text] holds.
-  ///
-  /// Anything reading could not carry — a move that is not legal, a comment
-  /// nobody closed, a `%` directive among the moves, a word that is not
-  /// anything a game can hold — is one of [issues], and the text it stands
-  /// for is still in the file. Generating the game again from [tree] would
-  /// delete that text. A game that was not read whole is therefore written
-  /// back as its own bytes and nothing else, and an edit that would have to
-  /// rewrite it is refused instead.
-  bool get isWhole => tree != null && issues.isEmpty;
-
-  /// The identity every later lookup uses — training progress, rename,
-  /// delete. Files in the wild spell it five ways; whichever one a file has
-  /// is the line's id.
-  String? get lineId {
-    for (final key in const ['LineID', 'LineId', 'Id', 'Line', 'Guid']) {
-      final value = tagValue(tags, key)?.trim();
-      if (value != null && value.isNotEmpty) return value;
-    }
-    return null;
-  }
-}
 
 /// A repertoire chapter: the file's preamble, its games, and every game
 /// from the same starting position merged into one tree.
@@ -197,34 +132,6 @@ Chapter withLines(
   lines: List.unmodifiable(lines),
   tree: mergeLines(lines),
 );
-
-/// [line] carrying [tree], or [line] untouched when writing it again would
-/// not read back as the same game.
-///
-/// This is the only place a game already in a file becomes new text, so the
-/// gate here is the gate for every edit. Nothing reaches it that reading did
-/// not take whole, and if the writer still could not say what the model
-/// holds — a `}` typed into a comment is the one way a user can cause that —
-/// the chapter keeps the bytes it had.
-ChapterLine rewritten(ChapterLine line, GameTree tree) {
-  final written = safeGameText(
-    tags: line.tags,
-    tree: tree,
-    terminator: line.terminator,
-    separator: line.separator,
-  );
-  return switch (written) {
-    RewriteRefused() => line,
-    RewriteReady(:final text) => ChapterLine(
-      tags: line.tags,
-      tree: tree,
-      text: text,
-      trailer: line.trailer,
-      terminator: line.terminator,
-      separator: line.separator,
-    ),
-  };
-}
 
 /// Every game from the first readable game's position, folded in file order.
 /// That game fixes the main line; later games can only add variations.

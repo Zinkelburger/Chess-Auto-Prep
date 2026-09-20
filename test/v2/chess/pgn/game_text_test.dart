@@ -2,6 +2,8 @@ import 'package:chess_auto_prep/v2/chess/pgn/game_text.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/pgn_reader.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/pgn_round_trip.dart';
+
 /// One game read and written again, which is what a chapter does to the one
 /// game an edit touched.
 String rewrite(String game) {
@@ -102,12 +104,35 @@ void main() {
     expect(rewrite(game), game);
   });
 
-  test('two tags on one line become two lines and keep both values', () {
+  test('two tags on one line stay on one line and keep both values', () {
     const game = '[Event "A"] [Site "B"]\n\n1. e4 *';
     final header = headerOf(game);
     expect(tagValue(header, 'Event'), 'A');
     expect(tagValue(header, 'Site'), 'B');
-    expect(rewrite(game), '[Event "A"]\n[Site "B"]\n\n1. e4 *');
+    expect(rewrite(game), game);
+  });
+
+  test('a tag value keeps the backslash the file wrote', () {
+    // The standard says to escape it; tidying it would change bytes the
+    // edit never touched.
+    const game = '[Event "a\\b"]\n\n1. e4 *';
+    expect(tagValue(headerOf(game), 'Event'), r'a\b');
+    expect(rewrite(game), game);
+  });
+
+  test('trailing space after a tag line survives', () {
+    const game = '[Event "A"]  \n[Result "*"]\n\n1. e4 *';
+    expect(rewrite(game), game);
+  });
+
+  test('a game with its moves on the header line gains no newline', () {
+    expectExactRoundTrip('[Event "a"] 1. e4 *');
+  });
+
+  test('a header and a move number with no move writes the same twice', () {
+    const game = '[Event "a"]\n\n1. ';
+    final once = rewrite(game);
+    expect(rewrite(once), once);
   });
 
   test('a line that is not a tag is kept, and the tags below it with it', () {

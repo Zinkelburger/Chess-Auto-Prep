@@ -1,8 +1,9 @@
+import 'chapter_line.dart';
 import 'game_text.dart';
 import 'game_tree.dart';
 import 'pgn_reader.dart';
 
-/// The one way a game already in a file is written again.
+/// The one way a game already in a file becomes new text.
 ///
 /// Writing a game from a model can only keep what the model holds, so the
 /// question is never "did the writer try" but "does the text still say the
@@ -10,54 +11,67 @@ import 'pgn_reader.dart';
 /// the game, reads the text back and compares. A game that comes back
 /// different is not written at all — the file keeps its bytes and the caller
 /// is told why.
-sealed class Rewrite {
-  const Rewrite();
+sealed class LineRewrite {
+  const LineRewrite();
 }
 
-/// The game's text, which reads back as the game it was written from.
-final class RewriteReady extends Rewrite {
-  const RewriteReady(this.text);
+/// [line] carrying the new tree, its text written again.
+final class LineRewritten extends LineRewrite {
+  const LineRewritten(this.line);
 
-  final String text;
+  final ChapterLine line;
 }
 
 /// The game must keep the bytes it has. [reason] is one plain English
 /// sentence fragment for the user.
-final class RewriteRefused extends Rewrite {
-  const RewriteRefused(this.reason);
+final class LineRefused extends LineRewrite {
+  const LineRefused(this.reason);
 
   final String reason;
 }
 
-/// [tags], [separator] and [tree] as one game's text, but only when reading
-/// that text back gives the same game.
-Rewrite safeGameText({
-  required List<PgnHeader> tags,
-  required GameTree tree,
-  required String? terminator,
-  required String separator,
-}) {
+/// [line] carrying [tree], or why it cannot.
+///
+/// Both gates are here. A game reading did not take whole is refused before
+/// anything is written, because its text holds moves the tree does not. A
+/// game that passes that is written, read back and compared, which catches
+/// what the model can hold but the format cannot — a `}` typed into a
+/// comment is the one way a user can cause it.
+LineRewrite rewritten(ChapterLine line, GameTree tree) {
+  if (!line.isWhole) {
+    return const LineRefused('the game was not read whole');
+  }
   final text = writeGameText(
-    tags,
+    line.tags,
     tree,
-    terminator: terminator,
-    separator: separator,
+    terminator: line.terminator,
+    separator: line.separator,
   );
   final back = readGame(text);
-  final reason = _difference(back, tags, tree, terminator);
-  return reason == null ? RewriteReady(text) : RewriteRefused(reason);
+  final reason = _difference(back, line, tree);
+  if (reason != null) return LineRefused(reason);
+  return LineRewritten(
+    ChapterLine(
+      tags: line.tags,
+      tree: tree,
+      text: text,
+      trailer: line.trailer,
+      terminator: line.terminator,
+      separator: line.separator,
+    ),
+  );
 }
 
-String? _difference(
-  GameRead back,
-  List<PgnHeader> tags,
-  GameTree tree,
-  String? terminator,
-) {
+String? _difference(GameRead back, ChapterLine line, GameTree tree) {
   final issue = back.issues.firstOrNull;
   if (issue != null) return issue.detail;
-  if (back.terminator != terminator) return 'the game would end differently';
-  final headers = _headerDifference(tags, back.tags);
+  if (back.terminator != line.terminator) {
+    return 'the game would end differently';
+  }
+  if (back.separator != line.separator) {
+    return 'the space before the moves would change';
+  }
+  final headers = _headerDifference(line.tags, back.tags);
   if (headers != null) return headers;
   final read = back.tree;
   if (read == null) return 'the starting position would be lost';
@@ -67,7 +81,10 @@ String? _difference(
 String? _headerDifference(List<PgnHeader> before, List<PgnHeader> after) {
   if (before.length != after.length) return 'a header line would be lost';
   for (var i = 0; i < before.length; i++) {
-    if (before[i].text == after[i].text) continue;
+    if (before[i].text == after[i].text &&
+        before[i].trailer == after[i].trailer) {
+      continue;
+    }
     return 'the header ${before[i].text} would not come back';
   }
   return null;

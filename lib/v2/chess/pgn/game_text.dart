@@ -1,6 +1,6 @@
 import 'game_tree.dart';
 import 'move_text.dart';
-import 'pgn_lexer.dart';
+import 'pgn_chars.dart';
 
 /// One line of a game's header block, kept in the order the file has it.
 ///
@@ -9,14 +9,15 @@ import 'pgn_lexer.dart';
 /// a list rather than a set of fields. A line that is not a tag at all is kept
 /// for the same reason: stopping at it would drop every tag below it too.
 sealed class PgnHeader {
-  const PgnHeader({this.newline = '\n'});
+  const PgnHeader({this.trailer = '\n'});
 
-  /// The line ending this line had in the file. Real repertoire exports put
-  /// CRLF on the tag lines and LF on everything else in the same game, so
-  /// one ending per file would change bytes the edit never touched.
-  final String newline;
+  /// The whitespace between this line and whatever followed it. Real
+  /// repertoire exports put CRLF on the tag lines and LF on everything else
+  /// in the same game, and some put two tags on one line; keeping what was
+  /// there is what stops an edit changing bytes it never touched.
+  final String trailer;
 
-  /// The line as it belongs in the file, without its ending.
+  /// The line as it belongs in the file, without that whitespace.
   String get text;
 
   @override
@@ -25,25 +26,31 @@ sealed class PgnHeader {
 
 /// One `[Key "value"]` tag.
 final class PgnTag extends PgnHeader {
-  const PgnTag(this.key, this.value, {super.newline});
+  const PgnTag(this.key, this.value, {this.raw, super.trailer});
 
   final String key;
 
   /// The value as prose: `\"` in the file is a quote here and `\\` is a
-  /// backslash. Writing escapes them again, so a value the file spelled with
-  /// a bare backslash comes back escaped, which is what the standard asks
-  /// for, and a value this app sets can hold a quote without cutting the
-  /// rest of the header off.
+  /// backslash. A value this app sets can hold a quote without cutting the
+  /// rest of the header off, because writing escapes it again.
   final String value;
 
+  /// The tag exactly as the file wrote it, when it came from a file.
+  ///
+  /// It is written back unchanged, so an edit to one move of a game does not
+  /// also tidy its headers: a value spelled `a\b`, which the standard says
+  /// to escape, stays `a\b` rather than becoming `a\\b`. A tag this app
+  /// builds has none and is written in the standard form.
+  final String? raw;
+
   @override
-  String get text => '[$key "${_escaped(value)}"]';
+  String get text => raw ?? '[$key "${_escaped(value)}"]';
 }
 
 /// A header line this reader cannot parse — a `%` escape, a bracket somebody
 /// mistyped — written back exactly as it was read.
 final class UnparsedHeader extends PgnHeader {
-  const UnparsedHeader(this.text, {super.newline});
+  const UnparsedHeader(this.text, {super.trailer});
 
   @override
   final String text;
@@ -106,6 +113,54 @@ bool _isEventLine(String text, int start, int end) {
       isTokenBlank(text.codeUnitAt(i + event.length));
 }
 
+/// Whether a `{}` comment is still open at the end of the run [start]–[end],
+/// given that [commented] says whether one was open before it.
+///
+/// Open or closed, never a count: PGN comments do not nest, so a `}` inside
+/// one ends it and a `{` inside one is text. Cutting a file into games needs
+/// this before it can trust a line that starts with `[Event`.
+///
+/// Only the movetext can open one. A `{` inside a tag value — `[Event "a {b"]`
+/// — or after a `;` is an ordinary character, and a file read as if it were a
+/// comment would have every game below it swallowed into one blob that no
+/// edit could ever touch again.
+bool commentOpenAfter(String text, int start, int end, bool commented) {
+  var open = commented;
+  var i = start;
+  while (i < end) {
+    final unit = text.codeUnitAt(i);
+    if (open) {
+      if (unit == closeBrace) open = false;
+      i++;
+      continue;
+    }
+    if (unit == openBrace) {
+      open = true;
+      i++;
+      continue;
+    }
+    if (unit == semicolon) return false;
+    i = unit == quote ? _pastQuoted(text, i, end) : i + 1;
+  }
+  return open;
+}
+
+/// Just past the quoted value starting at [i]; a backslash escapes the
+/// character after it, which is how a value holds a quote.
+int _pastQuoted(String text, int i, int end) {
+  var j = i + 1;
+  while (j < end) {
+    final unit = text.codeUnitAt(j);
+    if (unit == backslash) {
+      j += 2;
+      continue;
+    }
+    if (unit == quote) return j + 1;
+    j++;
+  }
+  return end;
+}
+
 /// The value of the first tag named [key], or null.
 String? tagValue(List<PgnHeader> header, String key) {
   for (final line in header) {
@@ -115,9 +170,9 @@ String? tagValue(List<PgnHeader> header, String key) {
 }
 
 /// [header], [separator] and [tree] as one game's text: the header lines in
-/// the order they are given with the endings they had, the whitespace that
-/// stood between them and the moves, and the movetext on one line ending
-/// with [terminator].
+/// the order they are given with the whitespace that followed each of them,
+/// whatever else stood between them and the moves, and the movetext on one
+/// line ending with [terminator].
 String writeGameText(
   List<PgnHeader> header,
   GameTree tree, {
@@ -128,7 +183,7 @@ String writeGameText(
   for (final line in header) {
     buffer
       ..write(line.text)
-      ..write(line.newline);
+      ..write(line.trailer);
   }
   return (buffer
         ..write(separator)

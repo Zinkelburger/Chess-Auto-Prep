@@ -2,7 +2,7 @@ import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
 
 import '../chess/pgn/chapter.dart';
-import '../chess/pgn/chapter_edits.dart';
+import '../chess/pgn/comment_edits.dart';
 import '../storage/chapter_files.dart';
 import '../ui/theme.dart';
 import 'document_saver.dart';

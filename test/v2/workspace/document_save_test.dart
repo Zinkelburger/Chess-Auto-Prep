@@ -35,14 +35,14 @@ void main() {
           .rewritten;
 
   test('a save names the games it writes again', () async {
-    // A note on the first move goes into both lines that play it; one on a
-    // move only the first line plays goes into that line alone.
+    // 1... c5 is played by both lines and commented only in the first, so
+    // the words go where they already lived; 2. Nc3 is the second line's.
     edit('shared');
     await pumpEventQueue();
-    expect(declared(), {0, 1});
-    session.setComment(NodePath.of([0, 0]), 'this line only');
-    await pumpEventQueue();
     expect(declared(), {0});
+    session.setComment(NodePath.of([0, 1]), 'the closed line');
+    await pumpEventQueue();
+    expect(declared(), {1});
   });
 
   test('a save that failed is written again with the next edit, under both '
@@ -73,7 +73,7 @@ void main() {
     edit('two');
     await pumpEventQueue();
     expect(saver.state, isA<Saved>());
-    expect(declared(), {0, 1}, reason: 'the stopped edit did not ride along');
+    expect(declared(), {0}, reason: 'the stopped edit did not ride along');
     expect(fixture.onDisk, contains('{two [%eval 0.30]}'));
   });
 
