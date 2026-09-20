@@ -17,13 +17,15 @@ import 'game_tree.dart';
 /// app relies on: that a line of SAN names and a path through the tree say
 /// the same thing, and that the cursor lands where the move is.
 ///
-/// [a] is empty or a forest this function produced, so it plays no move
-/// twice; nothing copies it when there is nothing to merge into it.
+/// [a] is empty or a forest this function produced, so it already plays no
+/// move twice and is taken as it is. Looking through it again for something
+/// to fold would walk the whole tree built so far once per game added to it,
+/// which is minutes on a file of ten thousand separate games.
 List<MoveNode> mergeForests(List<MoveNode> a, List<MoveNode> b) {
   if (b.isEmpty) return a;
   if (a.isEmpty && !_playsAMoveTwice(b)) return b;
-  final merged = <MoveNode>[];
-  for (final incoming in a.followedBy(b)) {
+  final merged = [...a];
+  for (final incoming in b) {
     final i = merged.indexWhere((node) => node.san == incoming.san);
     if (i < 0) {
       merged.add(_folded(incoming));
