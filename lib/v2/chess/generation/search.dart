@@ -11,6 +11,7 @@ import 'search_node.dart';
 import 'search_result.dart';
 import 'sources.dart';
 import 'terminal.dart';
+import 'tree_assembly.dart';
 
 /// Asked before every expansion. Returning true stops the search where it is;
 /// it never abandons work in flight, so an evaluation already asked for is
@@ -29,8 +30,8 @@ typedef CancelSignal = bool Function();
 /// A six-node example, White to move, horizon two, loss limit 200: we play
 /// the two moves the window keeps; against the first the opponent has one
 /// reply that reaches +80 (worth 0.573) and against the second two replies
-/// at −10 and +300, half each (0.491 and 0.749, so 0.620). The second move
-/// is worth more, so the root is worth 0.620 and exports that move.
+/// at −10 and +300, half each (0.491 and 0.751, so 0.621). The second move
+/// is worth more, so the root is worth 0.621 and exports that move.
 ///
 /// The shallowest unexpanded node always goes first, so a search that runs
 /// out of budget or is cancelled comes back level by level rather than one
@@ -57,116 +58,28 @@ Future<SearchResult> buildSearchTree({
 
 bool _neverCancelled() => false;
 
-/// A position being worked on, with the part of its path the rules need.
+/// What one position turned out to be, before anything below it is
+/// expanded: the leaf it is for now, or why the engine could not score it.
 ///
-/// The path is the point: the same placement reached two ways is two frames,
-/// because a draw claim depends on what came before it.
-final class _Frame {
-  _Frame({
-    required this.position,
-    required this.fen,
-    required this.history,
-    required this.ply,
-  });
-
-  factory _Frame.root(Position position) {
-    final fen = Fen(position.fen);
-    return _Frame(
-      position: position,
-      fen: fen,
-      history: [repetitionKey(fen)],
-      ply: 0,
-    );
-  }
-
-  final Position position;
-  final Fen fen;
-
-  /// [repetitionKey] for every position from the search root to this one,
-  /// this one last.
-  final List<String> history;
-
-  /// Half-moves from the search root.
-  final int ply;
-
-  _Frame next(Position after) {
-    final fen = Fen(after.fen);
-    return _Frame(
-      position: after,
-      fen: fen,
-      history: [...history, repetitionKey(fen)],
-      ply: ply + 1,
-    );
-  }
+/// The engine answers for a whole node's children at once, so a failure is
+/// carried back with its position rather than recorded where it happened;
+/// whichever answer arrives first, the search reports the first move in
+/// order that failed.
+sealed class _Leaf {
+  const _Leaf();
 }
 
-/// A node while the search is still working: the leaf it is for now, and
-/// what it turned into once it was expanded.
-///
-/// This is the one thing in the search that changes after it is made. The
-/// queue has to hand out places in the tree before their subtrees exist, and
-/// the tree it hands to the caller is built from these at the end, so nothing
-/// mutable ever leaves the run.
-final class _Pending {
-  _Pending(this.frame, this.leaf);
+final class _Scored extends _Leaf {
+  const _Scored(this.node);
 
-  final _Frame frame;
-  final SearchNode leaf;
-
-  _Expansion? expansion;
+  final SearchNode node;
 }
 
-/// What one expanded node turned into: the moves we may play, or the replies
-/// the opponent may answer with.
-sealed class _Expansion {
-  const _Expansion();
+final class _Unscored extends _Leaf {
+  const _Unscored(this.reason);
 
-  Iterable<_Pending> get children;
+  final String reason;
 }
-
-final class _OurMoves extends _Expansion {
-  const _OurMoves(this.admitted);
-
-  final List<(MoveRef, _Pending)> admitted;
-
-  @override
-  Iterable<_Pending> get children => admitted.map((entry) => entry.$2);
-}
-
-final class _Replies extends _Expansion {
-  const _Replies(this.replies);
-
-  final List<(MoveRef, double, _Pending)> replies;
-
-  @override
-  Iterable<_Pending> get children => replies.map((entry) => entry.$3);
-}
-
-/// Builds the immutable tree out of the finished scaffolding, bottom up. A
-/// node nothing was expanded into stays the leaf it already was.
-SearchNode _assemble(_Pending pending) => switch (pending.expansion) {
-  null => pending.leaf,
-  _OurMoves(:final admitted) => OurNode.over(
-    fen: pending.leaf.fen,
-    evalForUs: pending.leaf.evalForUs,
-    candidates: [
-      for (final (move, child) in admitted)
-        CandidateMove(move: move, child: _assemble(child)),
-    ],
-  ),
-  _Replies(:final replies) => OpponentNode.over(
-    fen: pending.leaf.fen,
-    evalForUs: pending.leaf.evalForUs,
-    replies: [
-      for (final (move, probability, child) in replies)
-        ReplyMove(
-          move: move,
-          probability: probability,
-          child: _assemble(child),
-        ),
-    ],
-  ),
-};
 
 /// Why the search stopped, once it has.
 sealed class _Stop {
@@ -209,24 +122,32 @@ final class _Search {
   final CancelSignal isCancelled;
 
   _Stop? _stop;
-  int _attached = 0;
+
+  /// Nodes in the tree so far, the root included, the way the old builder
+  /// counts them.
+  int _nodes = 1;
 
   Future<SearchResult> run(Position root) async {
-    final frame = _Frame.root(root);
-    final leaf = await _leaf(frame);
-    final start = leaf == null ? null : _Pending(frame, leaf);
+    final path = SearchPath.root(root);
+    final leaf = await _leaf(path);
+    if (leaf case _Unscored(:final reason)) {
+      _stop = _EvaluationFailed(path.fen, reason);
+    }
+    final start = leaf is _Scored ? PendingNode(path, leaf.node) : null;
     if (start != null) await _expandByDepth(start);
     // The engine failing on the root position is the one way a search ends
-    // with no tree at all, and it is reported below as a failure, not a tree.
-    final tree = start == null ? null : _assemble(start);
+    // with no tree at all; every other failure still hands back what it had.
+    final tree = start == null ? null : assembleTree(start);
     return switch (_stop) {
       _PolicyFailed(:final fen, :final reason) => PolicyMissing(
         fen: fen,
         reason: reason,
+        tree: tree,
       ),
       _EvaluationFailed(:final fen, :final reason) => EvaluationFailed(
         fen: fen,
         reason: reason,
+        tree: tree,
       ),
       _Requested(:final reason) => SearchIncomplete(
         tree: tree!,
@@ -236,33 +157,60 @@ final class _Search {
     };
   }
 
-  /// The node for [frame] before anything below it is expanded: a finished
+  /// The node for [path] before anything below it is expanded: a finished
   /// game, a horizon leaf, or a frontier node carrying the evaluation its
-  /// parent's loss window is about to compare. Null when the engine failed.
-  Future<SearchNode?> _leaf(_Frame frame) async {
-    final kind = terminalKind(frame.position, frame.history);
-    if (kind != null) return _terminal(frame, kind);
-    final evaluation = await evaluator.evaluate(frame.position);
+  /// parent's loss window is about to compare.
+  Future<_Leaf> _leaf(SearchPath path) async {
+    final kind = terminalKind(path.position, path.history);
+    if (kind != null) return _Scored(_terminal(path, kind));
+    final evaluation = await evaluationOf(evaluator, path.position);
     switch (evaluation) {
       case EvaluationUnavailable(:final reason):
-        _stop ??= _EvaluationFailed(frame.fen, reason);
-        return null;
+        return _Unscored(reason);
       case Evaluated(:final eval):
-        final forUs = eval.forUs(config.side, frame.position.turn);
-        return frame.ply >= config.horizonPlies
-            ? HorizonNode(fen: frame.fen, evalForUs: forUs)
-            : FrontierNode(fen: frame.fen, evalForUs: forUs);
+        final forUs = eval.forUs(config.side, path.position.turn);
+        return _Scored(
+          path.ply >= config.horizonPlies
+              ? HorizonNode(fen: path.fen, evalForUs: forUs)
+              : FrontierNode(fen: path.fen, evalForUs: forUs),
+        );
     }
+  }
+
+  /// The leaves for [frames], asked for together.
+  ///
+  /// The engine is the slow part of a build and one node's children do not
+  /// depend on each other, so the whole set goes out at once. The answers are
+  /// read back in move order, so a run that loses the engine on two of them
+  /// reports the first of the two, every time.
+  Future<List<PendingNode>?> _leavesOf(List<SearchPath> paths) async {
+    final leaves = await Future.wait(paths.map(_leaf));
+    final pendings = <PendingNode>[];
+    for (final (index, leaf) in leaves.indexed) {
+      if (leaf case _Unscored(:final reason)) {
+        _stop ??= _EvaluationFailed(paths[index].fen, reason);
+        return null;
+      }
+      pendings.add(PendingNode(paths[index], (leaf as _Scored).node));
+    }
+    return pendings;
+  }
+
+  /// [named] played: the name the tree will hold it under, and the path its
+  /// child is searched in.
+  (MoveRef, SearchPath) _play(SearchPath path, NamedMove named) {
+    final (after, san) = path.position.makeSan(named.move);
+    return (MoveRef(uci: named.uci, san: san), path.next(after));
   }
 
   /// A finished game needs no engine, but the loss window and the tie-break
   /// still rank it against ordinary moves, so it carries the score an engine
   /// would report there: a mate for whoever gave it, zero for a draw.
-  TerminalNode _terminal(_Frame frame, TerminalKind kind) {
-    final ourTurn = frame.position.turn == config.side;
+  TerminalNode _terminal(SearchPath path, TerminalKind kind) {
+    final ourTurn = path.position.turn == config.side;
     final mate = ourTurn ? -mateBaseCp : mateBaseCp;
     return TerminalNode(
-      fen: frame.fen,
+      fen: path.fen,
       evalForUs: Eval(kind == TerminalKind.checkmate ? mate : 0),
       kind: kind,
       ourTurn: ourTurn,
@@ -275,14 +223,14 @@ final class _Search {
   /// The queue is what makes an unfinished answer worth having: work is spent
   /// evenly across the tree, so what comes back is the whole choice seen
   /// shallowly rather than one line seen deeply.
-  Future<void> _expandByDepth(_Pending start) async {
-    final queue = Queue<_Pending>()..add(start);
+  Future<void> _expandByDepth(PendingNode start) async {
+    final queue = Queue<PendingNode>()..add(start);
     while (queue.isNotEmpty && !_stopping()) {
       final pending = queue.removeFirst();
       if (pending.leaf is! FrontierNode) continue;
-      final expansion = pending.frame.position.turn == config.side
-          ? await _ourMoves(pending.frame)
-          : await _replies(pending.frame);
+      final expansion = pending.path.position.turn == config.side
+          ? await _ourMoves(pending.path)
+          : await _replies(pending.path);
       if (expansion == null) continue;
       pending.expansion = expansion;
       queue.addAll(expansion.children);
@@ -293,24 +241,23 @@ final class _Search {
   /// ones the window admits. Null when the search stopped part-way, so that
   /// nothing is attached and the node stays a frontier node instead of half
   /// an enumeration.
-  Future<_Expansion?> _ourMoves(_Frame frame) async {
-    final pendings = <CandidateMove, _Pending>{};
-    for (final named in legalMovesOf(frame.position)) {
-      if (_stopping()) return null;
-      final (after, san) = frame.position.makeSan(named.move);
-      final child = frame.next(after);
-      final node = await _leaf(child);
-      if (node == null) return null;
-      final move = MoveRef(uci: named.uci, san: san);
-      pendings[CandidateMove(move: move, child: node)] = _Pending(child, node);
-    }
-    final admitted = admittedMoves(
-      pendings.keys.toList(),
-      lossLimitCp: config.lossLimitCp,
-    );
-    if (!_reserve(admitted.length)) return null;
-    return _OurMoves([
-      for (final candidate in admitted) (candidate.move, pendings[candidate]!),
+  Future<Expansion?> _ourMoves(SearchPath path) async {
+    final legal = legalMovesOf(path.position);
+    if (!_fits(legal.length)) return null;
+    final played = [for (final named in legal) _play(path, named)];
+    final pendings = await _leavesOf([for (final (_, child) in played) child]);
+    if (pendings == null || _stopping()) return null;
+    final admitted = admittedMoves([
+      for (final (index, (move, _)) in played.indexed)
+        CandidateMove(move: move, child: pendings[index].leaf),
+    ], lossLimitCp: config.lossLimitCp);
+    // Moves are told apart by their name, never by the identity of the
+    // candidate the window handed back.
+    final kept = {for (final candidate in admitted) candidate.move.uci};
+    _nodes += kept.length;
+    return OurMoves([
+      for (final (index, (move, _)) in played.indexed)
+        if (kept.contains(move.uci)) (move, pendings[index]),
     ]);
   }
 
@@ -318,9 +265,9 @@ final class _Search {
   /// replies and keep every reply it gives positive probability. Null on the
   /// same terms as [_ourMoves], so a budget can never leave part of a
   /// probability distribution behind.
-  Future<_Expansion?> _replies(_Frame frame) async {
-    final legal = legalMovesOf(frame.position);
-    final result = await policy.policyFor(frame.position);
+  Future<Expansion?> _replies(SearchPath path) async {
+    final legal = legalMovesOf(path.position);
+    final result = await policyOf(policy, path.position);
     if (_stopping()) return null;
     final shares = switch (result) {
       PolicyFound(:final policy) => policy.sharesOver(
@@ -329,34 +276,37 @@ final class _Search {
       PolicyUnavailable() => null,
     };
     if (shares == null) {
-      _stop ??= _PolicyFailed(frame.fen, _policyReason(result));
+      _stop ??= _PolicyFailed(path.fen, _policyReason(result));
       return null;
     }
-    final replies = await _replyLeaves(frame, legal, shares);
-    if (replies == null || !_reserve(replies.length)) return null;
-    return _Replies(replies);
+    final played = _repliesPlayed(path, legal, shares);
+    if (!_fits(played.length)) return null;
+    final pendings = await _leavesOf([
+      for (final (_, _, child) in played) child,
+    ]);
+    if (pendings == null || _stopping()) return null;
+    _nodes += pendings.length;
+    return Replies([
+      for (final (index, (move, share, _)) in played.indexed)
+        (move, share, pendings[index]),
+    ]);
   }
 
-  /// Every reply with positive probability, played and evaluated but not yet
-  /// expanded, each with the place it will be expanded into.
-  Future<List<(MoveRef, double, _Pending)>?> _replyLeaves(
-    _Frame frame,
+  /// Every reply the model gives positive probability, played, with the
+  /// share it holds of the opponent's move.
+  List<(MoveRef, double, SearchPath)> _repliesPlayed(
+    SearchPath path,
     List<NamedMove> legal,
     Map<String, double> shares,
-  ) async {
-    final replies = <(MoveRef, double, _Pending)>[];
+  ) {
+    final played = <(MoveRef, double, SearchPath)>[];
     for (final named in legal) {
       final share = shares[named.uci];
       if (share == null) continue;
-      if (_stopping()) return null;
-      final (after, san) = frame.position.makeSan(named.move);
-      final child = frame.next(after);
-      final node = await _leaf(child);
-      if (node == null) return null;
-      final move = MoveRef(uci: named.uci, san: san);
-      replies.add((move, share, _Pending(child, node)));
+      final (move, child) = _play(path, named);
+      played.add((move, share, child));
     }
-    return replies;
+    return played;
   }
 
   String _policyReason(PolicyResult result) => switch (result) {
@@ -373,15 +323,21 @@ final class _Search {
     return _stop != null;
   }
 
-  /// Takes [count] nodes out of the budget, or refuses and stops the search.
-  /// Refusing before an expansion begins is what keeps expansions whole.
-  bool _reserve(int count) {
+  /// True when [count] more nodes still fit in the budget, and otherwise
+  /// stops the search.
+  ///
+  /// [count] is the most the expansion could attach — every legal move of
+  /// one of our positions, before the loss window has seen any of them — and
+  /// it is asked before the first evaluation of that expansion, so the budget
+  /// is never spent on work the search then refuses to attach. The moves the
+  /// window rejects are not charged, so a search can finish under budget with
+  /// room the next expansion could not use.
+  bool _fits(int count) {
     final budget = config.nodeBudget;
-    if (budget != null && _attached + count > budget) {
+    if (budget != null && _nodes + count > budget) {
       _stop ??= const _Requested(StopReason.nodeBudget);
       return false;
     }
-    _attached += count;
     return true;
   }
 }

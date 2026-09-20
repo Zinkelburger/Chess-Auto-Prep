@@ -38,6 +38,23 @@ final class ScriptedEvaluator implements PositionEvaluator {
   }
 }
 
+/// An engine that answers nothing but zero, and records how many questions
+/// it was holding at once, so a test can say whether they were asked one
+/// after another or all together.
+final class CountingEvaluator implements PositionEvaluator {
+  int inFlight = 0;
+  int peakInFlight = 0;
+
+  @override
+  Future<EvaluationResult> evaluate(Position position) async {
+    inFlight++;
+    if (inFlight > peakInFlight) peakInFlight = inFlight;
+    await Future<void>.delayed(Duration.zero);
+    inFlight--;
+    return const Evaluated(Eval(0));
+  }
+}
+
 /// An opponent model that answers every position with the same weights, keyed
 /// by standard UCI. A move it does not mention is a move it says will not be
 /// played.
@@ -49,6 +66,43 @@ final class ScriptedPolicy implements OpponentPolicy {
   @override
   Future<PolicyResult> policyFor(Position position) async =>
       PolicyFound(Policy(weights));
+}
+
+/// An opponent model with a different answer at each position, keyed by
+/// FEN. A position it holds nothing for is a position it cannot answer,
+/// which is what a real model does when it is asked about a position its
+/// weights do not cover.
+final class TabulatedPolicy implements OpponentPolicy {
+  const TabulatedPolicy(this.byFen);
+
+  final Map<String, Map<String, double>> byFen;
+
+  @override
+  Future<PolicyResult> policyFor(Position position) async {
+    final weights = byFen[position.fen];
+    return weights == null
+        ? const PolicyUnavailable('no scripted policy for this position')
+        : PolicyFound(Policy(weights));
+  }
+}
+
+/// An engine adapter that breaks rather than answering, the way a dead
+/// process or a decoder does.
+final class ThrowingEvaluator implements PositionEvaluator {
+  const ThrowingEvaluator();
+
+  @override
+  Future<EvaluationResult> evaluate(Position position) async =>
+      throw StateError('the engine process is gone');
+}
+
+/// An opponent model that breaks the same way.
+final class ThrowingPolicy implements OpponentPolicy {
+  const ThrowingPolicy();
+
+  @override
+  Future<PolicyResult> policyFor(Position position) async =>
+      throw StateError('the model file is truncated');
 }
 
 /// An opponent model that is not available at all.

@@ -5,6 +5,7 @@ import 'package:chess_auto_prep/v2/chess/fen.dart';
 import 'package:chess_auto_prep/v2/chess/generation/eval.dart';
 import 'package:chess_auto_prep/v2/chess/generation/move_admission.dart';
 import 'package:chess_auto_prep/v2/chess/generation/search_node.dart';
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 
 /// Thirty trees solved independently, in Python, by a script that knows
@@ -14,18 +15,25 @@ import 'package:flutter_test/flutter_test.dart';
 /// also record which move the search is supposed to come out with.
 ///
 /// The positions are stand-ins — every node carries the same placement and a
-/// made-up move name — because what is being checked is the arithmetic and
-/// the ordering, not the chess. The rules that need a board are checked in
-/// `search_test.dart`, against real positions.
+/// made-up move name — because what is being checked here is the arithmetic
+/// and the ordering, not the chess. `pure_search_oracle_test.dart` lays the
+/// same trees out on a board and drives the real search through them; this
+/// one keeps all thirty, including the five whose leaves pair a terminal
+/// value with an engine score no board would pair it with.
 const _oracles = 'test/fixtures/pure_expectimax_oracles.json';
 
 /// The oracle stores engine scores the way UCI reports them, from the side to
-/// move, which is the same convention [PositionEvaluator] answers in.
-Eval _evalForUs(Map<String, Object?> node, {required bool playAsWhite}) {
-  final cp = node['engine_eval_cp']! as int;
-  final ourTurn = Fen(node['fen']! as String).whiteToMove == playAsWhite;
-  return Eval(ourTurn ? cp : -cp);
+/// move, which is the same convention [PositionEvaluator] answers in. The
+/// conversion is the production one, so a sign error in it cannot be hidden
+/// by the same sign error here.
+Eval evalForUs(Map<String, Object?> node, {required Side us}) {
+  final cp = Eval(node['engine_eval_cp']! as int);
+  return cp.forUs(us, sideToMoveIn(node));
 }
+
+/// The side to move at [node], read from the oracle's FEN.
+Side sideToMoveIn(Map<String, Object?> node) =>
+    Fen(node['fen']! as String).whiteToMove ? Side.white : Side.black;
 
 MoveRef _moveOf(Map<String, Object?> node) =>
     MoveRef(uci: node['move_uci']! as String, san: node['move_san']! as String);
@@ -59,24 +67,17 @@ TerminalNode _terminal(Map<String, Object?> node, double value, Eval eval) {
 /// the arithmetic.
 SearchNode _rebuild(
   Map<String, Object?> node, {
-  required bool playAsWhite,
+  required Side us,
   required int lossLimitCp,
 }) {
   final fen = Fen(node['fen']! as String);
-  final eval = _evalForUs(node, playAsWhite: playAsWhite);
+  final eval = evalForUs(node, us: us);
   final children = (node['children'] as List<Object?>? ?? const [])
       .map((child) => child! as Map<String, Object?>)
       .toList();
   final built = [
     for (final child in children)
-      (
-        data: child,
-        node: _rebuild(
-          child,
-          playAsWhite: playAsWhite,
-          lossLimitCp: lossLimitCp,
-        ),
-      ),
+      (data: child, node: _rebuild(child, us: us, lossLimitCp: lossLimitCp)),
   ];
   final terminal = node['terminal_value'] as num?;
   final SearchNode rebuilt;
@@ -84,7 +85,7 @@ SearchNode _rebuild(
     rebuilt = _terminal(node, terminal.toDouble(), eval);
   } else if (built.isEmpty) {
     rebuilt = HorizonNode(fen: fen, evalForUs: eval);
-  } else if (fen.whiteToMove == playAsWhite) {
+  } else if (sideToMoveIn(node) == us) {
     rebuilt = OurNode.over(
       fen: fen,
       evalForUs: eval,
@@ -136,7 +137,7 @@ void main() {
       final config = data['config']! as Map<String, Object?>;
       final root = _rebuild(
         data['tree']! as Map<String, Object?>,
-        playAsWhite: config['play_as_white']! as bool,
+        us: config['play_as_white']! as bool ? Side.white : Side.black,
         lossLimitCp: config['max_eval_loss_cp']! as int,
       );
       expect(root.valuation.isExact, isTrue);
