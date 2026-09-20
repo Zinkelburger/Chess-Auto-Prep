@@ -84,7 +84,7 @@ Map<String, Object?> _configJson(SearchConfig config) => <String, Object?>{
   'play_as_white': config.side == Side.white,
   'max_depth': config.horizonPlies,
   'max_eval_loss_cp': config.lossLimitCp,
-  if (config.nodeBudget case final budget?) 'max_nodes': budget,
+  'max_nodes': ?config.nodeBudget,
 };
 
 /// Walks the tree once, numbering the nodes and counting them as it goes.

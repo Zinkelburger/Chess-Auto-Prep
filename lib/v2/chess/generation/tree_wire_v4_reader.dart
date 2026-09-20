@@ -179,7 +179,9 @@ final class _Reader {
     // The file reports from the side to move; the search works from ours.
     final evalForUs = Eval(ourTurn ? cp.toInt() : -cp.toInt());
     final children = json['children'];
-    if (json['terminal_value'] is num || children is! List || children.isEmpty) {
+    if (json['terminal_value'] is num ||
+        children is! List ||
+        children.isEmpty) {
       return _leaf(json, fen, evalForUs, ourTurn: ourTurn, depth: depth);
     }
     final edges = _edges(children, depth);

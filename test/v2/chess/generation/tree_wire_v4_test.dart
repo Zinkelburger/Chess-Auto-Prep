@@ -56,8 +56,8 @@ TreeDecoded _decoded(String json) {
 Map<String, Object?> _asJson(String text) =>
     jsonDecode(text) as Map<String, Object?>;
 
-/// A smallest possible document: one unexpanded node and the four
-/// configuration keys the search needs back.
+/// The smallest document there is: one unexpanded node, which [_document]
+/// puts under the configuration keys the search needs back.
 const _oneNode = <String, Object?>{
   'id': 1,
   'depth': 0,
@@ -164,8 +164,8 @@ void main() {
 
     final decoded = _decoded(encodeTreeV4(tree, config, complete: true));
 
-    final replies = ((decoded.root as OurNode).chosen.child as OpponentNode)
-        .replies;
+    final replies =
+        ((decoded.root as OurNode).chosen.child as OpponentNode).replies;
     expect(
       replies.map((reply) => reply.probability),
       unorderedEquals(<double>[2 / 3, 1 / 3]),
@@ -243,16 +243,11 @@ void main() {
       _document(tree: {..._oneNode}..remove('engine_eval_cp')),
     );
 
-    expect(
-      (result as TreeMalformed).detail,
-      contains('no engine evaluation'),
-    );
+    expect((result as TreeMalformed).detail, contains('no engine evaluation'));
   });
 
   test('a node without a position is malformed, and says so', () {
-    final result = decodeTreeV4(
-      _document(tree: {..._oneNode}..remove('fen')),
-    );
+    final result = decodeTreeV4(_document(tree: {..._oneNode}..remove('fen')));
 
     expect((result as TreeMalformed).detail, contains('no FEN'));
   });
