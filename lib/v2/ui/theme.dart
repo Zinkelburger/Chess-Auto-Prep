@@ -146,12 +146,19 @@ ThemeData darkTheme() {
     dividerColor: outline,
     useMaterial3: true,
   );
+  // Sized from the styles the theme built, not from bare ones: a fresh
+  // TextStyle carries no family, and a style put here without one is text in
+  // whatever font the platform falls back to.
+  final type = base.textTheme;
   return base.copyWith(
-    textTheme: base.textTheme.copyWith(
-      titleMedium: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-      bodyMedium: const TextStyle(fontSize: 14),
-      bodySmall: const TextStyle(fontSize: 13, color: muted),
-      labelSmall: const TextStyle(fontSize: 12, color: muted),
+    textTheme: type.copyWith(
+      titleMedium: type.titleMedium?.copyWith(
+        fontSize: 18,
+        fontWeight: FontWeight.w600,
+      ),
+      bodyMedium: type.bodyMedium?.copyWith(fontSize: 14),
+      bodySmall: type.bodySmall?.copyWith(fontSize: 13, color: muted),
+      labelSmall: type.labelSmall?.copyWith(fontSize: 12, color: muted),
     ),
     extensions: const [
       BoardTheme(
