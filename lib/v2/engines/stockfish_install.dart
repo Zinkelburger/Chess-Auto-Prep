@@ -91,8 +91,27 @@ final class StockfishInstall {
         'This build has no bundled Stockfish; run tools/fetch_assets.py',
       );
     }
+    try {
+      return await _write(release, binary.path, stamp, compressed);
+    } catch (e) {
+      // A corrupt asset, a full disk, a read-only support folder: the pane
+      // says so and starts without an engine rather than hanging.
+      log.e('install $_binaryName', e);
+      return StockfishMissing('Could not install $_binaryName: $e');
+    }
+  }
+
+  /// Unpacks, makes it runnable, and only then stamps it. The stamp is the
+  /// claim that the binary is installed, so it goes last and the old one
+  /// goes first: no half-written engine can ever carry a matching stamp.
+  Future<StockfishLocation> _write(
+    _Release release,
+    String target,
+    File stamp,
+    Uint8List compressed,
+  ) async {
     await supportDirectory.create(recursive: true);
-    final target = binary.path;
+    if (await stamp.exists()) await stamp.delete();
     final expected = release.assetSha256;
     final problem = await Isolate.run(
       () => _unpack(compressed, expected, target),
@@ -105,8 +124,10 @@ final class StockfishInstall {
 }
 
 /// Hashes and inflates 80 MB, so it runs in its own isolate. Returns the
-/// problem, or null. Writes beside the target and renames so an
-/// interrupted install never leaves a half engine under the real name.
+/// problem, or null; anything else it hits is thrown to [StockfishInstall],
+/// which turns it into a [StockfishMissing]. Writes beside the target and
+/// renames, so an interrupted install never leaves a half engine under the
+/// real name.
 String? _unpack(Uint8List compressed, String expectedSha256, String target) {
   if (sha256.convert(compressed).toString() != expectedSha256) {
     return 'The bundled Stockfish does not match tools/assets.lock.json';
