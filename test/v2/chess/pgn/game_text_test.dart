@@ -128,4 +128,4 @@ const _withStrayLines =
 
 /// The tree of the one game in [text], so a written game can be compared with
 /// the file it came from.
-GameTree _treeOf(String text) => readPgn(text).games.single.tree;
+GameTree _treeOf(String text) => readGame(text).tree!;

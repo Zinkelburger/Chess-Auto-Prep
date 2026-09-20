@@ -164,4 +164,28 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Saved a copy as Main draft.pgn'), findsNothing);
   });
+
+  testWidgets('says when a game could not be read at all', (tester) async {
+    fixture.dispose();
+    fixture = await openSession(unreadableGameChapter);
+    await pump(tester);
+    expect(find.text('White · 1 lines, 1 could not be read'), findsOneWidget);
+  });
 }
+
+/// A chapter of two games, the first of which names a position nothing can
+/// read.
+const unreadableGameChapter = '''
+// Color: White
+
+[Event "Broken"]
+[FEN "not a fen"]
+[Result "*"]
+
+1. e4 *
+
+[Event "Good"]
+[Result "*"]
+
+1. d4 d5 *
+''';

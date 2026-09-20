@@ -106,6 +106,9 @@ class _ChapterHeaderState extends State<ChapterHeader> {
         final skipped = chapter.skippedGames == 0
             ? ''
             : ', ${chapter.skippedGames} from another position';
+        final unreadable = chapter.unreadableGames == 0
+            ? ''
+            : ', ${chapter.unreadableGames} could not be read';
         return Padding(
           padding: const EdgeInsets.all(Space.m),
           child: Column(
@@ -113,7 +116,7 @@ class _ChapterHeaderState extends State<ChapterHeader> {
             children: [
               Text(chapter.name, style: text.titleMedium),
               const SizedBox(height: Space.xs),
-              Text('$side · $lines$skipped', style: text.bodySmall),
+              Text('$side · $lines$skipped$unreadable', style: text.bodySmall),
               const SizedBox(height: Space.xs),
               Row(
                 children: [

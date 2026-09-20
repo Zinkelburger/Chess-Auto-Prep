@@ -107,48 +107,52 @@ ChapterLine _commented(
   List<String> sans,
   String? text,
 ) {
-  if (!chapter.isInTree(line)) return line;
-  final path = pathOfSans(line.tree, sans);
-  final node = path == null ? null : line.tree.nodeAt(path);
+  final tree = chapter.mergedTree(line);
+  if (tree == null) return line;
+  final path = pathOfSans(tree, sans);
+  final node = path == null ? null : tree.nodeAt(path);
   if (path == null || node == null) return line;
   final comment = withProse(node.comment, text);
   if (comment == node.comment) return line;
-  return rewritten(line, withComment(line.tree, path, comment));
+  return rewritten(line, withComment(tree, path, comment));
 }
 
 /// The introduction lives on the first game of the chapter, which is where
 /// the merged tree takes its root comment from.
 Chapter _withIntroduction(Chapter chapter, String? text) {
-  final index = chapter.lines.indexWhere(chapter.isInTree);
-  if (index < 0) return chapter;
-  final line = chapter.lines[index];
-  final comment = withProse(line.tree.rootComment, text);
-  if (comment == line.tree.rootComment) return chapter;
-  final lines = [...chapter.lines];
-  lines[index] = rewritten(
-    line,
-    withComment(line.tree, const NodePath.root(), comment),
-  );
-  return withLines(chapter, lines);
+  for (final (index, line) in chapter.lines.indexed) {
+    final tree = chapter.mergedTree(line);
+    if (tree == null) continue;
+    final comment = withProse(tree.rootComment, text);
+    if (comment == tree.rootComment) return chapter;
+    final lines = [...chapter.lines];
+    lines[index] = rewritten(
+      line,
+      withComment(tree, const NodePath.root(), comment),
+    );
+    return withLines(chapter, lines);
+  }
+  return chapter;
 }
 
 /// The chapter with [node] appended to the game whose main line ends at
 /// [prefix], or null when no game ends there — the end of a variation
 /// inside a game does not, so that branch becomes a game of its own.
 Chapter? _extended(Chapter chapter, List<String> prefix, MoveNode node) {
-  final index = chapter.lines.indexWhere(
-    (line) =>
-        chapter.isInTree(line) &&
-        const ListEquality<String>().equals(mainlineSans(line.tree), prefix),
-  );
-  if (index < 0) return null;
-  final lines = [...chapter.lines];
-  final line = lines[index];
-  lines[index] = rewritten(
-    line,
-    withChildAdded(line.tree, NodePath.of(List.filled(prefix.length, 0)), node),
-  );
-  return withLines(chapter, lines);
+  for (final (index, line) in chapter.lines.indexed) {
+    final tree = chapter.mergedTree(line);
+    if (tree == null) continue;
+    if (!const ListEquality<String>().equals(mainlineSans(tree), prefix)) {
+      continue;
+    }
+    final lines = [...chapter.lines];
+    lines[index] = rewritten(
+      line,
+      withChildAdded(tree, NodePath.of(List.filled(prefix.length, 0)), node),
+    );
+    return withLines(chapter, lines);
+  }
+  return null;
 }
 
 /// The chapter with a new game for [prefix] plus [node] at the end of the
@@ -229,9 +233,8 @@ String _title(Chapter chapter, List<String> prefix, MoveNode branch) {
 
 ChapterLine? _lineThrough(Chapter chapter, List<String> sans) {
   for (final line in chapter.lines) {
-    if (chapter.isInTree(line) && pathOfSans(line.tree, sans) != null) {
-      return line;
-    }
+    final tree = chapter.mergedTree(line);
+    if (tree != null && pathOfSans(tree, sans) != null) return line;
   }
   return null;
 }

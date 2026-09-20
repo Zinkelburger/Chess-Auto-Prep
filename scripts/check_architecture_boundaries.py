@@ -121,7 +121,9 @@ def violations(relative: str, source: str, *, include_retirements: bool = True) 
     path = Path(relative)
     errors = retirement_violations(relative, source, RETIREMENTS) if include_retirements else []
     executable = without_comments(source)
-    if relative.startswith('lib/') and relative != 'lib/chess_core/pgn/pgn_parser.dart' and re.search(r'\bPgnGame\.parsePgn\s*\(', executable):
+    # lib/v2/ is the rewrite: it may not import the old app's chess_core, so it
+    # reads PGN with its own reader and this consolidation rule does not apply.
+    if relative.startswith('lib/') and not relative.startswith('lib/v2/') and relative != 'lib/chess_core/pgn/pgn_parser.dart' and re.search(r'\bPgnGame\.parsePgn\s*\(', executable):
         errors.append(f'{relative}: single-game parsing must use chess_core/pgn/pgn_parser.dart')
     if relative in ('lib/features/repertoires/controllers/builder_workspace_controller.dart', 'lib/features/repertoires/controllers/repertoire_writer.dart'):
         for uri in dependency_uris(without_comments(source)):
