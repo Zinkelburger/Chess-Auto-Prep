@@ -1,0 +1,123 @@
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:chess_auto_prep/v2/storage/document_ref.dart';
+import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
+import 'package:crypto/crypto.dart';
+
+/// A document store whose answers the test writes, for owners and widgets
+/// that must never touch a real file.
+///
+/// Each operation takes the next result queued for it and falls back to plain
+/// success. With [hold] set, every call waits until the test releases it, so a
+/// test can look at what an owner shows while a save is still in flight.
+final class ScriptedDocumentStore implements PgnDocumentStore {
+  /// What [open] answers; a document that is not here is [Absent].
+  final documents = <DocumentRef, DocumentRead>{};
+
+  final creates = <CreateResult>[];
+  final saves = <SaveResult>[];
+  final moves = <MoveResult>[];
+  final deletes = <DeleteResult>[];
+
+  /// Every save that was asked for, in the order it was asked.
+  final requestedSaves = <SaveRequest>[];
+
+  bool hold = false;
+
+  final _waiting = <Completer<void>>[];
+
+  int get waiting => _waiting.length;
+
+  void releaseNext() => _waiting.removeAt(0).complete();
+
+  void releaseAll() {
+    while (_waiting.isNotEmpty) {
+      releaseNext();
+    }
+  }
+
+  @override
+  Future<DocumentRead> open(DocumentRef ref) async {
+    await _turn();
+    return documents[ref] ?? const Absent();
+  }
+
+  @override
+  Future<CreateResult> create(DocumentRef ref, String text) async {
+    await _turn();
+    return _next(creates) ?? Created(scriptedRevision(text));
+  }
+
+  @override
+  Future<SaveResult> save(
+    DocumentRef ref,
+    String text, {
+    required Revision expected,
+  }) async {
+    requestedSaves.add(SaveRequest(ref, text, expected));
+    await _turn();
+    final before = documents[ref];
+    documents[ref] = Opened(text, scriptedRevision(text));
+    return _next(saves) ??
+        Saved(
+          Receipt(
+            committed: scriptedRevision(text),
+            before: before is Opened ? before.text : '',
+            beforeRevision: expected,
+          ),
+        );
+  }
+
+  @override
+  Future<MoveResult> rename(
+    DocumentRef ref,
+    String name, {
+    required Revision expected,
+  }) async {
+    await _turn();
+    return _next(moves) ?? Moved(expected);
+  }
+
+  @override
+  Future<MoveResult> move(
+    DocumentRef ref,
+    DocumentRef destination, {
+    required Revision expected,
+  }) async {
+    await _turn();
+    return _next(moves) ?? Moved(expected);
+  }
+
+  @override
+  Future<DeleteResult> delete(
+    DocumentRef ref, {
+    required Revision expected,
+  }) async {
+    await _turn();
+    return _next(deletes) ?? Deleted('${ref.path}.deleted');
+  }
+
+  T? _next<T>(List<T> queued) => queued.isEmpty ? null : queued.removeAt(0);
+
+  Future<void> _turn() {
+    if (!hold) return Future<void>.value();
+    final turn = Completer<void>();
+    _waiting.add(turn);
+    return turn.future;
+  }
+}
+
+final class SaveRequest {
+  const SaveRequest(this.ref, this.text, this.expected);
+
+  final DocumentRef ref;
+  final String text;
+  final Revision expected;
+}
+
+/// A revision that two scripted answers about the same text agree on.
+Revision scriptedRevision(String text) => Revision(
+  contentHash: sha256.convert(utf8.encode(text)).toString(),
+  identity: 'scripted',
+);
