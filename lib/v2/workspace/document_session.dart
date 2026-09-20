@@ -189,6 +189,10 @@ final class DocumentSession extends ChangeNotifier {
 
   /// Writes the draft beside the original as `<name>.pgn`, replacing
   /// nothing. The session stays on the document it had open.
+  ///
+  /// A copy changes nothing here, so nothing about it goes stale: whatever
+  /// the user opened while it was being written, the answer is about the
+  /// file they asked for and they are told it.
   Future<CopyResult> saveCopy(String name) async {
     final ref = _source;
     final chapter = _chapter;
@@ -197,9 +201,7 @@ final class DocumentSession extends ChangeNotifier {
     }
     final file = p.extension(name) == '.pgn' ? name : '$name.pgn';
     final target = DocumentRef(p.join(p.dirname(ref.path), file));
-    final ticket = _opens;
     final created = await _store.create(target, writeChapter(chapter));
-    if (_disposed || ticket != _opens) return CopySaved(file);
     return switch (created) {
       store.Created() => CopySaved(file),
       store.Collision() => const CopyNameTaken(),

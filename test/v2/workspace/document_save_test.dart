@@ -180,5 +180,20 @@ void main() {
       final result = await session.saveCopy('Main draft');
       expect((result as CopyFailed).detail, 'Permission denied');
     });
+
+    test('a copy refused while another chapter opened still says so', () async {
+      final other = chapterRef('KID', 'Other');
+      fixture.store.documents[other] = Opened(
+        whiteChapter,
+        scriptedRevision(whiteChapter),
+      );
+      fixture.store.creates.add(const Collision());
+      fixture.store.hold = true;
+      final copying = session.saveCopy('Main draft');
+      final opening = session.open(other);
+      fixture.store.releaseAll();
+      await opening;
+      expect(await copying, isA<CopyNameTaken>());
+    });
   });
 }
