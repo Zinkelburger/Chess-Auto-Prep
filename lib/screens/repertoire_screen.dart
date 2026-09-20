@@ -204,7 +204,10 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   /// panel on the right — the PGN editor stays visible in the middle column
   /// and the outline (chapters and lines) holds the left column.
   late final TabController _sidePanelTabController;
-  int _databaseSource = 3;
+
+  /// Persisted with the rest of the Builder layout, so the source you chose
+  /// is the one the Database pane opens on next time.
+  int get _databaseSource => _layout.databaseSource;
   bool _showTrapsInLinesTab = false;
 
   /// The repertoire as chapters, folders and lines — the left column. Reads
@@ -274,7 +277,7 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   /// Reveal generation beside the board at its current position.
   Future<void> _openGenerateTab() async {
     if (!mounted) return;
-    setState(() => _databaseSource = 3);
+    unawaited(_layout.setDatabaseSource(3));
     if (_isCompactLayout) {
       _toolsTabController.animateTo(2);
     } else {

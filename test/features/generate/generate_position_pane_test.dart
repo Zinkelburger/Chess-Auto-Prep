@@ -9,7 +9,9 @@ import 'dart:async';
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/core/generation_session_controller.dart';
 import 'package:chess_auto_prep/features/generate/widgets/generate_position_pane.dart';
+import 'package:chess_auto_prep/chess_core/generation/build_tree_node.dart';
 import 'package:chess_auto_prep/services/eval/db_move_list.dart';
+import 'package:chess_auto_prep/services/generation/fen_map.dart';
 import 'package:chess_auto_prep/utils/chess_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -18,6 +20,56 @@ import 'package:shared_preferences/shared_preferences.dart';
 RuntimeSettings? _engineFixtureSettings;
 EngineRuntime get engines =>
     testEngines(_engineFixtureSettings ??= testRuntimeSettings());
+
+/// Drives the pane's run states without starting a real build, the same way
+/// the Jobs panel suite does.
+class _Generation extends GenerationSessionController {
+  _Generation(RuntimeSettings settings)
+    : super(
+        databases: settings.databases,
+        jobs: JobManager(),
+        enginePool: testEngines(settings).pool,
+        engineLifecycle: testEngines(settings).lifecycle,
+        artifacts: generationArtifactsFixture(),
+        publication: generationPublicationFixture(),
+      );
+
+  bool generating = false;
+  bool paused = false;
+  bool pausable = true;
+  FenMap? saved;
+  final calls = <String>[];
+  @override
+  FenMap? get generatedTreeFenMap => saved;
+  @override
+  bool get isGenerating => generating;
+  @override
+  bool get isPaused => paused;
+  @override
+  bool get canPause => generating && !paused && pausable;
+  @override
+  bool get isCancelling => false;
+  @override
+  void pauseBuild() {
+    calls.add('pause');
+    paused = true;
+    notifyListeners();
+  }
+
+  @override
+  void resumeBuild() {
+    calls.add('resume');
+    paused = false;
+    notifyListeners();
+  }
+
+  @override
+  void cancelBuild() {
+    calls.add('cancel');
+    notifyListeners();
+  }
+}
+
 void main() {
   setUp(() {
     _engineFixtureSettings = null;
@@ -143,6 +195,122 @@ void main() {
       expect(prefs.getInt('position_generation.maiaCoverage'), 65);
     },
   );
+  testWidgets('the run control starts, pauses and resumes in place', (
+    tester,
+  ) async {
+    final settings = _engineFixtureSettings ??= testRuntimeSettings();
+    final gen = _Generation(settings);
+    addTearDown(gen.dispose);
+    await pumpRuntimeWidget(
+      tester,
+      settings,
+      MaterialApp(
+        home: Scaffold(
+          body: GeneratePositionPane(
+            fen: kStandardStartFen,
+            databaseName: 'Main',
+            generation: gen,
+            onGenerate:
+                ({
+                  String? moveSan,
+                  required int plies,
+                  required int cores,
+                  required int engineMoves,
+                  required double maiaCoverage,
+                }) async => null,
+            onPlayMove: (_) {},
+            onPlanLines: () {},
+          ),
+        ),
+      ),
+    );
+    const control = ValueKey('generation-run-control');
+    expect(find.text('Generate'), findsOneWidget);
+    expect(find.text('Stop'), findsNothing);
+
+    gen.generating = true;
+    gen.notifyListeners();
+    await tester.pump();
+    expect(find.text('Generate'), findsNothing);
+    expect(find.text('Stop'), findsOneWidget);
+    await tester.tap(find.byKey(control));
+    await tester.pump();
+    expect(gen.calls, ['pause']);
+    expect(find.text('Resume'), findsOneWidget);
+    expect(find.text('Paused · Preparing…'), findsOneWidget);
+
+    await tester.tap(find.byKey(control));
+    await tester.pump();
+    expect(gen.calls, ['pause', 'resume']);
+    expect(find.text('Pause'), findsOneWidget);
+
+    // A phase that would ignore the request offers a reason, not a no-op.
+    gen.pausable = false;
+    gen.notifyListeners();
+    await tester.pump();
+    expect(tester.widget<TextButton>(find.byKey(control)).onPressed, isNull);
+    expect(
+      find.byTooltip('This step finishes too quickly to pause'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('a database already on disk is named, and the run extends it', (
+    tester,
+  ) async {
+    final settings = _engineFixtureSettings ??= testRuntimeSettings();
+    final gen = _Generation(settings);
+    addTearDown(gen.dispose);
+    await pumpRuntimeWidget(
+      tester,
+      settings,
+      MaterialApp(
+        home: Scaffold(
+          body: GeneratePositionPane(
+            fen: kStandardStartFen,
+            databaseName: 'Main',
+            generation: gen,
+            onGenerate:
+                ({
+                  String? moveSan,
+                  required int plies,
+                  required int cores,
+                  required int engineMoves,
+                  required double maiaCoverage,
+                }) async => null,
+            onPlayMove: (_) {},
+            onPlanLines: () {},
+          ),
+        ),
+      ),
+    );
+    expect(find.text('Generate'), findsOneWidget);
+    expect(find.textContaining('Database on disk'), findsNothing);
+
+    gen.saved = FenMap()
+      ..populate(
+        BuildTreeNode(
+          fen: playUciMove(kStandardStartFen, 'e2e4')!,
+          moveSan: 'e4',
+          moveUci: 'e2e4',
+          ply: 1,
+          isWhiteToMove: false,
+          nodeId: 1,
+        )..engineEvalCp = -25,
+      );
+    gen.notifyListeners();
+    await tester.pump();
+    expect(find.text('Generate'), findsNothing);
+    expect(find.text('Extend'), findsOneWidget);
+    expect(find.text('Database on disk · 1 position'), findsOneWidget);
+
+    // The run strip replaces the line; the two never stack.
+    gen.generating = true;
+    gen.notifyListeners();
+    await tester.pump();
+    expect(find.textContaining('Database on disk'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('late ChessDB results cannot populate a different position', (
     tester,
   ) async {
