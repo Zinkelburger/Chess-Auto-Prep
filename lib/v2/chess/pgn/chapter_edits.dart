@@ -6,6 +6,7 @@ import 'chapter.dart';
 import 'comment_text.dart';
 import 'game_text.dart';
 import 'game_tree.dart';
+import 'games_written.dart';
 import 'line_id.dart';
 import 'move_label.dart';
 import 'tree_edit.dart';
@@ -15,30 +16,6 @@ import 'tree_edit.dart';
 /// A chapter's persistent unit is the game, and the tree the workspace shows
 /// is every game merged. So an edit changes one or more games and the tree
 /// is merged again from them; a game nothing touched keeps its bytes.
-
-/// Which games an edit wrote again, and how many it added at the end.
-///
-/// An edit knows this; the text it produced does not say it. A caller that
-/// worked it out by comparing the chapter before with the chapter after
-/// would agree with whatever the edit did, including with a game it should
-/// never have touched, so the edit says it here and whoever writes the file
-/// carries it through to the store.
-final class GamesWritten {
-  GamesWritten({Set<int> rewritten = const {}, this.appended = 0})
-    : rewritten = Set.unmodifiable(rewritten),
-      assert(appended >= 0, 'no edit takes a game out of a chapter');
-
-  /// An edit that changed nothing of the file.
-  static final nothing = GamesWritten();
-
-  /// Indexes into the chapter's games as they were before the edit, from 0.
-  /// Its own copy, so what an edit declared cannot change afterwards.
-  final Set<int> rewritten;
-
-  /// How many games the edit added at the end of the chapter. Never
-  /// negative: nothing here takes a game out.
-  final int appended;
-}
 
 sealed class AddMoveResult {
   const AddMoveResult();
@@ -85,12 +62,24 @@ final class CommentWritten extends CommentResult {
   final GamesWritten written;
 }
 
+/// Nothing was changed. The screen has to say so: an edit that silently
+/// does nothing reads as a lost one.
+sealed class CommentRefused extends CommentResult {
+  const CommentRefused();
+}
+
 /// The comment belongs to a game reading could not finish, so writing that
-/// game again would delete the moves reading dropped. Nothing was changed,
-/// and the screen has to say so: an edit that silently does nothing reads
-/// as a lost one.
-final class GameNotWhole extends CommentResult {
+/// game again would delete the moves reading dropped.
+final class GameNotWhole extends CommentRefused {
   const GameNotWhole();
+}
+
+/// The words themselves cannot go into a PGN file. [reason] is one plain
+/// English fragment saying which of them.
+final class CommentUnwritable extends CommentRefused {
+  const CommentUnwritable(this.reason);
+
+  final String reason;
 }
 
 /// Plays [uci] after the node at [at] and writes it into the file.
@@ -152,12 +141,15 @@ AddMoveResult addMove(
 /// A game that was not read whole cannot take the comment: writing it again
 /// would delete the moves reading dropped. One such game among those playing
 /// the move refuses the whole edit rather than letting the comment land in
-/// some games and not others.
+/// some games and not others. Words a PGN file cannot hold are refused
+/// before any game is touched.
 CommentResult setComment(
   Chapter chapter, {
   required NodePath at,
   required String? text,
 }) {
+  final unwritable = text == null ? null : commentRefusal(text);
+  if (unwritable != null) return CommentUnwritable(unwritable);
   if (at.isRoot) return _withIntroduction(chapter, text);
   final sans = [for (final node in chapter.tree.lineTo(at)) node.san];
   if (sans.isEmpty) return _unchanged(chapter);
@@ -214,12 +206,14 @@ CommentResult _withIntroduction(Chapter chapter, String? text) {
   if (tree == null) return const GameNotWhole();
   final comment = withProse(tree.rootComment, text);
   if (comment == tree.rootComment) return _unchanged(chapter);
-  final index = chapter.lines.indexOf(first);
-  final lines = [...chapter.lines];
-  lines[index] = rewritten(
+  final line = rewritten(
     first,
     withComment(tree, const NodePath.root(), comment),
   );
+  if (identical(line, first)) return _unchanged(chapter);
+  final index = chapter.lines.indexOf(first);
+  final lines = [...chapter.lines];
+  lines[index] = line;
   return CommentWritten(
     withLines(chapter, lines),
     written: GamesWritten(rewritten: {index}),
@@ -258,8 +252,7 @@ _Edited? _extended(Chapter chapter, List<String> prefix, MoveNode node) {
         const ListEquality<String>().equals(mainlineSans(game.tree), prefix),
   );
   if (found == null) return null;
-  final lines = [...chapter.lines];
-  lines[found.index] = rewritten(
+  final line = rewritten(
     found.line,
     withChildAdded(
       found.tree,
@@ -267,14 +260,25 @@ _Edited? _extended(Chapter chapter, List<String> prefix, MoveNode node) {
       node,
     ),
   );
+  final lines = [...chapter.lines];
+  lines[found.index] = line;
   return (
     chapter: withLines(chapter, lines),
-    written: GamesWritten(rewritten: {found.index}),
+    // The gate gives the game back untouched when writing it again would
+    // not read as the same game, and a game that keeps its bytes is not a
+    // game this edit may change.
+    written: identical(line, found.line)
+        ? GamesWritten.nothing
+        : GamesWritten(rewritten: {found.index}),
   );
 }
 
 /// The chapter with a new game for [prefix] plus [node] at the end of the
 /// file, which is where re-reading finds it as the last variation.
+///
+/// Written straight rather than through the rewrite gate: a new game
+/// replaces no bytes, so there is nothing here for a bad write to lose. That
+/// it reads back as itself is what the assertion in [addMove] checks.
 _Edited _appended(Chapter chapter, List<String> prefix, MoveNode node) {
   final tree = lineTree(chapter.tree.rootFen, [...prefix, node.san]);
   final tags = _newTags(chapter, prefix, tree, node);
@@ -286,9 +290,10 @@ _Edited _appended(Chapter chapter, List<String> prefix, MoveNode node) {
     ChapterLine(
       tags: tags,
       tree: tree,
-      isWhole: true,
-      text: writeGameText(tags, tree),
+      text: writeGameText(tags, tree, terminator: '*', separator: '\n'),
       trailer: '\n',
+      terminator: '*',
+      separator: '\n',
     ),
   );
   return (
@@ -379,9 +384,11 @@ ChapterLine _spacedAfter(ChapterLine line) => line.trailer.endsWith('\n\n')
     : ChapterLine(
         tags: line.tags,
         tree: line.tree,
-        isWhole: line.isWhole,
         text: line.text,
         trailer: '\n\n',
+        terminator: line.terminator,
+        separator: line.separator,
+        issues: line.issues,
       );
 
 String _spacedPreamble(String preamble) {

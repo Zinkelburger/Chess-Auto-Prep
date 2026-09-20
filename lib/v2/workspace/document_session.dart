@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import '../chess/fen.dart';
 import '../chess/pgn/chapter.dart';
 import '../chess/pgn/chapter_edits.dart' as edits;
+import '../chess/pgn/games_written.dart';
 import '../chess/pgn/game_tree.dart';
 import '../diagnostics/log.dart';
 import '../storage/chapter_files.dart';
@@ -73,7 +74,7 @@ final class DocumentSession extends ChangeNotifier {
   Chapter? _chapter;
   ChapterRef? _source;
   NodePath _cursor = const NodePath.root();
-  edits.GameNotWhole? _refused;
+  edits.CommentRefused? _refused;
   int _opens = 0;
   bool _disposed = false;
 
@@ -82,9 +83,10 @@ final class DocumentSession extends ChangeNotifier {
   /// Why the last edit did not happen, or null when it did.
   ///
   /// A game reading could not finish keeps its own bytes and is never
-  /// generated again, so an edit that would have to write it is refused. The
-  /// next edit, and opening another document, clears this.
-  edits.GameNotWhole? get refusedEdit => _refused;
+  /// generated again, so an edit that would have to write it is refused, and
+  /// so are words a PGN file cannot hold. The next edit, and opening another
+  /// document, clears this.
+  edits.CommentRefused? get refusedEdit => _refused;
 
   /// The file the chapter was read from.
   ChapterRef? get source => _source;
@@ -211,19 +213,17 @@ final class DocumentSession extends ChangeNotifier {
   /// cursor moves first. Text that would leave the file as it is changes
   /// nothing.
   ///
-  /// A game reading could not finish cannot take the comment, and then
-  /// nothing is written and [refusedEdit] says so.
+  /// A game reading could not finish cannot take the comment, and neither
+  /// can words a PGN file has no way to hold; then nothing is written and
+  /// [refusedEdit] says so.
   void setComment(NodePath at, String? text) {
     final chapter = _chapter;
     if (chapter == null) return;
     final hadRefusal = _refused != null;
     switch (edits.setComment(chapter, at: at, text: text)) {
-      case edits.GameNotWhole():
-        log.w(
-          'comment ${_source?.path}',
-          'the game holding that move was not read whole',
-        );
-        _refused = const edits.GameNotWhole();
+      case final edits.CommentRefused refusal:
+        log.w('comment ${_source?.path}', _refusalDetail(refusal));
+        _refused = refusal;
       case edits.CommentWritten(chapter: final edited, :final written):
         _refused = null;
         if (identical(edited, chapter)) {
@@ -234,6 +234,13 @@ final class DocumentSession extends ChangeNotifier {
     }
     notifyListeners();
   }
+
+  /// What the log should say about a refused edit; the screen says its own
+  /// version of the same thing.
+  String _refusalDetail(edits.CommentRefused refusal) => switch (refusal) {
+    edits.GameNotWhole() => 'the game holding that move was not read whole',
+    edits.CommentUnwritable(:final reason) => reason,
+  };
 
   /// Puts the file back as it was before the last edit and shows what came
   /// back. A refused undo leaves the document and the history alone, and
@@ -294,7 +301,7 @@ final class DocumentSession extends ChangeNotifier {
   /// to look like: a scope worked out from the text would agree with the
   /// text, so a writer that rewrote a game nobody edited would declare that
   /// game and the store would have nothing to refuse.
-  void _replace(Chapter edited, edits.GamesWritten written) {
+  void _replace(Chapter edited, GamesWritten written) {
     _chapter = edited;
     _saver.save(writeChapter(edited), GamesEdited(written));
   }

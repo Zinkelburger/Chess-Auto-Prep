@@ -1,7 +1,6 @@
-import 'dart:convert';
-
 import 'game_tree.dart';
 import 'move_text.dart';
+import 'pgn_lexer.dart';
 
 /// One line of a game's header block, kept in the order the file has it.
 ///
@@ -10,9 +9,14 @@ import 'move_text.dart';
 /// a list rather than a set of fields. A line that is not a tag at all is kept
 /// for the same reason: stopping at it would drop every tag below it too.
 sealed class PgnHeader {
-  const PgnHeader();
+  const PgnHeader({this.newline = '\n'});
 
-  /// The line as it belongs in the file.
+  /// The line ending this line had in the file. Real repertoire exports put
+  /// CRLF on the tag lines and LF on everything else in the same game, so
+  /// one ending per file would change bytes the edit never touched.
+  final String newline;
+
+  /// The line as it belongs in the file, without its ending.
   String get text;
 
   @override
@@ -21,7 +25,7 @@ sealed class PgnHeader {
 
 /// One `[Key "value"]` tag.
 final class PgnTag extends PgnHeader {
-  const PgnTag(this.key, this.value);
+  const PgnTag(this.key, this.value, {super.newline});
 
   final String key;
 
@@ -39,7 +43,7 @@ final class PgnTag extends PgnHeader {
 /// A header line this reader cannot parse — a `%` escape, a bracket somebody
 /// mistyped — written back exactly as it was read.
 final class UnparsedHeader extends PgnHeader {
-  const UnparsedHeader(this.text);
+  const UnparsedHeader(this.text, {super.newline});
 
   @override
   final String text;
@@ -57,9 +61,14 @@ typedef GameSpan = ({String text, String trailer});
 /// conditions cost a game when they are wrong: `[EventDate "…"]`, which
 /// course exports carry, would split every game in two, and a comment
 /// quoting a header would split one game where it should not.
+///
+/// A byte-order mark at the very start belongs to the file, not to its first
+/// game, so it goes into the preamble: a game the user edits is written
+/// again from its model, and a mark left inside it would be written away.
 ({String preamble, List<GameSpan> games}) splitChapterText(String text) {
   final starts = _gameStarts(text);
   if (starts.isEmpty) return (preamble: text, games: const []);
+  if (starts.first == 0 && text.startsWith('\uFEFF')) starts[0] = 1;
   final games = <GameSpan>[];
   for (var i = 0; i < starts.length; i++) {
     final end = i + 1 < starts.length ? starts[i + 1] : text.length;
@@ -80,7 +89,7 @@ List<int> _gameStarts(String text) {
     if (!commented && _isEventLine(text, lineStart, lineEnd)) {
       starts.add(lineStart);
     }
-    commented = _commentedAfter(text, lineStart, lineEnd, commented);
+    commented = commentOpenAfter(text, lineStart, lineEnd, commented);
     lineStart = lineEnd + 1;
   }
   return starts;
@@ -88,61 +97,13 @@ List<int> _gameStarts(String text) {
 
 bool _isEventLine(String text, int start, int end) {
   var i = start;
-  while (i < end && _isBlank(text.codeUnitAt(i))) {
+  while (i < end && isTokenBlank(text.codeUnitAt(i))) {
     i++;
   }
   const event = '[Event';
   return text.startsWith(event, i) &&
       i + event.length < end &&
-      _isBlank(text.codeUnitAt(i + event.length));
-}
-
-/// Whether a `{}` comment is still open at the end of the line.
-///
-/// Open or closed, never a count: PGN comments do not nest, so a `}` inside
-/// one ends it and a `{` inside one is text.
-bool _commentedAfter(String text, int start, int end, bool commented) {
-  var open = commented;
-  for (var i = start; i < end; i++) {
-    final unit = text.codeUnitAt(i);
-    if (open ? unit == _closeBrace : unit == _openBrace) open = !open;
-  }
-  return open;
-}
-
-const _openBrace = 0x7B;
-const _closeBrace = 0x7D;
-
-/// Space, tab, carriage return or a byte-order mark.
-bool _isBlank(int unit) =>
-    unit == 0x20 || unit == 0x09 || unit == 0x0D || unit == 0xFEFF;
-
-/// A tag name is letters, digits and the punctuation course exports use;
-/// a value may escape a quote or a backslash, so `"` alone cannot end it.
-final _tagLine = RegExp(
-  r'^\s*\[([A-Za-z0-9_+#=:-]+)\s+"((?:[^"\\]|\\.)*)"\]\s*$',
-);
-
-/// The header block at the top of [gameText], in file order.
-///
-/// The block ends at the first blank line, which is what separates a header
-/// from its movetext, or at the first line that is neither bracketed nor a `%`
-/// escape, so a game written without that blank line does not swallow its
-/// moves. Every line before that is kept, parsed as a [PgnTag] where it can be
-/// and as an [UnparsedHeader] where it cannot.
-List<PgnHeader> readTags(String gameText) {
-  final header = <PgnHeader>[];
-  for (final line in const LineSplitter().convert(gameText)) {
-    final match = _tagLine.firstMatch(line);
-    if (match != null) {
-      header.add(PgnTag(match.group(1)!, _unescaped(match.group(2)!)));
-      continue;
-    }
-    final rest = line.trimLeft();
-    if (rest.isEmpty || !(rest.startsWith('[') || line.startsWith('%'))) break;
-    header.add(UnparsedHeader(line));
-  }
-  return List.unmodifiable(header);
+      isTokenBlank(text.codeUnitAt(i + event.length));
 }
 
 /// The value of the first tag named [key], or null.
@@ -153,29 +114,29 @@ String? tagValue(List<PgnHeader> header, String key) {
   return null;
 }
 
-/// [header] then [tree] as one game's text: the header lines in the order
-/// they are given, a blank line, and the movetext on one line ending with the
-/// value of the `Result` tag.
-String writeGameText(List<PgnHeader> header, GameTree tree) {
-  final lines = [for (final line in header) line.text];
-  final moves = writeMoveText(tree, result: tagValue(header, 'Result') ?? '*');
-  return '${lines.join('\n')}\n\n$moves';
+/// [header], [separator] and [tree] as one game's text: the header lines in
+/// the order they are given with the endings they had, the whitespace that
+/// stood between them and the moves, and the movetext on one line ending
+/// with [terminator].
+String writeGameText(
+  List<PgnHeader> header,
+  GameTree tree, {
+  required String? terminator,
+  required String separator,
+}) {
+  final buffer = StringBuffer();
+  for (final line in header) {
+    buffer
+      ..write(line.text)
+      ..write(line.newline);
+  }
+  return (buffer
+        ..write(separator)
+        ..write(writeMoveText(tree, terminator: terminator)))
+      .toString();
 }
 
 /// PGN escapes two characters inside a tag value and no others: a backslash
 /// and a quote, each with a backslash in front of it.
 String _escaped(String value) =>
     value.replaceAll(r'\', r'\\').replaceAll('"', r'\"');
-
-String _unescaped(String value) {
-  if (!value.contains(r'\')) return value;
-  final out = StringBuffer();
-  for (var i = 0; i < value.length; i++) {
-    final char = value[i];
-    final next = i + 1 < value.length ? value[i + 1] : '';
-    final escapes = char == r'\' && (next == r'\' || next == '"');
-    out.write(escapes ? next : char);
-    if (escapes) i++;
-  }
-  return out.toString();
-}

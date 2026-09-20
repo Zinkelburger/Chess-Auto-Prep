@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// [movetext] read and written again, which is what a chapter does to the
 /// one game an edit touched.
 String rewritten(String movetext) =>
-    writeMoveText(readGame(movetext).tree!, result: '*');
+    writeMoveText(readGame(movetext).tree!, terminator: '*');
 
 void main() {
   test('a brace inside a comment is text and survives the trip', () {

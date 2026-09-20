@@ -6,6 +6,7 @@ import 'dart:io';
 
 import 'package:chess_auto_prep/v2/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/chapter_edits.dart';
+import 'package:chess_auto_prep/v2/chess/pgn/games_written.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/diagnostics/log.dart';
 import 'package:chess_auto_prep/v2/storage/edit_scope.dart';

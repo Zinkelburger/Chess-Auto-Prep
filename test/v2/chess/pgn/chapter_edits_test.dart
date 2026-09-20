@@ -9,7 +9,7 @@ import '../../support/fixtures.dart';
 
 /// The whole tree as text, so a test can say two trees are the same tree
 /// without reading anything private.
-String movesOf(Chapter chapter) => writeMoveText(chapter.tree, result: '*');
+String movesOf(Chapter chapter) => writeMoveText(chapter.tree, terminator: '*');
 
 /// The chapter written out and read back, which is what the old app and the
 /// next session see.
@@ -303,7 +303,6 @@ void main() {
       expect(after.lines[2].text, chapter.lines[2].text);
       expect(writeChapter(after), contains('1. d4 e6 -- 2. c4 {also vital} *'));
     });
-
   });
 
   group('a game reading could not finish, in other places', () {
@@ -338,8 +337,9 @@ void main() {
   });
 }
 
-/// Three games from 1. d4. The third stops at `--`, a null move this reader
-/// cannot play, so the moves after it are in the file and not in the tree.
+/// Three games from 1. d4. In the third, `--` is White's ply, so `2. c4`
+/// after it is White moving twice; reading stops there and the moves after
+/// it are in the file and not in the tree.
 const partlyReadChapter = '''
 // Color: White
 
@@ -360,7 +360,7 @@ const partlyReadChapter = '''
 ''';
 
 /// A chapter whose first game — the one the introduction belongs to — is the
-/// one reading could not finish.
+/// one reading could not finish, for the same reason.
 const partialFirstChapter = '''
 // Color: White
 

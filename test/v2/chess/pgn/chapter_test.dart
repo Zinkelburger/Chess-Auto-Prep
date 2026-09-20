@@ -2,6 +2,7 @@ import 'package:chess_auto_prep/v2/chess/fen.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/chapter_edits.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
+import 'package:chess_auto_prep/v2/chess/pgn/pgn_issue.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/tree_edit.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
@@ -92,7 +93,7 @@ void main() {
       expect(mixed.unreadableGames, 1);
       expect(mixed.skippedGames, 0);
       expect(mixed.issues.single.game, 0);
-      expect(mixed.issues.single.detail, 'unusable FEN header');
+      expect(mixed.issues.single.issue, isA<UnreadablePosition>());
     });
 
     test('keeps its own text word for word', () {

@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:math' as math;
 
-import '../chess/pgn/chapter_edits.dart' show GamesWritten;
+import '../chess/pgn/games_written.dart';
 import '../chess/pgn/game_text.dart';
 
 /// What a save says it is about to change.

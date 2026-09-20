@@ -28,6 +28,15 @@ String? withProse(String? comment, String? prose) {
   return tokens.isEmpty ? text : '$text $tokens';
 }
 
+/// Why [text] cannot be a comment in a PGN file, or null when it can be.
+///
+/// A comment ends at its first `}` and the format gives no way to escape
+/// one: the old app and Lichess both strip braces rather than invent an
+/// escape. So a `}` in the words would cut the comment — and every move
+/// written after it — out of the file. Saying no is the only honest answer.
+String? commentRefusal(String text) =>
+    text.contains('}') ? 'a comment cannot hold a closing brace' : null;
+
 final _machineToken = RegExp(r'\[%[^\]]*\]');
 final _whitespace = RegExp(r'\s+');
 

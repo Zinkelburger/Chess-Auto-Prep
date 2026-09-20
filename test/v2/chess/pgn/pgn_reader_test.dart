@@ -1,5 +1,6 @@
 import 'package:chess_auto_prep/v2/chess/fen.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/pgn_reader.dart';
+import 'package:chess_auto_prep/v2/chess/pgn/tree_edit.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -34,45 +35,37 @@ void main() {
     expect(read.tree!.children.single.uci, 'a1b1');
   });
 
-  test('an illegal move ends its branch and is reported', () {
-    final read = readGame('1. e4 e5 2. Ke3 Nf6 (2... Qh4) *');
-    expect(read.tree!.children.single.children.single.children, isEmpty);
-    expect(read.issues, ['Ke3 is not legal']);
-  });
+  group('move numbers', () {
+    test('are read however they are spaced', () {
+      for (final game in const [
+        '1.e4 e5 2.Nf3 *',
+        '1. e4 e5 2. Nf3 *',
+        '1. e4 1... e5 2. Nf3 *',
+        '1. e4 1. ... e5 2. Nf3 *',
+        '1.e4 1...e5 2.Nf3 *',
+      ]) {
+        expect(mainlineSans(readGame(game).tree!), [
+          'e4',
+          'e5',
+          'Nf3',
+        ], reason: game);
+      }
+    });
 
-  test('an unusable FEN leaves the game unread', () {
-    final read = readGame('''
-[FEN "not a fen"]
+    test('do not say whose move it is', () {
+      // A course that numbers Black's ply with a single dot, which is the
+      // commonest repertoire export on this machine.
+      final read = readGame('1. e4\n1. e5\n2. Nf3\n2. Nc6\n*');
+      expect(mainlineSans(read.tree!), ['e4', 'e5', 'Nf3', 'Nc6']);
+      expect(read.issues, isEmpty);
+    });
 
-1. e4 *
-''');
-    expect(read.tree, isNull);
-    expect(read.issues, ['unusable FEN header']);
-  });
-
-  test('a comment holding a blank line does not cut the game short', () {
-    final read = readGame('''
-[Event "Notes"]
-[Result "*"]
-
-1. e4 {A thought that runs on
-
-[%eval 0.21]} d5 2. c4 *
-''');
-    final e4 = read.tree!.children.single;
-    expect(e4.children.single.san, 'd5');
-    expect(e4.children.single.children.single.san, 'c4');
-  });
-
-  test('keeps a comment written before the move it introduces', () {
-    final read = readGame('1. e4 ({A note} 1. d4 d5) e5 *');
-    final [e4, d4] = read.tree!.children;
-    expect(e4.startingComment, isNull);
-    expect(d4.startingComment, 'A note');
-  });
-
-  test('a brace inside a comment is part of its text', () {
-    final read = readGame('1. e4 {see {this} *');
-    expect(read.tree!.children.single.comment, 'see {this');
+    test('a five-digit number is a number, not a null move', () {
+      // `0000` spells a ply where nobody moved, so a reader that looks for
+      // words before numbers turns move ten thousand into one.
+      final read = readGame('10000. e4 10000... e5 *');
+      expect(mainlineSans(read.tree!), ['e4', 'e5']);
+      expect(read.issues, isEmpty);
+    });
   });
 }

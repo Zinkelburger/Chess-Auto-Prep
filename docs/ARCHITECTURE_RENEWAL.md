@@ -434,6 +434,29 @@ C checks rC, restores B and gets rB2; B's entry then expects rB2. If an external
 edit E happened before C, undo C restores E and the older B entry stays
 disarmed. A failed or uncertain undo never pops history.
 
+**Reading and writing a game.** `v2/chess/pgn/` owns the PGN grammar; dartchess
+is used for legality and positions, never for text. Reading a game yields its
+header lines with the endings they had, its moves, the termination marker it
+wrote (never the `[Result]` tag), the whitespace before the moves, and a list
+of named, located issues. **Any issue at all makes the game not whole:** it
+keeps its own bytes, is left out of `Chapter.writableTree`, and every edit
+that would have to rewrite it is refused with a typed reason the screen shows.
+
+**The round-trip gate.** `safeGameText` in `chess/pgn/rewrite_gate.dart` is the
+only way a game already in a file becomes new text. It writes the game, reads
+that text back and compares headers, moves, comments, annotations and marker;
+it answers `RewriteReady(text)` or `RewriteRefused(reason)`. `rewritten` in
+`chapter.dart` goes through it and hands back the untouched game on a refusal,
+so no caller can rewrite a game that fails it. The store needs no hook: a
+chapter that cannot be written never produces text for the store to save.
+
+The writer's canonical form is stated on `writeMoveText`. It keeps the SAN the
+file spelled, every comment's text, the order of moves and variations, the NAG
+numbers and the marker; it normalises redundant move numbers, several comments
+on one move into one, `;` comments into `{}`, symbolic annotations into their
+numbers, and `e.p.`. Each normalisation reads back as the same game, which the
+gate proves, and writing twice gives the same bytes.
+
 ### Required failure tests (step 2)
 
 Against real files in a disposable directory: concurrent create of the same

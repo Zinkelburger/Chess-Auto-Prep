@@ -14,14 +14,24 @@ final class MoveNode {
     required this.san,
     required this.uci,
     required this.fen,
+    this.spelling,
     this.startingComment,
     this.comment,
     this.nags = const [],
     this.children = const [],
   });
 
-  /// Normalised SAN, as dartchess writes it (`Nf3`, `O-O`, `exd6#`).
+  /// Normalised SAN, as dartchess writes it (`Nf3`, `O-O`, `exd6#`). It is
+  /// the move's identity: two spellings of one move are one node.
   final String san;
+
+  /// The SAN exactly as the file spelled it, when that is not [san] — `0-0`
+  /// for castling, a disambiguation the position does not need, `e8Q` for a
+  /// promotion, a missing `+`. Null when the file agreed with [san].
+  ///
+  /// Writing a game again uses it, so editing one move does not re-spell
+  /// every other move in the game.
+  final String? spelling;
 
   /// The same move as `e2e4` / `e7e8q`, for the board's last-move highlight.
   final String uci;
@@ -32,6 +42,14 @@ final class MoveNode {
   /// The comment the file wrote *before* this move rather than after it,
   /// which is how a variation is introduced: `({A note} 1. d4 d5)`. Kept
   /// apart from [comment] because that is where it has to go back.
+  ///
+  /// Only a move that starts a variation can have one, because `(` is the
+  /// only place a file can put a comment that belongs to the move after it:
+  /// before the game's first move a comment is the introduction,
+  /// [GameTree.rootComment], and anywhere else it reads as the comment on
+  /// the move before. Reading never produces one anywhere else; putting one
+  /// there makes the game unwritable, which the rewrite gate reports rather
+  /// than lets through.
   final String? startingComment;
 
   final String? comment;
@@ -50,6 +68,7 @@ final class MoveNode {
     san: san,
     uci: uci,
     fen: fen,
+    spelling: spelling,
     startingComment: startingComment ?? this.startingComment,
     comment: comment ?? this.comment,
     nags: nags ?? this.nags,
