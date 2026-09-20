@@ -2,6 +2,7 @@ import 'package:dartchess/dartchess.dart';
 
 import '../fen.dart';
 import 'game_tree.dart';
+import 'tree_edit.dart';
 
 /// One game out of a PGN file. Headers are read for the root position and
 /// then dropped; the document store step keeps them when it needs them.
@@ -64,16 +65,8 @@ PgnReadResult readPgn(String text) {
   return PgnReadResult(games: games, issues: issues);
 }
 
-Position? _rootPosition(String? fen) {
-  if (fen == null) return Chess.initial;
-  try {
-    return Chess.fromSetup(Setup.parseFen(fen));
-  } on FenException {
-    return null;
-  } on PositionSetupException {
-    return null;
-  }
-}
+Position? _rootPosition(String? fen) =>
+    fen == null ? Chess.initial : positionOf(Fen(fen));
 
 List<MoveNode> _convert(
   List<PgnChildNode<PgnNodeData>> nodes,
