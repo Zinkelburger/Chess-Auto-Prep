@@ -8,13 +8,16 @@
 /// only ever used by one writer at a time.
 ///
 /// Linux is the tested host; Windows replacement needs `ReplaceFileW` and
-/// retried sharing violations, which this does not do yet.
+/// retried sharing violations, which this does not do yet, and has no
+/// directory handle to flush, so the final step is skipped there.
 library;
 
 import 'dart:io';
 
 import 'package:document_file_io/document_file_io.dart';
 import 'package:path/path.dart' as p;
+
+import '../diagnostics/log.dart';
 
 /// Where the staged copy of [path] lives while it is being written.
 String temporaryPathFor(String path) =>
@@ -34,7 +37,7 @@ Future<void> createFileExclusively(String path, List<int> bytes) async {
     await _discard(staged);
     rethrow;
   }
-  await syncDirectory(p.dirname(path));
+  await _syncDirectoryEntry(path);
 }
 
 /// Replaces [path] with [bytes]. The caller has already checked the revision
@@ -47,7 +50,7 @@ Future<void> replaceFile(String path, List<int> bytes) async {
     await _discard(staged);
     rethrow;
   }
-  await syncDirectory(p.dirname(path));
+  await _syncDirectoryEntry(path);
 }
 
 /// Removes staged copies an interrupted write left behind. They are never the
@@ -62,6 +65,14 @@ Future<void> removeStaleTemporaries(Directory directory) async {
       await entry.delete();
     }
   }
+}
+
+/// Flushes the directory entry that now names [path]. Windows has no
+/// directory handle to flush, so the native call reports not-supported there
+/// and a save that succeeded would otherwise be reported as a failure.
+Future<void> _syncDirectoryEntry(String path) async {
+  if (Platform.isWindows) return;
+  await syncDirectory(p.dirname(path));
 }
 
 Future<File> _stage(String path, List<int> bytes) async {
@@ -79,7 +90,8 @@ Future<File> _stage(String path, List<int> bytes) async {
 Future<void> _discard(File staged) async {
   try {
     await staged.delete();
-  } on FileSystemException {
+  } on FileSystemException catch (error) {
     // The write already failed; a leftover temporary is swept by the next one.
+    log.w('remove the staged copy at ${staged.path}', error);
   }
 }
