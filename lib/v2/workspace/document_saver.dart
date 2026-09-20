@@ -250,16 +250,27 @@ final class DocumentSaver extends ChangeNotifier {
   ///
   /// Waits for a draft on its way out: there is nothing to undo to while the
   /// newest text is still going to disk.
-  Future<UndoResult> undo() async {
+  ///
+  /// It is a write like any other to whatever is waiting for the file, too:
+  /// a flush, a hold and the closing window wait for the undo and for the
+  /// draft typed while it was going out, which goes to disk behind it.
+  Future<UndoResult> undo() {
     final target = _target;
     if (target == null ||
         _undo.isEmpty ||
         _held ||
         _writing ||
         _pending != null) {
-      return const UndoRefused();
+      return Future<UndoResult>.value(const UndoRefused());
     }
-    final entry = _undo.last;
+    final undoing = _undoTo(_undo.last, target);
+    // What is kept here can only complete, never fail: a future left here
+    // with an error would throw again at every later flush.
+    _inFlight = undoing.then<void>((_) {}, onError: (Object _) {});
+    return undoing;
+  }
+
+  Future<UndoResult> _undoTo(store.Receipt entry, _Target target) async {
     final resting = _state;
     _writing = true;
     _set(const Saving());
@@ -270,12 +281,22 @@ final class DocumentSaver extends ChangeNotifier {
       expected: entry.committed,
     );
     _writing = false;
-    if (_disposed || ticket != _opens) return const UndoRefused();
-    if (_outOfDate(result, target)) {
-      _set(resting);
+    if (_disposed) return const UndoRefused();
+    if (ticket != _opens) {
+      // The answer is about an open nobody is on any more, and a draft of
+      // the document open now may have been waiting behind it.
+      _catchUp(result, target.ref);
+      await _write();
       return const UndoRefused();
     }
-    return _undone(result, entry, target.ref);
+    if (_outOfDate(result, target)) {
+      _set(resting);
+      await _write();
+      return const UndoRefused();
+    }
+    final outcome = _undone(result, entry, target.ref);
+    if (_state is! SaveConflict) await _write();
+    return outcome;
   }
 
   /// Whether the store refused because the entry names a revision the
@@ -335,7 +356,10 @@ final class DocumentSaver extends ChangeNotifier {
 
   void _set(SaveState state) {
     if (_disposed) return;
-    _state = state;
+    // A draft still waiting its turn is not saved, whatever the write that
+    // just landed did with the text before it. Saying Saved here would tell
+    // the user the file holds words it does not hold yet.
+    _state = state is Saved && _pending != null ? const Unsaved() : state;
     notifyListeners();
   }
 

@@ -297,6 +297,34 @@ void main() {
     await session.undo();
     expect(saver.state, isA<Saved>());
   });
+
+  test('a draft typed during an undo goes out behind it', () async {
+    edit('B');
+    await pumpEventQueue();
+    fixture.store.hold = true;
+    final undoing = session.undo();
+    await pumpEventQueue();
+    edit('C'); // typed while the undo is still being written
+    var landed = false;
+    final flushed = saver.flush().then((_) => landed = true);
+    await pumpEventQueue();
+    expect(landed, isFalse, reason: 'the undo is still going out');
+    expect(saver.state, isNot(isA<Saved>()));
+    fixture.store.releaseAll(); // the undo's write
+    await pumpEventQueue();
+    expect(landed, isFalse, reason: 'the draft is still on its way');
+    expect(
+      saver.state,
+      isNot(isA<Saved>()),
+      reason: 'the file does not hold the draft yet',
+    );
+    fixture.store.releaseAll(); // the draft behind it
+    await flushed;
+    await undoing;
+    expect(saver.state, isA<Saved>());
+    expect(fixture.onDisk, contains('{C [%eval 0.30]}'));
+  });
+
   test('a copy refused while another chapter opened still says so', () async {
     final other = chapterRef('KID', 'Other');
     fixture.store.documents[other] = Opened(
