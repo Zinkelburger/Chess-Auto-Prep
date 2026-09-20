@@ -11,6 +11,13 @@ abstract final class Space {
 /// Moves, FENs and evaluations share one monospace style.
 const monoText = TextStyle(fontFamily: 'SourceCodePro', fontSize: 13);
 
+/// The headline evaluation in the engine pane.
+const scoreText = TextStyle(
+  fontFamily: 'SourceCodePro',
+  fontSize: 18,
+  fontWeight: FontWeight.w600,
+);
+
 /// Board colours, resolved from the theme so a light theme can swap them.
 final class BoardTheme extends ThemeExtension<BoardTheme> {
   const BoardTheme({
