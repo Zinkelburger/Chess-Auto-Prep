@@ -1,4 +1,5 @@
 import 'package:dartchess/dartchess.dart';
+import 'package:flutter/gestures.dart' show DragStartBehavior;
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -60,52 +61,64 @@ class _BoardViewState extends State<BoardView> {
 
   @override
   Widget build(BuildContext context) {
-    final pieces = _pieces(widget.fen);
     return AspectRatio(
       aspectRatio: 1,
       child: LayoutBuilder(
         builder: (context, constraints) {
           final square = constraints.maxWidth / 8;
           return GestureDetector(
-            onTapUp: (details) => _tapped(_squareAt(details.localPosition, square)),
+            // The piece picked up is the one the pointer went down on, not
+            // whichever square it had reached when the drag was recognised.
+            dragStartBehavior: DragStartBehavior.down,
+            onTapUp: (details) =>
+                _tapped(_squareAt(details.localPosition, square)),
             onPanStart: (details) => _pickUp(details.localPosition, square),
             onPanUpdate: (details) => _moveTo(details.localPosition),
             onPanEnd: (_) => _drop(square),
-            child: Stack(
-              children: [
-                Positioned.fill(child: CustomPaint(painter: _painter(context))),
-                for (final (at, piece) in pieces)
-                  if (at != _drag?.from)
-                    Positioned(
-                      left: _column(at, widget.orientation) * square,
-                      top: _row(at, widget.orientation) * square,
-                      width: square,
-                      height: square,
-                      child: _PieceImage(piece: piece),
-                    ),
-                if (_dragged(pieces) case final piece?)
-                  Positioned(
-                    left: _drag!.at.dx - square / 2,
-                    top: _drag!.at.dy - square / 2,
-                    width: square,
-                    height: square,
-                    child: IgnorePointer(child: _PieceImage(piece: piece)),
-                  ),
-                if (_promoting case final move?)
-                  PromotionPicker(
-                    color: widget.fen.whiteToMove ? Side.white : Side.black,
-                    file: _column(move.to, widget.orientation),
-                    fromTop: widget.fen.whiteToMove ==
-                        (widget.orientation == Side.white),
-                    square: square,
-                    onChosen: (role) => _play(move.withPromotion(role)),
-                    onCancel: () => setState(() => _promoting = null),
-                  ),
-              ],
-            ),
+            child: Stack(children: _layers(context, square)),
           );
         },
       ),
+    );
+  }
+
+  /// The squares, then the pieces, then whatever is being carried or asked,
+  /// which is the order they sit in front of each other.
+  List<Widget> _layers(BuildContext context, double square) {
+    final pieces = _pieces(widget.fen);
+    return [
+      Positioned.fill(child: CustomPaint(painter: _painter(context))),
+      for (final (at, piece) in pieces)
+        if (at != _drag?.from)
+          Positioned(
+            left: _column(at, widget.orientation) * square,
+            top: _row(at, widget.orientation) * square,
+            width: square,
+            height: square,
+            child: _PieceImage(piece: piece),
+          ),
+      if (_dragged(pieces) case final piece?) _inHand(piece, square),
+      if (_promoting case final move?) _picker(move, square),
+    ];
+  }
+
+  Widget _inHand(Piece piece, double square) => Positioned(
+    left: _drag!.at.dx - square / 2,
+    top: _drag!.at.dy - square / 2,
+    width: square,
+    height: square,
+    child: IgnorePointer(child: _PieceImage(piece: piece)),
+  );
+
+  Widget _picker(NormalMove move, double square) {
+    final promoting = widget.fen.whiteToMove ? Side.white : Side.black;
+    return PromotionPicker(
+      color: promoting,
+      file: _column(move.to, widget.orientation),
+      fromTop: promoting == widget.orientation,
+      square: square,
+      onChosen: (role) => _play(move.withPromotion(role)),
+      onCancel: () => setState(() => _promoting = null),
     );
   }
 

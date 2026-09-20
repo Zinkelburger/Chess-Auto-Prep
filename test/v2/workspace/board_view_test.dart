@@ -62,4 +62,75 @@ void main() {
     await pump(tester, fen: const Fen('8/8/8/8/8/8/8/8 w - - 0 1'));
     expect(find.byType(SvgPicture), findsNothing);
   });
+
+  /// The centre of a square, with the board 400px wide and White below.
+  Offset at(String square) {
+    final file = square.codeUnitAt(0) - 'a'.codeUnitAt(0);
+    final rank = int.parse(square[1]) - 1;
+    return Offset(file * 50 + 25, (7 - rank) * 50 + 25);
+  }
+
+  testWidgets('a piece and then a square plays that move', (tester) async {
+    await pump(tester);
+    await tester.tapAt(at('e2'));
+    await tester.pump();
+    await tester.tapAt(at('e4'));
+    expect(played, ['e2e4']);
+  });
+
+  testWidgets('a square with nothing to play there changes nothing', (
+    tester,
+  ) async {
+    await pump(tester);
+    await tester.tapAt(at('e2'));
+    await tester.tapAt(at('e5'));
+    await tester.pump();
+    expect(played, isEmpty);
+    await tester.tapAt(at('d2'));
+    await tester.tapAt(at('d4'));
+    expect(played, ['d2d4'], reason: 'the second piece is the selected one');
+  });
+
+  testWidgets('the other side cannot be moved', (tester) async {
+    await pump(tester);
+    await tester.tapAt(at('e7'));
+    await tester.tapAt(at('e5'));
+    await tester.pump();
+    expect(played, isEmpty);
+  });
+
+  testWidgets('dragging a piece plays the move', (tester) async {
+    await pump(tester);
+    final gesture = await tester.startGesture(at('g1'));
+    await gesture.moveTo(at('f3'));
+    await tester.pump();
+    await gesture.up();
+    await tester.pump();
+    expect(played, ['g1f3']);
+  });
+
+  testWidgets('a promotion waits for the piece and then plays it', (
+    tester,
+  ) async {
+    await pump(tester, fen: const Fen('8/4P3/8/8/8/8/8/K6k w - - 0 1'));
+    await tester.tapAt(at('e7'));
+    await tester.tapAt(at('e8'));
+    await tester.pump();
+    expect(played, isEmpty, reason: 'nothing is played until a piece is named');
+    expect(find.byKey(const ValueKey('promote-q')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('promote-n')));
+    await tester.pump();
+    expect(played, ['e7e8n']);
+  });
+
+  testWidgets('a promotion nobody answers plays no move', (tester) async {
+    await pump(tester, fen: const Fen('8/4P3/8/8/8/8/8/K6k w - - 0 1'));
+    await tester.tapAt(at('e7'));
+    await tester.tapAt(at('e8'));
+    await tester.pump();
+    await tester.tapAt(at('a4')); // the scrim, away from the choices
+    await tester.pump();
+    expect(played, isEmpty);
+    expect(find.byKey(const ValueKey('promote-q')), findsNothing);
+  });
 }

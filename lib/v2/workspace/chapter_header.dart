@@ -23,6 +23,12 @@ class _ChapterHeaderState extends State<ChapterHeader> {
   /// The answer to the last thing the user asked for here.
   String? _notice;
 
+  Future<void> _undo() async {
+    await widget.session.undo();
+    if (!mounted) return;
+    setState(() => _notice = null);
+  }
+
   Future<void> _reload() async {
     final result = await widget.session.reloadFromDisk();
     if (!mounted) return;
@@ -78,7 +84,12 @@ class _ChapterHeaderState extends State<ChapterHeader> {
               const SizedBox(height: Space.xs),
               Text('$side · $lines$skipped', style: text.bodySmall),
               const SizedBox(height: Space.xs),
-              _SaveLine(state: widget.saver.state),
+              Row(
+                children: [
+                  Expanded(child: _SaveLine(state: widget.saver.state)),
+                  _UndoButton(onPressed: widget.saver.canUndo ? _undo : null),
+                ],
+              ),
               if (widget.saver.state is SaveConflict)
                 _ConflictActions(onReload: _reload, onSaveCopy: _saveCopy),
               if (_notice case final notice?) _Notice(notice),
@@ -88,6 +99,22 @@ class _ChapterHeaderState extends State<ChapterHeader> {
       },
     );
   }
+}
+
+/// The last edit, taken back. Disabled when there is nothing to take back,
+/// which is also true of a document nobody has edited yet.
+class _UndoButton extends StatelessWidget {
+  const _UndoButton({required this.onPressed});
+
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+    onPressed: onPressed,
+    icon: const Icon(Icons.undo, size: 18),
+    tooltip: 'Undo (Ctrl+Z)',
+    visualDensity: VisualDensity.compact,
+  );
 }
 
 /// The save state in words. Only a failure and a conflict take a colour:
