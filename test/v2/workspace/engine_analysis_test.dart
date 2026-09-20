@@ -86,7 +86,8 @@ void main() {
       engine.current.emit(line(score: const MateIn(0)));
       engine.current.end();
       async.flushMicrotasks();
-      expect(analysis.snapshot!.best!.score, const MateIn(0));
+      // Black to move and mated, so from White's side White gave the mate.
+      expect(analysis.snapshot!.best!.score, const MateIn(0).negated);
     });
   });
 

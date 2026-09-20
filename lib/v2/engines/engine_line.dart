@@ -47,30 +47,45 @@ final class Centipawns extends Score {
   String toString() => 'Centipawns($value)';
 }
 
-/// Mate in [moves]: positive when the side scores mates, negative when it
-/// is mated, zero when it already is.
+/// Mate in [moves]: positive when the side the score is about gives the
+/// mate, negative when that side is the one being mated, and zero when the
+/// board is checkmate already, which UCI reports as `score mate 0` for the
+/// side to move in it — a loss.
+///
+/// A mate that has happened has no distance left to carry its sign, so
+/// [mating] carries it instead. Without that, the mated side and the side
+/// that just mated would be the same score, and the bar would show the
+/// mated side winning.
 final class MateIn extends Score {
-  const MateIn(this.moves);
+  /// UCI's `score mate N` for the side to move.
+  const MateIn(int moves) : this._(moves, mating: moves > 0);
 
+  const MateIn._(this.moves, {required this.mating});
+
+  /// How far off the mate is, zero once it is on the board.
   final int moves;
 
-  @override
-  Score get negated => MateIn(-moves);
+  /// Whether the side this score is about is the one giving the mate.
+  final bool mating;
 
   @override
-  String get text => moves >= 0 ? '#$moves' : '#-${-moves}';
+  Score get negated => MateIn._(-moves, mating: !mating);
 
   @override
-  double get expected => moves > 0 ? 1 : 0;
+  String get text => mating ? '#$moves' : '#-${moves.abs()}';
 
   @override
-  bool operator ==(Object other) => other is MateIn && other.moves == moves;
+  double get expected => mating ? 1 : 0;
 
   @override
-  int get hashCode => moves.hashCode;
+  bool operator ==(Object other) =>
+      other is MateIn && other.moves == moves && other.mating == mating;
 
   @override
-  String toString() => 'MateIn($moves)';
+  int get hashCode => Object.hash(moves, mating);
+
+  @override
+  String toString() => 'MateIn($text)';
 }
 
 /// One line of analysis: the engine's [multiPv]-th best continuation.
