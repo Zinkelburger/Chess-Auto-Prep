@@ -1629,7 +1629,7 @@ void main() {
       expect(find.text('Engine evals'), findsOneWidget);
       expect(find.text('Move'), findsOneWidget);
       expect(find.text('Evaluation'), findsOneWidget);
-      expect(find.text('Expectimax'), findsOneWidget);
+      expect(find.text('Expected'), findsOneWidget);
       await tester.tap(find.byTooltip('Generation settings'));
       await _settle(tester);
       expect(find.text('Generation settings'), findsWidgets);
