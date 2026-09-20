@@ -353,11 +353,11 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
                         ? const Text('Annotation', style: AppTextStyles.caption)
                         : const Tooltip(
                             message:
-                                'Expectimax: the score expected once the '
-                                'opponent’s likely replies are weighed in, '
-                                'from White’s perspective',
+                                'The score expected once the opponent’s '
+                                'likely replies are weighed in, from '
+                                'White’s perspective',
                             child: Text(
-                              'Expected',
+                              'Expectimax',
                               style: AppTextStyles.caption,
                             ),
                           ),

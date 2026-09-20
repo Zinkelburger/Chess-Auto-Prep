@@ -37,6 +37,59 @@ void main() {
       expect(prefs.boardSize, BoardSize.small);
     });
 
+    test('opens the Database pane on the source you last picked', () async {
+      SharedPreferences.setMockInitialValues({
+        RepertoireLayoutPrefs.databaseSourceKey: 4,
+      });
+      final prefs = RepertoireLayoutPrefs();
+      addTearDown(prefs.dispose);
+
+      await prefs.load();
+
+      expect(prefs.databaseSource, 4);
+    });
+
+    test('defaults the Database pane to engine evals', () async {
+      final prefs = RepertoireLayoutPrefs();
+      addTearDown(prefs.dispose);
+
+      await prefs.load();
+
+      expect(prefs.databaseSource, RepertoireLayoutPrefs.defaultDatabaseSource);
+    });
+
+    test('a source outside the menu falls back to the default', () async {
+      for (final stored in [-1, 5, 99]) {
+        SharedPreferences.setMockInitialValues({
+          RepertoireLayoutPrefs.databaseSourceKey: stored,
+        });
+        final prefs = RepertoireLayoutPrefs();
+        addTearDown(prefs.dispose);
+
+        await prefs.load();
+
+        expect(
+          prefs.databaseSource,
+          RepertoireLayoutPrefs.defaultDatabaseSource,
+          reason: 'stored $stored must not index the source list out of range',
+        );
+      }
+    });
+
+    test('picking a source writes it back for the next launch', () async {
+      final prefs = RepertoireLayoutPrefs();
+      addTearDown(prefs.dispose);
+      await prefs.load();
+
+      await prefs.setDatabaseSource(1);
+      expect(prefs.databaseSource, 1);
+
+      final reopened = RepertoireLayoutPrefs();
+      addTearDown(reopened.dispose);
+      await reopened.load();
+      expect(reopened.databaseSource, 1);
+    });
+
     test('an unknown board size falls back to the classic layout', () async {
       SharedPreferences.setMockInitialValues({
         RepertoireLayoutPrefs.boardSizeKey: 'gigantic',
