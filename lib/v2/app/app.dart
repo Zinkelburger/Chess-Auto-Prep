@@ -24,7 +24,7 @@ class ChessAutoPrepV2 extends StatefulWidget {
 
 class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
   late final Library _library = Library(
-    ChapterFiles(Directory(p.join(widget.documents.path, 'repertoires'))),
+    ChapterDirectory(Directory(p.join(widget.documents.path, 'repertoires'))),
   );
   final _session = DocumentSession();
 

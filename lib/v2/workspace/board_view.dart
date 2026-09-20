@@ -68,13 +68,8 @@ int _column(Square square, Side orientation) =>
 int _row(Square square, Side orientation) =>
     orientation == Side.white ? 7 - square.rank.value : square.rank.value;
 
-Iterable<(Square, Piece)> _pieces(Fen fen) {
-  try {
-    return Setup.parseFen(fen.value).board.pieces.toList();
-  } on FenException {
-    return const [];
-  }
-}
+Iterable<(Square, Piece)> _pieces(Fen fen) =>
+    Setup.parseFen(fen.value).board.pieces;
 
 Set<Square> _squaresOf(String? uci) {
   if (uci == null) return const {};

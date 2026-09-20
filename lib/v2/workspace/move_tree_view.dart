@@ -36,7 +36,7 @@ class MoveTreeView extends StatelessWidget {
               if (tree.rootComment case final comment?) _Comment(text: comment),
               ..._LineBuilder(
                 session,
-              ).build(const NodePath.root(), tree.children, depth: 0),
+              ).line(const NodePath.root(), tree.children),
             ],
           ),
         );
@@ -45,60 +45,59 @@ class MoveTreeView extends StatelessWidget {
   }
 }
 
-/// Turns a forest into widgets. [build] renders `siblings[first]` and the
-/// main continuations below it as one line. When the line starts at the
-/// main move (`first == 0`), the other siblings are its variations and appear
-/// as indented blocks straight after it; a variation block starts at its own
-/// index and shows no siblings, since the main call already did.
+/// Where a line is: one sibling list under one parent, and which sibling.
+typedef _Branch = ({NodePath parent, List<MoveNode> siblings, int branch});
+
 final class _LineBuilder {
   _LineBuilder(this.session);
 
   final DocumentSession session;
 
-  List<Widget> build(
+  /// The line that starts at `siblings[branch]` and follows main
+  /// continuations to the end. The other siblings of a main move are its
+  /// variations and interrupt the line as indented blocks, each a line of
+  /// its own; the siblings of a variation's first move are not repeated.
+  List<Widget> line(
     NodePath parent,
     List<MoveNode> siblings, {
-    int first = 0,
-    required int depth,
+    int branch = 0,
   }) {
     final blocks = <Widget>[];
     var tokens = <Widget>[];
-    var path = parent;
-    var index = first;
-    var startsLine = true;
-    while (index < siblings.length) {
-      final node = siblings[index];
-      final nodePath = path.child(index);
-      tokens.add(_token(node, nodePath, startsLine: startsLine));
-      if (node.comment case final comment?) {
-        final text = displayComment(comment);
-        if (text.isNotEmpty) tokens.add(_Comment(text: text));
-      }
-      startsLine = node.comment != null;
-      if (index == 0 && siblings.length > 1) {
+    var numbered = true;
+    var at = (parent: parent, siblings: siblings, branch: branch);
+    while (true) {
+      final node = at.siblings[at.branch];
+      final path = at.parent.child(at.branch);
+      tokens.add(_token(node, path, numbered: numbered));
+      final comment = displayComment(node.comment ?? '');
+      if (comment.isNotEmpty) tokens.add(_Comment(text: comment));
+      // As in print, a move after a comment shows its number again.
+      numbered = comment.isNotEmpty;
+      if (at.branch == 0 && at.siblings.length > 1) {
         blocks.add(_Line(tokens));
+        blocks.addAll(_variations(at));
         tokens = <Widget>[];
-        for (var i = 1; i < siblings.length; i++) {
-          blocks.add(
-            _VariationBlock(
-              depth: depth + 1,
-              children: build(path, siblings, first: i, depth: depth + 1),
-            ),
-          );
-        }
-        startsLine = true;
+        numbered = true;
       }
-      path = nodePath;
-      siblings = node.children;
-      index = 0;
+      if (node.children.isEmpty) break;
+      at = (parent: path, siblings: node.children, branch: 0);
     }
     if (tokens.isNotEmpty) blocks.add(_Line(tokens));
     return blocks;
   }
 
-  Widget _token(MoveNode node, NodePath path, {required bool startsLine}) {
+  Iterable<Widget> _variations(_Branch at) sync* {
+    for (var branch = 1; branch < at.siblings.length; branch++) {
+      yield _VariationBlock(
+        children: line(at.parent, at.siblings, branch: branch),
+      );
+    }
+  }
+
+  Widget _token(MoveNode node, NodePath path, {required bool numbered}) {
     return _MoveToken(
-      label: moveNumberLabel(node, startsLine: startsLine),
+      label: moveNumberLabel(node, startsLine: numbered),
       san: node.san + node.nags.map(nagGlyph).nonNulls.join(),
       selected: session.cursor == path,
       onTap: () => session.goTo(path),
@@ -117,9 +116,8 @@ class _Line extends StatelessWidget {
 }
 
 class _VariationBlock extends StatelessWidget {
-  const _VariationBlock({required this.depth, required this.children});
+  const _VariationBlock({required this.children});
 
-  final int depth;
   final List<Widget> children;
 
   @override
@@ -140,7 +138,9 @@ class _VariationBlock extends StatelessWidget {
   }
 }
 
-class _MoveToken extends StatelessWidget {
+/// One clickable move. When it becomes the selected one it scrolls itself
+/// into view.
+class _MoveToken extends StatefulWidget {
   const _MoveToken({
     required this.label,
     required this.san,
@@ -154,46 +154,63 @@ class _MoveToken extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    if (selected) _keepVisible(context);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(3),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-        decoration: BoxDecoration(
-          color: selected ? scheme.primary.withValues(alpha: 0.35) : null,
-          borderRadius: BorderRadius.circular(3),
-        ),
-        child: Text.rich(
-          TextSpan(
-            children: [
-              if (label.isNotEmpty)
-                TextSpan(
-                  text: '$label ',
-                  style: TextStyle(color: scheme.onSurfaceVariant),
-                ),
-              TextSpan(text: san),
-            ],
-          ),
-          style: monoText.copyWith(color: scheme.onSurface),
-        ),
-      ),
-    );
+  State<_MoveToken> createState() => _MoveTokenState();
+}
+
+class _MoveTokenState extends State<_MoveToken> {
+  @override
+  void initState() {
+    super.initState();
+    if (widget.selected) _reveal();
   }
 
-  /// Scrolls the list so the selected move is on screen after this frame,
-  /// which is when it has a position.
-  void _keepVisible(BuildContext context) {
+  @override
+  void didUpdateWidget(_MoveToken old) {
+    super.didUpdateWidget(old);
+    if (widget.selected && !old.selected) _reveal();
+  }
+
+  /// After the frame, because the token has no position until it is laid out.
+  void _reveal() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!context.mounted) return;
+      if (!mounted) return;
       Scrollable.ensureVisible(
         context,
         alignment: 0.5,
         duration: const Duration(milliseconds: 100),
       );
     });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: widget.onTap,
+      borderRadius: BorderRadius.circular(3),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+        decoration: BoxDecoration(
+          color: widget.selected
+              ? scheme.primary.withValues(alpha: 0.35)
+              : null,
+          borderRadius: BorderRadius.circular(3),
+        ),
+        child: Text.rich(
+          TextSpan(
+            children: [
+              if (widget.label.isNotEmpty)
+                TextSpan(
+                  text: '${widget.label} ',
+                  style: TextStyle(color: scheme.onSurfaceVariant),
+                ),
+              TextSpan(text: widget.san),
+            ],
+          ),
+          style: monoText.copyWith(color: scheme.onSurface),
+        ),
+      ),
+    );
   }
 }
 

@@ -3,11 +3,11 @@ import 'package:dartchess/dartchess.dart';
 import '../fen.dart';
 import 'game_tree.dart';
 
-/// One game out of a PGN file.
+/// One game out of a PGN file. Headers are read for the root position and
+/// then dropped; the document store step keeps them when it needs them.
 final class ParsedGame {
-  const ParsedGame({required this.headers, required this.tree});
+  const ParsedGame({required this.tree});
 
-  final Map<String, String> headers;
   final GameTree tree;
 }
 
@@ -59,7 +59,7 @@ PgnReadResult readPgn(String text) {
       rootComment: game.comments.isEmpty ? null : game.comments.join(' '),
       children: _convert(game.moves.children, root, index, issues),
     );
-    games.add(ParsedGame(headers: Map.unmodifiable(game.headers), tree: tree));
+    games.add(ParsedGame(tree: tree));
   }
   return PgnReadResult(games: games, issues: issues);
 }

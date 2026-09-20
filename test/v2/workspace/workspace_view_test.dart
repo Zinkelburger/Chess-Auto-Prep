@@ -51,9 +51,8 @@ void main() {
     await tester.pump();
     expect(session.cursor, NodePath.of([0, 1]));
     expect(session.currentMove?.san, 'Nc3');
-    // The Nc3 block sits right under "2. Nf3", so its Nc6 comes first.
-    await tester.tap(find.textContaining('Nc6').first);
-    await tester.pump();
+    // Two moves render as "2... Nc6"; walk on instead of picking one.
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     expect(session.cursor, NodePath.of([0, 1, 0]));
     await tester.tap(find.textContaining('cxd4'));
     await tester.pump();

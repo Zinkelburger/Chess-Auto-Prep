@@ -56,28 +56,32 @@ final class Library extends ChangeNotifier {
   Future<void> refresh() async {
     final ticket = ++_refreshes;
     _set(const LibraryLoading());
-    LibraryState next;
-    try {
-      next = LibraryReady(await _files.list());
-    } on Exception catch (e) {
-      next = LibraryFailed('$e');
-    }
-    if (ticket != _refreshes || _disposed) return;
-    _set(next);
+    final listing = await _files.list();
+    if (ticket != _refreshes) return;
+    _set(switch (listing) {
+      Chapters(:final refs) => LibraryReady(refs),
+      ChaptersUnreadable(:final detail) => LibraryFailed(
+        'Could not read the repertoires folder: $detail',
+      ),
+    });
   }
 
   /// Reads and parses [ref]. Parsing is pure, so the caller may do what it
   /// likes with the chapter; this owner keeps no reference to it.
   Future<OpenResult> open(ChapterRef ref) async {
-    try {
-      final text = await _files.read(ref);
-      return Opened(parseChapter(name: ref.name, text: text));
-    } on Exception catch (e) {
-      return OpenFailed('$e');
-    }
+    return switch (await _files.read(ref)) {
+      ChapterText(:final text) => Opened(
+        parseChapter(name: ref.name, text: text),
+      ),
+      ChapterAbsent() => OpenFailed('${ref.name} is no longer on disk'),
+      ChapterUnreadable(:final detail) => OpenFailed(
+        'Could not read ${ref.name}: $detail',
+      ),
+    };
   }
 
   void _set(LibraryState state) {
+    if (_disposed) return;
     _state = state;
     notifyListeners();
   }
