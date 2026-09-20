@@ -1,9 +1,10 @@
 /// The training schedule's half of a chapter rename, move or delete.
 ///
 /// Reviews, move progress and history live in three CSVs in the Documents
-/// folder, and every row names its chapter by path in the first column,
-/// `repertoire_id`. Move the chapter and say nothing, and the user's
-/// scheduling, streaks and history stop belonging to anything.
+/// folder, beside the log of answered moves, a JSON object per line. Every
+/// record names its chapter by path — the first CSV column, `repertoire_id`,
+/// and the log's `repertoireId`. Move the chapter and say nothing, and the
+/// user's scheduling, streaks, history and answers belong to nothing.
 ///
 /// So the store repoints them in the same operation. A row is matched the way
 /// the old app matches it, because both apps write these files: the chapter's
@@ -29,17 +30,17 @@ import 'csv_records.dart';
 import 'document_ref.dart';
 import 'file_lock.dart';
 
-/// The training CSVs under one Documents folder.
+/// The training records under one Documents folder.
 final class TrainingRecords {
   const TrainingRecords(this.documents);
 
   /// The folder the three files sit in, beside `repertoires/`.
   final Directory documents;
 
-  /// Rewrites every row that named [from] so it names [to] instead.
+  /// Rewrites every record that named [from] so it names [to] instead.
   ///
-  /// All three files are read and checked before any of them is written, so a
-  /// malformed record in the last file leaves the first two as they were. The
+  /// Every file is read and checked before any of them is written, so a
+  /// malformed record in the last one leaves the others as they were. The
   /// files are replaced one atomic publication each; a reader between two of
   /// them sees whole files, never half a row.
   Future<RepointResult> repoint(DocumentRef from, DocumentRef to) async {
@@ -88,6 +89,7 @@ final class TrainingRecords {
     }
     // A file with no records is one the user has not trained against yet.
     if (text.trim().isEmpty) return const _Keep();
+    if (name == _attempts) return _planAttempts(text, from, to);
     return _planText(text, name, from, to);
   }
 
@@ -143,16 +145,23 @@ final class IoFailure extends RepointResult {
   final String detail;
 }
 
-/// The three files, and only these: a legacy `<name>.pre-csv-v2.bak` holds
+/// These four files, and only these: a legacy `<name>.pre-csv-v2.bak` holds
 /// the bytes from before the quoting migration and is never rewritten.
 const _files = [
   'repertoire_reviews.csv',
   'repertoire_move_progress.csv',
   'repertoire_review_history.csv',
+  _attempts,
 ];
 
-/// The first column of every one of the three files, and of their headers.
+/// The log of answered moves: one JSON object per line, only ever appended.
+const _attempts = 'repertoire_move_attempts.jsonl';
+
+/// The first column of every one of the three CSVs, and of their headers.
 const _idColumn = 'repertoire_id';
+
+/// What the attempt log calls the same thing.
+const _attemptIdKey = 'repertoireId';
 
 const _notText = 'the file is not UTF-8 text';
 
@@ -185,6 +194,42 @@ _Plan _planText(String text, String name, String from, String to) {
     case CsvParsed(:final records):
       return _planRecords(records, name, from, to);
   }
+}
+
+/// The attempt log, whose records are lines rather than CSV.
+///
+/// Splitting on the line feed and joining on it again reproduces the file
+/// exactly, trailing newline and all, so every answer the user gave that did
+/// not name this chapter keeps the bytes it was written with.
+_Plan _planAttempts(String text, String from, String to) {
+  final lines = text.split('\n');
+  var rows = 0;
+  for (var i = 0; i < lines.length; i++) {
+    final rewritten = _movedAttempt(lines[i], from, to);
+    if (rewritten == null) return _Refused(Malformed(_attempts, i + 1));
+    if (rewritten != lines[i]) rows++;
+    lines[i] = rewritten;
+  }
+  return rows == 0 ? const _Keep() : _Rewrite(lines.join('\n'), rows);
+}
+
+/// One logged answer pointing at its chapter, or null when the line is not
+/// a JSON object naming one — which is a file this code will not rewrite.
+String? _movedAttempt(String line, String from, String to) {
+  if (line.trim().isEmpty) return line;
+  final Object? decoded;
+  try {
+    decoded = jsonDecode(line);
+  } on FormatException {
+    return null;
+  }
+  if (decoded is! Map<String, Object?>) return null;
+  final id = decoded[_attemptIdKey];
+  if (id is! String) return null;
+  final moved = _moved(id, from, to);
+  if (moved == null) return line;
+  // Spreading first keeps every other field, and its place in the object.
+  return jsonEncode({...decoded, _attemptIdKey: moved});
 }
 
 _Plan _planRecords(

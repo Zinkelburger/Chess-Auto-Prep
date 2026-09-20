@@ -16,6 +16,7 @@ import 'store_fixture.dart';
 const _reviews = 'repertoire_reviews.csv';
 const _progress = 'repertoire_move_progress.csv';
 const _history = 'repertoire_review_history.csv';
+const _attempts = 'repertoire_move_attempts.jsonl';
 
 const _reviewsHeader =
     'repertoire_id,line_id,line_name,difficulty,interval_days,due_utc,'
@@ -40,6 +41,12 @@ String _progressRow(String id) => '$id,line_1,4,2,true';
 String _historyRow(String id) =>
     '$id,line_1,2026-09-14T00:00:00Z,good,false,review';
 
+/// A logged answer, spaced the way no encoder would write it, so a line that
+/// keeps these bytes proves it was never re-encoded.
+String _attemptRow(String id) =>
+    '{"repertoireId": "$id", "lineId": "line_1", "moveIndex": 4, '
+    '"correct": true, "timestampUtc": "2026-09-14T00:00:00Z"}';
+
 void main() {
   late StoreFixture fixture;
   late TrainingRecords records;
@@ -60,8 +67,9 @@ void main() {
   String read(String name) =>
       File(p.join(fixture.documents.path, name)).readAsStringSync();
 
-  /// All three files, with one row for each of the two chapters.
+  /// All four files, with one record for each of the two chapters.
   void writeAll() {
+    write(_attempts, '${_attemptRow(kid.path)}\n${_attemptRow(benko.path)}\n');
     write(
       _reviews,
       '$_reviewsHeader\n${_review(kid.path)}\n${_awkwardReview(benko.path)}\n',
@@ -80,13 +88,23 @@ void main() {
 
   test('a file nothing matches keeps every one of its bytes', () async {
     writeAll();
-    final before = [read(_reviews), read(_progress), read(_history)];
+    final before = [
+      read(_reviews),
+      read(_progress),
+      read(_history),
+      read(_attempts),
+    ];
     final result = await records.repoint(
       fixture.ref('repertoires/Slav/Main.pgn'),
       fixture.ref('repertoires/Slav/Renamed.pgn'),
     );
     expect(result, isA<NothingToRepoint>());
-    expect([read(_reviews), read(_progress), read(_history)], before);
+    expect([
+      read(_reviews),
+      read(_progress),
+      read(_history),
+      read(_attempts),
+    ], before);
   });
 
   test('a quoted, multiline row survives a rewrite of its neighbour', () async {
@@ -104,7 +122,7 @@ void main() {
     writeAll();
     final renamed = fixture.ref('repertoires/KID/Classical.pgn');
     expect(await records.repoint(kid, renamed), isA<Repointed>());
-    expect((await records.repoint(renamed, kid) as Repointed).rowsChanged, 3);
+    expect((await records.repoint(renamed, kid) as Repointed).rowsChanged, 4);
     expect(read(_progress), contains(_progressRow(kid.path)));
     expect(read(_history), contains(_historyRow(kid.path)));
   });
@@ -113,7 +131,7 @@ void main() {
     writeAll();
     final from = fixture.ref('repertoires/KID');
     final to = fixture.ref('repertoires/Kings Indian');
-    expect((await records.repoint(from, to) as Repointed).rowsChanged, 3);
+    expect((await records.repoint(from, to) as Repointed).rowsChanged, 4);
     expect(read(_progress), contains(p.join(to.path, 'Main.pgn')));
     expect(read(_history), contains(p.join(to.path, 'Main.pgn')));
     expect(read(_reviews), contains(_awkwardReview(benko.path)));
@@ -131,7 +149,7 @@ void main() {
 
   test('a record with the wrong number of fields stops everything', () async {
     writeAll();
-    final before = [read(_reviews), read(_progress), read(_history)];
+    final before = [read(_reviews), read(_progress), read(_attempts)];
     write(
       _history,
       '$_historyHeader\n${_historyRow(kid.path)}\n'
@@ -144,8 +162,8 @@ void main() {
     expect(result, isA<Malformed>());
     expect((result as Malformed).file, _history);
     expect(result.line, 3);
-    // The two files that would have changed were never written.
-    expect([read(_reviews), read(_progress)], [before[0], before[1]]);
+    // The other files that would have changed were never written.
+    expect([read(_reviews), read(_progress), read(_attempts)], before);
   });
 
   test('a quoted field nobody closed is malformed, not a guess', () async {
@@ -179,6 +197,36 @@ void main() {
     );
   });
 
+  test('only the logged answers that named the chapter change', () async {
+    writeAll();
+    final renamed = fixture.ref('repertoires/KID/Classical.pgn');
+    expect(await records.repoint(kid, renamed), isA<Repointed>());
+    final answers = read(_attempts);
+    expect(answers, contains(_attemptRow(benko.path)));
+    expect(answers, contains('"repertoireId":"${renamed.path}"'));
+    // The rest of the answer is still there, and the log still ends a line.
+    expect(answers, contains('"moveIndex":4'));
+    expect(answers, contains('"correct":true'));
+    expect(answers, isNot(contains(kid.path)));
+    expect(answers, endsWith('\n'));
+  });
+
+  test('a logged answer that is not a JSON object stops it', () async {
+    writeAll();
+    write(_attempts, '${read(_attempts)}truncated answer\n');
+    final broken = read(_attempts);
+    final result = await records.repoint(
+      kid,
+      fixture.ref('repertoires/KID/Classical.pgn'),
+    );
+    expect(result, isA<Malformed>());
+    expect((result as Malformed).file, _attempts);
+    expect(result.line, 3);
+    expect(read(_attempts), broken);
+    // The CSVs that would have changed were not written either.
+    expect(read(_reviews), contains(_review(kid.path)));
+  });
+
   test('a folder that cannot be written reports the failure', () async {
     writeAll();
     final before = read(_reviews);
@@ -198,7 +246,7 @@ void main() {
     final moved =
         await fixture.store.rename(kid, 'Classical.pgn', expected: revision)
             as Moved;
-    expect((moved.training as Repointed).rowsChanged, 3);
+    expect((moved.training as Repointed).rowsChanged, 4);
     final renamed = fixture.ref('repertoires/KID/Classical.pgn');
     expect(read(_reviews), contains('${renamed.path},line_1,Mainline,'));
     expect(read(_progress), contains(_progressRow(renamed.path)));
@@ -210,14 +258,14 @@ void main() {
     final revision = await fixture.put(kid, '[Event "KID"]\n\n1. d4 *\n');
     final deleted =
         await fixture.store.delete(kid, expected: revision) as Deleted;
-    expect((deleted.training as Repointed).rowsChanged, 3);
+    expect((deleted.training as Repointed).rowsChanged, 4);
     expect(read(_progress), contains(_progressRow(deleted.recoveredTo)));
     // Nothing was dropped: restoring the chapter brings the schedule back.
     expect(
       (await records.repoint(DocumentRef(deleted.recoveredTo), kid)
               as Repointed)
           .rowsChanged,
-      3,
+      4,
     );
     expect(read(_history), contains(_historyRow(kid.path)));
   });
