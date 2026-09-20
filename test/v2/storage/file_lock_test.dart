@@ -47,6 +47,28 @@ void main() {
     });
   });
 
+  test('a rename waits while another app holds the documents root, then goes '
+      'through', () async {
+    final ref = fixture.ref('KID/Main.pgn');
+    final revision = await fixture.put(ref, 'A *\n');
+    // The old app locks the documents root to rename a chapter, so v2 has
+    // to take the same lock or the two would move one file at once.
+    final other = sqlite3.open(await _lockPath(fixture.documents));
+    other.execute('PRAGMA busy_timeout = 0');
+    other.execute('BEGIN IMMEDIATE');
+    var done = false;
+    final renamed = fixture.store
+        .rename(ref, 'Mainline.pgn', expected: revision)
+        .whenComplete(() => done = true);
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    expect(done, isFalse, reason: 'the other app still holds the root');
+    expect(await File(ref.path).exists(), isTrue);
+    other.execute('ROLLBACK');
+    other.close();
+    expect(await renamed, isA<Moved>());
+    expect(await File(fixture.ref('KID/Mainline.pgn').path).exists(), isTrue);
+  });
+
   test(
     'a save waits while another app holds the folder, then goes through',
     () async {

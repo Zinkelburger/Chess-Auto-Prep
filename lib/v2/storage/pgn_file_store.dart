@@ -60,7 +60,7 @@ final class PgnFileStore implements PgnDocumentStore {
       log.e('create ${ref.path}', error);
       return IoFailure(_detail(error));
     }
-    return _locked(ref, () => _create(ref, text), IoFailure.new);
+    return _locked(_folder(ref), ref, () => _create(ref, text), IoFailure.new);
   }
 
   Future<CreateResult> _create(DocumentRef ref, String text) async {
@@ -82,7 +82,12 @@ final class PgnFileStore implements PgnDocumentStore {
     DocumentRef ref,
     String text, {
     required Revision expected,
-  }) => _locked(ref, () => _save(ref, text, expected), IoFailure.new);
+  }) => _locked(
+    _folder(ref),
+    ref,
+    () => _save(ref, text, expected),
+    IoFailure.new,
+  );
 
   Future<SaveResult> _save(
     DocumentRef ref,
@@ -139,12 +144,22 @@ final class PgnFileStore implements PgnDocumentStore {
     expected: expected,
   );
 
+  /// Moving holds the lock on the documents root rather than on either
+  /// folder, because that is the scope the old app takes for the same
+  /// operation (`io_storage_service.dart`, `_rootForMove`). Two apps renaming
+  /// one chapter must exclude each other, and no one folder covers both ends
+  /// of a move.
   @override
   Future<MoveResult> move(
     DocumentRef ref,
     DocumentRef destination, {
     required Revision expected,
-  }) => _locked(ref, () => _move(ref, destination, expected), IoFailure.new);
+  }) => _locked(
+    documents,
+    ref,
+    () => _move(ref, destination, expected),
+    IoFailure.new,
+  );
 
   Future<MoveResult> _move(
     DocumentRef ref,
@@ -192,7 +207,7 @@ final class PgnFileStore implements PgnDocumentStore {
 
   @override
   Future<DeleteResult> delete(DocumentRef ref, {required Revision expected}) =>
-      _locked(ref, () => _delete(ref, expected), IoFailure.new);
+      _locked(_folder(ref), ref, () => _delete(ref, expected), IoFailure.new);
 
   Future<DeleteResult> _delete(DocumentRef ref, Revision expected) async {
     switch (await probeDocument(ref.path)) {
@@ -255,14 +270,15 @@ final class PgnFileStore implements PgnDocumentStore {
   }
 
   Future<T> _locked<T>(
+    Directory folder,
     DocumentRef ref,
     Future<T> Function() action,
     T Function(String detail) failed,
   ) async {
     try {
-      return await withDirectoryLock(_folder(ref), action);
+      return await withDirectoryLock(folder, action);
     } on FileSystemException catch (error) {
-      log.e('take the folder lock for ${ref.path}', error);
+      log.e('take the lock on ${folder.path} for ${ref.path}', error);
       return failed(_detail(error));
     }
   }
