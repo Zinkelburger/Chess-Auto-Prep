@@ -579,6 +579,13 @@ Each belongs to the step that owns it:
 
 ### The brief
 
+Each mode has a behaviour spec in [`docs/v2/features/`](v2/features/README.md):
+what is on the screen, what the user can do, what data it touches, what can
+fail, and the owner's Keep / Change / Drop verdict on each item. The spec is
+the scope of a row; the row text in the table is its summary; the old code
+is consulted only for file formats and algorithms. A row starts when its
+spec says `corrected by the owner`.
+
 The product owner starts a session with one row and this brief, filled in:
 
 ```text
@@ -643,8 +650,9 @@ style-reference table. For each row, in this order:
    `git diff <first commit of that row>^..HEAD -- lib/v2 test/v2`. Fix every
    must-fix finding in a commit of its own before starting the new row.
 2. Make a worktree: `python3 scripts/agent_worktree.py v2-stepN`.
-3. Build the row exactly as written; nothing for later rows. When it needs a
-   value the old app has (a colour, a size, a file format, a layout), read
+3. Read the row's spec in docs/v2/features/ (stop if it is not marked
+   corrected by the owner). Build the row from the spec; nothing for later
+   rows; Drop lines are never built. When it needs a value the old app has (a colour, a size, a file format, a layout), read
    the old code or screenshot the old mode and copy the value, never the
    code. Owners first, with their tests; widgets last, from the owners.
 4. See it: `python3 scripts/app_driver.py start --target lib/main_v2.dart`,
