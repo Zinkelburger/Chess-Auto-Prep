@@ -228,6 +228,23 @@ void main() {
     expect((result as TreeUnsupported).reason, contains('rolling'));
   });
 
+  test('a tree from the bounded database mode is refused', () {
+    final result = decodeTreeV4(
+      _document(
+        config: const {
+          'algorithm_version': 3,
+          'search_algorithm': 'pure',
+          'play_as_white': true,
+          'max_depth': 4,
+          'bounded_database': true,
+        },
+      ),
+    );
+
+    expect(result, isA<TreeUnsupported>());
+    expect((result as TreeUnsupported).reason, contains('bounded database'));
+  });
+
   test('text that is not a saved tree is malformed, never an exception', () {
     expect(decodeTreeV4('not json at all'), isA<TreeMalformed>());
     expect(decodeTreeV4('[1, 2, 3]'), isA<TreeMalformed>());

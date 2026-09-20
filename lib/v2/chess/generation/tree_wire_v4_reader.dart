@@ -126,6 +126,14 @@ String? _unsupportedReason(
     return 'this tree was built by the $search search, which this reader '
         'does not have';
   }
+  // Bounded builds keep a node's moves rather than all of them: our moves
+  // are not the ones the loss window admits, and the opponent's shares stop
+  // short of one on purpose. Both look exactly like a complete expansion in
+  // the file, so a tree read as one would be quietly wrong everywhere.
+  if (config['bounded_database'] == true) {
+    return 'this tree was built by the bounded database mode, which keeps '
+        'only some of each position\'s moves; build it again to open it here';
+  }
   return null;
 }
 
