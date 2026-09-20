@@ -157,6 +157,10 @@ Chapter? _extended(Chapter chapter, List<String> prefix, MoveNode node) {
 
 /// The chapter with a new game for [prefix] plus [node] at the end of the
 /// file, which is where re-reading finds it as the last variation.
+///
+/// Written straight rather than through the rewrite gate: a new game
+/// replaces no bytes, so there is nothing here for a bad write to lose. That
+/// the game reads back as itself is checked by the assertion in [addMove].
 Chapter _appended(Chapter chapter, List<String> prefix, MoveNode node) {
   final tree = lineTree(chapter.tree.rootFen, [...prefix, node.san]);
   final tags = _newTags(chapter, prefix, tree, node);
@@ -166,8 +170,10 @@ Chapter _appended(Chapter chapter, List<String> prefix, MoveNode node) {
     ChapterLine(
       tags: tags,
       tree: tree,
-      text: writeGameText(tags, tree),
+      text: writeGameText(tags, tree, terminator: '*', separator: '\n'),
       trailer: '\n',
+      terminator: '*',
+      separator: '\n',
     ),
   );
   return withLines(
@@ -257,6 +263,9 @@ ChapterLine _spacedAfter(ChapterLine line) => line.trailer.endsWith('\n\n')
         tree: line.tree,
         text: line.text,
         trailer: '\n\n',
+        terminator: line.terminator,
+        separator: line.separator,
+        issues: line.issues,
       );
 
 String _spacedPreamble(String preamble) {

@@ -33,6 +33,34 @@ MoveNode? moveNode(Fen fen, Move move) {
   return MoveNode(san: san, uci: move.uci, fen: Fen(next.fen));
 }
 
+/// A ply where nobody moved, as a childless node, or null when [fen] is not
+/// a position one can be played from.
+///
+/// Chessable writes a whole introduction chapter as `{prose} 1. -- *`, and
+/// its `Z0` waiting plies carry the variations under them, so a reader that
+/// dropped the ply would drop the chapter. Nobody moving advances the clock
+/// and the side, and clears the en-passant square: that is the whole rule.
+MoveNode? nullMoveNode(Fen fen, {required String spelling}) {
+  if (positionOf(fen) == null) return null;
+  final fields = fen.value.split(' ');
+  if (fields.length < 6) return null;
+  final black = fields[1] == 'b';
+  fields[1] = black ? 'w' : 'b';
+  fields[3] = '-';
+  fields[4] = '${(int.tryParse(fields[4]) ?? 0) + 1}';
+  if (black) fields[5] = '${(int.tryParse(fields[5]) ?? 1) + 1}';
+  return MoveNode(
+    san: nullMoveSan,
+    spelling: spelling == nullMoveSan ? null : spelling,
+    uci: '0000',
+    fen: Fen(fields.join(' ')),
+  );
+}
+
+/// How this app spells a ply where nobody moved; `Z0`, `0000` and `@@@@`
+/// mean the same thing and keep their own spelling.
+const nullMoveSan = '--';
+
 /// The SAN of each move down the main continuation from the root.
 List<String> mainlineSans(GameTree tree) {
   final sans = <String>[];
@@ -110,6 +138,7 @@ MoveNode _commented(MoveNode node, String? comment) => MoveNode(
   san: node.san,
   uci: node.uci,
   fen: node.fen,
+  spelling: node.spelling,
   startingComment: node.startingComment,
   comment: comment,
   nags: node.nags,

@@ -1,7 +1,20 @@
 import 'package:chess_auto_prep/v2/chess/pgn/game_text.dart';
-import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/pgn_reader.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+/// One game read and written again, which is what a chapter does to the one
+/// game an edit touched.
+String rewrite(String game) {
+  final read = readGame(game);
+  return writeGameText(
+    read.tags,
+    read.tree!,
+    terminator: read.terminator,
+    separator: read.separator,
+  );
+}
+
+List<PgnHeader> headerOf(String game) => readGame(game).tags;
 
 void main() {
   test('a tab after [Event still starts a game', () {
@@ -38,16 +51,21 @@ void main() {
         '[LineID "line_abc"]\n'
         '\n'
         '1. e4 1-0';
-    final header = readTags(game);
+    final header = headerOf(game);
     expect(tagValue(header, 'White'), 'He said "hi"');
     expect(tagValue(header, 'Result'), '1-0');
     expect(tagValue(header, 'LineID'), 'line_abc');
   });
 
   test('an escaped backslash reads as one backslash', () {
-    final header = readTags('[Site "C:\\\\games"]\n[Result "*"]\n\n*');
+    final header = headerOf('[Site "C:\\\\games"]\n[Result "*"]\n\n*');
     expect(tagValue(header, 'Site'), r'C:\games');
     expect(tagValue(header, 'Result'), '*');
+  });
+
+  test('a backslash that escapes nothing keeps both its characters', () {
+    final header = headerOf('[Site "a\\nb"]\n[Result "*"]\n\n*');
+    expect(tagValue(header, 'Site'), r'a\nb');
   });
 
   test('the keys and values real exports carry are read as they are', () {
@@ -58,15 +76,42 @@ void main() {
         '[Result "0-1"]\n'
         '\n'
         '1. e4 0-1';
-    final header = readTags(game);
+    final header = headerOf(game);
     expect(tagValue(header, 'WhiteElo'), '2412');
     expect(tagValue(header, 'ECO'), 'B90');
     expect(tagValue(header, 'Date'), '????.??.??');
     expect(tagValue(header, 'Result'), '0-1');
   });
 
+  test('a value holding a whole movetext stays one value', () {
+    final header = headerOf(
+      '[SourceMovetext "1. e4 c5 2. Nf3 d6"]\n[Result "*"]\n\n1. d4 *',
+    );
+    expect(tagValue(header, 'SourceMovetext'), '1. e4 c5 2. Nf3 d6');
+    expect(tagValue(header, 'Result'), '*');
+    expect(
+      readGame('[SourceMovetext "1. e4 c5"]\n\n1. d4 *').tree!.children,
+      hasLength(1),
+    );
+  });
+
+  test('a tag named twice keeps both lines and reads as the first', () {
+    const game = '[Result "1-0"]\n[Result "0-1"]\n\n1. e4 1-0';
+    expect(headerOf(game), hasLength(2));
+    expect(tagValue(headerOf(game), 'Result'), '1-0');
+    expect(rewrite(game), game);
+  });
+
+  test('two tags on one line become two lines and keep both values', () {
+    const game = '[Event "A"] [Site "B"]\n\n1. e4 *';
+    final header = headerOf(game);
+    expect(tagValue(header, 'Event'), 'A');
+    expect(tagValue(header, 'Site'), 'B');
+    expect(rewrite(game), '[Event "A"]\n[Site "B"]\n\n1. e4 *');
+  });
+
   test('a line that is not a tag is kept, and the tags below it with it', () {
-    final header = readTags(_withStrayLines);
+    final header = headerOf(_withStrayLines);
     expect(header.map((line) => line.text), [
       '[Event "A"]',
       '%an escape the reader does not know',
@@ -79,8 +124,14 @@ void main() {
   });
 
   test('the header stops at the movetext, blank line or not', () {
-    final header = readTags('[Event "A"]\n1. e4 *');
+    final header = headerOf('[Event "A"]\n1. e4 *');
     expect(header.map((line) => line.text), ['[Event "A"]']);
+  });
+
+  test('moves on the header line are still moves', () {
+    final read = readGame('[Event "A"] 1. e4 e5 *');
+    expect(read.tree!.children.single.san, 'e4');
+    expect(read.terminator, '*');
   });
 
   test('a game read and written again is the same bytes', () {
@@ -91,7 +142,12 @@ void main() {
         '[Result "*"]\n'
         '\n'
         '1. e4 *';
-    expect(writeGameText(readTags(game), _treeOf(game)), game);
+    expect(rewrite(game), game);
+  });
+
+  test('a game whose header lines end in CRLF keeps them', () {
+    const game = '[Event "A"]\r\n[Result "*"]\r\n\n1. e4 *';
+    expect(rewrite(game), game);
   });
 
   test('a value set with a quote in it does not cut the header off', () {
@@ -100,20 +156,22 @@ void main() {
       PgnTag('Result', '*'),
       PgnTag('LineID', 'line_abc'),
     ];
-    final written = writeGameText(header, _treeOf('[Event "A"]\n\n1. e4 *'));
-    expect(readTags(written).map((line) => line.text), [
+    final written = writeGameText(
+      header,
+      readGame('[Event "A"]\n\n1. e4 *').tree!,
+      terminator: '*',
+      separator: '\n',
+    );
+    expect(headerOf(written).map((line) => line.text), [
       r'[Event "He said \"go\""]',
       '[Result "*"]',
       '[LineID "line_abc"]',
     ]);
-    expect(tagValue(readTags(written), 'Event'), 'He said "go"');
+    expect(tagValue(headerOf(written), 'Event'), 'He said "go"');
   });
 
   test('writing puts a line the reader could not parse back unchanged', () {
-    expect(
-      writeGameText(readTags(_withStrayLines), _treeOf(_withStrayLines)),
-      _withStrayLines,
-    );
+    expect(rewrite(_withStrayLines), _withStrayLines);
   });
 }
 
@@ -125,7 +183,3 @@ const _withStrayLines =
     '[LineID "line_abc"]\n'
     '\n'
     '1. e4 *';
-
-/// The tree of the one game in [text], so a written game can be compared with
-/// the file it came from.
-GameTree _treeOf(String text) => readGame(text).tree!;

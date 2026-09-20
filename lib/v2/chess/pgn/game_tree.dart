@@ -14,14 +14,24 @@ final class MoveNode {
     required this.san,
     required this.uci,
     required this.fen,
+    this.spelling,
     this.startingComment,
     this.comment,
     this.nags = const [],
     this.children = const [],
   });
 
-  /// Normalised SAN, as dartchess writes it (`Nf3`, `O-O`, `exd6#`).
+  /// Normalised SAN, as dartchess writes it (`Nf3`, `O-O`, `exd6#`). It is
+  /// the move's identity: two spellings of one move are one node.
   final String san;
+
+  /// The SAN exactly as the file spelled it, when that is not [san] — `0-0`
+  /// for castling, a disambiguation the position does not need, `e8Q` for a
+  /// promotion, a missing `+`. Null when the file agreed with [san].
+  ///
+  /// Writing a game again uses it, so editing one move does not re-spell
+  /// every other move in the game.
+  final String? spelling;
 
   /// The same move as `e2e4` / `e7e8q`, for the board's last-move highlight.
   final String uci;
@@ -50,6 +60,7 @@ final class MoveNode {
     san: san,
     uci: uci,
     fen: fen,
+    spelling: spelling,
     startingComment: startingComment ?? this.startingComment,
     comment: comment ?? this.comment,
     nags: nags ?? this.nags,

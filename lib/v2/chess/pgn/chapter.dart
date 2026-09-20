@@ -5,29 +5,34 @@ import 'package:dartchess/dartchess.dart' show Side;
 import '../fen.dart';
 import 'game_text.dart';
 import 'game_tree.dart';
+import 'pgn_issue.dart';
 import 'pgn_reader.dart';
+import 'rewrite_gate.dart';
 import 'tree_merge.dart';
 
 /// One game of a chapter file: the line a reader trains and a writer edits.
 ///
 /// The game is the persistent unit, so a line keeps everything a write-back
-/// needs — its tags in file order, its own tree (variations included) and
-/// its verbatim source. An untouched line is written back byte for byte;
-/// only an edited one is generated again.
+/// needs — its tags in file order with the endings they had, the whitespace
+/// before its moves, its own tree (variations included), the marker it ended
+/// with and its verbatim source. An untouched line is written back byte for
+/// byte; only an edited one is generated again.
 final class ChapterLine {
   const ChapterLine({
     required this.tags,
     required this.tree,
     required this.text,
     required this.trailer,
+    required this.terminator,
+    required this.separator,
+    this.issues = const [],
   });
 
   /// Every line of the game's header block, in file order.
   final List<PgnHeader> tags;
 
   /// The game's moves, or null when nothing could read it — a `[FEN]` header
-  /// that is not a position. An unread game keeps [text] and is never merged,
-  /// edited or generated again, so no edit elsewhere can write over it.
+  /// that is not a position.
   final GameTree? tree;
 
   /// The game's source, with no trailing whitespace.
@@ -36,6 +41,22 @@ final class ChapterLine {
   /// The whitespace between this game and the next, kept so a file that is
   /// read and written again is unchanged.
   final String trailer;
+
+  /// The game-termination marker the file wrote, or null when it wrote none.
+  final String? terminator;
+
+  /// The whitespace between the header block and the first move.
+  final String separator;
+
+  /// What the reader could not carry into the model.
+  final List<PgnIssue> issues;
+
+  /// Whether an edit may write this game again.
+  ///
+  /// A game with anything the model does not hold keeps its own bytes and no
+  /// edit can reach it, so nothing anyone does elsewhere in the chapter can
+  /// take that text away.
+  bool get rewritable => tree != null && issues.isEmpty;
 
   /// The identity every later lookup uses — training progress, rename,
   /// delete. Files in the wild spell it five ways; whichever one a file has
@@ -48,6 +69,9 @@ final class ChapterLine {
     return null;
   }
 }
+
+/// An issue with the game at [game] in the chapter file, counting from zero.
+typedef ChapterIssue = ({int game, PgnIssue issue});
 
 /// A repertoire chapter: the file's preamble, its games, and every game
 /// from the same starting position merged into one tree.
@@ -63,7 +87,6 @@ final class Chapter {
     required this.preamble,
     required this.lines,
     required this.tree,
-    required this.issues,
   });
 
   final String name;
@@ -78,13 +101,21 @@ final class Chapter {
 
   final GameTree tree;
 
-  final List<PgnIssue> issues;
+  /// Everything no game could carry into the model, in file order.
+  List<ChapterIssue> get issues => [
+    for (final (index, line) in lines.indexed)
+      for (final issue in line.issues) (game: index, issue: issue),
+  ];
 
-  /// [line]'s moves when it is one of the games merged into [tree]; null
-  /// when it starts somewhere else or could not be read at all.
+  /// [line]'s moves when an edit may rewrite it: it is one of the games
+  /// merged into [tree] and everything it holds survives being written
+  /// again. Null when it starts somewhere else, could not be read, or holds
+  /// something this app cannot write back.
   GameTree? mergedTree(ChapterLine line) {
     final lineTree = line.tree;
-    return lineTree != null && lineTree.rootFen == tree.rootFen
+    return line.rewritable &&
+            lineTree != null &&
+            lineTree.rootFen == tree.rootFen
         ? lineTree
         : null;
   }
@@ -98,25 +129,30 @@ final class Chapter {
   /// Games nothing could read.
   int get unreadableGames => lines.where((line) => line.tree == null).length;
 
+  /// Games that were read but keep their own bytes, because writing them
+  /// again would not give them back.
+  int get protectedGames =>
+      lines.where((line) => line.tree != null && !line.rewritable).length;
+
   /// Games left out because their root position differs from the chapter's.
-  int get skippedGames => lines.length - gameCount - unreadableGames;
+  int get skippedGames =>
+      lines.length - gameCount - unreadableGames - protectedGames;
 }
 
 Chapter parseChapter({required String name, required String text}) {
   final document = splitChapterText(text);
-  final issues = <PgnIssue>[];
   final lines = <ChapterLine>[];
-  for (final (index, game) in document.games.indexed) {
+  for (final game in document.games) {
     final read = readGame(game.text);
-    for (final detail in read.issues) {
-      issues.add(PgnIssue(game: index, detail: detail));
-    }
     lines.add(
       ChapterLine(
-        tags: readTags(game.text),
+        tags: read.tags,
         tree: read.tree,
         text: game.text,
         trailer: game.trailer,
+        terminator: read.terminator,
+        separator: read.separator,
+        issues: read.issues,
       ),
     );
   }
@@ -126,7 +162,6 @@ Chapter parseChapter({required String name, required String text}) {
     preamble: document.preamble,
     lines: List.unmodifiable(lines),
     tree: mergeLines(lines),
-    issues: List.unmodifiable(issues),
   );
 }
 
@@ -144,17 +179,33 @@ Chapter withLines(
   preamble: preamble ?? chapter.preamble,
   lines: List.unmodifiable(lines),
   tree: mergeLines(lines),
-  issues: chapter.issues,
 );
 
-/// [line] carrying [tree]: its tags keep their order and their values, and
-/// its text is written again in the format the old app reads.
-ChapterLine rewritten(ChapterLine line, GameTree tree) => ChapterLine(
-  tags: line.tags,
-  tree: tree,
-  text: writeGameText(line.tags, tree),
-  trailer: line.trailer,
-);
+/// [line] carrying [tree], or [line] untouched when writing it again would
+/// not read back as the same game.
+///
+/// This is the only place a game already in a file becomes new text, so the
+/// gate here is the gate for every edit: a caller that cannot write a game
+/// gets the game it had, and the chapter keeps those bytes.
+ChapterLine rewritten(ChapterLine line, GameTree tree) {
+  final written = safeGameText(
+    tags: line.tags,
+    tree: tree,
+    terminator: line.terminator,
+    separator: line.separator,
+  );
+  return switch (written) {
+    RewriteRefused() => line,
+    RewriteReady(:final text) => ChapterLine(
+      tags: line.tags,
+      tree: tree,
+      text: text,
+      trailer: line.trailer,
+      terminator: line.terminator,
+      separator: line.separator,
+    ),
+  };
+}
 
 /// Every game from the first readable game's position, folded in file order.
 /// That game fixes the main line; later games can only add variations.
@@ -191,7 +242,6 @@ Chapter renamedChapter(Chapter chapter, String name) => Chapter(
   preamble: chapter.preamble,
   lines: chapter.lines,
   tree: chapter.tree,
-  issues: chapter.issues,
 );
 
 /// A chapter file with no games yet: the `//` preamble and nothing else.

@@ -9,7 +9,7 @@ import '../../support/fixtures.dart';
 
 /// The whole tree as text, so a test can say two trees are the same tree
 /// without reading anything private.
-String movesOf(Chapter chapter) => writeMoveText(chapter.tree, result: '*');
+String movesOf(Chapter chapter) => writeMoveText(chapter.tree, terminator: '*');
 
 /// The chapter written out and read back, which is what the old app and the
 /// next session see.
