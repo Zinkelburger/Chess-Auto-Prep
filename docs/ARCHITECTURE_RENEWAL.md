@@ -563,6 +563,11 @@ Each belongs to the step that owns it:
 
 - **Step 3:** chapter rename, move and delete must update training references,
   including late writes from an active session and a reused path.
+- **Step 3:** the old app serialises every repertoire operation behind a lock
+  on `<repertoires>/.cap-directory-domain` as well as the folder locks both
+  apps take; `v2` does not take it yet, so against the old app the folder
+  locks stop two writers in one folder but not two repertoire-wide
+  operations.
 - **Step 6:** opening another file, pasting, recovery and close must stop
   delayed collection, filter, index and analysis work.
 - **Step 2/7:** autosave is bounded (no unbounded queue of snapshots);

@@ -16,9 +16,14 @@ final class LibraryLoading extends LibraryState {
 }
 
 final class LibraryLoaded extends LibraryState {
-  const LibraryLoaded(this.repertoires);
+  const LibraryLoaded(this.repertoires, {this.unreadable = const []});
 
   final List<RepertoireFolder> repertoires;
+
+  /// The folders the listing had to pass over. They are not in
+  /// [repertoires], so without naming them a repertoire the operating system
+  /// will not open would look like one the user never made.
+  final List<UnreadableFolder> unreadable;
 }
 
 final class LibraryLoadFailed extends LibraryState {

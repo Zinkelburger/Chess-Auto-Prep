@@ -85,15 +85,31 @@ class _LibraryPanelState extends State<LibraryPanel> {
     return switch (library.state) {
       LibraryLoading() => const Center(child: CircularProgressIndicator()),
       LibraryLoadFailed() => _Failure(onRetry: library.refresh),
-      LibraryLoaded(:final repertoires) when repertoires.isEmpty =>
-        const _Message(
-          'No repertoires yet\nCreate a repertoire to get started.',
-        ),
-      LibraryLoaded() when library.visible.isEmpty => _Message(
-        'Nothing matches "${library.query}".',
-      ),
-      LibraryLoaded() => _list(library),
+      LibraryLoaded() => _loaded(library),
     };
+  }
+
+  /// A folder the app was not allowed to read is named above the list. It is
+  /// not in the list, and a repertoire that disappeared without a word is
+  /// worse than one with a line saying why.
+  Widget _loaded(Library library) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      for (final folder in library.unreadable) _Unreadable(folder: folder),
+      Expanded(child: _listed(library)),
+    ],
+  );
+
+  Widget _listed(Library library) {
+    if (library.repertoires.isEmpty) {
+      return const _Message(
+        'No repertoires yet\nCreate a repertoire to get started.',
+      );
+    }
+    if (library.visible.isEmpty) {
+      return _Message('Nothing matches "${library.query}".');
+    }
+    return _list(library);
   }
 
   Widget _list(Library library) => ListView.builder(
@@ -179,6 +195,23 @@ class _Failure extends StatelessWidget {
           const SizedBox(height: Space.s),
           FilledButton(onPressed: onRetry, child: const Text('Retry')),
         ],
+      ),
+    );
+  }
+}
+
+class _Unreadable extends StatelessWidget {
+  const _Unreadable({required this.folder});
+
+  final UnreadableFolder folder;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Space.m, Space.xs, Space.m, Space.xs),
+      child: Text(
+        '${folder.name} could not be read: ${folder.detail}',
+        style: Theme.of(context).textTheme.bodySmall,
       ),
     );
   }

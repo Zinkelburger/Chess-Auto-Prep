@@ -72,6 +72,14 @@ final class Library extends ChangeNotifier {
     _ => const [],
   };
 
+  /// The folders the listing could not read, whatever the search says: the
+  /// panel names each one, because a repertoire missing from the list for a
+  /// reason the user can fix is worth a line.
+  List<UnreadableFolder> get unreadable => switch (_state) {
+    LibraryLoaded(unreadable: final folders) => folders,
+    _ => const [],
+  };
+
   /// The repertoires whose name matches [query].
   List<RepertoireFolder> get visible {
     final needle = _query.trim().toLowerCase();
@@ -98,7 +106,10 @@ final class Library extends ChangeNotifier {
     final listing = await _files.list();
     if (_disposed || ticket != _refreshes) return;
     _set(switch (listing) {
-      Repertoires(:final folders) => LibraryLoaded(folders),
+      Repertoires(:final folders, :final unreadable) => LibraryLoaded(
+        folders,
+        unreadable: unreadable,
+      ),
       RepertoiresUnreadable(:final detail) => _loadFailed(detail),
     });
   }
