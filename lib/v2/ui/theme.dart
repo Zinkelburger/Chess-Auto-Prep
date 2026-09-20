@@ -8,6 +8,13 @@ abstract final class Space {
   static const l = 16.0;
 }
 
+/// How wide the library panel beside the workspace is.
+const libraryPanelWidth = 300.0;
+
+/// How wide a dialog that asks for one line of text is. Wide enough for a
+/// long chapter name, narrow enough not to fill the window.
+const nameDialogWidth = 360.0;
+
 /// How big an icon is. Icons sit with the text they label, so they follow
 /// the type scale rather than Material's default 24.
 abstract final class IconSize {

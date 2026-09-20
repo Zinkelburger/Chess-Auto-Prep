@@ -82,6 +82,10 @@ final class DocumentSaver extends ChangeNotifier {
   int _opens = 0;
   bool _disposed = false;
 
+  /// The file is being renamed, moved or deleted, so nothing is written to it
+  /// until that is done.
+  bool _held = false;
+
   SaveState get state => _state;
 
   bool get canUndo => _undo.isNotEmpty;
@@ -103,18 +107,79 @@ final class DocumentSaver extends ChangeNotifier {
     if (_state is SaveConflict) return;
     _pending = text;
     _set(const Unsaved());
-    if (!_writing) _inFlight = _write();
+    _start();
   }
 
-  /// Waits until the draft is on disk: the write in flight and the one that
-  /// collapsed behind it. Closing the window waits for this, so an edit made
-  /// a moment before it closed is not cut off.
+  /// Waits until the draft is on disk: the write in flight, the one that
+  /// collapsed behind it, and a hold that is keeping both waiting. Closing
+  /// the window waits for this, so an edit made a moment before it closed is
+  /// not cut off.
   Future<void> flush() => _inFlight ?? Future<void>.value();
+
+  /// Runs [action] against the revision the file has now, with the file held
+  /// still: the write on its way out finishes first, and a save asked for
+  /// while [action] runs waits behind it and goes to wherever the document
+  /// ends up. Answers null when there is nothing open or another hold is
+  /// running.
+  ///
+  /// This is how a rename, move or delete of the open chapter is serialised
+  /// with autosave. The alternative — letting the save go and renaming
+  /// afterwards — would leave the rename racing an answer it cannot see, and
+  /// a lost race means the user is told their file changed on disk when the
+  /// only thing that wrote it was this app.
+  Future<T?> holdStill<T>(Future<T> Function(Revision revision) action) {
+    if (_held || _disposed) return Future<T?>.value();
+    final held = _hold(action);
+    // The hold and the draft waiting behind it are now what the draft is
+    // waiting on, so a flush waits for the whole of it rather than for a
+    // write that finished before the hold began.
+    _inFlight = held;
+    return held;
+  }
+
+  Future<T?> _hold<T>(Future<T> Function(Revision revision) action) async {
+    _held = true;
+    try {
+      await flush();
+      final target = _target;
+      if (_disposed || target == null) return null;
+      return await action(target.revision);
+    } finally {
+      _held = false;
+      await _write();
+    }
+  }
+
+  /// The open document is now at [ref]: the same file with the same bytes
+  /// under another name, so the revision and the undo receipts still stand.
+  void relocated(DocumentRef ref) {
+    final target = _target;
+    if (target == null) return;
+    _target = (ref: ref, revision: target.revision);
+  }
+
+  /// The open document is gone. Nothing more is written to it, and its undo
+  /// history goes with it: the file those receipts name is not there to
+  /// restore into.
+  void closed() {
+    _opens++;
+    _target = null;
+    _pending = null;
+    _undo.clear();
+    _set(const Saved());
+  }
+
+  /// Puts the draft on its way, unless a write is already going — it takes
+  /// the newest text when it lands — or the file is held still.
+  void _start() {
+    if (_held || _writing || _disposed) return;
+    _inFlight = _write();
+  }
 
   Future<void> _write() async {
     final target = _target;
     final text = _pending;
-    if (_writing || target == null || text == null) return;
+    if (_held || _writing || target == null || text == null) return;
     _pending = null;
     _writing = true;
     _set(const Saving());
@@ -179,7 +244,11 @@ final class DocumentSaver extends ChangeNotifier {
   /// newest text is still going to disk.
   Future<UndoResult> undo() async {
     final target = _target;
-    if (target == null || _undo.isEmpty || _writing || _pending != null) {
+    if (target == null ||
+        _undo.isEmpty ||
+        _held ||
+        _writing ||
+        _pending != null) {
       return const UndoRefused();
     }
     final entry = _undo.last;

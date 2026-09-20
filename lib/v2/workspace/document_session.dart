@@ -120,6 +120,30 @@ final class DocumentSession extends ChangeNotifier {
     return open(ref);
   }
 
+  /// The open document was renamed or moved. It is the same file with the
+  /// same bytes, so only the name the workspace shows and the file later
+  /// saves go to change.
+  void relocated(ChapterRef ref) {
+    final chapter = _chapter;
+    if (_source == null || chapter == null) return;
+    _source = ref;
+    _chapter = renamedChapter(chapter, ref.name);
+    _saver.relocated(ref);
+    notifyListeners();
+  }
+
+  /// The open document was deleted. The workspace empties rather than showing
+  /// a chapter whose file is now in the recovery folder.
+  void closed() {
+    if (_source == null) return;
+    _opens++;
+    _chapter = null;
+    _source = null;
+    _cursor = const NodePath.root();
+    _saver.closed();
+    notifyListeners();
+  }
+
   /// Moves the cursor; a path that is not in the tree is ignored.
   void goTo(NodePath path) {
     final tree = this.tree;

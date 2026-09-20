@@ -1,0 +1,67 @@
+import 'package:chess_auto_prep/v2/features/library/library.dart';
+import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
+import 'package:chess_auto_prep/v2/storage/document_ref.dart';
+import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
+import 'package:chess_auto_prep/v2/workspace/document_session.dart';
+
+import 'scripted_files.dart';
+import 'scripted_store.dart';
+
+/// A library over scripted files and a scripted store, with the workspace
+/// owners it changes documents through. Nothing here touches a real file.
+final class LibraryFixture {
+  LibraryFixture._(
+    this.files,
+    this.store,
+    this.saver,
+    this.session,
+    this.library,
+  );
+
+  final ScriptedFiles files;
+  final ScriptedDocumentStore store;
+  final DocumentSaver saver;
+  final DocumentSession session;
+  final Library library;
+
+  /// What the scripted store holds for the document at [path].
+  String? textAt(String path) => switch (store.documents[DocumentRef(path)]) {
+    Opened(:final text) => text,
+    _ => null,
+  };
+
+  void dispose() {
+    library.dispose();
+    session.dispose();
+    saver.dispose();
+  }
+}
+
+/// A loaded library holding [folders], with every chapter in the store as
+/// [text] and, when [open] is given, that chapter open in the workspace.
+Future<LibraryFixture> openLibrary(
+  List<RepertoireFolder> folders, {
+  String text = '// Main\n// Color: White\n\n',
+  ChapterRef? open,
+}) async {
+  final files = ScriptedFiles(listing: Repertoires(folders));
+  final store = ScriptedDocumentStore();
+  for (final folder in folders) {
+    for (final chapter in folder.chapters) {
+      store.documents[chapter] = Opened(text, scriptedRevision(text));
+    }
+  }
+  final saver = DocumentSaver(store);
+  final session = DocumentSession(store, saver);
+  final library = Library(
+    files: files,
+    documents: store,
+    session: session,
+    saver: saver,
+    root: '/repertoires',
+  );
+  await library.refresh();
+  if (open != null) await session.open(open);
+  return LibraryFixture._(files, store, saver, session, library);
+}
