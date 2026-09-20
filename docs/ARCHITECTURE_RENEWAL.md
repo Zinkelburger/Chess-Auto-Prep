@@ -410,7 +410,10 @@ grants overwrite permission.
 A save also declares what it is changing. `save` takes an `EditScope`: the
 games of the version on disk it writes again and how many it adds at the end,
 or `WholeDocument` for a restore, an import or a caller that cannot say, which
-is logged as a warning so it is visible. Before anything is written, the new
+is logged as a warning so it is visible. The scope comes from the edit that
+produced the text — `addMove` and `setComment` report the games they wrote —
+never from comparing the new text with the old, which would agree with
+whatever the writer did and leave nothing to refuse. Before anything is written, the new
 text and the version on disk are cut into games with the chapter reader's own
 splitter and compared: a game the scope does not name that would change, a game
 that would disappear, or a changed `//` heading refuses the save, names the
