@@ -364,6 +364,22 @@ void main() {
     expect(fixture.textAt('/repertoires/benko/Mainline.pgn'), contains('d4'));
   });
 
+  test('deleting the open chapter writes its draft first', () async {
+    final open = ref('benko', 'Main');
+    fixture = await openLibrary([benko], open: open);
+    fixture.store.hold = true;
+    fixture.session.playMove('e2e4');
+    await pumpEventQueue();
+    final deleted = fixture.library.deleteChapter(open);
+    await pumpEventQueue();
+    fixture.store.hold = false;
+    fixture.store.releaseAll();
+    expect(await deleted, isA<LibraryDone>());
+    // The edit went to the file, and the file went to recovery with it in.
+    expect(fixture.store.requestedSaves.last.text, contains('e4'));
+    expect(fixture.textAt(open.path), isNull);
+  });
+
   test('deleting the open chapter empties the workspace', () async {
     final open = ref('benko', 'Main');
     fixture = await openLibrary([benko], open: open);
