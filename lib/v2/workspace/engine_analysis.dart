@@ -33,15 +33,23 @@ final class EngineFailed extends EngineState {
   final String reason;
 }
 
-/// What the engine thinks of one position: one entry per MultiPV slot in
-/// order, scores from White's side.
+/// What the engine thinks of one position: the lines it has said something
+/// about, in MultiPV order, scores from White's side.
+///
+/// A line is found by its own [EngineLine.multiPv] number, never by its
+/// place in [lines], because a tick can carry 1 and 3 without 2 and the
+/// third-best line must not be read as the best one.
 final class AnalysisSnapshot {
   const AnalysisSnapshot({required this.fen, required this.lines});
 
   final Fen fen;
   final List<EngineLine> lines;
 
-  EngineLine get best => lines.first;
+  /// The [multiPv]-th best line, or null when this snapshot has none.
+  EngineLine? line(int multiPv) =>
+      lines.where((line) => line.multiPv == multiPv).firstOrNull;
+
+  EngineLine? get best => line(1);
 }
 
 /// Keeps the engine on the cursor position and publishes what it finds.
@@ -63,6 +71,10 @@ final class EngineAnalysis extends ChangeNotifier {
   Engine? _engine;
   _Following? _following;
   AnalysisSnapshot? _snapshot;
+
+  /// Counts the times the engine has been asked for, so a launch that lands
+  /// after a [disable] or a second [enable] is dropped instead of adopted.
+  int _starts = 0;
   late final _buffer = _LineBuffer(
     every: const Duration(milliseconds: 200),
     onFlush: _publish,
@@ -78,9 +90,10 @@ final class EngineAnalysis extends ChangeNotifier {
 
   Future<void> enable() async {
     if (enabled) return;
+    final ticket = ++_starts;
     _set(const EngineStarting());
     final start = await _launch();
-    if (_disposed || _state is! EngineStarting) {
+    if (_disposed || ticket != _starts) {
       // Turned off, or gone, while the engine was coming up.
       if (start case Started(:final engine)) unawaited(engine.quit());
       return;
@@ -97,6 +110,7 @@ final class EngineAnalysis extends ChangeNotifier {
   }
 
   Future<void> disable() async {
+    _starts++;
     final engine = _engine;
     _engine = null;
     _stopFollowing();
@@ -133,7 +147,7 @@ final class EngineAnalysis extends ChangeNotifier {
       ),
     );
     _snapshot = null;
-    notifyListeners();
+    _notify();
   }
 
   void _stopFollowing() {
@@ -149,13 +163,13 @@ final class EngineAnalysis extends ChangeNotifier {
     final fen = _following?.fen;
     if (fen == null) return;
     _snapshot = AnalysisSnapshot(fen: fen, lines: lines);
-    notifyListeners();
+    _notify();
   }
 
   void _clearSnapshot() {
     if (_snapshot == null) return;
     _snapshot = null;
-    notifyListeners();
+    _notify();
   }
 
   void _lost(Engine engine) {
@@ -169,6 +183,12 @@ final class EngineAnalysis extends ChangeNotifier {
 
   void _set(EngineState state) {
     _state = state;
+    _notify();
+  }
+
+  /// A search or an engine exit can land after the workspace has gone.
+  void _notify() {
+    if (_disposed) return;
     notifyListeners();
   }
 
@@ -195,9 +215,11 @@ final class _Following {
   final StreamSubscription<EngineLine> subscription;
 }
 
-/// The latest line per MultiPV slot, handed out at most once per [every]:
+/// The latest line per MultiPV number, handed out at most once per [every]:
 /// the first line after a flush starts the clock, and whatever has arrived
-/// when it rings goes out together.
+/// when it rings goes out together. A number the engine has not revisited
+/// keeps the line it last gave, on purpose, so a deepening line does not
+/// blink out of the pane between the ticks that mention it.
 final class _LineBuffer {
   _LineBuffer({required this.every, required this.onFlush});
 

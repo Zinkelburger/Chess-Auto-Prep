@@ -12,8 +12,8 @@ import 'package:flutter_test/flutter_test.dart';
 final class FakeProcess implements UciProcess {
   final sent = <String>[];
   final _out = StreamController<String>();
-  final _exit = Completer<int>();
   bool killed = false;
+  bool _gone = false;
 
   @override
   int get pid => 4242;
@@ -25,9 +25,6 @@ final class FakeProcess implements UciProcess {
   void send(String line) => sent.add(line);
 
   @override
-  Future<int> get exitCode => _exit.future;
-
-  @override
   Future<void> kill() async {
     killed = true;
     exit(137);
@@ -35,9 +32,11 @@ final class FakeProcess implements UciProcess {
 
   void say(String line) => _out.add(line);
 
+  /// The process goes. [code] is what a real one would report: 139 for a
+  /// crash, 137 for the kill above.
   void exit(int code) {
-    if (_exit.isCompleted) return;
-    _exit.complete(code);
+    if (_gone) return;
+    _gone = true;
     unawaited(_out.close());
   }
 

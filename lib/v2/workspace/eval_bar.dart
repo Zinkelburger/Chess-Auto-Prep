@@ -2,6 +2,7 @@ import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
 
 import '../engines/engine_line.dart';
+import '../ui/theme.dart';
 
 /// The bar beside the board: the share of the point White is expected to
 /// score, filled from White's edge, as on Lichess. Even with no score.
@@ -13,13 +14,11 @@ class EvalBar extends StatelessWidget {
 
   final Side orientation;
 
-  static const width = 12.0;
-
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Container(
-      width: width,
+      width: evalBarWidth,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: scheme.outline,

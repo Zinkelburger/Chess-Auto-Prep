@@ -13,8 +13,6 @@ abstract interface class UciProcess {
 
   void send(String line);
 
-  Future<int> get exitCode;
-
   /// Ends the process now, without a UCI `quit`.
   Future<void> kill();
 }
@@ -27,8 +25,9 @@ abstract interface class UciProcess {
 /// checks. Nothing here kills by name.
 final class SpawnedProcess implements UciProcess {
   SpawnedProcess._(this._process) {
-    // A write after the engine has gone shows up in exitCode, not as an
-    // unhandled error from the sink.
+    // A write after the engine has gone is swallowed here rather than
+    // surfacing as an unhandled error from the sink; `lines` ending is how
+    // the engine's exit is noticed.
     _process.stdin.done.ignore();
     _process.stderr
         .transform(utf8.decoder)
@@ -54,9 +53,6 @@ final class SpawnedProcess implements UciProcess {
 
   @override
   void send(String line) => _process.stdin.writeln(line);
-
-  @override
-  Future<int> get exitCode => _process.exitCode;
 
   @override
   Future<void> kill() async {

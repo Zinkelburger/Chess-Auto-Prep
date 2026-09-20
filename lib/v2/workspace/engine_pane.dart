@@ -6,7 +6,9 @@ import 'engine_analysis.dart';
 
 /// The engine's lines for the position on the board, Lichess style: the
 /// best score large, then one fixed-height row per MultiPV line so the
-/// pane never jumps as lines arrive. A switch turns the engine on and off.
+/// pane never jumps as lines arrive. A row shows the line the engine
+/// numbered with that MultiPV, and stays blank while it has none. A switch
+/// turns the engine on and off.
 class EnginePane extends StatelessWidget {
   const EnginePane({super.key, required this.analysis});
 
@@ -29,14 +31,9 @@ class EnginePane extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _Header(analysis: analysis),
-              for (var slot = 0; slot < analysis.multiPv; slot++)
+              for (var multiPv = 1; multiPv <= analysis.multiPv; multiPv++)
                 _LineRow(
-                  text: snapshot == null || slot >= snapshot.lines.length
-                      ? null
-                      : (
-                          score: snapshot.lines[slot].score.text,
-                          moves: pvText(snapshot.fen, snapshot.lines[slot].pv),
-                        ),
+                  text: snapshot == null ? null : _row(snapshot, multiPv),
                 ),
             ],
           ),
@@ -44,6 +41,17 @@ class EnginePane extends StatelessWidget {
       },
     );
   }
+}
+
+/// The score column, the same above and in every row so the moves line up.
+const _scoreWidth = 64.0;
+
+/// What the [multiPv]-th row reads, or null when this snapshot has no such
+/// line yet.
+({String score, String moves})? _row(AnalysisSnapshot snapshot, int multiPv) {
+  final line = snapshot.line(multiPv);
+  if (line == null) return null;
+  return (score: line.score.text, moves: pvText(snapshot.fen, line.pv));
 }
 
 class _Header extends StatelessWidget {
@@ -55,24 +63,21 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
-    final snapshot = analysis.snapshot;
+    final best = analysis.snapshot?.best;
     final (String status, Color? colour) = switch (analysis.state) {
       EngineOff() => ('Engine off', null),
       EngineStarting() => ('Starting…', null),
       EngineFailed(:final reason) => (reason, scheme.error),
       EngineRunning(:final name) => (
-        snapshot == null ? name : 'depth ${snapshot.best.depth} · $name',
+        best == null ? name : 'depth ${best.depth} · $name',
         null,
       ),
     };
     return Row(
       children: [
         SizedBox(
-          width: 64,
-          child: Text(
-            snapshot?.best.score.text ?? '',
-            style: scoreText,
-          ),
+          width: _scoreWidth,
+          child: Text(best?.score.text ?? '', style: scoreText),
         ),
         Expanded(
           child: Text(
@@ -111,7 +116,7 @@ class _LineRow extends StatelessWidget {
       child: Row(
         children: [
           SizedBox(
-            width: 64,
+            width: _scoreWidth,
             child: Text(
               line.score,
               style: monoText.copyWith(color: scheme.onSurface),

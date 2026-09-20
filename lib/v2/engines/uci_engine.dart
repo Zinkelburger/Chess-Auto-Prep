@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../chess/fen.dart';
+import '../diagnostics/log.dart';
 import 'engine.dart';
 import 'engine_line.dart';
 import 'uci_process.dart';
@@ -37,8 +38,9 @@ final class UciEngine implements Engine {
   final UciProcess _process;
   final _exited = Completer<void>();
   String _name = 'UCI engine';
-  Completer<void>? _awaiting;
-  String _awaitedToken = '';
+
+  /// The handshake token being waited for and who to wake when it lands.
+  ({String token, Completer<void> completer})? _awaited;
 
   /// The search the engine is on; `info` lines go here.
   _UciSearch? _current;
@@ -60,7 +62,15 @@ final class UciEngine implements Engine {
     final search = _UciSearch(_send);
     final previous = _latest;
     _latest = search;
-    _turn = _turn.then((_) => _begin(search, previous, fen, multiPv));
+    // One search that fails must not break the queue: without this, a
+    // single error would leave every later `analyse` waiting on a rejected
+    // future and no `go` would ever be sent again.
+    _turn = _turn
+        .then((_) => _begin(search, previous, fen, multiPv))
+        .catchError((Object error) {
+          log.w('start a search on $_name', error);
+          search.finish();
+        });
     return search.public;
   }
 
@@ -90,15 +100,16 @@ final class UciEngine implements Engine {
   void _send(String line) => _process.send(line);
 
   Future<void> _expect(String token) {
-    _awaitedToken = token;
-    return (_awaiting = Completer<void>()).future;
+    final completer = Completer<void>();
+    _awaited = (token: token, completer: completer);
+    return completer.future;
   }
 
   void _onLine(String line) {
-    if (line == _awaitedToken) {
-      _awaiting?.complete();
-      _awaiting = null;
-      _awaitedToken = '';
+    final awaited = _awaited;
+    if (awaited != null && line == awaited.token) {
+      _awaited = null;
+      awaited.completer.complete();
     } else if (line.startsWith('id name ')) {
       _name = line.substring('id name '.length);
     } else if (line.startsWith('bestmove')) {
@@ -110,8 +121,8 @@ final class UciEngine implements Engine {
   }
 
   void _onExit() {
-    _awaiting?.completeError(const EngineFailure('engine exited'));
-    _awaiting = null;
+    _awaited?.completer.completeError(const EngineFailure('engine exited'));
+    _awaited = null;
     _current?.finish();
     _current = null;
     _exited.complete();

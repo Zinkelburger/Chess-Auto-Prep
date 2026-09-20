@@ -58,7 +58,33 @@ void main() {
     expect(find.text('1... e5'), findsOneWidget);
   });
 
+  testWidgets('a tick without the best line promotes no other line', (
+    tester,
+  ) async {
+    await pump(tester);
+    await tester.tap(find.byType(Switch));
+    await tester.pump();
+    engine.current.emit(
+      line(multiPv: 2, score: const Centipawns(-35), depth: 18, pv: ['e7e5']),
+    );
+    engine.current.emit(
+      line(multiPv: 3, score: const Centipawns(-50), depth: 18, pv: ['g8f6']),
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.text('Scripted 1'), findsOneWidget, reason: 'no depth yet');
+    expect(find.text('+0.35'), findsOneWidget, reason: 'the row, not above');
+    expect(find.text('1... e5'), findsOneWidget);
+    expect(find.text('1... Nf6'), findsOneWidget);
+    engine.current.emit(
+      line(score: const Centipawns(-20), depth: 18, pv: ['c7c5']),
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.text('depth 18 · Scripted 1'), findsOneWidget);
+    expect(find.text('+0.20'), findsNWidgets(2));
+  });
+
   testWidgets('a failure is written where the name was', (tester) async {
+    analysis.dispose();
     analysis = EngineAnalysis(
       session,
       () async => const StartFailed('No Stockfish in this build'),
