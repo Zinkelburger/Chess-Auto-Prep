@@ -11,15 +11,23 @@ import '../../support/pgn_round_trip.dart';
 /// Hand-written files in the shapes the app actually meets. Each one must
 /// come back byte for byte, and each game in it must survive being written
 /// again from what reading it gave.
+///
+/// Nothing here is named `twic*.pgn`: `.gitignore` drops those as scratch
+/// downloads, and a fixture the repository does not hold is a test that
+/// passes for whoever wrote it and nobody else.
 const _dialects = [
   'lichess_study.pgn',
   'chessable_course.pgn',
   'chessbase.pgn',
   'chesscom.pgn',
-  'twic.pgn',
+  'tournament_bulletin.pgn',
   'old_app_chapter.pgn',
   'dialects.pgn',
 ];
+
+/// Every file the fixture folder is expected to hold, so one the repository
+/// does not track is named here rather than found missing much later.
+const _fixtures = [..._dialects, 'malformed.pgn'];
 
 String fixture(String name) =>
     File('test/fixtures/v2_pgn/$name').readAsStringSync();
@@ -77,6 +85,14 @@ const _normalised = {
 };
 
 void main() {
+  test('the fixture folder holds exactly the files the tests name', () {
+    final found = Directory('test/fixtures/v2_pgn')
+        .listSync()
+        .map((entry) => entry.uri.pathSegments.last)
+        .toList();
+    expect(found..sort(), [..._fixtures]..sort());
+  });
+
   group('a game with the part named survives being written again', () {
     for (final entry in _games.entries) {
       test(entry.key, () => expectRoundTrip(entry.value));
@@ -111,7 +127,7 @@ void main() {
     }
 
     test('a file with a byte-order mark keeps it', () {
-      final text = '\uFEFF${fixture('twic.pgn')}';
+      final text = '\uFEFF${fixture('tournament_bulletin.pgn')}';
       final chapter = parseChapter(name: 'BOM', text: text);
       expect(chapter.lines, hasLength(2));
       expect(writeChapter(chapter), text);
