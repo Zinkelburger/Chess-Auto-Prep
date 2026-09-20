@@ -2,7 +2,7 @@ import 'package:chess_auto_prep/v2/chess/generation/search_node.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// One move out of a node, whichever kind of node it is.
-typedef _Branch = ({
+typedef TreeBranch = ({
   String uci,
   String san,
   double probability,
@@ -56,9 +56,9 @@ void expectSameTree(
 }
 
 void _expectSameBranches(SearchNode actual, SearchNode expected, String where) {
-  final mine = {for (final branch in _branchesOf(actual)) branch.uci: branch};
+  final mine = {for (final branch in branchesOf(actual)) branch.uci: branch};
   final theirs = {
-    for (final branch in _branchesOf(expected)) branch.uci: branch,
+    for (final branch in branchesOf(expected)) branch.uci: branch,
   };
   expect(mine.keys, unorderedEquals(theirs.keys), reason: where);
   for (final entry in theirs.entries) {
@@ -74,7 +74,9 @@ void _expectSameBranches(SearchNode actual, SearchNode expected, String where) {
   }
 }
 
-List<_Branch> _branchesOf(SearchNode node) => switch (node) {
+/// The moves out of [node], ours or the opponent's, each with the share the
+/// file gives it; our own moves are always certain.
+List<TreeBranch> branchesOf(SearchNode node) => switch (node) {
   OurNode(:final candidates) => [
     for (final candidate in candidates)
       (
