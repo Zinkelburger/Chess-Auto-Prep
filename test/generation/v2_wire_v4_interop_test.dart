@@ -23,6 +23,7 @@ const _kingAndPawn = '4k3/8/8/8/8/8/4P3/4K3 w - - 0 1';
 const _start = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 const _afterE4 = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
 const _afterE5 = 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2';
+const _afterC5 = 'rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2';
 
 /// White queen and king against a lone black king with no move to make.
 const _stalemate = '7k/5Q2/6K1/8/8/8/8/8 b - - 0 1';
@@ -102,6 +103,62 @@ BuildTree _oldAppTree() {
       'opponent_book_source': 'none',
       'play_as_white': true,
       'max_depth': 2,
+      'max_eval_loss_cp': 200,
+    },
+  );
+}
+
+/// The same build stopped one step earlier, the way the old builder leaves a
+/// paused, cancelled or budget-stopped tree: it attaches a position's whole
+/// set of replies first and evaluates them afterwards, so the replies are in
+/// the file with no engine evaluation of their own.
+BuildTree _pausedOldAppTree() {
+  final root = _oldNode(_start, ply: 0, isWhiteToMove: true, nodeId: 1)
+    ..engineEvalCp = 25
+    ..explored = true;
+  final e4 =
+      _oldNode(
+          _afterE4,
+          ply: 1,
+          isWhiteToMove: false,
+          nodeId: 2,
+          uci: 'e2e4',
+          san: 'e4',
+        )
+        ..engineEvalCp = -25
+        ..explored = true
+        ..isRepertoireMove = true;
+  final e5 = _oldNode(
+    _afterE5,
+    ply: 2,
+    isWhiteToMove: true,
+    nodeId: 3,
+    uci: 'e7e5',
+    san: 'e5',
+    probability: 0.75,
+  );
+  final c5 = _oldNode(
+    _afterC5,
+    ply: 2,
+    isWhiteToMove: true,
+    nodeId: 4,
+    uci: 'c7c5',
+    san: 'c5',
+    probability: 0.25,
+  );
+  root.children.add(e4);
+  e4.children.addAll([e5, c5]);
+  return BuildTree(
+    root: root,
+    totalNodes: 4,
+    maxPlyReached: 2,
+    buildComplete: false,
+    configSnapshot: const {
+      'algorithm_version': 3,
+      'search_algorithm': 'pure',
+      'opponent_book_source': 'none',
+      'play_as_white': true,
+      'max_depth': 4,
       'max_eval_loss_cp': 200,
     },
   );
@@ -196,6 +253,27 @@ void main() {
     expect(horizon, isA<HorizonNode>());
     expect(horizon.evalForUs.cp, 30);
     expect(horizon.valuation.isExact, isTrue);
+  });
+
+  test('a build the old app paused mid-expansion comes back whole', () {
+    final result = decodeTreeV4(serializeTree(_pausedOldAppTree()));
+
+    expect(result, isA<TreeDecoded>());
+    final decoded = result as TreeDecoded;
+    expect(decoded.complete, isFalse);
+
+    final opponent = (decoded.root as OurNode).chosen.child as OpponentNode;
+    expect(opponent.replies.length, 2);
+    for (final reply in opponent.replies) {
+      expect(
+        reply.child,
+        isA<FrontierNode>(),
+        reason: 'attached, not yet evaluated',
+      );
+      expect(reply.child.evalForUs.cp, 0);
+      expect(reply.child.valuation.isExact, isFalse);
+    }
+    expect(decoded.root.valuation.isExact, isFalse);
   });
 
   test('a draw the old app saved comes back a draw, with its reason', () {

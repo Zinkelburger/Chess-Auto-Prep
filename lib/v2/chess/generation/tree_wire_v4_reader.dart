@@ -161,6 +161,15 @@ final class _Reader {
 
   String? failure;
 
+  /// The node [json] describes, or null when the document cannot be read.
+  ///
+  /// A node may carry no evaluation at all. The old builder attaches a
+  /// position's whole set of replies before any of them is evaluated, so
+  /// every tree a pause, a cancellation or a node budget left behind ends in
+  /// nodes that were reached but never scored. That is unfinished work rather
+  /// than a broken file: such a node is read as the frontier it is, at the
+  /// neutral score the old app's own backup gives it, with the whole [0, 1]
+  /// interval still open below it.
   SearchNode? read(Map<String, Object?> json, int depth) {
     final text = json['fen'];
     if (text is! String || text.isEmpty) {
@@ -172,28 +181,37 @@ final class _Reader {
     final ourTurn =
         (white is bool ? white : fen.whiteToMove) == (ourSide == Side.white);
     final cp = json['engine_eval_cp'];
-    if (cp is! num) {
-      _fail('the node at ${fen.value} has no engine evaluation');
-      return null;
-    }
     // The file reports from the side to move; the search works from ours.
-    final evalForUs = Eval(ourTurn ? cp.toInt() : -cp.toInt());
+    final evalForUs = cp is num
+        ? Eval(ourTurn ? cp.toInt() : -cp.toInt())
+        : const Eval(0);
     final children = json['children'];
     if (json['terminal_value'] is num ||
         children is! List ||
         children.isEmpty) {
-      return _leaf(json, fen, evalForUs, ourTurn: ourTurn, depth: depth);
+      return _leaf(
+        json,
+        fen,
+        evalForUs,
+        ourTurn: ourTurn,
+        evaluated: cp is num,
+        depth: depth,
+      );
     }
     final edges = _edges(children, depth);
     if (edges == null) return null;
     return _branch(fen, evalForUs, edges, ourTurn: ourTurn);
   }
 
+  /// A childless node. Only an evaluated one at the horizon is settled: an
+  /// unevaluated node is where the build stopped, whatever depth it stopped
+  /// at, so its value stays provisional.
   SearchNode _leaf(
     Map<String, Object?> json,
     Fen fen,
     Eval evalForUs, {
     required bool ourTurn,
+    required bool evaluated,
     required int depth,
   }) {
     final terminal = json['terminal_value'];
@@ -205,7 +223,7 @@ final class _Reader {
         ourTurn: ourTurn,
       );
     }
-    return depth >= horizonPlies
+    return evaluated && depth >= horizonPlies
         ? HorizonNode(fen: fen, evalForUs: evalForUs)
         : FrontierNode(fen: fen, evalForUs: evalForUs);
   }

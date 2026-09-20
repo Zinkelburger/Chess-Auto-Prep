@@ -238,12 +238,33 @@ void main() {
     );
   });
 
-  test('a node without an evaluation is malformed, and says so', () {
-    final result = decodeTreeV4(
+  test('a node the build never evaluated is a frontier, not a failure', () {
+    // The old builder attaches a position's replies before evaluating them,
+    // so this is what a pause or a node budget leaves behind.
+    final decoded = _decoded(
       _document(tree: {..._oneNode}..remove('engine_eval_cp')),
     );
 
-    expect((result as TreeMalformed).detail, contains('no engine evaluation'));
+    expect(decoded.root, isA<FrontierNode>());
+    expect(decoded.root.evalForUs.cp, 0, reason: 'neutral, not a guess');
+    expect(decoded.root.valuation.value, 0.5);
+    expect(decoded.root.valuation.isExact, isFalse);
+  });
+
+  test('an unevaluated node at the horizon is unfinished, not settled', () {
+    final decoded = _decoded(
+      _document(
+        config: const {
+          'algorithm_version': 3,
+          'play_as_white': true,
+          'max_depth': 0,
+        },
+        tree: {..._oneNode}..remove('engine_eval_cp'),
+      ),
+    );
+
+    expect(decoded.root, isA<FrontierNode>());
+    expect(decoded.root.valuation.isExact, isFalse);
   });
 
   test('a node without a position is malformed, and says so', () {
