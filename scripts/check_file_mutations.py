@@ -45,6 +45,8 @@ APPROVED: dict[str, tuple[int, str]] = {
         "disposable inter-process request file",
     ),
     "lib/services/engine/stockfish_bundle.dart": (7, "reproducible engine bundle"),
+    "lib/v2/storage/log_file.dart": (2, "append-only diagnostic log with one rotated generation; never user data"),
+    "lib/v2/engines/stockfish_install.dart": (3, "reproducible engine bundle, v2: .part write, rename, stamp"),
     "lib/services/eval/cdb_snapshot_download.dart": (4, "resumable downloaded snapshot"),
     "lib/services/eval/lichess_eval_controller.dart": (4, "resumable downloaded snapshot"),
     "lib/services/eval/lichess_eval_import.dart": (6, "rebuildable database staging"),

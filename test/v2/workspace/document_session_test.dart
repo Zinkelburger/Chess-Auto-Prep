@@ -33,8 +33,9 @@ void main() {
     expect(session.currentMove?.san, 'c5');
     session.back();
     expect(session.cursor.isRoot, isTrue);
+    final before = notifications;
     session.back();
-    expect(notifications, 5, reason: 'backing off the root does nothing');
+    expect(notifications, before, reason: 'backing off the root does nothing');
   });
 
   test('goTo ignores paths outside the tree', () {

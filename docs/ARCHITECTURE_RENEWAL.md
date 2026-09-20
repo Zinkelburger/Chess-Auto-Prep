@@ -153,7 +153,7 @@ Allowed imports:
 | `chess/` | Pub packages without Flutter or `dart:io` |
 | `storage/`, `engines/`, `net/` | `chess/`, pub packages, `packages/` |
 | `ui/` | Flutter only; no feature, storage or engine code |
-| `diagnostics/` | Flutter foundation only; nothing else in `v2` |
+| `diagnostics/` | Pure Dart, so `engines/` can report from outside Flutter; nothing else in `v2` |
 | `workspace/` | `chess/`, `storage/`, `engines/`, `net/`, `ui/` |
 | `features/<mode>/` | `workspace/` and everything it may import; never another mode |
 | `app/` | Everything in `v2` |
@@ -302,6 +302,10 @@ Copy the shape of these files; they are what the rules above look like:
 | `lib/v2/features/library/library.dart` | Sealed states and results, a stale check after `await` |
 | `lib/v2/workspace/move_tree_view.dart` | A widget built from an owner, private sub-widgets, no I/O |
 | `lib/v2/app/shell.dart` | Composition and the one cross-feature request |
+| `lib/v2/storage/chapter_files.dart` | An interface at a real boundary (the filesystem) with sealed results, and its one adapter |
+| `lib/v2/engines/uci_engine.dart` | A protocol over a pipe: serialised searches, each with its own stream, so stale output cannot land |
+| `lib/v2/workspace/engine_analysis.dart` | An owner over a background job: enable/disable, stale checks, a 200 ms snapshot buffer, `dispose` |
+| `test/v2/workspace/engine_analysis_test.dart` | Fake time, a scripted double, assertions on the owner and never on private state |
 
 `scripts/check_v2.py` enforces the numbers below and the import table; run
 it before saying a step is done.
@@ -445,8 +449,8 @@ settings, lint and Widgetbook appear inside the row that first needs them.
 
 | Step | Scope | Ends with | Status |
 |---|---|---|---|
-| 0 | **Board on screen.** `main_v2.dart`, a window with the mode menu stub, board widget, move-tree widget; open a real chapter from Documents `repertoires/` read-only; click and arrow through moves. Only the theme values a board and a move list need. | Screenshot of a real chapter | Done 2026-09-19: 1.5k lines, 23 tests |
-| 1 | **Engine.** Supervisor, one Stockfish, engine pane with MultiPV lines at 200 ms, kill-on-exit test on Linux. First step that can fail, so it also installs the log: facade in `diagnostics/`, file sink in `storage/`, installed by `main_v2` before the engine starts. | Live evaluation on the board, and an engine that will not start named in `app.log` | Not started |
+| 0 | **Board on screen.** `main_v2.dart`, a window with the mode menu stub, board widget, move-tree widget; open a real chapter from Documents `repertoires/` read-only; click and arrow through moves. Only the theme values a board and a move list need. | Screenshot of a real chapter | Done 2026-09-19: 1.5k lines, 23 tests; second-agent review the same day, its findings fixed (typed file results, open race, move-list rewrite, 18 more tests) |
+| 1 | **Engine.** Supervisor, one Stockfish, engine pane with MultiPV lines at 200 ms, kill-on-exit test on Linux. First step that can fail, so it also installs the log: facade in `diagnostics/`, file sink in `storage/`, installed by `main_v2` before the engine starts. | Live evaluation on the board, and an engine that will not start named in `app.log` | Done 2026-09-19: 1.6k lines, 41 tests; a real Stockfish dies with a SIGKILLed parent on Linux (`test/v2/engines/stockfish_exit_test.dart`); a start failure is an `E start …` line in `app.log` |
 | 2 | **Document store.** `PgnDocumentStore` (open, save, create, rename, move, recoverable delete) with revisions; add moves and comments in the workspace; save; undo from receipts; the required failure tests; the old app sees the edit. | Edit a chapter, reopen it in the old app | Not started |
 | 3 | **Library.** Repertoire list, search, create, rename, move, recoverable delete; training references follow chapter changes. | Screenshot | Not started |
 | 4 | **Chapters and Study.** Chapter outline panel, chapter operations, per-chapter orientation, Lichess study import and export, quiz markers. | Screenshot | Not started |

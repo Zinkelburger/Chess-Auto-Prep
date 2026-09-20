@@ -5,35 +5,42 @@ import '../features/library/library_panel.dart';
 import '../storage/chapter_files.dart';
 import '../ui/theme.dart';
 import '../workspace/document_session.dart';
+import '../workspace/engine_analysis.dart';
 import '../workspace/workspace_view.dart';
 
 /// The window: a top bar with the mode menu, the library on the left and the
 /// workspace filling the rest. Opening a chapter from the library into the
 /// workspace is the one cross-feature request, and it is handled here.
 class Shell extends StatefulWidget {
-  const Shell({super.key, required this.library, required this.session});
+  const Shell({
+    super.key,
+    required this.library,
+    required this.session,
+    required this.analysis,
+  });
 
   final Library library;
   final DocumentSession session;
+  final EngineAnalysis analysis;
 
   @override
   State<Shell> createState() => _ShellState();
 }
 
 class _ShellState extends State<Shell> {
-  ChapterRef? _selected;
+  int _opens = 0;
   String? _error;
 
+  /// Opens [ref] unless a later click has overtaken this one, so two quick
+  /// clicks always end on the second chapter, however long each read takes.
   Future<void> _open(ChapterRef ref) async {
+    final ticket = ++_opens;
     final result = await widget.library.open(ref);
-    if (!mounted) return;
+    if (!mounted || ticket != _opens) return;
     switch (result) {
       case Opened(:final chapter):
-        widget.session.open(chapter);
-        setState(() {
-          _selected = ref;
-          _error = null;
-        });
+        widget.session.open(chapter, source: ref);
+        setState(() => _error = null);
       case OpenFailed(:final reason):
         setState(() => _error = reason);
     }
@@ -52,14 +59,22 @@ class _ShellState extends State<Shell> {
               children: [
                 SizedBox(
                   width: 260,
-                  child: LibraryPanel(
-                    library: widget.library,
-                    selected: _selected,
-                    onOpen: _open,
+                  child: ListenableBuilder(
+                    listenable: widget.session,
+                    builder: (context, _) => LibraryPanel(
+                      library: widget.library,
+                      selected: widget.session.source,
+                      onOpen: _open,
+                    ),
                   ),
                 ),
                 const VerticalDivider(width: 1),
-                Expanded(child: WorkspaceView(session: widget.session)),
+                Expanded(
+                  child: WorkspaceView(
+                    session: widget.session,
+                    analysis: widget.analysis,
+                  ),
+                ),
               ],
             ),
           ),
@@ -70,23 +85,28 @@ class _ShellState extends State<Shell> {
 }
 
 /// Modes not yet in v2 are listed but disabled, so the menu shows the whole
-/// product from day one and each step turns one entry on.
+/// product from day one and each step turns one entry on. Repertoires is the
+/// only mode, so choosing it just closes the menu.
+const _currentMode = 'Repertoires';
 const _modes = [
-  ('Repertoires', true),
-  ('PGN Viewer', false),
-  ('Repertoire builder', false),
-  ('Repertoire trainer', false),
-  ('Study', false),
-  ('Tactics', false),
-  ('Player analysis', false),
-  ('Players & prep', false),
-  ('Databases', false),
-  ('Engine tournament', false),
-  ('Bughouse lab', false),
+  'Repertoires',
+  'PGN Viewer',
+  'Repertoire builder',
+  'Repertoire trainer',
+  'Study',
+  'Tactics',
+  'Player analysis',
+  'Players & prep',
+  'Databases',
+  'Engine tournament',
+  'Bughouse lab',
 ];
 
 class _TopBar extends StatelessWidget {
   const _TopBar();
+
+  /// Already in this mode; the item closes the menu by itself.
+  static void _stayHere() {}
 
   @override
   Widget build(BuildContext context) {
@@ -99,16 +119,19 @@ class _TopBar extends StatelessWidget {
         children: [
           MenuAnchor(
             menuChildren: [
-              for (final (name, available) in _modes)
+              for (final name in _modes)
                 MenuItemButton(
-                  onPressed: available ? () {} : null,
+                  onPressed: name == _currentMode ? _stayHere : null,
+                  leadingIcon: name == _currentMode
+                      ? const Icon(Icons.check, size: 16)
+                      : const SizedBox(width: 16),
                   child: Text(name),
                 ),
             ],
             builder: (context, controller, _) => TextButton.icon(
               onPressed: controller.isOpen ? controller.close : controller.open,
               icon: const Icon(Icons.menu, size: 18),
-              label: const Text('Repertoires'),
+              label: const Text(_currentMode),
             ),
           ),
           const Spacer(),

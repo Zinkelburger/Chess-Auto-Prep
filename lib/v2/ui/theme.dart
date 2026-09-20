@@ -6,7 +6,6 @@ abstract final class Space {
   static const s = 8.0;
   static const m = 12.0;
   static const l = 16.0;
-  static const xl = 24.0;
 }
 
 /// Moves, FENs and evaluations share one monospace style.

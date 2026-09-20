@@ -65,8 +65,6 @@ final class NodePath {
 
   bool get isRoot => indexes.isEmpty;
 
-  int get depth => indexes.length;
-
   NodePath get parent =>
       isRoot ? this : NodePath.of(indexes.take(indexes.length - 1));
 
