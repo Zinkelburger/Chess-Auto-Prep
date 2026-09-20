@@ -8,9 +8,12 @@ import 'package:crypto/crypto.dart';
 /// A document store whose answers the test writes, for owners and widgets
 /// that must never touch a real file.
 ///
-/// Each operation takes the next result queued for it and falls back to plain
-/// success. With [hold] set, every call waits until the test releases it, so a
-/// test can look at what an owner shows while a save is still in flight.
+/// Each operation takes the next result queued for it. With nothing queued
+/// it behaves like the real one: a save whose expected revision is not what
+/// [documents] holds is a conflict, and a save that goes through replaces the
+/// document and returns its receipt. With [hold] set, every call waits until
+/// the test releases it, so a test can look at what an owner shows while a
+/// save is still in flight.
 final class ScriptedDocumentStore implements PgnDocumentStore {
   /// What [open] answers; a document that is not here is [Absent].
   final documents = <DocumentRef, DocumentRead>{};
@@ -31,6 +34,9 @@ final class ScriptedDocumentStore implements PgnDocumentStore {
 
   void releaseNext() => _waiting.removeAt(0).complete();
 
+  /// Lets the newest waiting call answer, ahead of older ones.
+  void releaseLast() => _waiting.removeLast().complete();
+
   void releaseAll() {
     while (_waiting.isNotEmpty) {
       releaseNext();
@@ -46,7 +52,12 @@ final class ScriptedDocumentStore implements PgnDocumentStore {
   @override
   Future<CreateResult> create(DocumentRef ref, String text) async {
     await _turn();
-    return _next(creates) ?? Created(scriptedRevision(text));
+    final queued = _next(creates);
+    if (queued != null) return queued;
+    if (documents.containsKey(ref)) return const Collision();
+    final revision = scriptedRevision(text);
+    documents[ref] = Opened(text, revision);
+    return Created(revision);
   }
 
   @override
@@ -57,16 +68,20 @@ final class ScriptedDocumentStore implements PgnDocumentStore {
   }) async {
     requestedSaves.add(SaveRequest(ref, text, expected));
     await _turn();
+    final queued = _next(saves);
+    if (queued != null) return queued;
     final before = documents[ref];
-    documents[ref] = Opened(text, scriptedRevision(text));
-    return _next(saves) ??
-        Saved(
-          Receipt(
-            committed: scriptedRevision(text),
-            before: before is Opened ? before.text : '',
-            beforeRevision: expected,
-          ),
-        );
+    if (before is! Opened) return const Conflict(null);
+    if (before.revision != expected) return Conflict(before.revision);
+    final committed = scriptedRevision(text);
+    documents[ref] = Opened(text, committed);
+    return Saved(
+      Receipt(
+        committed: committed,
+        before: before.text,
+        beforeRevision: before.revision,
+      ),
+    );
   }
 
   @override

@@ -38,37 +38,14 @@ final class ChaptersUnreadable extends ChapterListing {
   final String detail;
 }
 
-sealed class ChapterRead {
-  const ChapterRead();
-}
-
-final class ChapterText extends ChapterRead {
-  const ChapterText(this.text);
-
-  final String text;
-}
-
-/// The file is gone: deleted or renamed since it was listed.
-final class ChapterAbsent extends ChapterRead {
-  const ChapterAbsent();
-}
-
-final class ChapterUnreadable extends ChapterRead {
-  const ChapterUnreadable(this.detail);
-
-  final String detail;
-}
-
 /// The chapter PGNs under `Documents/repertoires/`. The filesystem is a real
 /// boundary, so this is an interface: [ChapterDirectory] in the app, a
 /// scripted one in tests.
 ///
-/// Read-only. Writes arrive with the document store and its lock, so nothing
-/// here may ever create or replace a file.
+/// Listing only: a chapter's text is read, and written, through the
+/// document store, which is the one place that knows its revision.
 abstract interface class ChapterFiles {
   Future<ChapterListing> list();
-
-  Future<ChapterRead> read(ChapterRef ref);
 }
 
 /// One folder per repertoire, one `.pgn` per chapter, plus index files the
@@ -108,17 +85,6 @@ final class ChapterDirectory implements ChapterFiles {
       }
     }
     return refs;
-  }
-
-  @override
-  Future<ChapterRead> read(ChapterRef ref) async {
-    try {
-      return ChapterText(await File(ref.path).readAsString());
-    } on PathNotFoundException {
-      return const ChapterAbsent();
-    } on FileSystemException catch (e) {
-      return ChapterUnreadable(_detail(e));
-    }
   }
 }
 

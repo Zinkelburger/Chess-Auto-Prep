@@ -74,6 +74,9 @@ AddMoveResult addMove(
 /// keeps the first, and the old app, which reads one game at a time, shows
 /// the same words whichever line the user opens. Empty text removes the
 /// prose and keeps the move's `[%…]` tokens.
+///
+/// Text that would leave the file as it is gives the same chapter back, so a
+/// caller can tell an edit from a re-statement by identity.
 Chapter setComment(
   Chapter chapter, {
   required NodePath at,
@@ -82,9 +85,13 @@ Chapter setComment(
   if (at.isRoot) return _withIntroduction(chapter, text);
   final sans = [for (final node in chapter.tree.lineTo(at)) node.san];
   if (sans.isEmpty) return chapter;
-  return withLines(chapter, [
+  final lines = [
     for (final line in chapter.lines) _commented(chapter, line, sans, text),
-  ]);
+  ];
+  final changed = lines.indexed.any(
+    (entry) => !identical(entry.$2, chapter.lines[entry.$1]),
+  );
+  return changed ? withLines(chapter, lines) : chapter;
 }
 
 ChapterLine _commented(

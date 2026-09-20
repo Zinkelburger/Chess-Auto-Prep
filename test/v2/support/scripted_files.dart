@@ -2,15 +2,12 @@ import 'dart:async';
 
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 
-/// Chapter files whose answers the test writes, and whose timing the test
-/// controls: every call waits until the test releases it.
+/// A chapter listing the test writes, whose timing the test controls: every
+/// call waits until the test releases it.
 final class ScriptedFiles implements ChapterFiles {
-  ScriptedFiles({this.listing = const Chapters([]), this.texts = const {}});
+  ScriptedFiles({this.listing = const Chapters([])});
 
   ChapterListing listing;
-
-  /// Text by chapter path; a path not here reads as absent.
-  Map<String, ChapterRead> texts;
 
   final _pending = <Completer<void>>[];
 
@@ -32,12 +29,6 @@ final class ScriptedFiles implements ChapterFiles {
   Future<ChapterListing> list() async {
     await _wait();
     return listing;
-  }
-
-  @override
-  Future<ChapterRead> read(ChapterRef ref) async {
-    await _wait();
-    return texts[ref.path] ?? const ChapterAbsent();
   }
 
   Future<void> _wait() {

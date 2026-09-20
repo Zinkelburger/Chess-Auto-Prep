@@ -1,7 +1,7 @@
-import 'package:chess_auto_prep/v2/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
+import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
 import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
 import 'package:chess_auto_prep/v2/workspace/workspace_view.dart';
@@ -10,9 +10,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/fixtures.dart';
+import '../support/scripted_store.dart';
+import '../support/session_fixture.dart';
 
 void main() {
+  late SessionFixture fixture;
   late DocumentSession session;
+  late DocumentSaver saver;
 
   /// The engine stays off; its pane has its own test.
   EngineAnalysis analysis() => EngineAnalysis(
@@ -26,17 +30,24 @@ void main() {
       MaterialApp(
         theme: darkTheme(),
         home: Scaffold(
-          body: WorkspaceView(session: session, analysis: analysis()),
+          body: WorkspaceView(
+            session: session,
+            saver: saver,
+            analysis: analysis(),
+          ),
         ),
       ),
     );
     await tester.pump();
   }
 
-  setUp(() {
-    session = DocumentSession()
-      ..open(parseChapter(name: 'Main', text: blackChapter));
+  setUp(() async {
+    fixture = await openSession(blackChapter);
+    session = fixture.session;
+    saver = fixture.saver;
   });
+
+  tearDown(() => fixture.dispose());
 
   testWidgets('shows the chapter, its lines and its variations', (
     tester,
@@ -84,7 +95,9 @@ void main() {
   });
 
   testWidgets('with nothing open it asks for a chapter', (tester) async {
-    session = DocumentSession();
+    final empty = ScriptedDocumentStore();
+    saver = DocumentSaver(empty);
+    session = DocumentSession(empty, saver);
     await pump(tester);
     expect(find.text('Open a chapter'), findsOneWidget);
     expect(find.text('No moves'), findsOneWidget);

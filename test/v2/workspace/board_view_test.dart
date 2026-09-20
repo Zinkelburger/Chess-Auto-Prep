@@ -7,6 +7,10 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  final played = <String>[];
+
+  setUp(played.clear);
+
   Future<void> pump(
     WidgetTester tester, {
     Fen fen = Fen.initial,
@@ -16,7 +20,12 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: darkTheme(),
-        home: BoardView(fen: fen, orientation: orientation, lastMove: null),
+        home: BoardView(
+          fen: fen,
+          orientation: orientation,
+          lastMove: null,
+          onMove: played.add,
+        ),
       ),
     );
   }

@@ -4,6 +4,7 @@ import '../features/library/library.dart';
 import '../features/library/library_panel.dart';
 import '../storage/chapter_files.dart';
 import '../ui/theme.dart';
+import '../workspace/document_saver.dart';
 import '../workspace/document_session.dart';
 import '../workspace/engine_analysis.dart';
 import '../workspace/workspace_view.dart';
@@ -16,11 +17,13 @@ class Shell extends StatefulWidget {
     super.key,
     required this.library,
     required this.session,
+    required this.saver,
     required this.analysis,
   });
 
   final Library library;
   final DocumentSession session;
+  final DocumentSaver saver;
   final EngineAnalysis analysis;
 
   @override
@@ -28,18 +31,17 @@ class Shell extends StatefulWidget {
 }
 
 class _ShellState extends State<Shell> {
-  int _opens = 0;
   String? _error;
 
-  /// Opens [ref] unless a later click has overtaken this one, so two quick
-  /// clicks always end on the second chapter, however long each read takes.
+  /// The session opens the file; this only says what came of it. An open
+  /// a later click overtook has nothing to say, so it says nothing.
   Future<void> _open(ChapterRef ref) async {
-    final ticket = ++_opens;
-    final result = await widget.library.open(ref);
-    if (!mounted || ticket != _opens) return;
+    final result = await widget.session.open(ref);
+    if (!mounted) return;
     switch (result) {
-      case Opened(:final chapter):
-        widget.session.open(chapter, source: ref);
+      case OpenOvertaken():
+        return;
+      case DocumentOpened():
         setState(() => _error = null);
       case OpenFailed(:final reason):
         setState(() => _error = reason);
@@ -72,6 +74,7 @@ class _ShellState extends State<Shell> {
                 Expanded(
                   child: WorkspaceView(
                     session: widget.session,
+                    saver: widget.saver,
                     analysis: widget.analysis,
                   ),
                 ),

@@ -42,29 +42,4 @@ void main() {
     final files = ChapterDirectory(Directory(p.join(root.path, 'none')));
     expect(((await files.list()) as Chapters).refs, isEmpty);
   });
-
-  test('reads a chapter and reports one that vanished', () async {
-    await put('KID/Main.pgn', '// Color: Black\n');
-    final files = ChapterDirectory(root);
-    final listed = ((await files.list()) as Chapters).refs.single;
-    expect(await files.read(listed), isA<ChapterText>());
-    await File(listed.path).delete();
-    expect(await files.read(listed), isA<ChapterAbsent>());
-  });
-
-  test(
-    'a file the process may not read is unreadable, not a crash',
-    () async {
-      await put('KID/Main.pgn', '*');
-      final files = ChapterDirectory(root);
-      final listed = ((await files.list()) as Chapters).refs.single;
-      await Process.run('chmod', ['000', listed.path]);
-      final read = await files.read(listed);
-      expect(read, isA<ChapterUnreadable>());
-      expect((read as ChapterUnreadable).detail, isNotEmpty);
-    },
-    skip: !Platform.isLinux || Platform.environment['USER'] == 'root'
-        ? 'needs a Linux user without root'
-        : false,
-  );
 }
