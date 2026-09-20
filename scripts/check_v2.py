@@ -45,6 +45,9 @@ FUNCTION_START = re.compile(
     r"^(\s*)(?:static\s+)?(?:@\w+\s+)*[\w<>?,\s\[\]()]+\s+_?\w+\s*\([^;]*\)\s*(?:async\*?\s*)?\{\s*$"
 )
 IMPORT = re.compile(r"^import\s+'([^']+)'")
+# Visual values live in ui/theme.dart so the look can change in one place.
+LITERAL_STYLE = re.compile(r"Color\(0x|fontSize:\s*\d|fontFamily:\s*'")
+WIDGET_IMPORT = re.compile(r"^import 'package:flutter/(?:material|widgets|cupertino)\.dart'")
 WRITE_CALL = re.compile(r"\b(writeAsString|writeAsBytes|openWrite|\.create\(|\.delete\(|rename\()")
 
 
@@ -54,12 +57,15 @@ def relative_folder(path: Path) -> str:
 
 def check_imports(path: Path, lines: list[str], findings: list[str]) -> None:
     folder = relative_folder(path)
+    is_widget = folder != "app" and any(WIDGET_IMPORT.match(line) for line in lines)
     for n, line in enumerate(lines, 1):
         m = IMPORT.match(line)
         if not m:
             continue
         target = m.group(1)
         where = f"{path.relative_to(REPO)}:{n}"
+        if is_widget and (target == "dart:io" or "/net/" in target or target.startswith("../net/")):
+            findings.append(f"{where}: a widget file imports {target}; widgets take owners and values")
         if target.startswith("package:chess_auto_prep/") and "/v2/" not in target:
             findings.append(f"{where}: imports the old app ({target})")
         if target.startswith("package:flutter") and folder in FLUTTER_FREE:
@@ -124,6 +130,8 @@ def check_file(path: Path, findings: list[str]) -> None:
             findings.append(f"{where}:{n}: `part` is not allowed")
         if re.search(r"\bdynamic\b", code):
             findings.append(f"{where}:{n}: `dynamic`")
+        if is_lib and folder != "ui" and LITERAL_STYLE.search(code):
+            findings.append(f"{where}:{n}: literal colour or font outside ui/ (add a token to ui/theme.dart)")
         if is_lib and re.search(r"\blate\b", code) and "late final" not in code:
             findings.append(f"{where}:{n}: `late` that is not `late final`")
         writer = is_lib and (folder == "storage" or str(path.relative_to(LIB)) in WRITERS_ALLOWED)

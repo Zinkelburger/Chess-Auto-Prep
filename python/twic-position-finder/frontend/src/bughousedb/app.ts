@@ -10,7 +10,7 @@
 import { EnginePool, type BrowserEngine, type NodeSearchResult } from '../bughouse/engine';
 import {
   BOARDS, Boards, LineView, Lines, SEAT, SetupBoxes, readBoard, squaresOf,
-  type BoardName, type BoardView, type Colour,
+  type BoardName, type BoardView, type Colour, type LineMove,
 } from '../bughouse/boards';
 import {
   ApiError, bookPosition, bookTicket, bookUpload,
@@ -19,8 +19,13 @@ import {
 
 const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1';
 const START_DUAL = `${START}|${START}`;
-/** The table's columns: A > D, Equal, B > C, Both. */
-const COLUMNS: Clock[] = ['ahead', 'even', 'behind', 'both'];
+/**
+ * The table's columns: A > D, Equal, B > C. The fourth case both teams may
+ * sit is stored and uploaded, but not shown: with both sit bits on the
+ * advantage cancels, so it lands within about a tenth of a pawn of Equal
+ * while A > D and B > C are pawns apart.
+ */
+const COLUMNS: Clock[] = ['ahead', 'even', 'behind'];
 // The browser engine runs one network evaluation (about 80 ms) per node, so a
 // browser analysis is far shallower than the desktop builder's 1500/200.
 const OWN_NODES = 200;    // each search of the position itself
@@ -177,6 +182,76 @@ function setStatus(text: string, error = false) {
   s.dataset.error = String(error);
 }
 
+// ── The line in the URL ───────────────────────────────────────────
+// The address keeps the starting position and the moves played from it, so a
+// reload (or a shared link) opens the same position with its history intact
+// and every earlier move still there to step back to.
+
+/**
+ * The start, the whole line, and how far each board has stepped along it:
+ * `?moves=A:e2e4 B:e7e5&at=1,0`. The moves past the cursor are kept too, so
+ * stepping back and reloading still leaves them to step forward into.
+ */
+function writeUrl() {
+  const params = new URLSearchParams();
+  if (lines.root !== START_DUAL) params.set('fen', lines.root);
+  if (lines.moves.length) params.set('moves', lines.moves.map((m) => `${m.board}:${m.uci}`).join(' '));
+  if (BOARDS.some((name) => lines.upto[name] < lines.of(name).length)) {
+    params.set('at', BOARDS.map((name) => lines.upto[name]).join(','));
+  }
+  const query = params.toString();
+  history.replaceState(null, '', query ? `?${query}` : location.pathname);
+}
+
+/**
+ * The position each move of the line was played in, asked for at once. A
+ * server that refuses overlapping requests is asked again one at a time, so
+ * the line still comes back for a visitor whose server is older than this.
+ */
+async function positionsAlong(root: string, tokens: string[]): Promise<(BookPosition | null)[]> {
+  const ask = (k: number) => bookPosition(root, tokens.slice(0, k)).catch(() => null);
+  const together = await Promise.all(tokens.map((_, k) => ask(k)));
+  if (together.every(Boolean)) return together;
+  const alone: (BookPosition | null)[] = [];
+  for (const [k, pos] of together.entries()) alone.push(pos ?? await ask(k));
+  return alone;
+}
+
+/**
+ * The moves of a line from the URL, each with the SAN, side and move number
+ * of the position it was played in — the same `LineMove` clicking it builds.
+ * A move the book no longer accepts ends the line there rather than dropping
+ * the whole history.
+ */
+async function replay(root: string, tokens: string[]): Promise<LineMove[]> {
+  const before = await positionsAlong(root, tokens);
+  const played: LineMove[] = [];
+  for (const [k, token] of tokens.entries()) {
+    const pos = before[k];
+    const board = token.slice(0, token.indexOf(':')) as BoardName;
+    const uci = token.slice(token.indexOf(':') + 1);
+    const move = pos?.moves.find((m) => m.board === board && m.uci === uci);
+    if (!pos || !move) break;
+    played.push({ board, uci, san: move.san, colour: pos.turn[board], num: moveNumber(pos.fen, board) });
+  }
+  return played;
+}
+
+/**
+ * Open a start position, with a line played out on it if the URL kept one and
+ * each board stepped to where it was left (`at`, default the whole line).
+ */
+async function openLine(root: string, tokens: string[], at: number[]) {
+  lines.reset(root);
+  if (tokens.length) {
+    setStatus('Replaying the line…');
+    for (const move of await replay(root, tokens)) lines.play(move);
+    BOARDS.forEach((name, i) => { if (at[i] !== undefined) lines.go(name, at[i]); });
+  }
+  accepted = lines.snapshot();
+  await load();
+}
+
 // ── Navigation ────────────────────────────────────────────────────
 
 /**
@@ -194,7 +269,7 @@ async function load() {
     accepted = asked;
     if (!job) setStatus('');
     setup.error('');
-    history.replaceState(null, '', pos.fen === START_DUAL ? location.pathname : `?fen=${encodeURIComponent(pos.fen)}`);
+    writeUrl();
   } catch (e) {
     if (JSON.stringify(lines.snapshot()) !== JSON.stringify(asked)) return;
     const message = e instanceof ApiError ? e.message : 'Could not reach the book.';
@@ -310,4 +385,9 @@ el<HTMLFormElement>('bdb-fen-form').onsubmit = (e) => {
 };
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') boards.deselect(); });
 
-reset(new URLSearchParams(location.search).get('fen') || START_DUAL);
+const opened = new URLSearchParams(location.search);
+void openLine(
+  opened.get('fen') || START_DUAL,
+  (opened.get('moves') ?? '').split(/\s+/).filter(Boolean),
+  (opened.get('at') ?? '').split(',').filter((n) => n !== '').map(Number).filter(Number.isInteger),
+);

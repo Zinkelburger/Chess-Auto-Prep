@@ -71,7 +71,7 @@ class _Header extends StatelessWidget {
           width: 64,
           child: Text(
             snapshot?.best.score.text ?? '',
-            style: monoText.copyWith(fontSize: 18, fontWeight: FontWeight.w600),
+            style: scoreText,
           ),
         ),
         Expanded(
