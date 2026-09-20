@@ -32,7 +32,7 @@ extension type const Eval(int cp) {
 /// centipawns to us: `U(cp) = 1 / (1 + exp(-0.00368208 · cp))`.
 ///
 /// 1 is a win for the repertoire side, 0.5 a draw, 0 a loss, and the curve is
-/// symmetric: U(0) = 0.5, U(+100) ≈ 0.592, U(−100) ≈ 0.408. A mate saturates,
+/// symmetric: U(0) = 0.5, U(+100) ≈ 0.591, U(−100) ≈ 0.409. A mate saturates,
 /// because the game is decided and no number of centipawns describes it:
 /// anything above +9000 is 1 and anything below −9000 is 0.
 ///

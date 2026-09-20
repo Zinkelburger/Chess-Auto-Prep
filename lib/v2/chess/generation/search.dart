@@ -29,8 +29,8 @@ typedef CancelSignal = bool Function();
 /// A six-node example, White to move, horizon two, loss limit 200: we play
 /// the two moves the window keeps; against the first the opponent has one
 /// reply that reaches +80 (worth 0.573) and against the second two replies
-/// at −10 and +300, half each (0.491 and 0.749, so 0.620). The second move
-/// is worth more, so the root is worth 0.620 and exports that move.
+/// at −10 and +300, half each (0.491 and 0.751, so 0.621). The second move
+/// is worth more, so the root is worth 0.621 and exports that move.
 ///
 /// The shallowest unexpanded node always goes first, so a search that runs
 /// out of budget or is cancelled comes back level by level rather than one
