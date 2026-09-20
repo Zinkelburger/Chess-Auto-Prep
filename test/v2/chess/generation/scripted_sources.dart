@@ -68,6 +68,24 @@ final class ScriptedPolicy implements OpponentPolicy {
       PolicyFound(Policy(weights));
 }
 
+/// An opponent model with a different answer at each position, keyed by
+/// FEN. A position it holds nothing for is a position it cannot answer,
+/// which is what a real model does when it is asked about a position its
+/// weights do not cover.
+final class TabulatedPolicy implements OpponentPolicy {
+  const TabulatedPolicy(this.byFen);
+
+  final Map<String, Map<String, double>> byFen;
+
+  @override
+  Future<PolicyResult> policyFor(Position position) async {
+    final weights = byFen[position.fen];
+    return weights == null
+        ? const PolicyUnavailable('no scripted policy for this position')
+        : PolicyFound(Policy(weights));
+  }
+}
+
 /// An engine adapter that breaks rather than answering, the way a dead
 /// process or a decoder does.
 final class ThrowingEvaluator implements PositionEvaluator {
