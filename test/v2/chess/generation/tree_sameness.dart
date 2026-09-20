@@ -25,6 +25,7 @@ void expectSameTree(
   expect(actual.runtimeType, expected.runtimeType, reason: where);
   expect(actual.fen.value, expected.fen.value, reason: where);
   expect(actual.evalForUs.cp, expected.evalForUs.cp, reason: where);
+  expect(actual.evaluated, expected.evaluated, reason: where);
   expect(
     actual.valuation.value,
     closeTo(expected.valuation.value, 1e-12),

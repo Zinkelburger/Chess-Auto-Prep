@@ -10,7 +10,9 @@ import 'uci_process.dart';
 ///
 /// Searches are serialised: a new one waits for the previous `bestmove`
 /// before sending `go`, and `info` lines go to whichever search the engine
-/// is on. That is what keeps a stale evaluation off the board.
+/// is on. That is what keeps a stale evaluation off the board. The wait is
+/// bounded: an engine that answers neither `bestmove` nor anything else is
+/// killed rather than waited on.
 final class UciEngine implements Engine {
   UciEngine._(this._process) {
     _process.lines.listen(_onLine, onDone: _onExit);
@@ -36,8 +38,11 @@ final class UciEngine implements Engine {
   }
 
   final UciProcess _process;
-  final _exited = Completer<void>();
+  final _exited = Completer<EngineExit>();
   String _name = 'UCI engine';
+
+  /// Set when we kill the engine for saying nothing, so its exit says why.
+  bool _unresponsive = false;
 
   /// The handshake token being waited for and who to wake when it lands.
   ({String token, Completer<void> completer})? _awaited;
@@ -55,7 +60,7 @@ final class UciEngine implements Engine {
   int get pid => _process.pid;
 
   @override
-  Future<void> get exited => _exited.future;
+  Future<EngineExit> get exited => _exited.future;
 
   @override
   Search analyse(Fen fen, {required int multiPv}) {
@@ -80,7 +85,7 @@ final class UciEngine implements Engine {
     Fen fen,
     int multiPv,
   ) async {
-    await previous?.stop();
+    if (previous != null && !await _stopped(previous)) return search.finish();
     if (_exited.isCompleted) return search.finish();
     if (search.isDone) return; // stopped before it began
     _current = search;
@@ -90,11 +95,41 @@ final class UciEngine implements Engine {
     search.markRunning();
   }
 
+  /// Whether [previous] really stopped, waiting as long as an engine that is
+  /// working can take to answer `stop` with `bestmove`.
+  ///
+  /// One that answers neither would otherwise hold every later search behind
+  /// it for as long as the process lives, leaving the pane on a position the
+  /// board has left. It is killed instead, and its exit says it was
+  /// [EngineExit.unresponsive], which is what tells the workspace to start
+  /// another engine rather than give up on the session.
+  Future<bool> _stopped(_UciSearch previous) async {
+    try {
+      await previous.stop().timeout(_stopPatience);
+      return true;
+    } on TimeoutException {
+      log.e(
+        'stop a search on $_name',
+        const EngineFailure('the engine did not answer stop'),
+      );
+      _unresponsive = true;
+      await _process.kill();
+      return false;
+    }
+  }
+
   @override
   Future<void> quit() async {
     if (_exited.isCompleted) return;
     _send('quit');
-    await exited.timeout(const Duration(seconds: 2), onTimeout: _process.kill);
+    await exited.timeout(
+      const Duration(seconds: 2),
+      onTimeout: () async {
+        await _process.kill();
+        // We asked it to go, so a slow goodbye is not a broken engine.
+        return EngineExit.ended;
+      },
+    );
   }
 
   void _send(String line) => _process.send(line);
@@ -125,9 +160,16 @@ final class UciEngine implements Engine {
     _awaited = null;
     _current?.finish();
     _current = null;
-    _exited.complete();
+    _exited.complete(
+      _unresponsive ? EngineExit.unresponsive : EngineExit.ended,
+    );
   }
 }
+
+/// How long a search that has been told to stop may take to say `bestmove`.
+/// Stockfish answers within milliseconds; seconds of silence mean the engine
+/// is not coming back.
+const _stopPatience = Duration(seconds: 5);
 
 /// A search as the engine sees it: queued, running, or finished once
 /// `bestmove` arrived.

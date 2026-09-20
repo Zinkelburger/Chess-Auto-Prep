@@ -47,30 +47,50 @@ final class Centipawns extends Score {
   String toString() => 'Centipawns($value)';
 }
 
-/// Mate in [moves]: positive when the side scores mates, negative when it
-/// is mated, zero when it already is.
+/// Mate in [moves]: positive when the side the score is about gives the
+/// mate, negative when that side is the one being mated, and zero when the
+/// board is checkmate already, which UCI reports as `score mate 0` for the
+/// side to move in it — a loss.
+///
+/// A mate that has happened has no distance left to carry its sign, so
+/// [mating] carries it instead. Without that, the mated side and the side
+/// that just mated would be the same score, and the bar would show the
+/// mated side winning.
 final class MateIn extends Score {
-  const MateIn(this.moves);
+  /// UCI's `score mate N` for the side to move.
+  const MateIn(int moves) : this._(moves, mating: moves > 0);
 
+  const MateIn._(this.moves, {required this.mating});
+
+  /// How far off the mate is, zero once it is on the board.
   final int moves;
 
-  @override
-  Score get negated => MateIn(-moves);
+  /// Whether the side this score is about is the one giving the mate.
+  final bool mating;
 
   @override
-  String get text => moves >= 0 ? '#$moves' : '#-${-moves}';
+  Score get negated => MateIn._(-moves, mating: !mating);
+
+  /// `#3`, `#-3`, and a bare `#` for a mate that has already happened: there
+  /// is no distance to print, and the bar beside it says whose mate it is.
+  @override
+  String get text => switch (moves) {
+    0 => '#',
+    _ => mating ? '#$moves' : '#-${moves.abs()}',
+  };
 
   @override
-  double get expected => moves > 0 ? 1 : 0;
+  double get expected => mating ? 1 : 0;
 
   @override
-  bool operator ==(Object other) => other is MateIn && other.moves == moves;
+  bool operator ==(Object other) =>
+      other is MateIn && other.moves == moves && other.mating == mating;
 
   @override
-  int get hashCode => moves.hashCode;
+  int get hashCode => Object.hash(moves, mating);
 
   @override
-  String toString() => 'MateIn($moves)';
+  String toString() => 'MateIn($text)';
 }
 
 /// One line of analysis: the engine's [multiPv]-th best continuation.
@@ -87,7 +107,8 @@ final class EngineLine {
   final int depth;
   final Score score;
 
-  /// The moves as UCI, from the analysed position.
+  /// The moves as UCI, from the analysed position. Empty when the engine
+  /// gave a score and no moves, which is what a finished game gets.
   final List<String> pv;
 
   EngineLine forWhite({required bool whiteToMove}) => EngineLine(
@@ -101,6 +122,12 @@ final class EngineLine {
 /// Reads a UCI `info` line. Null for the lines with nothing to show:
 /// `info string`, `currmove` progress, and bound scores (`lowerbound`,
 /// `upperbound`) the engine replaces within milliseconds.
+///
+/// A score with no moves after it is a line all the same. It is what an
+/// engine says about a position that is already over — Stockfish answers
+/// `info depth 0 score mate 0` and then `bestmove (none)` on a board that is
+/// checkmate, and `score cp 0` on a stalemate — and dropping it is what left
+/// the bar at even money on a finished game.
 EngineLine? parseInfoLine(String line) {
   final words = line.trim().split(_spaces);
   if (words.first != 'info') return null;
@@ -123,8 +150,13 @@ EngineLine? parseInfoLine(String line) {
         i = words.length;
     }
   }
-  if (depth == null || score == null || pv == null || pv.isEmpty) return null;
-  return EngineLine(multiPv: multiPv, depth: depth, score: score, pv: pv);
+  if (depth == null || score == null) return null;
+  return EngineLine(
+    multiPv: multiPv,
+    depth: depth,
+    score: score,
+    pv: pv ?? const [],
+  );
 }
 
 String _word(List<String> words, int i) => i < words.length ? words[i] : '';

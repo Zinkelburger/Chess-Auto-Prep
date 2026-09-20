@@ -16,27 +16,44 @@ import 'game_tree.dart';
 /// move. Two siblings with one SAN would break the one thing the rest of the
 /// app relies on: that a line of SAN names and a path through the tree say
 /// the same thing, and that the cursor lands where the move is.
+///
+/// [a] is empty or a forest this function produced, so it plays no move
+/// twice; nothing copies it when there is nothing to merge into it.
 List<MoveNode> mergeForests(List<MoveNode> a, List<MoveNode> b) {
+  if (b.isEmpty) return a;
+  if (a.isEmpty && !_playsAMoveTwice(b)) return b;
   final merged = <MoveNode>[];
   for (final incoming in a.followedBy(b)) {
-    _fold(merged, incoming);
+    final i = merged.indexWhere((node) => node.san == incoming.san);
+    if (i < 0) {
+      merged.add(_folded(incoming));
+      continue;
+    }
+    final existing = merged[i];
+    merged[i] = existing.copyWith(
+      startingComment: existing.startingComment ?? incoming.startingComment,
+      comment: existing.comment ?? incoming.comment,
+      nags: existing.nags.isEmpty ? incoming.nags : existing.nags,
+      children: mergeForests(existing.children, incoming.children),
+    );
   }
   return List.unmodifiable(merged);
 }
 
-void _fold(List<MoveNode> merged, MoveNode incoming) {
-  final i = merged.indexWhere((node) => node.san == incoming.san);
-  if (i < 0) {
-    merged.add(
-      incoming.copyWith(children: mergeForests(const [], incoming.children)),
-    );
-    return;
+/// [node] with the moves under it folded, or [node] itself when there was
+/// nothing to fold, which is the whole of an ordinary game.
+MoveNode _folded(MoveNode node) {
+  final children = mergeForests(const [], node.children);
+  return identical(children, node.children)
+      ? node
+      : node.copyWith(children: children);
+}
+
+/// Whether [forest] or anything under it gives one move two nodes.
+bool _playsAMoveTwice(List<MoveNode> forest) {
+  final sans = <String>{};
+  for (final node in forest) {
+    if (!sans.add(node.san) || _playsAMoveTwice(node.children)) return true;
   }
-  final existing = merged[i];
-  merged[i] = existing.copyWith(
-    startingComment: existing.startingComment ?? incoming.startingComment,
-    comment: existing.comment ?? incoming.comment,
-    nags: existing.nags.isEmpty ? incoming.nags : existing.nags,
-    children: mergeForests(existing.children, incoming.children),
-  );
+  return false;
 }

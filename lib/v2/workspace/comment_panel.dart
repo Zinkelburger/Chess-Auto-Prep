@@ -92,14 +92,33 @@ class _CommentPanelState extends State<CommentPanel> {
     widget.session.setComment(at, text);
   }
 
+  /// The note the file wrote before the move the field is on, if it had one.
+  /// It is shown, not edited: it belongs to the line the move introduces and
+  /// nothing here decides yet what editing it would mean.
+  String get _introduction {
+    final at = _at;
+    if (at == null) return '';
+    return displayComment(widget.session.startingCommentAt(at) ?? '');
+  }
+
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
+    final introduction = _introduction;
     return Padding(
       padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.m, Space.m),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (introduction.isNotEmpty) ...[
+            Text('Before this move', style: text.labelSmall),
+            const SizedBox(height: Space.xs),
+            Text(
+              introduction,
+              style: text.bodySmall?.copyWith(fontStyle: FontStyle.italic),
+            ),
+            const SizedBox(height: Space.s),
+          ],
           Text('Comment', style: text.labelSmall),
           const SizedBox(height: Space.xs),
           CallbackShortcuts(

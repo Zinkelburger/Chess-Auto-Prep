@@ -120,4 +120,41 @@ void main() {
     expect(find.text('Comment'), findsOneWidget);
     expect(find.text('About this chapter'), findsOneWidget);
   });
+
+  testWidgets('shows the note the file wrote before the move, read only', (
+    tester,
+  ) async {
+    fixture.dispose();
+    fixture = await openSession(introducedChapter);
+    // 1. d4, then its variation 1. c4, which the note introduces.
+    fixture.session.goTo(NodePath.of([1]));
+    await pump(tester);
+    expect(find.text('Before this move'), findsOneWidget);
+    expect(find.text('A sideline.'), findsOneWidget);
+    expect(find.text('[%eval 0.05]'), findsNothing);
+    expect(
+      tester.widget<TextField>(find.byType(TextField).first).controller?.text,
+      isEmpty,
+      reason: 'the field still edits the comment after the move',
+    );
+  });
+
+  testWidgets('has no such label for a move nothing introduces', (
+    tester,
+  ) async {
+    fixture.session.goTo(sicilian);
+    await pump(tester);
+    expect(find.text('Before this move'), findsNothing);
+  });
 }
+
+/// A chapter whose variation is introduced by a note written before its
+/// first move.
+const introducedChapter = '''
+// Color: White
+
+[Event "Introduced"]
+[Result "*"]
+
+1. d4 ({A sideline. [%eval 0.05]} 1. c4 e5) 1... d5 *
+''';

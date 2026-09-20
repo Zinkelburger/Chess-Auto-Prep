@@ -33,16 +33,29 @@ enum TerminalKind {
 /// ways have different repetition histories and different half-move clocks,
 /// so the same move can be a draw down one path and not down the other.
 sealed class SearchNode {
-  const SearchNode({required this.fen, required this.evalForUs});
+  const SearchNode({required this.fen, required Eval? evalForUs})
+    : _eval = evalForUs;
 
   final Fen fen;
+
+  /// What an engine said about [fen], or null when none has.
+  final Eval? _eval;
 
   /// The fixed-depth evaluation of [fen], already converted to the repertoire
   /// side's point of view. Every position the search creates carries one: the
   /// loss window compares siblings by it, ties are ordered by it, a horizon
   /// leaf is worth [expectedScore] of it, and an unexpanded node borrows it
-  /// as a provisional value.
-  final Eval evalForUs;
+  /// as a provisional value. A node nothing has scored is worth level until
+  /// something does.
+  Eval get evalForUs => _eval ?? const Eval(0);
+
+  /// Whether an engine has scored [fen] at all.
+  ///
+  /// A saved tree leaves the score out of a node its build attached and never
+  /// reached, and a builder that resumes scores exactly those nodes. Level
+  /// and unscored are different facts about a position, so they are different
+  /// values here and the file keeps them apart.
+  bool get evaluated => _eval != null;
 
   /// What the node is worth and how far that could still move. A leaf works
   /// it out from what it already knows; a node with children keeps the
@@ -79,12 +92,15 @@ final class HorizonNode extends SearchNode {
   Valuation get valuation => Valuation.exact(expectedScore(evalForUs));
 }
 
-/// A position the search has evaluated but not expanded.
+/// A position the search has reached but not expanded.
 ///
 /// Every leaf of a cancelled or budget-stopped build is one of these, and so
 /// is every legal move of ours while the loss window is deciding which to
 /// keep. Its value is only the engine's opinion, so its bounds stay the whole
 /// interval: the subtree below it could still turn out to be anything.
+///
+/// One with no score at all is a node a build attached and stopped before
+/// reaching, which is not an engine calling the position level.
 final class FrontierNode extends SearchNode {
   const FrontierNode({required super.fen, required super.evalForUs});
 
@@ -123,7 +139,7 @@ final class OurNode extends SearchNode {
   /// one candidate is required: a position with no legal move is a terminal.
   factory OurNode.over({
     required Fen fen,
-    required Eval evalForUs,
+    required Eval? evalForUs,
     required List<CandidateMove> candidates,
   }) {
     final ordered = [...candidates]..sort(compareCandidates);
@@ -189,7 +205,7 @@ final class OpponentNode extends SearchNode {
   /// many, and rare replies are not dropped to save work.
   factory OpponentNode.over({
     required Fen fen,
-    required Eval evalForUs,
+    required Eval? evalForUs,
     required List<ReplyMove> replies,
   }) => OpponentNode._(
     fen: fen,

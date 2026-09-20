@@ -169,9 +169,39 @@ void main() {
     fixture.dispose();
     fixture = await openSession(unreadableGameChapter);
     await pump(tester);
-    expect(find.text('White · 1 lines, 1 could not be read'), findsOneWidget);
+    expect(find.text('White · 1 line, 1 could not be read'), findsOneWidget);
+  });
+  testWidgets('says when a line could not be read in full', (tester) async {
+    fixture.dispose();
+    fixture = await openSession(partlyReadChapter);
+    await pump(tester);
+    expect(find.textContaining('could not be read in full'), findsNothing);
+    fixture.session.setComment(NodePath.of([0]), 'mine');
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('Edit it in the old app.'),
+      findsOneWidget,
+      reason: 'an edit that quietly does nothing reads as a lost one',
+    );
+    expect(fixture.onDisk, partlyReadChapter);
   });
 }
+
+/// Two games from 1. d4, the second stopped by `--`, a null move this reader
+/// cannot play; the moves after it are in the file and not in the tree.
+const partlyReadChapter = '''
+// Color: White
+
+[Event "A"]
+[Result "*"]
+
+1. d4 d5 *
+
+[Event "B"]
+[Result "*"]
+
+1. d4 e6 -- 2. c4 *
+''';
 
 /// A chapter of two games, the first of which names a position nothing can
 /// read.
