@@ -738,6 +738,7 @@
     "lib/features/generate/widgets/generate_position_pane.dart: widget bypasses active theme/typography: style: AppTextStyles.bodyStrong,",
     "lib/features/generate/widgets/generate_position_pane.dart: widget bypasses active theme/typography: style: AppTextStyles.caption,",
     "lib/features/generate/widgets/generate_position_pane.dart: widget bypasses active theme/typography: style: AppTextStyles.caption,",
+    "lib/features/generate/widgets/generate_position_pane.dart: widget bypasses active theme/typography: style: AppTextStyles.caption,",
     "lib/features/generate/widgets/generate_position_pane.dart: widget bypasses active theme/typography: style: AppTextStyles.caption.copyWith(",
     "lib/features/generate/widgets/generate_position_pane.dart: widget bypasses active theme/typography: style: AppTextStyles.mono,",
     "lib/features/generate/widgets/generate_position_pane.dart: widget bypasses active theme/typography: style: AppTextStyles.mono,",

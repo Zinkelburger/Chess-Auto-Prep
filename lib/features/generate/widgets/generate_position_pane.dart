@@ -168,13 +168,27 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
   Widget _runControl(
     GenerationSessionController gen, {
     required bool canStart,
+    required bool extending,
   }) {
     if (!gen.isGenerating) {
-      return TextButton.icon(
-        key: const ValueKey('generation-run-control'),
-        onPressed: canStart ? () => _generate() : null,
-        icon: const Icon(Icons.play_arrow, size: 16),
-        label: Text(_starting ? 'Starting…' : 'Generate'),
+      // Not "Resume": a run does not continue where an earlier one stopped,
+      // it scores this position and merges the result into what is saved.
+      return Tooltip(
+        message: extending
+            ? 'Score this position and add it to the saved database'
+            : 'Score this position and start a database beside the chapter',
+        child: TextButton.icon(
+          key: const ValueKey('generation-run-control'),
+          onPressed: canStart ? () => _generate() : null,
+          icon: const Icon(Icons.play_arrow, size: 16),
+          label: Text(
+            _starting
+                ? 'Starting…'
+                : extending
+                ? 'Extend'
+                : 'Generate',
+          ),
+        ),
       );
     }
     if (gen.isPaused) {
@@ -217,6 +231,9 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
       builder: (context, _) {
         final gen = widget.generation;
         final busy = gen.isGenerating || _starting;
+        // What a previous run left beside the chapter. A run adds to it; it
+        // never starts the database over.
+        final savedPositions = gen.generatedTreeFenMap?.size ?? 0;
         final stmWhite = widget.fen.split(' ').elementAtOrNull(1) == 'w';
         final rows = positionMoves(
           widget.fen,
@@ -267,7 +284,11 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
                           ),
                         ),
                   ),
-                  _runControl(gen, canStart: !busy && rows.isNotEmpty),
+                  _runControl(
+                    gen,
+                    canStart: !busy && rows.isNotEmpty,
+                    extending: savedPositions > 0,
+                  ),
                   IconButton(
                     key: const ValueKey('generation-settings'),
                     tooltip: 'Generation settings',
@@ -325,6 +346,17 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
                 ],
               ),
             ),
+            if (!gen.isGenerating && savedPositions > 0)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+                child: Text(
+                  'Database on disk · $savedPositions position'
+                  '${savedPositions == 1 ? '' : 's'}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.caption,
+                ),
+              ),
             if (gen.isGenerating) ...[
               LinearProgressIndicator(
                 minHeight: 2,
