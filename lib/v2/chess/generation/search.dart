@@ -209,7 +209,10 @@ final class _Search {
   final CancelSignal isCancelled;
 
   _Stop? _stop;
-  int _attached = 0;
+
+  /// Nodes in the tree so far, the root included, the way the old builder
+  /// counts them.
+  int _nodes = 1;
 
   Future<SearchResult> run(Position root) async {
     final frame = _Frame.root(root);
@@ -294,8 +297,10 @@ final class _Search {
   /// nothing is attached and the node stays a frontier node instead of half
   /// an enumeration.
   Future<_Expansion?> _ourMoves(_Frame frame) async {
+    final legal = legalMovesOf(frame.position);
+    if (!_fits(legal.length)) return null;
     final pendings = <CandidateMove, _Pending>{};
-    for (final named in legalMovesOf(frame.position)) {
+    for (final named in legal) {
       if (_stopping()) return null;
       final (after, san) = frame.position.makeSan(named.move);
       final child = frame.next(after);
@@ -308,7 +313,7 @@ final class _Search {
       pendings.keys.toList(),
       lossLimitCp: config.lossLimitCp,
     );
-    if (!_reserve(admitted.length)) return null;
+    _nodes += admitted.length;
     return _OurMoves([
       for (final candidate in admitted) (candidate.move, pendings[candidate]!),
     ]);
@@ -332,8 +337,10 @@ final class _Search {
       _stop ??= _PolicyFailed(frame.fen, _policyReason(result));
       return null;
     }
+    if (!_fits(shares.length)) return null;
     final replies = await _replyLeaves(frame, legal, shares);
-    if (replies == null || !_reserve(replies.length)) return null;
+    if (replies == null) return null;
+    _nodes += replies.length;
     return _Replies(replies);
   }
 
@@ -373,15 +380,21 @@ final class _Search {
     return _stop != null;
   }
 
-  /// Takes [count] nodes out of the budget, or refuses and stops the search.
-  /// Refusing before an expansion begins is what keeps expansions whole.
-  bool _reserve(int count) {
+  /// True when [count] more nodes still fit in the budget, and otherwise
+  /// stops the search.
+  ///
+  /// [count] is the most the expansion could attach — every legal move of
+  /// one of our positions, before the loss window has seen any of them — and
+  /// it is asked before the first evaluation of that expansion, so the budget
+  /// is never spent on work the search then refuses to attach. The moves the
+  /// window rejects are not charged, so a search can finish under budget with
+  /// room the next expansion could not use.
+  bool _fits(int count) {
     final budget = config.nodeBudget;
-    if (budget != null && _attached + count > budget) {
+    if (budget != null && _nodes + count > budget) {
       _stop ??= const _Requested(StopReason.nodeBudget);
       return false;
     }
-    _attached += count;
     return true;
   }
 }

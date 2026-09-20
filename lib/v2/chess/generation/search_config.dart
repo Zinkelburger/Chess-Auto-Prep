@@ -27,9 +27,14 @@ final class SearchConfig {
   /// scores it within this much of our best move at the fixed depth.
   final int lossLimitCp;
 
-  /// Stop rather than begin an expansion that would take the tree past this
-  /// many nodes. Null runs to the horizon however large that is. The budget
-  /// is spent on whole expansions, so some of it can be left unused when the
-  /// next one does not fit.
+  /// The most nodes the tree may hold, the root counted among them. Null
+  /// runs to the horizon however large that is.
+  ///
+  /// An expansion is begun only when every legal move of the position would
+  /// still fit, which is what keeps expansions whole: the count is taken
+  /// before the first evaluation, on the legal moves rather than on the ones
+  /// the loss window will keep. The rejected moves are not charged, so a
+  /// finished tree is usually smaller than its budget and the last of it can
+  /// go unused when the next expansion does not fit.
   final int? nodeBudget;
 }

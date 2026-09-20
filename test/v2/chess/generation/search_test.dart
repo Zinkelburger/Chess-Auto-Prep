@@ -31,6 +31,14 @@ Future<SearchResult> searchFrom(
   isCancelled: isCancelled ?? () => false,
 );
 
+int nodesIn(SearchNode node) => switch (node) {
+  OurNode(:final candidates) =>
+    1 + candidates.fold(0, (sum, c) => sum + nodesIn(c.child)),
+  OpponentNode(:final replies) =>
+    1 + replies.fold(0, (sum, r) => sum + nodesIn(r.child)),
+  _ => 1,
+};
+
 SearchNode treeOf(SearchResult result) => switch (result) {
   SearchComplete(:final tree) => tree,
   SearchIncomplete(:final tree) => tree,
@@ -230,12 +238,14 @@ void main() {
   });
 
   test('a budget stops before the next expansion, not inside it', () async {
+    // The root and its six moves: enough for the whole first expansion and
+    // not one node more.
     final result = await searchFrom(
       _kingAndPawn,
       config: const SearchConfig(
         side: Side.white,
         horizonPlies: 2,
-        nodeBudget: 6,
+        nodeBudget: 7,
       ),
     );
     final tree = treeOf(result) as OurNode;
@@ -246,20 +256,63 @@ void main() {
     );
     expect(tree.valuation.lower, 0);
     expect(tree.valuation.upper, 1);
+    expect(nodesIn(tree), 7);
     expect((result as SearchIncomplete).reason, StopReason.nodeBudget);
   });
 
+  test('the budget counts the root, so six moves need seven nodes', () async {
+    final result = await searchFrom(
+      _kingAndPawn,
+      config: const SearchConfig(
+        side: Side.white,
+        horizonPlies: 2,
+        nodeBudget: 6,
+      ),
+    );
+    expect(treeOf(result), isA<FrontierNode>());
+    expect((result as SearchIncomplete).reason, StopReason.nodeBudget);
+  });
+
+  test('the budget is taken on the legal moves, not the survivors', () async {
+    // Six legal moves of which the window keeps two: the budget has to hold
+    // all six before the engine is asked about any of them, and only the two
+    // that are attached are charged.
+    final tooTight = await searchFrom(
+      _kingAndPawn,
+      config: const SearchConfig(
+        side: Side.white,
+        horizonPlies: 1,
+        nodeBudget: 6,
+      ),
+      evaluator: matesForUs(),
+    );
+    expect(treeOf(tooTight), isA<FrontierNode>());
+
+    final result = await searchFrom(
+      _kingAndPawn,
+      config: const SearchConfig(
+        side: Side.white,
+        horizonPlies: 1,
+        nodeBudget: 7,
+      ),
+      evaluator: matesForUs(),
+    );
+    final tree = treeOf(result) as OurNode;
+    expect(tree.candidates, hasLength(2));
+    expect(nodesIn(tree), 3);
+  });
+
   test('answers every move at the root before any reply to them', () async {
-    // Six moves at the root, one reply to each: twelve nodes buy the root's
-    // whole choice and the answers to it, and nothing below that. Depth-first
-    // would have spent the same budget on one line and left five of our moves
-    // unanswered.
+    // The root, its six moves and one reply to each: thirteen nodes buy the
+    // root's whole choice and the answers to it, and nothing below that.
+    // Depth-first would have spent the same budget on one line and left five
+    // of our moves unanswered.
     final result = await searchFrom(
       _kingAndPawn,
       config: const SearchConfig(
         side: Side.white,
         horizonPlies: 3,
-        nodeBudget: 12,
+        nodeBudget: 13,
       ),
     );
     expect((result as SearchIncomplete).reason, StopReason.nodeBudget);
