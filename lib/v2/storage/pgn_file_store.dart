@@ -22,6 +22,16 @@ import 'pgn_document_store.dart';
 /// native probe takes bytes and identity from one open handle, and a
 /// publication is one rename, so a reader gets the whole old file or the whole
 /// new one either way.
+///
+/// What that does and does not promise. Against the old app and against
+/// another copy of this one, which take the same lock, a mutation is
+/// exclusive and neither side can lose the other's write. Against a program
+/// that does not take the lock — a text editor, a sync client — the file is
+/// read again immediately before it is replaced and the mutation refuses on
+/// any change, but that check and the rename are two system calls, so a write
+/// that lands between them is replaced rather than reported. What was
+/// replaced is kept in Support before the rename, so even then nothing is
+/// gone for good.
 final class PgnFileStore implements PgnDocumentStore {
   PgnFileStore({required this.documents, required Directory support})
     : _backups = BackupArchive(Directory(p.join(support.path, 'backups')));
@@ -121,6 +131,10 @@ final class PgnFileStore implements PgnDocumentStore {
     }
     final refused = await _keep(ref, current, revision.contentHash);
     if (refused != null) return refused;
+    // Keeping the replaced version awaited the disk, and an editor outside
+    // the lock could have written the file meanwhile.
+    final changed = await _recheck(ref, revision);
+    if (changed != null) return changed;
     try {
       await removeStaleTemporaries(_folder(ref));
       await replaceFile(ref.path, bytes);
@@ -131,6 +145,20 @@ final class PgnFileStore implements PgnDocumentStore {
     final committed = await _revisionOf(ref.path, 'save ${ref.path}');
     if (committed == null) return const IoFailure(_unread);
     return Saved(_receipt(before, revision, committed));
+  }
+
+  /// What to answer with when [ref] no longer holds [expected]; null while it
+  /// still does.
+  Future<SaveResult?> _recheck(DocumentRef ref, Revision expected) async {
+    switch (await probeDocument(ref.path)) {
+      case FileMissing():
+        return const Conflict(null);
+      case FileUnreadable(:final detail):
+        log.w('save ${ref.path}', detail);
+        return IoFailure(detail);
+      case FileFound(:final revision):
+        return revision == expected ? null : Conflict(revision);
+    }
   }
 
   @override
@@ -189,13 +217,16 @@ final class PgnFileStore implements PgnDocumentStore {
     Revision revision,
   ) async {
     final target = Directory(p.dirname(destination.path));
+    final made = !await target.exists();
     try {
-      await target.create(recursive: true);
+      if (made) await target.create(recursive: true);
       await movePathNoReplace(ref.path, destination.path);
     } on NativeNameCollision {
+      await _removeIfMade(target, made);
       return const Collision();
     } on Object catch (error) {
       log.e('move ${ref.path}', error);
+      await _removeIfMade(target, made);
       return IoFailure(_detail(error));
     }
     await _backups.adopt(from: from, to: to, documentPath: destination.path);
@@ -267,6 +298,17 @@ final class PgnFileStore implements PgnDocumentStore {
         'the version being replaced could not be kept: $detail',
       ),
     };
+  }
+
+  /// Takes back a destination folder this move created and nothing landed
+  /// in, so a refused move leaves the tree exactly as it found it.
+  Future<void> _removeIfMade(Directory target, bool made) async {
+    if (!made) return;
+    try {
+      if (await target.list().isEmpty) await target.delete();
+    } on FileSystemException catch (error) {
+      log.w('remove the empty folder ${target.path}', error);
+    }
   }
 
   Future<T> _locked<T>(
