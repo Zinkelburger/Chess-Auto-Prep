@@ -14,6 +14,7 @@ final class MoveNode {
     required this.san,
     required this.uci,
     required this.fen,
+    this.startingComment,
     this.comment,
     this.nags = const [],
     this.children = const [],
@@ -28,6 +29,11 @@ final class MoveNode {
   /// The position after this move.
   final Fen fen;
 
+  /// The comment the file wrote *before* this move rather than after it,
+  /// which is how a variation is introduced: `({A note} 1. d4 d5)`. Kept
+  /// apart from [comment] because that is where it has to go back.
+  final String? startingComment;
+
   final String? comment;
 
   /// Numeric annotation glyphs, e.g. 1 for `!` and 2 for `?`.
@@ -36,6 +42,7 @@ final class MoveNode {
   final List<MoveNode> children;
 
   MoveNode copyWith({
+    String? startingComment,
     String? comment,
     List<int>? nags,
     List<MoveNode>? children,
@@ -43,6 +50,7 @@ final class MoveNode {
     san: san,
     uci: uci,
     fen: fen,
+    startingComment: startingComment ?? this.startingComment,
     comment: comment ?? this.comment,
     nags: nags ?? this.nags,
     children: children ?? this.children,

@@ -1172,7 +1172,9 @@ singleton or filesystem import. Linux uses the native identity/byte revision
 store; other hosts retain the explicitly content-only compatibility adapter.
 `chess_core/pgn/pgn_text.dart` is the canonical pure-Dart split/count/header/text
 module. `chess_core/pgn/pgn_parser.dart` owns production single-game syntax
-parsing, enforced by architecture lint even in legacy directories. It bounds
+parsing, enforced by architecture lint even in legacy directories. `lib/v2/`
+is outside that rule: the rewrite may not import the old app's code and reads
+one game at a time through its own `v2/chess/pgn/pgn_reader.dart`. It bounds
 long annotated parser-input lines to avoid upstream quadratic suffix copying,
 preserves comment/header/escape-line semantics and removes explicit move-number
 labels (including `10000.`, otherwise misread upstream as a null move). Stored

@@ -119,50 +119,59 @@ final class BoardTheme extends ThemeExtension<BoardTheme> {
       Theme.of(context).extension<BoardTheme>()!;
 }
 
-/// The dark workspace: neutral greys, one muted blue accent, colour kept for
-/// meaning. Type is Inter at 14/13/12 with Source Code Pro for moves.
-ThemeData darkTheme() {
-  const surface = Color(0xFF1B1B1D);
-  const panel = Color(0xFF242427);
-  const outline = Color(0xFF3A3A3E);
-  const text = Color(0xFFE6E6E8);
-  const muted = Color(0xFF9A9AA0);
-  const accent = Color(0xFF5F93CC);
+/// Neutral greys, one muted blue accent, colour kept for meaning.
+const _surface = Color(0xFF1B1B1D);
+const _panel = Color(0xFF242427);
+const _outline = Color(0xFF3A3A3E);
+const _text = Color(0xFFE6E6E8);
+const _muted = Color(0xFF9A9AA0);
+const _accent = Color(0xFF5F93CC);
 
+const _board = BoardTheme(
+  lightSquare: Color(0xFFF0D9B5),
+  darkSquare: Color(0xFFB58863),
+  lastMove: Color(0x559BC700),
+  selected: Color(0x669BC700),
+  coordinate: Color(0xCC5A4632),
+  scrim: Color(0x80000000),
+  promotionChoice: Color(0xFFB0B0B0),
+);
+
+/// The dark workspace. Type is Inter at 14/13/12 with Source Code Pro for
+/// moves.
+ThemeData darkTheme() {
   const scheme = ColorScheme.dark(
-    surface: surface,
-    onSurface: text,
-    primary: accent,
+    surface: _surface,
+    onSurface: _text,
+    primary: _accent,
     onPrimary: Colors.white,
-    secondary: accent,
-    outline: outline,
-    surfaceContainerHighest: panel,
-    onSurfaceVariant: muted,
+    secondary: _accent,
+    outline: _outline,
+    surfaceContainerHighest: _panel,
+    onSurfaceVariant: _muted,
   );
   final base = ThemeData(
     colorScheme: scheme,
     fontFamily: 'Inter',
-    scaffoldBackgroundColor: surface,
-    dividerColor: outline,
+    scaffoldBackgroundColor: _surface,
+    dividerColor: _outline,
     useMaterial3: true,
   );
   return base.copyWith(
-    textTheme: base.textTheme.copyWith(
-      titleMedium: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-      bodyMedium: const TextStyle(fontSize: 14),
-      bodySmall: const TextStyle(fontSize: 13, color: muted),
-      labelSmall: const TextStyle(fontSize: 12, color: muted),
-    ),
-    extensions: const [
-      BoardTheme(
-        lightSquare: Color(0xFFF0D9B5),
-        darkSquare: Color(0xFFB58863),
-        lastMove: Color(0x559BC700),
-        selected: Color(0x669BC700),
-        coordinate: Color(0xCC5A4632),
-        scrim: Color(0x80000000),
-        promotionChoice: Color(0xFFB0B0B0),
-      ),
-    ],
+    textTheme: _sized(base.textTheme),
+    extensions: const [_board],
   );
 }
+
+/// The type scale, sized from the styles the theme built rather than from
+/// bare ones: a fresh TextStyle carries no family, and a style put into the
+/// theme without one is text in whatever font the platform falls back to.
+TextTheme _sized(TextTheme base) => base.copyWith(
+  titleMedium: base.titleMedium?.copyWith(
+    fontSize: 18,
+    fontWeight: FontWeight.w600,
+  ),
+  bodyMedium: base.bodyMedium?.copyWith(fontSize: 14),
+  bodySmall: base.bodySmall?.copyWith(fontSize: 13, color: _muted),
+  labelSmall: base.labelSmall?.copyWith(fontSize: 12, color: _muted),
+);

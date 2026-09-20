@@ -71,10 +71,18 @@ final class DocumentSession extends ChangeNotifier {
   Chapter? _chapter;
   ChapterRef? _source;
   NodePath _cursor = const NodePath.root();
+  edits.GameNotWhole? _refused;
   int _opens = 0;
   bool _disposed = false;
 
   Chapter? get chapter => _chapter;
+
+  /// Why the last edit did not happen, or null when it did.
+  ///
+  /// A game reading could not finish keeps its own bytes and is never
+  /// generated again, so an edit that would have to write it is refused. The
+  /// next edit, and opening another document, clears this.
+  edits.GameNotWhole? get refusedEdit => _refused;
 
   /// The file the chapter was read from.
   ChapterRef? get source => _source;
@@ -94,6 +102,11 @@ final class DocumentSession extends ChangeNotifier {
   /// root; machine tokens included.
   String? commentAt(NodePath at) =>
       at.isRoot ? tree?.rootComment : tree?.nodeAt(at)?.comment;
+
+  /// The comment the file wrote before the move at [at], which is how a
+  /// variation is introduced. Nothing edits it; it is shown so that a note
+  /// the file holds is not invisible.
+  String? startingCommentAt(NodePath at) => tree?.nodeAt(at)?.startingComment;
 
   /// Reads [ref] through the store, so the session holds the revision every
   /// later save is checked against.
@@ -147,6 +160,7 @@ final class DocumentSession extends ChangeNotifier {
     _chapter = null;
     _source = null;
     _cursor = const NodePath.root();
+    _refused = null;
     _saver.closed();
     notifyListeners();
   }
@@ -182,6 +196,7 @@ final class DocumentSession extends ChangeNotifier {
       case edits.MoveIllegal():
         return;
       case edits.MoveAdded(chapter: final edited, :final path):
+        _refused = null;
         _cursor = path;
         if (!identical(edited, chapter)) _replace(edited);
         notifyListeners();
@@ -193,12 +208,28 @@ final class DocumentSession extends ChangeNotifier {
   /// cursor's, so words typed under one move cannot land on another when the
   /// cursor moves first. Text that would leave the file as it is changes
   /// nothing.
+  ///
+  /// A game reading could not finish cannot take the comment, and then
+  /// nothing is written and [refusedEdit] says so.
   void setComment(NodePath at, String? text) {
     final chapter = _chapter;
     if (chapter == null) return;
-    final edited = edits.setComment(chapter, at: at, text: text);
-    if (identical(edited, chapter)) return;
-    _replace(edited);
+    final hadRefusal = _refused != null;
+    switch (edits.setComment(chapter, at: at, text: text)) {
+      case edits.GameNotWhole():
+        log.w(
+          'comment ${_source?.path}',
+          'the game holding that move was not read whole',
+        );
+        _refused = const edits.GameNotWhole();
+      case edits.CommentWritten(chapter: final edited):
+        _refused = null;
+        if (identical(edited, chapter)) {
+          if (!hadRefusal) return;
+        } else {
+          _replace(edited);
+        }
+    }
     notifyListeners();
   }
 
@@ -212,9 +243,12 @@ final class DocumentSession extends ChangeNotifier {
     final result = await _saver.undo();
     if (_disposed || ticket != _opens) return const UndoRefused();
     if (result case Restored(:final text)) {
+      final before = _chapter?.tree;
       final restored = parseChapter(name: ref.name, text: text);
       _chapter = restored;
-      _cursor = _within(restored.tree, _cursor);
+      _cursor = before == null
+          ? const NodePath.root()
+          : _sameMoves(before, restored.tree, _cursor);
       notifyListeners();
     }
     return result;
@@ -246,6 +280,7 @@ final class DocumentSession extends ChangeNotifier {
     _chapter = chapter;
     _source = ref;
     _cursor = const NodePath.root();
+    _refused = null;
     _saver.opened(ref, revision);
     notifyListeners();
   }
@@ -260,13 +295,19 @@ final class DocumentSession extends ChangeNotifier {
     return OpenFailed(reason);
   }
 
-  /// [path] cut back to the deepest move of it that [tree] still has, so a
-  /// cursor never points into a line an undo took away.
-  NodePath _within(GameTree tree, NodePath path) {
+  /// Where the moves [path] names in [before] are in [after].
+  ///
+  /// The moves are followed by name, not by their places in the lists: a
+  /// path is only a route through a particular tree, and the same numbers in
+  /// a file the user just took back can name entirely different moves. A move
+  /// the restored file does not have leaves the cursor on the deepest move
+  /// above it that it does.
+  NodePath _sameMoves(GameTree before, GameTree after, NodePath path) {
     final kept = <int>[];
-    var siblings = tree.children;
-    for (final index in path.indexes) {
-      if (index >= siblings.length) break;
+    var siblings = after.children;
+    for (final step in before.lineTo(path)) {
+      final index = siblings.indexWhere((node) => node.san == step.san);
+      if (index < 0) break;
       kept.add(index);
       siblings = siblings[index].children;
     }

@@ -37,6 +37,26 @@ final class MoveIllegal extends AddMoveResult {
   final String uci;
 }
 
+sealed class CommentResult {
+  const CommentResult();
+}
+
+/// The comment is in the chapter. [chapter] is the same object when the
+/// words would have left the file exactly as it was.
+final class CommentWritten extends CommentResult {
+  const CommentWritten(this.chapter);
+
+  final Chapter chapter;
+}
+
+/// The comment belongs to a game reading could not finish, so writing that
+/// game again would delete the moves reading dropped. Nothing was changed,
+/// and the screen has to say so: an edit that silently does nothing reads
+/// as a lost one.
+final class GameNotWhole extends CommentResult {
+  const GameNotWhole();
+}
+
 /// Plays [uci] after the node at [at] and writes it into the file.
 ///
 /// Where it lands follows the shape of the tree there. A move that is
@@ -84,21 +104,37 @@ AddMoveResult addMove(
 ///
 /// Text that would leave the file as it is gives the same chapter back, so a
 /// caller can tell an edit from a re-statement by identity.
-Chapter setComment(
+///
+/// A game that was not read whole cannot take the comment: writing it again
+/// would delete the moves reading dropped. One such game among those playing
+/// the move refuses the whole edit rather than letting the comment land in
+/// some games and not others.
+CommentResult setComment(
   Chapter chapter, {
   required NodePath at,
   required String? text,
 }) {
   if (at.isRoot) return _withIntroduction(chapter, text);
   final sans = [for (final node in chapter.tree.lineTo(at)) node.san];
-  if (sans.isEmpty) return chapter;
+  if (sans.isEmpty) return CommentWritten(chapter);
+  if (_playedByAPartialGame(chapter, sans)) return const GameNotWhole();
   final lines = [
     for (final line in chapter.lines) _commented(chapter, line, sans, text),
   ];
   final changed = lines.indexed.any(
     (entry) => !identical(entry.$2, chapter.lines[entry.$1]),
   );
-  return changed ? withLines(chapter, lines) : chapter;
+  return CommentWritten(changed ? withLines(chapter, lines) : chapter);
+}
+
+/// Whether a game reading could not finish plays [sans].
+bool _playedByAPartialGame(Chapter chapter, List<String> sans) {
+  for (final line in chapter.lines) {
+    if (line.isWhole) continue;
+    final tree = chapter.treeInChapter(line);
+    if (tree != null && pathOfSans(tree, sans) != null) return true;
+  }
+  return false;
 }
 
 ChapterLine _commented(
@@ -107,46 +143,68 @@ ChapterLine _commented(
   List<String> sans,
   String? text,
 ) {
-  if (!chapter.isInTree(line)) return line;
-  final path = pathOfSans(line.tree, sans);
-  final node = path == null ? null : line.tree.nodeAt(path);
+  final tree = chapter.writableTree(line);
+  if (tree == null) return line;
+  final path = pathOfSans(tree, sans);
+  final node = path == null ? null : tree.nodeAt(path);
   if (path == null || node == null) return line;
   final comment = withProse(node.comment, text);
   if (comment == node.comment) return line;
-  return rewritten(line, withComment(line.tree, path, comment));
+  return rewritten(line, withComment(tree, path, comment));
 }
 
 /// The introduction lives on the first game of the chapter, which is where
-/// the merged tree takes its root comment from.
-Chapter _withIntroduction(Chapter chapter, String? text) {
-  final index = chapter.lines.indexWhere(chapter.isInTree);
-  if (index < 0) return chapter;
-  final line = chapter.lines[index];
-  final comment = withProse(line.tree.rootComment, text);
-  if (comment == line.tree.rootComment) return chapter;
-  final lines = [...chapter.lines];
-  lines[index] = rewritten(
-    line,
-    withComment(line.tree, const NodePath.root(), comment),
+/// the merged tree takes its root comment from; it has to go into that game
+/// or nothing shows it.
+CommentResult _withIntroduction(Chapter chapter, String? text) {
+  final first = chapter.lines.firstWhereOrNull(
+    (line) => chapter.treeInChapter(line) != null,
   );
-  return withLines(chapter, lines);
+  if (first == null) return CommentWritten(chapter);
+  final tree = chapter.writableTree(first);
+  if (tree == null) return const GameNotWhole();
+  final comment = withProse(tree.rootComment, text);
+  if (comment == tree.rootComment) return CommentWritten(chapter);
+  final lines = [...chapter.lines];
+  lines[chapter.lines.indexOf(first)] = rewritten(
+    first,
+    withComment(tree, const NodePath.root(), comment),
+  );
+  return CommentWritten(withLines(chapter, lines));
+}
+
+/// A game an edit may write again, its moves, and where it sits in
+/// [Chapter.lines].
+typedef _Writable = ({int index, ChapterLine line, GameTree tree});
+
+/// The games of [chapter] an edit may write again, in file order.
+Iterable<_Writable> _writableGames(Chapter chapter) sync* {
+  for (final (index, line) in chapter.lines.indexed) {
+    if (chapter.writableTree(line) case final tree?) {
+      yield (index: index, line: line, tree: tree);
+    }
+  }
 }
 
 /// The chapter with [node] appended to the game whose main line ends at
-/// [prefix], or null when no game ends there — the end of a variation
-/// inside a game does not, so that branch becomes a game of its own.
+/// [prefix], or null when no game an edit may write ends there — the end of
+/// a variation inside a game does not, and neither does a game that was not
+/// read whole, so in both cases that branch becomes a game of its own and
+/// nothing already in the file is written again.
 Chapter? _extended(Chapter chapter, List<String> prefix, MoveNode node) {
-  final index = chapter.lines.indexWhere(
-    (line) =>
-        chapter.isInTree(line) &&
-        const ListEquality<String>().equals(mainlineSans(line.tree), prefix),
+  final found = _writableGames(chapter).firstWhereOrNull(
+    (game) =>
+        const ListEquality<String>().equals(mainlineSans(game.tree), prefix),
   );
-  if (index < 0) return null;
+  if (found == null) return null;
   final lines = [...chapter.lines];
-  final line = lines[index];
-  lines[index] = rewritten(
-    line,
-    withChildAdded(line.tree, NodePath.of(List.filled(prefix.length, 0)), node),
+  lines[found.index] = rewritten(
+    found.line,
+    withChildAdded(
+      found.tree,
+      NodePath.of(List.filled(prefix.length, 0)),
+      node,
+    ),
   );
   return withLines(chapter, lines);
 }
@@ -162,6 +220,7 @@ Chapter _appended(Chapter chapter, List<String> prefix, MoveNode node) {
     ChapterLine(
       tags: tags,
       tree: tree,
+      isWhole: true,
       text: writeGameText(tags, tree),
       trailer: '\n',
     ),
@@ -227,14 +286,11 @@ String _title(Chapter chapter, List<String> prefix, MoveNode branch) {
   return '$title — $label${branch.san}';
 }
 
-ChapterLine? _lineThrough(Chapter chapter, List<String> sans) {
-  for (final line in chapter.lines) {
-    if (chapter.isInTree(line) && pathOfSans(line.tree, sans) != null) {
-      return line;
-    }
-  }
-  return null;
-}
+ChapterLine? _lineThrough(Chapter chapter, List<String> sans) =>
+    chapter.lines.firstWhereOrNull((line) {
+      final tree = chapter.treeInChapter(line);
+      return tree != null && pathOfSans(tree, sans) != null;
+    });
 
 Set<String> _takenIds(Chapter chapter) {
   final ids = <String>{};
@@ -252,6 +308,7 @@ ChapterLine _spacedAfter(ChapterLine line) => line.trailer.endsWith('\n\n')
     : ChapterLine(
         tags: line.tags,
         tree: line.tree,
+        isWhole: line.isWhole,
         text: line.text,
         trailer: '\n\n',
       );

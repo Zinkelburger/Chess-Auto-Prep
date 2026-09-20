@@ -249,8 +249,19 @@ int _column(Square square, Side orientation) =>
 int _row(Square square, Side orientation) =>
     orientation == Side.white ? 7 - square.rank.value : square.rank.value;
 
-List<(Square, Piece)> _piecesOf(Fen fen) =>
-    Setup.parseFen(fen.value).board.pieces.toList(growable: false);
+/// The pieces of [fen], or none when the text is not a position.
+///
+/// A board it cannot read is drawn empty. Letting the exception out of
+/// `initState` would take the whole frame down and with it every pointer
+/// this app has, which looks to the user like a dead mouse rather than one
+/// bad position.
+List<(Square, Piece)> _piecesOf(Fen fen) {
+  try {
+    return Setup.parseFen(fen.value).board.pieces.toList(growable: false);
+  } on FenException {
+    return const [];
+  }
+}
 
 Set<Square> _squaresOf(String? uci) {
   if (uci == null) return const {};

@@ -5,7 +5,7 @@ import 'package:chess_auto_prep/v2/chess/pgn/pgn_reader.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/tree_merge.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-GameTree treeOf(String pgn) => readPgn(pgn).games.single.tree;
+GameTree treeOf(String pgn) => readGame(pgn).tree!;
 
 void main() {
   group('NodePath', () {

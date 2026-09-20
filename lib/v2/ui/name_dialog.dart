@@ -25,6 +25,12 @@ String? nameProblem(String name) {
   // Untrimmed: a trailing space survives the dialog but not every filesystem.
   if (name.endsWith(' ')) return 'Names cannot end with a dot or space.';
   if (trimmed == '.' || trimmed == '..') return 'That name is reserved.';
+  // A folder whose name starts with a dot is hidden, by this app's own
+  // listing and by every file manager, so the user would be making something
+  // they could never open again.
+  if (trimmed.startsWith('.')) {
+    return 'Names cannot start with a dot; the list would not show it.';
+  }
   if (_illegalCharacters.hasMatch(trimmed)) {
     return r'Names cannot contain < > : " / \ | ? * or control characters.';
   }

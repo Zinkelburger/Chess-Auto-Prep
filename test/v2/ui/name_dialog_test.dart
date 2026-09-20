@@ -29,6 +29,14 @@ void main() {
     expect(nameProblem('..'), 'That name is reserved.');
   });
 
+  test('a name that would hide the folder is refused', () {
+    const message =
+        'Names cannot start with a dot; the list would not show it.';
+    expect(nameProblem('.Sicilian'), message);
+    expect(nameProblem('  .hidden'), message);
+    expect(nameProblem('e4.e5'), isNull, reason: 'a dot inside is fine');
+  });
+
   test('the names Windows keeps for devices are refused', () {
     const message = 'That name is reserved by the operating system.';
     expect(nameProblem('CON'), message);

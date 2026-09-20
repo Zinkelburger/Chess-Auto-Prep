@@ -18,13 +18,28 @@ final class ChapterLine {
   const ChapterLine({
     required this.tags,
     required this.tree,
+    required this.isWhole,
     required this.text,
     required this.trailer,
   });
 
   /// Every line of the game's header block, in file order.
   final List<PgnHeader> tags;
-  final GameTree tree;
+
+  /// The game's moves, or null when nothing could read it — a `[FEN]` header
+  /// that is not a position. An unread game keeps [text] and is never merged,
+  /// edited or generated again, so no edit elsewhere can write over it.
+  final GameTree? tree;
+
+  /// Whether [tree] holds everything [text] holds.
+  ///
+  /// Reading stops a branch at the first thing it cannot play — `--`, `Z0`,
+  /// a move that is not legal, a move number a tokeniser misread — and keeps
+  /// what came before it. The moves it dropped are still in the file, so
+  /// generating the game again from [tree] would delete them. A game that was
+  /// not read whole is therefore written back as its own bytes and nothing
+  /// else, and an edit that would have to rewrite it is refused instead.
+  final bool isWhole;
 
   /// The game's source, with no trailing whitespace.
   final String text;
@@ -76,15 +91,32 @@ final class Chapter {
 
   final List<PgnIssue> issues;
 
+  /// [line]'s own moves when it is one of the games merged into [tree]; null
+  /// when it starts somewhere else or could not be read at all.
+  GameTree? treeInChapter(ChapterLine line) {
+    final lineTree = line.tree;
+    return lineTree != null && lineTree.rootFen == tree.rootFen
+        ? lineTree
+        : null;
+  }
+
+  /// [line]'s own moves when an edit may write the game again: it is merged
+  /// into [tree] and reading it lost nothing. Null for a game that has to
+  /// keep its bytes, which an edit refuses rather than truncates.
+  GameTree? writableTree(ChapterLine line) =>
+      line.isWhole ? treeInChapter(line) : null;
+
   /// Whether [line] is one of the games merged into [tree].
-  bool isInTree(ChapterLine line) => line.tree.rootFen == tree.rootFen;
+  bool isInTree(ChapterLine line) => treeInChapter(line) != null;
 
   /// Games merged into [tree].
   int get gameCount => lines.where(isInTree).length;
 
-  /// Games left out because their root position differs from the first
-  /// game's.
-  int get skippedGames => lines.length - gameCount;
+  /// Games nothing could read.
+  int get unreadableGames => lines.where((line) => line.tree == null).length;
+
+  /// Games left out because their root position differs from the chapter's.
+  int get skippedGames => lines.length - gameCount - unreadableGames;
 }
 
 Chapter parseChapter({required String name, required String text}) {
@@ -92,18 +124,15 @@ Chapter parseChapter({required String name, required String text}) {
   final issues = <PgnIssue>[];
   final lines = <ChapterLine>[];
   for (final (index, game) in document.games.indexed) {
-    final read = readPgn(game.text);
-    for (final issue in read.issues) {
-      issues.add(PgnIssue(game: index, detail: issue.detail));
+    final read = readGame(game.text);
+    for (final detail in read.issues) {
+      issues.add(PgnIssue(game: index, detail: detail));
     }
-    final tags = readTags(game.text);
     lines.add(
       ChapterLine(
-        tags: tags,
-        // A game whose FEN the reader could not use keeps that text as its
-        // root, which no other game can equal, so it stays out of the
-        // merged tree instead of pretending to start at the chapter root.
-        tree: read.games.firstOrNull?.tree ?? _unreadRoot(tags),
+        tags: readTags(game.text),
+        tree: read.tree,
+        isWhole: read.issues.isEmpty,
         text: game.text,
         trailer: game.trailer,
       ),
@@ -141,22 +170,31 @@ Chapter withLines(
 ChapterLine rewritten(ChapterLine line, GameTree tree) => ChapterLine(
   tags: line.tags,
   tree: tree,
+  isWhole: line.isWhole,
   text: writeGameText(line.tags, tree),
   trailer: line.trailer,
 );
 
-/// Every game from the first game's position, folded in file order. The
-/// first game fixes the main line; later games can only add variations.
+/// Every game from the first readable game's position, folded in file order.
+/// That game fixes the main line; later games can only add variations.
+///
+/// The root comes from the first game that could be read, not simply the
+/// first game: one unreadable game at the top of a file would otherwise give
+/// the chapter a position no other game shares and hide all of them. A file
+/// with nothing readable in it has no position of its own, so it reads as an
+/// empty chapter from the initial position and says so through
+/// [Chapter.unreadableGames] and [Chapter.issues].
 GameTree mergeLines(List<ChapterLine> lines) {
-  if (lines.isEmpty) return const GameTree(rootFen: Fen.initial);
-  final root = lines.first.tree.rootFen;
-  final shared = lines.where((line) => line.tree.rootFen == root);
+  final trees = [for (final line in lines) line.tree].nonNulls;
+  if (trees.isEmpty) return const GameTree(rootFen: Fen.initial);
+  final root = trees.first.rootFen;
+  final shared = trees.where((tree) => tree.rootFen == root);
   return GameTree(
     rootFen: root,
-    rootComment: shared.first.tree.rootComment,
+    rootComment: shared.first.rootComment,
     children: shared.fold(
       const <MoveNode>[],
-      (merged, line) => mergeForests(merged, line.tree.children),
+      (merged, tree) => mergeForests(merged, tree.children),
     ),
   );
 }
@@ -200,9 +238,6 @@ String writeChapter(Chapter chapter) {
   }
   return buffer.toString();
 }
-
-GameTree _unreadRoot(List<PgnHeader> tags) =>
-    GameTree(rootFen: Fen(tagValue(tags, 'FEN') ?? ''));
 
 /// `// Color: Black` in the preamble reads as Black; anything else,
 /// including no line at all, is White. The old app wrote it that way and

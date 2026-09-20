@@ -6,9 +6,9 @@ void main() {
   test(
     'reads moves, variations, comments and NAGs with the position after each',
     () {
-      final result = readPgn('1. e4 e5 (1... c5!? {Sicilian}) 2. Nf3 *');
-      expect(result.issues, isEmpty);
-      final tree = result.games.single.tree;
+      final read = readGame('1. e4 e5 (1... c5!? {Sicilian}) 2. Nf3 *');
+      expect(read.issues, isEmpty);
+      final tree = read.tree!;
       expect(tree.rootFen, Fen.initial);
 
       final e4 = tree.children.single;
@@ -26,32 +26,53 @@ void main() {
   );
 
   test('starts from the FEN header', () {
-    final result = readPgn('''
+    final read = readGame('''
 [FEN "8/8/8/8/8/8/8/K6k w - - 0 1"]
 
 1. Kb1 *
 ''');
-    expect(result.games.single.tree.children.single.uci, 'a1b1');
+    expect(read.tree!.children.single.uci, 'a1b1');
   });
 
   test('an illegal move ends its branch and is reported', () {
-    final result = readPgn('1. e4 e5 2. Ke3 Nf6 (2... Qh4) *');
-    final tree = result.games.single.tree;
-    expect(tree.children.single.children.single.children, isEmpty);
-    expect(result.issues.map((i) => i.detail), ['Ke3 is not legal']);
+    final read = readGame('1. e4 e5 2. Ke3 Nf6 (2... Qh4) *');
+    expect(read.tree!.children.single.children.single.children, isEmpty);
+    expect(read.issues, ['Ke3 is not legal']);
   });
 
-  test('an unusable FEN skips the game', () {
-    final result = readPgn('''
+  test('an unusable FEN leaves the game unread', () {
+    final read = readGame('''
 [FEN "not a fen"]
 
 1. e4 *
-
-[Event "second"]
-
-1. d4 *
 ''');
-    expect(result.games.map((g) => g.tree.children.single.san), ['d4']);
-    expect(result.issues.single.game, 0);
+    expect(read.tree, isNull);
+    expect(read.issues, ['unusable FEN header']);
+  });
+
+  test('a comment holding a blank line does not cut the game short', () {
+    final read = readGame('''
+[Event "Notes"]
+[Result "*"]
+
+1. e4 {A thought that runs on
+
+[%eval 0.21]} d5 2. c4 *
+''');
+    final e4 = read.tree!.children.single;
+    expect(e4.children.single.san, 'd5');
+    expect(e4.children.single.children.single.san, 'c4');
+  });
+
+  test('keeps a comment written before the move it introduces', () {
+    final read = readGame('1. e4 ({A note} 1. d4 d5) e5 *');
+    final [e4, d4] = read.tree!.children;
+    expect(e4.startingComment, isNull);
+    expect(d4.startingComment, 'A note');
+  });
+
+  test('a brace inside a comment is part of its text', () {
+    final read = readGame('1. e4 {see {this} *');
+    expect(read.tree!.children.single.comment, 'see {this');
   });
 }

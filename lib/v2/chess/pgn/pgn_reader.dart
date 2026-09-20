@@ -4,16 +4,8 @@ import '../fen.dart';
 import 'game_tree.dart';
 import 'tree_edit.dart';
 
-/// One game out of a PGN file. Headers are read for the root position and
-/// then dropped; the document store step keeps them when it needs them.
-final class ParsedGame {
-  const ParsedGame({required this.tree});
-
-  final GameTree tree;
-}
-
-/// Something in the text that could not become a move. The game keeps what
-/// parsed before it; the branch ends there.
+/// Something in a game's text that could not become a move. The game keeps
+/// what parsed before it; the branch ends there.
 final class PgnIssue {
   const PgnIssue({required this.game, required this.detail});
 
@@ -25,44 +17,45 @@ final class PgnIssue {
   String toString() => 'game $game: $detail';
 }
 
-final class PgnReadResult {
-  const PgnReadResult({required this.games, required this.issues});
+/// One game read from its text.
+final class GameRead {
+  const GameRead({required this.tree, required this.issues});
 
-  final List<ParsedGame> games;
-  final List<PgnIssue> issues;
+  /// The game's moves, or null when its `[FEN]` header is not a position a
+  /// game can be played from. A game nobody can read is not modelled at all,
+  /// so nothing can merge it, edit it or write it back over what it holds.
+  final GameTree? tree;
+
+  /// What the text held that could not be read, in the order it held it.
+  final List<String> issues;
 }
 
-/// Reads PGN text into [GameTree]s.
+/// Reads one game's PGN text into a [GameTree].
 ///
-/// dartchess tokenises the text and checks move legality; this file turns its
-/// mutable node tree into immutable [MoveNode]s with the position after each
-/// move, so nothing downstream replays moves again. A game whose `[FEN]` is
-/// unusable is skipped with an issue. Comments before a move
-/// (`{...} 1. e4`) are not kept yet; the document store step decides how
-/// they round-trip.
-PgnReadResult readPgn(String text) {
-  final issues = <PgnIssue>[];
-  final games = <ParsedGame>[];
-  final parsed = PgnGame.parseMultiGamePgn(
-    text,
-    initHeaders: PgnGame.emptyHeaders,
-  );
-  for (final (index, game) in parsed.indexed) {
-    // dartchess yields one empty game for empty text; that is not a game.
-    if (game.headers.isEmpty && game.moves.children.isEmpty) continue;
-    final root = _rootPosition(game.headers['FEN']);
-    if (root == null) {
-      issues.add(PgnIssue(game: index, detail: 'unusable FEN header'));
-      continue;
-    }
-    final tree = GameTree(
+/// The whole of [text] is that one game, and a file is cut into games by
+/// `splitChapterText`, which knows where a `{}` comment is. dartchess's own
+/// multi-game split cuts on a newline followed by whitespace and `[`, which
+/// a comment holding a blank line before a `[%eval …]` token matches too;
+/// every move after such a cut would be dropped, and dropped moves are moves
+/// the next save deletes from the file.
+///
+/// The text is tokenised and each move checked for legality here, so nothing
+/// downstream replays them: a node carries the position after its own move.
+GameRead readGame(String text) {
+  final game = PgnGame.parsePgn(text, initHeaders: PgnGame.emptyHeaders);
+  final root = _rootPosition(game.headers['FEN']);
+  if (root == null) {
+    return const GameRead(tree: null, issues: ['unusable FEN header']);
+  }
+  final issues = <String>[];
+  return GameRead(
+    tree: GameTree(
       rootFen: Fen(root.fen),
       rootComment: game.comments.isEmpty ? null : game.comments.join(' '),
-      children: _convert(game.moves.children, root, index, issues),
-    );
-    games.add(ParsedGame(tree: tree));
-  }
-  return PgnReadResult(games: games, issues: issues);
+      children: _convert(game.moves.children, root, issues),
+    ),
+    issues: List.unmodifiable(issues),
+  );
 }
 
 Position? _rootPosition(String? fen) =>
@@ -71,30 +64,30 @@ Position? _rootPosition(String? fen) =>
 List<MoveNode> _convert(
   List<PgnChildNode<PgnNodeData>> nodes,
   Position position,
-  int game,
-  List<PgnIssue> issues,
+  List<String> issues,
 ) {
   final out = <MoveNode>[];
   for (final node in nodes) {
     final move = position.parseSan(node.data.san);
     if (move == null) {
-      issues.add(PgnIssue(game: game, detail: '${node.data.san} is not legal'));
+      issues.add('${node.data.san} is not legal');
       continue;
     }
     final (next, san) = position.makeSan(move);
-    final comments = node.data.comments;
     out.add(
       MoveNode(
         san: san,
         uci: move.uci,
         fen: Fen(next.fen),
-        comment: comments == null || comments.isEmpty
-            ? null
-            : comments.join(' '),
+        startingComment: _joined(node.data.startingComments),
+        comment: _joined(node.data.comments),
         nags: node.data.nags ?? const [],
-        children: _convert(node.children, next, game, issues),
+        children: _convert(node.children, next, issues),
       ),
     );
   }
   return List.unmodifiable(out);
 }
+
+String? _joined(List<String>? comments) =>
+    comments == null || comments.isEmpty ? null : comments.join(' ');
