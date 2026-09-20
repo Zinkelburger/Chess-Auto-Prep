@@ -74,7 +74,13 @@ final class PgnFileStore implements PgnDocumentStore {
         log.w('open ${ref.path}', detail);
         return Unreadable(detail);
       case FileFound(:final bytes, :final revision):
-        return Opened(_decode(bytes), revision);
+        switch (_read(bytes)) {
+          case _PlainText(:final text):
+            return Opened(text, revision);
+          case _NotText(:final detail):
+            log.w('open ${ref.path}', detail);
+            return Unreadable(detail);
+        }
     }
   }
 
@@ -148,7 +154,14 @@ final class PgnFileStore implements PgnDocumentStore {
     List<int> current,
     Revision revision,
   ) async {
-    final before = _decode(current);
+    final read = _read(current);
+    // A document this app cannot read is not one it may replace: a save over
+    // a compressed chapter would leave bytes neither app can open.
+    if (read case _NotText(:final detail)) {
+      log.w('save ${ref.path}', detail);
+      return IoFailure(detail);
+    }
+    final before = (read as _PlainText).text;
     final bytes = utf8.encode(text);
     // Nothing to replace, so nothing to keep and nothing to write.
     if (sha256.convert(bytes).toString() == revision.contentHash) {
@@ -232,16 +245,76 @@ const _unread = 'the file could not be read back after writing';
 /// way.
 const _validToStrayRatio = 8;
 
+/// What a file holds: a document, or a reason this app will not treat it as
+/// one. Never a document made out of bytes that are not text.
+sealed class _Read {
+  const _Read();
+}
+
+final class _PlainText extends _Read {
+  const _PlainText(this.text);
+
+  final String text;
+}
+
+final class _NotText extends _Read {
+  const _NotText(this.detail);
+
+  /// For the log and for the user; the widget writes the sentence around it.
+  final String detail;
+}
+
+/// A gzipped chapter, which the old app writes and reads by the two magic
+/// bytes of RFC 1952 rather than by extension.
+const _compressed =
+    'this chapter is compressed; open and save it in the old app to '
+    'store it uncompressed';
+
+const _notText = 'the file is not text';
+
+/// Control bytes per byte read at which a file stops being text. Tab, line
+/// feed and carriage return are text; a stray escape or two in a course
+/// export is not enough to refuse the file.
+const _controlLimit = 0.01;
+
+/// How much of a file is looked at to decide whether it is text at all.
+const _sampled = 8192;
+
 /// The text in [bytes], read as the old app reads the same files, so every
 /// PGN it opens opens here too. Whatever came in, a save writes UTF-8 back.
 ///
-/// Strict UTF-8 first. A file that fails it is one of two things. A Latin-1
-/// file fails on its first accented letter and holds no valid multi-byte
-/// sequence anywhere, so it is decoded as Latin-1. A UTF-8 file with a few
-/// damaged bytes among thousands of good ones — a course export with four
-/// control bytes in ten megabytes of curly quotes — keeps its UTF-8 reading
-/// with the stray bytes as U+FFFD, because reading it as Latin-1 would turn
-/// every one of those quotes into mojibake.
+/// Bytes that are not text at all are refused rather than decoded: a
+/// gzipped chapter read as Latin-1 would open as mojibake and the first save
+/// would replace it with bytes neither app could read.
+///
+/// Otherwise strict UTF-8 first. A file that fails it is one of two things. A
+/// Latin-1 file fails on its first accented letter and holds no valid
+/// multi-byte sequence anywhere, so it is decoded as Latin-1. A UTF-8 file
+/// with a few damaged bytes among thousands of good ones — a course export
+/// with four control bytes in ten megabytes of curly quotes — keeps its UTF-8
+/// reading with the stray bytes as U+FFFD, because reading it as Latin-1
+/// would turn every one of those quotes into mojibake.
+_Read _read(List<int> bytes) {
+  final refusal = _binary(bytes);
+  if (refusal != null) return _NotText(refusal);
+  return _PlainText(_decode(bytes));
+}
+
+/// Why [bytes] are not a text document, or null when they could be one.
+String? _binary(List<int> bytes) {
+  if (bytes.length >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b) {
+    return _compressed;
+  }
+  final sample = bytes.length < _sampled ? bytes.length : _sampled;
+  var controls = 0;
+  for (var i = 0; i < sample; i++) {
+    final byte = bytes[i];
+    if (byte == 0) return _notText;
+    if (byte < 0x20 && byte != 0x09 && byte != 0x0a && byte != 0x0d) controls++;
+  }
+  return controls > sample * _controlLimit ? _notText : null;
+}
+
 String _decode(List<int> bytes) {
   try {
     return utf8.decode(bytes);

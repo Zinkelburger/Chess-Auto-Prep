@@ -46,6 +46,33 @@ void main() {
     },
   );
 
+  test('a gzipped chapter is refused, opening and saving alike', () async {
+    final ref = fixture.ref('KID/Main.pgn');
+    const text = '[Event "KID"]\n\n1. d4 Nf6 *\n';
+    final compressed = gzip.encode(utf8.encode(text));
+    await Directory(p.dirname(ref.path)).create(recursive: true);
+    await File(ref.path).writeAsBytes(compressed);
+
+    final opened = await fixture.store.open(ref);
+    expect(opened, isA<Unreadable>());
+    expect((opened as Unreadable).detail, contains('compressed'));
+    // Nothing to save against: there is no revision the caller could have
+    // read, and a save with the one on disk is refused too.
+    final revision = await fixture.revisionOf(ref);
+    expect(
+      await fixture.store.save(ref, 'mine *\n', expected: revision),
+      isA<IoFailure>(),
+    );
+    expect(await File(ref.path).readAsBytes(), compressed);
+  });
+
+  test('a chapter full of control bytes is not a document', () async {
+    final ref = fixture.ref('KID/Main.pgn');
+    await Directory(p.dirname(ref.path)).create(recursive: true);
+    await File(ref.path).writeAsBytes([0x5b, 0x00, 0x01, 0x02, 0x03, 0x04]);
+    expect(await fixture.store.open(ref), isA<Unreadable>());
+  });
+
   test('a mostly good UTF-8 file keeps its UTF-8 reading', () async {
     final ref = fixture.ref('KID/Main.pgn');
     const text = '[Event "’’’’’’’’"]\n';
