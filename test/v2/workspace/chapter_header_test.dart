@@ -1,6 +1,6 @@
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart'
-    show Collision, Conflict, IoFailure, Opened;
+    show Collision, Conflict, IoFailure, Opened, SaveRefused;
 import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:chess_auto_prep/v2/workspace/chapter_header.dart';
 import 'package:flutter/material.dart';
@@ -108,6 +108,28 @@ void main() {
     await conflict(tester);
     expect(find.text('Reload'), findsOneWidget);
     expect(find.text('Save a copy…'), findsOneWidget);
+  });
+
+  testWidgets('a save the store stopped says so in words and offers the '
+      'same two ways out', (tester) async {
+    await pump(tester);
+    fixture.store.saves.add(
+      const SaveRefused('game 3 would change but the edit was to game 1'),
+    );
+    edit('mine');
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'The app tried to change a line you did not edit, so the save was '
+        'stopped. Nothing was written.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Reload'), findsOneWidget);
+    expect(find.text('Save a copy…'), findsOneWidget);
+    // The words are still on the screen, and the file never took them.
+    expect(fixture.session.commentAt(sicilian), contains('mine'));
+    expect(fixture.onDisk, isNot(contains('mine')));
   });
 
   testWidgets('Reload takes what is on disk', (tester) async {

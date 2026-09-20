@@ -218,11 +218,14 @@ final class SaveRefused extends SaveDidNotLand {
   const SaveRefused(super.detail);
 }
 
-/// The bytes were written and the file does not hold them.
+/// The bytes were written and nothing can say the file holds them: it holds
+/// something else, or it cannot be read at all.
 ///
-/// The version this write replaced is kept, and [detail] says where, so the
-/// document can be put back by hand until the restore screen exists.
-final class WriteUnverified extends SaveDidNotLand {
+/// Not an [IoFailure], because the document is *not* as it was — the write
+/// landed. The version it replaced is kept, and [detail] says where, so it
+/// can be put back by hand until the restore screen exists. A create says
+/// where the new file is instead; it replaced nothing.
+final class WriteUnverified extends SaveDidNotLand implements CreateResult {
   const WriteUnverified(super.detail);
 }
 

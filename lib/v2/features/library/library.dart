@@ -216,7 +216,8 @@ final class Library extends ChangeNotifier {
     return switch (await _store.create(ref, text)) {
       store.Created() => const LibraryDone(),
       store.Collision() => const LibraryNameTaken(),
-      store.IoFailure(:final detail) => LibraryFailure(detail),
+      store.IoFailure(:final detail) ||
+      store.WriteUnverified(:final detail) => LibraryFailure(detail),
     };
   }
 

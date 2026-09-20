@@ -274,7 +274,8 @@ final class DocumentSession extends ChangeNotifier {
     return switch (created) {
       store.Created() => CopySaved(file),
       store.Collision() => const CopyNameTaken(),
-      store.IoFailure(:final detail) => CopyFailed(detail),
+      store.IoFailure(:final detail) ||
+      store.WriteUnverified(:final detail) => CopyFailed(detail),
     };
   }
 
@@ -295,10 +296,7 @@ final class DocumentSession extends ChangeNotifier {
   /// game and the store would have nothing to refuse.
   void _replace(Chapter edited, edits.GamesWritten written) {
     _chapter = edited;
-    _saver.save(
-      writeChapter(edited),
-      GamesEdited(written.rewritten, appended: written.appended),
-    );
+    _saver.save(writeChapter(edited), GamesEdited(written));
   }
 
   OpenFailed _openFailed(ChapterRef ref, String reason) {

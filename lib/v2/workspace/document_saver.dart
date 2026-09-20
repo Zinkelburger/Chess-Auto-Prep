@@ -4,16 +4,11 @@ import '../diagnostics/log.dart';
 import '../storage/document_ref.dart';
 import '../storage/edit_scope.dart';
 import '../storage/pgn_document_store.dart' as store;
+import 'save_queue.dart';
 import 'save_state.dart';
 import 'undo_history.dart';
 
 typedef _Target = ({DocumentRef ref, Revision revision});
-
-/// Words waiting for the disk and the games they change. Two edits waiting
-/// at once are one write of the newer words, so the scope is both of theirs:
-/// the earlier edit is in that text too, and the store checks the text
-/// against the file, not against the draft in between.
-typedef _Draft = ({String text, EditScope scope});
 
 /// Keeps one document's file matching the draft the user is editing.
 ///
@@ -28,7 +23,7 @@ final class DocumentSaver extends ChangeNotifier {
   final store.PgnDocumentStore _store;
   _Target? _target;
   SaveState _state = const Saved();
-  _Draft? _pending;
+  final _pending = SaveQueue();
   bool _writing = false;
 
   /// The write going out and everything that collapses behind it, so the
@@ -53,7 +48,7 @@ final class DocumentSaver extends ChangeNotifier {
   /// leave words on the screen that are in no file. Closing the window asks
   /// this, because [flush] only says that nothing is on its way, not that
   /// anything arrived.
-  bool get settled => _state is Saved && _pending == null;
+  bool get settled => _state is Saved && _pending.isEmpty;
 
   /// The file being written, for a log line or a sentence about it.
   String? get documentPath => _target?.ref.path;
@@ -68,7 +63,7 @@ final class DocumentSaver extends ChangeNotifier {
   void opened(DocumentRef ref, Revision revision) {
     _opens++;
     _target = (ref: ref, revision: revision);
-    _pending = null;
+    _pending.clear();
     _undo.clear();
     _set(const Saved());
   }
@@ -81,20 +76,9 @@ final class DocumentSaver extends ChangeNotifier {
   /// document.
   void save(String text, EditScope scope) {
     if (_state is SaveConflict) return;
-    _queue(text, scope);
+    _pending.typed(text, scope);
     _set(const Unsaved());
     _start();
-  }
-
-  /// Puts [text] in the queue under a scope covering this edit and whatever
-  /// else is still waiting: one write goes out and the file it replaces is
-  /// the version all of them were typed over.
-  void _queue(String text, EditScope scope) {
-    final waiting = _pending;
-    _pending = (
-      text: text,
-      scope: waiting == null ? scope : scopeOfBoth(waiting.scope, scope),
-    );
   }
 
   /// Waits until nothing is on its way any more: the write in flight, the
@@ -155,7 +139,7 @@ final class DocumentSaver extends ChangeNotifier {
   void closed() {
     _opens++;
     _target = null;
-    _pending = null;
+    _pending.clear();
     _undo.clear();
     _set(const Saved());
   }
@@ -169,9 +153,8 @@ final class DocumentSaver extends ChangeNotifier {
 
   Future<void> _write() async {
     final target = _target;
-    final draft = _pending;
-    if (_held || _writing || target == null || draft == null) return;
-    _pending = null;
+    if (_held || _writing || target == null || _pending.isEmpty) return;
+    final draft = _pending.take()!;
     _writing = true;
     _set(const Saving());
     final ticket = _opens;
@@ -190,28 +173,22 @@ final class DocumentSaver extends ChangeNotifier {
       await _write();
       return;
     }
-    if (result is store.SaveDidNotLand) _returned(draft);
+    // Only a write the disk refused comes back to be tried with the next
+    // edit. A save the store stopped would be stopped again for as long as
+    // the text carried whatever it objected to, so that draft is let go of
+    // and the next edit starts from what the file holds.
+    if (result is store.IoFailure) _pending.returned(draft);
     _adopt(result, target.ref);
     if (_writable) await _write();
   }
 
-  /// A draft the store did not take. The words stay with the saver, so a
-  /// later write has them and so the document knows it is not settled;
-  /// nothing tries again on its own, because the same answer would only come
-  /// back. Words typed meanwhile are newer and win, and they take this
-  /// draft's scope with them: the file still holds the version both were
-  /// typed over.
-  void _returned(_Draft draft) {
-    final waiting = _pending;
-    _pending = waiting == null
-        ? draft
-        : (text: waiting.text, scope: scopeOfBoth(waiting.scope, draft.scope));
-  }
-
   /// Whether a write may go out now. A conflicted file takes nothing until
-  /// the user decides what to do with it, and a failed one is not written
-  /// again until something changes.
-  bool get _writable => _state is! SaveConflict && _state is! SaveFailed;
+  /// the user decides what to do with it, and a failed or stopped one is not
+  /// written again until the user edits something.
+  bool get _writable =>
+      _state is! SaveConflict &&
+      _state is! SaveFailed &&
+      _state is! SaveStopped;
 
   /// The store's answer to one write, with an exception it was not supposed
   /// to throw turned into the failure it is. A throw that got out would
@@ -255,7 +232,10 @@ final class DocumentSaver extends ChangeNotifier {
         // there, so it is named here.
         log.w('save ${ref.path}', 'the file changed on disk');
         _conflicted();
-      case store.SaveDidNotLand(:final detail):
+      case store.SaveRefused():
+        _stopped();
+      case store.IoFailure(:final detail) ||
+          store.WriteUnverified(:final detail):
         _set(SaveFailed(detail));
     }
   }
@@ -282,7 +262,7 @@ final class DocumentSaver extends ChangeNotifier {
         entry == null ||
         _held ||
         _writing ||
-        _pending != null) {
+        !_pending.isEmpty) {
       return Future<UndoResult>.value(const UndoRefused());
     }
     final undoing = _undoTo(entry, target);
@@ -297,13 +277,13 @@ final class DocumentSaver extends ChangeNotifier {
     _writing = true;
     _set(const Saving());
     final ticket = _opens;
-    // Putting a version back writes the whole file, games the edit being
-    // undone never touched included, so there is nothing narrower to say.
+    // A version this store itself recorded, going back to the file it came
+    // from: there is no edit here whose games could be named.
     final result = await _put(
       target.ref,
       entry.before,
       entry.committed,
-      const WholeDocument(),
+      const RestoredVersion(),
     );
     _writing = false;
     if (_disposed) return const UndoRefused();
@@ -319,7 +299,7 @@ final class DocumentSaver extends ChangeNotifier {
       await _write();
       return const UndoRefused();
     }
-    if (result is store.Saved && _pending != null) {
+    if (result is store.Saved && !_pending.isEmpty) {
       // Typed over: the entry stays where it is, the draft goes out on top
       // of the version just written, and the receipt the draft brings back
       // makes that version the next step back.
@@ -356,7 +336,11 @@ final class DocumentSaver extends ChangeNotifier {
         log.w('undo ${ref.path}', 'the file changed on disk');
         _conflicted();
         return const UndoRefused();
-      case store.SaveDidNotLand(:final detail):
+      case store.SaveRefused():
+        _stopped();
+        return const UndoRefused();
+      case store.IoFailure(:final detail) ||
+          store.WriteUnverified(:final detail):
         _set(SaveFailed(detail));
         return const UndoRefused();
     }
@@ -366,8 +350,17 @@ final class DocumentSaver extends ChangeNotifier {
   /// waiting its turn is waiting for nothing. Remembering it would refuse
   /// every undo for the life of the document.
   void _conflicted() {
-    _pending = null;
+    _pending.clear();
     _set(const SaveConflict());
+  }
+
+  /// The store stopped the save. The text it stopped is let go of — writing
+  /// it again would be stopped again — and the screen offers the same two
+  /// ways out a conflict does. Editing goes on: the next edit is written on
+  /// its own, over what the file holds.
+  void _stopped() {
+    _pending.clear();
+    _set(const SaveStopped());
   }
 
   void _set(SaveState state) {
@@ -375,7 +368,7 @@ final class DocumentSaver extends ChangeNotifier {
     // A draft still waiting its turn is not saved, whatever the write that
     // just landed did with the text before it. Saying Saved here would tell
     // the user the file holds words it does not hold yet.
-    _state = state is Saved && _pending != null ? const Unsaved() : state;
+    _state = state is Saved && !_pending.isEmpty ? const Unsaved() : state;
     notifyListeners();
   }
 

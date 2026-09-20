@@ -1,6 +1,6 @@
-// What a save is allowed to change, against real files. A chapter holds
-// games the edit never looked at, and these are the ways a save that would
-// have touched one of them is stopped before it reaches the disk.
+// What a save is allowed to change. A chapter holds games the edit never
+// looked at, and these are the ways a save that would have touched one of
+// them is stopped before it reaches the disk.
 import 'dart:convert';
 import 'dart:io';
 
@@ -8,8 +8,6 @@ import 'package:chess_auto_prep/v2/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/chapter_edits.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/diagnostics/log.dart';
-import 'package:chess_auto_prep/v2/storage/atomic_write.dart';
-import 'package:chess_auto_prep/v2/storage/document_ref.dart';
 import 'package:chess_auto_prep/v2/storage/edit_scope.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -25,18 +23,18 @@ void main() {
 
   test('a save that changes only the game it declared goes through', () async {
     final ref = fixture.ref('KID/Main.pgn');
-    final revision = await fixture.put(ref, _threeGames);
-    final edited = _chapter([
-      _game(1, '1. d4 Nf6'),
-      _game(2, '1. e4'),
-      _game(3, '1. c4'),
+    final revision = await fixture.put(ref, threeGames);
+    final edited = chapterOf([
+      gameOf(1, '1. d4 Nf6'),
+      gameOf(2, '1. e4'),
+      gameOf(3, '1. c4'),
     ]);
 
     final saved = await fixture.store.save(
       ref,
       edited,
       expected: revision,
-      scope: const GamesEdited({0}),
+      scope: GamesEdited(GamesWritten(rewritten: {0})),
     );
 
     expect(saved, isA<Saved>());
@@ -46,21 +44,21 @@ void main() {
   test('a save that would also change a game nobody edited is refused and '
       'the file is byte for byte as it was', () async {
     final ref = fixture.ref('KID/Main.pgn');
-    final revision = await fixture.put(ref, _threeGames);
+    final revision = await fixture.put(ref, threeGames);
     final before = await File(ref.path).readAsBytes();
     // What a writer with a bug produces: the edit was to the first game and
     // the third one came out different anyway.
-    final text = _chapter([
-      _game(1, '1. d4 Nf6'),
-      _game(2, '1. e4'),
-      _game(3, '1. c4 g6'),
+    final text = chapterOf([
+      gameOf(1, '1. d4 Nf6'),
+      gameOf(2, '1. e4'),
+      gameOf(3, '1. c4 g6'),
     ]);
 
     final result = await fixture.store.save(
       ref,
       text,
       expected: revision,
-      scope: const GamesEdited({0}),
+      scope: GamesEdited(GamesWritten(rewritten: {0})),
     );
 
     expect((result as SaveRefused).detail, contains('game 3 would change'));
@@ -72,12 +70,12 @@ void main() {
   test('a writer that rewrites a game the edit never touched is refused, '
       'whatever the text says', () async {
     final ref = fixture.ref('KID/Main.pgn');
-    final revision = await fixture.put(ref, _threeGames);
+    final revision = await fixture.put(ref, threeGames);
     final before = await File(ref.path).readAsBytes();
     // A real edit: a move at the end of the first line, which writes that
     // game and says so. The scope is the edit's own answer, so a writer that
     // does more than the edit asked for cannot widen it.
-    final chapter = parseChapter(name: 'Main', text: _threeGames);
+    final chapter = parseChapter(name: 'Main', text: threeGames);
     final edit =
         addMove(chapter, at: NodePath.of([0]), uci: 'g8f6') as MoveAdded;
     expect(edit.written.rewritten, {0});
@@ -89,10 +87,7 @@ void main() {
       ref,
       damaged,
       expected: revision,
-      scope: GamesEdited(
-        edit.written.rewritten,
-        appended: edit.written.appended,
-      ),
+      scope: GamesEdited(edit.written),
     );
 
     expect((result as SaveRefused).detail, contains('game 3 would change'));
@@ -102,15 +97,15 @@ void main() {
 
   test('a save that would drop a game is refused', () async {
     final ref = fixture.ref('KID/Main.pgn');
-    final revision = await fixture.put(ref, _threeGames);
+    final revision = await fixture.put(ref, threeGames);
     final before = await File(ref.path).readAsBytes();
-    final text = _chapter([_game(1, '1. d4 Nf6'), _game(3, '1. c4')]);
+    final text = chapterOf([gameOf(1, '1. d4 Nf6'), gameOf(3, '1. c4')]);
 
     final result = await fixture.store.save(
       ref,
       text,
       expected: revision,
-      scope: const GamesEdited({0}),
+      scope: GamesEdited(GamesWritten(rewritten: {0})),
     );
 
     expect((result as SaveRefused).detail, contains('game 2 would change'));
@@ -120,19 +115,19 @@ void main() {
 
   test('a save that adds a game at the end and says so goes through', () async {
     final ref = fixture.ref('KID/Main.pgn');
-    final revision = await fixture.put(ref, _threeGames);
-    final text = _chapter([
-      _game(1, '1. d4'),
-      _game(2, '1. e4'),
-      _game(3, '1. c4'),
-      _game(4, '1. Nf3'),
+    final revision = await fixture.put(ref, threeGames);
+    final text = chapterOf([
+      gameOf(1, '1. d4'),
+      gameOf(2, '1. e4'),
+      gameOf(3, '1. c4'),
+      gameOf(4, '1. Nf3'),
     ]);
 
     final saved = await fixture.store.save(
       ref,
       text,
       expected: revision,
-      scope: const GamesEdited({}, appended: 1),
+      scope: GamesEdited(GamesWritten(appended: 1)),
     );
 
     expect(saved, isA<Saved>());
@@ -143,13 +138,13 @@ void main() {
       'down', () async {
     final ref = fixture.ref('KID/Main.pgn');
     final revision = await fixture.put(ref, '// Main\n// Color: White\n');
-    final text = '// Main\n// Color: White\n\n${_game(1, '1. d4')}\n';
+    final text = '// Main\n// Color: White\n\n${gameOf(1, '1. d4')}\n';
 
     final saved = await fixture.store.save(
       ref,
       text,
       expected: revision,
-      scope: const GamesEdited({}, appended: 1),
+      scope: GamesEdited(GamesWritten(appended: 1)),
     );
 
     expect(saved, isA<Saved>());
@@ -158,15 +153,15 @@ void main() {
 
   test('a save that would rewrite the heading is refused', () async {
     final ref = fixture.ref('KID/Main.pgn');
-    final revision = await fixture.put(ref, _threeGames);
+    final revision = await fixture.put(ref, threeGames);
     final before = await File(ref.path).readAsBytes();
-    final text = _threeGames.replaceFirst('Color: White', 'Color: Black');
+    final text = threeGames.replaceFirst('Color: White', 'Color: Black');
 
     final result = await fixture.store.save(
       ref,
       text,
       expected: revision,
-      scope: const GamesEdited({0}),
+      scope: GamesEdited(GamesWritten(rewritten: {0})),
     );
 
     expect((result as SaveRefused).detail, contains('chapter heading'));
@@ -180,8 +175,8 @@ void main() {
     log.install(collect);
     addTearDown(() => log.remove(collect));
     final ref = fixture.ref('KID/Main.pgn');
-    final revision = await fixture.put(ref, _threeGames);
-    final text = _chapter([_game(9, '1. f4')]);
+    final revision = await fixture.put(ref, threeGames);
+    final text = chapterOf([gameOf(9, '1. f4')]);
 
     final saved = await fixture.store.save(
       ref,
@@ -202,151 +197,56 @@ void main() {
 
   test('a compressed chapter is refused before any of this', () async {
     final ref = fixture.ref('KID/Main.pgn');
-    final compressed = gzip.encode(utf8.encode(_threeGames));
+    final compressed = gzip.encode(utf8.encode(threeGames));
     await Directory(p.dirname(ref.path)).create(recursive: true);
     await File(ref.path).writeAsBytes(compressed);
     final revision = await fixture.revisionOf(ref);
 
     final result = await fixture.store.save(
       ref,
-      _chapter([_game(1, '1. d4 Nf6')]),
+      chapterOf([gameOf(1, '1. d4 Nf6')]),
       expected: revision,
-      scope: const GamesEdited({0}),
+      scope: GamesEdited(GamesWritten(rewritten: {0})),
     );
 
     expect((result as IoFailure).detail, contains('compressed'));
     expect(await File(ref.path).readAsBytes(), compressed);
   });
 
-  test('a save waits for a kept copy that really is the version being '
-      'replaced', () async {
+  test('a byte the app cannot read keeps its place in a game nobody '
+      'edited', () async {
     final ref = fixture.ref('KID/Main.pgn');
-    final revision = await fixture.put(ref, _threeGames);
-    final before = await File(ref.path).readAsBytes();
-    // A kept version listed under the hash of what is on disk, holding
-    // something else. Nothing may be replaced on the strength of that copy.
-    await _keepInstead(fixture, ref, revision.contentHash, 'not the chapter\n');
+    // A stray byte among good UTF-8 in the third game: the file reads with
+    // that byte as U+FFFD, and writing the reading back would put EF BF BD
+    // where it was. The save may not do that to a game nobody edited.
+    final stray = [
+      ...utf8.encode(chapterOf([gameOf(1, '1. d4'), gameOf(2, '1. e4')])),
+      ...utf8.encode('[Event "Line 3"]\n[Result "*"]\n\n1. c4 {’’’’’’’’'),
+      0x9d,
+      ...utf8.encode('} *\n\n'),
+    ];
+    await Directory(p.dirname(ref.path)).create(recursive: true);
+    await File(ref.path).writeAsBytes(stray);
+    final revision = await fixture.revisionOf(ref);
+    final opened = await fixture.store.open(ref) as Opened;
+    expect(opened.text, contains('\uFFFD'), reason: 'the reading is lossy');
 
-    final result = await fixture.store.save(
+    final saved = await fixture.store.save(
       ref,
-      _chapter([_game(1, '1. d4 Nf6'), _game(2, '1. e4'), _game(3, '1. c4')]),
+      opened.text.replaceFirst('1. d4 *', '1. d4 Nf6 *'),
       expected: revision,
-      scope: const GamesEdited({0}),
+      scope: GamesEdited(GamesWritten(rewritten: {0})),
     );
 
-    expect((result as IoFailure).detail, contains('could not be read back'));
-    expect(await File(ref.path).readAsBytes(), before);
+    expect(saved, isA<SaveRefused>());
+    expect(await File(ref.path).readAsBytes(), stray);
   });
 
-  test('a file that does not hold what was written to it is reported, and '
-      'the version it replaced is named', () async {
-    final ref = fixture.ref('KID/Main.pgn');
-    final revision = await fixture.put(ref, _threeGames);
-    final text = _chapter([
-      _game(1, '1. d4 Nf6'),
-      _game(2, '1. e4'),
-      _game(3, '1. c4'),
-    ]);
-
-    final result = await IOOverrides.runWithIOOverrides(
-      () => fixture.store.save(
-        ref,
-        text,
-        expected: revision,
-        scope: const GamesEdited({0}),
-      ),
-      _PublishesSomethingElse(ref.path),
-    );
-
-    expect(result, isA<WriteUnverified>());
+  test('a scope that says games were taken out cannot be made', () {
     expect(
-      (result as WriteUnverified).detail,
-      contains(fixture.backupFolder(ref).path),
+      () => GamesWritten(appended: -2),
+      throwsA(isA<AssertionError>()),
+      reason: 'no edit removes a game, so no save may declare it',
     );
-    expect(fixture.keptTexts(ref), [_threeGames]);
   });
-}
-
-const _heading = '// Main\n// Color: White\n\n';
-
-String _game(int number, String moves) =>
-    '[Event "Line $number"]\n[Result "*"]\n\n$moves *';
-
-String _chapter(List<String> games) =>
-    '$_heading${games.map((game) => '$game\n\n').join()}';
-
-final _threeGames = _chapter([
-  _game(1, '1. d4'),
-  _game(2, '1. e4'),
-  _game(3, '1. c4'),
-]);
-
-/// Puts [text] in the archive as the newest version of [ref], under [hash],
-/// which is not its hash. Only a save that reads the copy it kept, rather
-/// than believing the list, notices.
-Future<void> _keepInstead(
-  StoreFixture fixture,
-  DocumentRef ref,
-  String hash,
-  String text,
-) async {
-  final folder = fixture.backupFolder(ref);
-  await folder.create(recursive: true);
-  const name = '20260101T000000000Z-abcdef01.pgn.gz';
-  await File(
-    p.join(folder.path, name),
-  ).writeAsBytes(gzip.encode(utf8.encode(text)));
-  await File(p.join(folder.path, 'index.json')).writeAsString(
-    jsonEncode({
-      'path': ref.path,
-      'versions': [
-        {
-          'file': name,
-          'time': '2026-01-01T00:00:00.000Z',
-          'size': text.length,
-          'hash': hash,
-        },
-      ],
-    }),
-  );
-}
-
-/// A filesystem that writes a line of its own into the document as it is
-/// published. There is no other way to see what a save does when the file
-/// does not end up holding what went out to it.
-final class _PublishesSomethingElse extends IOOverrides {
-  _PublishesSomethingElse(this.document);
-
-  final String document;
-
-  @override
-  File createFile(String path) => path == temporaryPathFor(document)
-      ? _TamperedOnRename(super.createFile(path))
-      : super.createFile(path);
-}
-
-final class _TamperedOnRename implements File {
-  _TamperedOnRename(this._staged);
-
-  final File _staged;
-
-  @override
-  String get path => _staged.path;
-
-  @override
-  Future<RandomAccessFile> open({FileMode mode = FileMode.read}) =>
-      _staged.open(mode: mode);
-
-  @override
-  Future<File> rename(String newPath) async {
-    final renamed = await _staged.rename(newPath);
-    return renamed..writeAsStringSync('tampered\n', mode: FileMode.append);
-  }
-
-  @override
-  Future<FileSystemEntity> delete({bool recursive = false}) =>
-      _staged.delete(recursive: recursive);
-
-  @override
-  Object? noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

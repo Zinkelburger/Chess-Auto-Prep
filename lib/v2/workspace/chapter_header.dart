@@ -118,7 +118,8 @@ class _ChapterHeaderState extends State<ChapterHeader> {
                   _UndoButton(onPressed: widget.saver.canUndo ? _undo : null),
                 ],
               ),
-              if (widget.saver.state is SaveConflict)
+              if (widget.saver.state is SaveConflict ||
+                  widget.saver.state is SaveStopped)
                 _ConflictActions(onReload: _reload, onSaveCopy: _saveCopy),
               if (widget.session.refusedEdit != null)
                 const _Notice(
@@ -177,7 +178,8 @@ class _SaveLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final trouble = state is SaveFailed || state is SaveConflict;
+    final trouble =
+        state is SaveFailed || state is SaveConflict || state is SaveStopped;
     return Text(
       switch (state) {
         Saved() => 'Saved',
@@ -185,6 +187,9 @@ class _SaveLine extends StatelessWidget {
         Unsaved() => 'Unsaved',
         SaveFailed(:final detail) => 'Could not save: $detail',
         SaveConflict() => 'The file changed on disk',
+        SaveStopped() =>
+          'The app tried to change a line you did not edit, so the save was '
+              'stopped. Nothing was written.',
       },
       style: theme.textTheme.bodySmall?.copyWith(
         color: trouble ? theme.colorScheme.error : null,

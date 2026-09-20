@@ -24,17 +24,21 @@ import 'tree_edit.dart';
 /// never have touched, so the edit says it here and whoever writes the file
 /// carries it through to the store.
 final class GamesWritten {
-  const GamesWritten({this.rewritten = const {}, this.appended = 0});
+  GamesWritten({Set<int> rewritten = const {}, this.appended = 0})
+    : rewritten = Set.unmodifiable(rewritten),
+      assert(appended >= 0, 'no edit takes a game out of a chapter');
+
+  /// An edit that changed nothing of the file.
+  static final nothing = GamesWritten();
 
   /// Indexes into the chapter's games as they were before the edit, from 0.
+  /// Its own copy, so what an edit declared cannot change afterwards.
   final Set<int> rewritten;
 
-  /// How many games the edit added at the end of the chapter.
+  /// How many games the edit added at the end of the chapter. Never
+  /// negative: nothing here takes a game out.
   final int appended;
 }
-
-/// Nothing of the file changed.
-const _nothingWritten = GamesWritten();
 
 sealed class AddMoveResult {
   const AddMoveResult();
@@ -46,7 +50,7 @@ final class MoveAdded extends AddMoveResult {
   const MoveAdded({
     required this.chapter,
     required this.path,
-    this.written = _nothingWritten,
+    required this.written,
   });
 
   final Chapter chapter;
@@ -72,7 +76,7 @@ sealed class CommentResult {
 /// The comment is in the chapter. [chapter] is the same object when the
 /// words would have left the file exactly as it was.
 final class CommentWritten extends CommentResult {
-  const CommentWritten(this.chapter, {this.written = _nothingWritten});
+  const CommentWritten(this.chapter, {required this.written});
 
   final Chapter chapter;
 
@@ -107,7 +111,11 @@ AddMoveResult addMove(
   final siblings = chapter.tree.nodeAt(at)?.children ?? chapter.tree.children;
   final existing = siblings.indexWhere((child) => child.san == node.san);
   if (existing >= 0) {
-    return MoveAdded(chapter: chapter, path: at.child(existing));
+    return MoveAdded(
+      chapter: chapter,
+      path: at.child(existing),
+      written: GamesWritten.nothing,
+    );
   }
   final prefix = [for (final step in chapter.tree.lineTo(at)) step.san];
   final edited =
@@ -152,7 +160,7 @@ CommentResult setComment(
 }) {
   if (at.isRoot) return _withIntroduction(chapter, text);
   final sans = [for (final node in chapter.tree.lineTo(at)) node.san];
-  if (sans.isEmpty) return CommentWritten(chapter);
+  if (sans.isEmpty) return _unchanged(chapter);
   if (_playedByAPartialGame(chapter, sans)) return const GameNotWhole();
   final lines = [
     for (final line in chapter.lines) _commented(chapter, line, sans, text),
@@ -161,7 +169,7 @@ CommentResult setComment(
     for (final (index, line) in lines.indexed)
       if (!identical(line, chapter.lines[index])) index,
   };
-  if (written.isEmpty) return CommentWritten(chapter);
+  if (written.isEmpty) return _unchanged(chapter);
   return CommentWritten(
     withLines(chapter, lines),
     written: GamesWritten(rewritten: written),
@@ -201,11 +209,11 @@ CommentResult _withIntroduction(Chapter chapter, String? text) {
   final first = chapter.lines.firstWhereOrNull(
     (line) => chapter.treeInChapter(line) != null,
   );
-  if (first == null) return CommentWritten(chapter);
+  if (first == null) return _unchanged(chapter);
   final tree = chapter.writableTree(first);
   if (tree == null) return const GameNotWhole();
   final comment = withProse(tree.rootComment, text);
-  if (comment == tree.rootComment) return CommentWritten(chapter);
+  if (comment == tree.rootComment) return _unchanged(chapter);
   final index = chapter.lines.indexOf(first);
   final lines = [...chapter.lines];
   lines[index] = rewritten(
@@ -217,6 +225,11 @@ CommentResult _withIntroduction(Chapter chapter, String? text) {
     written: GamesWritten(rewritten: {index}),
   );
 }
+
+/// The chapter as it was, because the words would have left the file
+/// exactly as it is.
+CommentResult _unchanged(Chapter chapter) =>
+    CommentWritten(chapter, written: GamesWritten.nothing);
 
 /// A game an edit may write again, its moves, and where it sits in
 /// [Chapter.lines].
@@ -286,7 +299,7 @@ _Edited _appended(Chapter chapter, List<String> prefix, MoveNode node) {
           ? _spacedPreamble(chapter.preamble)
           : null,
     ),
-    written: const GamesWritten(appended: 1),
+    written: GamesWritten(appended: 1),
   );
 }
 

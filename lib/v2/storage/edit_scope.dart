@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:math' as math;
 
+import '../chess/pgn/chapter_edits.dart' show GamesWritten;
 import '../chess/pgn/game_text.dart';
 
 /// What a save says it is about to change.
@@ -14,73 +16,95 @@ sealed class EditScope {
   const EditScope();
 }
 
-/// The save replaces the whole file, which is what a restore, an import or a
-/// paste does, and what a caller that cannot say says. There is nothing to
-/// compare it against, so the store writes what it was given and says in the
-/// log that it did.
+/// The save writes the games [written] says the edit wrote and adds the ones
+/// it counted. Every other game of the version on disk must come through
+/// unchanged.
+///
+/// The value comes from the edit itself ([GamesWritten]) rather than from
+/// reading the new text: a scope worked out from the text would agree with
+/// whatever the text says, including with a game it should never have
+/// touched.
+final class GamesEdited extends EditScope {
+  const GamesEdited(this.written);
+
+  final GamesWritten written;
+}
+
+/// The save replaces the whole file, which is what an import or a paste
+/// does, and what a caller that cannot say says. There is nothing to compare
+/// it against, so the store writes what it was given and says in the log
+/// that it did.
 final class WholeDocument extends EditScope {
   const WholeDocument();
 }
 
-/// The save writes the games named in [games] again and adds [appended] more
-/// at the end. Every other game of the version on disk must come through
-/// unchanged.
-final class GamesEdited extends EditScope {
-  const GamesEdited(this.games, {this.appended = 0});
-
-  /// Indexes into the games of the version on disk, from 0, as the games of
-  /// a chapter are numbered in code. A refusal numbers them from 1, the way
-  /// the person reading it counts.
-  final Set<int> games;
-
-  /// How many games the save adds at the end of the file.
-  ///
-  /// Never negative: nothing in the app removes a game from a chapter, so a
-  /// save that would leave fewer games than the file has is the mistake this
-  /// check is here for, and it is refused rather than described.
-  final int appended;
+/// The save puts back a version this store recorded, which is what an undo
+/// is. Nothing is compared and nothing is logged: the text is not a fresh
+/// edit but bytes the store read off the disk and kept, and the revision
+/// check is what says they may go back.
+final class RestoredVersion extends EditScope {
+  const RestoredVersion();
 }
 
 /// One scope covering both, for two edits whose saves collapsed into one.
 ///
-/// The indexes still name games of the version on disk, because an edit adds
-/// games at the end and never removes or reorders one: a game the earlier
-/// edit added sits past the end of the version on disk, where the added
-/// count covers it.
-EditScope scopeOfBoth(EditScope first, EditScope second) =>
-    switch ((first, second)) {
-      (final GamesEdited a, final GamesEdited b) => GamesEdited({
-        ...a.games,
-        ...b.games,
-      }, appended: a.appended + b.appended),
-      (WholeDocument(), _) || (_, WholeDocument()) => const WholeDocument(),
-    };
+/// The indexes still name games of the version on disk, **because an edit
+/// adds games at the end and never removes or reorders one**: a game the
+/// earlier edit added sits past the end of the version on disk, where the
+/// added count covers it. An edit that inserts a game in the middle, or
+/// removes one, would shift the later indexes and has to revisit this.
+///
+/// Anything else — a whole document, a restored version — covers everything
+/// the other could have named, so the pair is a whole document, which the
+/// store logs.
+EditScope scopeOfBoth(EditScope first, EditScope second) {
+  if (first is! GamesEdited || second is! GamesEdited) {
+    return const WholeDocument();
+  }
+  return GamesEdited(
+    GamesWritten(
+      rewritten: {...first.written.rewritten, ...second.written.rewritten},
+      appended: first.written.appended + second.written.appended,
+    ),
+  );
+}
 
 /// Why [next] may not replace [previous] under [scope], as a sentence, or
 /// null when every game the scope does not name comes through byte for byte.
 ///
-/// Games are compared by their own text and not by the blank lines between
+/// Bytes, not text: a file this app reads with a stray byte in it decodes
+/// with that byte as U+FFFD, and comparing the decodings would let the save
+/// write the replacement character over it. Both sides here are what is and
+/// what would be on the disk.
+///
+/// Games are compared by their own bytes and not by the blank lines between
 /// them: appending a game gives the game before it a blank line, and a
 /// separator is not where anybody's moves are.
 String? changeOutsideScope({
-  required String previous,
-  required String next,
+  required List<int> previous,
+  required List<int> next,
   required EditScope scope,
 }) => switch (scope) {
-  WholeDocument() => null,
-  GamesEdited() => _changeOutside(previous, next, scope),
+  WholeDocument() || RestoredVersion() => null,
+  GamesEdited() => _changeOutside(previous, next, scope.written),
 };
 
-String? _changeOutside(String previous, String next, GamesEdited edit) {
+String? _changeOutside(List<int> previous, List<int> next, GamesWritten edit) {
+  // An edit that added a negative number of games is an edit that removed
+  // some, which nothing in the app does and no save may claim.
+  if (edit.appended < 0) {
+    return 'the save said it was taking ${_count(-edit.appended)} out, which '
+        'no edit does';
+  }
   final before = _cut(previous);
   final after = _cut(next);
-  if (!_headingKept(before, after)) {
+  if (!_headingKept(before, after, previous, next)) {
     return 'the chapter heading would change but ${_declared(edit)}';
   }
   final shared = math.min(before.games.length, after.games.length);
   for (var index = 0; index < shared; index++) {
-    if (edit.games.contains(index)) continue;
-    if (!_same(before, before.games[index], after, after.games[index])) {
+    if (edit.rewritten.contains(index)) continue;
+    if (!_same(previous, before.games[index], next, after.games[index])) {
       return 'game ${index + 1} would change but ${_declared(edit)}';
     }
   }
@@ -98,24 +122,33 @@ String? _changeOutside(String previous, String next, GamesEdited edit) {
 /// no games in it is all heading, and the first game appended to it must
 /// start on a line of its own, so the heading may gain whitespace. Nothing
 /// already in it is allowed to go either way.
-bool _headingKept(_Cut before, _Cut after) {
+bool _headingKept(_Cut before, _Cut after, List<int> previous, List<int> next) {
   if (after.heading < before.heading) return false;
   if (after.heading > before.heading) {
     if (before.games.isNotEmpty) return false;
-    if (!_blank(after.text, before.heading, after.heading)) return false;
+    if (!_blank(next, before.heading, after.heading)) return false;
   }
-  return _same(before, (0, before.heading), after, (0, before.heading));
+  return _same(previous, (0, before.heading), next, (0, before.heading));
 }
 
-/// A version of a chapter as ranges into its own text rather than as copies
-/// of it: comparing two five-megabyte versions must not make two more
-/// megabytes of split-out games to do it.
-typedef _Cut = ({String text, int heading, List<(int, int)> games});
+/// Where the games of one version are, as ranges into its bytes.
+///
+/// The splitter takes a string and gives back the games as substrings, so
+/// one version at a time is split; its pieces are reduced to offsets here
+/// and are collectable before the other version is split. Two five-megabyte
+/// versions are therefore never both split at once, and the comparison
+/// itself reads the byte lists and copies nothing.
+typedef _Cut = ({int heading, List<(int, int)> games});
 
-/// Where each game of [text] is in it, using the same splitter the chapter
-/// code uses, so the store and the reader agree on what a game is.
-_Cut _cut(String text) {
-  final document = splitChapterText(text);
+/// Where each game of [bytes] is in it, cut by the same splitter the chapter
+/// reader uses, so the store and the reader agree on what a game is.
+///
+/// Latin-1 gives each byte one code unit, so an offset in the decoded string
+/// is the same offset in the bytes. The splitter only ever looks for ASCII —
+/// `[Event`, braces, line ends — and no byte of a UTF-8 sequence is ASCII,
+/// so it finds the same games whichever way the bytes were meant to be read.
+_Cut _cut(List<int> bytes) {
+  final document = splitChapterText(latin1.decode(bytes));
   final games = <(int, int)>[];
   // The preamble and the games, each with the whitespace after it, are the
   // whole text in order, so one running offset places them all.
@@ -124,33 +157,34 @@ _Cut _cut(String text) {
     games.add((at, at + game.text.length));
     at += game.text.length + game.trailer.length;
   }
-  return (text: text, heading: document.preamble.length, games: games);
+  return (heading: document.preamble.length, games: games);
 }
 
-bool _same(_Cut a, (int, int) inA, _Cut b, (int, int) inB) {
+bool _same(List<int> a, (int, int) inA, List<int> b, (int, int) inB) {
   final length = inA.$2 - inA.$1;
   if (inB.$2 - inB.$1 != length) return false;
   for (var i = 0; i < length; i++) {
-    if (a.text.codeUnitAt(inA.$1 + i) != b.text.codeUnitAt(inB.$1 + i)) {
+    if (a[inA.$1 + i] != b[inB.$1 + i]) return false;
+  }
+  return true;
+}
+
+bool _blank(List<int> bytes, int from, int to) {
+  for (var i = from; i < to; i++) {
+    final byte = bytes[i];
+    if (byte != 0x20 && byte != 0x09 && byte != 0x0a && byte != 0x0d) {
       return false;
     }
   }
   return true;
 }
 
-bool _blank(String text, int from, int to) {
-  for (var i = from; i < to; i++) {
-    if (text[i].trim().isNotEmpty) return false;
-  }
-  return true;
-}
-
 /// What the save said it was doing, for the sentence that refuses it.
-String _declared(GamesEdited edit) {
-  final named = (edit.games.toList()..sort())
+String _declared(GamesWritten edit) {
+  final named = (edit.rewritten.toList()..sort())
       .map((index) => '${index + 1}')
       .join(', ');
-  return switch ((edit.games.isEmpty, edit.appended)) {
+  return switch ((edit.rewritten.isEmpty, edit.appended)) {
     (true, 0) => 'the edit changed no game',
     (true, final added) => 'the edit only added ${_count(added)} at the end',
     (false, 0) => 'the edit was to game $named',

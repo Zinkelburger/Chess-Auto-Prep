@@ -31,6 +31,17 @@ final class SaveFailed extends SaveState {
   final String detail;
 }
 
+/// The store stopped the save because the text would have changed a game
+/// the edit never touched. The words are still on the screen and the file is
+/// as it was.
+///
+/// A conflict for the user's purposes — reload or save a copy — but it is
+/// the app's mistake, not another writer's, so it says something else. The
+/// store has already put the game it would have changed in the log.
+final class SaveStopped extends SaveState {
+  const SaveStopped();
+}
+
 /// Someone else wrote the file. The draft is kept and nothing more is
 /// written until the user chooses what to do with it.
 final class SaveConflict extends SaveState {

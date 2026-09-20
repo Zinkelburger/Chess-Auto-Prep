@@ -5,6 +5,7 @@ import 'dart:io';
 
 import 'package:chess_auto_prep/v2/storage/backups.dart';
 import 'package:chess_auto_prep/v2/storage/document_probe.dart';
+import 'package:chess_auto_prep/v2/chess/pgn/chapter_edits.dart';
 import 'package:chess_auto_prep/v2/storage/document_ref.dart';
 import 'package:chess_auto_prep/v2/storage/edit_scope.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
@@ -46,8 +47,23 @@ final class StoreFixture {
     ),
   );
 
+  /// Replaces [ref] with [text] as an edit to its first game, which is what
+  /// a save of a one-game chapter says, so the tests run under the check
+  /// that stops a save changing any other game.
+  Future<SaveResult> edit(DocumentRef ref, String text, Revision expected) =>
+      store.save(
+        ref,
+        text,
+        expected: expected,
+        scope: GamesEdited(GamesWritten(rewritten: const {0})),
+      );
+
+  /// Puts a version the store recorded back, which is what an undo does.
+  Future<SaveResult> restore(DocumentRef ref, String text, Revision expected) =>
+      store.save(ref, text, expected: expected, scope: const RestoredVersion());
+
   /// Replaces [ref] with [text], the whole document at a time, which is what
-  /// a test that is not about the scope of an edit is doing.
+  /// an import does.
   Future<SaveResult> replace(DocumentRef ref, String text, Revision expected) =>
       store.save(ref, text, expected: expected, scope: const WholeDocument());
 
@@ -82,3 +98,24 @@ final class StoreFixture {
     await root.delete(recursive: true);
   }
 }
+
+/// A chapter with one game in it, the smallest file a save can name a game
+/// of.
+String oneGame(String moves) => '[Event "Line"]\n[Result "*"]\n\n$moves *\n';
+
+/// One game of a chapter, numbered so a test can tell them apart.
+String gameOf(int number, String moves) =>
+    '[Event "Line $number"]\n[Result "*"]\n\n$moves *';
+
+/// A chapter of [games], each on its own with a blank line after it.
+String chapterOf(List<String> games) =>
+    '$chapterHeading${games.map((game) => '$game\n\n').join()}';
+
+const chapterHeading = '// Main\n// Color: White\n\n';
+
+/// Three games from the initial position, the file the scope tests edit.
+final threeGames = chapterOf([
+  gameOf(1, '1. d4'),
+  gameOf(2, '1. e4'),
+  gameOf(3, '1. c4'),
+]);

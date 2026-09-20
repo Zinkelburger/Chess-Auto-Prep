@@ -1,7 +1,7 @@
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/storage/edit_scope.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart'
-    show Collision, IoFailure, Opened;
+    show Collision, IoFailure, Opened, SaveRefused, WriteUnverified;
 import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
 import 'package:chess_auto_prep/v2/workspace/save_state.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
@@ -30,7 +30,9 @@ void main() {
 
   /// The games the last save told the store it was writing again.
   Set<int> declared() =>
-      (fixture.store.requestedSaves.last.scope as GamesEdited).games;
+      (fixture.store.requestedSaves.last.scope as GamesEdited)
+          .written
+          .rewritten;
 
   test('a save names the games it writes again', () async {
     // A note on the first move goes into both lines that play it; one on a
@@ -56,6 +58,47 @@ void main() {
     expect(fixture.onDisk, contains('{first}'));
     expect(fixture.onDisk, contains('{second}'));
   });
+
+  test('a save the store stopped is not tried again, and the next edit goes '
+      'out on its own', () async {
+    fixture.store.saves.add(
+      const SaveRefused('game 3 would change but the edit was to game 1'),
+    );
+    edit('one');
+    await pumpEventQueue();
+    expect(saver.state, isA<SaveStopped>());
+    expect(saver.settled, isFalse);
+    expect(fixture.store.requestedSaves, hasLength(1), reason: 'no retry');
+
+    edit('two');
+    await pumpEventQueue();
+    expect(saver.state, isA<Saved>());
+    expect(declared(), {0, 1}, reason: 'the stopped edit did not ride along');
+    expect(fixture.onDisk, contains('{two [%eval 0.30]}'));
+  });
+
+  test('a copy can still be written after a save was stopped', () async {
+    fixture.store.saves.add(const SaveRefused('game 3 would change'));
+    edit('one');
+    await pumpEventQueue();
+    expect(saver.state, isA<SaveStopped>());
+    expect(await session.saveCopy('Main draft'), isA<CopySaved>());
+    expect(
+      fixture.store.documents.keys.map((ref) => ref.path),
+      contains(endsWith('Main draft.pgn')),
+    );
+  });
+
+  test(
+    'a copy the store could not read back is not a copy that was made',
+    () async {
+      fixture.store.creates.add(
+        const WriteUnverified('the file could not be read back after writing'),
+      );
+      final result = await session.saveCopy('Main draft');
+      expect((result as CopyFailed).detail, contains('could not be read back'));
+    },
+  );
 
   test('an edit is saved at once and says so', () async {
     expect(saver.state, isA<Saved>());

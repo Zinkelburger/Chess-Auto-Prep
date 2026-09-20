@@ -125,7 +125,11 @@ final class PgnFileStore implements PgnDocumentStore {
       return IoFailure(failureDetail(error));
     }
     final revision = await _revisionOf(ref.path, 'create ${ref.path}');
-    return revision == null ? const IoFailure(_unread) : Created(revision);
+    if (revision != null) return Created(revision);
+    // The file is there — it was just written — so this is not the document
+    // being as it was. Whoever asked has to be told the name is taken by
+    // something nobody has read.
+    return WriteUnverified('$_unread; it is at ${ref.path}');
   }
 
   @override
@@ -180,7 +184,7 @@ final class PgnFileStore implements PgnDocumentStore {
     if (written == revision.contentHash) {
       return Saved(_receipt(before, revision, revision));
     }
-    final refused = _onlyWhatWasDeclared(ref, before, text, scope);
+    final refused = _onlyWhatWasDeclared(ref, current, bytes, scope);
     if (refused != null) return refused;
     final unkept = await keepReplacedVersion(
       backups: _backups,
@@ -208,19 +212,20 @@ final class PgnFileStore implements PgnDocumentStore {
     return _committed(ref, before, revision, written);
   }
 
-  /// Why [text] may not be written, or null when it changes only what
-  /// [scope] declared. A scope that names no game at all is not refused —
-  /// there is nothing to compare it against — but it is logged, so a caller
-  /// that replaces a whole chapter without saying what it edited is visible.
+  /// Why [next] may not be written over [current], or null when it changes
+  /// only what [scope] declared. A save that replaces the whole document is
+  /// not refused — there is nothing to compare it against — but it is
+  /// logged, so a caller that rewrites a chapter without saying what it
+  /// edited is visible.
   SaveResult? _onlyWhatWasDeclared(
     DocumentRef ref,
-    String before,
-    String text,
+    List<int> current,
+    List<int> next,
     EditScope scope,
   ) {
     final outside = changeOutsideScope(
-      previous: before,
-      next: text,
+      previous: current,
+      next: next,
       scope: scope,
     );
     if (outside != null) {
@@ -254,7 +259,11 @@ final class PgnFileStore implements PgnDocumentStore {
   ///
   /// The file is read again rather than assumed: a rename that reported
   /// success over a filesystem that lied, or anything that wrote the name
-  /// between the rename and now, would otherwise be a silent loss.
+  /// between the rename and now, would otherwise be a silent loss. A file
+  /// nothing can read now is the same news: the rename happened, so the
+  /// document is not as it was, and saying it failed would leave the app
+  /// expecting the old revision and calling this app's own write somebody
+  /// else's.
   Future<SaveResult> _committed(
     DocumentRef ref,
     String before,
@@ -262,15 +271,21 @@ final class PgnFileStore implements PgnDocumentStore {
     String written,
   ) async {
     final committed = await _revisionOf(ref.path, 'save ${ref.path}');
-    if (committed == null) return const IoFailure(_unread);
+    if (committed == null) return WriteUnverified(_notHeld(ref, _unread));
     if (committed.contentHash != written) {
-      final detail =
-          'the file does not hold what was just written to it; the version '
-          'it replaced is kept in ${_keptFolder(ref)}';
-      log.e('save ${ref.path}', detail);
-      return WriteUnverified(detail);
+      return WriteUnverified(
+        _notHeld(ref, 'the file does not hold what was just written to it'),
+      );
     }
     return Saved(_receipt(before, was, committed));
+  }
+
+  String _notHeld(DocumentRef ref, String detail) {
+    final said =
+        '$detail; the version it replaced is kept in '
+        '${_keptFolder(ref)}';
+    log.e('save ${ref.path}', said);
+    return said;
   }
 
   String _keptFolder(DocumentRef ref) {
