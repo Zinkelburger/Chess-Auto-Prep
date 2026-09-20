@@ -7,6 +7,7 @@ import 'eval.dart';
 import 'search_config.dart';
 import 'search_node.dart';
 import 'terminal.dart';
+import 'tree_wire_v4_config.dart';
 import 'tree_wire_v4.dart';
 
 /// What [decodeTreeV4] made of a file.
@@ -74,9 +75,9 @@ TreeReadResult decodeTreeV4(String json) {
   final config = snapshot is Map<String, Object?>
       ? snapshot
       : const <String, Object?>{};
-  final unsupported = _unsupportedReason(parsed['version'], config, tree);
+  final unsupported = unsupportedTreeReason(parsed['version'], config, tree);
   if (unsupported != null) return TreeUnsupported(unsupported);
-  return _readTree(tree, _configOf(config), parsed['build_complete']);
+  return _readTree(tree, configFromSnapshot(config), parsed['build_complete']);
 }
 
 TreeReadResult _readTree(
@@ -90,7 +91,7 @@ TreeReadResult _readTree(
   );
   final root = reader.read(tree, 0);
   if (root == null) {
-    return TreeMalformed(reader.failure ?? 'the tree could not be read');
+    return reader.refusal ?? const TreeMalformed('the tree could not be read');
   }
   return TreeDecoded(
     root: root,
@@ -101,58 +102,10 @@ TreeReadResult _readTree(
   );
 }
 
-/// Why this search cannot read the tree, or null when it can.
-String? _unsupportedReason(
-  Object? version,
-  Map<String, Object?> config,
-  Map<String, Object?> tree,
-) {
-  if (version is! num || version.toInt() != treeWireVersion) {
-    return 'this tree was saved in format version ${version ?? 'unknown'}, '
-        'and only version $treeWireVersion can be read';
-  }
-  // The flag on the root is what tells the two searches apart, and it is what
-  // the old app itself checks before resuming a build; the version number
-  // beside it is a label that some writers leave off.
-  final algorithm = config['algorithm_version'];
-  if (tree['history_aware'] != true ||
-      (algorithm != null && algorithm != pureAlgorithmVersion)) {
-    return 'this tree was built by the older heuristic search, which valued '
-        'positions differently and shared values between paths; build it '
-        'again to open it here';
-  }
-  final search = config['search_algorithm'];
-  if (search != null && search != 'pure') {
-    return 'this tree was built by the $search search, which this reader '
-        'does not have';
-  }
-  // Bounded builds keep a node's moves rather than all of them: our moves
-  // are not the ones the loss window admits, and the opponent's shares stop
-  // short of one on purpose. Both look exactly like a complete expansion in
-  // the file, so a tree read as one would be quietly wrong everywhere.
-  if (config['bounded_database'] == true) {
-    return 'this tree was built by the bounded database mode, which keeps '
-        'only some of each position\'s moves; build it again to open it here';
-  }
-  return null;
-}
-
-/// The search the document says it was built by. Every key defaults, because
-/// the C builder and the old app each leave out what their mode does not use.
-SearchConfig _configOf(Map<String, Object?> config) {
-  final side = config['play_as_white'] == false ? Side.black : Side.white;
-  final defaults = SearchConfig(side: side);
-  final budget = config['max_nodes'];
-  return SearchConfig(
-    side: side,
-    horizonPlies: _intOr(config['max_depth'], defaults.horizonPlies),
-    lossLimitCp: _intOr(config['max_eval_loss_cp'], defaults.lossLimitCp),
-    nodeBudget: budget is num && budget > 0 ? budget.toInt() : null,
-  );
-}
-
-int _intOr(Object? value, int fallback) =>
-    value is num ? value.toInt() : fallback;
+/// Deeper than any saved build goes, and shallow enough that reading a node
+/// per level cannot exhaust the stack. A document nested past it is not a
+/// tree that was searched but one that was generated at this reader.
+const int _plyLimit = 512;
 
 /// Rebuilds the tree, one node at a time, and remembers the first thing that
 /// stopped it. A node that cannot be read stops the whole document: half a
@@ -167,7 +120,8 @@ final class _Reader {
   /// the format writes both as a childless node.
   final int horizonPlies;
 
-  String? failure;
+  /// The first thing that stopped the read, and what the caller is told.
+  TreeReadResult? refusal;
 
   /// The node [json] describes, or null when the document cannot be read.
   ///
@@ -179,9 +133,24 @@ final class _Reader {
   /// neutral score the old app's own backup gives it, with the whole [0, 1]
   /// interval still open below it.
   SearchNode? read(Map<String, Object?> json, int depth) {
+    if (depth > _plyLimit) {
+      _fail(
+        'the tree goes deeper than $_plyLimit plies, which no search '
+        'reaches; the file nests further than it can mean',
+      );
+      return null;
+    }
     final text = json['fen'];
     if (text is! String || text.isEmpty) {
-      _fail('a node at depth $depth has no FEN');
+      // The C builder can be told to leave positions out to save space. That
+      // is a smaller file, not a broken one, but every rule here works from
+      // the position: which side is to move, whether the game ended and why.
+      _refuse(
+        const TreeUnsupported(
+          'this tree was saved without positions, and the positions are what '
+          'it has to be read from; build it again to open it here',
+        ),
+      );
       return null;
     }
     final fen = Fen(text);
@@ -226,6 +195,11 @@ final class _Reader {
 
   /// A node the file says the game ended at.
   ///
+  /// A finished game is worth a win, a draw or a loss and nothing between,
+  /// and a checkmate is always a loss for whoever is to move in it. A value
+  /// that says otherwise is not a tree this reader can value, and it is worth
+  /// more to the user as a named position than as a number nobody checked.
+  ///
   /// A node that both ends the game and has moves after it states two
   /// incompatible things, and no node here can hold both: a finished game
   /// offers no moves, so the subtree would have to go, and the value the
@@ -244,10 +218,25 @@ final class _Reader {
       );
       return null;
     }
+    if (value != 0 && value != 0.5 && value != 1) {
+      _fail(
+        'the node at ${fen.value} ends the game worth $value, which is '
+        'neither a win, a draw nor a loss',
+      );
+      return null;
+    }
+    final kind = _terminalReason(value, fen);
+    if (kind == TerminalKind.checkmate && (value == 0) != ourTurn) {
+      _fail(
+        'the node at ${fen.value} is a checkmate worth $value, which is '
+        'not what the side to move there gets',
+      );
+      return null;
+    }
     return TerminalNode(
       fen: fen,
       evalForUs: evalForUs,
-      kind: _terminalReason(value, fen),
+      kind: kind,
       ourTurn: ourTurn,
     );
   }
@@ -323,7 +312,9 @@ final class _Reader {
         : kind;
   }
 
-  void _fail(String detail) => failure ??= detail;
+  void _fail(String detail) => _refuse(TreeMalformed(detail));
+
+  void _refuse(TreeReadResult result) => refusal ??= result;
 }
 
 final class _Edge {

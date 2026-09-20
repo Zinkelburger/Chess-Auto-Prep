@@ -533,7 +533,11 @@ void main() {
     final tree = BuildTree(
       root: drawn,
       buildComplete: true,
-      configSnapshot: const {'algorithm_version': 3, 'play_as_white': true},
+      configSnapshot: const {
+        'algorithm_version': 3,
+        'play_as_white': true,
+        'max_depth': 2,
+      },
     );
 
     final decoded = decodeTreeV4(serializeTree(tree)) as TreeDecoded;
