@@ -2,6 +2,7 @@ import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
 
 import '../chess/pgn/chapter.dart';
+import '../chess/pgn/chapter_edits.dart';
 import '../storage/chapter_files.dart';
 import '../ui/theme.dart';
 import 'document_saver.dart';
@@ -119,11 +120,8 @@ class _ChapterHeaderState extends State<ChapterHeader> {
               ),
               if (widget.saver.state is SaveConflict)
                 _ConflictActions(onReload: _reload, onSaveCopy: _saveCopy),
-              if (widget.session.refusedEdit != null)
-                const _Notice(
-                  'That line could not be read in full, so it is left as it '
-                  'is. Edit it in the old app.',
-                ),
+              if (widget.session.refusedEdit case final refusal?)
+                _Notice(_refusalNotice(refusal)),
               if (_notice case final notice?) _Notice(notice),
             ],
           ),
@@ -132,6 +130,15 @@ class _ChapterHeaderState extends State<ChapterHeader> {
     );
   }
 }
+
+/// What the screen tells the user about an edit that did not happen.
+String _refusalNotice(CommentRefused refusal) => switch (refusal) {
+  GameNotWhole() =>
+    'That line could not be read in full, so it is left as it is. Edit it '
+        'in the old app.',
+  CommentUnwritable(:final reason) =>
+    'The note was not saved: $reason. Take it out and try again.',
+};
 
 /// Whose chapter it is and how many games of the file it holds: the games
 /// merged into the tree, then the ones left out and why, because a chapter

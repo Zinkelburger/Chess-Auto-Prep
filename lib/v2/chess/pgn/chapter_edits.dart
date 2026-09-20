@@ -49,12 +49,24 @@ final class CommentWritten extends CommentResult {
   final Chapter chapter;
 }
 
+/// Nothing was changed. The screen has to say so: an edit that silently
+/// does nothing reads as a lost one.
+sealed class CommentRefused extends CommentResult {
+  const CommentRefused();
+}
+
 /// The comment belongs to a game reading could not finish, so writing that
-/// game again would delete the moves reading dropped. Nothing was changed,
-/// and the screen has to say so: an edit that silently does nothing reads
-/// as a lost one.
-final class GameNotWhole extends CommentResult {
+/// game again would delete the moves reading dropped.
+final class GameNotWhole extends CommentRefused {
   const GameNotWhole();
+}
+
+/// The words themselves cannot go into a PGN file. [reason] is one plain
+/// English fragment saying which of them.
+final class CommentUnwritable extends CommentRefused {
+  const CommentUnwritable(this.reason);
+
+  final String reason;
 }
 
 /// Plays [uci] after the node at [at] and writes it into the file.
@@ -108,12 +120,15 @@ AddMoveResult addMove(
 /// A game that was not read whole cannot take the comment: writing it again
 /// would delete the moves reading dropped. One such game among those playing
 /// the move refuses the whole edit rather than letting the comment land in
-/// some games and not others.
+/// some games and not others. Words a PGN file cannot hold are refused
+/// before any game is touched.
 CommentResult setComment(
   Chapter chapter, {
   required NodePath at,
   required String? text,
 }) {
+  final unwritable = text == null ? null : commentRefusal(text);
+  if (unwritable != null) return CommentUnwritable(unwritable);
   if (at.isRoot) return _withIntroduction(chapter, text);
   final sans = [for (final node in chapter.tree.lineTo(at)) node.san];
   if (sans.isEmpty) return CommentWritten(chapter);
