@@ -371,9 +371,22 @@ class _OpeningExplorerPanelState extends State<OpeningExplorerPanel> {
           onLoggedIn: _requestCurrent,
         );
       case ExplorerStatus.error:
+        // The one part of the app that cannot answer from this computer, so
+        // it says which database it means and offers the only thing that can
+        // help. TWIC, when the user has it, is the offline way to ask the
+        // same question.
         return _buildMessage(
           Icons.cloud_off,
-          'Could not reach the Lichess explorer.',
+          _twicAvailable && _database != LichessDatabase.twic
+              ? 'Could not reach the Lichess database — it needs a '
+                    'connection.\nTWIC is on this computer and answers '
+                    'offline.'
+              : 'Could not reach the Lichess database — it needs a '
+                    'connection.',
+          action: TextButton(
+            onPressed: _requestCurrent,
+            child: const Text('Try again'),
+          ),
         );
       case ExplorerStatus.data:
         return _buildData(context, state.data!);
@@ -602,7 +615,7 @@ class _OpeningExplorerPanelState extends State<OpeningExplorerPanel> {
     );
   }
 
-  Widget _buildMessage(IconData icon, String text) {
+  Widget _buildMessage(IconData icon, String text, {Widget? action}) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -619,6 +632,7 @@ class _OpeningExplorerPanelState extends State<OpeningExplorerPanel> {
                 color: AppColors.onSurfaceMuted,
               ),
             ),
+            if (action != null) ...[const SizedBox(height: 4), action],
           ],
         ),
       ),

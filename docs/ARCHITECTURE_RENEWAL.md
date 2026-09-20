@@ -519,7 +519,11 @@ no games on it.
   removes the other's rows.
 - **What a panel displays is persisted**, not held for one session, so a
   second launch offline shows what the first launch fetched. In-memory caches
-  are scratch for a single session.
+  are scratch for a single session. The one decided exception is the Lichess
+  explorer, whose database is the service: it stays online-only and says so
+  with a retry (see [the workspace spec](v2/features/workspace.md)). A panel
+  that cannot answer offline says which service it needs and offers the retry;
+  it never shows an empty result or an unresolvable spinner.
 - **A stale answer is labelled, not hidden:** one muted line naming the
   service and the age, beside the content, never instead of it.
 
@@ -530,8 +534,11 @@ refresh that fails; and two services where one fails and the other does not.
 
 **Confirming it in the running app** belongs to the step's screenshot. The
 accepted screenshot is the online proof; the offline proof is the same screen
-under `unshare -rn bash -c 'ip link set lo up; <driver command>'`, which
-leaves the app its display and loopback but no internet.
+from `python3 scripts/app_driver.py start --offline`, which runs the app in a
+network namespace with loopback only — display, VM service and session bus
+intact, nothing else reachable. Warm the build with a normal `start` first.
+(`unshare` around the driver does not work: the app runs in a user-manager
+unit, not as a child of the caller.)
 
 ## Engines and background work
 
