@@ -11,7 +11,8 @@ export type Colour = 'white' | 'black';
 export const BOARDS: BoardName[] = ['A', 'B'];
 const COLOURS: Colour[] = ['white', 'black'];
 /** Seats: board A has A (White) and B (Black); board B has D (White) and C (Black). */
-export const SEAT: Record<BoardName, Record<Colour, string>> = { A: { white: 'A', black: 'B' }, B: { white: 'D', black: 'C' } };
+// Partners hold opposite colours, so the teams read A + B and C + D.
+export const SEAT: Record<BoardName, Record<Colour, string>> = { A: { white: 'A', black: 'C' }, B: { white: 'D', black: 'B' } };
 export const PIECE_NAMES: Record<string, string> = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' };
 
 export function pieceImage(piece: string): HTMLImageElement {

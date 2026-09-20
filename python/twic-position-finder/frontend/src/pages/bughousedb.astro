@@ -21,12 +21,27 @@ const TURNSTILE = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
           <div class="bdb-missing-row">
             <button id="bdb-analyse" class="btn btn-primary" title="Run Hivemind in this browser and add the position to the book for everyone">Analyze locally</button>
             <button id="bdb-cancel" class="btn btn-outline" hidden>Cancel</button>
+            <label class="bdb-cores" title="Searches run side by side, one per core. More cores finish sooner.">Cores <input id="bdb-cores" type="number" min="1" step="1" inputmode="numeric" /></label>
             <span id="bdb-missing-text" class="dim">Not in the book yet.</span>
           </div>
           {TURNSTILE && <div class="cf-turnstile" data-sitekey={TURNSTILE} data-appearance="interaction-only"></div>}
           <div id="bdb-progress" class="bdb-progress" hidden><i></i></div>
           <p id="bdb-status" class="bdb-status dim" role="status"></p>
         </section>
+        <div class="bdb-priority">
+          <span class="bdb-priority-label">Priority<span class="bb-info" tabindex="0" role="img" aria-label="About priority" title="The team up on the diagonal clock may choose not to move. Without priority a team has to move.">i</span></span>
+          <div class="choice-row" role="radiogroup" aria-label="Priority">
+            {[['ahead', 'AB may sit', 'A + B are up on the clock, so they may sit rather than move'],
+              ['even', 'Equal', 'Nobody is up on the clock: both teams have to move'],
+              ['behind', 'CD may sit', 'C + D are up on the clock, so they may sit rather than move'],
+            ].map(([value, text, hint]) => (
+              <label class="choice" title={hint}>
+                <input type="radio" name="bdb-priority" value={value} checked={value === 'even'} />
+                <span>{text}</span>
+              </label>
+            ))}
+          </div>
+        </div>
         {['A', 'B'].map((name, i) => (
           <section class="bdb-table-panel" aria-label={`Board ${i + 1} moves`}>
             <h2 class="bdb-table-title">Board {i + 1}</h2>
@@ -34,10 +49,7 @@ const TURNSTILE = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
             <table class="bdb-table" aria-label={`Moves on board ${i + 1}`}>
               <thead><tr>
                 <th scope="col" id={`bdb-mover-${name}`}>Move</th>
-                <th scope="col" title="A has more time than D: A + C may sit">A &gt; D</th>
-                <th scope="col" title="Neither A > D nor B > C: nobody may sit">Equal</th>
-                <th scope="col" title="B has more time than C: B + D may sit">B &gt; C</th>
-                <th scope="col" title="A > D and B > C: both teams may sit">Both</th>
+                <th scope="col" id={`bdb-score-${name}`}>Score</th>
               </tr></thead>
               <tbody id={`bdb-moves-${name}`}></tbody>
             </table>

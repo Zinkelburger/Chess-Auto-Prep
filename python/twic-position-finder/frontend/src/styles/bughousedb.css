@@ -21,13 +21,20 @@
 .bdb-table tr.best td:first-child { font-weight: 600; }
 .bdb-table td.none { color: var(--text-faint); }
 
-.bdb-tables { grid-template-rows: minmax(0, 1fr); }
-.bdb-tables:has(> .bdb-missing:not([hidden])) { grid-template-rows: auto minmax(0, 1fr); }
+/* One priority governs both boards' tables, so it sits above them. */
+.bdb-priority { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 0 0 10px; }
+.bdb-priority-label { color: var(--text-dim); font-size: 14px; }
+.bdb-priority-label .bb-info { display: inline-grid; margin-left: 6px; vertical-align: middle; }
+
+.bdb-tables { grid-template-rows: auto minmax(0, 1fr); }
+.bdb-tables:has(> .bdb-missing:not([hidden])) { grid-template-rows: auto auto minmax(0, 1fr); }
 .bdb-tables > .bdb-missing { grid-column: 1 / -1; }
 .bdb-missing { display: flex; flex-direction: column; gap: 8px; padding: 0 0 8px; }
 .bdb-missing[hidden] { display: none; }
 .bdb-missing p { margin: 0; }
 .bdb-missing-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 14px; }
+.bdb-cores { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--text-dim); font-size: 14px; }
+.bdb-cores input { width: 4.2em; padding: 5px 6px; }
 .bdb-progress { height: 6px; border-radius: 3px; background: var(--bg-input); overflow: hidden; }
 .bdb-progress i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.2s; }
 .bdb-status { font-size: 14px; }

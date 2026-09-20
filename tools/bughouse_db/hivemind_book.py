@@ -11,21 +11,27 @@ is searched by Hivemind, one search at a time, by one engine process.
 How a position is scored
 ------------------------
 A move's score is the value of the position it leads to: the move is played,
-and the team that has to answer it on that board is searched. Hivemind's
-clock input is one bit per team -- "ahead on the diagonal clock, may sit":
-A + C's is A > D, B + D's is B > C -- so each answer costs two searches (bit
-on, bit off), and the four clock cases are read from those two:
+and the team that has to answer it on that board is searched. Partners hold
+opposite colours, so the teams are A + B and C + D. Hivemind's clock input is
+one bit per team -- "up on the diagonal clock, so free to sit rather than
+move" -- and each answer costs one search per bit:
 
-    clock case         B + D answers with    A + C answers with
-    ahead  (A > D)     bit off               bit on
-    even               bit off               bit off
-    behind (B > C)     bit on                bit off
+    priority           C + D answers with    A + B answers with
+    ahead  (A + B's)   bit off               bit on
+    even   (nobody's)  bit off               bit off
+    behind (C + D's)   bit on                bit off
     both               bit on                bit on
+
+By default only ``even`` is searched, which halves the work: one search per
+move instead of two, and two searches of the position instead of four. The
+priority cases are computed for a run given ``--priority all``. ``both`` is
+a curiosity -- no clock gives both teams the choice, and with neither team
+obliged to move it lands within about a tenth of a pawn of ``even``.
 
 A raw Hivemind score carries a large offset (see
 ``tools/mcp/bughouse/calibration.py``), measured once per position and clock
 from both teams' searches of the position itself and subtracted from every
-move's score, so 0.00 reads as level and + is good for A + C.
+move's score, so 0.00 reads as level and + is good for A + B.
 
 Scores are stored on the engine's scale (``to_score`` of the calibrated
 value), the same scale as the MCP server's ``advantage_score``.
@@ -55,10 +61,12 @@ from __future__ import annotations
 
 import argparse
 import math
+import re
 import signal
 import sqlite3
 import sys
 import time
+from collections.abc import Sequence
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -75,12 +83,17 @@ from bughouse_db.book import explore, open_book  # noqa: E402
 from bughouse_db.paths import data_home  # noqa: E402
 from bughouse_db.poskey import dual_key_fen, position_key  # noqa: E402
 
-# A + C's clock cases, named by Hivemind's two inputs: "ahead" is A > D
-# (A + C may sit), "behind" is B > C (B + D may sit), "both" is both.
+# Which team has priority -- the time to choose whether to move at all --
+# named by Hivemind's two inputs: "ahead" is A + B's, "behind" is C + D's,
+# "even" is nobody's. "both" is both inputs on, which no clock produces: with
+# neither team obliged to move it lands within about a tenth of a pawn of
+# "even", so it is not searched unless asked for.
 CLOCKS = ("ahead", "even", "behind", "both")
+DEFAULT_CLOCKS = ("even",)
 TEAMS = (chess.WHITE, chess.BLACK)  # a team is named by its colour on board A
-SEATS = {("A", chess.WHITE): "A", ("A", chess.BLACK): "B",
-         ("B", chess.WHITE): "D", ("B", chess.BLACK): "C"}
+# Partners hold opposite colours, so the teams are A + B and C + D.
+SEATS = {("A", chess.WHITE): "A", ("A", chess.BLACK): "C",
+         ("B", chess.WHITE): "D", ("B", chess.BLACK): "B"}
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS position(
@@ -89,7 +102,7 @@ CREATE TABLE IF NOT EXISTS position(
   line      TEXT NOT NULL,        -- first line that reached it: 'A:e4 B:d4'
   ply       INTEGER NOT NULL,
   priority  REAL NOT NULL,        -- lower is searched first
-  status    TEXT NOT NULL,        -- 'queued' | 'done'
+  status    TEXT NOT NULL,        -- 'queued' | 'running' (claimed by a worker) | 'done'
   nodes     INTEGER,              -- per search of the position itself
   child_nodes INTEGER,            -- per search of each move
   seconds   REAL,
@@ -101,10 +114,10 @@ CREATE INDEX IF NOT EXISTS position_queue ON position(status, priority);
 CREATE TABLE IF NOT EXISTS pick(
   pos    INTEGER NOT NULL,
   clock  TEXT NOT NULL,
-  team   TEXT NOT NULL,           -- 'AC' | 'BD'
-  best   TEXT,                    -- joint action, seat-lettered: 'A d4 · C sits'
-  score  REAL,                    -- A + C, 0 = level
-  mate   INTEGER,                 -- plies, + mates for A + C
+  team   TEXT NOT NULL,           -- 'AB' | 'CD'
+  best   TEXT,                    -- joint action, seat-lettered: 'A d4 · B sits'
+  score  REAL,                    -- A + B, 0 = level
+  mate   INTEGER,                 -- plies, + mates for A + B
   pv     TEXT,
   offset REAL,                    -- the calibration used for this clock
   PRIMARY KEY(pos, clock, team)
@@ -117,8 +130,8 @@ CREATE TABLE IF NOT EXISTS move(
   seat   TEXT NOT NULL,           -- A B C D
   uci    TEXT NOT NULL,
   clock  TEXT NOT NULL,
-  score  REAL,                    -- A + C, 0 = level
-  mate   INTEGER,                 -- + mates for A + C
+  score  REAL,                    -- A + B, 0 = level
+  mate   INTEGER,                 -- + mates for A + B
   pv     TEXT,                    -- starts with the move itself
   child  INTEGER NOT NULL,        -- pos key after the move
   PRIMARY KEY(pos, move, clock)
@@ -207,7 +220,7 @@ def joint_text(dual: DualBoard, joint, team: chess.Color) -> str:
 
 
 def for_ac(result: SearchResult, team: chess.Color, offset: float) -> tuple[float | None, int | None]:
-    """A searched team's top line as (A + C score, A + C mate)."""
+    """A searched team's top line as (A + B score, A + B mate)."""
     top = result.top
     if top is None:
         return None, None
@@ -221,36 +234,44 @@ def for_ac(result: SearchResult, team: chess.Color, offset: float) -> tuple[floa
 # ── One position ────────────────────────────────────────────────────────────
 
 
+def clocks_of(args: argparse.Namespace) -> tuple[str, ...]:
+    """The priority cases a run searches: nobody's, or every case."""
+    return CLOCKS if getattr(args, "priority", "even") == "all" else DEFAULT_CLOCKS
+
+
 def team_bits(clock: str) -> dict[chess.Color, bool]:
     """Which team has the clock bit on, for one A + C clock case."""
     return {chess.WHITE: clock in ("ahead", "both"), chess.BLACK: clock in ("behind", "both")}
 
 
 def analyse_position(engine: HivemindEngine, dual: DualBoard, nodes: int,
-                     child_nodes: int) -> tuple[list[tuple], list[tuple], dict]:
-    """Returns (pick rows, move rows, per-move A+C score by clock for expansion)."""
+                     child_nodes: int, clocks: Sequence[str] = DEFAULT_CLOCKS,
+                     ) -> tuple[list[tuple], list[tuple], dict]:
+    """Returns (pick rows, move rows, per-move A+B score by clock for expansion)."""
     pos = key_of(dual)
 
-    # Both teams, bit on and off: four searches of the position itself. They
-    # give the engine's own pick for every clock and the offset to read by.
+    # Only the bits the asked-for clocks read: one search of the position per
+    # team and bit (two for "even" alone, four for every case). They give the
+    # engine's own pick for each clock and the offset to read it by.
+    wanted = {(team, team_bits(clock)[team]) for clock in clocks for team in TEAMS}
     own = {(team, bit): search(engine, dual, team, bit, nodes, multipv=1)
-           for team in TEAMS for bit in (True, False)}
+           for team, bit in sorted(wanted)}
     offsets = {}
-    for clock in CLOCKS:
+    for clock in clocks:
         bits = team_bits(clock)
         qw, qb = top_q(own[(chess.WHITE, bits[chess.WHITE])]), top_q(own[(chess.BLACK, bits[chess.BLACK])])
         offsets[clock] = (qw + qb) / 2 if qw is not None and qb is not None \
             else assumed_offset(bits[chess.WHITE], bits[chess.BLACK])
 
     picks = []
-    for clock in CLOCKS:
+    for clock in clocks:
         bits = team_bits(clock)
         for team in TEAMS:
             res = own[(team, bits[team])]
             if res.top is None:
                 continue
             score, mate = for_ac(res, team, offsets[clock])
-            picks.append((pos, clock, "AC" if team == chess.WHITE else "BD",
+            picks.append((pos, clock, "AB" if team == chess.WHITE else "CD",
                           joint_text(dual, res.best, team), score, mate,
                           readable_pv(dual, res.top.pv), round(offsets[clock], 4)))
 
@@ -266,14 +287,15 @@ def analyse_position(engine: HivemindEngine, dual: DualBoard, nodes: int,
             after = dual.copy()
             ply = after.push(name, move.uci())
             children.append((move, after, ply))
+        bits = {team_bits(clock)[answers] for clock in clocks}
         found = {bit: [search(engine, after, answers, bit, child_nodes) for _, after, _ in children]
-                 for bit in (True, False)}
+                 for bit in sorted(bits)}
         for i, (move, after, ply) in enumerate(children):
             tag = f"{name}:{ply.san}"
             child = key_of(after)
-            by_bit = {bit: found[bit][i] for bit in (True, False)}
+            by_bit = {bit: found[bit][i] for bit in found}
             scores[tag] = {"after": after, "seat": seat}
-            for clock in CLOCKS:
+            for clock in clocks:
                 res = by_bit[team_bits(clock)[answers]]
                 score, mate = for_ac(res, answers, offsets[clock])
                 pv = f"{seat} {ply.san}"
@@ -299,10 +321,75 @@ def mover_value(entry: tuple, seat: str) -> float:
 
 def open_db(path: Path) -> sqlite3.Connection:
     path.parent.mkdir(parents=True, exist_ok=True)
-    con = sqlite3.connect(path)
+    con = sqlite3.connect(path, timeout=60)  # several workers share the file
     con.executescript(SCHEMA)
     con.execute("PRAGMA journal_mode=WAL")
+    relabel_seats(con)
     return con
+
+
+def relabel_seats(con: sqlite3.Connection) -> None:
+    """Rewrite a book written before the seats were lettered A + B and C + D.
+
+    Board 1's black seat was B and board 2's was C, which split each team's
+    letters across the boards. Only stored text carries the old letters: the
+    team names, the seat of each move, and the seat tags inside `best` and
+    `pv`.
+    """
+    if con.execute("SELECT 1 FROM meta WHERE key='seats'").fetchone():
+        return
+    swap = lambda text: None if not text else re.sub(  # noqa: E731
+        r"\b([BC])\b", lambda m: {"B": "C", "C": "B"}[m.group(1)], text)
+    renamed = {"AC": "AB", "BD": "CD"}
+    with con:
+        picks = con.execute("SELECT * FROM pick").fetchall()
+        con.execute("DELETE FROM pick")
+        con.executemany("INSERT INTO pick VALUES(?,?,?,?,?,?,?,?)",
+                        [(pos, clock, renamed.get(team, team), swap(best), score, mate,
+                          swap(pv), offset)
+                         for pos, clock, team, best, score, mate, pv, offset in picks])
+        moves = con.execute("SELECT pos, move, seat, clock, pv FROM move").fetchall()
+        con.executemany("UPDATE move SET seat=?, pv=? WHERE pos=? AND move=? AND clock=?",
+                        [(swap(seat), swap(pv), pos, move, clock)
+                         for pos, move, seat, clock, pv in moves])
+        con.execute("INSERT INTO meta(key, value) VALUES('seats', 'AB/CD')")
+
+
+def claim(con: sqlite3.Connection) -> tuple | None:
+    """The next queued position, marked 'running' so no other worker takes it."""
+    with con:
+        con.execute("BEGIN IMMEDIATE")
+        row = con.execute(
+            "SELECT pos, fen, line, ply FROM position WHERE status='queued' "
+            "ORDER BY priority, ply LIMIT 1").fetchone()
+        if row:
+            con.execute("UPDATE position SET status='running' WHERE pos=?", (row[0],))
+    return row
+
+
+def run_workers(args: argparse.Namespace) -> int:
+    """`--workers N`: N builder processes on one queue, each with its own
+    engine (one engine keeps about five cores busy). Positions a stopped run
+    had claimed go back to the queue first."""
+    import subprocess
+
+    con = open_db(args.db)
+    con.execute("UPDATE position SET status='queued' WHERE status='running'")
+    con.commit()
+    con.close()
+    base = [sys.executable, "-u", str(Path(__file__).resolve()), "--db", str(args.db), "run",
+            "--root", args.root, "--nodes", str(args.nodes), "--child-nodes", str(args.child_nodes),
+            "--max-ply", str(args.max_ply), "--follow", args.follow, "--width", str(args.width),
+            "--priority", args.priority]
+    procs = [subprocess.Popen(base + ["--worker", str(i + 1)]) for i in range(args.workers)]
+
+    def forward(sig, _frame):
+        for p in procs:
+            p.send_signal(sig)
+
+    signal.signal(signal.SIGINT, forward)
+    signal.signal(signal.SIGTERM, forward)
+    return max(p.wait() for p in procs)
 
 
 def enqueue(con: sqlite3.Connection, dual: DualBoard, line: str, ply: int, priority: float) -> None:
@@ -314,7 +401,11 @@ def enqueue(con: sqlite3.Connection, dual: DualBoard, line: str, ply: int, prior
 
 
 def run(args: argparse.Namespace) -> int:
+    if args.workers > 1 and not args.worker:
+        return run_workers(args)
     con = open_db(args.db)
+    if not args.worker:
+        con.execute("UPDATE position SET status='queued' WHERE status='running'")
     root = DualBoard()
     for tag in (args.root or "").split():
         b, text = tag.split(":", 1)
@@ -336,16 +427,15 @@ def run(args: argparse.Namespace) -> int:
     started, done_here = time.time(), 0
     try:
         while not stop["now"]:
-            row = con.execute(
-                "SELECT pos, fen, line, ply FROM position WHERE status='queued' "
-                "ORDER BY priority, ply LIMIT 1").fetchone()
+            row = claim(con)
             if row is None:
                 print("queue empty", flush=True)
                 break
             pos, fen, line, ply = row
             dual = DualBoard.from_dual_fen(fen)
             t0 = time.time()
-            picks, moves, scores = analyse_position(engine, dual, args.nodes, args.child_nodes)
+            picks, moves, scores = analyse_position(engine, dual, args.nodes, args.child_nodes,
+                                                    clocks=clocks_of(args))
             with con:
                 con.executemany("INSERT OR REPLACE INTO pick VALUES(?,?,?,?,?,?,?,?)", picks)
                 con.executemany("INSERT OR REPLACE INTO move VALUES(?,?,?,?,?,?,?,?,?)", moves)
@@ -357,11 +447,11 @@ def run(args: argparse.Namespace) -> int:
                     if fics is not None:
                         expand_fics(con, fics, dual, line, ply, args.width)
                     else:
-                        expand(con, line, ply, scores, args.width)
+                        expand(con, line, ply, scores, args.width, clocks_of(args))
             done_here += 1
             queued = con.execute("SELECT COUNT(*) FROM position WHERE status='queued'").fetchone()[0]
             total = con.execute("SELECT COUNT(*) FROM position WHERE status='done'").fetchone()[0]
-            print(f"{time.strftime('%H:%M:%S')}  done {total:5d}  queue {queued:5d}  "
+            print(f"{time.strftime('%H:%M:%S')}  {f'w{args.worker} ' if args.worker else ''}done {total:5d}  queue {queued:5d}  "
                   f"ply {ply}  {len(scores):3d} moves  {time.time() - t0:5.0f}s  "
                   f"{line or '(start)'}", flush=True)
     finally:
@@ -372,15 +462,17 @@ def run(args: argparse.Namespace) -> int:
     return 0
 
 
-def expand(con: sqlite3.Connection, line: str, ply: int, scores: dict, width: int) -> None:
+def expand(con: sqlite3.Connection, line: str, ply: int, scores: dict, width: int,
+           clocks: Sequence[str] = DEFAULT_CLOCKS) -> None:
     """Queue each board's best `width` moves (even clock) and the best move of
-    the other two clocks. Priority favours main lines: rank costs 0.75 ply."""
+    each other priority case searched. Priority favours main lines: rank costs
+    0.75 ply."""
     chosen: dict[str, float] = {}
     by_board: dict[str, list[str]] = {}
     for tag in scores:
         by_board.setdefault(tag[0], []).append(tag)
     for tags in by_board.values():
-        for clock in CLOCKS:
+        for clock in clocks:
             ranked = sorted(tags, key=lambda t: -mover_value(scores[t][clock], scores[t]["seat"]))
             for rank, tag in enumerate(ranked[: width if clock == "even" else 1]):
                 chosen[tag] = min(chosen.get(tag, 99.0), rank)
@@ -474,9 +566,14 @@ def show(args: argparse.Namespace) -> int:
         r[clock] = (score, mate)
         if clock == "even":
             r["pv"] = pv
-    print(f"\n  {'move':12} " + " ".join(f"{c:>7}" for c in CLOCKS) + "  pv (even)")
-    for move, r in sorted(rows.items(), key=lambda kv: (kv[0][0], -mover_value(kv[1]["even"], kv[1]["seat"]))):
-        print(f"  {r['seat']} {move[2:]:10} " + " ".join(f"{fmt(*r[c]):>7}" for c in CLOCKS) + f"  {r['pv']}")
+    # A book built without `--priority all` has only the one case.
+    present = [c for c in CLOCKS if any(c in r for r in rows.values())]
+    print(f"\n  {'move':12} " + " ".join(f"{c:>7}" for c in present) + "  pv (even)")
+    for move, r in sorted(rows.items(),
+                          key=lambda kv: (kv[0][0], -mover_value(kv[1].get("even", (None, None)),
+                                                                 kv[1]["seat"]))):
+        cells = " ".join(f"{fmt(*r[c]) if c in r else '—':>7}" for c in present)
+        print(f"  {r['seat']} {move[2:]:10} " + cells + f"  {r.get('pv', '')}")
     return 0
 
 
@@ -564,6 +661,12 @@ def main(argv: list[str] | None = None) -> int:
                    help="queue the most-played FICS moves, or the engine's best")
     r.add_argument("--width", type=int, default=4,
                    help="moves queued after each position (engine: per board)")
+    r.add_argument("--priority", choices=("even", "all"), default="even",
+                   help="which priority cases to search: nobody's (the default, "
+                        "half the searches) or every case")
+    r.add_argument("--workers", type=int, default=1,
+                   help="builder processes sharing the queue; each engine uses about 5 cores")
+    r.add_argument("--worker", type=int, default=0, help=argparse.SUPPRESS)
     s = sub.add_parser("show", help="print one position's table")
     s.add_argument("line", nargs="?", default="")
     sub.add_parser("stats")

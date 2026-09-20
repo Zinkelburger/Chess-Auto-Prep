@@ -255,7 +255,7 @@ class TestHivemindBook(unittest.TestCase):
         import chess
         from bughouse_db.hivemind_book import team_bits
 
-        # A + C is White on board A. Only the team ahead has the bit on.
+        # A + B is White on board A. Only the team ahead has the bit on.
         self.assertEqual(team_bits("ahead"), {chess.WHITE: True, chess.BLACK: False})
         self.assertEqual(team_bits("even"), {chess.WHITE: False, chess.BLACK: False})
         self.assertEqual(team_bits("behind"), {chess.WHITE: False, chess.BLACK: True})
@@ -267,8 +267,8 @@ class TestHivemindBook(unittest.TestCase):
         import chess
         from bughouse_db import hivemind_book as hb
 
-        # Raw Q of each team's own search, bit on and off, and of B + D
-        # answering A's e4 (board A: B + D answers) with its bit on.
+        # Raw Q of each team's own search, bit on and off, and of C + D
+        # answering A's e4 (board A: C + D answers) with its bit on.
         raw = {("AC", True): 0.1, ("AC", False): -0.5, ("BD", True): 0.05, ("BD", False): -0.6}
         answer_on = 0.3
         off = {c: (raw[("AC", b[chess.WHITE])] + raw[("BD", b[chess.BLACK])]) / 2
@@ -298,6 +298,24 @@ class TestHivemindBook(unittest.TestCase):
         self.assertAlmostEqual(picks["BD"], -hb.to_score(raw[("BD", True)] - off["both"]), places=2)
         self.assertEqual(hb.fill_both(con), 0, "filled once")
 
+    def test_workers_never_claim_the_same_position(self):
+        from bughouse_db import hivemind_book as hb
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "book.db"
+            one, two = hb.open_db(path), hb.open_db(path)
+            dual = hb.DualBoard()
+            hb.enqueue(one, dual, "", 0, -2)
+            dual.push("A", "e4")
+            hb.enqueue(one, dual, "A:e4", 1, -1)
+            one.commit()
+            first, second = hb.claim(one), hb.claim(two)
+            self.assertEqual(first[2], "")  # most-played first
+            self.assertEqual(second[2], "A:e4")
+            self.assertIsNone(hb.claim(one))
+            one.close()
+            two.close()
+
     def test_seats_follow_the_side_to_move(self):
         from bughouse_db import hivemind_book as hb
 
@@ -305,7 +323,8 @@ class TestHivemindBook(unittest.TestCase):
         self.assertEqual((hb.seat_of(dual, 0), hb.seat_of(dual, 1)), ("A", "D"))
         dual.push("A", "e4")
         dual.push("B", "d4")
-        self.assertEqual((hb.seat_of(dual, 0), hb.seat_of(dual, 1)), ("B", "C"))
+        # Partners hold opposite colours: board 1 is A and C, board 2 D and B.
+        self.assertEqual((hb.seat_of(dual, 0), hb.seat_of(dual, 1)), ("C", "B"))
 
 
 class TestIndexReplacementSafety(unittest.TestCase):

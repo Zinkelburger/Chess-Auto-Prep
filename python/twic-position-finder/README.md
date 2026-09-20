@@ -131,9 +131,14 @@ Endpoints: `GET /health`, `GET /api/slots` (returns window, `blocked_dates`, `av
 ### BughouseDB (`/bughousedb`)
 
 A shared, precomputed Hivemind book for bughouse, like chessdb.cn: every
-legal move on both boards, scored for the four clock cases Hivemind can
-tell apart (A > D, equal, B > C, both; its clock input is one bit per team),
-with a principal variation. `bughousedb.py` owns it, in its
+legal move on both boards, scored for the priority cases Hivemind can tell
+apart, with a principal variation. Seats are lettered A and C on board 1, D
+and B on board 2, so the teams read **A + B** and **C + D**. *Priority* is the
+right to choose whether to move at all, which the team up on the diagonal
+clock has; the tables show one column for the case picked above them —
+`AB may sit`, `Equal` (the default) or `CD may sit`. A fourth stored case,
+`both`, is never offered: no clock gives both teams the choice, and it lands
+within about a tenth of a pawn of `equal`. `bughousedb.py` owns it, in its
 own SQLite file (`BUGHOUSEDB_PATH`, default `bughousedb.db` beside the app).
 The server runs no engine:
 
@@ -150,6 +155,14 @@ The server runs no engine:
 - `POST /api/bughousedb/import` — positions computed on the owner's machine
   (`python3 tools/bughouse_db/hivemind_book.py push`), `X-API-Key:
   $BUGHOUSEDB_ADMIN_KEY`.
+
+The page keeps the line it is showing in its own address
+(`?fen=&moves=A:e2e4 B:d2d4&at=1,1`: the start, the whole line in played
+order, and how far each board has stepped along it, `at` only when a board
+is not at the end). A reload or a shared link replays it, so the move lists
+and every earlier move survive a refresh. Replaying asks for each move's
+position at once, falling back to one at a time if a server refuses
+overlapping requests.
 
 Uploads carry numbers and moves only: move text is rebuilt on the server
 from legal moves, and the page renders everything as text. A browser cannot

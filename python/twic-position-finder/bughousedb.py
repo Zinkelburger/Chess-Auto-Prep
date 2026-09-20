@@ -48,7 +48,7 @@ MIN_SECONDS_PER_SEARCH = 0.05  # an upload faster than this per search is not re
 
 # A + C's clock cases: "ahead" is A > D, "behind" is B > C, "both" is both.
 CLOCKS = ("ahead", "even", "behind", "both")
-TEAMS = ("AC", "BD")           # AC = White on board A + Black on board B
+TEAMS = ("AB", "CD")           # AB = White on board A + Black on board B
 SIT_BIT_Q = 0.5814             # tools/mcp/bughouse/calibration.py
 LICHESS_K = 0.00368208         # lila's winning-chances curve
 JOINT = re.compile(r"^\((?:[A-Za-z0-9@]{2,6}|pass),(?:[A-Za-z0-9@]{2,6}|pass)\)$")
@@ -78,6 +78,7 @@ CREATE TABLE IF NOT EXISTS move(
   q REAL, mate INTEGER, pv TEXT,
   PRIMARY KEY(pos, board, uci, clock)
 ) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS ticket(
   id TEXT PRIMARY KEY, pos INTEGER NOT NULL, contributor TEXT NOT NULL,
   issued REAL NOT NULL, used REAL
@@ -86,11 +87,49 @@ CREATE TABLE IF NOT EXISTS ticket(
 
 
 def connect(path: Path | None = None) -> sqlite3.Connection:
-    conn = sqlite3.connect(path or DB_PATH, timeout=10)
+    # A request's connection is opened by the `db` dependency and used by the
+    # endpoint, which FastAPI may run on a different worker thread; overlapping
+    # requests then land on different threads and sqlite3 refuses the handle.
+    # Each request still gets its own connection, used by one thread at a time.
+    conn = sqlite3.connect(path or DB_PATH, timeout=10, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.executescript(SCHEMA)
+    relabel_seats(conn)
     return conn
+
+
+# The seats were once lettered A and B on board A, D and C on board B, which
+# put a team's letters on different boards (A + C). They now read A + B and
+# C + D. Seats are derived from board and colour, so only the text written
+# before the change carries the old letters: the stored team names and the
+# seat tags inside `best` and `pv`.
+SEAT_SWAP = {"B": "C", "C": "B"}
+
+
+def relabel_seats(conn: sqlite3.Connection) -> None:
+    """Rewrite one database's stored seat letters, once."""
+    if conn.execute("SELECT 1 FROM meta WHERE key='seats'").fetchone():
+        return
+    def swap(text: str | None) -> str | None:
+        if not text:
+            return text
+        return re.sub(r"\b([BC])\b", lambda m: SEAT_SWAP[m.group(1)], text)
+
+    renamed = {"AC": "AB", "BD": "CD"}
+    with conn:
+        # `team` is part of the pick key, so those rows are rewritten wholesale.
+        picks = conn.execute("SELECT pos, clock, team, best, q, mate, pv FROM pick").fetchall()
+        conn.execute("DELETE FROM pick")
+        conn.executemany(
+            "INSERT INTO pick(pos, clock, team, best, q, mate, pv) VALUES(?,?,?,?,?,?,?)",
+            [(p["pos"], p["clock"], renamed.get(p["team"], p["team"]), swap(p["best"]),
+              p["q"], p["mate"], swap(p["pv"])) for p in picks])
+        moves = conn.execute("SELECT pos, board, uci, clock, pv FROM move").fetchall()
+        conn.executemany(
+            "UPDATE move SET pv=? WHERE pos=? AND board=? AND uci=? AND clock=?",
+            [(swap(m["pv"]), m["pos"], m["board"], m["uci"], m["clock"]) for m in moves])
+        conn.execute("INSERT INTO meta(key, value) VALUES('seats', 'AB/CD')")
 
 
 def db() -> Iterator[sqlite3.Connection]:
@@ -141,12 +180,13 @@ def position_key(boards: list[CrazyhouseBoard]) -> int:
 
 
 def seat(which: int, colour: chess.Color) -> str:
-    return (("B", "A"), ("C", "D"))[which][colour]
+    # Partners hold opposite colours, so the teams read A + B and C + D.
+    return (("C", "A"), ("B", "D"))[which][colour]
 
 
 def team_of(which: int, colour: chess.Color) -> str:
-    """AC holds White on board A and Black on board B."""
-    return "AC" if (colour == chess.WHITE) == (which == 0) else "BD"
+    """AB holds White on board A and Black on board B."""
+    return "AB" if (colour == chess.WHITE) == (which == 0) else "CD"
 
 
 def san(board: CrazyhouseBoard, move: chess.Move) -> str:
@@ -183,7 +223,7 @@ def legal_moves(boards: list[CrazyhouseBoard]) -> list[dict]:
             rows.append({
                 "board": "AB"[which], "uci": move.uci(), "san": san(board, move),
                 "seat": seat(which, board.turn),
-                "answerer": "BD" if mover == "AC" else "AC",
+                "answerer": "CD" if mover == "AB" else "AB",
                 "child_fen": dual_fen(child),
             })
     return rows
@@ -245,7 +285,7 @@ def joint_text(boards: list[CrazyhouseBoard], joint: str | None, team: str) -> s
 def team_bits(clock: str) -> dict[str, bool]:
     """Hivemind's only clock input, one bit per team: A + C's is A > D, B + D's
     is B > C (hivemind src/domain/board2planes.py). Equal is both off."""
-    return {"AC": clock in ("ahead", "both"), "BD": clock in ("behind", "both")}
+    return {"AB": clock in ("ahead", "both"), "CD": clock in ("behind", "both")}
 
 
 def centipawns(q: float | None) -> int | None:
@@ -279,14 +319,14 @@ def derive(boards: list[CrazyhouseBoard], own: dict[tuple[str, bool], Search],
     offsets = {}
     for clock in CLOCKS:
         bits = team_bits(clock)
-        qa, qb = q_of(own.get(("AC", bits["AC"]))), q_of(own.get(("BD", bits["BD"])))
+        qa, qb = q_of(own.get(("AB", bits["AB"]))), q_of(own.get(("CD", bits["CD"])))
         offsets[clock] = (qa + qb) / 2 if qa is not None and qb is not None else (
-            (SIT_BIT_Q if bits["AC"] else -SIT_BIT_Q) + (SIT_BIT_Q if bits["BD"] else -SIT_BIT_Q)) / 2
+            (SIT_BIT_Q if bits["AB"] else -SIT_BIT_Q) + (SIT_BIT_Q if bits["CD"] else -SIT_BIT_Q)) / 2
 
     def value(s: Search | None, team: str, clock: str) -> tuple[float | None, int | None]:
         if s is None:
             return None, None
-        sign = 1 if team == "AC" else -1
+        sign = 1 if team == "AB" else -1
         if s.mate is not None:
             return (1.0 if sign * s.mate > 0 else -1.0), sign * s.mate
         if s.q is None:
@@ -404,7 +444,7 @@ class MoveUpload(BaseModel):
 
 
 class OwnUpload(BaseModel):
-    team: str = Field(pattern="^(AC|BD)$")
+    team: str = Field(pattern="^(AB|CD)$")
     ahead: bool
     search: Search
 
@@ -491,7 +531,7 @@ def store_upload(conn: sqlite3.Connection, up: PositionUpload, contributor: str)
 
 class ImportPick(BaseModel):
     clock: str = Field(pattern="^(ahead|even|behind|both)$")
-    team: str = Field(pattern="^(AC|BD)$")
+    team: str = Field(pattern="^(AB|CD)$")
     best: str = Field(default="", max_length=80)
     q: float | None = Field(default=None, ge=-1, le=1)
     mate: int | None = None
