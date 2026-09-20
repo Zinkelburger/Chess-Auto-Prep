@@ -136,16 +136,18 @@ final class _Search {
     final start = leaf is _Scored ? PendingNode(path, leaf.node) : null;
     if (start != null) await _expandByDepth(start);
     // The engine failing on the root position is the one way a search ends
-    // with no tree at all, and it is reported below as a failure, not a tree.
+    // with no tree at all; every other failure still hands back what it had.
     final tree = start == null ? null : assembleTree(start);
     return switch (_stop) {
       _PolicyFailed(:final fen, :final reason) => PolicyMissing(
         fen: fen,
         reason: reason,
+        tree: tree,
       ),
       _EvaluationFailed(:final fen, :final reason) => EvaluationFailed(
         fen: fen,
         reason: reason,
+        tree: tree,
       ),
       _Requested(:final reason) => SearchIncomplete(
         tree: tree!,

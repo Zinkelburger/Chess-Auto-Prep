@@ -39,18 +39,37 @@ final class SearchIncomplete extends SearchResult {
 /// is to move, so the search stopped. Nothing is substituted for it: a guess
 /// at what the opponent plays would silently change what the tree means.
 final class PolicyMissing extends SearchResult {
-  const PolicyMissing({required this.fen, required this.reason});
+  const PolicyMissing({
+    required this.fen,
+    required this.reason,
+    required this.tree,
+  });
 
   final Fen fen;
   final String reason;
+
+  /// Everything the search had built when it stopped, with the node it was
+  /// expanding left untouched — null only when the root itself never got a
+  /// value. A build that has run for hours does not lose its tree because
+  /// one position could not be answered for; the caller can show it, save it
+  /// and resume from it.
+  final SearchNode? tree;
 }
 
 /// The engine could not score a position, so the search stopped. The loss
 /// window and the horizon both need the score; skipping it would quietly
 /// prepare a move on no evidence.
 final class EvaluationFailed extends SearchResult {
-  const EvaluationFailed({required this.fen, required this.reason});
+  const EvaluationFailed({
+    required this.fen,
+    required this.reason,
+    required this.tree,
+  });
 
   final Fen fen;
   final String reason;
+
+  /// What the search had built when the engine gave up, on the same terms as
+  /// [PolicyMissing.tree].
+  final SearchNode? tree;
 }

@@ -198,6 +198,44 @@ void main() {
     );
   });
 
+  test('a model that fails deeper down keeps the tree so far', () async {
+    // Six of our moves are answered and paid for before the model is asked
+    // anything; a build that has run for hours must not lose them.
+    final result = await searchFrom(
+      _kingAndPawn,
+      config: const SearchConfig(side: Side.white, horizonPlies: 2),
+      policy: const AbsentPolicy(),
+    );
+    final failure = result as PolicyMissing;
+    final tree = failure.tree! as OurNode;
+    expect(tree.candidates, hasLength(6));
+    expect(
+      tree.candidates.map((c) => c.child),
+      everyElement(isA<FrontierNode>()),
+    );
+  });
+
+  test('an engine that fails deeper down keeps the tree so far', () async {
+    final root = positionOf(_kingAndPawn);
+    final afterE4 = afterUci(root, 'e2e4');
+    final result = await searchFrom(
+      _kingAndPawn,
+      config: const SearchConfig(side: Side.white, horizonPlies: 2),
+      evaluator: ScriptedEvaluator(failAt: afterUci(afterE4, 'e8d8').fen),
+    );
+    final failure = result as EvaluationFailed;
+    expect((failure.tree! as OurNode).candidates, hasLength(6));
+  });
+
+  test('an engine that fails on the root leaves no tree at all', () async {
+    final result = await searchFrom(
+      _kingAndPawn,
+      config: const SearchConfig(side: Side.white, horizonPlies: 2),
+      evaluator: ScriptedEvaluator(failAt: _kingAndPawn),
+    );
+    expect((result as EvaluationFailed).tree, isNull);
+  });
+
   test('stops when no legal reply has any weight', () async {
     final result = await searchFrom(
       _afterE4,
