@@ -33,7 +33,9 @@ class MoveTreeView extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (tree.rootComment case final comment?) _Comment(text: comment),
+              if (displayComment(tree.rootComment ?? '') case final prose
+                  when prose.isNotEmpty)
+                _Comment(text: prose),
               ..._LineBuilder(
                 session,
               ).line(const NodePath.root(), tree.children),
