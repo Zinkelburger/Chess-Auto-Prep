@@ -325,7 +325,10 @@ share; `BughouseHistory.play` is the one path a move takes onto a line.
 the FICS book (`~/.local/share/chess-prep/bughouse-db/hivemind_book.db`, same
 position key): every legal move on both boards, each scored for the four
 clock cases Hivemind can tell apart (A > D, equal, B > C, both), with a
-principal variation. One engine, one search at a time, resumable; by default
+principal variation. All four come from the same two searches per move, so
+`both` is free to store; the web tables leave it out because it lands within
+about a tenth of a pawn of `equal`. One engine, one search at a time,
+resumable; by default
 it follows the four most-played FICS moves of each position to ply 10.
 `push` uploads it to BughouseDB (`/bughousedb` on the site); the desktop Lab
 does not read it yet.

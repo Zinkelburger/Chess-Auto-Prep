@@ -86,7 +86,11 @@ CREATE TABLE IF NOT EXISTS ticket(
 
 
 def connect(path: Path | None = None) -> sqlite3.Connection:
-    conn = sqlite3.connect(path or DB_PATH, timeout=10)
+    # A request's connection is opened by the `db` dependency and used by the
+    # endpoint, which FastAPI may run on a different worker thread; overlapping
+    # requests then land on different threads and sqlite3 refuses the handle.
+    # Each request still gets its own connection, used by one thread at a time.
+    conn = sqlite3.connect(path or DB_PATH, timeout=10, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.executescript(SCHEMA)
