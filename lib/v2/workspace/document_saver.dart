@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../diagnostics/log.dart';
 import '../storage/document_ref.dart';
 import '../storage/pgn_document_store.dart' as store;
+import 'undo_history.dart';
 
 /// What the file on disk is doing. Only [Saved] says it holds what the
 /// screen shows.
@@ -65,10 +66,6 @@ typedef _Target = ({DocumentRef ref, Revision revision});
 final class DocumentSaver extends ChangeNotifier {
   DocumentSaver(this._store);
 
-  /// Undo is for the mistake you just made, not a version history; the
-  /// versions themselves are kept in Support by the store.
-  static const undoDepth = 20;
-
   final store.PgnDocumentStore _store;
   _Target? _target;
   SaveState _state = const Saved();
@@ -78,7 +75,7 @@ final class DocumentSaver extends ChangeNotifier {
   /// The write going out and everything that collapses behind it, so the
   /// app can wait for the file to hold the draft before it closes.
   Future<void>? _inFlight;
-  final _undo = <store.Receipt>[];
+  final _undo = UndoHistory();
   int _opens = 0;
   bool _disposed = false;
 
@@ -88,7 +85,19 @@ final class DocumentSaver extends ChangeNotifier {
 
   SaveState get state => _state;
 
-  bool get canUndo => _undo.isNotEmpty;
+  bool get canUndo => !_undo.isEmpty;
+
+  /// Whether the file holds the words the user has typed.
+  ///
+  /// False while a write is going out and while a draft waits behind one,
+  /// and false for as long as a save has been refused or has failed: those
+  /// leave words on the screen that are in no file. Closing the window asks
+  /// this, because [flush] only says that nothing is on its way, not that
+  /// anything arrived.
+  bool get settled => _state is Saved && _pending == null;
+
+  /// The file being written, for a log line or a sentence about it.
+  String? get documentPath => _target?.ref.path;
 
   /// A document was opened. It is what the saver writes from now on, and
   /// nothing of the last one — its draft, its receipts — is carried over.
@@ -107,7 +116,10 @@ final class DocumentSaver extends ChangeNotifier {
 
   /// Puts [text] on disk. While the file is conflicted nothing is written:
   /// the user reloads, saves a copy, or keeps editing a draft that is theirs
-  /// to keep.
+  /// to keep. The text is not remembered then — keeping it would refuse
+  /// every undo for the life of the document — but the conflict itself says
+  /// the document is not [settled], so nothing takes the file for the
+  /// document.
   void save(String text) {
     if (_state is SaveConflict) return;
     _pending = text;
@@ -115,10 +127,11 @@ final class DocumentSaver extends ChangeNotifier {
     _start();
   }
 
-  /// Waits until the draft is on disk: the write in flight, the one that
-  /// collapsed behind it, and a hold that is keeping both waiting. Closing
-  /// the window waits for this, so an edit made a moment before it closed is
-  /// not cut off.
+  /// Waits until nothing is on its way any more: the write in flight, the
+  /// one that collapsed behind it, and a hold that is keeping both waiting.
+  /// Closing the window waits for this, so an edit made a moment before it
+  /// closed is not cut off. Whether the words arrived is [settled]; a write
+  /// that was refused or failed also ends the wait.
   Future<void> flush() => _inFlight ?? Future<void>.value();
 
   /// Runs [action] against the revision the file has now, with the file held
@@ -192,11 +205,7 @@ final class DocumentSaver extends ChangeNotifier {
     _writing = true;
     _set(const Saving());
     final ticket = _opens;
-    final result = await _store.save(
-      target.ref,
-      text,
-      expected: target.revision,
-    );
+    final result = await _put(target.ref, text, target.revision);
     _writing = false;
     if (_disposed) return;
     if (ticket != _opens) {
@@ -206,8 +215,34 @@ final class DocumentSaver extends ChangeNotifier {
       await _write();
       return;
     }
+    // Words a write could not put on disk stay with the saver, so a later
+    // try has them and so the document knows it is not settled. Nothing
+    // tries again on its own: the same failure would only happen again.
+    if (result is store.IoFailure && _pending == null) _pending = text;
     _adopt(result, target.ref);
-    if (_state is! SaveConflict) await _write();
+    if (_writable) await _write();
+  }
+
+  /// Whether a write may go out now. A conflicted file takes nothing until
+  /// the user decides what to do with it, and a failed one is not written
+  /// again until something changes.
+  bool get _writable => _state is! SaveConflict && _state is! SaveFailed;
+
+  /// The store's answer to one write, with an exception it was not supposed
+  /// to throw turned into the failure it is. A throw that got out would
+  /// leave the saver believing a write was still going and hand the error to
+  /// every later flush.
+  Future<store.SaveResult> _put(
+    DocumentRef ref,
+    String text,
+    Revision expected,
+  ) async {
+    try {
+      return await _store.save(ref, text, expected: expected);
+    } on Object catch (error) {
+      log.e('save ${ref.path}', error);
+      return store.IoFailure('$error');
+    }
   }
 
   /// A write that landed after its document was opened again. When it wrote
@@ -227,7 +262,7 @@ final class DocumentSaver extends ChangeNotifier {
     switch (result) {
       case store.Saved(:final receipt):
         _target = (ref: ref, revision: receipt.committed);
-        _keep(receipt);
+        _undo.keep(receipt);
         _set(const Saved());
       case store.Conflict():
         // The store logs what it could not do; a conflict is not a failure
@@ -239,11 +274,6 @@ final class DocumentSaver extends ChangeNotifier {
     }
   }
 
-  void _keep(store.Receipt receipt) {
-    _undo.add(receipt);
-    if (_undo.length > undoDepth) _undo.removeAt(0);
-  }
-
   /// Puts the version before the last save back, through the store, so the
   /// undo is itself a save: it is refused if the file changed underneath and
   /// it is recorded like any other write.
@@ -252,18 +282,19 @@ final class DocumentSaver extends ChangeNotifier {
   /// newest text is still going to disk.
   ///
   /// It is a write like any other to whatever is waiting for the file, too:
-  /// a flush, a hold and the closing window wait for the undo and for the
-  /// draft typed while it was going out, which goes to disk behind it.
+  /// a flush, a hold and the closing window wait for the undo, and for the
+  /// draft typed while it was going out.
   Future<UndoResult> undo() {
     final target = _target;
+    final entry = _undo.newest;
     if (target == null ||
-        _undo.isEmpty ||
+        entry == null ||
         _held ||
         _writing ||
         _pending != null) {
       return Future<UndoResult>.value(const UndoRefused());
     }
-    final undoing = _undoTo(_undo.last, target);
+    final undoing = _undoTo(entry, target);
     // What is kept here can only complete, never fail: a future left here
     // with an error would throw again at every later flush.
     _inFlight = undoing.then<void>((_) {}, onError: (Object _) {});
@@ -275,11 +306,7 @@ final class DocumentSaver extends ChangeNotifier {
     _writing = true;
     _set(const Saving());
     final ticket = _opens;
-    final result = await _store.save(
-      target.ref,
-      entry.before,
-      expected: entry.committed,
-    );
+    final result = await _put(target.ref, entry.before, entry.committed);
     _writing = false;
     if (_disposed) return const UndoRefused();
     if (ticket != _opens) {
@@ -295,7 +322,7 @@ final class DocumentSaver extends ChangeNotifier {
       return const UndoRefused();
     }
     final outcome = _undone(result, entry, target.ref);
-    if (_state is! SaveConflict) await _write();
+    if (_writable) await _write();
     return outcome;
   }
 
@@ -315,8 +342,7 @@ final class DocumentSaver extends ChangeNotifier {
   ) {
     switch (result) {
       case store.Saved(:final receipt):
-        _undo.removeLast();
-        _rearm(entry, receipt);
+        _undo.tookBack(entry, receipt);
         _target = (ref: ref, revision: receipt.committed);
         _set(const Saved());
         return Restored(entry.before);
@@ -328,22 +354,6 @@ final class DocumentSaver extends ChangeNotifier {
         _set(SaveFailed(detail));
         return const UndoRefused();
     }
-  }
-
-  /// The entry below the one just undone holds content that is on disk
-  /// again, but as the file the undo wrote, so it is pointed at that
-  /// revision. An entry whose revision was not the one the undone save
-  /// replaced is left alone: something else wrote in between, and undoing to
-  /// it would throw that away.
-  void _rearm(store.Receipt undone, store.Receipt written) {
-    if (_undo.isEmpty) return;
-    final previous = _undo.last;
-    if (previous.committed != undone.beforeRevision) return;
-    _undo[_undo.length - 1] = store.Receipt(
-      committed: written.committed,
-      before: previous.before,
-      beforeRevision: previous.beforeRevision,
-    );
   }
 
   /// Nothing is written while the file is conflicted, so a draft that was
