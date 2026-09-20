@@ -4,6 +4,31 @@ import 'package:chess_auto_prep/v2/chess/pgn/pgn_reader.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('a tab after [Event still starts a game', () {
+    const file = '[Event\t"A"]\n[Result "*"]\n\n1. e4 *\n';
+    final document = splitChapterText(file);
+    expect(document.preamble, isEmpty);
+    expect(document.games, hasLength(1));
+  });
+
+  test('[EventDate does not start a game', () {
+    const file = '[Event "A"]\n[EventDate "2020.01.01"]\n\n1. e4 *\n';
+    expect(splitChapterText(file).games, hasLength(1));
+  });
+
+  test('a header quoted inside a comment does not split the game', () {
+    const file =
+        '[Event "A"]\n'
+        '[Result "*"]\n'
+        '\n'
+        '1. e4 {The file said\n'
+        '[Event "B"] and meant nothing by it\n'
+        '} *\n';
+    final document = splitChapterText(file);
+    expect(document.games, hasLength(1));
+    expect(document.games.single.text, contains('and meant nothing by it'));
+  });
+
   test('an escaped quote does not end a value, and the tags below it '
       'survive', () {
     const game =

@@ -52,10 +52,11 @@ typedef GameSpan = ({String text, String trailer});
 
 /// Cuts chapter text into the `//` preamble and its games.
 ///
-/// A game starts at a line whose first non-blank characters are `[Event `.
-/// The trailing space is load-bearing: a bare `[Event` prefix also matches
-/// the `[EventDate "…"]` that course exports carry, and cutting there splits
-/// every game in two.
+/// A game starts at a line whose first non-blank characters are `[Event`
+/// followed by whitespace, and that is not inside a `{}` comment. Both
+/// conditions cost a game when they are wrong: `[EventDate "…"]`, which
+/// course exports carry, would split every game in two, and a comment
+/// quoting a header would split one game where it should not.
 ({String preamble, List<GameSpan> games}) splitChapterText(String text) {
   final starts = _gameStarts(text);
   if (starts.isEmpty) return (preamble: text, games: const []);
@@ -72,10 +73,14 @@ typedef GameSpan = ({String text, String trailer});
 List<int> _gameStarts(String text) {
   final starts = <int>[];
   var lineStart = 0;
+  var commented = false;
   while (lineStart <= text.length) {
     var lineEnd = text.indexOf('\n', lineStart);
     if (lineEnd < 0) lineEnd = text.length;
-    if (_isEventLine(text, lineStart, lineEnd)) starts.add(lineStart);
+    if (!commented && _isEventLine(text, lineStart, lineEnd)) {
+      starts.add(lineStart);
+    }
+    commented = _commentedAfter(text, lineStart, lineEnd, commented);
     lineStart = lineEnd + 1;
   }
   return starts;
@@ -86,8 +91,27 @@ bool _isEventLine(String text, int start, int end) {
   while (i < end && _isBlank(text.codeUnitAt(i))) {
     i++;
   }
-  return i < end && text.startsWith('[Event ', i);
+  const event = '[Event';
+  return text.startsWith(event, i) &&
+      i + event.length < end &&
+      _isBlank(text.codeUnitAt(i + event.length));
 }
+
+/// Whether a `{}` comment is still open at the end of the line.
+///
+/// Open or closed, never a count: PGN comments do not nest, so a `}` inside
+/// one ends it and a `{` inside one is text.
+bool _commentedAfter(String text, int start, int end, bool commented) {
+  var open = commented;
+  for (var i = start; i < end; i++) {
+    final unit = text.codeUnitAt(i);
+    if (open ? unit == _closeBrace : unit == _openBrace) open = !open;
+  }
+  return open;
+}
+
+const _openBrace = 0x7B;
+const _closeBrace = 0x7D;
 
 /// Space, tab, carriage return or a byte-order mark.
 bool _isBlank(int unit) =>
