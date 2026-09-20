@@ -1022,7 +1022,7 @@
     "lib/features/tactics/services/tactics_database.dart: global singleton access bypasses injection: final storage = StorageFactory.instance;",
     "lib/features/tactics/services/tactics_database.dart: global singleton access bypasses injection: final storage = StorageFactory.instance;",
     "lib/features/tactics/services/tactics_database.dart: global singleton access bypasses injection: final storage = StorageFactory.instance;",
-    "lib/features/tactics/services/tactics_game_fetcher.dart: global singleton access bypasses injection: final response = await LichessApiClient.instance.get(",
+    "lib/features/tactics/services/tactics_game_fetcher.dart: global singleton access bypasses injection: response = await LichessApiClient.instance.get(",
     "lib/features/tactics/services/tactics_game_pruner.dart: forbidden dependency ../../../services/storage/storage_factory.dart",
     "lib/features/tactics/services/tactics_game_pruner.dart: global singleton access bypasses injection: final storage = StorageFactory.instance;",
     "lib/features/tactics/services/tactics_game_pruner.dart: global singleton access bypasses injection: final store = await GameStoreService.instance.open();",

@@ -36,6 +36,7 @@ class _EmptyLibrary extends GamesLibraryService {
     bool forceRefresh = false,
     void Function(String message)? onProgress,
     void Function(DateTime fetchedAt)? onFetched,
+    void Function(Object? error)? onStaleCache,
   }) async {
     fetches++;
     forcedFetches.add(forceRefresh);
@@ -102,6 +103,7 @@ class _OneGameLibrary extends GamesLibraryService {
     bool forceRefresh = false,
     void Function(String message)? onProgress,
     void Function(DateTime fetchedAt)? onFetched,
+    void Function(Object? error)? onStaleCache,
   }) async {
     forcedFetches.add(forceRefresh);
     return [GameRecord.parse(pgn)];

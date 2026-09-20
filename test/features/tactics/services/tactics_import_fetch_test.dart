@@ -647,4 +647,91 @@ void main() {
       expect(result.gamesSkipped, 1);
     });
   });
+
+  // ────────────────────────────────────────────────────────────────────────
+  group('with no connection', () {
+    /// Write the games-library cache a previous successful download would
+    /// have left behind.
+    Future<void> seedLibraryCache(String name, String pgn) async {
+      final dir = Directory('${tempDir.path}/games_library');
+      await dir.create(recursive: true);
+      await File('${dir.path}/$name').writeAsString(pgn);
+    }
+
+    test('Lichess unreachable: the saved games are reviewed instead', () async {
+      stub.routes = {
+        'https://lichess.org/api/games/user/userA': (status: 503, body: ''),
+      };
+      await seedLibraryCache(
+        'lichess_usera.pgn',
+        [lichessGame('aaaaaaaa'), lichessGame('bbbbbbbb')].join('\n\n'),
+      );
+      final service = await serviceWithAnalyzed([
+        'lichess_aaaaaaaa',
+        'lichess_bbbbbbbb',
+      ]);
+
+      final messages = <String>[];
+      final result = await service.importGamesFromLichess(
+        'userA',
+        depth: 8,
+        maxCores: 0,
+        progressCallback: messages.add,
+      );
+
+      expect(result.gamesSkipped, 2);
+      expect(
+        messages,
+        contains(
+          contains('Could not reach Lichess — reviewing the 2 games saved'),
+        ),
+      );
+    });
+
+    test('Chess.com unreachable: the saved games are reviewed instead', () async {
+      stub.routes = {_archivesUrl: (status: 500, body: '')};
+      await seedLibraryCache(
+        'chesscom_usera.pgn',
+        [chesscomGame('111'), chesscomGame('222')].join('\n\n'),
+      );
+      final service = await serviceWithAnalyzed([
+        'chesscom_111',
+        'chesscom_222',
+      ]);
+
+      final result = await service.importGamesFromChessCom(
+        'userA',
+        depth: 8,
+        maxCores: 0,
+      );
+
+      expect(result.gamesSkipped, 2);
+    });
+
+    test('the saved games honour the window the run asked for', () async {
+      stub.routes = {
+        'https://lichess.org/api/games/user/userA': (status: 503, body: ''),
+      };
+      await seedLibraryCache(
+        'lichess_usera.pgn',
+        [
+          lichessGame('aaaaaaaa', date: '2025.06.10'),
+          lichessGame('bbbbbbbb', date: '2025.01.02'),
+        ].join('\n\n'),
+      );
+      final service = await serviceWithAnalyzed([
+        'lichess_aaaaaaaa',
+        'lichess_bbbbbbbb',
+      ]);
+
+      final result = await service.importGamesFromLichess(
+        'userA',
+        since: DateTime.utc(2025, 6, 1),
+        depth: 8,
+        maxCores: 0,
+      );
+
+      expect(result.gamesSkipped, 1, reason: 'the older game is outside it');
+    });
+  });
 }

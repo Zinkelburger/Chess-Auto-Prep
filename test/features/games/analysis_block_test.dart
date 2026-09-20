@@ -38,6 +38,7 @@ class _IdleLibrary extends GamesLibraryService {
     bool forceRefresh = false,
     void Function(String message)? onProgress,
     void Function(DateTime fetchedAt)? onFetched,
+    void Function(Object? error)? onStaleCache,
   }) async => const [];
 
   @override

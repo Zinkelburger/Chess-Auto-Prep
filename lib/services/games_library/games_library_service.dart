@@ -129,6 +129,21 @@ class GamesLibraryService {
     return null;
   }
 
+  /// The games already downloaded for this player, or null when this
+  /// computer holds none. Never touches the network, and never throws: a
+  /// caller asks for this precisely when something else has already gone
+  /// wrong.
+  Future<String?> cachedPgn(GamesPlatform platform, String username) async {
+    try {
+      final file = await _cacheFile(platform, username);
+      if (!await file.exists()) return null;
+      final text = await file.readAsString();
+      return text.trim().isEmpty ? null : text;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// When this player's games were last downloaded, or null if never.
   Future<DateTime?> lastFetched(
     GamesPlatform platform,
@@ -151,8 +166,16 @@ class GamesLibraryService {
 
   /// Return the requested slice of a player's games.
   ///
-  /// Uses the on-disk cache when fresh (or when [forceRefresh] is false and a
-  /// cache exists offline); otherwise fetches, caches, then filters.
+  /// Uses the on-disk cache when fresh; otherwise fetches, caches, then
+  /// filters.
+  ///
+  /// **A failed download never costs the caller its games.** Whatever the
+  /// reason the fetch produced nothing — no network, a 429, a site outage —
+  /// the cache is read and served instead, however stale, and [onStaleCache]
+  /// says so. [forceRefresh] means "prefer the network", not "discard what is
+  /// on this computer": it skips the cache on the way *out*, not on the way
+  /// back. Only a player with no cache at all propagates the failure, because
+  /// only then is there nothing to show.
   ///
   /// [unionWith] adds further selections whose slices are unioned into the
   /// result from the same parse: one load that leaves the caller holding
@@ -167,6 +190,7 @@ class GamesLibraryService {
     bool forceRefresh = false,
     void Function(String message)? onProgress,
     void Function(DateTime fetchedAt)? onFetched,
+    void Function(Object? error)? onStaleCache,
   }) async {
     final file = await _cacheFile(platform, username);
     String pgn;
@@ -179,14 +203,24 @@ class GamesLibraryService {
       pgn = await file.readAsString();
     } else {
       onProgress?.call('Downloading $username from ${platform.name}…');
-      pgn = await _fetcherFor(platform)(
-        username,
-        maxGames: selection.maxGames ?? 300,
-        since: selection.since,
-        onProgress: onProgress,
-      );
-      if (pgn.trim().isNotEmpty) {
-        final fresh = pgn;
+      var fresh = '';
+      Object? failure;
+      StackTrace? failureStack;
+      try {
+        fresh = await _fetcherFor(platform)(
+          username,
+          maxGames: selection.maxGames ?? 300,
+          since: selection.since,
+          onProgress: onProgress,
+        );
+      } catch (e, stack) {
+        // Caught, not propagated: the answer to "your games, please" is the
+        // games this computer already holds, and the caller hears about the
+        // failure through [onStaleCache] instead of losing the list.
+        failure = e;
+        failureStack = stack;
+      }
+      if (fresh.trim().isNotEmpty) {
         pgn = await updateTextFileAtomically(
           file,
           (existing) => existing == null
@@ -200,9 +234,16 @@ class GamesLibraryService {
         fetchedNow = DateTime.now();
         await _writeFetchStamp(file, fetchedNow);
       } else if (await file.exists()) {
-        // Network gave nothing — fall back to the stale cache rather than
-        // wiping the user's data.
+        // The download failed or gave nothing — serve the stale cache rather
+        // than wiping the user's data. This is the offline path.
         pgn = await file.readAsString();
+        onStaleCache?.call(failure);
+      } else if (failure != null) {
+        // Nothing downloaded, nothing saved: there is no list to protect, so
+        // the caller has to hear why it is empty, with the original error.
+        Error.throwWithStackTrace(failure, failureStack ?? StackTrace.current);
+      } else {
+        pgn = '';
       }
     }
 

@@ -4,6 +4,7 @@
 library;
 
 import 'dart:async';
+import 'dart:io' show SocketException;
 
 import 'package:chess_auto_prep/features/games/controllers/recent_games_controller.dart';
 import 'package:chess_auto_prep/features/games/services/games_window.dart';
@@ -25,6 +26,7 @@ class _ThrowingLibrary extends GamesLibraryService {
     bool forceRefresh = false,
     void Function(String message)? onProgress,
     void Function(DateTime fetchedAt)? onFetched,
+    void Function(Object? error)? onStaleCache,
   }) async {
     calls++;
     throw StateError('network down');
@@ -46,6 +48,7 @@ class _GatedLibrary extends GamesLibraryService {
     bool forceRefresh = false,
     void Function(String message)? onProgress,
     void Function(DateTime fetchedAt)? onFetched,
+    void Function(Object? error)? onStaleCache,
   }) {
     calls.add(selection);
     return gate.future;
@@ -74,6 +77,7 @@ class _PgnLibrary extends GamesLibraryService {
     bool forceRefresh = false,
     void Function(String message)? onProgress,
     void Function(DateTime fetchedAt)? onFetched,
+    void Function(Object? error)? onStaleCache,
   }) async {
     loads++;
     return GamesLibraryService.selectFromPgnUnion(pgn, [
@@ -104,8 +108,69 @@ class _StampingLibrary extends GamesLibraryService {
     bool forceRefresh = false,
     void Function(String message)? onProgress,
     void Function(DateTime fetchedAt)? onFetched,
+    void Function(Object? error)? onStaleCache,
   }) async {
     onFetched?.call(at);
+    return GamesLibraryService.selectFromPgnUnion(pgn, [
+      selection,
+      ...unionWith,
+    ]);
+  }
+
+  @override
+  Future<String> cacheFilePath(GamesPlatform platform, String username) async =>
+      '/tmp/${platform.name}_$username.pgn';
+}
+
+/// Serves the PGN on the first load and fails on every load after it: the
+/// machine that had games and then lost its connection.
+class _FlakyLibrary extends GamesLibraryService {
+  _FlakyLibrary(this.pgn);
+
+  final String pgn;
+  int loads = 0;
+
+  @override
+  Future<List<GameRecord>> getGames({
+    required GamesPlatform platform,
+    required String username,
+    GameSelection selection = const GameSelection(),
+    List<GameSelection> unionWith = const [],
+    bool forceRefresh = false,
+    void Function(String message)? onProgress,
+    void Function(DateTime fetchedAt)? onFetched,
+    void Function(Object? error)? onStaleCache,
+  }) async {
+    if (loads++ > 0) throw StateError('SocketException: host lookup failed');
+    return GamesLibraryService.selectFromPgnUnion(pgn, [
+      selection,
+      ...unionWith,
+    ]);
+  }
+
+  @override
+  Future<String> cacheFilePath(GamesPlatform platform, String username) async =>
+      '/tmp/${platform.name}_$username.pgn';
+}
+
+/// Serves the PGN and reports that it came off the disk rather than the site.
+class _StaleServingLibrary extends GamesLibraryService {
+  _StaleServingLibrary(this.pgn);
+
+  final String pgn;
+
+  @override
+  Future<List<GameRecord>> getGames({
+    required GamesPlatform platform,
+    required String username,
+    GameSelection selection = const GameSelection(),
+    List<GameSelection> unionWith = const [],
+    bool forceRefresh = false,
+    void Function(String message)? onProgress,
+    void Function(DateTime fetchedAt)? onFetched,
+    void Function(Object? error)? onStaleCache,
+  }) async {
+    onStaleCache?.call(const SocketException('Failed host lookup'));
     return GamesLibraryService.selectFromPgnUnion(pgn, [
       selection,
       ...unionWith,
@@ -319,5 +384,67 @@ void main() {
       (GamesPlatform.chesscom, at),
       (GamesPlatform.lichess, at),
     ]);
+  });
+
+  // Regression: opening the app offline started a forced "check for new
+  // games", the check failed, and the list replaced the games it was already
+  // showing with an empty-state card. A failed refresh may cost freshness,
+  // never the games.
+  test('a refresh that fails keeps the games already listed', () async {
+    SharedPreferences.setMockInitialValues({});
+    final library = _FlakyLibrary(_threeGames);
+    final controller = RecentGamesController(
+      lichessUsername: () => 'me',
+      chesscomUsername: () => null,
+      library: library,
+      windowSettings: GamesWindowSettings.forTest(),
+      now: () => DateTime(2026, 8, 4, 12),
+    );
+    addTearDown(controller.dispose);
+
+    await controller.refresh();
+    expect(controller.games, hasLength(3));
+
+    await controller.refresh(force: true);
+
+    expect(controller.games, hasLength(3), reason: 'the list is not emptied');
+    expect(controller.error, isNull, reason: 'nothing failed for the reader');
+    expect(controller.staleNotice, contains('Lichess'));
+    expect(controller.staleNotice, contains('saved games'));
+  });
+
+  test('a first load that fails with nothing saved says why', () async {
+    SharedPreferences.setMockInitialValues({});
+    final controller = RecentGamesController(
+      lichessUsername: () => 'me',
+      chesscomUsername: () => null,
+      library: _ThrowingLibrary(),
+      windowSettings: GamesWindowSettings.forTest(),
+      now: () => DateTime(2026, 8, 4, 12),
+    );
+    addTearDown(controller.dispose);
+
+    await controller.refresh();
+
+    expect(controller.games, isEmpty);
+    expect(controller.error, isNotNull);
+  });
+
+  test('games served from the cache are listed with a notice', () async {
+    SharedPreferences.setMockInitialValues({});
+    final controller = RecentGamesController(
+      lichessUsername: () => 'me',
+      chesscomUsername: () => null,
+      library: _StaleServingLibrary(_threeGames),
+      windowSettings: GamesWindowSettings.forTest(),
+      now: () => DateTime(2026, 8, 4, 12),
+    );
+    addTearDown(controller.dispose);
+
+    await controller.refresh();
+
+    expect(controller.games, hasLength(3));
+    expect(controller.error, isNull);
+    expect(controller.staleNotice, contains('Lichess'));
   });
 }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'log.dart';
+import 'network_errors.dart';
 
 /// All user-facing notification strings in one place for easy auditing.
 ///
@@ -32,24 +33,16 @@ class AppMessages {
   /// connection is the difference between "try again" and knowing that
   /// clicking again will not help until the network is back.
   static String downloadFailed(Object error, {required String site}) =>
-      _looksOffline(error)
+      looksOffline(error)
       ? 'Could not reach $site. Check your internet connection and try again.'
       : 'Could not download from $site. Please try again.';
 
-  /// Whether [error] is the machine failing to reach the network at all,
-  /// rather than the site answering with something unusable. Matched on the
-  /// message because `package:http` wraps the socket failure in its own
-  /// `ClientException`.
-  static bool _looksOffline(Object error) {
-    if (error is TimeoutException) return true;
-    final text = error.toString();
-    return text.contains('SocketException') ||
-        text.contains('Failed host lookup') ||
-        text.contains('Connection refused') ||
-        text.contains('Connection reset') ||
-        text.contains('Network is unreachable') ||
-        text.contains('No route to host');
-  }
+  /// What a list says while it is showing games the network could not be
+  /// asked about. The games are real and already on this computer; the only
+  /// thing missing is anything played since [lastFetched].
+  static String showingSavedGames(String? lastFetched) => lastFetched == null
+      ? 'Offline — showing the games saved on this computer.'
+      : 'Offline — showing the games saved $lastFetched.';
 
   // ── Informational (SnackBar, auto-dismiss 3s) ─────────────────
   static String noGamesFound(String username) =>

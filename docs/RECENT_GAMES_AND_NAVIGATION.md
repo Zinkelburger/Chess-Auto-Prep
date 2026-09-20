@@ -25,7 +25,7 @@ Companion docs: [`GAMES_DRIVEN_REPERTOIRE.md`](GAMES_DRIVEN_REPERTOIRE.md)
 
 | Need | Status today |
 |---|---|
-| Download + cache my games (both platforms) | **Exists.** `GamesLibraryService` (`lib/services/games_library/`) — per-(platform, username) PGN cache, 12 h TTL, verified chess.com + Lichess fetchers, `GameSelection` filters. Only consumer so far is the draft flow. |
+| Download + cache my games (both platforms) | **Exists.** `GamesLibraryService` (`lib/services/games_library/`) — per-(platform, username) PGN cache, 12 h TTL, verified chess.com + Lichess fetchers, `GameSelection` filters. A fetch that fails (offline, 429, outage) is answered from that cache however stale, including under `forceRefresh`; `onStaleCache` reports it and only a player with no cache at all propagates the error. |
 | Per-game metadata (players, ratings, result, date, speed) | **Exists** via `GameRecord` (`game_filter.dart`) + PGN headers. Missing: move count (trivial to compute), accuracy (not fetched anywhere). |
 | Full game review (blunders, eval graph, ACPL) | **Exists.** `GameAnalysisController.analyzeGame()` — batch engine pass, Lichess-style win%-swing classification (0.30/0.20/0.10), Maia "interesting" moves, `[%eval]` persistence + zero-engine cached restore on every game switch. |
 | 0–100 accuracy score | **Missing.** Only ACPL + classification counts exist. All ingredients (per-move win chances) already computed. |
