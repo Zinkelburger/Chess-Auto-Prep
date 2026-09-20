@@ -50,6 +50,22 @@ final class BackupArchive {
     }
   }
 
+  /// When the document with [id] has a version whose bytes hash to [hash],
+  /// what is known about it; null when it has none.
+  ///
+  /// It is how a restore proves it is putting back something this store kept
+  /// rather than bytes a caller made up: nothing else compares what a
+  /// restore writes against anything.
+  Future<BackupVersion?> versionWithHash(String id, String hash) async {
+    try {
+      final versions = await _readIndex(folderFor(id));
+      return versions.where((version) => version.hash == hash).lastOrNull;
+    } on Object catch (error) {
+      log.e('look for a kept version of $id', error);
+      return null;
+    }
+  }
+
   /// Records [bytes] as the newest version of the document with [id], unless
   /// they are already the newest one recorded.
   ///

@@ -214,12 +214,11 @@ void main() {
     expect(await File(ref.path).readAsBytes(), compressed);
   });
 
-  test('a byte the app cannot read keeps its place in a game nobody '
-      'edited', () async {
+  test('a file with a byte the app cannot read opens to read only', () async {
     final ref = fixture.ref('KID/Main.pgn');
     // A stray byte among good UTF-8 in the third game: the file reads with
     // that byte as U+FFFD, and writing the reading back would put EF BF BD
-    // where it was. The save may not do that to a game nobody edited.
+    // where it was. Nothing about it may be written.
     final stray = [
       ...utf8.encode(chapterOf([gameOf(1, '1. d4'), gameOf(2, '1. e4')])),
       ...utf8.encode('[Event "Line 3"]\n[Result "*"]\n\n1. c4 {’’’’’’’’'),
@@ -231,6 +230,7 @@ void main() {
     final revision = await fixture.revisionOf(ref);
     final opened = await fixture.store.open(ref) as Opened;
     expect(opened.text, contains('\uFFFD'), reason: 'the reading is lossy');
+    expect(opened.readOnly, contains('not UTF-8'));
 
     final saved = await fixture.store.save(
       ref,
@@ -239,8 +239,88 @@ void main() {
       scope: GamesEdited(GamesWritten(rewritten: {0})),
     );
 
-    expect(saved, isA<SaveRefused>());
+    expect(saved, isA<NotWritable>());
     expect(await File(ref.path).readAsBytes(), stray);
+  });
+
+  test(
+    'a file with a byte-order mark keeps it through a scoped save',
+    () async {
+      final ref = fixture.ref('KID/Main.pgn');
+      final text =
+          '\uFEFF${chapterOf([gameOf(1, '1. d4'), gameOf(2, '1. e4')])}';
+      await Directory(p.dirname(ref.path)).create(recursive: true);
+      await File(ref.path).writeAsBytes(utf8.encode(text));
+      final revision = await fixture.revisionOf(ref);
+      final opened = await fixture.store.open(ref) as Opened;
+      expect(opened.text, startsWith('\uFEFF'));
+      expect(opened.readOnly, isNull);
+
+      final saved = await fixture.store.save(
+        ref,
+        opened.text.replaceFirst('1. d4 *', '1. d4 Nf6 *'),
+        expected: revision,
+        scope: GamesEdited(GamesWritten(rewritten: {0})),
+      );
+
+      expect(saved, isA<Saved>());
+      expect((await File(ref.path).readAsBytes()).take(3), [0xEF, 0xBB, 0xBF]);
+      expect(await File(ref.path).readAsString(), contains('1. d4 Nf6 *'));
+    },
+  );
+
+  test('a byte-order mark comes through a whole-document save too', () async {
+    final ref = fixture.ref('KID/Main.pgn');
+    final text = '\uFEFF${chapterOf([gameOf(1, '1. d4')])}';
+    await Directory(p.dirname(ref.path)).create(recursive: true);
+    await File(ref.path).writeAsBytes(utf8.encode(text));
+    final revision = await fixture.revisionOf(ref);
+    final opened = await fixture.store.open(ref) as Opened;
+
+    final saved = await fixture.store.save(
+      ref,
+      '${opened.text}\n',
+      expected: revision,
+      scope: const WholeDocument(),
+    );
+
+    expect(saved, isA<Saved>());
+    expect((await File(ref.path).readAsBytes()).take(3), [0xEF, 0xBB, 0xBF]);
+  });
+
+  group('a restored version', () {
+    test('goes back when the archive kept those bytes', () async {
+      final ref = fixture.ref('KID/Main.pgn');
+      final first = await fixture.put(ref, threeGames);
+      final edited = chapterOf([
+        gameOf(1, '1. d4 Nf6'),
+        gameOf(2, '1. e4'),
+        gameOf(3, '1. c4'),
+      ]);
+      final saved = await fixture.edit(ref, edited, first) as Saved;
+
+      final back = await fixture.restore(
+        ref,
+        threeGames,
+        saved.receipt.committed,
+      );
+      expect(back, isA<Saved>());
+      expect(await File(ref.path).readAsString(), threeGames);
+    });
+
+    test('is refused when nothing kept those bytes', () async {
+      final ref = fixture.ref('KID/Main.pgn');
+      final revision = await fixture.put(ref, threeGames);
+
+      final made = await fixture.restore(
+        ref,
+        chapterOf([gameOf(1, '1. d4 Nf6 2. c4 g6')]),
+        revision,
+      );
+
+      expect((made as SaveRefused).detail, contains('kept for this document'));
+      expect(await File(ref.path).readAsString(), threeGames);
+    });
   });
 
   test('a scope that says games were taken out cannot be made', () {

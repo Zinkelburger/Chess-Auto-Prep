@@ -4,6 +4,7 @@ import 'package:chess_auto_prep/v2/chess/pgn/comment_edits.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_text.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/move_text.dart';
+import 'package:chess_auto_prep/v2/chess/pgn/tree_edit.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';
@@ -168,6 +169,36 @@ void main() {
     expect(writeChapter(result.chapter), blackChapter);
   });
 
+  group('a branch below a ply where nobody moved', () {
+    final chapter = parseChapter(name: 'Waiting', text: nullMoveChapter);
+
+    test('reads as two lines through the waiting ply', () {
+      expect(mainlineSans(chapter.tree), ['--', 'e5', 'Nf3']);
+      expect(chapter.gameCount, 2);
+    });
+
+    test('writes a game that holds the move that was played', () {
+      final result = addMove(chapter, at: NodePath.of([0, 0]), uci: 'c2c4');
+      expect(result, isA<MoveAdded>());
+      final after = (result as MoveAdded).chapter;
+      expect(after.lines, hasLength(3));
+      expect(after.lines.last.text, contains('1. -- e5 2. c4 *'));
+      expect(after.tree.nodeAt(result.path)?.san, 'c4');
+    });
+
+    test('leaves the games it branched from alone', () {
+      final after = added(chapter, NodePath.of([0, 0]), 'c2c4');
+      expect(after.lines[0].text, chapter.lines[0].text);
+      expect(after.lines[1].text, chapter.lines[1].text);
+    });
+
+    test('reads back as the last variation of the waiting ply', () {
+      final after = reread(added(chapter, NodePath.of([0, 0]), 'c2c4'));
+      final e5 = after.tree.children.single.children.single;
+      expect(e5.children.map((node) => node.san), ['Nf3', 'd4', 'c4']);
+    });
+  });
+
   test('a move that cannot be played is reported, not written', () {
     final before = black();
     expect(
@@ -181,3 +212,19 @@ void main() {
     expect(writeChapter(before), blackChapter);
   });
 }
+
+/// Two lines through a ply where nobody moved, which Chessable writes as a
+/// waiting move and every replay has to be able to play.
+const nullMoveChapter = '''
+// Color: White
+
+[Event "A"]
+[Result "*"]
+
+1. Z0 e5 2. Nf3 *
+
+[Event "B"]
+[Result "*"]
+
+1. Z0 e5 2. d4 *
+''';

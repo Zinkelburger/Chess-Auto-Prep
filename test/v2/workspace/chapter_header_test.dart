@@ -10,6 +10,20 @@ import '../support/fixtures.dart';
 import '../support/scripted_store.dart';
 import '../support/session_fixture.dart';
 
+/// Two games from 1. e4, the second stopping at a move nobody can play.
+const _partial =
+    '// Color: White\n'
+    '\n'
+    '[Event "A"]\n'
+    '[Result "*"]\n'
+    '\n'
+    '1. e4 e5 *\n'
+    '\n'
+    '[Event "B"]\n'
+    '[Result "*"]\n'
+    '\n'
+    '1. e4 e5 2. Ke3 Nf6 *\n';
+
 void main() {
   late SessionFixture fixture;
   final sicilian = NodePath.of([0]);
@@ -41,6 +55,27 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Saved'), findsOneWidget);
+  });
+
+  testWidgets('says how many lines cannot be edited here', (tester) async {
+    // The second game stops at a move that is not legal, so it keeps its
+    // own bytes; the user hears that before they try to edit it.
+    await openSession(_partial).then((other) async {
+      addTearDown(other.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: darkTheme(),
+          home: Scaffold(
+            body: ChapterHeader(session: other.session, saver: other.saver),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(
+        find.text('White · 2 lines, 1 cannot be edited here'),
+        findsOneWidget,
+      );
+    });
   });
 
   testWidgets('a save in flight says so, and then that it is done', (
@@ -121,14 +156,17 @@ void main() {
     expect(
       find.text(
         'The app tried to change a line you did not edit, so the save was '
-        'stopped. Nothing was written.',
+        'stopped. Nothing was written and the document is back as the file '
+        'has it.',
       ),
       findsOneWidget,
     );
     expect(find.text('Reload'), findsOneWidget);
     expect(find.text('Save a copy…'), findsOneWidget);
-    // The words are still on the screen, and the file never took them.
-    expect(fixture.session.commentAt(sicilian), contains('mine'));
+    // The words were never written, so the document goes back to what the
+    // file holds rather than carrying them into the next save. Save a copy
+    // is where they are still to be had.
+    expect(fixture.session.commentAt(sicilian), isNot(contains('mine')));
     expect(fixture.onDisk, isNot(contains('mine')));
   });
 

@@ -69,10 +69,15 @@ sealed class DocumentRead {
 }
 
 final class Opened extends DocumentRead {
-  const Opened(this.text, this.revision);
+  const Opened(this.text, this.revision, {this.readOnly});
 
   final String text;
   final Revision revision;
+
+  /// Why this document may be shown and not written, or null when it may be
+  /// written. A file this app had to guess the encoding of is one: writing
+  /// it back would re-encode every game, including the ones nobody edited.
+  final String? readOnly;
 }
 
 final class Absent extends DocumentRead {
@@ -216,6 +221,14 @@ sealed class SaveDidNotLand implements SaveResult {
 /// would have changed and what the save said it was changing.
 final class SaveRefused extends SaveDidNotLand {
   const SaveRefused(super.detail);
+}
+
+/// The file is not one this app may write at all, whatever it was asked to
+/// write: it could only put it back in another encoding, changing games
+/// nobody edited. The user is told when the document opens; this is the
+/// backstop for a caller that asked anyway.
+final class NotWritable extends SaveDidNotLand {
+  const NotWritable(super.detail);
 }
 
 /// The bytes were written and nothing can say the file holds them: it holds

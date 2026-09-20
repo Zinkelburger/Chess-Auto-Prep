@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:chess_auto_prep/v2/app/exit_guard.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart'
-    show IoFailure;
+    show IoFailure, SaveRefused;
 import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -54,6 +54,18 @@ void main() {
       reason: 'the user answered nothing, so the window stays',
     );
     expect(question.asked.single, contains('No space left on device'));
+  });
+
+  test('a save the store stopped says what it was, not a stopwatch', () async {
+    fixture.store.saves.add(
+      const SaveRefused('game 3 would change but the edit was to game 1'),
+    );
+    edit('one');
+    await pumpEventQueue();
+    final question = _Question(answer: DraftChoice.closeAnyway);
+    expect(await guardWith(question).mayClose(), isTrue);
+    expect(question.asked.single, contains('was stopped because'));
+    expect(question.asked.single, isNot(contains('has not finished')));
   });
 
   test('words typed over a conflict are asked about too', () async {

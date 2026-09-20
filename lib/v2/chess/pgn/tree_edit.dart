@@ -100,7 +100,12 @@ NodePath? pathOfSans(GameTree tree, List<String> sans) {
 }
 
 /// A tree whose only line is [sans] played from [rootFen], stopping at the
-/// first move that is not legal.
+/// first move that cannot be played.
+///
+/// A ply where nobody moved is one of the moves it can play. `--` is not a
+/// SAN any move generator knows, so replaying a line through one used to
+/// stop there and throw away everything after it, including the move the
+/// user had just made; the game that came out held no moves at all.
 ///
 /// The moves carry no comments: a new game written for a branch shares its
 /// opening moves with the game it branched from, and that game already
@@ -108,19 +113,28 @@ NodePath? pathOfSans(GameTree tree, List<String> sans) {
 /// comments that later drift apart.
 GameTree lineTree(Fen rootFen, List<String> sans) {
   final nodes = <MoveNode>[];
-  var fen = rootFen;
+  var position = positionOf(rootFen);
   for (final san in sans) {
-    final move = positionOf(fen)?.parseSan(san);
-    final node = move == null ? null : moveNode(fen, move);
-    if (node == null) break;
-    nodes.add(node);
-    fen = node.fen;
+    final played = position == null ? null : replayed(position, san);
+    if (played == null) break;
+    nodes.add(played.$1);
+    position = played.$2;
   }
   var children = const <MoveNode>[];
   for (final node in nodes.reversed) {
     children = [node.copyWith(children: children)];
   }
   return GameTree(rootFen: rootFen, children: children);
+}
+
+/// [san] played from [position]: the node and the position after it, or
+/// null when it is not a move that can be played there.
+(MoveNode, Position)? replayed(Position position, String san) {
+  if (san == nullMoveSan) return nullMovePlayed(position, spelling: san);
+  final move = position.parseSan(san);
+  if (move == null) return null;
+  final (next, spelled) = position.makeSan(move);
+  return (MoveNode(san: spelled, uci: move.uci, fen: Fen(next.fen)), next);
 }
 
 /// [tree] with [node] appended to the children of the node at [at].

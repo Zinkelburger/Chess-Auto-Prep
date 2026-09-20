@@ -89,8 +89,5 @@ bool isWordChar(int c) =>
     c == 0x40 || // @
     c == 0x5F; //  _
 
-/// Whether [c] separates tokens without ending a line.
-bool isTokenBlank(int c) => isBlank(c);
-
 /// Whether [c] is whitespace of any kind, line endings included.
 bool isGameWhitespace(int c) => isBlank(c) || c == lf;

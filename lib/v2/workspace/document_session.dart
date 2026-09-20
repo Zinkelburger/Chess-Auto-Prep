@@ -68,7 +68,9 @@ final class CopyFailed extends CopyResult {
 /// [DocumentSaver] this session was given: an edit replaces the chapter and
 /// hands the saver the new file text.
 final class DocumentSession extends ChangeNotifier {
-  DocumentSession(this._store, this._saver);
+  DocumentSession(this._store, this._saver) {
+    _saver.addListener(_saverChanged);
+  }
 
   final store.PgnDocumentStore _store;
   final DocumentSaver _saver;
@@ -76,6 +78,7 @@ final class DocumentSession extends ChangeNotifier {
   ChapterRef? _source;
   NodePath _cursor = const NodePath.root();
   edits.CommentRefused? _refused;
+  SaveState _lastSaveState = const Saved();
   int _opens = 0;
   bool _disposed = false;
 
@@ -128,7 +131,7 @@ final class DocumentSession extends ChangeNotifier {
     if (_disposed || ticket != _opens) return const OpenOvertaken();
     switch (read) {
       case store.Opened(:final text, :final revision):
-        _show(parseChapter(name: ref.name, text: text), ref, revision);
+        _show(parseChapter(name: ref.name, text: text), ref, revision, text);
         return const DocumentOpened();
       case store.Absent():
         return _openFailed(ref, '${ref.name} is no longer on disk');
@@ -193,12 +196,16 @@ final class DocumentSession extends ChangeNotifier {
   /// Plays [uci] from the cursor and follows it. A move already in the tree
   /// only moves the cursor; a new one is written into the chapter and saved.
   /// An illegal move is ignored: the board offers legal moves only, so this
-  /// can only be a request nobody made.
+  /// can only be a request nobody made. A move the chapter comes back
+  /// without is logged and dropped rather than saved.
   void playMove(String uci) {
     final chapter = _chapter;
     if (chapter == null) return;
     switch (edits.addMove(chapter, at: _cursor, uci: uci)) {
       case edits.MoveIllegal():
+        return;
+      case edits.MoveNotWritten():
+        log.e('move ${_source?.path}', 'the chapter came back without $uci');
         return;
       case edits.MoveAdded(chapter: final edited, :final path, :final written):
         _refused = null;
@@ -278,7 +285,11 @@ final class DocumentSession extends ChangeNotifier {
     }
     final file = p.extension(name) == '.pgn' ? name : '$name.pgn';
     final target = DocumentRef(p.join(p.dirname(ref.path), file));
-    final created = await _store.create(target, writeChapter(chapter));
+    // After a stopped save the document on screen is what the file holds
+    // again, and the words the store refused are the ones the user wanted
+    // somewhere else. They are what a copy writes.
+    final text = _saver.refusedDraft ?? writeChapter(chapter);
+    final created = await _store.create(target, text);
     return switch (created) {
       store.Created() => CopySaved(file),
       store.Collision() => const CopyNameTaken(),
@@ -287,12 +298,38 @@ final class DocumentSession extends ChangeNotifier {
     };
   }
 
-  void _show(Chapter chapter, ChapterRef ref, Revision revision) {
+  void _show(Chapter chapter, ChapterRef ref, Revision revision, String text) {
     _chapter = chapter;
     _source = ref;
     _cursor = const NodePath.root();
     _refused = null;
-    _saver.opened(ref, revision);
+    _lastSaveState = const Saved();
+    _saver.opened(ref, revision, text);
+    notifyListeners();
+  }
+
+  /// A save that was stopped takes the document back to what the file holds.
+  ///
+  /// The words the store refused were never written, and keeping them on
+  /// screen puts them into the next edit's save too — under a scope that
+  /// names only the game that edit touched, so either every later save is
+  /// stopped as well or the refused bytes land under somebody else's name.
+  /// They are not lost: Save a copy still writes them.
+  void _saverChanged() {
+    final state = _saver.state;
+    final was = _lastSaveState;
+    _lastSaveState = state;
+    if (state is! SaveStopped || was is SaveStopped || _disposed) return;
+    final ref = _source;
+    final committed = _saver.committedText;
+    if (ref == null || committed == null) return;
+    final restored = parseChapter(name: ref.name, text: committed);
+    _cursor = _sameMoves(
+      _chapter?.tree ?? restored.tree,
+      restored.tree,
+      _cursor,
+    );
+    _chapter = restored;
     notifyListeners();
   }
 
@@ -334,6 +371,7 @@ final class DocumentSession extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _saver.removeListener(_saverChanged);
     super.dispose();
   }
 }

@@ -127,6 +127,13 @@ final class ExitGuard {
       SaveConflict() =>
         '$file was changed somewhere else, so your version of it has not '
             'been saved.',
+      SaveStopped() =>
+        'The last save of $file was stopped because the app would have '
+            'changed a line you did not edit. Your words are still on '
+            'screen.',
+      DocumentReadOnly() =>
+        '$file is not a file this app can write, so nothing you changed in '
+            'it has been saved.',
       _ =>
         'The save of $file has not finished after ${wait.inSeconds} '
             'seconds.',

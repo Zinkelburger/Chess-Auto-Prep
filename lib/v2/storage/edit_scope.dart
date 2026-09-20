@@ -39,9 +39,10 @@ final class WholeDocument extends EditScope {
 }
 
 /// The save puts back a version this store recorded, which is what an undo
-/// is. Nothing is compared and nothing is logged: the text is not a fresh
-/// edit but bytes the store read off the disk and kept, and the revision
-/// check is what says they may go back.
+/// is. There is no earlier version to compare it against — it *is* an
+/// earlier version — so the store compares it against the archive instead:
+/// bytes that hash to no version kept for the document are refused, and the
+/// one that is put back is named in the log.
 final class RestoredVersion extends EditScope {
   const RestoredVersion();
 }
@@ -80,6 +81,9 @@ EditScope scopeOfBoth(EditScope first, EditScope second) {
 /// Games are compared by their own bytes and not by the blank lines between
 /// them: appending a game gives the game before it a blank line, and a
 /// separator is not where anybody's moves are.
+/// A restored version is not checked here: the store looks it up in the
+/// archive, which is the only thing that can say whether those bytes were
+/// ever this document.
 String? changeOutsideScope({
   required List<int> previous,
   required List<int> next,

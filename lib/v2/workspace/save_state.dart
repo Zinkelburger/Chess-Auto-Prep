@@ -48,6 +48,15 @@ final class SaveConflict extends SaveState {
   const SaveConflict();
 }
 
+/// The file is not one this app may write at all. Nothing was edited and
+/// nothing will be: the document opened to read.
+final class DocumentReadOnly extends SaveState {
+  const DocumentReadOnly(this.detail);
+
+  /// For the log; the widget writes the sentence.
+  final String detail;
+}
+
 sealed class UndoResult {
   const UndoResult();
 }

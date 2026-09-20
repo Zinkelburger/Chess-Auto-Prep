@@ -77,6 +77,41 @@ void main() {
     expect(fixture.onDisk, contains('{two [%eval 0.30]}'));
   });
 
+  test('a stopped save takes the document back to what the file holds, and '
+      'the next edit lands on its own', () async {
+    fixture.store.saves.add(
+      const SaveRefused('game 3 would change but the edit was to game 1'),
+    );
+    session.setComment(NodePath.of([0, 1]), 'stopped words');
+    await pumpEventQueue();
+    expect(saver.state, isA<SaveStopped>());
+    expect(session.commentAt(NodePath.of([0, 1])), 'Closed');
+
+    edit('honest');
+    await pumpEventQueue();
+    expect(saver.state, isA<Saved>());
+    expect(declared(), {0});
+    expect(fixture.onDisk, isNot(contains('stopped words')));
+    expect(fixture.onDisk, contains('{honest [%eval 0.30]}'));
+  });
+
+  test(
+    'a copy after a stopped save writes the words the store refused',
+    () async {
+      fixture.store.saves.add(
+        const SaveRefused('game 3 would change but the edit was to game 1'),
+      );
+      edit('refused words');
+      await pumpEventQueue();
+      expect(saver.state, isA<SaveStopped>());
+      expect(await session.saveCopy('Elsewhere'), isA<CopySaved>());
+      final copy = fixture.store.documents.entries.firstWhere(
+        (entry) => entry.key.path.endsWith('Elsewhere.pgn'),
+      );
+      expect((copy.value as Opened).text, contains('refused words'));
+    },
+  );
+
   test('a copy can still be written after a save was stopped', () async {
     fixture.store.saves.add(const SaveRefused('game 3 would change'));
     edit('one');

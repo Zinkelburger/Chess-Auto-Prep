@@ -86,6 +86,9 @@ final class PgnFileStore implements PgnDocumentStore {
         switch (readDocumentText(bytes)) {
           case PlainText(:final text):
             return Opened(text, revision);
+          case ForeignText(:final text, :final detail):
+            log.w('open ${ref.path}', detail);
+            return Opened(text, revision, readOnly: detail);
           case NotText(:final detail):
             log.w('open ${ref.path}', detail);
             return Unreadable(detail);
@@ -177,6 +180,12 @@ final class PgnFileStore implements PgnDocumentStore {
       log.w('save ${ref.path}', detail);
       return IoFailure(detail);
     }
+    // Nor one it had to guess at: this writes UTF-8, so putting a Latin-1
+    // file back would change every game holding an accented letter.
+    if (read case ForeignText(:final detail)) {
+      log.w('save ${ref.path}', detail);
+      return NotWritable(detail);
+    }
     final before = (read as PlainText).text;
     final bytes = utf8.encode(text);
     final written = sha256.convert(bytes).toString();
@@ -184,7 +193,7 @@ final class PgnFileStore implements PgnDocumentStore {
     if (written == revision.contentHash) {
       return Saved(_receipt(before, revision, revision));
     }
-    final refused = _onlyWhatWasDeclared(ref, current, bytes, scope);
+    final refused = await _onlyWhatWasDeclared(ref, current, bytes, scope);
     if (refused != null) return refused;
     final unkept = await keepReplacedVersion(
       backups: _backups,
@@ -217,12 +226,13 @@ final class PgnFileStore implements PgnDocumentStore {
   /// not refused — there is nothing to compare it against — but it is
   /// logged, so a caller that rewrites a chapter without saying what it
   /// edited is visible.
-  SaveResult? _onlyWhatWasDeclared(
+  Future<SaveResult?> _onlyWhatWasDeclared(
     DocumentRef ref,
     List<int> current,
     List<int> next,
     EditScope scope,
-  ) {
+  ) async {
+    if (scope is RestoredVersion) return _keptHere(ref, next);
     final outside = changeOutsideScope(
       previous: current,
       next: next,
@@ -233,6 +243,25 @@ final class PgnFileStore implements PgnDocumentStore {
       return SaveRefused(outside);
     }
     if (scope is WholeDocument) log.w('save ${ref.path}', _undeclared);
+    return null;
+  }
+
+  /// Why [bytes] are not a version this store kept for [ref], or null when
+  /// they are one.
+  ///
+  /// A restore is the one write with nothing to compare against, so it is
+  /// compared against the archive instead: bytes that hash to no version
+  /// kept for this document are not a version being put back, whatever the
+  /// caller called them.
+  Future<SaveResult?> _keptHere(DocumentRef ref, List<int> bytes) async {
+    final id = documentBackupIdFor(documents, ref);
+    final hash = sha256.convert(bytes).toString();
+    final kept = id == null ? null : await _backups.versionWithHash(id, hash);
+    if (kept == null) {
+      log.e('restore ${ref.path}', _unkeptVersion);
+      return const SaveRefused(_unkeptVersion);
+    }
+    log.i('restore ${ref.path} to the version of ${kept.time}');
     return null;
   }
 
@@ -345,6 +374,10 @@ const _unread = 'the file could not be read back after writing';
 const _unkept =
     'the version being replaced could not be read back from the copy kept '
     'for it';
+
+const _unkeptVersion =
+    'the save said it was putting a kept version back, and these are not the '
+    'bytes of any version kept for this document';
 
 const _undeclared =
     'the whole document was replaced; the save did not say which game it '

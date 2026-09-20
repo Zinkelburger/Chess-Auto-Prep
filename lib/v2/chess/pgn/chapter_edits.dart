@@ -47,6 +47,18 @@ final class MoveIllegal extends AddMoveResult {
   final String uci;
 }
 
+/// The move could be played but the chapter it came back in does not hold
+/// it, so nothing was written.
+///
+/// Nothing should ever produce this. It is a result rather than an
+/// assertion because the alternative is a release build writing a game that
+/// does not hold the move the user just made, and telling them it did.
+final class MoveNotWritten extends AddMoveResult {
+  const MoveNotWritten(this.uci);
+
+  final String uci;
+}
+
 /// Plays [uci] after the node at [at] and writes it into the file.
 ///
 /// Where it lands follows the shape of the tree there. A move that is
@@ -78,12 +90,12 @@ AddMoveResult addMove(
   // Merging keeps the order of the moves a chapter already had and puts the
   // ones only the edited game plays after them, so a move no sibling matched
   // is the last child of the node it was played from. There is nowhere else
-  // in the merged tree for it to be.
+  // in the merged tree for it to be — and if it is not there, the chapter
+  // the edit produced is not one anybody may save.
   final path = at.child(siblings.length);
-  assert(
-    pathOfSans(edited.chapter.tree, [...prefix, node.san]) == path,
-    'a move written into a chapter came back somewhere other than $path',
-  );
+  if (pathOfSans(edited.chapter.tree, [...prefix, node.san]) != path) {
+    return MoveNotWritten(uci);
+  }
   return MoveAdded(
     chapter: edited.chapter,
     path: path,

@@ -9,13 +9,18 @@
 // games and putting it back gives the same bytes. A game that is not whole is
 // named with its first issue, so a real loss can be told from a genuinely
 // malformed file. The milliseconds are reading alone, not the rewrite check.
-import 'dart:convert';
 import 'dart:io';
 
+import 'package:chess_auto_prep/v2/chess/pgn/chapter.dart';
+import 'package:chess_auto_prep/v2/chess/pgn/chapter_edits.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/chapter_line.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_text.dart';
+import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/pgn_reader.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/rewrite_gate.dart';
+import 'package:chess_auto_prep/v2/chess/pgn/tree_edit.dart';
+import 'package:chess_auto_prep/v2/storage/document_text.dart';
+import 'package:dartchess/dartchess.dart' show NormalMove, Position;
 
 /// What one file's games came to.
 typedef FileReport = ({
@@ -42,9 +47,11 @@ void main(List<String> arguments) {
     return;
   }
   final shown = _intFlag(arguments, '--losses') ?? 10;
-  final reports = [for (final file in _pgnFiles(folder)) _read(file)];
+  final files = _pgnFiles(folder);
+  final reports = [for (final file in files) _read(file)];
   _printTable(reports);
   _printLosses(reports, shown);
+  _printBranching(files);
 }
 
 List<File> _pgnFiles(Directory folder) {
@@ -59,7 +66,14 @@ List<File> _pgnFiles(Directory folder) {
 
 FileReport _read(File file) {
   final bytes = file.readAsBytesSync();
-  final text = _decoded(bytes);
+  // The same reading the store does, so the tool and the app agree on what
+  // a file holds and on which files the app will not write back.
+  final read = readDocumentText(bytes);
+  final text = switch (read) {
+    PlainText(:final text) => text,
+    ForeignText(:final text) => text,
+    NotText() => null,
+  };
   if (text == null) {
     return (
       path: file.path,
@@ -69,7 +83,7 @@ FileReport _read(File file) {
       rewritable: 0,
       sameBytes: false,
       milliseconds: 0,
-      losses: ['the file is not UTF-8 text'],
+      losses: ['${file.path}: ${(read as NotText).detail}'],
     );
   }
   final clock = Stopwatch()..start();
@@ -92,6 +106,9 @@ FileReport _read(File file) {
       ..write(game.text)
       ..write(game.trailer);
   }
+  if (read is ForeignText) {
+    losses.add('${file.path}: ${read.detail}, so it opens to read only');
+  }
   return (
     path: file.path,
     bytes: bytes.length,
@@ -102,6 +119,57 @@ FileReport _read(File file) {
     milliseconds: clock.elapsedMilliseconds,
     losses: losses,
   );
+}
+
+/// Whether a file held a ply where nobody moved, and what playing a move
+/// below it did.
+typedef BranchTry = ({bool tried, String? failure});
+
+/// Plays one move below the first ply where nobody moved in [text], to see
+/// that the chapter comes back holding it. Nothing is written anywhere.
+///
+/// Replaying a line used to stop at `--`, which turned a branch below a
+/// Chessable waiting move into a game with no moves in it at all.
+BranchTry tryBranchingBelowANullMove(String path, String text) {
+  final chapter = parseChapter(name: path, text: text);
+  final at = _firstNullMove(chapter.tree);
+  if (at == null) return (tried: false, failure: null);
+  final from = positionOf(chapter.tree.fenAt(at));
+  final move = from == null ? null : _aLegalMove(from);
+  if (move == null) return (tried: false, failure: null);
+  final result = addMove(chapter, at: at, uci: move);
+  if (result is! MoveAdded) {
+    return (tried: true, failure: '$path: $move below a null move was refused');
+  }
+  final played = result.chapter.tree.nodeAt(result.path);
+  return (
+    tried: true,
+    failure: played == null
+        ? '$path: the chapter came back without $move'
+        : null,
+  );
+}
+
+NodePath? _firstNullMove(GameTree tree) {
+  var path = const NodePath.root();
+  var siblings = tree.children;
+  while (siblings.isNotEmpty) {
+    final index = siblings.indexWhere((node) => node.san == nullMoveSan);
+    if (index >= 0) return path.child(index);
+    path = path.child(0);
+    siblings = siblings.first.children;
+  }
+  return null;
+}
+
+String? _aLegalMove(Position from) {
+  for (final entry in from.legalMoves.entries) {
+    for (final to in entry.value.squares) {
+      final move = NormalMove(from: entry.key, to: to);
+      if (from.isLegal(move)) return move.uci;
+    }
+  }
+  return null;
 }
 
 /// Why [game] could not be written again, or null when it can.
@@ -124,14 +192,6 @@ String? _lossOf(GameRead game, GameSpan span) {
     LineRefused() when game.issues.isNotEmpty => game.issues.first.toString(),
     LineRefused(:final reason) => reason,
   };
-}
-
-String? _decoded(List<int> bytes) {
-  try {
-    return utf8.decode(bytes);
-  } on FormatException {
-    return null;
-  }
 }
 
 void _printTable(List<FileReport> reports) {
@@ -181,6 +241,26 @@ void _printLosses(List<FileReport> reports, int shown) {
   stdout.writeln('\n${losses.length} games keep their own bytes:');
   for (final loss in losses.take(shown)) {
     stdout.writeln('  $loss');
+  }
+}
+
+/// One move played below a null move in every file that has one, in memory.
+void _printBranching(List<File> files) {
+  var tried = 0;
+  final trouble = <String>[];
+  for (final file in files) {
+    final read = readDocumentText(file.readAsBytesSync());
+    if (read is! PlainText) continue;
+    final attempt = tryBranchingBelowANullMove(file.path, read.text);
+    if (attempt.tried) tried++;
+    if (attempt.failure case final failure?) trouble.add(failure);
+  }
+  stdout.writeln(
+    '\nbranching below a null move: $tried files have one, '
+    '${trouble.length} went wrong',
+  );
+  for (final line in trouble.take(10)) {
+    stdout.writeln('  $line');
   }
 }
 

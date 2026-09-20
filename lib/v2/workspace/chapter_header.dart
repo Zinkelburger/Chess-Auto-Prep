@@ -156,7 +156,12 @@ String _summary(Chapter chapter) {
   final unreadable = chapter.unreadableGames == 0
       ? ''
       : ', ${chapter.unreadableGames} could not be read';
-  return '$side · $lines$skipped$unreadable';
+  // A line this app will not write is one the user should hear about before
+  // they try to edit it, not after the edit is refused.
+  final protected = chapter.protectedGames == 0
+      ? ''
+      : ', ${chapter.protectedGames} cannot be edited here';
+  return '$side · $lines$skipped$unreadable$protected';
 }
 
 /// The last edit, taken back. Disabled when there is nothing to take back,
@@ -186,7 +191,10 @@ class _SaveLine extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final trouble =
-        state is SaveFailed || state is SaveConflict || state is SaveStopped;
+        state is SaveFailed ||
+        state is SaveConflict ||
+        state is SaveStopped ||
+        state is DocumentReadOnly;
     return Text(
       switch (state) {
         Saved() => 'Saved',
@@ -196,7 +204,11 @@ class _SaveLine extends StatelessWidget {
         SaveConflict() => 'The file changed on disk',
         SaveStopped() =>
           'The app tried to change a line you did not edit, so the save was '
-              'stopped. Nothing was written.',
+              'stopped. Nothing was written and the document is back as the '
+              'file has it.',
+        DocumentReadOnly() =>
+          'This file is not UTF-8, so it opened to read. Open and save it in '
+              'the old app to convert it, then edit it here.',
       },
       style: theme.textTheme.bodySmall?.copyWith(
         color: trouble ? theme.colorScheme.error : null,

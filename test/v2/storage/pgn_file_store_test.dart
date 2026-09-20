@@ -33,7 +33,7 @@ void main() {
   });
 
   test(
-    'a Latin-1 PGN opens with its accents and saves back as UTF-8',
+    'a Latin-1 PGN opens with its accents and will not be written back',
     () async {
       final ref = fixture.ref('KID/Main.pgn');
       const text = '[White "Réti"]\n\n1. Nf3 *\n';
@@ -41,11 +41,13 @@ void main() {
       await File(ref.path).writeAsBytes(latin1.encode(text));
       final opened = await fixture.store.open(ref);
       expect((opened as Opened).text, text);
+      expect(opened.readOnly, contains('not UTF-8'));
+      // Writing it back would re-encode every accent in the file, so the
+      // store says no rather than changing games nobody edited.
       final edited = text.replaceFirst('Nf3', 'd4');
-      final saved =
-          await fixture.replace(ref, edited, opened.revision) as Saved;
-      expect(saved.receipt.before, text);
-      expect(await File(ref.path).readAsBytes(), utf8.encode(edited));
+      final saved = await fixture.replace(ref, edited, opened.revision);
+      expect(saved, isA<NotWritable>());
+      expect(await File(ref.path).readAsBytes(), latin1.encode(text));
     },
   );
 

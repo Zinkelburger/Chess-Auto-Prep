@@ -104,13 +104,13 @@ List<int> _gameStarts(String text) {
 
 bool _isEventLine(String text, int start, int end) {
   var i = start;
-  while (i < end && isTokenBlank(text.codeUnitAt(i))) {
+  while (i < end && isBlank(text.codeUnitAt(i))) {
     i++;
   }
   const event = '[Event';
   return text.startsWith(event, i) &&
       i + event.length < end &&
-      isTokenBlank(text.codeUnitAt(i + event.length));
+      isBlank(text.codeUnitAt(i + event.length));
 }
 
 /// Whether a `{}` comment is still open at the end of the run [start]–[end],
