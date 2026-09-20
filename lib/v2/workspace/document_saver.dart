@@ -30,7 +30,6 @@ final class DocumentSaver extends ChangeNotifier {
   /// app can wait for the file to hold the draft before it closes.
   Future<void>? _inFlight;
   final _undo = UndoHistory();
-  String? _committed;
   int _opens = 0;
   bool _disposed = false;
 
@@ -54,30 +53,21 @@ final class DocumentSaver extends ChangeNotifier {
   /// The file being written, for a log line or a sentence about it.
   String? get documentPath => _target?.ref.path;
 
-  /// A document was opened, holding [text], which is what the saver writes
-  /// from now on; nothing of the last one is carried over. [readOnly] is
-  /// why the file may not be written at all, or null when it may.
+  /// A document was opened. It is the one this saver writes from now on,
+  /// and nothing of the last one is carried over. [readOnly] is why the
+  /// file may not be written at all, or null when it may.
   ///
   /// The draft of the document being replaced must already be on disk, which
   /// is why the caller waits for [flush] first: a draft waiting behind a hold
   /// belongs to the file it was typed into, and this cannot write it there
   /// once the target has changed.
-  void opened(
-    DocumentRef ref,
-    Revision revision,
-    String text, {
-    String? readOnly,
-  }) {
+  void opened(DocumentRef ref, Revision revision, {String? readOnly}) {
     _opens++;
     _target = (ref: ref, revision: revision);
-    _committed = text;
     _pending.clear();
     _undo.clear();
     _set(readOnly == null ? const Saved() : DocumentReadOnly(readOnly));
   }
-
-  /// The text the file is known to hold, which is what a reload takes.
-  String? get committedText => _committed;
 
   /// Puts [text] on disk, unless this saver has stopped writing the file:
   /// conflicted, stopped, or not writable at all. Nothing is remembered
@@ -147,7 +137,6 @@ final class DocumentSaver extends ChangeNotifier {
   void closed() {
     _opens++;
     _target = null;
-    _committed = null;
     _pending.clear();
     _undo.clear();
     _set(const Saved());
@@ -160,9 +149,13 @@ final class DocumentSaver extends ChangeNotifier {
     _inFlight = _write();
   }
 
+  /// The one gate on writing: the save loop, the retry after a failure and
+  /// the end of a hold for a rename all come through here, so a document
+  /// this saver stopped writing cannot be written by any of them.
   Future<void> _write() async {
     final target = _target;
-    if (_held || _writing || target == null || _pending.isEmpty) return;
+    if (!_writable || _held || _writing || target == null) return;
+    if (_pending.isEmpty) return;
     final draft = _pending.take()!;
     _writing = true;
     _set(const Saving());
@@ -185,8 +178,8 @@ final class DocumentSaver extends ChangeNotifier {
     // Only a write the disk refused comes back to be tried with the next
     // edit; see [_stopped] for what happens to the others.
     if (result is store.IoFailure) _pending.returned(draft);
-    _adopt(result, target.ref, draft.text);
-    if (_writable) await _write();
+    _adopt(result, target.ref);
+    await _write();
   }
 
   /// Whether a write may go out now: a failed file is written again with
@@ -232,11 +225,10 @@ final class DocumentSaver extends ChangeNotifier {
     }
   }
 
-  void _adopt(store.SaveResult result, DocumentRef ref, String text) {
+  void _adopt(store.SaveResult result, DocumentRef ref) {
     switch (result) {
       case store.Saved(:final receipt):
         _target = (ref: ref, revision: receipt.committed);
-        _committed = text;
         _undo.keep(receipt);
         _set(const Saved());
       case store.Conflict():
@@ -248,8 +240,9 @@ final class DocumentSaver extends ChangeNotifier {
         _stopped();
       case store.NotWritable(:final detail):
         _stopWriting(DocumentReadOnly(detail));
-      case store.RestoreRefused():
-        _set(const RestoreStopped());
+      case store.RestoreRefused(:final detail):
+        log.e('save ${ref.path}', detail);
+        _set(SaveFailed(detail));
       case store.IoFailure(:final detail) ||
           store.WriteUnverified(:final detail):
         _set(SaveFailed(detail));
@@ -320,8 +313,8 @@ final class DocumentSaver extends ChangeNotifier {
       await _write();
       return const UndoRefused();
     }
-    final outcome = _undone(result, entry, target.ref);
-    if (_writable) await _write();
+    final outcome = _undone(result, entry, resting);
+    await _write();
     return outcome;
   }
 
@@ -334,16 +327,19 @@ final class DocumentSaver extends ChangeNotifier {
   bool _outOfDate(store.SaveResult result, _Target target) =>
       result is store.Conflict && result.current == target.revision;
 
+  /// What one answer to a restore means. [resting] is the state the file was
+  /// in before the undo went out, which a refused restore goes back to: the
+  /// file was not touched, so nothing about it is unsaved because of this.
   UndoResult _undone(
     store.SaveResult result,
     store.Receipt entry,
-    DocumentRef ref,
+    SaveState resting,
   ) {
+    final ref = _target!.ref;
     switch (result) {
       case store.Saved(:final receipt):
         _undo.tookBack(entry, receipt);
         _target = (ref: ref, revision: receipt.committed);
-        _committed = entry.before;
         _set(const Saved());
         return Restored(entry.before);
       case store.Conflict():
@@ -353,9 +349,10 @@ final class DocumentSaver extends ChangeNotifier {
       case store.SaveRefused():
         _stopped();
         return const UndoRefused();
-      case store.RestoreRefused():
-        _set(const RestoreStopped());
-        return const UndoRefused();
+      case store.RestoreRefused(:final detail):
+        log.w('undo ${ref.path}', detail);
+        _set(resting);
+        return undoNotKept;
       case store.NotWritable(:final detail):
         _stopWriting(DocumentReadOnly(detail));
         return const UndoRefused();

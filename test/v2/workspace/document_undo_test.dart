@@ -1,6 +1,6 @@
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart'
-    show Conflict, Opened;
+    show Conflict, Opened, RestoreRefused;
 import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
 import 'package:chess_auto_prep/v2/workspace/save_state.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
@@ -115,6 +115,26 @@ void main() {
       expect(restored.cursor, NodePath.of([1]));
     });
   });
+
+  test(
+    'an undo of a version the store never kept leaves the file alone',
+    () async {
+      session.setComment(NodePath.of([0]), 'mine');
+      await pumpEventQueue();
+      final before = fixture.onDisk;
+      fixture.store.saves.add(
+        const RestoreRefused('these are not the bytes of any kept version'),
+      );
+
+      final result = await session.undo() as UndoRefused;
+      expect(result.reason, contains('not among the ones kept'));
+      // The file was not touched, so nothing about the document is unsaved.
+      expect(saver.state, isA<Saved>());
+      expect(saver.settled, isTrue);
+      expect(fixture.onDisk, before);
+      expect(saver.canUndo, isTrue, reason: 'the history is still there');
+    },
+  );
 
   test('nothing to undo is not an error', () async {
     await session.undo();

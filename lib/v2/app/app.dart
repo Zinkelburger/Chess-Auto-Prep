@@ -11,8 +11,10 @@ import '../features/library/library.dart';
 import '../storage/chapter_files.dart';
 import '../storage/pgn_file_store.dart';
 import '../ui/theme.dart';
+import '../workspace/chapter_header.dart';
 import '../workspace/document_saver.dart';
 import '../workspace/document_session.dart';
+import '../workspace/session_results.dart';
 import '../workspace/engine_analysis.dart';
 import 'engine_launch.dart';
 import 'exit_guard.dart';
@@ -69,7 +71,23 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
   late final _exit = ExitGuard(
     saver: _saver,
     question: DraftDialog(_navigator),
+    saveCopy: _saveCopy,
   );
+
+  /// Writes the words on screen beside the original, under a name the user
+  /// gives, and answers whether they are now in a file. It is the same copy
+  /// the chapter panel offers; the question on the way out points at it
+  /// because that is the one way out that keeps them.
+  Future<bool> _saveCopy() async {
+    final context = _navigator.currentContext;
+    if (context == null) return false;
+    final name = await showCopyNameDialog(
+      context,
+      _session.chapter?.name ?? 'Chapter',
+    );
+    if (name == null) return false;
+    return await _session.saveCopy(name) is CopySaved;
+  }
 
   /// The answer being worked out for a close that was asked for already.
   Future<AppExitResponse>? _leaving;
@@ -137,6 +155,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
       theme: darkTheme(),
       debugShowCheckedModeBanner: false,
       home: Shell(
+        leaving: _exit,
         library: _library,
         session: _session,
         saver: _saver,

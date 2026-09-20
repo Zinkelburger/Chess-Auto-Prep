@@ -16,48 +16,7 @@ import '../storage/pgn_document_store.dart' as store;
 import 'document_saver.dart';
 import 'edit_refused.dart';
 import 'save_state.dart';
-
-sealed class OpenResult {
-  const OpenResult();
-}
-
-final class DocumentOpened extends OpenResult {
-  const DocumentOpened();
-}
-
-final class OpenFailed extends OpenResult {
-  const OpenFailed(this.reason);
-
-  /// A sentence for the screen.
-  final String reason;
-}
-
-/// A later open took over. This one changed nothing and has nothing to say.
-final class OpenOvertaken extends OpenResult {
-  const OpenOvertaken();
-}
-
-sealed class CopyResult {
-  const CopyResult();
-}
-
-final class CopySaved extends CopyResult {
-  const CopySaved(this.name);
-
-  /// The file name the copy was written under.
-  final String name;
-}
-
-/// The name is taken. Nothing was written and nothing was replaced.
-final class CopyNameTaken extends CopyResult {
-  const CopyNameTaken();
-}
-
-final class CopyFailed extends CopyResult {
-  const CopyFailed(this.detail);
-
-  final String detail;
-}
+import 'session_results.dart';
 
 /// The document open in the workspace, where the user is in it, and the
 /// edits they make to it.
@@ -138,7 +97,6 @@ final class DocumentSession extends ChangeNotifier {
           parseChapter(name: ref.name, text: text),
           ref,
           revision,
-          text,
           readOnly,
         );
         return const DocumentOpened();
@@ -210,7 +168,6 @@ final class DocumentSession extends ChangeNotifier {
   void playMove(String uci) {
     final chapter = _chapter;
     if (chapter == null) return;
-    if (_refuseWhenReadOnly()) return;
     switch (edits.addMove(chapter, at: _cursor, uci: uci)) {
       case edits.MoveIllegal():
         return;
@@ -220,9 +177,18 @@ final class DocumentSession extends ChangeNotifier {
         notifyListeners();
         return;
       case edits.MoveAdded(chapter: final edited, :final path, :final written):
-        _refused = null;
+        // A move the chapter already holds writes nothing, so following it
+        // is reading, not editing: a file this app may not write still
+        // shows its own lines.
+        if (identical(edited, chapter)) {
+          _cursor = path;
+          notifyListeners();
+          return;
+        }
+        if (_refuseWhenReadOnly()) return;
+        _clearRefusal();
         _cursor = path;
-        if (!identical(edited, chapter)) _replace(edited, written);
+        _replace(edited, written);
         notifyListeners();
     }
   }
@@ -246,7 +212,7 @@ final class DocumentSession extends ChangeNotifier {
         log.w('comment ${_source?.path}', _refusalDetail(refusal));
         _refused = _refusalOf(refusal);
       case edits.CommentWritten(chapter: final edited, :final written):
-        _refused = null;
+        _clearRefusal();
         if (identical(edited, chapter)) {
           if (!hadRefusal) return;
         } else {
@@ -276,6 +242,13 @@ final class DocumentSession extends ChangeNotifier {
     _refused = NotEditable(reason);
     notifyListeners();
     return true;
+  }
+
+  /// Forgets the last refusal, except the standing one: a document that
+  /// opened to read says so until it is closed.
+  void _clearRefusal() {
+    final reason = _readOnly;
+    _refused = reason == null ? null : NotEditable(reason);
   }
 
   /// Puts the file back as it was before the last edit and shows what came
@@ -318,18 +291,39 @@ final class DocumentSession extends ChangeNotifier {
     // words the user is looking at that they want kept.
     final created = await _store.create(target, writeChapter(chapter));
     return switch (created) {
-      store.Created() => CopySaved(file),
+      store.Created() => await _copied(ref, file, target),
       store.Collision() => const CopyNameTaken(),
       store.IoFailure(:final detail) ||
       store.WriteUnverified(:final detail) => CopyFailed(detail),
     };
   }
 
+  /// The copy is written. A document that can still take words keeps the
+  /// session; one that cannot — frozen by a stopped save, or a file this app
+  /// may not write — hands it over, because the copy is now the only place
+  /// those words can go on being edited. A conflicted document keeps the
+  /// session: it can still be reloaded, and its draft is still the user's.
+  Future<CopyResult> _copied(
+    ChapterRef from,
+    String file,
+    DocumentRef target,
+  ) async {
+    final frozen = _saver.state is SaveStopped || _readOnly != null;
+    if (!frozen) return CopySaved(file);
+    final opened = await open(
+      ChapterRef(
+        repertoire: from.repertoire,
+        name: p.basenameWithoutExtension(file),
+        path: target.path,
+      ),
+    );
+    return CopySaved(file, nowEditing: opened is DocumentOpened);
+  }
+
   void _show(
     Chapter chapter,
     ChapterRef ref,
     Revision revision,
-    String text,
     String? readOnly,
   ) {
     _chapter = chapter;
@@ -337,7 +331,7 @@ final class DocumentSession extends ChangeNotifier {
     _cursor = const NodePath.root();
     _readOnly = readOnly;
     _refused = readOnly == null ? null : NotEditable(readOnly);
-    _saver.opened(ref, revision, text, readOnly: readOnly);
+    _saver.opened(ref, revision, readOnly: readOnly);
     notifyListeners();
   }
 

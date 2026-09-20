@@ -78,6 +78,31 @@ void main() {
     });
   });
 
+  testWidgets('a file that opened to read says so once, with the reason', (
+    tester,
+  ) async {
+    final other = await openSession(blackChapter, readOnly: 'it is Latin-1');
+    addTearDown(other.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: darkTheme(),
+        home: Scaffold(
+          body: ChapterHeader(session: other.session, saver: other.saver),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('Read only'), findsOneWidget);
+    expect(
+      find.text(
+        'This file opened to read: it is Latin-1. Save a copy to edit it '
+        'here.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Save a copy…'), findsOneWidget);
+  });
+
   testWidgets('a save in flight says so, and then that it is done', (
     tester,
   ) async {
@@ -141,7 +166,7 @@ void main() {
 
   testWidgets('says so and offers the two ways out', (tester) async {
     await conflict(tester);
-    expect(find.text('Reload'), findsOneWidget);
+    expect(find.text('Reload and lose the words on screen'), findsOneWidget);
     expect(find.text('Save a copy…'), findsOneWidget);
   });
 
@@ -171,7 +196,7 @@ void main() {
 
   testWidgets('Reload takes what is on disk', (tester) async {
     await conflict(tester);
-    await tester.tap(find.text('Reload'));
+    await tester.tap(find.text('Reload and lose the words on screen'));
     await tester.pumpAndSettle();
     expect(fixture.session.chapter?.tree.children.first.san, 'e4');
     expect(find.text('Saved'), findsOneWidget);

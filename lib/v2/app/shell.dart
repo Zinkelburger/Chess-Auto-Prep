@@ -6,8 +6,10 @@ import '../storage/chapter_files.dart';
 import '../ui/theme.dart';
 import '../workspace/document_saver.dart';
 import '../workspace/document_session.dart';
+import '../workspace/session_results.dart';
 import '../workspace/engine_analysis.dart';
 import '../workspace/workspace_view.dart';
+import 'exit_guard.dart';
 
 /// The window: a top bar with the mode menu, the library on the left and the
 /// workspace filling the rest. Opening a chapter from the library into the
@@ -19,12 +21,17 @@ class Shell extends StatefulWidget {
     required this.session,
     required this.saver,
     required this.analysis,
+    required this.leaving,
   });
 
   final Library library;
   final DocumentSession session;
   final DocumentSaver saver;
   final EngineAnalysis analysis;
+
+  /// Asked before another document takes the screen, so words the file
+  /// never took are not carried off it without the user saying so.
+  final ExitGuard leaving;
 
   @override
   State<Shell> createState() => _ShellState();
@@ -35,7 +42,13 @@ class _ShellState extends State<Shell> {
 
   /// The session opens the file; this only says what came of it. An open
   /// a later click overtook has nothing to say, so it says nothing.
+  ///
+  /// Opening a document takes the saver off the one that is open, and a
+  /// draft it never wrote goes with it, so the user is asked first — the
+  /// same question the closing window asks.
   Future<void> _open(ChapterRef ref) async {
+    if (!await widget.leaving.mayLeaveDocument()) return;
+    if (!mounted) return;
     final result = await widget.session.open(ref);
     if (!mounted) return;
     switch (result) {

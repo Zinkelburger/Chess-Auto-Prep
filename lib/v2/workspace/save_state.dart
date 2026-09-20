@@ -48,12 +48,6 @@ final class SaveConflict extends SaveState {
   const SaveConflict();
 }
 
-/// An undo asked for a version the store never kept, so nothing went back.
-/// The file and the document are as they were.
-final class RestoreStopped extends SaveState {
-  const RestoreStopped();
-}
-
 /// The file is not one this app may write at all. Nothing was edited and
 /// nothing will be: the document opened to read.
 final class DocumentReadOnly extends SaveState {
@@ -81,6 +75,12 @@ final class UndoRefused extends UndoResult {
 
   final String? reason;
 }
+
+/// An undo asked for a version this store never kept. The file was not
+/// touched, so the document is no less saved than it was.
+const undoNotKept = UndoRefused(
+  'Could not go back: that version is not among the ones kept for this file.',
+);
 
 /// Nothing goes back while a stopped save is waiting to be dealt with: the
 /// file holds a version the words on screen were never written over.

@@ -5,6 +5,7 @@ import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart'
 import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
 import 'package:chess_auto_prep/v2/workspace/save_state.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
+import 'package:chess_auto_prep/v2/workspace/session_results.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/fixtures.dart';
@@ -116,12 +117,62 @@ void main() {
     expect(writeChapter(session.chapter!), fixture.onDisk);
   });
 
-  test('an undo leaves the text the file now holds behind it', () async {
+  test('reloading after an undo takes the version the undo put back', () async {
     edit('first');
     await pumpEventQueue();
-    final undone = await saver.undo();
-    expect(undone, isA<Restored>());
-    expect(saver.committedText, isNot(contains('first')));
-    expect(saver.committedText, fixture.onDisk);
+    expect(await saver.undo(), isA<Restored>());
+    await pumpEventQueue();
+
+    expect(await session.reloadFromDisk(), isA<DocumentOpened>());
+    expect(session.commentAt(sicilian), isNot(contains('first')));
+    expect(writeChapter(session.chapter!), fixture.onDisk);
+  });
+  test(
+    'a hold for a rename writes nothing while the document is frozen',
+    () async {
+      fixture.store.hold = true;
+      edit('first');
+      session.setComment(NodePath.of([0, 1]), 'second');
+      fixture.store.saves.add(
+        const SaveRefused('game 3 would change but the edit was to game 1'),
+      );
+      fixture.store.releaseAll();
+      await pumpEventQueue();
+      fixture.store.hold = false;
+      expect(saver.state, isA<SaveStopped>());
+      fixture.store.requestedSaves.clear();
+
+      // What a rename does: hold the file still, then let the saver go again.
+      await saver.holdStill((revision) async => revision);
+      await pumpEventQueue();
+
+      expect(fixture.store.requestedSaves, isEmpty, reason: 'still frozen');
+      expect(saver.state, isA<SaveStopped>());
+      expect(session.commentAt(sicilian), contains('first'));
+      expect(session.commentAt(NodePath.of([0, 1])), 'second');
+    },
+  );
+
+  test('a copy of a frozen document becomes the document', () async {
+    fixture.store.saves.add(
+      const SaveRefused('game 3 would change but the edit was to game 1'),
+    );
+    edit('frozen words');
+    await pumpEventQueue();
+    expect(saver.state, isA<SaveStopped>());
+
+    final copy = await session.saveCopy('Elsewhere') as CopySaved;
+    expect(copy.nowEditing, isTrue);
+    expect(session.source?.name, 'Elsewhere');
+    expect(saver.state, isA<Saved>());
+    expect(session.commentAt(sicilian), contains('frozen words'));
+
+    // And it takes words again, into the copy.
+    fixture.store.requestedSaves.clear();
+    edit('more words');
+    await pumpEventQueue();
+    expect(saver.state, isA<Saved>());
+    expect(fixture.store.requestedSaves, hasLength(1));
+    expect(_copyText(fixture, 'Elsewhere.pgn'), contains('more words'));
   });
 }

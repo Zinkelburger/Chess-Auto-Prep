@@ -43,6 +43,15 @@ void main() {
     fixture.store.releaseAll();
   });
 
+  test('a save that is only slow says waiting will help', () async {
+    fixture.store.hold = true;
+    edit('one');
+    final question = _Question(answer: DraftChoice.closeAnyway);
+    expect(await guardWith(question).mayClose(), isTrue);
+    expect(question.asked.single, contains('You can stay until it is saved'));
+    fixture.store.releaseAll();
+  });
+
   test('a save that failed is not taken for a save', () async {
     fixture.store.saves.add(const IoFailure('No space left on device'));
     edit('one');
@@ -66,7 +75,12 @@ void main() {
     expect(await guardWith(question).mayClose(), isTrue);
     expect(question.asked.single, contains('was stopped because'));
     expect(question.asked.single, contains('still on screen'));
-    expect(question.asked.single, contains('closing now loses them'));
+    expect(question.asked.single, contains('Closing now loses them'));
+    expect(
+      question.asked.single,
+      contains('waiting will not help'),
+      reason: 'a frozen document is not going to write itself',
+    );
     expect(question.asked.single, isNot(contains('has not finished')));
   });
 
@@ -117,12 +131,17 @@ void main() {
       ),
     );
     final dialog = DraftDialog(navigator);
-    final answer = dialog.put('The save of Main.pgn has not finished.');
+    final answer = dialog.put((
+      body: 'The save of Main.pgn has not finished.',
+      leave: 'Close and lose the words',
+      offerCopy: true,
+    ));
     await tester.pumpAndSettle();
     expect(find.textContaining('has not finished'), findsOneWidget);
-    expect(find.text('Leave it open'), findsOneWidget);
+    expect(find.text('Stay here'), findsOneWidget);
+    expect(find.text('Save a copy…'), findsOneWidget);
 
-    await tester.tap(find.text('Close and lose changes'));
+    await tester.tap(find.text('Close and lose the words'));
     await tester.pumpAndSettle();
     expect(await answer, DraftChoice.closeAnyway);
   });
@@ -137,7 +156,11 @@ void main() {
       ),
     );
     final dialog = DraftDialog(navigator);
-    final answer = dialog.put('The save of Main.pgn has not finished.');
+    final answer = dialog.put((
+      body: 'The save of Main.pgn has not finished.',
+      leave: 'Close and lose the words',
+      offerCopy: false,
+    ));
     await tester.pumpAndSettle();
     dialog.withdraw();
     await tester.pumpAndSettle();
@@ -167,8 +190,8 @@ final class _Question implements DraftQuestion {
   Future<void> get first => _first.future;
 
   @override
-  Future<DraftChoice?> put(String trouble) {
-    asked.add(trouble);
+  Future<DraftChoice?> put(DraftPrompt prompt) {
+    asked.add(prompt.body);
     if (!_first.isCompleted) _first.complete();
     if (!waits) return Future<DraftChoice?>.value(answer);
     return (_open = Completer<DraftChoice?>()).future;

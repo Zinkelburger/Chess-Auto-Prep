@@ -8,6 +8,7 @@ import 'document_saver.dart';
 import 'edit_refused.dart';
 import 'save_state.dart';
 import 'document_session.dart';
+import 'session_results.dart';
 
 /// What is open and whether it is on disk: the chapter's name and side, then
 /// one line of save state. A file someone else changed offers the two ways
@@ -84,6 +85,8 @@ class _ChapterHeaderState extends State<ChapterHeader> {
     if (!mounted) return;
     setState(
       () => _notice = switch (result) {
+        CopySaved(name: final name, nowEditing: true) =>
+          'Saved a copy as $name. Now editing the copy.',
         CopySaved(:final name) => 'Saved a copy as $name',
         CopyNameTaken() => 'That name is taken. Nothing was replaced.',
         CopyFailed(:final detail) => 'Could not save a copy: $detail',
@@ -138,9 +141,8 @@ class _ChapterHeaderState extends State<ChapterHeader> {
 
 /// What the screen tells the user about an edit that did not happen.
 String _refusalNotice(EditRefused refusal) => switch (refusal) {
-  NotEditable() =>
-    'This file is not UTF-8, so it opened to read. Save a copy to edit it '
-        'here, or open and save it in the old app to convert it.',
+  NotEditable(:final detail) =>
+    'This file opened to read: $detail. Save a copy to edit it here.',
   LineNotWhole() =>
     'That line could not be read in full, so it is left as it is. Edit it '
         'in the old app.',
@@ -201,7 +203,6 @@ class _SaveLine extends StatelessWidget {
         state is SaveFailed ||
         state is SaveConflict ||
         state is SaveStopped ||
-        state is RestoreStopped ||
         state is DocumentReadOnly;
     return Text(
       switch (state) {
@@ -214,12 +215,9 @@ class _SaveLine extends StatelessWidget {
           'The app tried to change a line you did not edit, so the save was '
               'stopped. Nothing was written and nothing more will be: your '
               'words are still on screen.',
-        RestoreStopped() =>
-          'Could not go back: that version is not among the ones kept for '
-              'this file.',
-        DocumentReadOnly() =>
-          'This file is not UTF-8, so it opened to read. Save a copy to edit '
-              'it here, or open and save it in the old app to convert it.',
+        // The sentence is on the notice below, where the store's own reason
+        // for it can be. Saying it twice reads as two problems.
+        DocumentReadOnly() => 'Read only',
       },
       style: theme.textTheme.bodySmall?.copyWith(
         color: trouble ? theme.colorScheme.error : null,
@@ -236,8 +234,7 @@ class _SaveLine extends StatelessWidget {
 /// throws them away. A file that opened to read has nothing to lose, so its
 /// only real way out is a copy.
 String? _waysOut(SaveState state) => switch (state) {
-  SaveConflict() => 'Reload',
-  SaveStopped() => 'Reload and lose the words on screen',
+  SaveConflict() || SaveStopped() => 'Reload and lose the words on screen',
   DocumentReadOnly() => 'Reload',
   _ => null,
 };

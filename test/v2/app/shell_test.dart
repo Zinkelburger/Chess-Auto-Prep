@@ -1,8 +1,12 @@
+import 'package:chess_auto_prep/v2/app/exit_guard.dart';
+import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
+import 'package:chess_auto_prep/v2/diagnostics/log.dart';
 import 'package:chess_auto_prep/v2/app/shell.dart';
 import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/v2/features/library/library.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/v2/workspace/save_state.dart';
 import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
@@ -23,6 +27,8 @@ void main() {
   late DocumentSaver saver;
   late DocumentSession session;
   late EngineAnalysis analysis;
+  late _Question question;
+  late ExitGuard leaving;
 
   setUp(() {
     files = ScriptedFiles(
@@ -50,6 +56,12 @@ void main() {
       session,
       () async => const StartFailed('no engine in this test'),
     );
+    question = _Question();
+    leaving = ExitGuard(
+      saver: saver,
+      question: question,
+      wait: const Duration(milliseconds: 20),
+    );
   });
 
   tearDown(() {
@@ -69,6 +81,7 @@ void main() {
           session: session,
           saver: saver,
           analysis: analysis,
+          leaving: leaving,
         ),
       ),
     );
@@ -115,4 +128,63 @@ void main() {
     expect(session.chapter, isNull);
     expect(find.text('Main is no longer on disk'), findsOneWidget);
   });
+  testWidgets('another chapter is not opened over a frozen document until '
+      'the user says so', (tester) async {
+    await pump(tester);
+    await tester.tap(find.text('Main').last); // KID
+    await tester.pumpAndSettle();
+    store.saves.add(
+      const SaveRefused('game 3 would change but the edit was to game 1'),
+    );
+    session.setComment(NodePath.of([0]), 'frozen words');
+    await tester.pumpAndSettle();
+    expect(saver.state, isA<SaveStopped>());
+
+    question.answer = DraftChoice.keepWaiting;
+    await tester.tap(find.text('Main').first); // benko
+    await tester.pumpAndSettle();
+    expect(question.asked.single, contains('was stopped'));
+    expect(session.source, kid, reason: 'nothing opened over the words');
+    expect(session.commentAt(NodePath.of([0])), contains('frozen words'));
+  });
+
+  testWidgets('leaving a frozen document anyway is logged', (tester) async {
+    final entries = <LogEntry>[];
+    void collect(LogEntry entry) => entries.add(entry);
+    log.install(collect);
+    addTearDown(() => log.remove(collect));
+    await pump(tester);
+    await tester.tap(find.text('Main').last); // KID
+    await tester.pumpAndSettle();
+    store.saves.add(const SaveRefused('game 3 would change'));
+    session.setComment(NodePath.of([0]), 'frozen words');
+    await tester.pumpAndSettle();
+
+    question.answer = DraftChoice.closeAnyway;
+    await tester.tap(find.text('Main').first); // benko
+    await tester.pumpAndSettle();
+    expect(session.source, benko);
+    expect(
+      entries
+          .where((entry) => entry.level == LogLevel.warning)
+          .map((entry) => entry.action),
+      contains(contains('leave this document with unsaved words')),
+    );
+  });
+}
+
+/// The question the shell puts before it leaves a document: it records what
+/// it was asked and answers what the test set.
+final class _Question implements DraftQuestion {
+  DraftChoice? answer;
+  final asked = <String>[];
+
+  @override
+  Future<DraftChoice?> put(DraftPrompt prompt) {
+    asked.add(prompt.body);
+    return Future<DraftChoice?>.value(answer);
+  }
+
+  @override
+  void withdraw() {}
 }
