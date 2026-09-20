@@ -1,25 +1,63 @@
 import 'dart:convert';
 
-import 'package:dartchess/dartchess.dart';
+import 'package:dartchess/dartchess.dart' show Side;
 
 import '../fen.dart';
+import 'game_text.dart';
 import 'game_tree.dart';
 import 'pgn_reader.dart';
 import 'tree_merge.dart';
 
-/// A repertoire chapter: every game in its file merged into one tree.
+/// One game of a chapter file: the line a reader trains and a writer edits.
 ///
-/// A chapter file is a multi-game PGN where each game is one line, all from
-/// the same starting position, with a `// Color: Black` comment line above
-/// the first game saying whose repertoire it is. Games that start somewhere
-/// else are counted in [skippedGames] rather than silently dropped.
+/// The game is the persistent unit, so a line keeps everything a write-back
+/// needs — its tags in file order, its own tree (variations included) and
+/// its verbatim source. An untouched line is written back byte for byte;
+/// only an edited one is generated again.
+final class ChapterLine {
+  const ChapterLine({
+    required this.tags,
+    required this.tree,
+    required this.text,
+    required this.trailer,
+  });
+
+  final List<PgnTag> tags;
+  final GameTree tree;
+
+  /// The game's source, with no trailing whitespace.
+  final String text;
+
+  /// The whitespace between this game and the next, kept so a file that is
+  /// read and written again is unchanged.
+  final String trailer;
+
+  /// The identity every later lookup uses — training progress, rename,
+  /// delete. Files in the wild spell it five ways; whichever one a file has
+  /// is the line's id.
+  String? get lineId {
+    for (final key in const ['LineID', 'LineId', 'Id', 'Line', 'Guid']) {
+      final value = tagValue(tags, key)?.trim();
+      if (value != null && value.isNotEmpty) return value;
+    }
+    return null;
+  }
+}
+
+/// A repertoire chapter: the file's preamble, its games, and every game
+/// from the same starting position merged into one tree.
+///
+/// A chapter file is a multi-game PGN where each game is one line, with a
+/// `// Color: Black` comment line above the first game saying whose
+/// repertoire it is. Games that start somewhere else stay in [lines]
+/// untouched and are not part of [tree].
 final class Chapter {
   const Chapter({
     required this.name,
     required this.side,
+    required this.preamble,
+    required this.lines,
     required this.tree,
-    required this.gameCount,
-    required this.skippedGames,
     required this.issues,
   });
 
@@ -28,77 +66,123 @@ final class Chapter {
   /// The side the repertoire is for; also the board orientation.
   final Side side;
 
+  /// The `//` metadata above the first game, verbatim.
+  final String preamble;
+
+  final List<ChapterLine> lines;
+
   final GameTree tree;
 
-  /// Games merged into [tree].
-  final int gameCount;
-
-  /// Games left out because their root position differs from the first one.
-  final int skippedGames;
-
   final List<PgnIssue> issues;
+
+  /// Whether [line] is one of the games merged into [tree].
+  bool isInTree(ChapterLine line) => line.tree.rootFen == tree.rootFen;
+
+  /// Games merged into [tree].
+  int get gameCount => lines.where(isInTree).length;
+
+  /// Games left out because their root position differs from the first
+  /// game's.
+  int get skippedGames => lines.length - gameCount;
 }
 
 Chapter parseChapter({required String name, required String text}) {
-  final side = _sideFromHeaderLines(text);
-  final read = readPgn(_withoutHeaderLines(text));
-  final first = read.games.firstOrNull;
-  if (first == null) {
-    return Chapter(
-      name: name,
-      side: side,
-      tree: const GameTree(rootFen: Fen.initial),
-      gameCount: 0,
-      skippedGames: 0,
-      issues: read.issues,
+  final document = splitChapterText(text);
+  final issues = <PgnIssue>[];
+  final lines = <ChapterLine>[];
+  for (final (index, game) in document.games.indexed) {
+    final read = readPgn(game.text);
+    for (final issue in read.issues) {
+      issues.add(PgnIssue(game: index, detail: issue.detail));
+    }
+    final tags = readTags(game.text);
+    lines.add(
+      ChapterLine(
+        tags: tags,
+        // A game whose FEN the reader could not use keeps that text as its
+        // root, which no other game can equal, so it stays out of the
+        // merged tree instead of pretending to start at the chapter root.
+        tree: read.games.firstOrNull?.tree ?? _unreadRoot(tags),
+        text: game.text,
+        trailer: game.trailer,
+      ),
     );
   }
-  final root = first.tree.rootFen;
-  final sameRoot = read.games.where((g) => g.tree.rootFen == root);
-  final children = sameRoot.fold(
-    const <MoveNode>[],
-    (merged, game) => mergeForests(merged, game.tree.children),
-  );
   return Chapter(
     name: name,
-    side: side,
-    tree: GameTree(
-      rootFen: root,
-      rootComment: first.tree.rootComment,
-      children: children,
-    ),
-    gameCount: sameRoot.length,
-    skippedGames: read.games.length - sameRoot.length,
-    issues: read.issues,
+    side: _side(document.preamble),
+    preamble: document.preamble,
+    lines: List.unmodifiable(lines),
+    tree: mergeLines(lines),
+    issues: List.unmodifiable(issues),
   );
 }
 
-/// `// Color: Black` above the first tag reads as Black; anything else,
+/// [chapter] with [lines] in its place and its tree merged again.
+///
+/// [preamble] replaces the metadata block, which adding the first game to a
+/// chapter that had none needs: the new game has to start on its own line.
+Chapter withLines(
+  Chapter chapter,
+  List<ChapterLine> lines, {
+  String? preamble,
+}) => Chapter(
+  name: chapter.name,
+  side: chapter.side,
+  preamble: preamble ?? chapter.preamble,
+  lines: List.unmodifiable(lines),
+  tree: mergeLines(lines),
+  issues: chapter.issues,
+);
+
+/// [line] carrying [tree]: its tags keep their order and their values, and
+/// its text is written again in the format the old app reads.
+ChapterLine rewritten(ChapterLine line, GameTree tree) => ChapterLine(
+  tags: line.tags,
+  tree: tree,
+  text: writeGameText(line.tags, tree),
+  trailer: line.trailer,
+);
+
+/// Every game from the first game's position, folded in file order. The
+/// first game fixes the main line; later games can only add variations.
+GameTree mergeLines(List<ChapterLine> lines) {
+  if (lines.isEmpty) return const GameTree(rootFen: Fen.initial);
+  final root = lines.first.tree.rootFen;
+  final shared = lines.where((line) => line.tree.rootFen == root);
+  return GameTree(
+    rootFen: root,
+    rootComment: shared.first.tree.rootComment,
+    children: shared.fold(
+      const <MoveNode>[],
+      (merged, line) => mergeForests(merged, line.tree.children),
+    ),
+  );
+}
+
+/// The chapter file again, byte for byte when nothing was edited.
+String writeChapter(Chapter chapter) {
+  final buffer = StringBuffer(chapter.preamble);
+  for (final line in chapter.lines) {
+    buffer
+      ..write(line.text)
+      ..write(line.trailer);
+  }
+  return buffer.toString();
+}
+
+GameTree _unreadRoot(List<PgnTag> tags) =>
+    GameTree(rootFen: Fen(tagValue(tags, 'FEN') ?? ''));
+
+/// `// Color: Black` in the preamble reads as Black; anything else,
 /// including no line at all, is White. The old app wrote it that way and
 /// reads it the same way.
-Side _sideFromHeaderLines(String text) {
-  for (final line in _headerLines(text)) {
-    if (line.startsWith('// Color:')) {
-      final color = line.substring('// Color:'.length).trim().toLowerCase();
-      return color == 'black' ? Side.black : Side.white;
-    }
+Side _side(String preamble) {
+  for (final line in const LineSplitter().convert(preamble)) {
+    final trimmed = line.trim();
+    if (!trimmed.startsWith('// Color:')) continue;
+    final color = trimmed.substring('// Color:'.length).trim().toLowerCase();
+    return color == 'black' ? Side.black : Side.white;
   }
   return Side.white;
-}
-
-/// The `//` lines before the first `[` tag, which are this app's metadata
-/// and not PGN. The PGN parser would otherwise read them as junk tokens.
-Iterable<String> _headerLines(String text) sync* {
-  for (final line in const LineSplitter().convert(text)) {
-    final trimmed = line.trim();
-    if (trimmed.startsWith('[')) return;
-    if (trimmed.startsWith('//')) yield trimmed;
-  }
-}
-
-String _withoutHeaderLines(String text) {
-  final lines = const LineSplitter().convert(text);
-  final firstTag = lines.indexWhere((line) => line.trim().startsWith('['));
-  if (firstTag <= 0) return text;
-  return lines.skip(firstTag).join('\n');
 }

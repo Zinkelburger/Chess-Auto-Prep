@@ -51,6 +51,9 @@ APPROVED: dict[str, tuple[int, str]] = {
         "reproducible engine bundle, v2: support dir, stale stamp delete, "
         ".part write, rename, stamp",
     ),
+    "lib/v2/storage/atomic_write.dart": (4, "v2 atomic publication: staged temporary, rename into place, sweep of interrupted writes"),
+    "lib/v2/storage/pgn_file_store.dart": (3, "v2 document store: the one write path, each mutation revision-checked and backed up"),
+    "lib/v2/storage/backups.dart": (1, "v2 kept versions under Support; creates folders, never removes"),
     "lib/services/eval/cdb_snapshot_download.dart": (4, "resumable downloaded snapshot"),
     "lib/services/eval/lichess_eval_controller.dart": (4, "resumable downloaded snapshot"),
     "lib/services/eval/lichess_eval_import.dart": (6, "rebuildable database staging"),

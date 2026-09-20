@@ -9,6 +9,25 @@
 String displayComment(String comment) =>
     comment.replaceAll(_machineToken, ' ').replaceAll(_whitespace, ' ').trim();
 
+/// The `[%...]` tokens of [comment] in the order it has them, space
+/// separated; empty when it has none.
+String machineTokens(String comment) =>
+    _machineToken.allMatches(comment).map((m) => m[0]!).join(' ');
+
+/// [comment] with its prose replaced by [prose], keeping the machine tokens
+/// it carried.
+///
+/// A person edits the words; the engine's evaluation, its line and the
+/// clock belong to the move and must survive that edit. Clearing the prose
+/// leaves the tokens alone, and a comment that ends up with nothing in it
+/// is removed rather than written as `{}`.
+String? withProse(String? comment, String? prose) {
+  final tokens = machineTokens(comment ?? '');
+  final text = prose?.trim() ?? '';
+  if (text.isEmpty) return tokens.isEmpty ? null : tokens;
+  return tokens.isEmpty ? text : '$text $tokens';
+}
+
 final _machineToken = RegExp(r'\[%[^\]]*\]');
 final _whitespace = RegExp(r'\s+');
 

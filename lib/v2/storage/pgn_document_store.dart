@@ -1,0 +1,151 @@
+import 'document_ref.dart';
+
+/// The one way `v2` writes a PGN file. The filesystem is a real boundary, so
+/// this is an interface: [PgnFileStore] in the app, a scripted one in tests.
+///
+/// Every mutation names the [Revision] the caller last read. If the bytes on
+/// disk are no longer that revision, the store refuses and says what is there
+/// now; there is no flag that turns the refusal off. What the caller does with
+/// the refusal — keep editing, save a copy, reload — is the workspace's
+/// business, and the draft is never this store's to throw away.
+abstract interface class PgnDocumentStore {
+  /// Reads [ref]. A failed read is never an empty document.
+  Future<DocumentRead> open(DocumentRef ref);
+
+  /// Writes a document that does not exist yet. Replaces nothing: if the name
+  /// is taken, even by a file created a moment ago, this is a [Collision].
+  Future<CreateResult> create(DocumentRef ref, String text);
+
+  /// Replaces [ref] with [text], having read [expected].
+  Future<SaveResult> save(
+    DocumentRef ref,
+    String text, {
+    required Revision expected,
+  });
+
+  /// Gives [ref] a new file name, such as `Main.pgn`, in the same folder.
+  Future<MoveResult> rename(
+    DocumentRef ref,
+    String name, {
+    required Revision expected,
+  });
+
+  /// Moves [ref] to [destination], replacing nothing.
+  Future<MoveResult> move(
+    DocumentRef ref,
+    DocumentRef destination, {
+    required Revision expected,
+  });
+
+  /// Moves [ref] into the recovery folder the old app also deletes into, so
+  /// the user has one place to look and nothing is unlinked.
+  Future<DeleteResult> delete(DocumentRef ref, {required Revision expected});
+}
+
+sealed class DocumentRead {
+  const DocumentRead();
+}
+
+final class Opened extends DocumentRead {
+  const Opened(this.text, this.revision);
+
+  final String text;
+  final Revision revision;
+}
+
+final class Absent extends DocumentRead {
+  const Absent();
+}
+
+final class Unreadable extends DocumentRead {
+  const Unreadable(this.detail);
+
+  /// For the log; the widget writes the sentence.
+  final String detail;
+}
+
+/// What a completed save replaced, and what it committed.
+///
+/// This is the whole of undo: `save(receipt.before, expected: receipt.committed)`
+/// puts the previous version back, and returns a receipt of its own. If
+/// something else wrote in between, that save is a [Conflict] and the entry
+/// stays where it is — an undo never guesses.
+final class Receipt {
+  const Receipt({
+    required this.committed,
+    required this.before,
+    required this.beforeRevision,
+  });
+
+  /// The revision the file now has.
+  final Revision committed;
+
+  /// The exact text that was replaced, as it was read from disk.
+  final String before;
+
+  final Revision beforeRevision;
+}
+
+sealed class CreateResult {
+  const CreateResult();
+}
+
+sealed class SaveResult {
+  const SaveResult();
+}
+
+sealed class MoveResult {
+  const MoveResult();
+}
+
+sealed class DeleteResult {
+  const DeleteResult();
+}
+
+final class Created implements CreateResult {
+  const Created(this.revision);
+
+  final Revision revision;
+}
+
+final class Saved implements SaveResult {
+  const Saved(this.receipt);
+
+  final Receipt receipt;
+}
+
+final class Moved implements MoveResult {
+  const Moved(this.revision);
+
+  /// Unchanged by the move: the same bytes in the same file, under a new name.
+  final Revision revision;
+}
+
+final class Deleted implements DeleteResult {
+  const Deleted(this.recoveredTo);
+
+  /// Where the file now is, so the user can be told where to find it.
+  final String recoveredTo;
+}
+
+/// The name is taken. Nothing was written.
+final class Collision implements CreateResult, MoveResult {
+  const Collision();
+}
+
+/// The file is not the revision the caller read.
+final class Conflict implements SaveResult, MoveResult, DeleteResult {
+  const Conflict(this.current);
+
+  /// What is on disk now, or null when the document is gone.
+  final Revision? current;
+}
+
+/// The operation could not be carried out. The document is as it was.
+final class IoFailure
+    implements CreateResult, SaveResult, MoveResult, DeleteResult {
+  const IoFailure(this.detail);
+
+  /// For the log; the widget writes the sentence.
+  final String detail;
+}

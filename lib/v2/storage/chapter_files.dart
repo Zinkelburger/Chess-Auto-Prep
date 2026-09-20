@@ -2,27 +2,22 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-/// One chapter file on disk.
-final class ChapterRef {
+import 'document_ref.dart';
+
+/// One chapter file on disk: a document, plus the two labels the library list
+/// shows. The store takes it as the [DocumentRef] it is.
+final class ChapterRef extends DocumentRef {
   const ChapterRef({
     required this.repertoire,
     required this.name,
-    required this.path,
-  });
+    required String path,
+  }) : super(path);
 
   /// The folder name under `repertoires/`.
   final String repertoire;
 
   /// The file name without `.pgn`.
   final String name;
-
-  final String path;
-
-  @override
-  bool operator ==(Object other) => other is ChapterRef && other.path == path;
-
-  @override
-  int get hashCode => path.hashCode;
 }
 
 sealed class ChapterListing {
