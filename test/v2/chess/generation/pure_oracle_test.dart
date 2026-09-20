@@ -15,9 +15,11 @@ import 'package:flutter_test/flutter_test.dart';
 /// also record which move the search is supposed to come out with.
 ///
 /// The positions are stand-ins — every node carries the same placement and a
-/// made-up move name — because what is being checked is the arithmetic and
-/// the ordering, not the chess. The rules that need a board are checked in
-/// `search_test.dart`, against real positions.
+/// made-up move name — because what is being checked here is the arithmetic
+/// and the ordering, not the chess. `pure_search_oracle_test.dart` lays the
+/// same trees out on a board and drives the real search through them; this
+/// one keeps all thirty, including the five whose leaves pair a terminal
+/// value with an engine score no board would pair it with.
 const _oracles = 'test/fixtures/pure_expectimax_oracles.json';
 
 /// The oracle stores engine scores the way UCI reports them, from the side to
