@@ -52,6 +52,23 @@ void main() {
     expect(fixture.onDisk, isNot(contains('two')));
   });
 
+  test('flush waits for the newest draft to reach the file', () async {
+    fixture.store.hold = true;
+    edit('one');
+    edit('two'); // collapses behind the write already going out
+    var landed = false;
+    final flushed = saver.flush().then((_) => landed = true);
+    await pumpEventQueue();
+    expect(landed, isFalse);
+    fixture.store.releaseAll(); // the first write
+    await pumpEventQueue();
+    expect(landed, isFalse, reason: 'the newest text is still on its way');
+    fixture.store.releaseAll(); // the second
+    await flushed;
+    expect(saver.state, isA<Saved>());
+    expect(fixture.onDisk, contains('{two [%eval 0.30]}'));
+  });
+
   test('a save landing after another chapter is open is discarded', () async {
     final other = chapterRef('KID', 'Other');
     fixture.store.documents[other] = Opened(

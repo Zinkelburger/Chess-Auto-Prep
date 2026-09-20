@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 
 import '../diagnostics/log.dart';
@@ -76,6 +74,10 @@ final class DocumentSaver extends ChangeNotifier {
   SaveState _state = const Saved();
   String? _pending;
   bool _writing = false;
+
+  /// The write going out and everything that collapses behind it, so the
+  /// app can wait for the file to hold the draft before it closes.
+  Future<void>? _inFlight;
   final _undo = <store.Receipt>[];
   int _opens = 0;
   bool _disposed = false;
@@ -101,8 +103,13 @@ final class DocumentSaver extends ChangeNotifier {
     if (_state is SaveConflict) return;
     _pending = text;
     _set(const Unsaved());
-    unawaited(_write());
+    if (!_writing) _inFlight = _write();
   }
+
+  /// Waits until the draft is on disk: the write in flight and the one that
+  /// collapsed behind it. Closing the window waits for this, so an edit made
+  /// a moment before it closed is not cut off.
+  Future<void> flush() => _inFlight ?? Future<void>.value();
 
   Future<void> _write() async {
     final target = _target;
@@ -122,11 +129,11 @@ final class DocumentSaver extends ChangeNotifier {
     if (ticket != _opens) {
       // The answer is about a document nobody has open now; a newer one may
       // have been waiting behind it.
-      unawaited(_write());
+      await _write();
       return;
     }
     _adopt(result, target.ref);
-    if (_state is! SaveConflict) unawaited(_write());
+    if (_state is! SaveConflict) await _write();
   }
 
   void _adopt(store.SaveResult result, DocumentRef ref) {

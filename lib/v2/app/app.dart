@@ -62,18 +62,30 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
   @override
   void initState() {
     super.initState();
-    // Quits the engines before the window goes, the polite path; a killed
-    // app relies on the pipes instead.
-    _lifecycle = AppLifecycleListener(
-      onExitRequested: () async {
-        await _engines.dispose();
-        log.i('exit');
-        await widget.closeLog();
-        return AppExitResponse.exit;
-      },
-    );
+    _lifecycle = AppLifecycleListener(onExitRequested: _leave);
     unawaited(_library.refresh());
     unawaited(_analysis.enable());
+  }
+
+  /// The way out: the draft reaches the disk, then the engines are quit —
+  /// the polite path, where a killed app relies on the pipes instead — and
+  /// the log is closed last so their final words are in it.
+  Future<AppExitResponse> _leave() async {
+    await _commitDraft();
+    await _engines.dispose();
+    log.i('exit');
+    await widget.closeLog();
+    return AppExitResponse.exit;
+  }
+
+  /// Words in a field the user never left are committed the way clicking
+  /// elsewhere commits them, by taking the focus away; the focus change is
+  /// applied in a microtask, so the edit is only made a turn later. Then the
+  /// file is waited for, because the window closes next.
+  Future<void> _commitDraft() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    await Future<void>.delayed(Duration.zero);
+    await _saver.flush();
   }
 
   @override

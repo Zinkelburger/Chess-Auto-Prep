@@ -42,7 +42,11 @@ class _CommentPanelState extends State<CommentPanel> {
 
   @override
   void dispose() {
+    // Words typed into the field are the user's whether or not they left it
+    // first, so the panel going away writes them like any other commit.
     widget.session.removeListener(_follow);
+    _focus.removeListener(_onFocusChanged);
+    _commit();
     _focus.dispose();
     _controller.dispose();
     super.dispose();
