@@ -51,6 +51,8 @@ let accepted = lines.snapshot();
 let cur: BookPosition | null = null;
 let hover: BookMove | null = null;
 let job: { fen: string; cancelled: boolean } | null = null;
+/** The latest message from loading or analysing; empty shows the position's own note. */
+let status = { text: '', error: false };
 
 const boards = new Boards('bdb', { view, play: playUci });
 const lineView = new LineView('bdb', lines, () => { void load(); });
@@ -131,17 +133,22 @@ function renderTables() {
   }
 }
 
+/** The analyse controls keep their place when hidden, and the status line under
+ * them is always there, so nothing above the tables moves. */
 function renderMissing() {
-  const missing = el('bdb-missing');
   const running = job !== null;
-  missing.hidden = !(running || (cur && !cur.found));
+  const missing = !!cur && !cur.found;
+  el('bdb-missing').dataset.shown = String(running || missing);
   el<HTMLButtonElement>('bdb-analyse').hidden = running;
   el<HTMLButtonElement>('bdb-cancel').hidden = !running;
   el('bdb-progress').hidden = !running;
   coresInput.disabled = running;
-  el('bdb-missing-text').textContent = running
-    ? (job!.fen === cur?.fen ? 'Analyzing on this computer…' : 'Analyzing an earlier position on this computer…')
-    : `Not in the book yet · about ${estimate()}`;
+  const earlier = running && job!.fen !== cur?.fen ? 'Analyzing an earlier position · ' : '';
+  el('bdb-status-text').textContent = earlier + (status.text
+    || (missing ? `Not in the book yet · about ${estimate()}` : '')
+    // Only a browser analysis is worth a note: it is much shallower than the book.
+    || (cur?.meta && cur.meta.source !== 'desktop' ? 'Analyzed in a browser: a quick, shallower search.' : ''));
+  el('bdb-status').dataset.error = String(!!status.text && status.error);
 }
 
 function estimate(): string {
@@ -174,17 +181,14 @@ coresInput.addEventListener('change', () => {
 
 function render() {
   boards.render(); lineView.render(); renderTables(); renderMissing();
-  // Only a browser analysis is worth a note: it is much shallower than the book.
-  el('bdb-source').textContent = cur?.meta && cur.meta.source !== 'desktop' ? 'Analyzed in a browser: a quick, shallower search.' : '';
   setup.fill(cur?.fen ?? lines.root);
 }
 
 function setHover(m: BookMove | null) { hover = m; boards.renderArrows(); }
 
 function setStatus(text: string, error = false) {
-  const s = el('bdb-status');
-  s.textContent = text;
-  s.dataset.error = String(error);
+  status = { text, error };
+  renderMissing();
 }
 
 // ── The line in the URL ───────────────────────────────────────────
@@ -400,9 +404,9 @@ async function analyse() {
     }));
     setStatus('Uploading…');
     await bookUpload({ ticket, fen: pos.fen, engine: ENGINE, nodes: OWN_NODES, child_nodes: CHILD_NODES, own, moves });
-    setStatus('Added to the book. Thank you.');
     job = null;
-    if (cur?.fen === pos.fen) await load(); else renderMissing();
+    if (cur?.fen === pos.fen) await load();
+    setStatus('Added to the book. Thank you.');
   } catch (e) {
     job = null;
     if (mine.cancelled) setStatus('Cancelled.');

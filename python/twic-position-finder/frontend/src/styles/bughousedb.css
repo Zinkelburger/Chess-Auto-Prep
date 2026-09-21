@@ -1,7 +1,5 @@
 /* BughouseDB's right-hand side: the move tables and the analyse strip.
    Boards, move lists and setup boxes: bughouse-board.css. */
-.bdb-source { margin: 0 0 6px; font-size: 13px; }
-.bdb-source:empty { display: none; }
 .bdb-tables { display: grid; grid-template-columns: 1fr 1fr; gap: 0; flex: 1; min-height: 0; }
 /* A vertical rule between the two boards' tables. */
 .bdb-table-panel { display: flex; flex-direction: column; min-height: 0; padding-right: 14px; }
@@ -21,24 +19,23 @@
 .bdb-table tr.best td:first-child { font-weight: 600; }
 .bdb-table td.none { color: var(--text-faint); }
 
-/* One priority governs both boards' tables, so it sits above them. */
-.bdb-priority { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 0 0 10px; }
+/* One row above both boards' tables: the priority, then the analyse controls,
+   which keep their place while hidden. The status line under it is always one
+   line tall. Neither changes height, so the tables never jump. */
+.bdb-tables { grid-template-rows: auto auto minmax(0, 1fr); }
+.bdb-bar { grid-column: 1 / -1; position: relative; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .bdb-priority-label { color: var(--text-dim); font-size: 14px; }
-
-.bdb-tables { grid-template-rows: auto minmax(0, 1fr); }
-.bdb-tables:has(> .bdb-missing:not([hidden])) { grid-template-rows: auto auto minmax(0, 1fr); }
-.bdb-tables > .bdb-missing { grid-column: 1 / -1; }
-.bdb-missing { display: flex; flex-direction: column; gap: 8px; padding: 0 0 8px; }
-.bdb-missing[hidden] { display: none; }
-.bdb-missing p { margin: 0; }
-.bdb-missing-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 14px; }
-.bdb-cores { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--text-dim); font-size: 14px; }
-.bdb-cores input { width: 4.2em; padding: 5px 6px; }
-.bdb-progress { height: 6px; border-radius: 3px; background: var(--bg-input); overflow: hidden; }
-.bdb-progress i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.2s; }
-.bdb-status { font-size: 14px; }
-.bdb-status:empty { display: none; }
+.bdb-missing { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.bdb-missing[data-shown="false"] { visibility: hidden; }
+.bdb-cores { display: flex; align-items: center; gap: 5px; margin: 0; color: var(--text-dim); font-size: 14px; }
+.bdb-cores input { width: 3.6em; padding: 5px 6px; }
+/* Turnstile only draws itself when it needs a click; it floats over the tables. */
+.bdb-captcha { position: absolute; top: calc(100% + 4px); right: 0; z-index: 3; }
+.bdb-status { grid-column: 1 / -1; position: relative; height: 30px; margin: 0; padding: 6px 0 0; font-size: 14px; line-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bdb-status[data-error="true"] { color: var(--danger); }
+.bdb-progress { position: absolute; left: 0; right: 0; bottom: 3px; height: 3px; border-radius: 2px; background: var(--bg-input); overflow: hidden; }
+.bdb-progress[hidden] { display: none; }
+.bdb-progress i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.2s; }
 
 /* Narrow or short screens: one column that scrolls. */
 @media (max-width: 1000px), (max-height: 600px) {
