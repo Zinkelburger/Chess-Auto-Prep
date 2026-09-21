@@ -8,9 +8,11 @@ import 'package:chess_auto_prep/v2/net/lichess_studies.dart';
 import 'package:chess_auto_prep/v2/features/library/library.dart';
 import 'package:chess_auto_prep/v2/features/library/library_panel.dart';
 import 'package:chess_auto_prep/v2/features/library/outline_panel.dart';
+import 'package:chess_auto_prep/v2/features/pgn_viewer/pgn_viewer.dart';
 import 'package:chess_auto_prep/v2/features/study/studies.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/v2/storage/recent_pgn_files.dart';
 import 'package:chess_auto_prep/v2/workspace/save_state.dart';
 import 'package:chess_auto_prep/v2/workspace/session_results.dart';
 import 'package:chess_auto_prep/v2/ui/theme.dart';
@@ -25,6 +27,7 @@ import '../support/fixtures.dart';
 import '../support/scripted_files.dart';
 import '../support/scripted_store.dart';
 import '../support/study_fixture.dart';
+import '../support/viewer_fixture.dart';
 
 void main() {
   final kid = ref('KID', 'Main');
@@ -44,6 +47,8 @@ void main() {
   late DocumentSession session;
   late EngineAnalysis analysis;
   late ChapterOutline outline;
+  late PgnViewer viewer;
+  late ScriptedRecentFiles recent;
   late _Question question;
   late ExitGuard leaving;
 
@@ -70,6 +75,8 @@ void main() {
       root: '/repertoires',
     );
     outline = ChapterOutline(library: library, session: session);
+    recent = ScriptedRecentFiles();
+    viewer = viewerFor(session, recent);
     studies = Studies(
       files: ScriptedStudyFiles(),
       documents: store,
@@ -97,6 +104,7 @@ void main() {
   });
 
   tearDown(() {
+    viewer.dispose();
     outline.dispose();
     analysis.dispose();
     studies.dispose();
@@ -113,6 +121,7 @@ void main() {
         home: Shell(
           library: library,
           studies: studies,
+          viewer: viewer,
           outline: outline,
           session: session,
           saver: saver,
@@ -243,6 +252,42 @@ void main() {
       store.documents.keys.map((ref) => ref.path),
       contains('/repertoires/KID/Main copy.pgn'),
     );
+  });
+
+  testWidgets('the PGN Viewer opens a recent file on its first game and '
+      'walks its games on the same board', (tester) async {
+    final games = collectionRef('games');
+    store.documents[games] = Opened(
+      threeGameFile,
+      scriptedRevision(threeGameFile),
+    );
+    recent.listing = RecentFilesListed([games.path]);
+    await pump(tester);
+    await tester.tap(find.byIcon(Icons.menu));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('PGN Viewer'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('games.pgn'));
+    await tester.pumpAndSettle();
+    expect(session.source, games);
+    expect(session.game, 0);
+    expect(find.text('Game 1 of 3'), findsOneWidget);
+    expect(find.byType(OutlinePanel), findsNothing);
+    // The header names the game rather than counting lines.
+    expect(
+      find.text('Carlsen, Magnus – Nakamura, Hikaru · 1-0 · Tata Steel · 2024'),
+      findsOneWidget,
+    );
+    await tester.tap(find.byTooltip('Next game'));
+    await tester.pumpAndSettle();
+    expect(session.game, 1);
+    expect(find.text('Game 2 of 3'), findsOneWidget);
+    await tester.tap(find.byTooltip('Viewer actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Close file'));
+    await tester.pumpAndSettle();
+    expect(session.source, isNull);
+    expect(find.text('Recent files'), findsOneWidget);
   });
 
   testWidgets('Ctrl+Z reaches the document from the outline column', (

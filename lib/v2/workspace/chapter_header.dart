@@ -2,6 +2,7 @@ import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
 
 import '../chess/pgn/chapter.dart';
+import '../chess/pgn/game_summary.dart';
 import '../storage/chapter_files.dart';
 import '../ui/theme.dart';
 import 'document_saver.dart';
@@ -211,10 +212,29 @@ class _SideChoice extends StatelessWidget {
   }
 }
 
+/// What the line under the name says: for one game of a file, who played it
+/// and where; for a merged chapter, how much of the file it holds.
+String _summary(Chapter chapter) =>
+    chapter.game == null ? _lineCount(chapter) : _gameLine(chapter);
+
+/// The players, the result and the event of the game on the board, in the
+/// words a study chapter or a viewed game is known by. Empty parts are left
+/// out rather than written as `?`.
+String _gameLine(Chapter chapter) {
+  final index = chapter.game!;
+  if (index >= chapter.lines.length) return '';
+  final game = summarizeGame(chapter.lines[index], index: index);
+  return [
+    game.title,
+    if (game.result.isNotEmpty) game.result,
+    if (game.setting.isNotEmpty) game.setting,
+  ].join(' · ');
+}
+
 /// How many games of the file the chapter holds: the games merged into the
 /// tree, then the ones left out and why, because a chapter that shows fewer
 /// lines than the file has must say so.
-String _summary(Chapter chapter) {
+String _lineCount(Chapter chapter) {
   final lines = chapter.gameCount == 1
       ? '1 line'
       : '${chapter.gameCount} lines';

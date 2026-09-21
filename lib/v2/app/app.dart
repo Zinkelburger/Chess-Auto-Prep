@@ -10,11 +10,14 @@ import '../diagnostics/log.dart';
 import '../engines/engine_supervisor.dart';
 import '../features/library/chapter_outline.dart';
 import '../features/library/library.dart';
+import '../features/pgn_viewer/pgn_viewer.dart';
 import '../features/study/studies.dart';
 import '../net/lichess_studies.dart';
 import '../storage/chapter_files.dart';
 import '../storage/lichess_token.dart';
+import '../storage/pgn_file_picker.dart';
 import '../storage/pgn_file_store.dart';
+import '../storage/recent_pgn_files.dart';
 import '../storage/study_files.dart';
 import '../ui/theme.dart';
 import '../workspace/chapter_header.dart';
@@ -74,6 +77,12 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     saver: _saver,
     lichess: LichessStudyApi(_lichess, token: readLichessToken),
     root: _studyFolder,
+  );
+  late final _viewer = PgnViewer(
+    recent: PreferencesRecentFiles(),
+    picker: const NativePgnFilePicker(),
+    session: _session,
+    collections: p.join(widget.documents.path, 'pgn_collections'),
   );
   late final _outline = ChapterOutline(library: _library, session: _session);
   final _engines = EngineSupervisor();
@@ -173,6 +182,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     _outline.dispose();
     _library.dispose();
     _studies.dispose();
+    _viewer.dispose();
     _lichess.close();
     _session.dispose();
     _saver.dispose();
@@ -191,6 +201,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
         leaving: _exit,
         library: _library,
         studies: _studies,
+        viewer: _viewer,
         outline: _outline,
         session: _session,
         saver: _saver,

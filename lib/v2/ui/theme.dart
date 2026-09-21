@@ -266,6 +266,10 @@ TextTheme _sized(TextTheme base) => base.copyWith(
   labelSmall: base.labelSmall?.copyWith(fontSize: 12, color: _muted),
 );
 
-/// How tall one chapter row is. Small enough that a long study is one
-/// screen, tall enough to hit.
-const studyRowHeight = 34.0;
+/// How tall one row of a list is — a study, its chapters, the games of a
+/// file. Small enough that a long list is one screen, tall enough to hit.
+const listRowHeight = 34.0;
+
+/// How wide the number in front of a game in a list is: room for four
+/// digits, which a downloaded collection needs.
+const gameOrdinalWidth = 40.0;

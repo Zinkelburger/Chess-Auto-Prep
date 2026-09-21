@@ -156,6 +156,25 @@ final class DocumentSession extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Puts the game at [index] of the open file on the board, without reading
+  /// the file again: every game is already in hand, and a viewer walks them
+  /// one after another. Only a document that shows one game at a time can
+  /// do this; a merged chapter has no other game to show.
+  ///
+  /// The draft, if one is waiting, stays where it is. It belongs to the
+  /// file, not to the game that was on the board when it was typed.
+  void showGame(int index) {
+    final chapter = _chapter;
+    if (chapter == null || chapter.game == null) return;
+    if (index < 0 || index >= chapter.lines.length) return;
+    if (index == chapter.game) return;
+    _chapter = withLines(chapter, chapter.lines, game: index);
+    _game = index;
+    _cursor = const NodePath.root();
+    _clearRefusal();
+    notifyListeners();
+  }
+
   /// Moves the cursor; a path not in the tree is ignored.
   void goTo(NodePath path) {
     final tree = this.tree;

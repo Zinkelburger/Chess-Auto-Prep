@@ -89,16 +89,31 @@ final class PgnFileStore implements PgnDocumentStore {
       case FileFound(:final bytes, :final revision):
         switch (await _decoded(bytes)) {
           case PlainText(:final text):
-            return Opened(text, revision);
+            return Opened(text, revision, readOnly: _outsideRoot(ref));
           case ForeignText(:final text, :final detail):
             log.w('open ${ref.path}', detail);
-            return Opened(text, revision, readOnly: detail);
+            return Opened(
+              text,
+              revision,
+              readOnly: _outsideRoot(ref) ?? detail,
+            );
           case NotText(:final detail):
             log.w('open ${ref.path}', detail);
             return Unreadable(detail);
         }
     }
   }
+
+  /// Why a file at [ref] opens to read, or null when it may be written.
+  ///
+  /// Every write keeps the version it replaces under an id made from the
+  /// path inside the documents folder, so a file outside it has nowhere for
+  /// its versions to go and no write ever reaches it. It is still read: the
+  /// viewer opens whatever the user browses to.
+  String? _outsideRoot(DocumentRef ref) =>
+      documentBackupIdFor(documents, ref) == null
+      ? 'it is outside your Documents folder'
+      : null;
 
   @override
   Future<CreateResult> create(DocumentRef ref, String text) async {

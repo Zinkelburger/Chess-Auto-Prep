@@ -39,7 +39,7 @@ class StudyRow extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(Space.s, 0, Space.xs, 0),
           child: SizedBox(
-            height: studyRowHeight,
+            height: listRowHeight,
             child: Row(
               children: [
                 Expanded(
@@ -102,7 +102,7 @@ class ChapterRow extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(Space.l, 0, Space.xs, 0),
           child: SizedBox(
-            height: studyRowHeight,
+            height: listRowHeight,
             child: Row(
               children: [
                 SizedBox(

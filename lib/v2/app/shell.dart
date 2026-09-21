@@ -7,6 +7,8 @@ import '../features/library/chapter_outline.dart';
 import '../features/library/library.dart';
 import '../features/library/library_panel.dart';
 import '../features/library/outline_panel.dart';
+import '../features/pgn_viewer/pgn_viewer.dart';
+import '../features/pgn_viewer/pgn_viewer_panel.dart';
 import '../features/study/quiz_menu.dart';
 import '../features/study/studies.dart';
 import '../features/study/study_panel.dart';
@@ -28,6 +30,7 @@ class Shell extends StatefulWidget {
     super.key,
     required this.library,
     required this.studies,
+    required this.viewer,
     required this.outline,
     required this.session,
     required this.saver,
@@ -37,6 +40,7 @@ class Shell extends StatefulWidget {
 
   final Library library;
   final Studies studies;
+  final PgnViewer viewer;
   final ChapterOutline outline;
   final DocumentSession session;
   final DocumentSaver saver;
@@ -52,6 +56,10 @@ class Shell extends StatefulWidget {
 
 class _ShellState extends State<Shell> {
   String? _error;
+
+  /// The name of the copy the last leave-question wrote, until the next
+  /// thing the bar says has carried it.
+  String? _copy;
   var _mode = Mode.repertoires;
 
   /// The columns and their widths. The user drags the dividers; the outline
@@ -119,30 +127,67 @@ class _ShellState extends State<Shell> {
     if (mode == Mode.study) unawaited(widget.studies.refresh());
   }
 
-  /// The session opens the file; this only says what came of it. An open
-  /// a later click overtook has nothing to say, so it says nothing.
+  /// The session opens the file; this only says what came of it, and
+  /// answers whether the document is now on the board. An open a later
+  /// click overtook has nothing to say, so it says nothing.
   ///
   /// Opening a document takes the saver off the one that is open, and a
   /// draft it never wrote goes with it, so the user is asked first — the
   /// same question the closing window asks. When they answered it by saving
   /// a copy, the bar above says where those words went.
-  Future<void> _open(ChapterRef ref, {int? game}) async {
+  Future<bool> _open(ChapterRef ref, {int? game}) async {
     // Clicking the chapter that is already open is not leaving it.
-    if (ref == widget.session.source && game == widget.session.game) return;
-    if (!await widget.leaving.mayLeaveDocument()) return;
-    if (!mounted) return;
-    final copy = widget.leaving.lastCopy;
-    widget.leaving.lastCopy = null;
+    if (ref == widget.session.source && game == widget.session.game) {
+      return true;
+    }
+    if (!await _leftTheDocument()) return false;
     final result = await widget.session.open(ref, game: game);
-    if (!mounted) return;
+    if (!mounted) return false;
     switch (result) {
       case OpenOvertaken():
-        return;
+        return false;
       case DocumentOpened():
-        setState(() => _error = copy == null ? null : 'Saved a copy as $copy');
+        _said(null);
+        return true;
       case OpenFailed(:final reason):
-        setState(() => _error = reason);
+        _said(reason);
+        return false;
     }
+  }
+
+  /// A file the viewer browsed to or picked from its recent list: opened
+  /// on its first game, and remembered once it is on the board.
+  Future<void> _openFile(ChapterRef ref) async {
+    if (await _open(ref, game: 0)) unawaited(widget.viewer.opened(ref));
+  }
+
+  /// Takes the document off the board, with the same question about a
+  /// draft the file never took as opening another one asks.
+  Future<void> _closeFile() async {
+    if (widget.session.source == null) return;
+    if (!await _leftTheDocument()) return;
+    widget.session.closed();
+    widget.viewer.closed();
+    _said(null);
+  }
+
+  /// Whether the workspace may leave what it has open. When the user
+  /// answered by saving a copy, the bar says where those words went, so
+  /// the copy's name is carried to the next thing said.
+  Future<bool> _leftTheDocument() async {
+    if (!await widget.leaving.mayLeaveDocument()) return false;
+    if (!mounted) return false;
+    _copy = widget.leaving.lastCopy;
+    widget.leaving.lastCopy = null;
+    return true;
+  }
+
+  void _said(String? error) {
+    final copy = _copy;
+    _copy = null;
+    setState(
+      () => _error = error ?? (copy == null ? null : 'Saved a copy as $copy'),
+    );
   }
 
   Widget _leftColumn() => switch (_mode) {
@@ -158,6 +203,11 @@ class _ShellState extends State<Shell> {
       studies: widget.studies,
       session: widget.session,
       onOpen: (study, chapter) => unawaited(_open(study, game: chapter)),
+    ),
+    Mode.pgnViewer => PgnViewerPanel(
+      viewer: widget.viewer,
+      onOpen: (file) => unawaited(_openFile(file)),
+      onClose: () => unawaited(_closeFile()),
     ),
   };
 
@@ -213,6 +263,7 @@ enum _Pane { list, outline, workspace }
 /// document and the draft in it are the same whichever is showing.
 enum Mode {
   repertoires('Repertoires'),
+  pgnViewer('PGN Viewer'),
   study('Study');
 
   const Mode(this.label);
