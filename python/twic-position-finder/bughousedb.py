@@ -514,7 +514,8 @@ def store_upload(conn: sqlite3.Connection, up: PositionUpload, contributor: str)
             if s is not None:
                 _check_joints(s.pv)
         moves[(m.board, m.uci)] = {True: m.on, False: m.off}
-    searches = len(own) + 2 * len(moves)
+    # A browser scores only each board's top few moves; the rest carry no search.
+    searches = len(own) + sum(s is not None for m in up.moves for s in (m.on, m.off))
     if now - t["issued"] < searches * MIN_SECONDS_PER_SEARCH:
         raise HTTPException(429, "That was faster than the engine can search. Try again.")
 

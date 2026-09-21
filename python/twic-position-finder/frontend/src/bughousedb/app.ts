@@ -33,10 +33,13 @@ const START_DUAL = `${START}|${START}`;
  */
 const PRIORITIES: Clock[] = ['ahead', 'even', 'behind'];
 let priority: Clock = 'even';
-// The browser engine runs one network evaluation (about 80 ms) per node, so a
-// browser analysis is far shallower than the desktop builder's 1500/200.
+// The browser engine runs one network evaluation (about 80 ms) per node, so the
+// position's own search is far shallower than the desktop builder's 1500. The
+// time goes to each board's few moves the search liked most, searched as deeply
+// as the desktop builder searches every move; the rest stay unscored.
 const OWN_NODES = 200;    // each search of the position itself
-const CHILD_NODES = 16;   // each search after one move (1 would leave q = -1)
+const CHILD_NODES = 200;  // each search after one of the top moves
+const TOP_MOVES = 4;      // per board
 const SECONDS_PER_NODE = 0.085;
 const ENGINE = 'hivemind-web';
 const BOTTOM: Record<BoardName, Colour> = { A: 'white', B: 'black' };
@@ -153,8 +156,10 @@ function renderMissing() {
 
 function estimate(): string {
   if (!cur) return '';
-  const nodes = cur.teams.length * 2 * OWN_NODES + cur.moves.length * 2 * CHILD_NODES;
-  const seconds = (nodes * SECONDS_PER_NODE) / cores();
+  // Two rounds: the position's own searches, then two per top move.
+  const round = (searches: number, nodes: number) => Math.ceil(searches / cores()) * nodes;
+  const nodes = round(cur.teams.length * 2, OWN_NODES) + round(2 * topCount(cur), CHILD_NODES);
+  const seconds = nodes * SECONDS_PER_NODE;
   return seconds < 90 ? `${Math.max(10, Math.round(seconds / 10) * 10)} s` : `${Math.round(seconds / 60)} min`;
 }
 
@@ -352,12 +357,44 @@ async function captchaToken(): Promise<string> {
   });
 }
 
-async function search(engine: BrowserEngine, fen: string, team: Team, ahead: boolean, nodes: number): Promise<RawSearch | null> {
+/** How many moves an analysis scores: up to TOP_MOVES on each board. */
+function topCount(pos: BookPosition): number {
+  return BOARDS.reduce((n, name) => n + Math.min(TOP_MOVES, pos.moves.filter((m) => m.board === name).length), 0);
+}
+
+/**
+ * Each board's TOP_MOVES from its mover's own searches (both clock bits),
+ * ranked by the visits the searches gave them, then by the network's prior.
+ */
+function topMoves(pos: BookPosition, own: { team: Team; ranked: NodeSearchResult['moves'] }[]): Set<string> {
+  const picked = new Set<string>();
+  for (const name of BOARDS) {
+    const legal = pos.moves.filter((m) => m.board === name);
+    if (!legal.length) continue;
+    const mover = moverTeam(legal[0]);
+    const score = new Map<string, { visits: number; prior: number }>();
+    for (const o of own) {
+      if (o.team !== mover) continue;
+      for (const m of o.ranked) {
+        if (m.board !== name) continue;
+        const s = score.get(m.uci) ?? { visits: 0, prior: 0 };
+        score.set(m.uci, { visits: s.visits + m.visits, prior: Math.max(s.prior, m.prior) });
+      }
+    }
+    legal.map((m) => m.uci).filter((uci) => score.has(uci))
+      .sort((a, b) => score.get(b)!.visits - score.get(a)!.visits || score.get(b)!.prior - score.get(a)!.prior)
+      .slice(0, TOP_MOVES)
+      .forEach((uci) => picked.add(`${name}:${uci}`));
+  }
+  return picked;
+}
+
+async function search(engine: BrowserEngine, fen: string, team: Team, ahead: boolean, nodes: number): Promise<(RawSearch & { ranked: NodeSearchResult['moves'] }) | null> {
   try {
     const r = await engine.request<NodeSearchResult>('search', {
       dual_fen: fen, team: team === 'AB' ? 'white' : 'black', time_advantage: ahead, nodes,
     });
-    return { q: r.mate === null ? r.q : null, mate: r.mate, pv: r.pv, best: r.best?.uci ?? null, nodes: r.nodes };
+    return { q: r.mate === null ? r.q : null, mate: r.mate, pv: r.pv, best: r.best?.uci ?? null, nodes: r.nodes, ranked: r.moves ?? [] };
   } catch (e) {
     // The answering side can have no legal move (mated); that search is empty.
     if (e instanceof Error && /no move available/i.test(e.message)) return null;
@@ -372,7 +409,7 @@ async function analyse() {
   job = mine;
   renderMissing();
   const bar = el('bdb-progress').firstElementChild as HTMLElement;
-  const total = pos.teams.length * 2 + pos.moves.length * 2;
+  let total = pos.teams.length * 2 + 2 * topCount(pos);
   let done = 0;
   const started = performance.now();
   const tick = () => {
@@ -387,21 +424,30 @@ async function analyse() {
     setStatus('Getting a ticket…');
     const { ticket } = await bookTicket(pos.fen, token);
     setStatus('Loading Hivemind (about 44 MB the first time)…');
-    // Every search is independent: the position's own four, then two per move.
+    // The position's own searches first; they rank each board's moves.
     type Task = { fen: string; team: Team; ahead: boolean; nodes: number };
-    const ownTasks: Task[] = pos.teams.flatMap((team) => [true, false].map((ahead) => ({ fen: pos.fen, team, ahead, nodes: OWN_NODES })));
-    const moveTasks: Task[] = pos.moves.flatMap((m) => [true, false].map((ahead) => ({ fen: m.child_fen, team: m.answerer, ahead, nodes: CHILD_NODES })));
-    const results = await pool.map(cores(), [...ownTasks, ...moveTasks], async (engine, t) => {
+    const run = (tasks: Task[]) => pool.map(cores(), tasks, async (engine, t) => {
       if (mine.cancelled) throw new Error('cancelled');
       const s = await search(engine, t.fen, t.team, t.ahead, t.nodes);
       tick();
       return s;
     });
-    const own = ownTasks.flatMap((t, i) => (results[i] ? [{ team: t.team, ahead: t.ahead, search: results[i]! }] : []));
-    const moves = pos.moves.map((m, i) => ({
-      board: m.board, uci: m.uci,
-      on: results[ownTasks.length + 2 * i], off: results[ownTasks.length + 2 * i + 1],
-    }));
+    const ownTasks: Task[] = pos.teams.flatMap((team) => [true, false].map((ahead) => ({ fen: pos.fen, team, ahead, nodes: OWN_NODES })));
+    const ownResults = await run(ownTasks);
+    const top = topMoves(pos, ownTasks.flatMap((t, i) => (ownResults[i] ? [{ team: t.team, ranked: ownResults[i]!.ranked }] : [])));
+    // Then the answering team's search after each top move, under both clock bits.
+    const scored = pos.moves.filter((m) => top.has(`${m.board}:${m.uci}`));
+    total = ownTasks.length + 2 * scored.length;
+    const moveTasks: Task[] = scored.flatMap((m) => [true, false].map((ahead) => ({ fen: m.child_fen, team: m.answerer, ahead, nodes: CHILD_NODES })));
+    const moveResults = await run(moveTasks);
+    const raw = (s: Awaited<ReturnType<typeof search>> | undefined): RawSearch | null =>
+      s ? { q: s.q, mate: s.mate, pv: s.pv, best: s.best, nodes: s.nodes } : null;
+    const own = ownTasks.flatMap((t, i) => (ownResults[i] ? [{ team: t.team, ahead: t.ahead, search: raw(ownResults[i])! }] : []));
+    // Every legal move is sent; the unscored ones carry no search.
+    const moves = pos.moves.map((m) => {
+      const i = scored.indexOf(m);
+      return { board: m.board, uci: m.uci, on: i < 0 ? null : raw(moveResults[2 * i]), off: i < 0 ? null : raw(moveResults[2 * i + 1]) };
+    });
     setStatus('Uploading…');
     await bookUpload({ ticket, fen: pos.fen, engine: ENGINE, nodes: OWN_NODES, child_nodes: CHILD_NODES, own, moves });
     job = null;
