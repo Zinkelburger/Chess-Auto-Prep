@@ -1,6 +1,6 @@
 # PGN Viewer
 
-Status: draft from the old app
+Status: corrected by the owner (2026-09-21, layout and editing decisions below)
 Old code (oracle only): `lib/screens/pgn_viewer_screen*.dart`, `lib/features/documents/`, `lib/widgets/pgn/`
 Plan step: 6
 
@@ -170,9 +170,18 @@ default and edits a file the user may only have meant to read; solitaire annotat
 movetext and ride along with Copy PGN but are deliberately not saved; `Tree` and `Database explorer`
 reach the same explorer; the tab bar disappears entirely during solitaire.
 
-## Questions for the owner
-- Should opening a file ever write to it without an explicit save, or should autosave default to off?
-- Is solitaire chess (and its trophy cabinet) part of the viewer, or its own mode?
-- Do all seven side panels survive, or do `Tree`, `Database explorer` and `Collection` collapse?
-- Should the Scid export survive, given that nothing in the app reads Scid?
-- How large a PGN must the viewer open without paging?
+## Owner decisions (2026-09-21)
+- **Layout A**: the old app's shape — board with the typeable `‹ n of N ›` counter under it, one
+  reading column (heading, engine row, moves, navigation row) — plus the game list in the left pane.
+  The left pane has `+` to open a file and hides behind the top bar's `«` (Ctrl+B).
+- **Reading shows no editing chrome.** Editing is a strip under the moves, opened from Actions ▸ Edit
+  or Ctrl+E: Done, Undo, the save state, the six glyphs and the comment field. Right-click ▸ Comment
+  is the second way in (not built yet). Save trouble shows the strip on its own.
+- **No eval bar anywhere in the app.** The engine pane is one row when off.
+- **Comments are laid out**: paragraphs, inline moves (hover board, click plays into the document
+  when the line follows on from the move), bare-FEN diagrams, Chessable headings and quotes.
+- **One Actions menu** in the top bar, the same shape whatever mode opened the document, with Ctrl+K
+  as a typeable palette over the same list.
+- **Solitaire is an action of the viewer**, not a mode. **A file outside Documents is copied into
+  `pgn_collections` on open** (default on; a setting later). Autosave stays on; Scid export, Tree,
+  Explorer and paging remain open questions.
