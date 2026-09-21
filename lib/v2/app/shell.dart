@@ -10,6 +10,7 @@ import '../workspace/document_saver.dart';
 import '../workspace/document_session.dart';
 import '../workspace/session_results.dart';
 import '../workspace/engine_analysis.dart';
+import '../workspace/workspace_keys.dart';
 import '../workspace/workspace_view.dart';
 import 'exit_guard.dart';
 
@@ -79,39 +80,42 @@ class _ShellState extends State<Shell> {
           const Divider(height: 1),
           if (_error case final error?) _ErrorBar(error),
           Expanded(
-            child: Row(
-              children: [
-                SizedBox(
-                  width: libraryPanelWidth,
-                  child: ListenableBuilder(
-                    listenable: widget.session,
-                    builder: (context, _) => LibraryPanel(
-                      library: widget.library,
-                      selected: widget.session.source,
-                      onOpen: _open,
+            child: WorkspaceKeys(
+              session: widget.session,
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: libraryPanelWidth,
+                    child: ListenableBuilder(
+                      listenable: widget.session,
+                      builder: (context, _) => LibraryPanel(
+                        library: widget.library,
+                        selected: widget.session.source,
+                        onOpen: _open,
+                      ),
                     ),
                   ),
-                ),
-                const VerticalDivider(width: 1),
-                ListenableBuilder(
-                  listenable: widget.session,
-                  builder: (context, _) => widget.session.source == null
-                      ? const SizedBox.shrink()
-                      : _OutlineColumn(
-                          outline: widget.outline,
-                          library: widget.library,
-                          session: widget.session,
-                          onOpen: _open,
-                        ),
-                ),
-                Expanded(
-                  child: WorkspaceView(
-                    session: widget.session,
-                    saver: widget.saver,
-                    analysis: widget.analysis,
+                  const VerticalDivider(width: 1),
+                  ListenableBuilder(
+                    listenable: widget.session,
+                    builder: (context, _) => widget.session.source == null
+                        ? const SizedBox.shrink()
+                        : _OutlineColumn(
+                            outline: widget.outline,
+                            library: widget.library,
+                            session: widget.session,
+                            onOpen: _open,
+                          ),
                   ),
-                ),
-              ],
+                  Expanded(
+                    child: WorkspaceView(
+                      session: widget.session,
+                      saver: widget.saver,
+                      analysis: widget.analysis,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
