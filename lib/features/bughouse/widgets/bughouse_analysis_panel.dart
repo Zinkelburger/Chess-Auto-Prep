@@ -629,7 +629,7 @@ class _TableRules extends StatelessWidget {
         // down. The engine takes one bit, so "Even" and "C + D may sit" run
         // the same search; the genuinely distinct third case is the must-move
         // constraint below.
-        const BughousePanelLabel('Clock'),
+        const BughousePanelLabel('Time'),
         SegmentedButton<BughouseTimeStance>(
           style: const ButtonStyle(visualDensity: VisualDensity.compact),
           segments: [

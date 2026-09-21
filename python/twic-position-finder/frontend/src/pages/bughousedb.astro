@@ -24,13 +24,13 @@ const TURNSTILE = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
             <label class="bdb-cores" title="Searches run side by side, one per core. More cores finish sooner.">Cores <input id="bdb-cores" type="number" min="1" step="1" inputmode="numeric" /></label>
             <span id="bdb-missing-text" class="dim">Not in the book yet.</span>
           </div>
-          {TURNSTILE && <div class="cf-turnstile" data-sitekey={TURNSTILE} data-appearance="interaction-only"></div>}
+          {TURNSTILE && <div id="bdb-captcha"></div>}
           <div id="bdb-progress" class="bdb-progress" hidden><i></i></div>
           <p id="bdb-status" class="bdb-status dim" role="status"></p>
         </section>
         <div class="bdb-priority">
-          <span class="bdb-priority-label">Clock<span class="bb-info" tabindex="0" role="img" aria-label="About the clock" title="Both partners share one margin: if A is up on their diagonal, B is up by exactly the same amount against theirs. The team that is up can wait rather than move.">i</span></span>
-          <div class="choice-row" role="radiogroup" aria-label="Clock">
+          <span class="bdb-priority-label">Time</span>
+          <div class="choice-row" role="radiogroup" aria-label="Time">
             {[['ahead', 'A + B may sit', 'A + B are up on the diagonal clock, so they can wait rather than move'],
               ['even', 'Even', 'Neither team is up on the clock: both have to move'],
               ['behind', 'C + D may sit', 'C + D are up on the diagonal clock, so they can wait rather than move'],
@@ -59,7 +59,9 @@ const TURNSTILE = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
       </div>
     </div>
   </div>
-  {TURNSTILE && <script is:inline src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>}
+  {/* Rendered by app.ts when a missing position is analysed: this strip is hidden when
+      the page loads, and an implicit widget there would never be drawn. */}
+  {TURNSTILE && <script is:inline src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>}
 </Base>
 
 <script>

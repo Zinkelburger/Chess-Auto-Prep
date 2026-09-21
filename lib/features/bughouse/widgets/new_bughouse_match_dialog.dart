@@ -315,7 +315,7 @@ class _NewBughouseMatchDialogState extends State<_NewBughouseMatchDialog> {
                     ),
                   ),
                   const SizedBox(height: 6),
-                  const BughousePanelLabel('Priority, for the whole run'),
+                  const BughousePanelLabel('Time, for the whole run'),
                   SegmentedButton<BughouseTimeStance>(
                     style: const ButtonStyle(
                       visualDensity: VisualDensity.compact,

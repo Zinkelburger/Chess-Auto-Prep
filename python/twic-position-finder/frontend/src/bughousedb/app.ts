@@ -310,9 +310,42 @@ function reset(fen: string) {
 
 // ── Analysing a missing position in this browser ──────────────────
 
-function turnstileToken(): string {
-  const t = (window as unknown as { turnstile?: { getResponse(): string | undefined } }).turnstile;
-  return root.dataset.turnstile ? (t?.getResponse() ?? '') : '';
+// ── CAPTCHA ───────────────────────────────────────────────────────
+// A ticket needs a fresh Turnstile token. The widget sits in the "not in the
+// book" strip, which is hidden when the page loads, so Cloudflare's automatic
+// render never draws it and no token ever comes: it is rendered here instead,
+// once per analysis, and its token awaited. Usually no puzzle appears at all.
+
+interface Turnstile {
+  render(el: HTMLElement, options: Record<string, unknown>): string;
+  remove(widget: string): void;
+}
+let captcha: string | null = null;
+
+async function turnstileApi(): Promise<Turnstile> {
+  for (let waited = 0; waited < 15000; waited += 100) {
+    const t = (window as unknown as { turnstile?: Turnstile }).turnstile;
+    if (t) return t;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  throw new Error('The CAPTCHA did not load. Check that challenges.cloudflare.com is not blocked.');
+}
+
+/** A token for one ticket, or '' when the site runs without a CAPTCHA. */
+async function captchaToken(): Promise<string> {
+  const sitekey = root.dataset.turnstile;
+  if (!sitekey) return '';
+  const turnstile = await turnstileApi();
+  if (captcha !== null) turnstile.remove(captcha);
+  return new Promise((resolve, reject) => {
+    captcha = turnstile.render(el('bdb-captcha'), {
+      sitekey,
+      appearance: 'interaction-only',
+      callback: (token: string) => resolve(token),
+      'error-callback': (code: string) => reject(new Error(`The CAPTCHA failed (${code}). Try again.`)),
+      'timeout-callback': () => reject(new Error('The CAPTCHA timed out. Try again.')),
+    });
+  });
 }
 
 async function search(engine: BrowserEngine, fen: string, team: Team, ahead: boolean, nodes: number): Promise<RawSearch | null> {
@@ -345,8 +378,10 @@ async function analyse() {
     setStatus(`Searched ${done} of ${total} · about ${left < 90 ? `${Math.round(left)} s` : `${Math.round(left / 60)} min`} left`);
   };
   try {
+    setStatus('Checking you are not a robot…');
+    const token = await captchaToken();
     setStatus('Getting a ticket…');
-    const { ticket } = await bookTicket(pos.fen, turnstileToken());
+    const { ticket } = await bookTicket(pos.fen, token);
     setStatus('Loading Hivemind (about 44 MB the first time)…');
     // Every search is independent: the position's own four, then two per move.
     type Task = { fen: string; team: Team; ahead: boolean; nodes: number };
@@ -375,7 +410,6 @@ async function analyse() {
     else setStatus(e instanceof Error && !(e instanceof ApiError) ? e.message : (e as ApiError).message, true);
     bar.style.width = '0';
     renderMissing();
-    try { (window as unknown as { turnstile?: { reset(): void } }).turnstile?.reset(); } catch { /* not loaded */ }
   }
 }
 
