@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'debug/agent_driver.dart';
 import 'v2/app/app.dart';
+import 'v2/app/error_log.dart';
 import 'v2/diagnostics/log.dart';
 import 'v2/storage/log_file.dart';
 
@@ -20,6 +21,7 @@ Future<void> main() async {
   final support = await getApplicationSupportDirectory();
   final logFile = LogFile(Directory(p.join(support.path, 'logs')));
   await _installLog(logFile);
+  installErrorLog();
   log.i('start');
   runApp(
     ChessAutoPrepV2(

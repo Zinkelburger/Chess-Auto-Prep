@@ -192,7 +192,10 @@ requests handled by `app/`.
    log secrets, tokens or file contents — the path and the error are enough.
    The facade lives in `diagnostics/` and its file sink in `storage/`
    (`v2` may not reuse the old app's); `main_v2` installs the sink before
-   anything that can fail. Build it in the first step that can report a
+   anything that can fail, then `app/error_log.dart`: Flutter's own errors
+   (a layout assertion, a build that threw, an uncaught async error) become
+   an `E performLayout(): …` entry with the blamed widget and the app's
+   frames, so a console that scrolled away is still in the file. Build it in the first step that can report a
    failure, not before, and never swallow an error into a bare `catch (_) {}`.
 9. **Async work has an owner and a stale check.** Each action declares whether
    a repeat is rejected, merged or queued. A result that arrives after its
