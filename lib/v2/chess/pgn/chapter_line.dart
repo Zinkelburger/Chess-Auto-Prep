@@ -44,6 +44,22 @@ final class ChapterLine {
   /// What reading the game could not carry into [tree].
   final List<PgnIssue> issues;
 
+  /// The same game, separated from whatever follows it by [trailer].
+  ///
+  /// The whitespace between two games belongs to the place in the file, not
+  /// to the game that happens to be there: a game moved to another place
+  /// takes neither the blank line that followed it nor the missing newline
+  /// at the end of the file.
+  ChapterLine spacedBy(String trailer) => ChapterLine(
+    tags: tags,
+    tree: tree,
+    text: text,
+    trailer: trailer,
+    terminator: terminator,
+    separator: separator,
+    issues: issues,
+  );
+
   /// Whether [tree] holds everything [text] holds.
   ///
   /// Anything reading could not carry — a move that is not legal, a comment

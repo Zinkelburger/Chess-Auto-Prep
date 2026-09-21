@@ -63,7 +63,7 @@ ChapterEdit movesDeleted(Chapter chapter, {required NodePath at}) {
     return const ChapterUnchanged();
   }
   return ChapterEdited(
-    withLines(chapter, lines),
+    withLines(chapter, spacedAsBefore(chapter, lines)),
     GamesArranged(
       order: order,
       rewritten: written,
@@ -158,7 +158,10 @@ ChapterEdit _reordered(
     return const ChapterUnchanged();
   }
   return ChapterEdited(
-    withLines(chapter, [for (final index in order) lines[index]]),
+    withLines(
+      chapter,
+      spacedAsBefore(chapter, [for (final index in order) lines[index]]),
+    ),
     GamesArranged(
       order: order,
       rewritten: written,

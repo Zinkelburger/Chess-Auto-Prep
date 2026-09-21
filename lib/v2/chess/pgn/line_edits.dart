@@ -64,7 +64,7 @@ ChapterEdit lineDeleted(Chapter chapter, {required int game}) {
   }
   final lines = [...chapter.lines]..removeAt(game);
   return ChapterEdited(
-    withLines(chapter, lines),
+    withLines(chapter, spacedAsBefore(chapter, lines)),
     GamesArranged(
       order: [
         for (var index = 0; index < chapter.lines.length; index++)

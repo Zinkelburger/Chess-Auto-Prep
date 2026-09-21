@@ -149,6 +149,27 @@ Chapter withLines(
   tree: mergeLines(lines),
 );
 
+/// [lines] with the whitespace between games kept where the file had it.
+///
+/// A trailer separates one place in the file from the next, so an edit that
+/// moves or removes games leaves the separators where they are rather than
+/// carrying each one along with its game. The last place keeps the last
+/// trailer the file had, which is what makes a file that ended without a
+/// newline go on ending without one — and stops the game moved there from
+/// running into the next game's first header.
+List<ChapterLine> spacedAsBefore(Chapter chapter, List<ChapterLine> lines) {
+  final was = chapter.lines;
+  if (lines.isEmpty || was.isEmpty) return lines;
+  return [
+    for (final (index, line) in lines.indexed)
+      line.spacedBy(
+        index == lines.length - 1
+            ? was.last.trailer
+            : was[index].trailer,
+      ),
+  ];
+}
+
 /// Every game from the first readable game's position, folded in file order.
 /// That game fixes the main line; later games can only add variations.
 ///
