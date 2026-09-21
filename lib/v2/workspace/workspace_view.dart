@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:multi_split_view/multi_split_view.dart';
 
 import '../storage/settings_store.dart';
+import '../ui/pane_tabs.dart';
 import '../ui/theme.dart';
 import 'board_view.dart';
 import 'document_saver.dart';
@@ -16,20 +17,23 @@ import 'move_note.dart';
 import 'move_tree_view.dart';
 import 'nav_row.dart';
 import 'reading_header.dart';
+import 'replies.dart';
+import 'replies_pane.dart';
 
 /// The board with the game counter and the move's note under it on the
-/// left; on the right the
-/// reading card, top to bottom in a fixed order: the heading, the engine,
-/// the moves, the edit strip while there is editing or trouble, and the
-/// navigation row. The two halves start equal, as the old app's did. The
-/// keys that walk the line and take an edit back are [WorkspaceKeys],
-/// above every column that edits the document.
+/// left; on the right the reading card, top to bottom in a fixed order: the
+/// heading, the engine, a tab strip, the moves or the opponent's replies,
+/// the edit strip while there is editing or trouble, and the navigation
+/// row. The two halves start equal, as the old app's did. The keys that
+/// walk the line and take an edit back are [WorkspaceKeys], above every
+/// column that edits the document.
 class WorkspaceView extends StatelessWidget {
   const WorkspaceView({
     super.key,
     required this.session,
     required this.saver,
     required this.analysis,
+    required this.replies,
     required this.editing,
     required this.settings,
     this.moveMenu,
@@ -38,6 +42,7 @@ class WorkspaceView extends StatelessWidget {
   final DocumentSession session;
   final DocumentSaver saver;
   final EngineAnalysis analysis;
+  final Replies replies;
 
   /// For what the board draws: the coordinates, today.
   final SettingsStore settings;
@@ -92,7 +97,11 @@ class WorkspaceView extends StatelessWidget {
             child: EnginePane(session: session, analysis: analysis),
           ),
           Expanded(
-            child: MoveTreeView(session: session, moveMenu: moveMenu),
+            child: _Tabbed(
+              session: session,
+              replies: replies,
+              moveMenu: moveMenu,
+            ),
           ),
           EditStrip(session: session, saver: saver, editing: editing),
           const Divider(height: 1),
@@ -101,6 +110,83 @@ class WorkspaceView extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// The moves, or the opponent's replies, under a tab strip that says which:
+/// the old viewer's way of letting one column show more than one thing
+/// without growing a second column. Which tab is up is this widget's own
+/// business, lost with the window and remembered across documents.
+class _Tabbed extends StatefulWidget {
+  const _Tabbed({
+    required this.session,
+    required this.replies,
+    required this.moveMenu,
+  });
+
+  final DocumentSession session;
+  final Replies replies;
+  final MoveMenu? moveMenu;
+
+  @override
+  State<_Tabbed> createState() => _TabbedState();
+}
+
+class _TabbedState extends State<_Tabbed> {
+  static const _tabs = ['Moves', 'Replies'];
+  int _tab = 0;
+
+  void _select(int index) {
+    if (!mounted) return;
+    setState(() => _tab = index);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: readingCardInset - Space.m,
+          ),
+          child: PaneTabs(
+            tabs: _tabs,
+            selected: _tab,
+            onSelected: _select,
+            trailing: _tab == 1 ? _NextGap(replies: widget.replies) : null,
+          ),
+        ),
+        Expanded(
+          child: _tab == 0
+              ? MoveTreeView(session: widget.session, moveMenu: widget.moveMenu)
+              : RepliesPane(session: widget.session, replies: widget.replies),
+        ),
+      ],
+    );
+  }
+}
+
+/// The one control the Replies tab owns: the way to the next unanswered
+/// position. Off while there is no gap to go to.
+class _NextGap extends StatelessWidget {
+  const _NextGap({required this.replies});
+
+  final Replies replies;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: replies,
+      builder: (context, _) {
+        final gaps = replies.walk?.gaps ?? const [];
+        return TextButton.icon(
+          onPressed: gaps.isEmpty ? null : replies.nextGap,
+          icon: const Icon(Icons.skip_next, size: IconSize.action),
+          label: const Text('Next gap'),
+        );
+      },
+    );
+  }
 }
 
 /// The largest square board that fits above the counter, at the top, and

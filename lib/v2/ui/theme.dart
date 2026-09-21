@@ -25,6 +25,11 @@ const outlineColumnWidth = 240.0;
 const outlineRowHeight = 30.0;
 const outlineIndent = 14.0;
 
+/// The line under a chapter's name that says where it starts, and how its
+/// moves are set: mono at the small size.
+const outlineRootHeight = 16.0;
+const outlineRootText = TextStyle(fontFamily: 'SourceCodePro', fontSize: 12);
+
 /// How wide a dialog that asks for one line of text is. Wide enough for a
 /// long chapter name, narrow enough not to fill the window.
 const nameDialogWidth = 360.0;
@@ -88,6 +93,17 @@ const navRowHeight = 36.0;
 const engineBarHeight = 32.0;
 const engineRowHeight = 28.0;
 const engineScoreWidth = 54.0;
+
+/// The tab strip at the top of a pane whose content the user can switch —
+/// Moves and Replies in the reading card — and the line under the chosen
+/// tab. The old viewer's tabs were this: words in a row, one underlined.
+const paneTabHeight = 32.0;
+const paneTabUnderline = 2.0;
+
+/// The Replies table: a row per move the model expects, as tall as an
+/// engine row, with its share in a gutter as wide as an engine score.
+const replyRowHeight = engineRowHeight;
+const replyShareWidth = engineScoreWidth;
 
 /// How many rows a line opens out to when its chevron is pressed.
 const engineExpandedRows = 6;
@@ -308,9 +324,10 @@ TextTheme _sized(TextTheme base) => base.copyWith(
 
 /// The settings dialog: small and fixed, so it never grows into a page.
 /// A list of places on the left, at most a handful of rows on the right,
-/// each one line tall.
+/// each one line tall. Tall enough for six places; a seventh means a place
+/// has to go, not the dialog grow.
 const settingsDialogWidth = 640.0;
-const settingsDialogHeight = 300.0;
+const settingsDialogHeight = 340.0;
 const settingsListWidth = 180.0;
 const settingRowHeight = 36.0;
 const settingNumberWidth = 64.0;

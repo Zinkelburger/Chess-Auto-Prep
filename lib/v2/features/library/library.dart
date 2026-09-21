@@ -131,11 +131,16 @@ final class Library extends ChangeNotifier {
 
   /// A chapter takes the side of the repertoire it is added to, read from a
   /// chapter already in it, so a Black repertoire does not grow a White one.
-  Future<LibraryResult> createChapter(RepertoireFolder into, String name) =>
-      _run('create the chapter $name in ${into.name}', () async {
-        final ref = DocumentRef(p.join(into.path, '$name.pgn'));
-        return _created(ref, name, await _sideOf(into));
-      });
+  /// [rootMoves] is where its lines start when that is not the start: the
+  /// position the user had on the board when they asked for it.
+  Future<LibraryResult> createChapter(
+    RepertoireFolder into,
+    String name, {
+    List<String> rootMoves = const [],
+  }) => _run('create the chapter $name in ${into.name}', () async {
+    final ref = DocumentRef(p.join(into.path, '$name.pgn'));
+    return _created(ref, name, await _sideOf(into), rootMoves: rootMoves);
+  });
 
   Future<LibraryResult> renameChapter(ChapterRef ref, String name) =>
       _run('rename ${ref.path}', () {
@@ -212,12 +217,14 @@ final class Library extends ChangeNotifier {
   Future<LibraryResult> _created(
     DocumentRef ref,
     String name,
-    Side side,
-  ) async {
+    Side side, {
+    List<String> rootMoves = const [],
+  }) async {
     final text = newChapterText(
       name: name,
       side: side,
       created: DateTime.now(),
+      rootMoves: rootMoves,
     );
     return switch (await _store.create(ref, text)) {
       store.Created() => const LibraryDone(),

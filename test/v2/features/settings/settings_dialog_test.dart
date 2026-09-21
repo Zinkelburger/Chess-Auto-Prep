@@ -46,7 +46,14 @@ void main() {
     tester,
   ) async {
     await pump(tester);
-    for (final place in ['Look', 'Engine', 'Files', 'Accounts', 'App']) {
+    for (final place in [
+      'Look',
+      'Engine',
+      'Repertoire',
+      'Files',
+      'Accounts',
+      'App',
+    ]) {
       expect(find.text(place), findsOneWidget);
     }
     expect(find.text('Board coordinates'), findsOneWidget);

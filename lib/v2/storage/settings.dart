@@ -13,6 +13,8 @@ final class Settings {
     this.engineMemoryMb = 128,
     this.engineLines = 3,
     this.copyFilesIntoDocuments = true,
+    this.opponentElo = 2200,
+    this.coverOnceIn = 50,
   });
 
   /// Rank and file letters on the board.
@@ -31,6 +33,15 @@ final class Settings {
   /// `pgn_collections` first, so it can be edited and kept.
   final bool copyFilesIntoDocuments;
 
+  /// The rating the opponent's replies are predicted for, everywhere a
+  /// repertoire is measured: the Replies table, the gaps, the coverage.
+  final int opponentElo;
+
+  /// A reply counts as one to prepare for when the opponent plays it at
+  /// least once in this many games at [opponentElo]. Fifty is Chessbook's
+  /// default and about four opponent moves deep in a main line.
+  final int coverOnceIn;
+
   static const defaults = Settings();
 
   /// The most the engine rows accept: a table bigger than this or more
@@ -38,12 +49,22 @@ final class Settings {
   static const maxMemoryMb = 4096;
   static const maxLines = 8;
 
+  /// The ratings the model was trained on.
+  static const minElo = 1100;
+  static const maxElo = 2900;
+
+  /// Fewer games than this and everything is a gap; more and nothing is.
+  static const minCoverOnceIn = 5;
+  static const maxCoverOnceIn = 1000;
+
   Settings copyWith({
     bool? boardCoordinates,
     int? engineCores,
     int? engineMemoryMb,
     int? engineLines,
     bool? copyFilesIntoDocuments,
+    int? opponentElo,
+    int? coverOnceIn,
   }) => Settings(
     boardCoordinates: boardCoordinates ?? this.boardCoordinates,
     engineCores: engineCores ?? this.engineCores,
@@ -51,6 +72,8 @@ final class Settings {
     engineLines: engineLines ?? this.engineLines,
     copyFilesIntoDocuments:
         copyFilesIntoDocuments ?? this.copyFilesIntoDocuments,
+    opponentElo: opponentElo ?? this.opponentElo,
+    coverOnceIn: coverOnceIn ?? this.coverOnceIn,
   );
 
   /// The file's text. One flat object with plain names, so a person can
@@ -61,6 +84,8 @@ final class Settings {
     'engineMemoryMb': engineMemoryMb,
     'engineLines': engineLines,
     'copyFilesIntoDocuments': copyFilesIntoDocuments,
+    'opponentElo': opponentElo,
+    'coverOnceIn': coverOnceIn,
   });
 
   /// Reads [text]; a field that is missing or of the wrong type keeps its
@@ -85,6 +110,8 @@ final class Settings {
         'copyFilesIntoDocuments',
         defaults.copyFilesIntoDocuments,
       ),
+      opponentElo: pick('opponentElo', defaults.opponentElo),
+      coverOnceIn: pick('coverOnceIn', defaults.coverOnceIn),
     );
   }
 
@@ -95,7 +122,9 @@ final class Settings {
       other.engineCores == engineCores &&
       other.engineMemoryMb == engineMemoryMb &&
       other.engineLines == engineLines &&
-      other.copyFilesIntoDocuments == copyFilesIntoDocuments;
+      other.copyFilesIntoDocuments == copyFilesIntoDocuments &&
+      other.opponentElo == opponentElo &&
+      other.coverOnceIn == coverOnceIn;
 
   @override
   int get hashCode => Object.hash(
@@ -104,5 +133,7 @@ final class Settings {
     engineMemoryMb,
     engineLines,
     copyFilesIntoDocuments,
+    opponentElo,
+    coverOnceIn,
   );
 }

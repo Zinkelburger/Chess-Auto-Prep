@@ -5,6 +5,7 @@ import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
 import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
+import 'package:chess_auto_prep/v2/workspace/replies.dart';
 import 'package:chess_auto_prep/v2/workspace/workspace_keys.dart';
 import 'package:chess_auto_prep/v2/workspace/workspace_view.dart';
 import 'package:flutter/material.dart';
@@ -13,6 +14,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../support/fixtures.dart';
 import '../support/scripted_store.dart';
+import '../support/scripted_policy.dart';
 import '../support/session_fixture.dart';
 import '../support/viewer_fixture.dart';
 
@@ -21,6 +23,7 @@ void main() {
   late DocumentSession session;
   late DocumentSaver saver;
   late EngineAnalysis analysis;
+  late Replies replies;
   late ValueNotifier<bool> editing;
   late SettingsStore settings;
 
@@ -30,6 +33,12 @@ void main() {
       session,
       () async => const StartFailed('no engine in this test'),
     );
+    replies = Replies(
+      session: session,
+      policy: const NoOpinion(),
+      settings: settings,
+    );
+    addTearDown(replies.dispose);
   }
 
   Future<void> pump(WidgetTester tester) async {
@@ -48,6 +57,7 @@ void main() {
               session: session,
               saver: saver,
               analysis: analysis,
+              replies: replies,
               editing: editing,
               settings: settings,
             ),

@@ -26,6 +26,7 @@ import '../workspace/document_saver.dart';
 import '../workspace/document_session.dart';
 import '../workspace/session_results.dart';
 import '../workspace/engine_analysis.dart';
+import '../workspace/replies.dart';
 import '../workspace/workspace_keys.dart';
 import '../workspace/workspace_view.dart';
 import 'exit_guard.dart';
@@ -45,6 +46,7 @@ class Shell extends StatefulWidget {
     required this.session,
     required this.saver,
     required this.analysis,
+    required this.replies,
     required this.settings,
     required this.settingRows,
     required this.leaving,
@@ -57,6 +59,7 @@ class Shell extends StatefulWidget {
   final DocumentSession session;
   final DocumentSaver saver;
   final EngineAnalysis analysis;
+  final Replies replies;
   final SettingsStore settings;
 
   /// The settings page's rows, as the app wires them.
@@ -267,6 +270,16 @@ class _ShellState extends State<Shell> {
       editing: _editing,
       onSaveCopy: () => unawaited(_saveCopy()),
     ),
+    AppAction(
+      'Next gap',
+      (widget.replies.walk?.gaps ?? const []).isEmpty
+          ? null
+          : widget.replies.nextGap,
+      group: 'Repertoire',
+    ),
+    // Not built yet: the expectimax search that writes proposed lines into
+    // a draft chapter. The entry is here so the menu has its final shape.
+    const AppAction('Fill gaps from here…', null, group: 'Repertoire'),
   ];
 
   /// The same actions, typed for: a searchable list that the enter key
@@ -349,6 +362,7 @@ class _ShellState extends State<Shell> {
               widget.session,
               widget.saver,
               widget.analysis,
+              widget.replies,
               widget.viewer,
               _editing,
             ]),
@@ -399,6 +413,7 @@ class _ShellState extends State<Shell> {
       session: widget.session,
       saver: widget.saver,
       analysis: widget.analysis,
+      replies: widget.replies,
       editing: _editing,
       settings: widget.settings,
       moveMenu: _mode == Mode.study

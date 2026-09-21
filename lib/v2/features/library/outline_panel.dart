@@ -10,6 +10,7 @@ import '../../workspace/undo_notice.dart';
 import 'chapter_outline.dart';
 import 'library.dart';
 import 'library_messages.dart';
+import 'new_chapter_dialog.dart';
 import 'outline_rows.dart';
 
 /// The chapters of the open repertoire and, under the open one, its lines.
@@ -46,21 +47,29 @@ class _OutlinePanelState extends State<OutlinePanel> {
     super.dispose();
   }
 
+  /// A chapter made with the board on a position can start there: that is
+  /// how a chapter for one opening is set up, and its root is what the
+  /// outline then prints under its name.
   Future<void> _newChapter() async {
     final into = widget.outline.repertoire;
+    final chapter = widget.session.chapter;
     if (into == null) return;
-    final name = await showNameDialog(
+    final wanted = await showNewChapterDialog(
       context,
-      title: 'New chapter',
-      label: 'Chapter name',
-      confirm: 'Create',
+      fromBoard: chapter == null
+          ? null
+          : rootMovesFromBoard(chapter, widget.session.cursor),
     );
-    if (name == null || !mounted) return;
+    if (wanted == null || !mounted) return;
     await announce(
       context,
-      widget.library.createChapter(into, name),
+      widget.library.createChapter(
+        into,
+        wanted.name,
+        rootMoves: wanted.rootMoves,
+      ),
       thing: 'chapter',
-      name: name,
+      name: wanted.name,
       failed: 'Could not create the chapter.',
     );
   }

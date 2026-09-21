@@ -69,6 +69,74 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets('a chapter that starts after some moves says so under its '
+      'name, and a draft says Proposed', (tester) async {
+    fixture = await openLibrary(
+      [
+        RepertoireFolder(
+          name: 'KID',
+          path: '/repertoires/KID',
+          modified: DateTime.now(),
+          chapters: [
+            main,
+            ChapterRef(
+              repertoire: 'KID',
+              name: 'Gambit',
+              path: '/repertoires/KID/Gambit.pgn',
+              heading: const ChapterHeading(
+                rootMoves: ['e4', 'e5', 'f4'],
+                draft: true,
+              ),
+            ),
+          ],
+        ),
+      ],
+      text: twoLines,
+      open: main,
+    );
+    outline = ChapterOutline(
+      library: fixture.library,
+      session: fixture.session,
+      debounce: Duration.zero,
+    );
+    addTearDown(() {
+      outline.dispose();
+      fixture.dispose();
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: darkTheme(),
+        home: Scaffold(
+          body: SizedBox(
+            width: outlineColumnWidth,
+            child: OutlinePanel(
+              outline: outline,
+              library: fixture.library,
+              session: fixture.session,
+              onOpen: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('1.e4 e5 2.f4'), findsOneWidget);
+    expect(find.text('Proposed'), findsOneWidget);
+    expect(
+      tester
+          .getSize(
+            find
+                .ancestor(
+                  of: find.text('Gambit'),
+                  matching: find.byType(InkWell),
+                )
+                .first,
+          )
+          .height,
+      outlineRowHeight + outlineRootHeight,
+    );
+  });
+
   testWidgets('shows the chapters and the open chapter’s lines', (
     tester,
   ) async {

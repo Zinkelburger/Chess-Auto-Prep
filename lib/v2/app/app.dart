@@ -28,7 +28,9 @@ import '../workspace/document_saver.dart';
 import '../workspace/document_session.dart';
 import '../workspace/session_results.dart';
 import '../workspace/engine_analysis.dart';
+import '../workspace/replies.dart';
 import 'engine_launch.dart';
+import 'maia_launch.dart';
 import 'exit_guard.dart';
 import 'open_folder.dart';
 import 'shell.dart';
@@ -111,6 +113,13 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
       memoryMb: _settings.value.engineMemoryMb,
     ),
     multiPv: _settings.value.engineLines,
+  );
+
+  final _maia = MaiaLaunch();
+  late final _replies = Replies(
+    session: _session,
+    policy: _maia,
+    settings: _settings,
   );
 
   /// What the engine was last started with, so a settings change that
@@ -237,6 +246,8 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     _lifecycle.dispose();
     _settings.removeListener(_engineSettings);
     _analysis.dispose();
+    _replies.dispose();
+    _maia.dispose();
     _settings.dispose();
     _outline.dispose();
     _library.dispose();
@@ -267,6 +278,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
         session: _session,
         saver: _saver,
         analysis: _analysis,
+        replies: _replies,
       ),
     );
   }

@@ -7,6 +7,10 @@ import 'chapter_outline.dart';
 
 /// One chapter of the outline. The one on the board is bold and accented, as
 /// the old app's is, because it is where every other panel is pointing.
+///
+/// A chapter that starts after some moves prints them under its name, so a
+/// chapter set up for one opening says which. A draft — proposed lines
+/// nobody has accepted yet — is muted and says "Proposed".
 class ChapterRow extends StatelessWidget {
   const ChapterRow({super.key, required this.chapter, required this.onOpen});
 
@@ -16,38 +20,68 @@ class ChapterRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final heading = chapter.ref.heading;
+    final rooted = !heading.startsAtTheStart;
     return InkWell(
       onTap: () => onOpen(chapter.ref),
       child: SizedBox(
-        height: outlineRowHeight,
+        height: rooted
+            ? outlineRowHeight + outlineRootHeight
+            : outlineRowHeight,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: Space.m),
-          child: Row(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(
-                child: Text(
-                  chapter.name,
+              _nameRow(theme),
+              if (rooted)
+                Text(
+                  heading.rootText,
                   overflow: TextOverflow.ellipsis,
-                  style: chapter.open
-                      ? TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: theme.colorScheme.primary,
-                        )
-                      : null,
-                ),
-              ),
-              if (chapter.lines case final lines?)
-                Padding(
-                  padding: const EdgeInsets.only(left: Space.s),
-                  child: Text(
-                    lines == 1 ? '1 line' : '$lines lines',
-                    style: theme.textTheme.labelSmall,
+                  style: outlineRootText.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _nameRow(ThemeData theme) {
+    final draft = chapter.ref.heading.draft;
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            chapter.name,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontWeight: chapter.open ? FontWeight.w600 : null,
+              color: chapter.open
+                  ? theme.colorScheme.primary
+                  : draft
+                  ? theme.colorScheme.onSurfaceVariant
+                  : null,
+            ),
+          ),
+        ),
+        if (draft)
+          Padding(
+            padding: const EdgeInsets.only(left: Space.s),
+            child: Text('Proposed', style: theme.textTheme.labelSmall),
+          ),
+        if (chapter.lines case final lines?)
+          Padding(
+            padding: const EdgeInsets.only(left: Space.s),
+            child: Text(
+              lines == 1 ? '1 line' : '$lines lines',
+              style: theme.textTheme.labelSmall,
+            ),
+          ),
+      ],
     );
   }
 }

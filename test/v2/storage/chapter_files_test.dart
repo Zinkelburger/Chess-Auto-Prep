@@ -62,6 +62,22 @@ void main() {
     );
   });
 
+  test(
+    'a chapter’s root and draft mark are read off the top of the file',
+    () async {
+      await put(
+        'KID/Gambit.pgn',
+        '// Gambit\n// Color: White\n// Draft\n// Root: 1. e4 e5 2. f4\n\n'
+            '[Event "x"]\n\n1. e4 e5 2. f4 *\n',
+      );
+      await put('KID/Main.pgn', '// Main\n// Color: White\n\n');
+      final chapters = (await list()).single.chapters;
+      expect(chapters.first.heading.rootMoves, ['e4', 'e5', 'f4']);
+      expect(chapters.first.heading.draft, isTrue);
+      expect(chapters.last.heading, ChapterHeading.none);
+    },
+  );
+
   test('a missing repertoires folder is an empty library', () async {
     final files = ChapterDirectory(Directory(p.join(root.path, 'none')));
     expect(((await files.list()) as Repertoires).folders, isEmpty);

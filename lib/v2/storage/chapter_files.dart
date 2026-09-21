@@ -1,27 +1,43 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../chess/pgn/chapter_heading.dart';
 import '../diagnostics/log.dart';
 import 'document_ref.dart';
 
-/// One chapter file on disk: a document, plus the two labels the library list
-/// shows. The store takes it as the [DocumentRef] it is.
+export '../chess/pgn/chapter_heading.dart' show ChapterHeading;
+
+/// One chapter file on disk: a document, plus what the lists show about it
+/// without opening it — its two names and its heading. The store takes it as
+/// the [DocumentRef] it is, and two refs to one path are equal whatever
+/// their headings say, because the path is the identity.
 final class ChapterRef extends DocumentRef {
   const ChapterRef({
     required this.repertoire,
     required this.name,
     required String path,
+    this.heading = ChapterHeading.none,
   }) : super(path);
 
   /// The chapter a file path names: the file without `.pgn`, in the folder
   /// whose name is the repertoire's. One rule, so a listing and a move cannot
   /// disagree about what a path means.
-  factory ChapterRef.at(String path) => ChapterRef(
+  factory ChapterRef.at(
+    String path, {
+    ChapterHeading heading = ChapterHeading.none,
+  }) => ChapterRef(
     repertoire: p.basename(p.dirname(path)),
     name: p.basenameWithoutExtension(path),
     path: path,
+    heading: heading,
   );
+
+  /// Where the chapter starts and whether it is a draft, read off the top
+  /// of the file when the folder was listed. A ref made from a path alone
+  /// has [ChapterHeading.none].
+  final ChapterHeading heading;
 
   /// The folder name under `repertoires/`.
   final String repertoire;
@@ -184,7 +200,7 @@ final class ChapterDirectory implements ChapterFiles {
     var modified = (await folder.stat()).modified;
     await for (final file in folder.list()) {
       if (file is! File || !_isChapter(file.path)) continue;
-      chapters.add(ChapterRef.at(file.path));
+      chapters.add(ChapterRef.at(file.path, heading: await _headingOf(file)));
       final touched = (await file.stat()).modified;
       if (touched.isAfter(modified)) modified = touched;
     }
@@ -197,6 +213,26 @@ final class ChapterDirectory implements ChapterFiles {
     );
   }
 }
+
+/// The `//` lines above the first game, read off the top of the file: a
+/// chapter of ten thousand lines costs the listing one kilobyte, not the
+/// file. A file that cannot be read here still lists; opening it is where
+/// the user is told why.
+Future<ChapterHeading> _headingOf(File file) async {
+  try {
+    final head = await file.openRead(0, _headingBytes).toList();
+    return readHeading(
+      utf8.decode(head.expand((chunk) => chunk).toList(), allowMalformed: true),
+    );
+  } on FileSystemException catch (error) {
+    log.w('read the heading of ${file.path}', error);
+    return ChapterHeading.none;
+  }
+}
+
+/// More than any heading the old app writes; a preamble longer than this
+/// loses its root line to the list, not to the chapter.
+const _headingBytes = 1024;
 
 /// A chapter is a `.pgn` that is not one of the raw-game sidecars generation
 /// writes beside a chapter; the old app hides those from its list too.

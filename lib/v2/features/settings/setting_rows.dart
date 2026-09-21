@@ -148,6 +148,31 @@ List<SettingGroup> settingGroups({
         ),
       ),
     ]),
+    SettingGroup('Repertoire', [
+      SettingRow(
+        'Opponent rating',
+        NumberSetting(
+          value: s.opponentElo,
+          min: Settings.minElo,
+          max: Settings.maxElo,
+          step: 100,
+          onChanged: (n) => set(s.copyWith(opponentElo: n)),
+        ),
+        hint: 'their replies are predicted for this Elo',
+      ),
+      SettingRow(
+        'Cover replies met once in',
+        NumberSetting(
+          value: s.coverOnceIn,
+          min: Settings.minCoverOnceIn,
+          max: Settings.maxCoverOnceIn,
+          step: 5,
+          unit: 'games',
+          onChanged: (n) => set(s.copyWith(coverOnceIn: n)),
+        ),
+        hint: 'rarer replies are not counted as gaps',
+      ),
+    ]),
     SettingGroup('Files', [
       SettingRow(
         'Copy files from outside Documents when opened',

@@ -3,6 +3,7 @@ import 'dart:isolate';
 import 'package:dartchess/dartchess.dart' show Side;
 
 import '../fen.dart';
+import 'chapter_heading.dart';
 import 'chapter_line.dart';
 import 'game_text.dart';
 import 'game_tree.dart';
@@ -225,7 +226,7 @@ Chapter _built({
     preamble: preamble,
     lines: List.unmodifiable(lines),
     tree: game == null
-        ? mergeLines(lines)
+        ? mergeLines(lines, orElseFrom: readHeading(preamble).rootFen)
         : focused?.tree ?? const GameTree(rootFen: Fen.initial),
     game: game,
   );
@@ -238,11 +239,12 @@ Chapter _built({
 /// first game: one unreadable game at the top of a file would otherwise give
 /// the chapter a position no other game shares and hide all of them. A file
 /// with nothing readable in it has no position of its own, so it reads as an
-/// empty chapter from the initial position and says so through
-/// [Chapter.unreadableGames] and [Chapter.issues].
-GameTree mergeLines(List<ChapterLine> lines) {
+/// empty chapter from [orElseFrom] — the heading's root, where a chapter made
+/// for a position starts before its first line is written — and says so
+/// through [Chapter.unreadableGames] and [Chapter.issues].
+GameTree mergeLines(List<ChapterLine> lines, {Fen orElseFrom = Fen.initial}) {
   final trees = [for (final line in lines) line.tree].nonNulls;
-  if (trees.isEmpty) return const GameTree(rootFen: Fen.initial);
+  if (trees.isEmpty) return GameTree(rootFen: orElseFrom);
   final root = trees.first.rootFen;
   final shared = trees.where((tree) => tree.rootFen == root);
   return GameTree(
@@ -326,14 +328,18 @@ String preambleWithSide(String preamble, Side side) {
 /// The colour line is the only record of which side the chapter is for, so it
 /// is written before there are any moves to infer it from. The stamp is the
 /// local time the old app writes, `2026-09-19 14:07:33`, and nothing reads it
-/// back; it is there for someone looking at the file.
+/// back; it is there for someone looking at the file. [rootMoves] is where
+/// the chapter starts when that is not the start, written the way the old
+/// app writes it and read back by [readHeading].
 String newChapterText({
   required String name,
   required Side side,
   required DateTime created,
+  List<String> rootMoves = const [],
 }) =>
     '// $name\n'
     '// Color: ${side == Side.white ? 'White' : 'Black'}\n'
+    '${rootLine(rootMoves)}'
     '// Created on ${created.toString().split('.').first}\n\n';
 
 /// The chapter file again, byte for byte when nothing was edited.

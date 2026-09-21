@@ -101,6 +101,22 @@ void main() {
     );
   });
 
+  test('a chapter made for a position writes its root line', () async {
+    await start([benko]);
+    expect(
+      await fixture.library.createChapter(
+        benko,
+        'Volga',
+        rootMoves: const ['d4', 'Nf6', 'c4', 'c5', 'd5', 'b5'],
+      ),
+      isA<LibraryDone>(),
+    );
+    expect(
+      fixture.textAt('/repertoires/benko/Volga.pgn'),
+      contains('// Root: 1. d4 Nf6 2. c4 c5 3. d5 b5\n'),
+    );
+  });
+
   test('a chapter name already on disk is refused', () async {
     await start([kid]);
     expect(
