@@ -1,12 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import '../chess/fen.dart';
 import '../chess/pgn/comment_text.dart';
 import '../chess/pgn/game_tree.dart';
 import '../chess/pgn/move_label.dart';
 import '../chess/pgn/study.dart';
+import '../chess/pv_text.dart';
 import '../ui/theme.dart';
-import 'document_session.dart';
 import 'chapter_commands.dart';
+import 'comment_blocks.dart';
+import 'document_session.dart';
+import 'line_preview.dart';
 import 'undo_notice.dart';
 
 /// What the move menu says when moves are taken out. The moves are gone from
@@ -14,10 +20,14 @@ import 'undo_notice.dart';
 /// number of lines.
 String deletedFromHere(String san) => 'Deleted the moves from $san.';
 
-/// The move list: the main line as running text, each variation as an
-/// indented block right after the move it replaces, the way Lichess lays
-/// out a study. Clicking a move puts the cursor on it.
-class MoveTreeView extends StatelessWidget {
+/// The move list, read like a book: the main line as running text, each
+/// comment as a paragraph of its own under the move it is on, each
+/// variation as an indented block right after the move it replaces, the
+/// way Lichess lays out a study. Clicking a move puts the cursor on it.
+/// A move written inside a comment floats its position under the pointer,
+/// and plays into the document when it follows on from the move the
+/// comment is on.
+class MoveTreeView extends StatefulWidget {
   const MoveTreeView({super.key, required this.session, this.moveMenu});
 
   final DocumentSession session;
@@ -27,20 +37,75 @@ class MoveTreeView extends StatelessWidget {
   /// which move was clicked and shows what it is given.
   final MoveMenu? moveMenu;
 
+  @override
+  State<MoveTreeView> createState() => _MoveTreeViewState();
+}
+
+class _MoveTreeViewState extends State<MoveTreeView> {
+  final _preview = ValueNotifier<LinePreview?>(null);
+  Timer? _settle;
+
+  @override
+  void dispose() {
+    _settle?.cancel();
+    _preview.dispose();
+    super.dispose();
+  }
+
+  /// The board appears once the pointer has rested on a move.
+  void _hover(PvMove move, Offset anchor) {
+    _settle?.cancel();
+    _settle = Timer(previewDelay, () {
+      if (!mounted) return;
+      _preview.value = LinePreview(
+        fen: move.after,
+        lastMove: move.uci,
+        anchor: anchor,
+      );
+    });
+  }
+
+  void _leave() {
+    _settle?.cancel();
+    _preview.value = null;
+  }
+
+  /// Plays [moves] from the move at [from], where the comment they were
+  /// written in belongs. A move that does not land, because the document
+  /// refused it, ends the walk there.
+  void _play(NodePath from, List<PvMove> moves) {
+    _leave();
+    final session = widget.session;
+    session.goTo(from);
+    for (final move in moves) {
+      session.playMove(move.uci);
+      if (session.fen != move.after) return;
+    }
+  }
+
   /// Takes the moves out and offers the same way back a deleted line does:
   /// this removes more than a line does, so it may not be the one edit that
   /// cannot be taken back with one click.
-  void _deleteFrom(BuildContext context, MoveNode node, NodePath path) {
-    deleteFrom(session, path);
-    showDeletionNotice(context, session, deletedFromHere(node.san));
+  void _deleteFrom(MoveNode node, NodePath path) {
+    deleteFrom(widget.session, path);
+    showDeletionNotice(context, widget.session, deletedFromHere(node.san));
   }
+
+  Widget _comment(String comment, Fen at, NodePath from) => CommentBlocks(
+    comment: comment,
+    at: at,
+    orientation: widget.session.orientation,
+    onHover: _hover,
+    onLeave: _leave,
+    onPlay: (moves) => _play(from, moves),
+  );
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: session,
+      listenable: widget.session,
       builder: (context, _) {
-        final tree = session.tree;
+        final tree = widget.session.tree;
         if (tree == null || tree.isEmpty) {
           return Center(
             child: Text(
@@ -49,20 +114,29 @@ class MoveTreeView extends StatelessWidget {
             ),
           );
         }
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(Space.m),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (displayComment(tree.rootComment ?? '') case final prose
-                  when prose.isNotEmpty)
-                _Comment(text: prose),
-              ..._LineBuilder(
-                session,
-                moveMenu,
-                (node, path) => _deleteFrom(context, node, path),
-              ).line(const NodePath.root(), tree.children),
-            ],
+        final builder = _LineBuilder(
+          widget.session,
+          widget.moveMenu,
+          _deleteFrom,
+          _comment,
+        );
+        return LinePreviewOverlay(
+          preview: _preview,
+          orientation: widget.session.orientation,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(Space.m),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (displayComment(tree.rootComment ?? '').isNotEmpty)
+                  _comment(
+                    tree.rootComment!,
+                    tree.rootFen,
+                    const NodePath.root(),
+                  ),
+                ...builder.line(const NodePath.root(), tree.children),
+              ],
+            ),
           ),
         );
       },
@@ -76,8 +150,12 @@ typedef _Branch = ({NodePath parent, List<MoveNode> siblings, int branch});
 /// What a mode adds to the menu on the move at `path`.
 typedef MoveMenu = List<Widget> Function(NodePath path);
 
+/// A comment laid out from the position [at], belonging to the move at
+/// [from] — the one a line of analysis in it is played from.
+typedef _CommentWidget = Widget Function(String comment, Fen at, NodePath from);
+
 final class _LineBuilder {
-  _LineBuilder(this.session, this.moveMenu, this.onDeleteFrom);
+  _LineBuilder(this.session, this.moveMenu, this.onDeleteFrom, this.comment);
 
   final DocumentSession session;
   final MoveMenu? moveMenu;
@@ -86,8 +164,12 @@ final class _LineBuilder {
   /// what went and offer it back.
   final void Function(MoveNode node, NodePath path) onDeleteFrom;
 
+  final _CommentWidget comment;
+
   /// The line that starts at `siblings[branch]` and follows main
-  /// continuations to the end. The other siblings of a main move are its
+  /// continuations to the end. A comment is a paragraph of its own, so the
+  /// moves before it close their row and the move after it shows its number
+  /// again, as in print. The other siblings of a main move are its
   /// variations and interrupt the line as indented blocks, each a line of
   /// its own; the siblings of a variation's first move are not repeated.
   List<Widget> line(
@@ -99,31 +181,37 @@ final class _LineBuilder {
     var tokens = <Widget>[];
     var numbered = true;
     var at = (parent: parent, siblings: siblings, branch: branch);
+    void breakRow() {
+      if (tokens.isNotEmpty) blocks.add(_Row(tokens));
+      tokens = <Widget>[];
+      numbered = true;
+    }
+
     while (true) {
       final node = at.siblings[at.branch];
       final path = at.parent.child(at.branch);
       // A note the file wrote before the move introduces it, so it is read
-      // before it too, and the move that follows shows its number again.
-      final introduction = displayComment(node.startingComment ?? '');
-      if (introduction.isNotEmpty) {
-        tokens.add(_Comment(text: introduction));
-        numbered = true;
+      // before it too.
+      if (displayComment(node.startingComment ?? '').isNotEmpty) {
+        breakRow();
+        blocks.add(
+          comment(node.startingComment!, at.parent.fenIn(session), at.parent),
+        );
       }
       tokens.add(_token(node, path, numbered: numbered));
-      final comment = displayComment(node.comment ?? '');
-      if (comment.isNotEmpty) tokens.add(_Comment(text: comment));
-      // As in print, a move after a comment shows its number again.
-      numbered = comment.isNotEmpty;
+      numbered = false;
+      if (displayComment(node.comment ?? '').isNotEmpty) {
+        breakRow();
+        blocks.add(comment(node.comment!, node.fen, path));
+      }
       if (at.branch == 0 && at.siblings.length > 1) {
-        blocks.add(_Line(tokens));
+        breakRow();
         blocks.addAll(_variations(at));
-        tokens = <Widget>[];
-        numbered = true;
       }
       if (node.children.isEmpty) break;
       at = (parent: path, siblings: node.children, branch: 0);
     }
-    if (tokens.isNotEmpty) blocks.add(_Line(tokens));
+    breakRow();
     return blocks;
   }
 
@@ -162,8 +250,15 @@ final class _LineBuilder {
   }
 }
 
-class _Line extends StatelessWidget {
-  const _Line(this.tokens);
+extension on NodePath {
+  /// The position at this path in the session's tree.
+  Fen fenIn(DocumentSession session) =>
+      session.tree?.fenAt(this) ?? Fen.initial;
+}
+
+/// A row of moves that wrap as text does.
+class _Row extends StatelessWidget {
+  const _Row(this.tokens);
 
   final List<Widget> tokens;
 
@@ -181,7 +276,7 @@ class _VariationBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: Space.xs),
-      padding: const EdgeInsets.only(left: Space.m),
+      padding: const EdgeInsets.only(left: variationIndent),
       decoration: BoxDecoration(
         border: Border(
           left: BorderSide(color: Theme.of(context).colorScheme.outline),
@@ -276,7 +371,7 @@ class _MoveTokenState extends State<_MoveToken> {
             TextSpan(text: widget.san),
           ],
         ),
-        style: monoText.copyWith(color: scheme.onSurface),
+        style: readingMoveText.copyWith(color: scheme.onSurface),
       ),
       if (widget.quizEnds)
         Icon(Icons.stop, size: IconSize.menu, color: scheme.onSurfaceVariant),
@@ -306,25 +401,6 @@ class _MoveTokenState extends State<_MoveToken> {
           ),
           child: _label(scheme),
         ),
-      ),
-    );
-  }
-}
-
-class _Comment extends StatelessWidget {
-  const _Comment({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: Space.xs),
-      child: Text(
-        text,
-        style: Theme.of(
-          context,
-        ).textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic),
       ),
     );
   }

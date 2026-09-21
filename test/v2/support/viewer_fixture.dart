@@ -1,6 +1,7 @@
 import 'package:chess_auto_prep/v2/features/pgn_viewer/pgn_viewer.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/v2/storage/pgn_file_import.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_file_picker.dart';
 import 'package:chess_auto_prep/v2/storage/recent_pgn_files.dart';
 import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
@@ -33,6 +34,27 @@ final class ScriptedRecentFiles implements RecentFiles {
   Future<bool> save(List<String> paths) async {
     saved.add(List.of(paths));
     return accepting;
+  }
+}
+
+/// An import that copies nothing: a path under the collections root is
+/// inside Documents; any other is answered as the test says.
+final class ScriptedImport implements PgnFileImport {
+  /// What a path outside Documents becomes; null fails the import.
+  String? copyTo;
+
+  /// Every path asked about, in order.
+  final asked = <String>[];
+
+  @override
+  Future<ImportResult> insideDocuments(String path) async {
+    asked.add(path);
+    if (path.startsWith('/Documents/')) {
+      return FileToOpen(path, copied: false);
+    }
+    final copy = copyTo;
+    if (copy == null) return const ImportFailed('no room');
+    return FileToOpen(copy, copied: true);
   }
 }
 
@@ -86,6 +108,7 @@ PgnViewer viewerFor(DocumentSession session, ScriptedRecentFiles recent) =>
     PgnViewer(
       recent: recent,
       picker: ScriptedPicker(),
+      import: ScriptedImport(),
       session: session,
       collections: collectionsRoot,
     );
@@ -100,6 +123,7 @@ final class ViewerFixture {
     required this.viewer,
     required this.recent,
     required this.picker,
+    required this.import,
     required this.ref,
   });
 
@@ -109,6 +133,7 @@ final class ViewerFixture {
   final PgnViewer viewer;
   final ScriptedRecentFiles recent;
   final ScriptedPicker picker;
+  final ScriptedImport import;
   final ChapterRef ref;
 
   String get onDisk => switch (store.documents[ref]) {
@@ -143,9 +168,11 @@ Future<ViewerFixture> viewerOver(
   final session = DocumentSession(store, saver);
   final recentFiles = ScriptedRecentFiles(recent);
   final picker = ScriptedPicker();
+  final import = ScriptedImport();
   final viewer = PgnViewer(
     recent: recentFiles,
     picker: picker,
+    import: import,
     session: session,
     collections: collectionsRoot,
   );
@@ -156,6 +183,7 @@ Future<ViewerFixture> viewerOver(
     viewer: viewer,
     recent: recentFiles,
     picker: picker,
+    import: import,
     ref: ref,
   );
 }

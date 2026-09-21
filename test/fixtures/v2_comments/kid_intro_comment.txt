@@ -1,0 +1,64 @@
+Wel@ome back! Part One of the Lifetime Repertoire:
+King’s Indian Defense dealt with White’s most straightforward route:
+developing the pieces and taking control of the centre. I hope I did a good
+job convincing you that Black’s position is fully playable there, both
+objectively fine and giving us great chances practically. It’s not
+surprising that many players would never dream of entering the Mar del Plata
+on the White side, and instead go for an early deviation. I should just say at
+this point that you don’t need to have studied part one for this course to
+be of benefit. There are a few transpositions in the opening chapters, but
+these can be studied either way around. You may already have lines you’re
+happy with against the Classical and Samisch Variations, or you might be
+concerned by an early White sideline, in which case it would make sense to
+start with part two.Here we’ll examine all of White’s other approaches. We
+start with a few topical tries where White delays developing their king’s
+knight: 3.Nc3 Bg7 4.e4 d6 5.Be2 White’s idea is generally to play g2-g4,
+making it harder for our traditional ...f7-f5 counter. This is very ambitious
+but fraught with danger. White’s king will no longer feel safe on the
+kingside and often remains in the centre. White needs to keep absolute control.
+A single misstep and his entire position collapses.We’ll move on to some
+setups where White puts his bishop on g5. 5.Bg5 The point of this is to make
+it harder for us to play ... e7-e5 due to the pin on our queen. However, by
+developing the bishop a bit prematurely White has weakened his queenside, and
+so opening up the long diagonal with 5...c5 , and a transposition into Benoni
+setups works very well. We often reach positions where White’s prospects
+would be much improved if he could place his bishop back on c1.Next up we
+defang the Four Pawns Attack. îîStartFENîîrnbqk2r/ppp1ppbp/3p1np1/8/2PPP3/2N5/
+PP3PPP/R1BQKBNR w KQkq - 0 5îîEndFENîî 5.f4 Thanks to its name this variation
+appeals to aggressive-minded players, but White actually has to show a lot of
+accuracy to keep his centre together. I’ll demonstrate that the e4-pawn is
+too weak, and with pawn and even piece sacrifices we’ll demolish White’s
+big centre, leaving him with just holes.After investigating a few slightly
+rarer setups:  • The Seirawan Variation: ��StartFEN��rnbqk2r/ppp1ppbp/3p1np1/
+8/2PPP3/2N5/PP3PPP/R1BQKBNR w KQkq - 0 5îîEndFENîî 5.Bd3 , â€¢ The Hungarian
+Attack: îîStartFENîîrnbqk2r/ppp1ppbp/3p1np1/8/2PPP3/2N5/PP3PPP/R1BQKBNR w KQkq
+- 0 5îîEndFENîî 5.Nge2 , â€¢ The Smyslov Variation: îîStartFENîîrnbqk2r/
+ppppppbp/5np1/8/2PP4/2N5/PP2PPPP/R1BQKBNR w KQkq - 2 4îîEndFENîî 4.Nf3 O-O 5.
+Bg5 It’s on to the most theoretical section of this course: the Fianchetto
+Variation: 3.g3 . By copying our kingside fianchetto White isn’t interested
+in attempting to refute our setup. Instead, he tries to keep as much control
+as possible and wants to prevent our famed activity. Don’t worry, we’ll
+still get double-edged exciting positions. I propose playing with ...d7-d6 and
+...c7-c5: 3...Bg7 4.Bg2 O-O 5.Nc3 d6 6.Nf3 c5 This is quite a rare setup, but
+one in which I’ve had very good results. We offer White a transposition to
+the Fianchetto Benoni, but bypass White’s critical option. In fact, with our
+move order wrinkle, we’ll really annoy those who used Boris Avrukh’s
+series of books to create a repertoire. Our idea is unmentioned and so our
+opponents are bound to panic!A big advantage of the King’s Indian is its
+flexibility. Not only have I covered all White’s tries against the King’s
+Indian, but I’ve built a complete repertoire against everything except 1.e4.
+A lot of players are too scared to allow us to enter the pure King’s Indian.
+I hope after going through this course you’ll no longer be annoyed by the
+London System but agree with me that Black’s position has dynamic potential
+and is much the easier to play. Englishes and Retis won’t worry us in the
+slightest, and neither will offbeat first moves like Adhiban’s 1.b3. I’m
+recommending 1...Nf6 and 2...g6 against almost everything.The big exception is
+when White plays an early Nc3 with the pawn remaining on c2. Here I recommend
+playing ...d7-d5 to prevent White from transposing into a Pirc. With White’s
+c-pawn blocked there’s no transposition into usual Queen’s Gambit style
+positions, and we’ll quickly seize the initiative with a quick ...c7-c5
+ourselves.This second part of the repertoire ended up being quite large, but I
+hope you’ll agree with me that Black’s play is quite logical, making it
+easier to remember. Working through the course will be a worthwhile investment.
+Not only will you have a dynamic and sound repertoire where you can fight for
+the win, but playing will actually be fun!

@@ -78,14 +78,19 @@ void main() {
     expect(find.text('1... e5'), findsOneWidget);
   });
 
-  testWidgets('every row keeps its height before and after it has a line', (
-    tester,
-  ) async {
+  testWidgets('off, the pane is one row; on, every row keeps its height '
+      'before and after it has a line', (tester) async {
     await pump(tester);
+    expect(tester.getSize(find.byType(EnginePane)).height, engineBarHeight);
+    await tester.tap(find.byType(Switch));
+    await tester.pump();
     final before = tester.getSize(find.byType(EnginePane));
-    await analyse(tester);
-    expect(tester.getSize(find.byType(EnginePane)), before);
     expect(before.height, engineBarHeight + engineRowHeight * 3);
+    engine.current.emit(
+      line(score: const Centipawns(-35), depth: 18, pv: ['c7c5', 'g1f3']),
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(tester.getSize(find.byType(EnginePane)), before);
   });
 
   testWidgets('a tick without the best line promotes no other line', (

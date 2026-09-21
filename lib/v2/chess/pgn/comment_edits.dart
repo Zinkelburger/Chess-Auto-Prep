@@ -74,8 +74,47 @@ CommentResult setComment(
   final unwritable = text == null ? null : commentRefusal(text);
   if (unwritable != null) return CommentUnwritable(unwritable);
   if (at.isRoot) return _withIntroduction(chapter, text);
-  return _edited(chapter, at, (comment) => withProse(comment, text));
+  return _edited(
+    chapter,
+    at,
+    (node) => _commented(node, withProse(node.comment, text)),
+    holds: (node) => node.comment != null,
+  );
 }
+
+/// Puts the glyph [nag] (`!`, `?`, `!!`, `??`, `!?` or `?!`, the numeric
+/// annotations 1 to 6) on the move at [at], in place of any of those six it
+/// had, or takes them all away when [nag] is null. Other annotation numbers
+/// stay: they say things these six do not.
+CommentResult setGlyph(Chapter chapter, {required NodePath at, int? nag}) {
+  if (at.isRoot) return _unchanged(chapter);
+  return _edited(
+    chapter,
+    at,
+    (node) => _glyphed(node, nag),
+    holds: (node) => node.nags.any(isGlyph),
+  );
+}
+
+/// Whether [nag] is one of the six glyphs a reader prints after a move.
+bool isGlyph(int nag) => nag >= 1 && nag <= 6;
+
+MoveNode _glyphed(MoveNode node, int? nag) {
+  final kept = [
+    for (final old in node.nags)
+      if (!isGlyph(old)) old,
+  ];
+  final nags = [?nag, ...kept];
+  return _sameNags(nags, node.nags) ? node : withNags(node, nags);
+}
+
+bool _sameNags(List<int> a, List<int> b) =>
+    a.length == b.length && a.indexed.every((e) => b[e.$1] == e.$2);
+
+/// [node] with [comment] in place of the one it had; the same node when it
+/// already has those words.
+MoveNode _commented(MoveNode node, String? comment) =>
+    comment == node.comment ? node : withNodeComment(node, comment);
 
 /// Puts the bare token [marker] on the move at [at], or takes it away.
 ///
@@ -92,24 +131,27 @@ CommentResult setMarker(
   return _edited(
     chapter,
     at,
-    (comment) => withToken(comment, marker, present: on),
+    (node) => _commented(node, withToken(node.comment, marker, present: on)),
+    holds: (node) => node.comment != null,
   );
 }
 
-/// The comment on the move at [at], put through [change], in every game the
-/// note belongs in.
+/// The move at [at], put through [change], in every game the annotation
+/// belongs in: the games that already hold one on that move ([holds]), or
+/// the first game that plays it.
 CommentResult _edited(
   Chapter chapter,
   NodePath at,
-  String? Function(String? comment) change,
-) {
+  MoveNode Function(MoveNode node) change, {
+  required bool Function(MoveNode node) holds,
+}) {
   final sans = [for (final node in chapter.tree.lineTo(at)) node.san];
   if (sans.isEmpty) return _unchanged(chapter);
   if (_playedByAPartialGame(chapter, sans)) return const GameNotWhole();
   final lines = [...chapter.lines];
   final written = <int>{};
-  for (final index in _commentHomes(chapter, sans)) {
-    switch (_commented(chapter, chapter.lines[index], sans, change)) {
+  for (final index in _homes(chapter, sans, holds)) {
+    switch (_changed(chapter, chapter.lines[index], sans, change)) {
       case LineRefused(:final reason):
         // Nothing is committed until every game the edit must write can be
         // written, so a note never lands in some games and not others.
@@ -128,14 +170,18 @@ CommentResult _edited(
   );
 }
 
-/// The games a comment on [sans] belongs in: every game that already holds
-/// one on that move, or, when none does, the first game that plays it.
+/// The games an annotation on [sans] belongs in: every game that already
+/// holds one on that move, or, when none does, the first game that plays it.
 ///
 /// A move is shared by every game through it, and writing the note into all
 /// of them rewrote 844 of the 930 games of one real course for one note.
 /// The comment lives where it lived; reading a chapter still merges the
 /// comments of all its games, so the workspace shows the same words.
-List<int> _commentHomes(Chapter chapter, List<String> sans) {
+List<int> _homes(
+  Chapter chapter,
+  List<String> sans,
+  bool Function(MoveNode node) holds,
+) {
   final holders = <int>[];
   int? first;
   for (final (index, line) in chapter.lines.indexed) {
@@ -144,7 +190,8 @@ List<int> _commentHomes(Chapter chapter, List<String> sans) {
     final path = pathOfSans(tree, sans);
     if (path == null) continue;
     first ??= index;
-    if (tree.nodeAt(path)?.comment != null) holders.add(index);
+    final node = tree.nodeAt(path);
+    if (node != null && holds(node)) holders.add(index);
   }
   if (holders.isNotEmpty) return holders;
   return [?first];
@@ -160,22 +207,22 @@ bool _playedByAPartialGame(Chapter chapter, List<String> sans) {
   return false;
 }
 
-/// [line] with the comment on [sans] put through [change], the reason it
+/// [line] with the move on [sans] put through [change], the reason it
 /// cannot be, or null when there is nothing there to change.
-LineRewrite? _commented(
+LineRewrite? _changed(
   Chapter chapter,
   ChapterLine line,
   List<String> sans,
-  String? Function(String? comment) change,
+  MoveNode Function(MoveNode node) change,
 ) {
   final tree = chapter.writableTree(line);
   if (tree == null) return null;
   final path = pathOfSans(tree, sans);
   final node = path == null ? null : tree.nodeAt(path);
   if (path == null || node == null) return null;
-  final comment = change(node.comment);
-  if (comment == node.comment) return null;
-  return rewritten(line, withComment(tree, path, comment));
+  final changed = change(node);
+  if (identical(changed, node)) return null;
+  return rewritten(line, withNodeChanged(tree, path, (_) => changed));
 }
 
 /// The introduction lives on the first game of the chapter, which is where

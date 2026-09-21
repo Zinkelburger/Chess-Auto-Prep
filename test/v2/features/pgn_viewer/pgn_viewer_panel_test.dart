@@ -10,13 +10,13 @@ import '../../support/viewer_fixture.dart';
 void main() {
   late ViewerFixture fixture;
   late List<ChapterRef> opened;
-  var closed = 0;
+  var browsed = 0;
 
   tearDown(() => fixture.dispose());
 
   Future<void> pump(WidgetTester tester) async {
     opened = [];
-    closed = 0;
+    browsed = 0;
     await tester.pumpWidget(
       MaterialApp(
         theme: darkTheme(),
@@ -26,7 +26,7 @@ void main() {
             child: PgnViewerPanel(
               viewer: fixture.viewer,
               onOpen: opened.add,
-              onClose: () => closed++,
+              onBrowse: () => browsed++,
             ),
           ),
         ),
@@ -46,6 +46,7 @@ void main() {
     expect(find.text('Recent files'), findsOneWidget);
     expect(find.text('twic.pgn'), findsOneWidget);
     expect(find.text('/home/me/Downloads'), findsOneWidget);
+    expect(find.byTooltip('Open PGN file… (Ctrl+O)'), findsOneWidget);
     await tester.tap(find.text('twic.pgn'));
     expect(opened, [ChapterRef.at('/home/me/Downloads/twic.pgn')]);
   });
@@ -54,20 +55,13 @@ void main() {
     tester,
   ) async {
     fixture = await viewerOver(threeGameFile);
-    fixture.picker.answer = '/home/me/Downloads/new.pgn';
     await pump(tester);
     expect(find.textContaining('No PGN open'), findsOneWidget);
     await tester.tap(find.text('Open PGN file…'));
     await tester.pumpAndSettle();
-    expect(opened, [ChapterRef.at('/home/me/Downloads/new.pgn')]);
-  });
-
-  testWidgets('a dialog closed without a choice opens nothing', (tester) async {
-    fixture = await viewerOver(threeGameFile);
-    await pump(tester);
-    await tester.tap(find.text('Open PGN file…'));
-    await tester.pumpAndSettle();
-    expect(opened, isEmpty);
+    expect(browsed, 1);
+    await tester.tap(find.byTooltip('Open PGN file… (Ctrl+O)'));
+    expect(browsed, 2);
   });
 
   testWidgets('an open file lists its games, and a click shows one', (
@@ -77,27 +71,11 @@ void main() {
     await fixture.open();
     await pump(tester);
     expect(find.text('games'), findsOneWidget);
-    expect(find.text('Game 1 of 3'), findsOneWidget);
     expect(find.text('Carlsen, Magnus – Nakamura, Hikaru'), findsOneWidget);
     expect(find.text('½-½'), findsOneWidget);
     await tester.tap(find.text('Ding, Liren – Giri, Anish'));
     await tester.pumpAndSettle();
-    expect(find.text('Game 2 of 3'), findsOneWidget);
     expect(fixture.session.game, 1);
-  });
-
-  testWidgets('the counter walks the games and stops at the ends', (
-    tester,
-  ) async {
-    fixture = await viewerOver(threeGameFile);
-    await fixture.open();
-    await pump(tester);
-    await tester.tap(find.byTooltip('Previous game'));
-    await tester.pumpAndSettle();
-    expect(find.text('Game 1 of 3'), findsOneWidget);
-    await tester.tap(find.byTooltip('Next game'));
-    await tester.pumpAndSettle();
-    expect(find.text('Game 2 of 3'), findsOneWidget);
   });
 
   testWidgets('the search narrows the list and says when nothing matches', (
@@ -115,28 +93,6 @@ void main() {
     expect(find.text('Nothing matches "fischer".'), findsOneWidget);
   });
 
-  testWidgets('with nothing open, the menu offers no Close file', (
-    tester,
-  ) async {
-    fixture = await viewerOver(threeGameFile);
-    await pump(tester);
-    await tester.tap(find.byTooltip('Viewer actions'));
-    await tester.pumpAndSettle();
-    final closeItem = find.widgetWithText(MenuItemButton, 'Close file');
-    expect(tester.widget<MenuItemButton>(closeItem).onPressed, isNull);
-  });
-
-  testWidgets('the menu closes the open file', (tester) async {
-    fixture = await viewerOver(threeGameFile);
-    await fixture.open();
-    await pump(tester);
-    await tester.tap(find.byTooltip('Viewer actions'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Close file'));
-    await tester.pumpAndSettle();
-    expect(closed, 1);
-  });
-
   // Under 64 KiB, so the file is read on this isolate: a widget test's
   // clock is fake, and a read on another isolate would never come back.
   testWidgets('a long file lists only the rows on screen', (tester) async {
@@ -149,7 +105,6 @@ void main() {
     fixture = await viewerOver(games.toString());
     await fixture.open();
     await pump(tester);
-    expect(find.text('Game 1 of 400'), findsOneWidget);
     expect(find.text('A1 – B1'), findsOneWidget);
     expect(find.text('A300 – B300'), findsNothing);
   });

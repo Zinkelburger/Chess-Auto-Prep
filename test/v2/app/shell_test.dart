@@ -271,18 +271,17 @@ void main() {
     await tester.pumpAndSettle();
     expect(session.source, games);
     expect(session.game, 0);
-    expect(find.text('Game 1 of 3'), findsOneWidget);
+    expect(find.text('of 3'), findsOneWidget, reason: 'under the board');
     expect(find.byType(OutlinePanel), findsNothing);
     // The header names the game rather than counting lines.
-    expect(
-      find.text('Carlsen, Magnus – Nakamura, Hikaru · 1-0 · Tata Steel · 2024'),
-      findsOneWidget,
-    );
-    await tester.tap(find.byTooltip('Next game'));
+    // Once in the list, once as the heading.
+    expect(find.text('Carlsen, Magnus – Nakamura, Hikaru'), findsNWidgets(2));
+    expect(find.text('1-0 · Tata Steel · 2024'), findsOneWidget);
+    await tester.tap(find.byTooltip('Next game (↓)'));
     await tester.pumpAndSettle();
     expect(session.game, 1);
-    expect(find.text('Game 2 of 3'), findsOneWidget);
-    await tester.tap(find.byTooltip('Viewer actions'));
+    expect(find.text('Ding, Liren – Giri, Anish'), findsWidgets);
+    await tester.tap(find.text('Actions'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Close file'));
     await tester.pumpAndSettle();

@@ -42,13 +42,29 @@ abstract final class IconSize {
   static const menu = 16.0;
 }
 
-/// How wide the evaluation bar beside the board is. A token because the
-/// workspace lays the board out next to it, so the bar can be rewritten
-/// without the layout having to know the widget.
-const evalBarWidth = 12.0;
-
 /// Moves, FENs and evaluations share one monospace style.
 const monoText = TextStyle(fontFamily: 'SourceCodePro', fontSize: 13);
+
+/// The reading column's own two sizes, the old app's reading pane a point
+/// smaller: moves in mono, prose upright in the text face. A comment is
+/// read, so it gets a book's measure rather than the column's width.
+const readingMoveText = TextStyle(
+  fontFamily: 'SourceCodePro',
+  fontSize: 15,
+  height: 1.6,
+);
+const readingProseText = TextStyle(fontSize: 16, height: 1.55);
+const proseMaxWidth = 640.0;
+
+/// A diagram drawn in a comment: a position the author put there to be
+/// looked at, so bigger than a hover board and smaller than the board.
+const diagramSize = 160.0;
+
+/// How far a variation block sits in from the line it interrupts.
+const variationIndent = 14.0;
+
+/// The row of first / back / forward / end buttons under the moves.
+const navRowHeight = 36.0;
 
 /// The engine bar, as the old app laid it out: a row this tall for the
 /// switch and the status, then one row per line, each with a gutter this
@@ -191,13 +207,20 @@ final class BoardTheme extends ThemeExtension<BoardTheme> {
 const paneDividerWidth = 1.0;
 const paneDividerGrab = 4.0;
 
-/// Narrower than this and a list is unreadable, a board unplayable.
+/// Narrower than this and a list is unreadable, a board unplayable, a
+/// paragraph a ribbon.
 const paneMinWidth = 180.0;
 const boardPaneMinWidth = 320.0;
+const readingPaneMinWidth = 300.0;
 
-/// How wide the column to the right of the board is: the chapter, the
-/// engine, the moves and their comment.
-const sidePanelWidth = 360.0;
+/// How wide the reading column to the right of the board starts out: the
+/// heading, the engine, the moves and the navigation row. The user drags
+/// the divider; a course reads better with more.
+const sidePanelWidth = 420.0;
+
+/// One of the six glyph buttons in the edit strip.
+const glyphButtonWidth = 36.0;
+const glyphButtonHeight = 30.0;
 
 /// What the dividers between panes look like: the outline colour, the
 /// accent while one is being dragged.
@@ -273,3 +296,6 @@ const listRowHeight = 34.0;
 /// How wide the number in front of a game in a list is: room for four
 /// digits, which a downloaded collection needs.
 const gameOrdinalWidth = 40.0;
+
+/// How wide the typeable game number under the board is: four digits.
+const gameNumberWidth = 52.0;

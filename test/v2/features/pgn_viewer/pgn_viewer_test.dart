@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/v2/features/pgn_viewer/pgn_viewer.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/recent_pgn_files.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -154,4 +155,62 @@ void main() {
       expect(fixture.viewer.games.length, 3);
     },
   );
+
+  test('a file outside Documents is opened as its copy inside', () async {
+    fixture = await viewerOver(threeGameFile);
+    fixture.import.copyTo = '/Documents/pgn_collections/course.pgn';
+    final ref = await fixture.viewer.fileFor('/home/me/Downloads/course.pgn');
+    expect(ref?.path, '/Documents/pgn_collections/course.pgn');
+    expect(fixture.import.asked, ['/home/me/Downloads/course.pgn']);
+    expect(fixture.viewer.recentProblem, isNull);
+  });
+
+  test('a file already inside Documents is opened where it is', () async {
+    fixture = await viewerOver(threeGameFile);
+    final ref = await fixture.viewer.fileFor(fixture.ref.path);
+    expect(ref, fixture.ref);
+  });
+
+  test('a copy that could not be made opens nothing and says why', () async {
+    fixture = await viewerOver(threeGameFile);
+    final ref = await fixture.viewer.fileFor('/home/me/Downloads/course.pgn');
+    expect(ref, isNull);
+    expect(
+      fixture.viewer.recentProblem,
+      'Could not copy course.pgn into your Documents: no room',
+    );
+  });
+
+  test('the dialog answers the file to open, through the same door', () async {
+    fixture = await viewerOver(threeGameFile);
+    fixture.picker.answer = '/home/me/Downloads/new.pgn';
+    fixture.import.copyTo = '/Documents/pgn_collections/new.pgn';
+    final ref = await fixture.viewer.browse();
+    expect(ref?.path, '/Documents/pgn_collections/new.pgn');
+    fixture.picker.answer = null;
+    expect(await fixture.viewer.browse(), isNull);
+  });
+
+  test('a folder is named from home down when it is under it', () async {
+    fixture = await viewerOver(threeGameFile);
+    // These fixtures put Documents at the root, which is not a home, so
+    // the folder is left whole; a viewer over a real home shortens it.
+    expect(
+      fixture.viewer.folderShown('/Documents/pgn_collections/a.pgn'),
+      '/Documents/pgn_collections',
+    );
+    final homed = PgnViewer(
+      recent: fixture.recent,
+      picker: fixture.picker,
+      import: fixture.import,
+      session: fixture.session,
+      collections: '/home/me/Documents/pgn_collections',
+    );
+    addTearDown(homed.dispose);
+    expect(
+      homed.folderShown('/home/me/Documents/pgn_collections/a.pgn'),
+      'Documents/pgn_collections',
+    );
+    expect(homed.folderShown('/mnt/usb/a.pgn'), '/mnt/usb');
+  });
 }

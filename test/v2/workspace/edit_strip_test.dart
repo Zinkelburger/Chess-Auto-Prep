@@ -2,103 +2,92 @@ import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart'
     show Collision, Conflict, IoFailure, Opened, SaveRefused;
 import 'package:chess_auto_prep/v2/ui/theme.dart';
-import 'package:chess_auto_prep/v2/workspace/chapter_header.dart';
+import 'package:chess_auto_prep/v2/workspace/edit_strip.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/fixtures.dart';
 import '../support/scripted_store.dart';
 import '../support/session_fixture.dart';
-import '../support/study_fixture.dart';
-
-/// Two games from 1. e4, the second stopping at a move nobody can play.
-const _partial =
-    '// Color: White\n'
-    '\n'
-    '[Event "A"]\n'
-    '[Result "*"]\n'
-    '\n'
-    '1. e4 e5 *\n'
-    '\n'
-    '[Event "B"]\n'
-    '[Result "*"]\n'
-    '\n'
-    '1. e4 e5 2. Ke3 Nf6 *\n';
 
 void main() {
   late SessionFixture fixture;
   final sicilian = NodePath.of([0]);
+  late ValueNotifier<bool> editing;
 
-  setUp(() async => fixture = await openSession(blackChapter));
+  setUp(() async {
+    fixture = await openSession(blackChapter);
+    editing = ValueNotifier(true);
+  });
 
-  tearDown(() => fixture.dispose());
+  tearDown(() {
+    editing.dispose();
+    fixture.dispose();
+  });
+
+  Widget strip(SessionFixture of) => MaterialApp(
+    theme: darkTheme(),
+    home: Scaffold(
+      body: EditStrip(session: of.session, saver: of.saver, editing: editing),
+    ),
+  );
 
   Future<void> pump(WidgetTester tester) async {
     await tester.binding.setSurfaceSize(const Size(500, 600));
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: darkTheme(),
-        home: Scaffold(
-          body: ChapterHeader(session: fixture.session, saver: fixture.saver),
-        ),
-      ),
-    );
+    await tester.pumpWidget(strip(fixture));
     await tester.pump();
   }
 
   void edit(String words) => fixture.session.setComment(sicilian, words);
 
-  testWidgets('shows which side the chapter is for and changes it', (
+  testWidgets('while reading, with nothing to report, there is no strip', (
+    tester,
+  ) async {
+    editing.value = false;
+    await pump(tester);
+    expect(find.text('Saved'), findsNothing);
+    expect(find.byType(TextField), findsNothing);
+    expect(find.byTooltip('Undo (Ctrl+Z)'), findsNothing);
+  });
+
+  testWidgets('editing opens the glyphs, the field, Undo and Done', (
     tester,
   ) async {
     await pump(tester);
-
-    expect(find.text('Black'), findsOneWidget);
-    await tester.tap(find.text('White'));
-    await tester.pumpAndSettle();
-
-    expect(fixture.onDisk, startsWith('// Color: White\n'));
-    expect(fixture.session.orientation.name, 'white');
-  });
-
-  testWidgets('names the chapter and says the file is saved', (tester) async {
-    await pump(tester);
-    expect(find.text('Main'), findsOneWidget);
-    expect(find.text('2 lines, 1 from another position'), findsOneWidget);
     expect(find.text('Saved'), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.text('!?'), findsOneWidget);
+    await tester.tap(find.text('Done'));
+    await tester.pump();
+    expect(editing.value, isFalse);
+    expect(find.byType(TextField), findsNothing);
   });
 
-  testWidgets('says how many lines cannot be edited here', (tester) async {
-    // The second game stops at a move that is not legal, so it keeps its
-    // own bytes; the user hears that before they try to edit it.
-    await openSession(_partial).then((other) async {
-      addTearDown(other.dispose);
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: darkTheme(),
-          home: Scaffold(
-            body: ChapterHeader(session: other.session, saver: other.saver),
-          ),
-        ),
-      );
-      await tester.pump();
-      expect(find.text('2 lines, 1 cannot be edited here'), findsOneWidget);
-    });
-  });
-
-  testWidgets('a file that opened to read says so once, with the reason', (
+  testWidgets('a glyph goes on the move on the board and comes off again', (
     tester,
   ) async {
+    fixture.session.goTo(sicilian);
+    await pump(tester);
+    await tester.tap(find.text('!'));
+    await tester.pumpAndSettle();
+    expect(fixture.session.currentMove?.nags, [1]);
+    expect(fixture.onDisk, contains(r'c5 $1'));
+    await tester.tap(find.text('?!'));
+    await tester.pumpAndSettle();
+    expect(fixture.session.currentMove?.nags, [6]);
+    await tester.tap(find.text('?!'));
+    await tester.pumpAndSettle();
+    expect(fixture.session.currentMove?.nags, isEmpty);
+    expect(fixture.onDisk, blackChapter);
+  });
+
+  testWidgets('a file that opened to read says so even while reading', (
+    tester,
+  ) async {
+    editing.value = false;
     final other = await openSession(blackChapter, readOnly: 'it is Latin-1');
     addTearDown(other.dispose);
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: darkTheme(),
-        home: Scaffold(
-          body: ChapterHeader(session: other.session, saver: other.saver),
-        ),
-      ),
-    );
+    await tester.pumpWidget(strip(other));
     await tester.pump();
     expect(find.text('Read only'), findsOneWidget);
     expect(
@@ -214,7 +203,13 @@ void main() {
     await conflict(tester);
     await tester.tap(find.text('Save a copy…'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), 'Main draft');
+    await tester.enterText(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(TextField),
+      ),
+      'Main draft',
+    );
     await tester.tap(find.widgetWithText(FilledButton, 'Save a copy'));
     await tester.pumpAndSettle();
     expect(find.text('Saved a copy as Main draft.pgn'), findsOneWidget);
@@ -243,7 +238,13 @@ void main() {
     await conflict(tester);
     await tester.tap(find.text('Save a copy…'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), 'Main draft');
+    await tester.enterText(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(TextField),
+      ),
+      'Main draft',
+    );
     await tester.tap(find.widgetWithText(FilledButton, 'Save a copy'));
     await tester.pumpAndSettle();
     expect(find.text('Saved a copy as Main draft.pgn'), findsOneWidget);
@@ -257,12 +258,6 @@ void main() {
     expect(find.text('Saved a copy as Main draft.pgn'), findsNothing);
   });
 
-  testWidgets('says when a game could not be read at all', (tester) async {
-    fixture.dispose();
-    fixture = await openSession(unreadableGameChapter);
-    await pump(tester);
-    expect(find.text('1 line, 1 could not be read'), findsOneWidget);
-  });
   testWidgets('says when a line could not be read in full', (tester) async {
     fixture.dispose();
     fixture = await openSession(partlyReadChapter);
@@ -276,26 +271,6 @@ void main() {
       reason: 'an edit that quietly does nothing reads as a lost one',
     );
     expect(fixture.onDisk, partlyReadChapter);
-  });
-
-  testWidgets('a study chapter is not offered a repertoire playing side', (
-    tester,
-  ) async {
-    final study = await openStudy(twoChapterStudy);
-    addTearDown(study.dispose);
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: darkTheme(),
-        home: Scaffold(
-          body: ChapterHeader(session: study.session, saver: study.saver),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    // Its board faces the way its own Orientation tag says, which the study
-    // list changes; the `// Color:` buttons belong to a repertoire chapter.
-    expect(find.text('White'), findsNothing);
-    expect(find.text('Black'), findsNothing);
   });
 }
 
@@ -313,21 +288,4 @@ const partlyReadChapter = '''
 [Result "*"]
 
 1. d4 e6 -- 2. c4 *
-''';
-
-/// A chapter of two games, the first of which names a position nothing can
-/// read.
-const unreadableGameChapter = '''
-// Color: White
-
-[Event "Broken"]
-[FEN "not a fen"]
-[Result "*"]
-
-1. e4 *
-
-[Event "Good"]
-[Result "*"]
-
-1. d4 d5 *
 ''';

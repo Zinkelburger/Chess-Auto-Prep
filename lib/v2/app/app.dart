@@ -15,12 +15,13 @@ import '../features/study/studies.dart';
 import '../net/lichess_studies.dart';
 import '../storage/chapter_files.dart';
 import '../storage/lichess_token.dart';
+import '../storage/pgn_file_import.dart';
 import '../storage/pgn_file_picker.dart';
 import '../storage/pgn_file_store.dart';
 import '../storage/recent_pgn_files.dart';
 import '../storage/study_files.dart';
 import '../ui/theme.dart';
-import '../workspace/chapter_header.dart';
+import '../workspace/copy_name_dialog.dart';
 import '../workspace/document_saver.dart';
 import '../workspace/document_session.dart';
 import '../workspace/session_results.dart';
@@ -78,11 +79,16 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     lichess: LichessStudyApi(_lichess, token: readLichessToken),
     root: _studyFolder,
   );
+  late final _collections = p.join(widget.documents.path, 'pgn_collections');
   late final _viewer = PgnViewer(
     recent: PreferencesRecentFiles(),
     picker: const NativePgnFilePicker(),
+    import: NativePgnFileImport(
+      documents: widget.documents.path,
+      into: _collections,
+    ),
     session: _session,
-    collections: p.join(widget.documents.path, 'pgn_collections'),
+    collections: _collections,
   );
   late final _outline = ChapterOutline(library: _library, session: _session);
   final _engines = EngineSupervisor();

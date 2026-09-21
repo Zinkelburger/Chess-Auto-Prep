@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 import '../../chess/pgn/chapter.dart';
 import '../../chess/pgn/game_summary.dart';
 import '../../storage/chapter_files.dart';
+import '../../storage/pgn_file_import.dart';
 import '../../storage/pgn_file_picker.dart';
 import '../../storage/recent_pgn_files.dart';
 import '../../workspace/document_session.dart';
@@ -19,10 +20,12 @@ final class PgnViewer extends ChangeNotifier {
   PgnViewer({
     required RecentFiles recent,
     required PgnFilePicker picker,
+    required PgnFileImport import,
     required DocumentSession session,
     required String collections,
   }) : _recentFiles = recent,
        _picker = picker,
+       _import = import,
        _session = session,
        _collections = collections {
     _session.addListener(_followTheDocument);
@@ -33,6 +36,7 @@ final class PgnViewer extends ChangeNotifier {
 
   final RecentFiles _recentFiles;
   final PgnFilePicker _picker;
+  final PgnFileImport _import;
   final DocumentSession _session;
 
   /// The `pgn_collections` folder, absolute: where the file dialog starts
@@ -78,6 +82,17 @@ final class PgnViewer extends ChangeNotifier {
 
   String get query => _query;
 
+  /// The folder of [path] as the user knows it: from their home down when
+  /// it is under it, which Documents is, else the whole path.
+  String folderShown(String path) {
+    final folder = p.dirname(path);
+    final home = p.dirname(p.dirname(_collections));
+    // Under the file system's root everything is "under home"; that is not
+    // a home, and the path is left whole.
+    if (p.equals(home, p.rootPrefix(home))) return folder;
+    return p.isWithin(home, folder) ? p.relative(folder, from: home) : folder;
+  }
+
   void search(String query) {
     if (query == _query) return;
     _query = query;
@@ -101,13 +116,33 @@ final class PgnViewer extends ChangeNotifier {
   }
 
   /// Asks the desktop for a file, starting beside the open one, else beside
-  /// the last one, else in the collections folder. Null when the user
-  /// closed the dialog without choosing.
-  Future<String?> browse() {
+  /// the last one, else in the collections folder, and answers the file to
+  /// open for it. Null when the user closed the dialog without choosing.
+  Future<ChapterRef?> browse() async {
     final near = file?.path ?? _recent.firstOrNull;
-    return _picker.pickPgn(
+    final path = await _picker.pickPgn(
       startIn: near == null ? _collections : p.dirname(near),
     );
+    if (path == null || _disposed) return null;
+    return fileFor(path);
+  }
+
+  /// The file to open for [path], whether it came from the dialog or the
+  /// recent list: itself when it is inside Documents, otherwise a copy made
+  /// in the collections folder, so what goes on the board can be edited and
+  /// kept. Null, with [recentProblem] saying why, when no copy could be made.
+  Future<ChapterRef?> fileFor(String path) async {
+    switch (await _import.insideDocuments(path)) {
+      case FileToOpen(path: final inside):
+        return ChapterRef.at(inside);
+      case ImportFailed(:final detail):
+        if (_disposed) return null;
+        _recentProblem =
+            'Could not copy ${p.basename(path)} into your '
+            'Documents: $detail';
+        notifyListeners();
+        return null;
+    }
   }
 
   /// [ref] is now the viewer's file: it goes to the top of the recent list,

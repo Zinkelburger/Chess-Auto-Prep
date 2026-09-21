@@ -41,6 +41,7 @@ final class DocumentSession extends ChangeNotifier {
   String? _readOnly;
   NodePath _cursor = const NodePath.root();
   EditRefused? _refused;
+  bool _flipped = false;
   int _opens = 0;
   bool _disposed = false;
 
@@ -68,8 +69,32 @@ final class DocumentSession extends ChangeNotifier {
 
   Fen get fen => tree?.fenAt(_cursor) ?? Fen.initial;
 
-  /// The repertoire's side, or a study chapter's own orientation tag.
-  Side get orientation => _chapter?.side ?? Side.white;
+  /// The side at the bottom of the board: the repertoire's side, or a study
+  /// chapter's own orientation tag, turned over while the user has flipped
+  /// the board. Opening another document turns it back.
+  Side get orientation {
+    final side = _chapter?.side ?? Side.white;
+    return _flipped ? side.opposite : side;
+  }
+
+  bool get flipped => _flipped;
+
+  void flip() {
+    _flipped = !_flipped;
+    notifyListeners();
+  }
+
+  /// How many games the open file has when one of them is on the board;
+  /// null for a merged chapter, which shows no one game.
+  int? get gameCount => game == null ? null : _chapter?.lines.length;
+
+  void nextGame() {
+    if (game case final at?) showGame(at + 1);
+  }
+
+  void previousGame() {
+    if (game case final at?) showGame(at - 1);
+  }
 
   /// The move the cursor is on; null at the root.
   MoveNode? get currentMove => tree?.nodeAt(_cursor);
@@ -259,6 +284,24 @@ final class DocumentSession extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Puts the glyph [nag] on the move at [at] in place of the one it had, or
+  /// takes it away when [nag] is null: the six marks a reader prints after a
+  /// move, and nothing else about it.
+  void setGlyph(NodePath at, int? nag) {
+    final chapter = _chapter;
+    if (chapter == null) return;
+    if (_refuseWhenReadOnly()) return;
+    switch (edits.setGlyph(chapter, at: at, nag: nag)) {
+      case final edits.CommentRefused refusal:
+        log.w('glyph ${_source?.path}', refusalDetail(refusal));
+        _refused = refusalOf(refusal);
+      case edits.CommentWritten(chapter: final edited, :final written):
+        _clearRefusal();
+        if (!identical(edited, chapter)) _replace(edited, written);
+    }
+    notifyListeners();
+  }
+
   /// Puts the bare token [marker] on the move at [at], or takes it away. A
   /// marker says something about the move rather than to the reader — a quiz
   /// starts here — so the words on it are left alone; everything else is a
@@ -359,6 +402,7 @@ final class DocumentSession extends ChangeNotifier {
     _chapter = chapter;
     _source = ref;
     _cursor = const NodePath.root();
+    _flipped = false;
     _readOnly = readOnly;
     _refused = readOnly == null ? null : NotEditable(readOnly);
     _saver.opened(ref, revision, readOnly: readOnly);

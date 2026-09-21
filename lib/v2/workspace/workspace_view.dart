@@ -5,31 +5,38 @@ import 'package:multi_split_view/multi_split_view.dart';
 
 import '../ui/theme.dart';
 import 'board_view.dart';
-import 'chapter_header.dart';
-import 'comment_panel.dart';
 import 'document_saver.dart';
 import 'document_session.dart';
+import 'edit_strip.dart';
 import 'engine_analysis.dart';
 import 'engine_pane.dart';
-import 'eval_bar.dart';
+import 'game_counter.dart';
 import 'move_tree_view.dart';
+import 'nav_row.dart';
+import 'reading_header.dart';
 
-/// The board with its evaluation bar on the left; the chapter, the engine,
-/// the moves and their comment on the right. The keys that walk the line and
-/// take an edit back are [WorkspaceKeys], above every column that edits the
-/// document.
+/// The board with the game counter under it on the left; on the right the
+/// reading column, top to bottom in a fixed order: the heading, the engine,
+/// the moves, the edit strip while there is editing or trouble, and the
+/// navigation row. The keys that walk the line and take an edit back are
+/// [WorkspaceKeys], above every column that edits the document.
 class WorkspaceView extends StatelessWidget {
   const WorkspaceView({
     super.key,
     required this.session,
     required this.saver,
     required this.analysis,
+    required this.editing,
     this.moveMenu,
   });
 
   final DocumentSession session;
   final DocumentSaver saver;
   final EngineAnalysis analysis;
+
+  /// Whether the edit strip is open. The shell owns it: the Actions menu
+  /// and Ctrl+E turn it, and the strip's Done turns it off.
+  final ValueNotifier<bool> editing;
 
   /// What a right-click on a move offers, which is the mode's business: a
   /// study marks where a quiz starts, and nothing else offers anything yet.
@@ -45,7 +52,11 @@ class WorkspaceView extends StatelessWidget {
       child: MultiSplitView(
         initialAreas: [
           Area(flex: 1, min: boardPaneMinWidth, builder: _board),
-          Area(size: sidePanelWidth, min: paneMinWidth, builder: _column),
+          Area(
+            size: sidePanelWidth,
+            min: readingPaneMinWidth,
+            builder: _column,
+          ),
         ],
       ),
     );
@@ -53,65 +64,61 @@ class WorkspaceView extends StatelessWidget {
 
   Widget _board(BuildContext context, Area area) => Padding(
     padding: const EdgeInsets.all(Space.l),
-    child: _BoardWithBar(session: session, analysis: analysis),
+    child: _BoardAndCounter(session: session),
   );
 
   Widget _column(BuildContext context, Area area) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      ChapterHeader(session: session, saver: saver),
+      ReadingHeader(session: session),
       const Divider(height: 1),
       EnginePane(session: session, analysis: analysis),
       const Divider(height: 1),
       Expanded(
         child: MoveTreeView(session: session, moveMenu: moveMenu),
       ),
+      EditStrip(session: session, saver: saver, editing: editing),
       const Divider(height: 1),
-      CommentPanel(session: session),
+      NavRow(session: session),
     ],
   );
 }
 
-/// The largest square board that fits beside the bar, at the top.
-class _BoardWithBar extends StatelessWidget {
-  const _BoardWithBar({required this.session, required this.analysis});
+/// The largest square board that fits above the counter, at the top.
+class _BoardAndCounter extends StatelessWidget {
+  const _BoardAndCounter({required this.session});
 
   final DocumentSession session;
-  final EngineAnalysis analysis;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final side = min(
-          constraints.maxWidth - evalBarWidth - Space.s,
-          constraints.maxHeight,
+          constraints.maxWidth,
+          constraints.maxHeight - navRowHeight - Space.s,
         );
         return Align(
           alignment: Alignment.topCenter,
           child: SizedBox(
-            height: side,
-            child: ListenableBuilder(
-              listenable: Listenable.merge([session, analysis]),
-              builder: (context, _) => Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  EvalBar(
-                    score: analysis.snapshot?.best?.score,
+            width: side,
+            child: Column(
+              children: [
+                ListenableBuilder(
+                  listenable: session,
+                  builder: (context, _) => BoardView(
+                    fen: session.fen,
                     orientation: session.orientation,
+                    lastMove: session.currentMove?.uci,
+                    onMove: session.playMove,
                   ),
-                  const SizedBox(width: Space.s),
-                  SizedBox(
-                    width: side,
-                    child: BoardView(
-                      fen: session.fen,
-                      orientation: session.orientation,
-                      lastMove: session.currentMove?.uci,
-                      onMove: session.playMove,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+                const SizedBox(height: Space.s),
+                SizedBox(
+                  height: navRowHeight,
+                  child: GameCounter(session: session),
+                ),
+              ],
             ),
           ),
         );

@@ -1,6 +1,6 @@
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
-import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
+import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
 import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
@@ -13,12 +13,14 @@ import 'package:flutter_test/flutter_test.dart';
 import '../support/fixtures.dart';
 import '../support/scripted_store.dart';
 import '../support/session_fixture.dart';
+import '../support/viewer_fixture.dart';
 
 void main() {
   late SessionFixture fixture;
   late DocumentSession session;
   late DocumentSaver saver;
   late EngineAnalysis analysis;
+  late ValueNotifier<bool> editing;
 
   /// The engine stays off; its pane has its own test.
   void startAnalysis() {
@@ -38,10 +40,13 @@ void main() {
         home: Scaffold(
           body: WorkspaceKeys(
             session: session,
+            analysis: analysis,
+            editing: editing,
             child: WorkspaceView(
               session: session,
               saver: saver,
               analysis: analysis,
+              editing: editing,
             ),
           ),
         ),
@@ -54,17 +59,18 @@ void main() {
     fixture = await openSession(blackChapter);
     session = fixture.session;
     saver = fixture.saver;
+    editing = ValueNotifier(false);
     startAnalysis();
   });
 
   tearDown(() {
+    editing.dispose();
     analysis.dispose();
     fixture.dispose();
   });
 
-  testWidgets('shows the chapter, its lines and its variations', (
-    tester,
-  ) async {
+  testWidgets('shows the chapter, its lines and its variations, and the '
+      'navigation row', (tester) async {
     await pump(tester);
     expect(find.text('Main'), findsOneWidget);
     expect(find.text('2 lines, 1 from another position'), findsOneWidget);
@@ -72,6 +78,32 @@ void main() {
     expect(find.textContaining('Nc3'), findsOneWidget);
     expect(find.text('The Sicilian'), findsOneWidget);
     expect(find.textContaining('[%eval'), findsNothing);
+    expect(find.byTooltip('Forward (→)'), findsOneWidget);
+    expect(find.byTooltip('End (End)'), findsOneWidget);
+  });
+
+  testWidgets('reading shows no comment field, no save line and no undo', (
+    tester,
+  ) async {
+    await pump(tester);
+    expect(find.byType(TextField), findsNothing);
+    expect(find.text('Saved'), findsNothing);
+    expect(find.byTooltip('Undo (Ctrl+Z)'), findsNothing);
+    expect(find.text('Engine'), findsOneWidget, reason: 'off, one row');
+  });
+
+  testWidgets('Ctrl+E opens the edit strip and Done closes it', (tester) async {
+    await pump(tester);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(editing.value, isTrue);
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.text('Saved'), findsOneWidget);
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField), findsNothing);
   });
 
   testWidgets('clicking a variation move puts the cursor on it', (
@@ -90,7 +122,9 @@ void main() {
     expect(session.cursor, NodePath.of([0, 0, 0, 0, 0]));
   });
 
-  testWidgets('arrow keys walk the line', (tester) async {
+  testWidgets('the arrows walk the line; Home and End are its ends', (
+    tester,
+  ) async {
     await pump(tester);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
@@ -98,16 +132,63 @@ void main() {
     expect(session.currentMove?.san, 'Nf3');
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     expect(session.currentMove?.san, 'c5');
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.end);
     expect(session.currentMove?.san, 'cxd4');
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.sendKeyEvent(LogicalKeyboardKey.home);
     expect(session.cursor.isRoot, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
+    expect(session.currentMove?.san, 'cxd4');
+    await tester.sendKeyEvent(LogicalKeyboardKey.pageUp);
+    expect(session.cursor.isRoot, isTrue);
+  });
+
+  testWidgets('F turns the board over; E asks for the engine', (tester) async {
+    await pump(tester);
+    expect(session.orientation.name, 'black');
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+    expect(session.orientation.name, 'white');
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
+    await tester.pumpAndSettle();
+    expect(analysis.state, isA<EngineFailed>(), reason: 'it was asked');
+  });
+
+  testWidgets('up and down walk the games of a viewed file, under the '
+      'board too', (tester) async {
+    final viewed = await viewerOver(threeGameFile);
+    addTearDown(viewed.dispose);
+    await viewed.open();
+    session = viewed.session;
+    saver = viewed.saver;
+    analysis.dispose();
+    startAnalysis();
+    await pump(tester);
+    expect(find.text('of 3'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    expect(session.game, 1);
+    expect(find.text('Ding, Liren – Giri, Anish'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
+    expect(session.game, 0);
+    await tester.tap(find.byTooltip('Next game (↓)'));
+    await tester.pump();
+    expect(session.game, 1);
+  });
+
+  testWidgets('a merged chapter has no games to walk and no counter', (
+    tester,
+  ) async {
+    await pump(tester);
+    expect(find.textContaining('of '), findsNothing);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    expect(session.game, isNull);
   });
 
   testWidgets('typing in the comment keeps the arrows and Ctrl+Z', (
     tester,
   ) async {
     final sicilian = NodePath.of([0]);
+    editing.value = true;
     await pump(tester);
     session.goTo(sicilian);
     session.setComment(sicilian, 'Mine'); // one edit there is to take back
@@ -120,8 +201,8 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     await tester.pump();
     expect(session.cursor, sicilian, reason: 'the arrow moved the caret');
-    final editing = tester.widget<EditableText>(find.byType(EditableText));
-    expect(editing.controller.selection.baseOffset, 'Mine words'.length - 1);
+    final editable = tester.widget<EditableText>(find.byType(EditableText));
+    expect(editable.controller.selection.baseOffset, 'Mine words'.length - 1);
 
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyZ);

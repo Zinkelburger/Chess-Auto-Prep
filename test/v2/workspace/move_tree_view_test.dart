@@ -118,8 +118,7 @@ void main() {
 
     final note = tester.getTopLeft(find.text('A sideline.'));
     final move = tester.getTopLeft(find.textContaining('c4'));
-    expect(note.dy, closeTo(move.dy, 4), reason: 'on the same line');
-    expect(note.dx, lessThan(move.dx), reason: 'and read before it');
+    expect(note.dy, lessThan(move.dy), reason: 'read before it');
     expect(
       find.byWidgetPredicate(
         (widget) => widget is Text && (widget.data ?? '').contains('[%'),

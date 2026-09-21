@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:multi_split_view/multi_split_view.dart';
 
 import '../features/library/chapter_outline.dart';
@@ -13,7 +14,11 @@ import '../features/study/quiz_menu.dart';
 import '../features/study/studies.dart';
 import '../features/study/study_panel.dart';
 import '../storage/chapter_files.dart';
+import '../ui/app_action.dart';
+import '../ui/choice_dialog.dart';
 import '../ui/theme.dart';
+import '../workspace/copy_name_dialog.dart';
+import '../workspace/document_actions.dart';
 import '../workspace/document_saver.dart';
 import '../workspace/document_session.dart';
 import '../workspace/session_results.dart';
@@ -21,10 +26,12 @@ import '../workspace/engine_analysis.dart';
 import '../workspace/workspace_keys.dart';
 import '../workspace/workspace_view.dart';
 import 'exit_guard.dart';
+import 'top_bar.dart';
 
-/// The window: a top bar with the mode menu, the library on the left and the
-/// workspace filling the rest. Opening a chapter from the library into the
-/// workspace is the one cross-feature request, and it is handled here.
+/// The window: a top bar with the mode menu and the Actions menu, the
+/// mode's list on the left and the workspace filling the rest. Opening a
+/// chapter from a list into the workspace is the one cross-feature request,
+/// and it is handled here.
 class Shell extends StatefulWidget {
   const Shell({
     super.key,
@@ -62,11 +69,15 @@ class _ShellState extends State<Shell> {
   String? _copy;
   var _mode = Mode.repertoires;
 
-  /// The columns and their widths. The user drags the dividers; the outline
-  /// column comes and goes with the chapter, and the widths of the others
-  /// stay what the user made them. The areas are the same three objects for
-  /// the life of the window: the split view keys each pane by its area, and
-  /// a pane rebuilt from a new area loses what it had open.
+  /// Whether the edit strip is open. The strip's own Done closes it.
+  final _editing = ValueNotifier(false);
+
+  /// The columns and their widths. The user drags the dividers; the list
+  /// column goes when hidden and the outline column comes and goes with the
+  /// chapter, and the widths of the others stay what the user made them.
+  /// The areas are the same three objects for the life of the window: the
+  /// split view keys each pane by its area, and a pane rebuilt from a new
+  /// area loses what it had open.
   final _panes = MultiSplitViewController();
   final _list = Area(
     data: _Pane.list,
@@ -84,21 +95,29 @@ class _ShellState extends State<Shell> {
     min: boardPaneMinWidth,
   );
   bool _outlineShown = false;
+  bool _listShown = true;
 
   @override
   void initState() {
     super.initState();
     _outlineShown = _wantsOutline;
-    _panes.areas = [_list, if (_outlineShown) _outline, _workspace];
+    _arrange();
     widget.session.addListener(_followTheChapter);
   }
 
   @override
   void dispose() {
     widget.session.removeListener(_followTheChapter);
+    _editing.dispose();
     _panes.dispose();
     super.dispose();
   }
+
+  void _arrange() => _panes.areas = [
+    if (_listShown) _list,
+    if (_outlineShown) _outline,
+    _workspace,
+  ];
 
   /// The outline is a repertoire chapter's lines, so it is there only when
   /// a chapter that is a whole file is open. A study chapter is one game of
@@ -114,7 +133,13 @@ class _ShellState extends State<Shell> {
   void _followTheChapter() {
     if (!mounted || _wantsOutline == _outlineShown) return;
     _outlineShown = _wantsOutline;
-    _panes.areas = [_list, if (_outlineShown) _outline, _workspace];
+    _arrange();
+  }
+
+  void _toggleList() {
+    if (!mounted) return;
+    setState(() => _listShown = !_listShown);
+    _arrange();
   }
 
   /// Switching mode swaps the left column and nothing else: the same board,
@@ -155,9 +180,22 @@ class _ShellState extends State<Shell> {
     }
   }
 
-  /// A file the viewer browsed to or picked from its recent list: opened
-  /// on its first game, and remembered once it is on the board.
+  /// A file from the viewer's recent list: brought inside Documents if it
+  /// is not, opened on its first game, and remembered once it is on the
+  /// board. The viewer is the mode that shows files, so it comes to the
+  /// front whichever mode asked.
   Future<void> _openFile(ChapterRef ref) async {
+    final inside = await widget.viewer.fileFor(ref.path);
+    if (inside == null || !mounted) return;
+    _switchTo(Mode.pgnViewer);
+    if (await _open(inside, game: 0)) unawaited(widget.viewer.opened(inside));
+  }
+
+  /// The desktop's file dialog, then the same door as the recent list.
+  Future<void> _browse() async {
+    final ref = await widget.viewer.browse();
+    if (ref == null || !mounted) return;
+    _switchTo(Mode.pgnViewer);
     if (await _open(ref, game: 0)) unawaited(widget.viewer.opened(ref));
   }
 
@@ -190,6 +228,69 @@ class _ShellState extends State<Shell> {
     );
   }
 
+  Future<void> _saveCopy() async {
+    final name = await showCopyNameDialog(
+      context,
+      widget.session.chapter?.name ?? 'Chapter',
+    );
+    if (name == null || !mounted) return;
+    final result = await widget.session.saveCopy(name);
+    if (!mounted) return;
+    _said(switch (result) {
+      CopySaved(:final name) => 'Saved a copy as $name',
+      CopyNameTaken() => 'That name is taken. Nothing was replaced.',
+      CopyFailed(:final detail) => 'Could not save a copy: $detail',
+    });
+  }
+
+  /// Everything the Actions menu offers now: the mode's own doors first,
+  /// then what can be done to the document, whichever mode opened it.
+  List<AppAction> _actions() => [
+    AppAction('Open PGN file…', () => unawaited(_browse()), shortcut: 'Ctrl+O'),
+    AppAction(
+      'Close file',
+      widget.viewer.file == null ? null : () => unawaited(_closeFile()),
+    ),
+    ...documentActions(
+      session: widget.session,
+      saver: widget.saver,
+      analysis: widget.analysis,
+      editing: _editing,
+      onSaveCopy: () => unawaited(_saveCopy()),
+    ),
+  ];
+
+  /// The same actions, typed for: a searchable list that the enter key
+  /// takes the one match of.
+  Future<void> _palette() async {
+    final actions = [
+      for (final a in _actions())
+        if (a.run != null) a,
+    ];
+    final chosen = await showChoiceDialog<AppAction>(
+      context,
+      title: 'Actions',
+      options: actions,
+      label: (action) => action.labelWithKey,
+      hint: 'Type an action',
+      empty: 'Nothing to do yet',
+    );
+    chosen?.run?.call();
+  }
+
+  Map<ShortcutActivator, VoidCallback> get _windowKeys => {
+    const SingleActivator(LogicalKeyboardKey.keyB, control: true): _toggleList,
+    const SingleActivator(LogicalKeyboardKey.keyB, meta: true): _toggleList,
+    const SingleActivator(LogicalKeyboardKey.keyO, control: true): () =>
+        unawaited(_browse()),
+    const SingleActivator(LogicalKeyboardKey.keyO, meta: true): () =>
+        unawaited(_browse()),
+    const SingleActivator(LogicalKeyboardKey.keyK, control: true): () =>
+        unawaited(_palette()),
+    const SingleActivator(LogicalKeyboardKey.keyK, meta: true): () =>
+        unawaited(_palette()),
+  };
+
   Widget _leftColumn() => switch (_mode) {
     Mode.repertoires => ListenableBuilder(
       listenable: widget.session,
@@ -207,7 +308,7 @@ class _ShellState extends State<Shell> {
     Mode.pgnViewer => PgnViewerPanel(
       viewer: widget.viewer,
       onOpen: (file) => unawaited(_openFile(file)),
-      onClose: () => unawaited(_closeFile()),
+      onBrowse: () => unawaited(_browse()),
     ),
   };
 
@@ -216,11 +317,32 @@ class _ShellState extends State<Shell> {
     return Scaffold(
       body: Column(
         children: [
-          _TopBar(mode: _mode, onMode: _switchTo),
+          ListenableBuilder(
+            listenable: Listenable.merge([
+              widget.session,
+              widget.saver,
+              widget.analysis,
+              widget.viewer,
+              _editing,
+            ]),
+            builder: (context, _) => TopBar(
+              mode: _mode,
+              onMode: _switchTo,
+              listShown: _listShown,
+              onToggleList: _toggleList,
+              actions: _actions(),
+            ),
+          ),
           const Divider(height: 1),
           if (_error case final error?) _ErrorBar(error),
           Expanded(
-            child: WorkspaceKeys(session: widget.session, child: _columns()),
+            child: WorkspaceKeys(
+              session: widget.session,
+              analysis: widget.analysis,
+              editing: _editing,
+              extra: _windowKeys,
+              child: _columns(),
+            ),
           ),
         ],
       ),
@@ -249,6 +371,7 @@ class _ShellState extends State<Shell> {
       session: widget.session,
       saver: widget.saver,
       analysis: widget.analysis,
+      editing: _editing,
       moveMenu: _mode == Mode.study
           ? (path) => quizMenuItems(widget.session, path)
           : null,
@@ -269,73 +392,6 @@ enum Mode {
   const Mode(this.label);
 
   final String label;
-}
-
-/// Modes not yet in v2 are listed but disabled, so the menu shows the whole
-/// product from day one and each step turns one entry on.
-const _modes = [
-  'Repertoires',
-  'PGN Viewer',
-  'Repertoire builder',
-  'Repertoire trainer',
-  'Study',
-  'Tactics',
-  'Player analysis',
-  'Players & prep',
-  'Databases',
-  'Engine tournament',
-  'Bughouse lab',
-];
-
-class _TopBar extends StatelessWidget {
-  const _TopBar({required this.mode, required this.onMode});
-
-  final Mode mode;
-  final ValueChanged<Mode> onMode;
-
-  /// The mode this entry switches to, or null when `v2` does not have it yet
-  /// and the entry is there only to show that the product does.
-  Mode? _modeNamed(String name) =>
-      Mode.values.where((mode) => mode.label == name).firstOrNull;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: Space.m,
-        vertical: Space.xs,
-      ),
-      child: Row(
-        children: [
-          MenuAnchor(
-            menuChildren: [
-              for (final name in _modes)
-                MenuItemButton(
-                  onPressed: switch (_modeNamed(name)) {
-                    null => null,
-                    final named => () => onMode(named),
-                  },
-                  leadingIcon: name == mode.label
-                      ? const Icon(Icons.check, size: IconSize.menu)
-                      : const SizedBox(width: IconSize.menu),
-                  child: Text(name),
-                ),
-            ],
-            builder: (context, controller, _) => TextButton.icon(
-              onPressed: controller.isOpen ? controller.close : controller.open,
-              icon: const Icon(Icons.menu, size: IconSize.action),
-              label: Text(mode.label),
-            ),
-          ),
-          const Spacer(),
-          Text(
-            'Chess Auto Prep',
-            style: Theme.of(context).textTheme.labelSmall,
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _ErrorBar extends StatelessWidget {

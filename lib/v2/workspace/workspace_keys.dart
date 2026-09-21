@@ -4,29 +4,60 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'document_session.dart';
+import 'engine_analysis.dart';
 
-/// The keys that walk the line and take the last edit back, wherever the
-/// focus is under [child].
+/// The keys of the workspace, wherever the focus is under [child]: the line
+/// (← → Home End PgUp PgDn), the games of the file (↑ ↓), the board (F), the
+/// engine (E), the edit strip (Ctrl+E) and the last edit (Ctrl+Z), plus
+/// whatever the shell adds in [extra] for the window itself.
 ///
-/// It encloses every column that works on the document, not the board alone:
-/// a click on a row's `⋯` menu leaves the focus on that button, and a
-/// binding that lived inside the board's column would then never see Ctrl+Z
-/// — the one way back from an edit made in another column.
+/// It encloses every column that works on the document, not the board
+/// alone: a click on a row's `⋯` menu leaves the focus on that button, and
+/// a binding that lived inside the board's column would then never see
+/// Ctrl+Z — the one way back from an edit made in another column.
 class WorkspaceKeys extends StatelessWidget {
-  const WorkspaceKeys({super.key, required this.session, required this.child});
+  const WorkspaceKeys({
+    super.key,
+    required this.session,
+    required this.analysis,
+    required this.editing,
+    this.extra = const {},
+    required this.child,
+  });
 
   final DocumentSession session;
+  final EngineAnalysis analysis;
+  final ValueNotifier<bool> editing;
+
+  /// The window's own keys, which the shell binds: the list pane, the
+  /// actions, opening a file.
+  final Map<ShortcutActivator, VoidCallback> extra;
+
   final Widget child;
 
   void _undo() => unawaited(session.undo());
 
+  void _engine() =>
+      unawaited(analysis.enabled ? analysis.disable() : analysis.enable());
+
+  void _edit() => editing.value = !editing.value;
+
   Map<ShortcutActivator, VoidCallback> get _bindings => {
     const SingleActivator(LogicalKeyboardKey.arrowLeft): session.back,
     const SingleActivator(LogicalKeyboardKey.arrowRight): session.forward,
-    const SingleActivator(LogicalKeyboardKey.arrowUp): session.toStart,
-    const SingleActivator(LogicalKeyboardKey.arrowDown): session.toEnd,
+    const SingleActivator(LogicalKeyboardKey.home): session.toStart,
+    const SingleActivator(LogicalKeyboardKey.end): session.toEnd,
+    const SingleActivator(LogicalKeyboardKey.pageUp): session.toStart,
+    const SingleActivator(LogicalKeyboardKey.pageDown): session.toEnd,
+    const SingleActivator(LogicalKeyboardKey.arrowUp): session.previousGame,
+    const SingleActivator(LogicalKeyboardKey.arrowDown): session.nextGame,
+    const SingleActivator(LogicalKeyboardKey.keyF): session.flip,
+    const SingleActivator(LogicalKeyboardKey.keyE): _engine,
+    const SingleActivator(LogicalKeyboardKey.keyE, control: true): _edit,
+    const SingleActivator(LogicalKeyboardKey.keyE, meta: true): _edit,
     const SingleActivator(LogicalKeyboardKey.keyZ, control: true): _undo,
     const SingleActivator(LogicalKeyboardKey.keyZ, meta: true): _undo,
+    ...extra,
   };
 
   /// A key the workspace answers to, unless the user is typing: in a text

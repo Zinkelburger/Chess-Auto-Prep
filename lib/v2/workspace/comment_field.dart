@@ -7,25 +7,25 @@ import '../ui/theme.dart';
 import 'document_session.dart';
 
 /// The note on the move under the cursor, or the chapter's introduction at
-/// the start position.
+/// the start position, open for editing.
 ///
 /// It shows the words only: the engine's evaluation, its line and the clock
 /// are the move's, not the reader's, and the session puts them back when it
 /// writes. The field commits when it loses the focus, on Ctrl+Enter, when
-/// the cursor leaves the node it is editing, and when the panel goes away.
+/// the cursor leaves the node it is editing, and when the field goes away.
 /// What it writes goes to that node, the one it was given the words for, and
 /// never to wherever the cursor has reached by then, so words typed under
 /// one move cannot land on another.
-class CommentPanel extends StatefulWidget {
-  const CommentPanel({super.key, required this.session});
+class CommentField extends StatefulWidget {
+  const CommentField({super.key, required this.session});
 
   final DocumentSession session;
 
   @override
-  State<CommentPanel> createState() => _CommentPanelState();
+  State<CommentField> createState() => _CommentFieldState();
 }
 
-class _CommentPanelState extends State<CommentPanel> {
+class _CommentFieldState extends State<CommentField> {
   final _controller = TextEditingController();
   final _focus = FocusNode();
 
@@ -44,7 +44,7 @@ class _CommentPanelState extends State<CommentPanel> {
   @override
   void dispose() {
     // Words typed into the field are the user's whether or not they left it
-    // first, so the panel going away writes them like any other commit.
+    // first, so the field going away writes them like any other commit.
     widget.session.removeListener(_follow);
     _focus.removeListener(_onFocusChanged);
     _commit();
@@ -105,48 +105,43 @@ class _CommentPanelState extends State<CommentPanel> {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final introduction = _introduction;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.m, Space.m),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (introduction.isNotEmpty) ...[
-            Text('Before this move', style: text.labelSmall),
-            const SizedBox(height: Space.xs),
-            Text(
-              introduction,
-              style: text.bodySmall?.copyWith(fontStyle: FontStyle.italic),
-            ),
-            const SizedBox(height: Space.s),
-          ],
-          Text('Comment', style: text.labelSmall),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (introduction.isNotEmpty) ...[
+          Text('Before this move', style: text.labelSmall),
           const SizedBox(height: Space.xs),
-          CallbackShortcuts(
-            bindings: {
-              const SingleActivator(LogicalKeyboardKey.enter, control: true):
-                  _commit,
-              const SingleActivator(LogicalKeyboardKey.enter, meta: true):
-                  _commit,
-            },
-            child: TextField(
-              controller: _controller,
-              focusNode: _focus,
-              enabled: _at != null,
-              minLines: 2,
-              maxLines: 4,
-              style: text.bodyMedium,
-              decoration: InputDecoration(
-                isDense: true,
-                border: const OutlineInputBorder(),
-                hintText: _at?.isRoot ?? true
-                    ? 'About this chapter'
-                    : 'About this move',
-                hintStyle: text.bodySmall,
-              ),
+          Text(
+            introduction,
+            style: text.bodySmall?.copyWith(fontStyle: FontStyle.italic),
+          ),
+          const SizedBox(height: Space.s),
+        ],
+        CallbackShortcuts(
+          bindings: {
+            const SingleActivator(LogicalKeyboardKey.enter, control: true):
+                _commit,
+            const SingleActivator(LogicalKeyboardKey.enter, meta: true):
+                _commit,
+          },
+          child: TextField(
+            controller: _controller,
+            focusNode: _focus,
+            enabled: _at != null,
+            minLines: 2,
+            maxLines: 4,
+            style: text.bodyMedium,
+            decoration: InputDecoration(
+              isDense: true,
+              border: const OutlineInputBorder(),
+              hintText: _at?.isRoot ?? true
+                  ? 'About this chapter'
+                  : 'About this move',
+              hintStyle: text.bodySmall,
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

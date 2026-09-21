@@ -1,6 +1,6 @@
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/ui/theme.dart';
-import 'package:chess_auto_prep/v2/workspace/comment_panel.dart';
+import 'package:chess_auto_prep/v2/workspace/comment_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -22,7 +22,7 @@ void main() {
         home: Scaffold(
           body: Column(
             children: [
-              CommentPanel(session: fixture.session),
+              CommentField(session: fixture.session),
               // Something else to give the focus to, as the move list does.
               const TextField(key: Key('elsewhere')),
             ],
@@ -114,10 +114,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: darkTheme(),
-        home: Scaffold(body: CommentPanel(session: empty.session)),
+        home: Scaffold(body: CommentField(session: empty.session)),
       ),
     );
-    expect(find.text('Comment'), findsOneWidget);
     expect(find.text('About this chapter'), findsOneWidget);
   });
 

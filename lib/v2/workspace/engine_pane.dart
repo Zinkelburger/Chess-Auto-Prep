@@ -14,7 +14,8 @@ import 'line_preview.dart';
 /// line's moves. The score is read in the gutter and nowhere larger.
 ///
 /// A row keeps its height while it has no line yet, so the moves below never
-/// jump as lines arrive. Resting the pointer on a move floats the position
+/// jump as lines arrive; switched off, the pane is the header row alone.
+/// Resting the pointer on a move floats the position
 /// after it on a small board; clicking a move plays the line up to it.
 /// A chevron opens a long line out to several rows.
 class EnginePane extends StatefulWidget {
@@ -77,8 +78,15 @@ class _EnginePaneState extends State<EnginePane> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _Header(analysis: widget.analysis),
-            for (var multiPv = 1; multiPv <= widget.analysis.multiPv; multiPv++)
-              _row(multiPv),
+            // Off, the pane is its one row: the switch and the word. The
+            // rows come with the engine and take the moves down with them.
+            if (widget.analysis.enabled)
+              for (
+                var multiPv = 1;
+                multiPv <= widget.analysis.multiPv;
+                multiPv++
+              )
+                _row(multiPv),
           ],
         ),
       ),

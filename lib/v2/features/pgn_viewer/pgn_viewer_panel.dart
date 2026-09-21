@@ -5,7 +5,6 @@ import 'package:path/path.dart' as p;
 
 import '../../chess/pgn/game_summary.dart';
 import '../../storage/chapter_files.dart';
-import '../../ui/row_actions.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
 import 'pgn_viewer.dart';
@@ -14,23 +13,28 @@ import 'pgn_viewer.dart';
 typedef OpenPgnFile = void Function(ChapterRef file);
 
 /// The PGN Viewer's column: the file that is open and its games, or the
-/// files opened before when none is.
+/// files opened before when none is. A `+` at the top opens another.
 ///
-/// Opening and closing a file are the host's, because they take the
-/// workspace off the document it has; everything else here is a command
-/// over the viewer or the session. The panel itself keeps only what the
-/// user typed into the search field.
+/// Opening a file is the host's, because it takes the workspace off the
+/// document it has; closing one is in the Actions menu with everything
+/// else that can be done to the document. The panel itself keeps only what
+/// the user typed into the search field.
 class PgnViewerPanel extends StatefulWidget {
   const PgnViewerPanel({
     super.key,
     required this.viewer,
     required this.onOpen,
-    required this.onClose,
+    required this.onBrowse,
   });
 
   final PgnViewer viewer;
+
+  /// A file from the recent list.
   final OpenPgnFile onOpen;
-  final VoidCallback onClose;
+
+  /// The desktop's file dialog, which the host runs so its key and its menu
+  /// entry go through the same door.
+  final VoidCallback onBrowse;
 
   @override
   State<PgnViewerPanel> createState() => _PgnViewerPanelState();
@@ -53,12 +57,6 @@ class _PgnViewerPanelState extends State<PgnViewerPanel> {
 
   PgnViewer get _viewer => widget.viewer;
 
-  Future<void> _browse() async {
-    final path = await _viewer.browse();
-    if (path == null || !mounted) return;
-    widget.onOpen(ChapterRef.at(path));
-  }
-
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -68,11 +66,7 @@ class _PgnViewerPanelState extends State<PgnViewerPanel> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _Toolbar(
-              hasFile: file != null,
-              onBrowse: _browse,
-              onClose: widget.onClose,
-            ),
+            _Toolbar(onBrowse: widget.onBrowse),
             if (_viewer.recentProblem case final problem?) _Message(problem),
             Expanded(
               child: file == null ? _recent(context) : _games(context, file),
@@ -86,7 +80,7 @@ class _PgnViewerPanelState extends State<PgnViewerPanel> {
   Widget _recent(BuildContext context) {
     final recent = _viewer.recent;
     if (recent.isEmpty) {
-      return _Empty(onBrowse: _browse);
+      return _Empty(onBrowse: widget.onBrowse);
     }
     return ListView(
       children: [
@@ -100,6 +94,7 @@ class _PgnViewerPanelState extends State<PgnViewerPanel> {
         for (final path in recent)
           _RecentRow(
             path: path,
+            folderShown: _viewer.folderShown(path),
             onOpen: () => widget.onOpen(ChapterRef.at(path)),
           ),
       ],
@@ -107,63 +102,67 @@ class _PgnViewerPanelState extends State<PgnViewerPanel> {
   }
 
   Widget _games(BuildContext context, ChapterRef file) {
-    final rows = _viewer.visible;
-    final current = _viewer.current;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _FileAndCounter(
-          name: file.name,
-          current: current,
-          total: _viewer.games.length,
-          onPrevious: _viewer.previousGame,
-          onNext: _viewer.nextGame,
+        Padding(
+          padding: const EdgeInsets.fromLTRB(Space.m, Space.xs, Space.s, 0),
+          child: Text(
+            file.name,
+            style: Theme.of(context).textTheme.titleMedium,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(Space.m, 0, Space.s, Space.s),
+          padding: const EdgeInsets.fromLTRB(
+            Space.m,
+            Space.s,
+            Space.s,
+            Space.s,
+          ),
           child: SearchField(
             controller: _search,
             hint: 'Search games',
             onChanged: _viewer.search,
           ),
         ),
-        if (rows.isEmpty)
-          _Message(
-            _viewer.games.isEmpty
-                ? 'No games in this file.'
-                : 'Nothing matches "${_viewer.query}".',
-          )
-        else
-          Expanded(
-            child: ListView.builder(
-              itemCount: rows.length,
-              itemExtent: listRowHeight,
-              itemBuilder: (context, at) {
-                final (index, game) = rows[at];
-                return _GameRow(
-                  index: index,
-                  game: game,
-                  open: index == current,
-                  onOpen: () => _viewer.showGame(index),
-                );
-              },
-            ),
-          ),
+        Expanded(child: _rows()),
       ],
+    );
+  }
+
+  /// The games that match the search, only the rows on screen built.
+  Widget _rows() {
+    final rows = _viewer.visible;
+    final current = _viewer.current;
+    if (rows.isEmpty) {
+      return _Message(
+        _viewer.games.isEmpty
+            ? 'No games in this file.'
+            : 'Nothing matches "${_viewer.query}".',
+      );
+    }
+    return ListView.builder(
+      itemCount: rows.length,
+      itemExtent: listRowHeight,
+      itemBuilder: (context, at) {
+        final (index, game) = rows[at];
+        return _GameRow(
+          index: index,
+          game: game,
+          open: index == current,
+          onOpen: () => _viewer.showGame(index),
+        );
+      },
     );
   }
 }
 
+/// The panel's name and the one thing to do before a file is open.
 class _Toolbar extends StatelessWidget {
-  const _Toolbar({
-    required this.hasFile,
-    required this.onBrowse,
-    required this.onClose,
-  });
+  const _Toolbar({required this.onBrowse});
 
-  final bool hasFile;
   final VoidCallback onBrowse;
-  final VoidCallback onClose;
 
   @override
   Widget build(BuildContext context) {
@@ -177,64 +176,11 @@ class _Toolbar extends StatelessWidget {
               style: Theme.of(context).textTheme.labelSmall,
             ),
           ),
-          RowActions(
-            tooltip: 'Viewer actions',
-            children: [
-              rowAction('Open PGN file…', onBrowse, busy: false),
-              rowAction('Close file', onClose, busy: !hasFile),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// The open file's name over `‹ Game n of N ›`.
-class _FileAndCounter extends StatelessWidget {
-  const _FileAndCounter({
-    required this.name,
-    required this.current,
-    required this.total,
-    required this.onPrevious,
-    required this.onNext,
-  });
-
-  final String name;
-  final int? current;
-  final int total;
-  final VoidCallback onPrevious;
-  final VoidCallback onNext;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    final at = current;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Space.m, Space.xs, Space.s, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(name, style: text.titleMedium, overflow: TextOverflow.ellipsis),
-          Row(
-            children: [
-              IconButton(
-                onPressed: at != null && at > 0 ? onPrevious : null,
-                icon: const Icon(Icons.chevron_left, size: IconSize.action),
-                tooltip: 'Previous game',
-                visualDensity: VisualDensity.compact,
-              ),
-              Text(
-                at == null ? '$total games' : 'Game ${at + 1} of $total',
-                style: text.bodySmall,
-              ),
-              IconButton(
-                onPressed: at != null && at + 1 < total ? onNext : null,
-                icon: const Icon(Icons.chevron_right, size: IconSize.action),
-                tooltip: 'Next game',
-                visualDensity: VisualDensity.compact,
-              ),
-            ],
+          IconButton(
+            icon: const Icon(Icons.add, size: IconSize.action),
+            tooltip: 'Open PGN file… (Ctrl+O)',
+            onPressed: onBrowse,
+            visualDensity: VisualDensity.compact,
           ),
         ],
       ),
@@ -291,11 +237,20 @@ class _GameRow extends StatelessWidget {
 }
 
 /// A file opened before: its name, and the folder it is in under it so two
-/// files called `games.pgn` can be told apart.
+/// files called `games.pgn` can be told apart. The folder is shown from the
+/// user's home down, which is what they know it by.
 class _RecentRow extends StatelessWidget {
-  const _RecentRow({required this.path, required this.onOpen});
+  const _RecentRow({
+    required this.path,
+    required this.folderShown,
+    required this.onOpen,
+  });
 
   final String path;
+
+  /// The folder as the viewer names it, from the user's home down.
+  final String folderShown;
+
   final VoidCallback onOpen;
 
   @override
@@ -313,7 +268,7 @@ class _RecentRow extends StatelessWidget {
           children: [
             Text(p.basename(path), overflow: TextOverflow.ellipsis),
             Text(
-              p.dirname(path),
+              folderShown,
               style: text.labelSmall,
               overflow: TextOverflow.ellipsis,
             ),

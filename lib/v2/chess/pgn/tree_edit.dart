@@ -191,17 +191,40 @@ GameTree withComment(GameTree tree, NodePath at, String? comment) {
       children: tree.children,
     );
   }
+  return withNodeChanged(tree, at, (node) => withNodeComment(node, comment));
+}
+
+/// [tree] with the node at [at] put through [change]; the root, which is
+/// not a move, and a path the tree does not have leave it as it is.
+GameTree withNodeChanged(
+  GameTree tree,
+  NodePath at,
+  MoveNode Function(MoveNode node) change,
+) {
+  if (at.isRoot) return tree;
   final last = at.indexes.last;
   return _rebuilt(tree, at.parent.indexes, (children) {
     if (last >= children.length) return children;
     final out = [...children];
-    out[last] = _commented(children[last], comment);
+    out[last] = change(children[last]);
     return out;
   });
 }
 
+/// [node] with [nags] as its only annotations.
+MoveNode withNags(MoveNode node, List<int> nags) => MoveNode(
+  san: node.san,
+  uci: node.uci,
+  fen: node.fen,
+  spelling: node.spelling,
+  startingComment: node.startingComment,
+  comment: node.comment,
+  nags: List.unmodifiable(nags),
+  children: node.children,
+);
+
 /// [node] with [comment], which [MoveNode.copyWith] cannot clear.
-MoveNode _commented(MoveNode node, String? comment) => MoveNode(
+MoveNode withNodeComment(MoveNode node, String? comment) => MoveNode(
   san: node.san,
   uci: node.uci,
   fen: node.fen,
