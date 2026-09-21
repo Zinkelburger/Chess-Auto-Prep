@@ -126,10 +126,8 @@ ChapterEdit _madeFirst(Chapter chapter, List<String> sans) {
   final written = <int>{};
   for (final branch in playing.where((branch) => branch.child > 0)) {
     final line = chapter.lines[branch.game];
-    final tree = chapter.treeInChapter(line);
-    if (!line.isWhole || tree == null) {
-      return const ChapterEditRefused(lineNotWholeReason);
-    }
+    final tree = chapter.writableTree(line);
+    if (tree == null) return const ChapterEditRefused(lineNotWholeReason);
     final moved = withChildFirst(tree, branch.at, branch.child);
     final result = rewritten(line, moved);
     if (result case LineRefused(:final reason)) {

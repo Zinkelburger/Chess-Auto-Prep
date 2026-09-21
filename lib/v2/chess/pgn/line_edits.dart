@@ -27,11 +27,10 @@ ChapterEdit renamedLine(
     return const ChapterUnchanged();
   }
   final line = chapter.lines[game];
-  final tree = line.tree;
   if (tagValue(line.tags, 'Event') == name) return const ChapterUnchanged();
-  if (!line.isWhole || tree == null) {
-    return const ChapterEditRefused(lineNotWholeReason);
-  }
+  // A game that was not read whole keeps its bytes, and its name is in them.
+  final tree = line.isWhole ? line.tree : null;
+  if (tree == null) return const ChapterEditRefused(lineNotWholeReason);
   final tags = _named(line.tags, name);
   if (tags == null) {
     return const ChapterEditRefused('that line has no name to change');

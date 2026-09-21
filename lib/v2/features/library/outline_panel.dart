@@ -73,6 +73,20 @@ class _OutlinePanelState extends State<OutlinePanel> {
       initial: line.name,
     );
     if (name == null || name == line.name || !mounted) return;
+    // The chapter can have been edited while the dialog was up, and a game
+    // index names a place in the file rather than a line: renaming by the
+    // index alone could put the name on somebody else's line.
+    if (widget.outline.nameOf(line.game) != line.name) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'That line changed while you were typing; '
+            'nothing was renamed.',
+          ),
+        ),
+      );
+      return;
+    }
     widget.session.renameLine(line.game, name);
   }
 

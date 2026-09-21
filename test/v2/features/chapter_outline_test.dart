@@ -188,6 +188,16 @@ void main() {
     expect(outline.lines, isEmpty);
   });
 
+  test('a line that is gone has no name to rename', () async {
+    await open();
+
+    expect(outline.nameOf(1), 'Indian');
+    fixture.session.deleteLine(1);
+    await pumpEventQueue();
+
+    expect(outline.nameOf(1), isNull);
+  });
+
   test('it follows the document when a line is taken out', () async {
     await open();
 
