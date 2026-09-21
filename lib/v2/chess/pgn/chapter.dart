@@ -250,6 +250,28 @@ Chapter renamedChapter(Chapter chapter, String name) => Chapter(
   game: chapter.game,
 );
 
+/// The exact text of the game [chapter] is showing, or null when it shows
+/// every game merged and there is no one game to follow.
+String? showingGameText(Chapter? chapter) {
+  final game = chapter?.game;
+  if (chapter == null || game == null) return null;
+  return game < chapter.lines.length ? chapter.lines[game].text : null;
+}
+
+/// [chapter] showing the game whose text is [text], wherever it now sits.
+///
+/// A version the user has just taken back can hold the chapters in another
+/// order — an undo takes back the move or the delete that arranged them — so
+/// the game is found by its own bytes rather than by the index it had a
+/// moment ago. A game this version does not hold leaves the board where the
+/// index points, which is the nearest thing to where the user was.
+Chapter showingGame(Chapter chapter, String? text) {
+  if (text == null || chapter.game == null) return chapter;
+  final at = chapter.lines.indexWhere((line) => line.text == text);
+  if (at < 0 || at == chapter.game) return chapter;
+  return withLines(chapter, chapter.lines, game: at);
+}
+
 /// [chapter] played from the other side of the board.
 ///
 /// The side is not a field of the games; it is one `//` line above them, so

@@ -110,6 +110,11 @@ final class DocumentSession extends ChangeNotifier {
           game: game,
         );
         if (_disposed || ticket != _opens) return const OpenOvertaken();
+        // A chapter the file does not have would otherwise open as every
+        // game merged, which looks like a chapter and is not one.
+        if (game != null && game >= chapter.lines.length) {
+          return _openFailed(ref, '${ref.name} has no chapter ${game + 1}');
+        }
         _show(chapter, ref, revision, readOnly);
         return const DocumentOpened();
       case store.Absent():
@@ -284,10 +289,10 @@ final class DocumentSession extends ChangeNotifier {
     final result = await _saver.undo();
     if (_disposed || ticket != _opens) return const UndoRefused();
     if (result case Restored(:final text)) {
-      final showing = _showingGame;
+      final showing = showingGameText(_chapter);
       final read = await readChapter(name: ref.name, text: text, game: _game);
       if (_disposed || ticket != _opens) return const UndoRefused();
-      final restored = _stillShowing(read, showing);
+      final restored = showingGame(read, showing);
       final before = _chapter?.tree;
       _chapter = restored;
       _game = restored.game;
@@ -352,31 +357,6 @@ final class DocumentSession extends ChangeNotifier {
   void _replace(Chapter edited, GamesWritten written) {
     _chapter = edited;
     _saver.save(writeChapter(edited), GamesEdited(written));
-  }
-
-  /// The exact text of the game on the board, for finding it again in a
-  /// version the user has just taken back. Null when the whole file is the
-  /// chapter, which an undo cannot move.
-  String? get _showingGame {
-    final chapter = _chapter;
-    final game = chapter?.game;
-    if (chapter == null || game == null) return null;
-    return game < chapter.lines.length ? chapter.lines[game].text : null;
-  }
-
-  /// [read] showing the game whose text is [showing], wherever the restored
-  /// version put it.
-  ///
-  /// An undo can put a chapter back in another place — it takes back the
-  /// move or the delete that arranged them — so the game is found by its own
-  /// bytes rather than by the index it had a moment ago. A game the restored
-  /// version does not hold leaves the board where the index points, which is
-  /// the nearest thing to where the user was.
-  Chapter _stillShowing(Chapter read, String? showing) {
-    if (showing == null || read.game == null) return read;
-    final at = read.lines.indexWhere((line) => line.text == showing);
-    if (at < 0 || at == read.game) return read;
-    return withLines(read, read.lines, game: at);
   }
 
   OpenFailed _openFailed(ChapterRef ref, String reason) {

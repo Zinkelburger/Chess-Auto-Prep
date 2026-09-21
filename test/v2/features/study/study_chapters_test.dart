@@ -8,6 +8,7 @@ import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/study_fixture.dart';
+import 'package:chess_auto_prep/v2/workspace/session_results.dart';
 
 void main() {
   late StudyFixture study;
@@ -316,6 +317,16 @@ void main() {
       // The same chapter is on the board, back at its own place in the file.
       expect(study.studies.openChapter, 2);
       expect(study.session.tree?.children.single.san, 'c4');
+    },
+  );
+
+  test(
+    'opening a chapter: a chapter the file does not have is refused',
+    () async {
+      await open();
+      final result = await study.session.open(study.ref, game: 5);
+      expect(result, isA<OpenFailed>());
+      expect((result as OpenFailed).reason, contains('has no chapter 6'));
     },
   );
 }
