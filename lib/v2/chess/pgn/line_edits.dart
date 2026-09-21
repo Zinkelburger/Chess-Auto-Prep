@@ -62,17 +62,32 @@ ChapterEdit lineDeleted(Chapter chapter, {required int game}) {
   if (game < 0 || game >= chapter.lines.length) {
     return const ChapterUnchanged();
   }
+  // In a study the games are the chapters, and a study with no chapters is
+  // a file with no games that nothing could open again. The rule holds here
+  // rather than only in the panel that usually asks.
+  if (chapter.game != null && chapter.lines.length <= 1) {
+    return const ChapterEditRefused('a study needs at least one chapter');
+  }
+  final order = [
+    for (var index = 0; index < chapter.lines.length; index++)
+      if (index != game) index,
+  ];
   final lines = [...chapter.lines]..removeAt(game);
   return ChapterEdited(
-    withLines(chapter, lines),
-    GamesArranged(
-      order: [
-        for (var index = 0; index < chapter.lines.length; index++)
-          if (index != game) index,
-      ],
-      before: chapter.lines.length,
-    ),
+    // The chapter on screen is followed by which game it is: taking another
+    // one out must not put a different chapter on the board.
+    withLines(chapter, lines, game: _stillShowing(chapter, order, took: game)),
+    GamesArranged(order: order, before: chapter.lines.length),
   );
+}
+
+/// Where the game on the board is once the file holds [order], or null when
+/// the chapter is the whole file and there is nothing to follow.
+int? _stillShowing(Chapter chapter, List<int> order, {required int took}) {
+  final showing = chapter.game;
+  if (showing == null) return null;
+  final moved = order.indexOf(showing);
+  return moved >= 0 ? moved : took.clamp(0, order.length - 1);
 }
 
 /// [chapter] played from [side], which is also the side the board faces.

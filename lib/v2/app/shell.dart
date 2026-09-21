@@ -104,6 +104,23 @@ class _ShellState extends State<Shell> {
     ),
   };
 
+  /// The outline is a repertoire chapter's lines, so it is there only when
+  /// a chapter that is a whole file is open. A study chapter is one game of
+  /// its file, its chapters are already in its own left column, and the line
+  /// operations do not mean the same thing there — so it has no outline,
+  /// whichever mode the user switches to.
+  Widget _outlineColumn() {
+    if (widget.session.source == null || widget.session.game != null) {
+      return const SizedBox.shrink();
+    }
+    return _OutlineColumn(
+      outline: widget.outline,
+      library: widget.library,
+      session: widget.session,
+      onOpen: _open,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -122,20 +139,10 @@ class _ShellState extends State<Shell> {
                   child: _leftColumn(),
                 ),
                 const VerticalDivider(width: 1),
-                // A study's chapters are already in its own left column, so
-                // the repertoire outline is not shown beside them.
-                if (_mode != Mode.study)
-                  ListenableBuilder(
-                    listenable: widget.session,
-                    builder: (context, _) => widget.session.source == null
-                        ? const SizedBox.shrink()
-                        : _OutlineColumn(
-                            outline: widget.outline,
-                            library: widget.library,
-                            session: widget.session,
-                            onOpen: _open,
-                          ),
-                  ),
+                ListenableBuilder(
+                  listenable: widget.session,
+                  builder: (context, _) => _outlineColumn(),
+                ),
                 Expanded(
                   child: WorkspaceView(
                     session: widget.session,

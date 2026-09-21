@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/study_fixture.dart';
 import 'package:chess_auto_prep/v2/workspace/session_results.dart';
+import 'package:chess_auto_prep/v2/workspace/chapter_commands.dart';
 
 void main() {
   late StudyFixture study;
@@ -329,4 +330,21 @@ void main() {
       expect((result as OpenFailed).reason, contains('has no chapter 6'));
     },
   );
+
+  test('chapter operations: the outline cannot empty a study either', () async {
+    await open(text: '[Event "Solo: Only"]\n[ChapterName "Only"]\n\n1. e4 *\n');
+    deleteLine(study.session, 0);
+    await pumpEventQueue();
+    expect(study.session.chapter?.lines, hasLength(1));
+    expect(study.store.requestedSaves, isEmpty);
+  });
+
+  test('chapter operations: an outline delete leaves this chapter on the '
+      'board', () async {
+    await open(text: threeChapterStudy, chapter: 2);
+    deleteLine(study.session, 0);
+    await pumpEventQueue();
+    expect(study.session.game, 1);
+    expect(study.session.tree?.children.single.san, 'c4');
+  });
 }

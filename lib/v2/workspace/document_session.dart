@@ -79,9 +79,8 @@ final class DocumentSession extends ChangeNotifier {
   String? commentAt(NodePath at) =>
       at.isRoot ? tree?.rootComment : tree?.nodeAt(at)?.comment;
 
-  /// The comment the file wrote before the move at [at], which is how a
-  /// variation is introduced. Nothing edits it; it is shown so a note the
-  /// file holds is not invisible.
+  /// The comment the file wrote before the move at [at], how a variation is
+  /// introduced. Nothing edits it; it is shown so a note is not invisible.
   String? startingCommentAt(NodePath at) => tree?.nodeAt(at)?.startingComment;
 
   /// Reads [ref] through the store, so the session holds the revision every
@@ -133,7 +132,7 @@ final class DocumentSession extends ChangeNotifier {
   }
 
   /// The open document was renamed or moved: the same file with the same
-  /// bytes, so only the name shown and the file later saves go to changes.
+  /// bytes, so only the name shown and the file saves go to change.
   void relocated(ChapterRef ref) {
     final chapter = _chapter;
     if (_source == null || chapter == null) return;
@@ -157,7 +156,7 @@ final class DocumentSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Moves the cursor; a path that is not in the tree is ignored.
+  /// Moves the cursor; a path not in the tree is ignored.
   void goTo(NodePath path) {
     final tree = this.tree;
     if (tree == null || path == _cursor) return;
@@ -280,8 +279,8 @@ final class DocumentSession extends ChangeNotifier {
   }
 
   /// Puts the file back as it was before the last edit and shows what came
-  /// back. A refused undo leaves the document and the history alone and says
-  /// so: nothing happening is something the screen has to tell.
+  /// back, on the chapter it was on. A refused undo leaves the document and
+  /// the history alone and says so.
   Future<UndoResult> undo() async {
     final ref = _source;
     if (ref == null) return const UndoRefused();
@@ -305,9 +304,8 @@ final class DocumentSession extends ChangeNotifier {
   }
 
   /// Writes the draft beside the original as `<name>.pgn`, replacing
-  /// nothing. A copy changes nothing here, so nothing about it goes stale:
-  /// whatever the user opened while it was being written, the answer is
-  /// about the file they asked for.
+  /// nothing. A copy changes nothing here, so nothing goes stale: whatever
+  /// the user opened meanwhile, the answer is about the file they asked for.
   Future<CopyResult> saveCopy(String name) async {
     final written = await copyAside(name);
     if (written is! CopySaved) return written;
