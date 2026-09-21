@@ -6,6 +6,7 @@ import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/v2/features/library/chapter_outline.dart';
 import 'package:chess_auto_prep/v2/net/lichess_studies.dart';
 import 'package:chess_auto_prep/v2/features/library/library.dart';
+import 'package:chess_auto_prep/v2/features/library/outline_panel.dart';
 import 'package:chess_auto_prep/v2/features/study/studies.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
@@ -16,6 +17,7 @@ import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
 import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/fixtures.dart';
@@ -234,7 +236,55 @@ void main() {
       contains('/repertoires/KID/Main copy.pgn'),
     );
   });
+
+  testWidgets('Ctrl+Z reaches the document from the outline column', (
+    tester,
+  ) async {
+    await pump(tester);
+    await tester.tap(find.text('Main').last);
+    await tester.pumpAndSettle();
+
+    // Working in another column leaves the focus there: on the row that was
+    // clicked, or on the menu button beside it, and not on the board.
+    final inRow = find.descendant(
+      of: find.byType(OutlinePanel),
+      matching: find.byType(Text),
+    );
+    Focus.of(tester.element(inRow.last)).requestFocus();
+    await tester.pumpAndSettle();
+    expect(
+      find.ancestor(
+        of: find.byWidget(FocusManager.instance.primaryFocus!.context!.widget),
+        matching: find.byType(OutlinePanel),
+      ),
+      findsOneWidget,
+      reason: 'the focus is on a row of the outline column',
+    );
+
+    await tester.tap(find.byTooltip('Actions').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Rename line…'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'Closed');
+    await tester.tap(find.widgetWithText(FilledButton, 'Rename'));
+    await tester.pumpAndSettle();
+    expect(textOf(store, kid), contains('[Event "Closed"]'));
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyZ);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+
+    expect(textOf(store, kid), isNot(contains('[Event "Closed"]')));
+  });
 }
+
+/// What the scripted store holds for [ref] now.
+String textOf(ScriptedDocumentStore store, ChapterRef ref) =>
+    switch (store.documents[ref]) {
+      Opened(:final text) => text,
+      _ => '',
+    };
 
 /// The question the shell puts before it leaves a document: it records what
 /// it was asked and answers what the test set.

@@ -41,9 +41,16 @@ String? withToken(String? comment, String name, {required bool present}) {
   final token = '[%$name]';
   final text = comment ?? '';
   if (text.contains(token) == present) return comment;
+  // Taking a token out takes the one space that was holding it apart from
+  // whatever was beside it, and nothing else: the words are the user's,
+  // including the spacing in them.
   final next = present
       ? (text.trim().isEmpty ? token : '${text.trim()} $token')
-      : text.split(token).join(' ').replaceAll(_runOfSpaces, ' ').trim();
+      : text
+            .replaceAll(' $token', '')
+            .replaceAll('$token ', '')
+            .replaceAll(token, '')
+            .trim();
   return next.isEmpty ? null : next;
 }
 
@@ -58,7 +65,6 @@ String? commentRefusal(String text) =>
 
 final _machineToken = RegExp(r'\[%[^\]]*\]');
 final _whitespace = RegExp(r'\s+');
-final _runOfSpaces = RegExp(' {2,}');
 
 /// The glyph for a numeric annotation, or null for the ones nobody prints.
 String? nagGlyph(int nag) => switch (nag) {

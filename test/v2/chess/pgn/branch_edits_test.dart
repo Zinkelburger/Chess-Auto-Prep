@@ -5,6 +5,7 @@ import 'package:chess_auto_prep/v2/chess/pgn/branch_edits.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/chapter_edit.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_text.dart';
+import 'package:chess_auto_prep/v2/chess/pgn/line_edits.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/move_text.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/tree_edit.dart';
@@ -119,15 +120,36 @@ void main() {
     expect(movesOf(after.chapter), '1. d4 d5 2. c4 e6 (2... c6) *');
   });
 
-  test('a game left with no moves at all leaves the file', () {
+  test('a game left with no moves keeps its name and its place', () {
     final before = book();
 
     final after = edited(movesDeleted(before, at: at(before, ['d4'])));
 
-    expect(after.chapter.lines, isEmpty);
-    expect(after.games.order, isEmpty);
-    expect(after.games.before, 3);
-    expect(writeChapter(after.chapter), '// Book\n// Color: White\n\n');
+    expect(namesOf(after.chapter), ["Queen's", 'Indian', 'Slav']);
+    expect(after.games.order, [0, 1, 2]);
+    expect(after.games.rewritten, {0, 1, 2});
+    expect(after.chapter.tree.isEmpty, isTrue);
+  });
+
+  test('a game left with no moves keeps the chapter introduction', () {
+    const one = '''
+// One
+// Color: White
+
+[Event "Only"]
+[Result "*"]
+[LineID "line_one"]
+
+{The chapter introduction} 1. d4 *
+''';
+    final before = parseChapter(name: 'One', text: one);
+
+    final after = edited(movesDeleted(before, at: at(before, ['d4'])));
+
+    final written = writeChapter(after.chapter);
+    expect(written, contains('{The chapter introduction}'));
+    expect(written, contains('[LineID "line_one"]'));
+    expect(parseChapter(name: 'One', text: written).lines, hasLength(1));
   });
 
   test('the file a deletion produces reads back as the tree it made', () {
@@ -175,6 +197,50 @@ void main() {
     );
     expect(movesOf(reread), movesOf(after.chapter));
     expect(reread.tree.children.first.children.first.san, 'd5');
+  });
+
+  group('the whitespace between games', () {
+    const heading = '// Book\n// Color: White\n\n';
+    const first = '[Event "Queen\'s"]\n[Result "*"]\n\n1. d4 d5 2. c4 e6 *';
+    const second = '[Event "Indian"]\n[Result "*"]\n\n1. d4 Nf6 *';
+    const third = '[Event "Slav"]\n[Result "*"]\n\n1. d4 d5 2. c4 c6 *';
+
+    test('stays where it was when a file ends without a newline', () {
+      const file = '$heading$first\n\n$second\n\n$third';
+      final before = parseChapter(name: 'Book', text: file);
+
+      final after = edited(
+        madeMainLine(before, at: at(before, ['d4', 'd5', 'c4', 'c6'])),
+      );
+
+      final written = writeChapter(after.chapter);
+      expect(written, '$heading$third\n\n$first\n\n$second');
+      expect(splitChapterText(written).games, hasLength(3));
+    });
+
+    test('stays where it was in a file written with CRLF', () {
+      const file =
+          '// Book\r\n// Color: White\r\n\r\n'
+          '$first\r\n\r\n$second\r\n\r\n$third';
+      final before = parseChapter(name: 'Book', text: file);
+
+      final after = edited(madeMainLine(before, at: at(before, ['d4', 'Nf6'])));
+
+      expect(
+        writeChapter(after.chapter),
+        '// Book\r\n// Color: White\r\n\r\n'
+        '$second\r\n\r\n$first\r\n\r\n$third',
+      );
+    });
+
+    test('stays where it was when a line is taken out', () {
+      const file = '$heading$first\n\n$second\n\n$third';
+      final before = parseChapter(name: 'Book', text: file);
+
+      final after = edited(lineDeleted(before, game: 0));
+
+      expect(writeChapter(after.chapter), '$heading$second\n\n$third');
+    });
   });
 }
 

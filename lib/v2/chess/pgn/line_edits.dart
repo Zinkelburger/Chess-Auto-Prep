@@ -27,11 +27,10 @@ ChapterEdit renamedLine(
     return const ChapterUnchanged();
   }
   final line = chapter.lines[game];
-  final tree = line.tree;
   if (tagValue(line.tags, 'Event') == name) return const ChapterUnchanged();
-  if (!line.isWhole || tree == null) {
-    return const ChapterEditRefused(lineNotWholeReason);
-  }
+  // A game that was not read whole keeps its bytes, and its name is in them.
+  final tree = line.isWhole ? line.tree : null;
+  if (tree == null) return const ChapterEditRefused(lineNotWholeReason);
   final tags = _named(line.tags, name);
   if (tags == null) {
     return const ChapterEditRefused('that line has no name to change');
@@ -76,7 +75,11 @@ ChapterEdit lineDeleted(Chapter chapter, {required int game}) {
   return ChapterEdited(
     // The chapter on screen is followed by which game it is: taking another
     // one out must not put a different chapter on the board.
-    withLines(chapter, lines, game: _stillShowing(chapter, order, took: game)),
+    withLines(
+      chapter,
+      spacedAsBefore(chapter, lines),
+      game: _stillShowing(chapter, order, took: game),
+    ),
     GamesArranged(order: order, before: chapter.lines.length),
   );
 }

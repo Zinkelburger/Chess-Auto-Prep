@@ -172,13 +172,37 @@ String? _arrangedHeading(
   List<int> next,
   GamesArranged edit,
 ) {
-  if (edit.heading) return null;
+  if (edit.heading) return _headingBeyondTheSide(previous, next, before, after);
   if (after.heading != before.heading ||
       !_same(previous, (0, before.heading), next, (0, before.heading))) {
     return 'the chapter heading would change but the edit did not touch it';
   }
   return null;
 }
+
+/// An edit that declares the heading is the one that writes the playing
+/// side, and that is the one line of it it may write: everything else above
+/// the first game — the chapter's name, the date it was made, the root it
+/// was built from — has to come through as it was.
+String? _headingBeyondTheSide(
+  List<int> previous,
+  List<int> next,
+  _Cut before,
+  _Cut after,
+) {
+  final was = _besideTheSide(previous, before.heading);
+  final now = _besideTheSide(next, after.heading);
+  return was == now
+      ? null
+      : 'the chapter heading would change beyond the playing side';
+}
+
+/// The heading without its `// Color:` line, which is the part an edit to
+/// the playing side may not touch.
+String _besideTheSide(List<int> bytes, int heading) => [
+  for (final line in latin1.decode(bytes.sublist(0, heading)).split('\n'))
+    if (!line.trim().startsWith('// Color:')) line,
+].join('\n');
 
 String? _arrangedGames(
   _Cut before,

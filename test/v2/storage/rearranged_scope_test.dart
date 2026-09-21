@@ -129,6 +129,28 @@ void main() {
     expect(await File(ref.path).readAsString(), recoloured);
   });
 
+  test('a heading edit may write the side line and nothing else', () async {
+    final ref = fixture.ref('KID/Main.pgn');
+    final revision = await fixture.put(ref, threeGames);
+
+    final refused = await fixture.store.save(
+      ref,
+      threeGames
+          .replaceFirst('// Color: White', '// Color: Black')
+          .replaceFirst('// Main', '// Renamed'),
+      expected: revision,
+      scope: GamesRearranged(
+        GamesArranged(order: const [0, 1, 2], before: 3, heading: true),
+      ),
+    );
+
+    expect(
+      (refused as SaveRefused).detail,
+      contains('beyond the playing side'),
+    );
+    expect(await File(ref.path).readAsString(), threeGames);
+  });
+
   group('two edits that collapse into one save', () {
     test('a removal and a move written after it name the right games', () {
       final both = scopeOfBoth(
@@ -152,6 +174,15 @@ void main() {
       expect(arranged.order, [1, 2, null]);
       expect(arranged.rewritten, {0});
       expect(arranged.before, 3);
+    });
+
+    test('a pair that started from different versions is not composed', () {
+      final both = scopeOfBoth(
+        GamesRearranged(GamesArranged(order: const [0, 2], before: 3)),
+        GamesRearranged(GamesArranged(order: const [0], before: 7)),
+      );
+
+      expect(both, isA<WholeDocument>());
     });
 
     test('a removal beside a restore covers everything, which is the whole '

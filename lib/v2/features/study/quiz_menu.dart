@@ -12,8 +12,8 @@ import '../../workspace/document_session.dart';
 /// through an export, an import and anyone else's reader. The words on the
 /// move are not touched, and each entry reads as what pressing it does.
 List<Widget> quizMenuItems(DocumentSession session, NodePath path) {
+  if (path.isRoot) return const [];
   final comment = session.tree?.nodeAt(path)?.comment;
-  if (comment == null && path.isRoot) return const [];
   final starts = hasToken(comment, quizStartMarker);
   final ends = hasToken(comment, quizEndMarker);
   return [

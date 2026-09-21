@@ -4,18 +4,13 @@ import '../../storage/chapter_files.dart';
 import '../../ui/name_dialog.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
+import '../../workspace/chapter_commands.dart';
 import '../../workspace/document_session.dart';
-import '../../workspace/save_state.dart';
+import '../../workspace/undo_notice.dart';
 import 'chapter_outline.dart';
 import 'library.dart';
 import 'library_messages.dart';
 import 'outline_rows.dart';
-import '../../workspace/chapter_commands.dart';
-
-/// How long a deleted line's notice stays, with the way back on it. The
-/// delete itself asks nothing first: undo is the answer, so the offer has to
-/// outlast the surprise.
-const undoOffer = Duration(seconds: 8);
 
 /// The chapters of the open repertoire and, under the open one, its lines.
 ///
@@ -79,6 +74,20 @@ class _OutlinePanelState extends State<OutlinePanel> {
       initial: line.name,
     );
     if (name == null || name == line.name || !mounted) return;
+    // The chapter can have been edited while the dialog was up, and a game
+    // index names a place in the file rather than a line: renaming by the
+    // index alone could put the name on somebody else's line.
+    if (widget.outline.nameOf(line.game) != line.name) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'That line changed while you were typing; '
+            'nothing was renamed.',
+          ),
+        ),
+      );
+      return;
+    }
     renameLine(widget.session, line.game, name);
   }
 
@@ -86,25 +95,8 @@ class _OutlinePanelState extends State<OutlinePanel> {
   /// workspace shares: no question first, because the answer is one click
   /// away for as long as the notice is up.
   void _delete(OutlineLine line) {
-    final messenger = ScaffoldMessenger.of(context);
     deleteLine(widget.session, line.game);
-    messenger.showSnackBar(
-      SnackBar(
-        content: const Text('Deleted 1 line.'),
-        duration: undoOffer,
-        action: SnackBarAction(label: 'Undo', onPressed: _undo),
-      ),
-    );
-  }
-
-  Future<void> _undo() async {
-    final messenger = ScaffoldMessenger.of(context);
-    final result = await widget.session.undo();
-    if (result case UndoRefused(:final reason)) {
-      messenger.showSnackBar(
-        SnackBar(content: Text(reason ?? 'There is nothing to undo.')),
-      );
-    }
+    showDeletionNotice(context, widget.session, 'Deleted 1 line.');
   }
 
   @override

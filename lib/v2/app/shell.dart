@@ -15,6 +15,7 @@ import '../workspace/document_saver.dart';
 import '../workspace/document_session.dart';
 import '../workspace/session_results.dart';
 import '../workspace/engine_analysis.dart';
+import '../workspace/workspace_keys.dart';
 import '../workspace/workspace_view.dart';
 import 'exit_guard.dart';
 
@@ -104,6 +105,22 @@ class _ShellState extends State<Shell> {
     ),
   };
 
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Column(
+        children: [
+          _TopBar(mode: _mode, onMode: _switchTo),
+          const Divider(height: 1),
+          if (_error case final error?) _ErrorBar(error),
+          Expanded(
+            child: WorkspaceKeys(session: widget.session, child: _columns()),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// The outline is a repertoire chapter's lines, so it is there only when
   /// a chapter that is a whole file is open. A study chapter is one game of
   /// its file, its chapters are already in its own left column, and the line
@@ -121,43 +138,32 @@ class _ShellState extends State<Shell> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Column(
-        children: [
-          _TopBar(mode: _mode, onMode: _switchTo),
-          const Divider(height: 1),
-          if (_error case final error?) _ErrorBar(error),
-          Expanded(
-            child: Row(
-              children: [
-                SizedBox(
-                  width: _mode == Mode.study
-                      ? studyPanelWidth
-                      : libraryPanelWidth,
-                  child: _leftColumn(),
-                ),
-                const VerticalDivider(width: 1),
-                ListenableBuilder(
-                  listenable: widget.session,
-                  builder: (context, _) => _outlineColumn(),
-                ),
-                Expanded(
-                  child: WorkspaceView(
-                    session: widget.session,
-                    saver: widget.saver,
-                    analysis: widget.analysis,
-                    moveMenu: _mode == Mode.study
-                        ? (path) => quizMenuItems(widget.session, path)
-                        : null,
-                  ),
-                ),
-              ],
-            ),
+  /// The columns the mode puts side by side, under one set of keys: the
+  /// mode's own list, the outline when a repertoire chapter is open, and the
+  /// workspace filling the rest.
+  Widget _columns() {
+    return Row(
+      children: [
+        SizedBox(
+          width: _mode == Mode.study ? studyPanelWidth : libraryPanelWidth,
+          child: _leftColumn(),
+        ),
+        const VerticalDivider(width: 1),
+        ListenableBuilder(
+          listenable: widget.session,
+          builder: (context, _) => _outlineColumn(),
+        ),
+        Expanded(
+          child: WorkspaceView(
+            session: widget.session,
+            saver: widget.saver,
+            analysis: widget.analysis,
+            moveMenu: _mode == Mode.study
+                ? (path) => quizMenuItems(widget.session, path)
+                : null,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

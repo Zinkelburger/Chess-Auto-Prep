@@ -64,7 +64,8 @@ void main() {
     );
   });
 
-  testWidgets('deleting from a move takes it off the screen', (tester) async {
+  testWidgets('deleting from a move takes it off the screen and offers it '
+      'back', (tester) async {
     final fixture = await openSession(twoLines);
     addTearDown(fixture.dispose);
     await pumpTree(tester, fixture);
@@ -74,8 +75,20 @@ void main() {
     await tester.tap(find.text('Delete from here'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('c4'), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byType(MoveTreeView),
+        matching: find.textContaining('c4'),
+      ),
+      findsNothing,
+    );
     expect(fixture.onDisk, contains('1. d4 d5 *'));
+    expect(find.text('Deleted the moves from c4.'), findsOneWidget);
+
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+
+    expect(fixture.onDisk, twoLines);
   });
 
   testWidgets('shows the introduction without its machine tokens', (

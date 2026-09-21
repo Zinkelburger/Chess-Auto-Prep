@@ -133,6 +133,7 @@ List<PgnHeader> withStudyTags(
   required String chapter,
   required Side orientation,
   required Fen root,
+  String ending = '\n',
 }) {
   final wanted = _studyTags(
     study: study,
@@ -148,11 +149,16 @@ List<PgnHeader> withStudyTags(
       continue;
     }
     final replacement = wanted[line.key];
-    if (replacement == null) continue;
+    // A tag this study has nothing to say about — `[FEN]` on a chapter that
+    // starts from the initial position — is the file's, and stays.
+    if (replacement == null) {
+      out.add(line);
+      continue;
+    }
     placed.add(line.key);
     out.add(PgnTag(line.key, replacement, trailer: line.trailer));
   }
-  final trailer = tags.isEmpty ? '\n' : tags.first.trailer;
+  final trailer = tags.isEmpty ? ending : tags.first.trailer;
   for (final MapEntry(:key, :value) in wanted.entries) {
     if (!placed.contains(key)) out.add(PgnTag(key, value, trailer: trailer));
   }
@@ -179,6 +185,7 @@ String newStudyChapterText({
   required String chapter,
   required Side orientation,
   Fen root = Fen.initial,
+  String ending = '\n',
 }) {
   final tags = withStudyTags(
     const [],
@@ -186,6 +193,7 @@ String newStudyChapterText({
     chapter: chapter,
     orientation: orientation,
     root: root,
+    ending: ending,
   );
   final buffer = StringBuffer();
   for (final tag in tags) {
@@ -193,7 +201,7 @@ String newStudyChapterText({
       ..write(tag.text)
       ..write(tag.trailer);
   }
-  return (buffer..write('\n*')).toString();
+  return (buffer..write('$ending*')).toString();
 }
 
 /// A study file with one empty chapter in it, which is what a new study is.

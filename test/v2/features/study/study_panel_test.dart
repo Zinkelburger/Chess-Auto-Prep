@@ -123,9 +123,6 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Import'));
     await tester.pumpAndSettle();
-    expect(
-      find.textContaining('Lichess did not respond'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('Lichess did not respond'), findsOneWidget);
   });
 }

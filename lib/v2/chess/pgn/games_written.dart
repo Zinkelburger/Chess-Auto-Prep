@@ -78,6 +78,11 @@ final class GamesArranged {
 /// therefore not a game on disk either.
 GamesArranged? composedArrangement(GamesArranged first, GamesArranged second) {
   final places = first.order.length;
+  // The second edit was worked out on what the first produced, so it has to
+  // have started from as many games as the first left. A pair that does not
+  // line up is two edits to different versions, and following one through
+  // the other would name the wrong games.
+  if (second.before != places) return null;
   final order = <int?>[];
   for (final place in second.order) {
     if (place == null) {

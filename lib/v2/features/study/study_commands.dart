@@ -80,8 +80,13 @@ String studyNameOf(Chapter chapter) =>
     studyNameIn(chapter.lines) ?? chapter.name;
 
 /// Runs [edit] over the open chapter through the session, which is the one
-/// place an edit becomes a file. Answers the sentence to show, or null.
+/// place an edit becomes a file.
+///
+/// Answers only what the session cannot say itself. A refused edit is
+/// already on screen — the header shows every refused edit, whichever panel
+/// asked for it — and saying it twice in two places reads as two failures.
 String? _apply(DocumentSession session, ChapterEdit Function(Chapter) edit) {
   if (session.chapter?.game == null) return 'Open a study chapter first.';
-  return session.apply(edit);
+  session.apply(edit);
+  return null;
 }

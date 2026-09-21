@@ -112,6 +112,8 @@ final class ChapterOutline extends ChangeNotifier {
   Timer? _waiting;
   Chapter? _chapter;
   List<OutlineLine> _lines = const [];
+  NodePath _cursor = const NodePath.root();
+  int? _current;
   bool _disposed = false;
 
   /// What the user has typed, which the field shows at once even though the
@@ -152,14 +154,17 @@ final class ChapterOutline extends ChangeNotifier {
 
   /// The line the cursor is inside, or null when it is on no line's moves —
   /// at the start, or on a move only another chapter's game plays.
-  int? get currentLine {
-    final chapter = _chapter;
-    final cursor = _session.cursor;
-    if (chapter == null || cursor.isRoot) return null;
-    final sans = [for (final node in chapter.tree.lineTo(cursor)) node.san];
+  ///
+  /// Worked out once for each place the cursor goes, not once for each row
+  /// that asks: finding it walks every line's moves, and a book of a
+  /// thousand lines would then cost a thousand walks per row.
+  int? get currentLine => _current;
+
+  /// What the line at [game] is called now, whatever the search is showing,
+  /// or null when the chapter has no such line any more.
+  String? nameOf(int game) {
     for (final line in _lines) {
-      final tree = chapter.treeInChapter(chapter.lines[line.game]);
-      if (tree != null && pathOfSans(tree, sans) != null) return line.game;
+      if (line.game == game) return line.name;
     }
     return null;
   }
@@ -185,11 +190,30 @@ final class ChapterOutline extends ChangeNotifier {
   void _reread() {
     if (_disposed) return;
     final chapter = _session.chapter;
-    if (!identical(chapter, _chapter)) {
+    final moved = _cursor != _session.cursor;
+    final another = !identical(chapter, _chapter);
+    if (another) {
       _chapter = chapter;
       _lines = chapter == null ? const [] : _linesOf(chapter);
     }
+    if (another || moved) {
+      _cursor = _session.cursor;
+      _current = _lineHolding(_cursor);
+    }
     notifyListeners();
+  }
+
+  /// Which line plays the moves down to [cursor]; the first of them when
+  /// several do, as the tree shows them once.
+  int? _lineHolding(NodePath cursor) {
+    final chapter = _chapter;
+    if (chapter == null || cursor.isRoot) return null;
+    final sans = [for (final node in chapter.tree.lineTo(cursor)) node.san];
+    for (final line in _lines) {
+      final tree = chapter.treeInChapter(chapter.lines[line.game]);
+      if (tree != null && pathOfSans(tree, sans) != null) return line.game;
+    }
+    return null;
   }
 
   bool _matches(String lowercased) =>

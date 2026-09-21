@@ -30,6 +30,7 @@ ChapterEdit addChapter(
     chapter: name,
     orientation: orientation,
     root: root,
+    ending: _endingIn(chapter),
   );
   final read = readGame(text);
   if (read.issues.isNotEmpty || read.tree == null) {
@@ -38,17 +39,15 @@ ChapterEdit addChapter(
       '${read.issues.firstOrNull?.detail ?? 'it is not a position'}.',
     );
   }
-  final lines = _separated([
-    ...chapter.lines,
-    ChapterLine(
-      tags: read.tags,
-      tree: read.tree,
-      text: text,
-      trailer: '\n',
-      terminator: read.terminator,
-      separator: read.separator,
-    ),
-  ]);
+  final added = ChapterLine(
+    tags: read.tags,
+    tree: read.tree,
+    text: text,
+    trailer: '',
+    terminator: read.terminator,
+    separator: read.separator,
+  );
+  final lines = _withNewGameAtTheEnd(chapter, added);
   return ChapterEdited(
     withLines(chapter, lines, game: lines.length - 1),
     GamesArranged.of(GamesWritten(appended: 1), before: chapter.lines.length),
@@ -181,37 +180,55 @@ int _stillShowing(Chapter chapter, List<int> order, {int? took}) {
 
 /// The study holding its games in [order], each byte for byte as it is now,
 /// with the focus on the game at [focus] of the new order.
+///
+/// The whitespace stays where the file had it rather than travelling with
+/// the game that moved, so a file written with CRLF, or one that ends
+/// without a newline, comes back the way it went in.
 ChapterEdit _inOrder(Chapter chapter, List<int> order, {required int focus}) {
-  final lines = _separated([for (final from in order) chapter.lines[from]]);
+  final moved = [for (final from in order) chapter.lines[from]];
   return ChapterEdited(
-    withLines(chapter, lines, game: focus),
+    withLines(chapter, spacedAsBefore(chapter, moved), game: focus),
     GamesArranged(order: order, before: chapter.lines.length),
   );
 }
 
-/// [lines] with a blank line between the games and one newline after the
-/// last, so every game still starts its own `[Event ` line once they have
-/// been put in another order.
+/// [chapter]'s games with [added] after them.
 ///
-/// Only the whitespace between games changes; no game's own bytes are
-/// touched, which is what lets a reorder be declared as one.
-List<ChapterLine> _separated(List<ChapterLine> lines) => [
-  for (final (index, line) in lines.indexed)
-    _withTrailer(line, index == lines.length - 1 ? '\n' : '\n\n'),
-];
+/// The game that was last gains only what it needs to stop the new game's
+/// first header running onto its last line, in the whitespace this file
+/// already puts between two games — so a CRLF study stays CRLF. What the
+/// file ended with becomes what it ends with again, after the new game.
+List<ChapterLine> _withNewGameAtTheEnd(Chapter chapter, ChapterLine added) {
+  final was = chapter.lines;
+  if (was.isEmpty) return [added.spacedBy(_endingIn(chapter))];
+  return [
+    for (final (index, line) in was.indexed)
+      // The game that was last is now followed by another, so it takes the
+      // whitespace this file puts between two games.
+      index == was.length - 1 ? line.spacedBy(_betweenGames(chapter)) : line,
+    added.spacedBy(was.last.trailer),
+  ];
+}
 
-ChapterLine _withTrailer(ChapterLine line, String trailer) =>
-    line.trailer == trailer
-    ? line
-    : ChapterLine(
-        tags: line.tags,
-        tree: line.tree,
-        text: line.text,
-        trailer: trailer,
-        terminator: line.terminator,
-        separator: line.separator,
-        issues: line.issues,
-      );
+/// The whitespace this file already has between two games, or a blank line
+/// in the line ending it uses when it has only one game to look at.
+String _betweenGames(Chapter chapter) {
+  if (chapter.lines.length > 1) return chapter.lines.first.trailer;
+  final ending = _endingIn(chapter);
+  return '$ending$ending';
+}
+
+/// The line ending this file is written with, read from the whitespace it
+/// already has rather than assumed.
+String _endingIn(Chapter chapter) {
+  for (final line in chapter.lines) {
+    if (line.trailer.contains('\r\n') || line.separator.contains('\r\n')) {
+      return '\r\n';
+    }
+    if (line.tags.any((tag) => tag.trailer.contains('\r\n'))) return '\r\n';
+  }
+  return '\n';
+}
 
 bool _holds(Chapter chapter, int index) =>
     index >= 0 && index < chapter.lines.length;

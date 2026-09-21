@@ -32,6 +32,9 @@ import 'tree_edit.dart';
 /// cut short there, and a game with nothing left is taken out of the file.
 
 /// [chapter] without the move at [at] and everything under it.
+///
+/// Every game that plays the move is cut short there; no game leaves the
+/// file, because a game is where a line's name, id and review state live.
 ChapterEdit movesDeleted(Chapter chapter, {required NodePath at}) {
   final sans = _sansTo(chapter, at);
   if (sans == null) return const ChapterUnchanged();
@@ -47,10 +50,11 @@ ChapterEdit movesDeleted(Chapter chapter, {required NodePath at}) {
       continue;
     }
     if (!line.isWhole) return const ChapterEditRefused(lineNotWholeReason);
+    // A game whose every move was under that one stays in the file as a game
+    // with no moves: its name, its id, its review state and the chapter's
+    // introduction are on it, and a deletion of moves is not a reason to
+    // lose the line those belong to.
     final cut = withChildRemoved(tree, path.parent, path.indexes.last);
-    // A game whose every move was under that one has nothing left to be, so
-    // it leaves the file rather than staying behind as a game with no moves.
-    if (cut.isEmpty) continue;
     final result = rewritten(line, cut);
     if (result case LineRefused(:final reason)) {
       return ChapterEditRefused(reason);
@@ -59,11 +63,9 @@ ChapterEdit movesDeleted(Chapter chapter, {required NodePath at}) {
     order.add(index);
     written.add(index);
   }
-  if (written.isEmpty && order.length == chapter.lines.length) {
-    return const ChapterUnchanged();
-  }
+  if (written.isEmpty) return const ChapterUnchanged();
   return ChapterEdited(
-    withLines(chapter, lines),
+    withLines(chapter, spacedAsBefore(chapter, lines)),
     GamesArranged(
       order: order,
       rewritten: written,
@@ -124,10 +126,8 @@ ChapterEdit _madeFirst(Chapter chapter, List<String> sans) {
   final written = <int>{};
   for (final branch in playing.where((branch) => branch.child > 0)) {
     final line = chapter.lines[branch.game];
-    final tree = chapter.treeInChapter(line);
-    if (!line.isWhole || tree == null) {
-      return const ChapterEditRefused(lineNotWholeReason);
-    }
+    final tree = chapter.writableTree(line);
+    if (tree == null) return const ChapterEditRefused(lineNotWholeReason);
     final moved = withChildFirst(tree, branch.at, branch.child);
     final result = rewritten(line, moved);
     if (result case LineRefused(:final reason)) {
@@ -158,7 +158,10 @@ ChapterEdit _reordered(
     return const ChapterUnchanged();
   }
   return ChapterEdited(
-    withLines(chapter, [for (final index in order) lines[index]]),
+    withLines(
+      chapter,
+      spacedAsBefore(chapter, [for (final index in order) lines[index]]),
+    ),
     GamesArranged(
       order: order,
       rewritten: written,

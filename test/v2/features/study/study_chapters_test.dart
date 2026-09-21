@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/study_fixture.dart';
 import 'package:chess_auto_prep/v2/workspace/session_results.dart';
 import 'package:chess_auto_prep/v2/workspace/chapter_commands.dart';
+import 'package:chess_auto_prep/v2/workspace/edit_refused.dart';
 
 void main() {
   late StudyFixture study;
@@ -107,16 +108,18 @@ void main() {
     () async {
       await open();
       final before = study.onDisk;
-      expect(
-        addStudyChapter(
-          study.session,
-          name: 'Broken',
-          orientation: Side.white,
-          root: const Fen('not a position'),
-        ),
-        contains('cannot be written'),
+      addStudyChapter(
+        study.session,
+        name: 'Broken',
+        orientation: Side.white,
+        root: const Fen('not a position'),
       );
       await pumpEventQueue();
+      // Said once, where every refused edit is said.
+      expect(
+        (study.session.refusedEdit as EditNotWritten).reason,
+        contains('cannot be written'),
+      );
       expect(study.onDisk, before);
     },
   );
@@ -174,8 +177,9 @@ void main() {
     'chapter operations: a chapter already first will not move up',
     () async {
       await open();
+      moveStudyChapter(study.session, index: 0, by: -1);
       expect(
-        moveStudyChapter(study.session, index: 0, by: -1),
+        (study.session.refusedEdit as EditNotWritten).reason,
         'That chapter is already first.',
       );
       expect(study.store.requestedSaves, isEmpty);
@@ -199,8 +203,9 @@ void main() {
 
   test('chapter operations: the last chapter cannot be deleted', () async {
     await open(text: '[Event "Solo: Only"]\n[ChapterName "Only"]\n\n1. e4 *\n');
+    deleteStudyChapter(study.session, index: 0);
     expect(
-      deleteStudyChapter(study.session, index: 0),
+      (study.session.refusedEdit as EditNotWritten).reason,
       'A study needs at least one chapter.',
     );
     expect(study.store.requestedSaves, isEmpty);
@@ -346,5 +351,29 @@ void main() {
     await pumpEventQueue();
     expect(study.session.game, 1);
     expect(study.session.tree?.children.single.san, 'c4');
+  });
+
+  test('chapter operations: a CRLF study keeps its line endings', () async {
+    final crlf = threeChapterStudy.replaceAll('\n', '\r\n');
+    await open(text: crlf, chapter: 0);
+    expect(moveStudyChapter(study.session, index: 1, by: 1), isNull);
+    await pumpEventQueue();
+    expect(study.onDisk, isNot(contains(RegExp(r'[^\r]\n'))));
+    expect(study.onDisk.split('[Event').length, 4);
+  });
+
+  test('chapter operations: a new chapter is written in the file\'s own line '
+      'ending', () async {
+    final crlf = twoChapterStudy.replaceAll('\n', '\r\n');
+    await open(text: crlf);
+    expect(
+      addStudyChapter(study.session, name: 'Third', orientation: Side.white),
+      isNull,
+    );
+    await pumpEventQueue();
+    expect(study.onDisk, contains('[ChapterName "Third"]'));
+    // The game before it still ends its own line, so the new header starts
+    // a game rather than running onto it.
+    expect(study.onDisk, contains('1. d4 d5 *\r\n\r\n[Event'));
   });
 }
