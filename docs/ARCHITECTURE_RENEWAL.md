@@ -660,7 +660,7 @@ settings, lint and Widgetbook appear inside the row that first needs them.
 | 11 | **Databases.** Master games, TWIC import and browser, broadcast collections, Scid export. | Screenshot | Not started |
 | 12 | **Engine tournament and Bughouse lab** on the shared supervisor. | Screenshot | Not started |
 | 13 | **Services.** Settings screen, Lichess and chess.com accounts, updates, diagnostics (**Open log folder**, copy diagnostics); theme polish; Widgetbook. | Screenshot | Not started |
-| 14 | **Switch-over.** `main.dart` starts `v2`; delete the old code, tests, ledgers and checks; move `lib/v2/` to `lib/`; rewrite COMPONENT_MAP and the agent guides. | Old code gone | Not started |
+| 14 | **Switch-over.** `main.dart` starts `v2`; delete the old code, tests, ledgers and checks; move `lib/v2/` to `lib/`; gather the folders the app writes in Documents (`repertoires/`, `studies/`, `pgn_collections/`, `games_library/`, `analysis_games/`, `tactics_sets/`, `opponents/`, `engine_tournaments/`, `exports/`, `repertoire_debug_runs/`, and the tools' `expectimax_runs/` and `lichess_broadcasts/`) under one `Documents/Chess Auto Prep/`, moving existing data once with a backup of every moved file and rewriting the settings keys and training references that name old paths (owner decision 2026-09-21; not earlier, because both apps must share the same folders until then); rewrite COMPONENT_MAP and the agent guides. | Old code gone | Not started |
 
 A row that turns out too large for one session is split into two rows here,
 each with its own screenshot; it is not stretched over two sessions.
