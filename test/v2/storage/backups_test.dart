@@ -2,6 +2,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:chess_auto_prep/v2/storage/atomic_write.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -87,6 +88,25 @@ void main() {
         .listSync()
         .map((e) => p.basename(e.path));
     expect(aside, contains(startsWith('index.json.corrupt-')));
+  });
+
+  test('what an interrupted write left behind is no version', () async {
+    final ref = fixture.ref('KID/Main.pgn');
+    final revision = await fixture.put(ref, a);
+    final folder = fixture.backupFolder(ref);
+    await folder.create(recursive: true);
+    // A version whose write was killed: the staged copy is all that is there,
+    // and it holds half a chapter.
+    final staged = File(
+      temporaryPathFor(p.join(folder.path, '20260101T000000000Z-11111111.pgn')),
+    );
+    await staged.writeAsString('[Event "Half a ga');
+    await File(p.join(folder.path, 'index.json')).writeAsString('not a list');
+
+    expect(await fixture.edit(ref, b, revision), isA<Saved>());
+
+    expect(fixture.keptTexts(ref), [a], reason: 'only the whole version');
+    expect(staged.existsSync(), isTrue, reason: 'nothing here deletes it');
   });
 
   test('a history already kept under the new name is not braided in', () async {
