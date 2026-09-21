@@ -284,14 +284,13 @@ final class DocumentSession extends ChangeNotifier {
     final result = await _saver.undo();
     if (_disposed || ticket != _opens) return const UndoRefused();
     if (result case Restored(:final text)) {
-      final restored = await readChapter(
-        name: ref.name,
-        text: text,
-        game: _game,
-      );
+      final showing = _showingGame;
+      final read = await readChapter(name: ref.name, text: text, game: _game);
       if (_disposed || ticket != _opens) return const UndoRefused();
+      final restored = _stillShowing(read, showing);
       final before = _chapter?.tree;
       _chapter = restored;
+      _game = restored.game;
       _cursor = before == null
           ? const NodePath.root()
           : samePathIn(before, restored.tree, _cursor);
@@ -353,6 +352,31 @@ final class DocumentSession extends ChangeNotifier {
   void _replace(Chapter edited, GamesWritten written) {
     _chapter = edited;
     _saver.save(writeChapter(edited), GamesEdited(written));
+  }
+
+  /// The exact text of the game on the board, for finding it again in a
+  /// version the user has just taken back. Null when the whole file is the
+  /// chapter, which an undo cannot move.
+  String? get _showingGame {
+    final chapter = _chapter;
+    final game = chapter?.game;
+    if (chapter == null || game == null) return null;
+    return game < chapter.lines.length ? chapter.lines[game].text : null;
+  }
+
+  /// [read] showing the game whose text is [showing], wherever the restored
+  /// version put it.
+  ///
+  /// An undo can put a chapter back in another place — it takes back the
+  /// move or the delete that arranged them — so the game is found by its own
+  /// bytes rather than by the index it had a moment ago. A game the restored
+  /// version does not hold leaves the board where the index points, which is
+  /// the nearest thing to where the user was.
+  Chapter _stillShowing(Chapter read, String? showing) {
+    if (showing == null || read.game == null) return read;
+    final at = read.lines.indexWhere((line) => line.text == showing);
+    if (at < 0 || at == read.game) return read;
+    return withLines(read, read.lines, game: at);
   }
 
   OpenFailed _openFailed(ChapterRef ref, String reason) {

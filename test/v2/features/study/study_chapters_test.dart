@@ -298,4 +298,24 @@ void main() {
     expect(study.studies.openChapter, 1);
     expect(study.session.tree?.children.single.san, 'c4');
   });
+
+  test(
+    'chapter operations: undoing a move puts the board back where it was',
+    () async {
+      await open(text: threeChapterStudy, chapter: 2);
+      expect(moveStudyChapter(study.session, index: 2, by: -1), isNull);
+      await pumpEventQueue();
+      expect(study.studies.openChapter, 1);
+      await study.session.undo();
+      await pumpEventQueue();
+      expect(study.studies.chapters.map((c) => c.name), [
+        'Alpha',
+        'Beta',
+        'Gamma',
+      ]);
+      // The same chapter is on the board, back at its own place in the file.
+      expect(study.studies.openChapter, 2);
+      expect(study.session.tree?.children.single.san, 'c4');
+    },
+  );
 }
