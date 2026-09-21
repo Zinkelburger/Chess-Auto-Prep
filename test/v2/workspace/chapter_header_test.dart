@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../support/fixtures.dart';
 import '../support/scripted_store.dart';
 import '../support/session_fixture.dart';
+import '../support/study_fixture.dart';
 
 /// Two games from 1. e4, the second stopping at a move nobody can play.
 const _partial =
@@ -275,6 +276,26 @@ void main() {
       reason: 'an edit that quietly does nothing reads as a lost one',
     );
     expect(fixture.onDisk, partlyReadChapter);
+  });
+
+  testWidgets('a study chapter is not offered a repertoire playing side', (
+    tester,
+  ) async {
+    final study = await openStudy(twoChapterStudy);
+    addTearDown(study.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: darkTheme(),
+        home: Scaffold(
+          body: ChapterHeader(session: study.session, saver: study.saver),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    // Its board faces the way its own Orientation tag says, which the study
+    // list changes; the `// Color:` buttons belong to a repertoire chapter.
+    expect(find.text('White'), findsNothing);
+    expect(find.text('Black'), findsNothing);
   });
 }
 

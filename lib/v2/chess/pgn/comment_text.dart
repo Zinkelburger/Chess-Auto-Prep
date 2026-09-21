@@ -28,6 +28,25 @@ String? withProse(String? comment, String? prose) {
   return tokens.isEmpty ? text : '$text $tokens';
 }
 
+/// Whether [comment] carries the bare machine token [name], such as
+/// `tstart`. Tokens are what a marker on a move is: they travel with the
+/// comment, survive a round trip and are hidden from the prose.
+bool hasToken(String? comment, String name) =>
+    (comment ?? '').contains('[%$name]');
+
+/// [comment] with the bare token [name] added or taken away, keeping its
+/// prose and its other tokens. A comment left with nothing in it is removed
+/// rather than written as `{}`.
+String? withToken(String? comment, String name, {required bool present}) {
+  final token = '[%$name]';
+  final text = comment ?? '';
+  if (text.contains(token) == present) return comment;
+  final next = present
+      ? (text.trim().isEmpty ? token : '${text.trim()} $token')
+      : text.split(token).join(' ').replaceAll(_runOfSpaces, ' ').trim();
+  return next.isEmpty ? null : next;
+}
+
 /// Why [text] cannot be a comment in a PGN file, or null when it can be.
 ///
 /// A comment ends at its first `}` and the format gives no way to escape
@@ -39,6 +58,7 @@ String? commentRefusal(String text) =>
 
 final _machineToken = RegExp(r'\[%[^\]]*\]');
 final _whitespace = RegExp(r'\s+');
+final _runOfSpaces = RegExp(' {2,}');
 
 /// The glyph for a numeric annotation, or null for the ones nobody prints.
 String? nagGlyph(int nag) => switch (nag) {

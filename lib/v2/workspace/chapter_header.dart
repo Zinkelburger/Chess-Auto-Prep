@@ -9,6 +9,7 @@ import 'edit_refused.dart';
 import 'save_state.dart';
 import 'document_session.dart';
 import 'session_results.dart';
+import 'chapter_commands.dart';
 
 /// What is open and whether it is on disk: the chapter's name and side, then
 /// one line of save state. A file someone else changed offers the two ways
@@ -114,7 +115,10 @@ class _ChapterHeaderState extends State<ChapterHeader> {
             children: [
               Text(chapter.name, style: text.titleMedium),
               const SizedBox(height: Space.xs),
-              _SideAndLines(chapter: chapter, onSide: widget.session.setSide),
+              _SideAndLines(
+                chapter: chapter,
+                onSide: (side) => setSide(widget.session, side),
+              ),
               const SizedBox(height: Space.xs),
               Row(
                 children: [
@@ -163,8 +167,13 @@ class _SideAndLines extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Row(
     children: [
-      _SideChoice(side: chapter.side, onChanged: onSide),
-      const SizedBox(width: Space.s),
+      // A study chapter's board faces the way its own `[Orientation]` tag
+      // says, which its row in the study list changes; the `// Color:` line
+      // these buttons write belongs to a repertoire chapter and is not what
+      // a study reads.
+      if (chapter.game == null)
+        _SideChoice(side: chapter.side, onChanged: onSide),
+      if (chapter.game == null) const SizedBox(width: Space.s),
       Expanded(
         child: Text(
           _summary(chapter),

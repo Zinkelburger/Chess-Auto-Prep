@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../support/library_fixture.dart';
 import '../support/scripted_files.dart';
+import 'package:chess_auto_prep/v2/workspace/chapter_commands.dart';
 
 const twoLines = '''
 // Book
@@ -192,7 +193,7 @@ void main() {
     await open();
 
     expect(outline.nameOf(1), 'Indian');
-    fixture.session.deleteLine(1);
+    deleteLine(fixture.session, 1);
     await pumpEventQueue();
 
     expect(outline.nameOf(1), isNull);
@@ -201,7 +202,7 @@ void main() {
   test('it follows the document when a line is taken out', () async {
     await open();
 
-    fixture.session.deleteLine(1);
+    deleteLine(fixture.session, 1);
     await pumpEventQueue();
 
     expect(outline.lines.map((line) => line.name), ["Queen's"]);

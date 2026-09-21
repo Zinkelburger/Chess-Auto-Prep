@@ -186,3 +186,11 @@ TextTheme _sized(TextTheme base) => base.copyWith(
   bodySmall: base.bodySmall?.copyWith(fontSize: 13, color: _muted),
   labelSmall: base.labelSmall?.copyWith(fontSize: 12, color: _muted),
 );
+
+/// How wide the study panel beside the workspace is. Narrower than the
+/// library's: a chapter list is one column of short names.
+const studyPanelWidth = 240.0;
+
+/// How tall one chapter row is. Small enough that a long study is one
+/// screen, tall enough to hit.
+const studyRowHeight = 34.0;

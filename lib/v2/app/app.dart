@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'dart:ui' show AppExitResponse;
 import 'package:path/path.dart' as p;
 
@@ -9,8 +10,12 @@ import '../diagnostics/log.dart';
 import '../engines/engine_supervisor.dart';
 import '../features/library/chapter_outline.dart';
 import '../features/library/library.dart';
+import '../features/study/studies.dart';
+import '../net/lichess_studies.dart';
 import '../storage/chapter_files.dart';
+import '../storage/lichess_token.dart';
 import '../storage/pgn_file_store.dart';
+import '../storage/study_files.dart';
 import '../ui/theme.dart';
 import '../workspace/chapter_header.dart';
 import '../workspace/document_saver.dart';
@@ -47,6 +52,7 @@ class ChessAutoPrepV2 extends StatefulWidget {
 
 class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
   late final _repertoires = p.join(widget.documents.path, 'repertoires');
+  late final _studyFolder = p.join(widget.documents.path, 'studies');
   late final _store = PgnFileStore(
     documents: widget.documents,
     support: widget.support,
@@ -59,6 +65,15 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     session: _session,
     saver: _saver,
     root: _repertoires,
+  );
+  final _lichess = http.Client();
+  late final Studies _studies = Studies(
+    files: StudyDirectory(Directory(_studyFolder)),
+    documents: _store,
+    session: _session,
+    saver: _saver,
+    lichess: LichessStudyApi(_lichess, token: readLichessToken),
+    root: _studyFolder,
   );
   late final _outline = ChapterOutline(library: _library, session: _session);
   final _engines = EngineSupervisor();
@@ -157,6 +172,8 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     _analysis.dispose();
     _outline.dispose();
     _library.dispose();
+    _studies.dispose();
+    _lichess.close();
     _session.dispose();
     _saver.dispose();
     unawaited(_engines.dispose());
@@ -173,6 +190,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
       home: Shell(
         leaving: _exit,
         library: _library,
+        studies: _studies,
         outline: _outline,
         session: _session,
         saver: _saver,

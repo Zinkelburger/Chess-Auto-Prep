@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import '../chess/pgn/comment_text.dart';
 import '../chess/pgn/game_tree.dart';
 import '../chess/pgn/move_label.dart';
+import '../chess/pgn/study.dart';
 import '../ui/theme.dart';
 import 'document_session.dart';
+import 'chapter_commands.dart';
 import 'undo_notice.dart';
 
 /// What the move menu says when moves are taken out. The moves are gone from
@@ -16,15 +18,20 @@ String deletedFromHere(String san) => 'Deleted the moves from $san.';
 /// indented block right after the move it replaces, the way Lichess lays
 /// out a study. Clicking a move puts the cursor on it.
 class MoveTreeView extends StatelessWidget {
-  const MoveTreeView({super.key, required this.session});
+  const MoveTreeView({super.key, required this.session, this.moveMenu});
 
   final DocumentSession session;
+
+  /// What the mode showing the move list adds to a move's menu, under the
+  /// edits every mode has. The list knows nothing about the entries: it says
+  /// which move was clicked and shows what it is given.
+  final MoveMenu? moveMenu;
 
   /// Takes the moves out and offers the same way back a deleted line does:
   /// this removes more than a line does, so it may not be the one edit that
   /// cannot be taken back with one click.
   void _deleteFrom(BuildContext context, MoveNode node, NodePath path) {
-    session.deleteFrom(path);
+    deleteFrom(session, path);
     showDeletionNotice(context, session, deletedFromHere(node.san));
   }
 
@@ -52,6 +59,7 @@ class MoveTreeView extends StatelessWidget {
                 _Comment(text: prose),
               ..._LineBuilder(
                 session,
+                moveMenu,
                 (node, path) => _deleteFrom(context, node, path),
               ).line(const NodePath.root(), tree.children),
             ],
@@ -65,10 +73,14 @@ class MoveTreeView extends StatelessWidget {
 /// Where a line is: one sibling list under one parent, and which sibling.
 typedef _Branch = ({NodePath parent, List<MoveNode> siblings, int branch});
 
+/// What a mode adds to the menu on the move at `path`.
+typedef MoveMenu = List<Widget> Function(NodePath path);
+
 final class _LineBuilder {
-  _LineBuilder(this.session, this.onDeleteFrom);
+  _LineBuilder(this.session, this.moveMenu, this.onDeleteFrom);
 
   final DocumentSession session;
+  final MoveMenu? moveMenu;
 
   /// Asked for the moves under a move to be taken out, so the screen can say
   /// what went and offer it back.
@@ -128,20 +140,23 @@ final class _LineBuilder {
       label: moveNumberLabel(node, startsLine: numbered),
       san: node.san + node.nags.map(nagGlyph).nonNulls.join(),
       selected: session.cursor == path,
+      quizStarts: hasToken(node.comment, quizStartMarker),
+      quizEnds: hasToken(node.comment, quizEndMarker),
       onTap: () => session.goTo(path),
       actions: [
         MenuItemButton(
-          onPressed: () => session.promoteVariation(path),
+          onPressed: () => promoteVariation(session, path),
           child: const Text('Promote variation'),
         ),
         MenuItemButton(
-          onPressed: () => session.makeMainLine(path),
+          onPressed: () => makeMainLine(session, path),
           child: const Text('Make main line'),
         ),
         MenuItemButton(
           onPressed: () => onDeleteFrom(node, path),
           child: const Text('Delete from here'),
         ),
+        ...?moveMenu?.call(path),
       ],
     );
   }
@@ -187,6 +202,8 @@ class _MoveToken extends StatefulWidget {
     required this.label,
     required this.san,
     required this.selected,
+    required this.quizStarts,
+    required this.quizEnds,
     required this.onTap,
     required this.actions,
   });
@@ -194,6 +211,13 @@ class _MoveToken extends StatefulWidget {
   final String label;
   final String san;
   final bool selected;
+
+  /// A quiz starts at this move, or ends after it. Shown as a small flag, so
+  /// a marker that is only a token in the file is still something the reader
+  /// can see.
+  final bool quizStarts;
+  final bool quizEnds;
+
   final VoidCallback onTap;
 
   /// What the right button offers for this move.
@@ -230,6 +254,35 @@ class _MoveTokenState extends State<_MoveToken> {
     });
   }
 
+  /// The move's number and SAN, with a flag on either side when a quiz
+  /// starts at it or ends after it.
+  Widget _label(ColorScheme scheme) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      if (widget.quizStarts)
+        Icon(
+          Icons.play_arrow,
+          size: IconSize.menu,
+          color: scheme.onSurfaceVariant,
+        ),
+      Text.rich(
+        TextSpan(
+          children: [
+            if (widget.label.isNotEmpty)
+              TextSpan(
+                text: '${widget.label} ',
+                style: TextStyle(color: scheme.onSurfaceVariant),
+              ),
+            TextSpan(text: widget.san),
+          ],
+        ),
+        style: monoText.copyWith(color: scheme.onSurface),
+      ),
+      if (widget.quizEnds)
+        Icon(Icons.stop, size: IconSize.menu, color: scheme.onSurfaceVariant),
+    ],
+  );
+
   /// The right button, and a long press for a pointer that has no right
   /// button, open what can be done to this move.
   @override
@@ -251,19 +304,7 @@ class _MoveTokenState extends State<_MoveToken> {
                 : null,
             borderRadius: BorderRadius.circular(3),
           ),
-          child: Text.rich(
-            TextSpan(
-              children: [
-                if (widget.label.isNotEmpty)
-                  TextSpan(
-                    text: '${widget.label} ',
-                    style: TextStyle(color: scheme.onSurfaceVariant),
-                  ),
-                TextSpan(text: widget.san),
-              ],
-            ),
-            style: monoText.copyWith(color: scheme.onSurface),
-          ),
+          child: _label(scheme),
         ),
       ),
     );

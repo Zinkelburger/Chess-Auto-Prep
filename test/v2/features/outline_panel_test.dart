@@ -1,6 +1,7 @@
 // The outline column itself: what a user sees in it and what their clicks
 // do. The owners are scripted, so no file is read or written.
 import 'package:chess_auto_prep/v2/features/library/chapter_outline.dart';
+import 'package:chess_auto_prep/v2/workspace/chapter_commands.dart';
 import 'package:chess_auto_prep/v2/features/library/outline_panel.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/ui/theme.dart';
@@ -146,7 +147,7 @@ void main() {
 
     // Something else is written while the offer is still up. Undo steps back
     // one version, so the offer would now take that back instead.
-    fixture.session.renameLine(0, 'Exchange');
+    renameLine(fixture.session, 0, 'Exchange');
     await tester.pumpAndSettle();
 
     expect(find.text('Deleted 1 line.'), findsNothing);

@@ -12,6 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../support/fixtures.dart';
 import '../support/session_fixture.dart';
+import 'package:chess_auto_prep/v2/workspace/chapter_commands.dart';
 
 /// Three lines from the initial position, the second branching at move 1.
 const threeLines = '''
@@ -39,7 +40,7 @@ void main() {
     final fixture = await openSession(threeLines);
     addTearDown(fixture.dispose);
 
-    fixture.session.renameLine(1, 'King’s Indian');
+    renameLine(fixture.session, 1, 'King’s Indian');
     await pumpEventQueue();
 
     expect(fixture.onDisk, contains('[Event "King’s Indian"]'));
@@ -53,7 +54,7 @@ void main() {
       final fixture = await openSession(threeLines);
       addTearDown(fixture.dispose);
 
-      fixture.session.deleteLine(1);
+      deleteLine(fixture.session, 1);
       await pumpEventQueue();
       expect(fixture.onDisk, isNot(contains('[Event "Indian"]')));
       expect(fixture.session.chapter!.lines, hasLength(2));
@@ -69,7 +70,7 @@ void main() {
     final fixture = await openSession(threeLines);
     addTearDown(fixture.dispose);
 
-    fixture.session.deleteLine(1);
+    deleteLine(fixture.session, 1);
     await pumpEventQueue();
 
     final scope = fixture.store.requestedSaves.single.scope;
@@ -82,7 +83,7 @@ void main() {
     final tree = fixture.session.tree!;
     final indian = pathOfSans(tree, ['d4', 'Nf6'])!;
 
-    fixture.session.makeMainLine(indian);
+    makeMainLine(fixture.session, indian);
     await pumpEventQueue();
 
     expect(
@@ -98,7 +99,7 @@ void main() {
     final tree = fixture.session.tree!;
     fixture.session.goTo(pathOfSans(tree, ['d4', 'd5', 'c4', 'c6'])!);
 
-    fixture.session.makeMainLine(pathOfSans(tree, ['d4', 'Nf6'])!);
+    makeMainLine(fixture.session, pathOfSans(tree, ['d4', 'Nf6'])!);
     await pumpEventQueue();
 
     expect(fixture.session.currentMove!.san, 'c6');
@@ -109,7 +110,7 @@ void main() {
     addTearDown(fixture.dispose);
     final tree = fixture.session.tree!;
 
-    fixture.session.deleteFrom(pathOfSans(tree, ['d4', 'd5', 'c4'])!);
+    deleteFrom(fixture.session, pathOfSans(tree, ['d4', 'd5', 'c4'])!);
     await pumpEventQueue();
 
     expect(fixture.onDisk, isNot(contains('c4')));
@@ -121,7 +122,7 @@ void main() {
     final fixture = await openSession(threeLines);
     addTearDown(fixture.dispose);
 
-    fixture.session.setSide(Side.black);
+    setSide(fixture.session, Side.black);
     await pumpEventQueue();
 
     expect(fixture.onDisk, startsWith('// Book\n// Color: Black\n'));
@@ -136,7 +137,7 @@ void main() {
       addTearDown(fixture.dispose);
       final tree = fixture.session.tree!;
 
-      fixture.session.deleteFrom(pathOfSans(tree, ['e4', 'e5'])!);
+      deleteFrom(fixture.session, pathOfSans(tree, ['e4', 'e5'])!);
       await pumpEventQueue();
 
       expect(fixture.session.refusedEdit, isA<EditNotWritten>());
@@ -152,8 +153,8 @@ void main() {
     );
     addTearDown(fixture.dispose);
 
-    fixture.session.deleteLine(0);
-    fixture.session.setSide(Side.black);
+    deleteLine(fixture.session, 0);
+    setSide(fixture.session, Side.black);
     await pumpEventQueue();
 
     expect(fixture.session.refusedEdit, isA<NotEditable>());
@@ -165,7 +166,7 @@ void main() {
     final fixture = await openSession(whiteChapter);
     addTearDown(fixture.dispose);
 
-    fixture.session.renameLine(2, 'Sidelines');
+    renameLine(fixture.session, 2, 'Sidelines');
     await pumpEventQueue();
 
     expect(fixture.onDisk, contains('[Event "Sidelines"]'));

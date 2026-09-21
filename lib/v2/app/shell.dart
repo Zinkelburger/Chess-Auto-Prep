@@ -1,9 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../features/library/chapter_outline.dart';
 import '../features/library/library.dart';
 import '../features/library/library_panel.dart';
 import '../features/library/outline_panel.dart';
+import '../features/study/quiz_menu.dart';
+import '../features/study/studies.dart';
+import '../features/study/study_panel.dart';
 import '../storage/chapter_files.dart';
 import '../ui/theme.dart';
 import '../workspace/document_saver.dart';
@@ -21,6 +26,7 @@ class Shell extends StatefulWidget {
   const Shell({
     super.key,
     required this.library,
+    required this.studies,
     required this.outline,
     required this.session,
     required this.saver,
@@ -29,6 +35,7 @@ class Shell extends StatefulWidget {
   });
 
   final Library library;
+  final Studies studies;
   final ChapterOutline outline;
   final DocumentSession session;
   final DocumentSaver saver;
@@ -44,6 +51,17 @@ class Shell extends StatefulWidget {
 
 class _ShellState extends State<Shell> {
   String? _error;
+  var _mode = Mode.repertoires;
+
+  /// Switching mode swaps the left column and nothing else: the same board,
+  /// the same document and the same draft stay where they are. A study
+  /// chapter opened from the study list is the same session on one game of
+  /// its file.
+  void _switchTo(Mode mode) {
+    if (!mounted || mode == _mode) return;
+    setState(() => _mode = mode);
+    if (mode == Mode.study) unawaited(widget.studies.refresh());
+  }
 
   /// The session opens the file; this only says what came of it. An open
   /// a later click overtook has nothing to say, so it says nothing.
@@ -52,14 +70,14 @@ class _ShellState extends State<Shell> {
   /// draft it never wrote goes with it, so the user is asked first — the
   /// same question the closing window asks. When they answered it by saving
   /// a copy, the bar above says where those words went.
-  Future<void> _open(ChapterRef ref) async {
+  Future<void> _open(ChapterRef ref, {int? game}) async {
     // Clicking the chapter that is already open is not leaving it.
-    if (ref == widget.session.source) return;
+    if (ref == widget.session.source && game == widget.session.game) return;
     if (!await widget.leaving.mayLeaveDocument()) return;
     if (!mounted) return;
     final copy = widget.leaving.lastCopy;
     widget.leaving.lastCopy = null;
-    final result = await widget.session.open(ref);
+    final result = await widget.session.open(ref, game: game);
     if (!mounted) return;
     switch (result) {
       case OpenOvertaken():
@@ -71,57 +89,87 @@ class _ShellState extends State<Shell> {
     }
   }
 
+  Widget _leftColumn() => switch (_mode) {
+    Mode.repertoires => ListenableBuilder(
+      listenable: widget.session,
+      builder: (context, _) => LibraryPanel(
+        library: widget.library,
+        selected: widget.session.source,
+        onOpen: _open,
+      ),
+    ),
+    Mode.study => StudyPanel(
+      studies: widget.studies,
+      session: widget.session,
+      onOpen: (study, chapter) => unawaited(_open(study, game: chapter)),
+    ),
+  };
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Column(
         children: [
-          const _TopBar(),
+          _TopBar(mode: _mode, onMode: _switchTo),
           const Divider(height: 1),
           if (_error case final error?) _ErrorBar(error),
           Expanded(
-            child: WorkspaceKeys(
-              session: widget.session,
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: libraryPanelWidth,
-                    child: ListenableBuilder(
-                      listenable: widget.session,
-                      builder: (context, _) => LibraryPanel(
-                        library: widget.library,
-                        selected: widget.session.source,
-                        onOpen: _open,
-                      ),
-                    ),
-                  ),
-                  const VerticalDivider(width: 1),
-                  ListenableBuilder(
-                    listenable: widget.session,
-                    builder: (context, _) => widget.session.source == null
-                        ? const SizedBox.shrink()
-                        : _OutlineColumn(
-                            outline: widget.outline,
-                            library: widget.library,
-                            session: widget.session,
-                            onOpen: _open,
-                          ),
-                  ),
-                  Expanded(
-                    child: WorkspaceView(
-                      session: widget.session,
-                      saver: widget.saver,
-                      analysis: widget.analysis,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            child: WorkspaceKeys(session: widget.session, child: _columns()),
           ),
         ],
       ),
     );
   }
+
+  /// The columns the mode puts side by side, under one set of keys: the
+  /// mode's own list, the outline when a repertoire chapter is open, and the
+  /// workspace filling the rest.
+  Widget _columns() {
+    return Row(
+      children: [
+        SizedBox(
+          width: _mode == Mode.study ? studyPanelWidth : libraryPanelWidth,
+          child: _leftColumn(),
+        ),
+        const VerticalDivider(width: 1),
+        // A study's chapters are already in its own left column, so
+        // the repertoire outline is not shown beside them.
+        if (_mode != Mode.study)
+          ListenableBuilder(
+            listenable: widget.session,
+            builder: (context, _) => widget.session.source == null
+                ? const SizedBox.shrink()
+                : _OutlineColumn(
+                    outline: widget.outline,
+                    library: widget.library,
+                    session: widget.session,
+                    onOpen: _open,
+                  ),
+          ),
+        Expanded(
+          child: WorkspaceView(
+            session: widget.session,
+            saver: widget.saver,
+            analysis: widget.analysis,
+            moveMenu: _mode == Mode.study
+                ? (path) => quizMenuItems(widget.session, path)
+                : null,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The modes `v2` has. Each one fills the left column; the workspace, the
+/// document and the draft in it are the same whichever is showing.
+enum Mode {
+  repertoires('Repertoires'),
+  study('Study');
+
+  const Mode(this.label);
+
+  final String label;
 }
 
 /// The outline between the library and the board, with the rule that it is
@@ -158,9 +206,7 @@ class _OutlineColumn extends StatelessWidget {
 }
 
 /// Modes not yet in v2 are listed but disabled, so the menu shows the whole
-/// product from day one and each step turns one entry on. Repertoires is the
-/// only mode, so choosing it just closes the menu.
-const _currentMode = 'Repertoires';
+/// product from day one and each step turns one entry on.
 const _modes = [
   'Repertoires',
   'PGN Viewer',
@@ -176,10 +222,15 @@ const _modes = [
 ];
 
 class _TopBar extends StatelessWidget {
-  const _TopBar();
+  const _TopBar({required this.mode, required this.onMode});
 
-  /// Already in this mode; the item closes the menu by itself.
-  static void _stayHere() {}
+  final Mode mode;
+  final ValueChanged<Mode> onMode;
+
+  /// The mode this entry switches to, or null when `v2` does not have it yet
+  /// and the entry is there only to show that the product does.
+  Mode? _modeNamed(String name) =>
+      Mode.values.where((mode) => mode.label == name).firstOrNull;
 
   @override
   Widget build(BuildContext context) {
@@ -194,8 +245,11 @@ class _TopBar extends StatelessWidget {
             menuChildren: [
               for (final name in _modes)
                 MenuItemButton(
-                  onPressed: name == _currentMode ? _stayHere : null,
-                  leadingIcon: name == _currentMode
+                  onPressed: switch (_modeNamed(name)) {
+                    null => null,
+                    final named => () => onMode(named),
+                  },
+                  leadingIcon: name == mode.label
                       ? const Icon(Icons.check, size: IconSize.menu)
                       : const SizedBox(width: IconSize.menu),
                   child: Text(name),
@@ -204,7 +258,7 @@ class _TopBar extends StatelessWidget {
             builder: (context, controller, _) => TextButton.icon(
               onPressed: controller.isOpen ? controller.close : controller.open,
               icon: const Icon(Icons.menu, size: IconSize.action),
-              label: const Text(_currentMode),
+              label: Text(mode.label),
             ),
           ),
           const Spacer(),

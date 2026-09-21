@@ -4,6 +4,7 @@ import '../../storage/chapter_files.dart';
 import '../../ui/name_dialog.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
+import '../../workspace/chapter_commands.dart';
 import '../../workspace/document_session.dart';
 import '../../workspace/undo_notice.dart';
 import 'chapter_outline.dart';
@@ -87,14 +88,14 @@ class _OutlinePanelState extends State<OutlinePanel> {
       );
       return;
     }
-    widget.session.renameLine(line.game, name);
+    renameLine(widget.session, line.game, name);
   }
 
   /// Deletes the line and offers the way back, which is the undo the whole
   /// workspace shares: no question first, because the answer is one click
   /// away for as long as the notice is up.
   void _delete(OutlineLine line) {
-    widget.session.deleteLine(line.game);
+    deleteLine(widget.session, line.game);
     showDeletionNotice(context, widget.session, 'Deleted 1 line.');
   }
 
