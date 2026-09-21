@@ -1,6 +1,5 @@
 // The lock the old app and v2 share. The protocol is written out again here,
 // so a change to either side of it fails this test rather than a user's save.
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:chess_auto_prep/v2/storage/file_lock.dart';
@@ -9,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart';
 
+import '../support/lock_path.dart';
 import 'store_fixture.dart';
 
 void main() {
@@ -43,7 +43,7 @@ void main() {
 
   test('the lock file is the one the old app takes', () async {
     await withDirectoryLock(fixture.documents, () async {
-      expect(await File(await _lockPath(fixture.documents)).exists(), isTrue);
+      expect(await File(await lockPathOf(fixture.documents)).exists(), isTrue);
     });
   });
 
@@ -53,7 +53,7 @@ void main() {
     final revision = await fixture.put(ref, 'A *\n');
     // The old app locks the documents root to rename a chapter, so v2 has
     // to take the same lock or the two would move one file at once.
-    final other = sqlite3.open(await _lockPath(fixture.documents));
+    final other = sqlite3.open(await lockPathOf(fixture.documents));
     other.execute('PRAGMA busy_timeout = 0');
     other.execute('BEGIN IMMEDIATE');
     var done = false;
@@ -77,7 +77,7 @@ void main() {
       final after = oneGame('1. d4 Nf6');
       final revision = await fixture.put(ref, before);
       final folder = Directory(p.dirname(ref.path));
-      final other = sqlite3.open(await _lockPath(folder));
+      final other = sqlite3.open(await lockPathOf(folder));
       other.execute('PRAGMA busy_timeout = 0');
       other.execute('BEGIN IMMEDIATE');
       var done = false;
@@ -97,16 +97,3 @@ void main() {
 
 /// The old app's formula: `<system temp>/chess-auto-prep-file-locks/` and the
 /// FNV-1a of the resolved absolute directory path.
-Future<String> _lockPath(Directory directory) async {
-  final key = p.normalize(await directory.resolveSymbolicLinks());
-  var hash = 0xcbf29ce484222325;
-  for (final byte in utf8.encode(key)) {
-    hash ^= byte;
-    hash = (hash * 0x100000001b3) & 0xFFFFFFFFFFFFFFFF;
-  }
-  return p.join(
-    Directory.systemTemp.path,
-    'chess-auto-prep-file-locks',
-    '${hash.toRadixString(16).padLeft(16, '0')}.sqlite3',
-  );
-}

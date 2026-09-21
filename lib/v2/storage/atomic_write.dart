@@ -81,15 +81,21 @@ Future<void> _syncDirectoryEntry(String path) async {
   await syncDirectory(p.dirname(path));
 }
 
+/// Writes the staged copy whole. A write that fails part way — the disk is
+/// full, say — takes its half-written copy with it, so what it leaves is
+/// exactly what was there before: the document, untouched.
 Future<File> _stage(String path, List<int> bytes) async {
   final staged = File(temporaryPathFor(path));
   final handle = await staged.open(mode: FileMode.writeOnly);
   try {
     await handle.writeFrom(bytes);
     await handle.flush();
-  } finally {
+  } on Object {
     await handle.close();
+    await _discard(staged);
+    rethrow;
   }
+  await handle.close();
   return staged;
 }
 
