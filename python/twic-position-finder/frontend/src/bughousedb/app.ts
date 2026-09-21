@@ -51,6 +51,8 @@ let accepted = lines.snapshot();
 let cur: BookPosition | null = null;
 let hover: BookMove | null = null;
 let job: { fen: string; cancelled: boolean } | null = null;
+/** Positions this computer has already analysed; each computer counts once. */
+const analysedHere = new Set<string>();
 /** The latest message from loading or analysing; empty shows the position's own note. */
 let status = { text: '', error: false };
 
@@ -138,8 +140,14 @@ function renderTables() {
 function renderMissing() {
   const running = job !== null;
   const missing = !!cur && !cur.found;
-  el('bdb-missing').dataset.shown = String(running || missing);
-  el<HTMLButtonElement>('bdb-analyse').hidden = running;
+  const confirmable = canConfirm();
+  el('bdb-missing').dataset.shown = String(running || missing || confirmable);
+  const analyse = el<HTMLButtonElement>('bdb-analyse');
+  analyse.hidden = running;
+  analyse.textContent = missing ? 'Analyze locally' : 'Confirm locally';
+  analyse.title = missing
+    ? 'Run Hivemind in this browser and add the position to the book for everyone'
+    : 'Run Hivemind in this browser too; the book counts every computer that has analysed a position';
   el<HTMLButtonElement>('bdb-cancel').hidden = !running;
   el('bdb-progress').hidden = !running;
   coresInput.disabled = running;
@@ -147,8 +155,17 @@ function renderMissing() {
   el('bdb-status-text').textContent = earlier + (status.text
     || (missing ? `Not in the book yet · about ${estimate()}` : '')
     // Only a browser analysis is worth a note: it is much shallower than the book.
-    || (cur?.meta && cur.meta.source !== 'desktop' ? 'Analyzed in a browser: a quick, shallower search.' : ''));
+    || (cur?.meta && cur.meta.source !== 'desktop' ? `Analyzed in a browser on ${computers(cur.meta.computers)}: a quick, shallower search.` : ''));
   el('bdb-status').dataset.error = String(!!status.text && status.error);
+}
+
+/** A browser position can be confirmed by another computer; the desktop book is deeper than a browser. */
+function canConfirm(): boolean {
+  return !!cur?.found && cur.meta?.source === 'browser' && !analysedHere.has(cur.fen);
+}
+
+function computers(n: number): string {
+  return n === 1 ? '1 computer' : `${n} computers`;
 }
 
 function estimate(): string {
@@ -314,44 +331,6 @@ function reset(fen: string) {
 
 // ── Analysing a missing position in this browser ──────────────────
 
-// ── CAPTCHA ───────────────────────────────────────────────────────
-// A ticket needs a fresh Turnstile token. The widget sits in the "not in the
-// book" strip, which is hidden when the page loads, so Cloudflare's automatic
-// render never draws it and no token ever comes: it is rendered here instead,
-// once per analysis, and its token awaited. Usually no puzzle appears at all.
-
-interface Turnstile {
-  render(el: HTMLElement, options: Record<string, unknown>): string;
-  remove(widget: string): void;
-}
-let captcha: string | null = null;
-
-async function turnstileApi(): Promise<Turnstile> {
-  for (let waited = 0; waited < 15000; waited += 100) {
-    const t = (window as unknown as { turnstile?: Turnstile }).turnstile;
-    if (t) return t;
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  throw new Error('The CAPTCHA did not load. Check that challenges.cloudflare.com is not blocked.');
-}
-
-/** A token for one ticket, or '' when the site runs without a CAPTCHA. */
-async function captchaToken(): Promise<string> {
-  const sitekey = root.dataset.turnstile;
-  if (!sitekey) return '';
-  const turnstile = await turnstileApi();
-  if (captcha !== null) turnstile.remove(captcha);
-  return new Promise((resolve, reject) => {
-    captcha = turnstile.render(el('bdb-captcha'), {
-      sitekey,
-      appearance: 'interaction-only',
-      callback: (token: string) => resolve(token),
-      'error-callback': (code: string) => reject(new Error(`The CAPTCHA failed (${code}). Try again.`)),
-      'timeout-callback': () => reject(new Error('The CAPTCHA timed out. Try again.')),
-    });
-  });
-}
-
 async function search(engine: BrowserEngine, fen: string, team: Team, ahead: boolean, nodes: number): Promise<RawSearch | null> {
   try {
     const r = await engine.request<NodeSearchResult>('search', {
@@ -366,7 +345,7 @@ async function search(engine: BrowserEngine, fen: string, team: Team, ahead: boo
 }
 
 async function analyse() {
-  if (!cur || cur.found || job) return;
+  if (!cur || job || (cur.found && !canConfirm())) return;
   const pos = cur;
   const mine = { fen: pos.fen, cancelled: false };
   job = mine;
@@ -382,11 +361,9 @@ async function analyse() {
     setStatus(`Searched ${done} of ${total} · about ${left < 90 ? `${Math.round(left)} s` : `${Math.round(left / 60)} min`} left`);
   };
   try {
-    setStatus('Checking you are not a robot…');
-    const token = await captchaToken();
     setStatus('Getting a ticket…');
-    const { ticket } = await bookTicket(pos.fen, token);
-    setStatus('Loading Hivemind (about 44 MB the first time)…');
+    const { ticket } = await bookTicket(pos.fen);
+    setStatus('Starting Hivemind…');
     // Every search is independent: the position's own four, then two per move.
     type Task = { fen: string; team: Team; ahead: boolean; nodes: number };
     const ownTasks: Task[] = pos.teams.flatMap((team) => [true, false].map((ahead) => ({ fen: pos.fen, team, ahead, nodes: OWN_NODES })));
@@ -403,14 +380,15 @@ async function analyse() {
       on: results[ownTasks.length + 2 * i], off: results[ownTasks.length + 2 * i + 1],
     }));
     setStatus('Uploading…');
-    await bookUpload({ ticket, fen: pos.fen, engine: ENGINE, nodes: OWN_NODES, child_nodes: CHILD_NODES, own, moves });
+    const stored = await bookUpload({ ticket, fen: pos.fen, engine: ENGINE, nodes: OWN_NODES, child_nodes: CHILD_NODES, own, moves });
     job = null;
+    analysedHere.add(pos.fen);
     if (cur?.fen === pos.fen) await load();
-    setStatus('Added to the book. Thank you.');
+    setStatus(stored.computers > 1 ? `Confirmed: ${computers(stored.computers)} have analysed this position. Thank you.` : 'Added to the book. Thank you.');
   } catch (e) {
     job = null;
     if (mine.cancelled) setStatus('Cancelled.');
-    else if (e instanceof ApiError && e.status === 409) { setStatus('Someone else just added this position.'); await load(); }
+    else if (e instanceof ApiError && e.status === 409) { analysedHere.add(pos.fen); setStatus(e.message); await load(); }
     else setStatus(e instanceof Error && !(e instanceof ApiError) ? e.message : (e as ApiError).message, true);
     bar.style.width = '0';
     renderMissing();

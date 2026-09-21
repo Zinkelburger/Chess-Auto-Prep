@@ -146,12 +146,17 @@ The server runs no engine:
   (optional, board-tagged UCI such as `A:e2e4 B:P@e6`), its legal moves (SAN,
   seat, resulting FEN, which team answers) and, when stored, their scores:
   Hivemind's calibrated Q plus a Lichess-style `cp = 543.17·atanh(Q)`.
-- `POST /api/bughousedb/ticket` — a one-time ticket for one missing
-  position, behind Turnstile, 20/minute per IP.
+- `POST /api/bughousedb/ticket` — a one-time ticket for one position,
+  20/minute per IP, no CAPTCHA. Refused (409) when this computer (a hash of
+  its IP) has already analysed the position.
 - `POST /api/bughousedb/position` — the browser's raw searches for that
   position (the page runs the static WASM Hivemind). The server requires
   exactly the legal move set, derives every score itself, rejects reused or
-  expired tickets and uploads faster than the searches could run.
+  expired tickets and uploads faster than the searches could run. The first
+  computer's searches become the book's scores; a later upload from another
+  computer confirms the position without changing them. Each submission is
+  kept (`submission` table), and the position's `meta.computers` counts
+  them; the page offers *Confirm locally* on browser-analysed positions.
 - `POST /api/bughousedb/import` — positions computed on the owner's machine
   (`python3 tools/bughouse_db/hivemind_book.py push`), `X-API-Key:
   $BUGHOUSEDB_ADMIN_KEY`.
