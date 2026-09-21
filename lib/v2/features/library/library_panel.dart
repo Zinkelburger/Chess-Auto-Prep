@@ -16,6 +16,7 @@ class LibraryPanel extends StatefulWidget {
     required this.library,
     required this.selected,
     required this.onOpen,
+    this.trailing,
   });
 
   final Library library;
@@ -24,6 +25,9 @@ class LibraryPanel extends StatefulWidget {
   final ChapterRef? selected;
 
   final ValueChanged<ChapterRef> onOpen;
+
+  /// What sits in the toolbar's corner: the host's toggle for the pane.
+  final Widget? trailing;
 
   @override
   State<LibraryPanel> createState() => _LibraryPanelState();
@@ -73,6 +77,7 @@ class _LibraryPanelState extends State<LibraryPanel> {
             onCreate: _newRepertoire,
             search: _search,
             onSearch: widget.library.search,
+            trailing: widget.trailing,
           ),
           Expanded(child: _body(context)),
         ],
@@ -134,12 +139,14 @@ class _Toolbar extends StatelessWidget {
     required this.onCreate,
     required this.search,
     required this.onSearch,
+    required this.trailing,
   });
 
   final bool busy;
   final VoidCallback onCreate;
   final TextEditingController search;
   final ValueChanged<String> onSearch;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -150,17 +157,23 @@ class _Toolbar extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(
+              // Room for the buttons first: a narrow pane cuts the label.
+              Flexible(
                 child: Text(
                   'Your repertoires',
                   style: Theme.of(context).textTheme.labelSmall,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              TextButton.icon(
+              const SizedBox(width: Space.xs),
+              IconButton(
+                icon: const Icon(Icons.add, size: IconSize.action),
+                tooltip: 'New repertoire',
                 onPressed: busy ? null : onCreate,
-                icon: const Icon(Icons.add, size: IconSize.menu),
-                label: const Text('New repertoire'),
+                visualDensity: VisualDensity.compact,
               ),
+              const Spacer(),
+              ?trailing,
             ],
           ),
           const SizedBox(height: Space.xs),

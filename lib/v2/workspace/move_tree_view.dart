@@ -124,7 +124,12 @@ class _MoveTreeViewState extends State<MoveTreeView> {
           preview: _preview,
           orientation: widget.session.orientation,
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(Space.m),
+            padding: const EdgeInsets.fromLTRB(
+              readingCardInset,
+              Space.s,
+              readingCardInset,
+              Space.l,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -392,7 +397,7 @@ class _MoveTokenState extends State<_MoveToken> {
         onLongPress: _menu.open,
         borderRadius: BorderRadius.circular(3),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+          padding: moveTokenPadding,
           decoration: BoxDecoration(
             color: widget.selected
                 ? scheme.primary.withValues(alpha: 0.35)

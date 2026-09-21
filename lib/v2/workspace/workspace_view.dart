@@ -17,10 +17,11 @@ import 'nav_row.dart';
 import 'reading_header.dart';
 
 /// The board with the game counter under it on the left; on the right the
-/// reading column, top to bottom in a fixed order: the heading, the engine,
+/// reading card, top to bottom in a fixed order: the heading, the engine,
 /// the moves, the edit strip while there is editing or trouble, and the
-/// navigation row. The keys that walk the line and take an edit back are
-/// [WorkspaceKeys], above every column that edits the document.
+/// navigation row. The two halves start equal, as the old app's did. The
+/// keys that walk the line and take an edit back are [WorkspaceKeys],
+/// above every column that edits the document.
 class WorkspaceView extends StatelessWidget {
   const WorkspaceView({
     super.key,
@@ -47,9 +48,10 @@ class WorkspaceView extends StatelessWidget {
   /// study marks where a quiz starts, and nothing else offers anything yet.
   final MoveMenu? moveMenu;
 
-  /// The board and the column beside it, with a divider the user can drag
-  /// between them. The sizes live in the split view's own state, so they
-  /// survive a rebuild and are lost with the window.
+  /// The board and the card beside it, half the workspace each, with a
+  /// divider the user can drag between them. The sizes live in the split
+  /// view's own state, so they survive a rebuild and are lost with the
+  /// window. The board shrinks to what its half leaves it.
   @override
   Widget build(BuildContext context) {
     return MultiSplitViewTheme(
@@ -57,11 +59,7 @@ class WorkspaceView extends StatelessWidget {
       child: MultiSplitView(
         initialAreas: [
           Area(flex: 1, min: boardPaneMinWidth, builder: _board),
-          Area(
-            size: sidePanelWidth,
-            min: readingPaneMinWidth,
-            builder: _column,
-          ),
+          Area(flex: 1, min: readingPaneMinWidth, builder: _column),
         ],
       ),
     );
@@ -72,20 +70,34 @@ class WorkspaceView extends StatelessWidget {
     child: _BoardAndCounter(session: session, settings: settings),
   );
 
-  Widget _column(BuildContext context, Area area) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      ReadingHeader(session: session),
-      const Divider(height: 1),
-      EnginePane(session: session, analysis: analysis),
-      const Divider(height: 1),
-      Expanded(
-        child: MoveTreeView(session: session, moveMenu: moveMenu),
+  /// The reading column is a card: darker than the window around it, its
+  /// corners rounded, the board's margin kept on three sides and the
+  /// divider's on the fourth. The words sit in from its edge.
+  Widget _column(BuildContext context, Area area) => Padding(
+    padding: const EdgeInsets.fromLTRB(0, Space.l, Space.l, Space.l),
+    child: Material(
+      color: Theme.of(context).colorScheme.surfaceContainerLowest,
+      borderRadius: BorderRadius.circular(readingCardRadius),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ReadingHeader(session: session),
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: readingCardInset - Space.s,
+            ),
+            child: EnginePane(session: session, analysis: analysis),
+          ),
+          Expanded(
+            child: MoveTreeView(session: session, moveMenu: moveMenu),
+          ),
+          EditStrip(session: session, saver: saver, editing: editing),
+          const Divider(height: 1),
+          NavRow(session: session),
+        ],
       ),
-      EditStrip(session: session, saver: saver, editing: editing),
-      const Divider(height: 1),
-      NavRow(session: session),
-    ],
+    ),
   );
 }
 

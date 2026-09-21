@@ -335,6 +335,30 @@ void main() {
 
     expect(textOf(store, kid), isNot(contains('[Event "Closed"]')));
   });
+
+  testWidgets('the list toggle sits at the edge of the pane, shown or not', (
+    tester,
+  ) async {
+    await pump(tester);
+    // Shown: `«` in the pane's own top right corner, not the top bar.
+    final hide = find.byTooltip('Hide the list (Ctrl+B)');
+    expect(hide, findsOneWidget);
+    expect(find.byTooltip('Show the list (Ctrl+B)'), findsNothing);
+    final corner = tester.getTopRight(hide);
+    expect(corner.dx, closeTo(libraryPanelWidth, Space.l));
+    expect(corner.dy, greaterThan(40));
+    await tester.tap(hide);
+    await tester.pumpAndSettle();
+    // Hidden: `»` at the top bar's left, where the pane would begin.
+    final show = find.byTooltip('Show the list (Ctrl+B)');
+    expect(show, findsOneWidget);
+    expect(hide, findsNothing);
+    expect(tester.getTopLeft(show).dx, lessThan(Space.l));
+    expect(find.text('Your repertoires'), findsNothing);
+    await tester.tap(show);
+    await tester.pumpAndSettle();
+    expect(find.text('Your repertoires'), findsOneWidget);
+  });
 }
 
 /// What the scripted store holds for [ref] now.

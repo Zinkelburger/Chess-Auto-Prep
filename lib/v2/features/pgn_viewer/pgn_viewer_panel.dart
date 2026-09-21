@@ -13,7 +13,8 @@ import 'pgn_viewer.dart';
 typedef OpenPgnFile = void Function(ChapterRef file);
 
 /// The PGN Viewer's column: the file that is open and its games, or the
-/// files opened before when none is. A `+` at the top opens another.
+/// files opened before when none is. A `+` beside the name at the top opens
+/// another; the corner after it is the host's, for the pane's own toggle.
 ///
 /// Opening a file is the host's, because it takes the workspace off the
 /// document it has; closing one is in the Actions menu with everything
@@ -25,6 +26,7 @@ class PgnViewerPanel extends StatefulWidget {
     required this.viewer,
     required this.onOpen,
     required this.onBrowse,
+    this.trailing,
   });
 
   final PgnViewer viewer;
@@ -35,6 +37,9 @@ class PgnViewerPanel extends StatefulWidget {
   /// The desktop's file dialog, which the host runs so its key and its menu
   /// entry go through the same door.
   final VoidCallback onBrowse;
+
+  /// What sits in the top right corner: the host's toggle for the pane.
+  final Widget? trailing;
 
   @override
   State<PgnViewerPanel> createState() => _PgnViewerPanelState();
@@ -66,7 +71,7 @@ class _PgnViewerPanelState extends State<PgnViewerPanel> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _Toolbar(onBrowse: widget.onBrowse),
+            _Toolbar(onBrowse: widget.onBrowse, trailing: widget.trailing),
             if (_viewer.recentProblem case final problem?) _Message(problem),
             Expanded(
               child: file == null ? _recent(context) : _games(context, file),
@@ -158,11 +163,13 @@ class _PgnViewerPanelState extends State<PgnViewerPanel> {
   }
 }
 
-/// The panel's name and the one thing to do before a file is open.
+/// The panel's name with the one thing to do before a file is open beside
+/// it, and the host's toggle in the corner.
 class _Toolbar extends StatelessWidget {
-  const _Toolbar({required this.onBrowse});
+  const _Toolbar({required this.onBrowse, required this.trailing});
 
   final VoidCallback onBrowse;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -170,18 +177,23 @@ class _Toolbar extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.s, 0),
       child: Row(
         children: [
-          Expanded(
+          // Room for the buttons first: a narrow pane cuts the label.
+          Flexible(
             child: Text(
               'PGN Viewer',
               style: Theme.of(context).textTheme.labelSmall,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
+          const SizedBox(width: Space.xs),
           IconButton(
             icon: const Icon(Icons.add, size: IconSize.action),
             tooltip: 'Open PGN file… (Ctrl+O)',
             onPressed: onBrowse,
             visualDensity: VisualDensity.compact,
           ),
+          const Spacer(),
+          ?trailing,
         ],
       ),
     );

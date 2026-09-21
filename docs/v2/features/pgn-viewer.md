@@ -173,7 +173,13 @@ reach the same explorer; the tab bar disappears entirely during solitaire.
 ## Owner decisions (2026-09-21)
 - **Layout A**: the old app's shape — board with the typeable `‹ n of N ›` counter under it, one
   reading column (heading, engine row, moves, navigation row) — plus the game list in the left pane.
-  The left pane has `+` to open a file and hides behind the top bar's `«` (Ctrl+B).
+  The left pane has `+` beside its name to open a file; the `«` that hides it (Ctrl+B) is in the
+  pane's own top right corner, and the `»` that brings it back is at the top bar's left.
+- **The reading column is half the workspace** (owner, same day: "text default to 50% of the
+  screen, shrink the board to compensate") and is drawn as the old app's near-black rounded card,
+  moves in mono 16 with the old line height, the words inset 24 px from the card's edge. What the
+  owner missed from the old viewer was this card, not a brighter type colour: the old ink was
+  `#F2F2F2` on `#000000`, v2's is `#E6E6E8` on a flat `#1B1B1D` everywhere.
 - **Reading shows no editing chrome.** Editing is a strip under the moves, opened from Actions ▸ Edit
   or Ctrl+E: Done, Undo, the save state, the six glyphs and the comment field. Right-click ▸ Comment
   is the second way in (not built yet). Save trouble shows the strip on its own.

@@ -9,6 +9,7 @@ abstract final class Space {
   static const s = 8.0;
   static const m = 12.0;
   static const l = 16.0;
+  static const xl = 24.0;
 }
 
 /// How wide the list beside the workspace starts out, whichever mode fills
@@ -45,16 +46,26 @@ abstract final class IconSize {
 /// Moves, FENs and evaluations share one monospace style.
 const monoText = TextStyle(fontFamily: 'SourceCodePro', fontSize: 13);
 
-/// The reading column's own two sizes, the old app's reading pane a point
-/// smaller: moves in mono, prose upright in the text face. A comment is
-/// read, so it gets a book's measure rather than the column's width.
+/// The reading column's own two sizes, the old app's reading pane: moves in
+/// mono at 16 with its line height, prose upright in the text face. A
+/// comment is read, so it gets a book's measure rather than the column's
+/// width.
 const readingMoveText = TextStyle(
   fontFamily: 'SourceCodePro',
-  fontSize: 15,
-  height: 1.6,
+  fontSize: 16,
+  height: 1.7,
 );
 const readingProseText = TextStyle(fontSize: 16, height: 1.55);
 const proseMaxWidth = 640.0;
+
+/// The room around one move in the moves: enough that the eye parts the
+/// tokens, little enough that a line still reads as a line.
+const moveTokenPadding = EdgeInsets.symmetric(horizontal: 4, vertical: 1);
+
+/// The reading column is a card, the old app's: its corners, and the room
+/// between its edge and the words.
+const readingCardRadius = 8.0;
+const readingCardInset = Space.xl;
 
 /// A diagram drawn in a comment: a position the author put there to be
 /// looked at, so bigger than a hover board and smaller than the board.
@@ -215,11 +226,6 @@ const paneMinWidth = 180.0;
 const boardPaneMinWidth = 320.0;
 const readingPaneMinWidth = 300.0;
 
-/// How wide the reading column to the right of the board starts out: the
-/// heading, the engine, the moves and the navigation row. The user drags
-/// the divider; a course reads better with more.
-const sidePanelWidth = 420.0;
-
 /// One of the six glyph buttons in the edit strip.
 const glyphButtonWidth = 36.0;
 const glyphButtonHeight = 30.0;
@@ -239,6 +245,10 @@ MultiSplitViewThemeData paneTheme(ColorScheme scheme) =>
 /// Neutral greys, one muted blue accent, colour kept for meaning.
 const _surface = Color(0xFF1B1B1D);
 const _panel = Color(0xFF242427);
+
+/// The reading card, near black under the moves: the old app's, and what
+/// made its reading pane look the way it did.
+const _reading = Color(0xFF0C0C0E);
 const _outline = Color(0xFF3A3A3E);
 const _text = Color(0xFFE6E6E8);
 const _muted = Color(0xFF9A9AA0);
@@ -263,6 +273,7 @@ ThemeData darkTheme() {
     secondary: _accent,
     outline: _outline,
     surfaceContainerHighest: _panel,
+    surfaceContainerLowest: _reading,
     onSurfaceVariant: _muted,
   );
   final base = ThemeData(

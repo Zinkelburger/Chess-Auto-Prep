@@ -33,11 +33,15 @@ class StudyPanel extends StatefulWidget {
     required this.studies,
     required this.session,
     required this.onOpen,
+    this.trailing,
   });
 
   final Studies studies;
   final DocumentSession session;
   final OpenChapter onOpen;
+
+  /// What sits in the toolbar's corner: the host's toggle for the pane.
+  final Widget? trailing;
 
   @override
   State<StudyPanel> createState() => _StudyPanelState();
@@ -212,6 +216,7 @@ class _StudyPanelState extends State<StudyPanel> {
               if (open != null) unawaited(_deleteStudy(open));
             },
             onNewChapter: _newChapter,
+            trailing: widget.trailing,
           ),
           Expanded(child: _body(context)),
         ],
@@ -275,6 +280,7 @@ class _Toolbar extends StatelessWidget {
     required this.onCopyStudy,
     required this.onDeleteStudy,
     required this.onNewChapter,
+    required this.trailing,
   });
 
   final bool busy;
@@ -286,6 +292,7 @@ class _Toolbar extends StatelessWidget {
   final VoidCallback onCopyStudy;
   final VoidCallback onDeleteStudy;
   final VoidCallback onNewChapter;
+  final Widget? trailing;
 
   /// Making and removing whole studies, and taking one away as text. The
   /// two that need a study open are off until one is.
@@ -305,13 +312,18 @@ class _Toolbar extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(
+              // Room for the buttons first: a narrow pane cuts the label.
+              Flexible(
                 child: Text(
                   'Your studies',
                   style: Theme.of(context).textTheme.labelSmall,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
+              const SizedBox(width: Space.xs),
               RowActions(tooltip: 'Study actions', children: _actions),
+              const Spacer(),
+              ?trailing,
             ],
           ),
           const SizedBox(height: Space.xs),

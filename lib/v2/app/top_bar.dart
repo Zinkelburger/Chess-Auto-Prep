@@ -4,9 +4,12 @@ import '../ui/app_action.dart';
 import '../ui/theme.dart';
 import 'shell.dart';
 
-/// The row over the window: the list pane's toggle, the mode menu, and on
-/// the right the Actions menu — one menu of everything that can be done
-/// now, the same shape in every mode.
+/// The row over the window: the mode menu, and on the right the Actions
+/// menu — one menu of everything that can be done now, the same shape in
+/// every mode. While the list pane is hidden, the `»` that brings it back
+/// sits at the left, where the pane would be; shown, the pane carries its
+/// own `«` in its top right corner, so the toggle is always at the pane's
+/// edge.
 class TopBar extends StatelessWidget {
   const TopBar({
     super.key,
@@ -34,19 +37,7 @@ class TopBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          IconButton(
-            icon: Icon(
-              listShown
-                  ? Icons.keyboard_double_arrow_left
-                  : Icons.keyboard_double_arrow_right,
-              size: IconSize.action,
-            ),
-            tooltip: listShown
-                ? 'Hide the list (Ctrl+B)'
-                : 'Show the list (Ctrl+B)',
-            onPressed: onToggleList,
-            visualDensity: VisualDensity.compact,
-          ),
+          if (!listShown) ListToggle(shown: false, onPressed: onToggleList),
           _ModeMenu(mode: mode, onMode: onMode, onSettings: onSettings),
           const Spacer(),
           _ActionsMenu(actions: actions),
@@ -162,4 +153,26 @@ class _ActionsMenu extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The button that hides or shows the list pane: `«` in the pane's corner
+/// while it is shown, `»` in the top bar while it is not.
+class ListToggle extends StatelessWidget {
+  const ListToggle({super.key, required this.shown, required this.onPressed});
+
+  final bool shown;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+    icon: Icon(
+      shown
+          ? Icons.keyboard_double_arrow_left
+          : Icons.keyboard_double_arrow_right,
+      size: IconSize.action,
+    ),
+    tooltip: shown ? 'Hide the list (Ctrl+B)' : 'Show the list (Ctrl+B)',
+    onPressed: onPressed,
+    visualDensity: VisualDensity.compact,
+  );
 }

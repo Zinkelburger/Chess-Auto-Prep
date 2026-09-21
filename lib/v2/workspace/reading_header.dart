@@ -28,7 +28,7 @@ class ReadingHeader extends StatelessWidget {
         final chapter = session.chapter;
         if (chapter == null) {
           return Padding(
-            padding: const EdgeInsets.all(Space.m),
+            padding: const EdgeInsets.all(readingCardInset),
             child: Text(
               'Open a chapter',
               style: text.bodySmall,
@@ -38,9 +38,9 @@ class ReadingHeader extends StatelessWidget {
         }
         return Padding(
           padding: const EdgeInsets.fromLTRB(
-            Space.m,
-            Space.m,
-            Space.m,
+            readingCardInset,
+            readingCardInset,
+            readingCardInset,
             Space.s,
           ),
           child: Column(

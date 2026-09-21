@@ -310,26 +310,34 @@ class _ShellState extends State<Shell> {
         unawaited(_palette()),
   };
 
-  Widget _leftColumn() => switch (_mode) {
-    Mode.repertoires => ListenableBuilder(
-      listenable: widget.session,
-      builder: (context, _) => LibraryPanel(
-        library: widget.library,
-        selected: widget.session.source,
-        onOpen: _open,
+  /// The mode's list, with the `«` that hides it in its top right corner:
+  /// the pane's edge is where the toggle lives, whichever mode fills it.
+  Widget _leftColumn() {
+    final toggle = ListToggle(shown: true, onPressed: _toggleList);
+    return switch (_mode) {
+      Mode.repertoires => ListenableBuilder(
+        listenable: widget.session,
+        builder: (context, _) => LibraryPanel(
+          library: widget.library,
+          selected: widget.session.source,
+          onOpen: _open,
+          trailing: toggle,
+        ),
       ),
-    ),
-    Mode.study => StudyPanel(
-      studies: widget.studies,
-      session: widget.session,
-      onOpen: (study, chapter) => unawaited(_open(study, game: chapter)),
-    ),
-    Mode.pgnViewer => PgnViewerPanel(
-      viewer: widget.viewer,
-      onOpen: (file) => unawaited(_openFile(file)),
-      onBrowse: () => unawaited(_browse()),
-    ),
-  };
+      Mode.study => StudyPanel(
+        studies: widget.studies,
+        session: widget.session,
+        onOpen: (study, chapter) => unawaited(_open(study, game: chapter)),
+        trailing: toggle,
+      ),
+      Mode.pgnViewer => PgnViewerPanel(
+        viewer: widget.viewer,
+        onOpen: (file) => unawaited(_openFile(file)),
+        onBrowse: () => unawaited(_browse()),
+        trailing: toggle,
+      ),
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
