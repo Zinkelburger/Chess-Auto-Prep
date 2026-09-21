@@ -1,19 +1,28 @@
 /**
  * The two-board view shared by Bughouse Lab and BughouseDB (markup in
- * components/BughouseBoards.astro): squares, players and reserves, last-move
- * and hover highlights, click and drag moves, and the setup boxes. Each page
- * supplies what is on the boards and what playing a move means.
+ * components/BughouseBoards.astro). Each board is Lichess's own board,
+ * chessground: its pieces, move and drop dots, dragging, last-move squares
+ * and arrows are Lichess's. Around it sit the players and their reserves,
+ * and under it the setup boxes. Each page supplies what is on the boards and
+ * what playing a move means.
  */
+import { Chessground } from '@lichess-org/chessground';
+import type { Api } from '@lichess-org/chessground/api';
+import type { DrawShape } from '@lichess-org/chessground/draw';
+import type { Key, Piece, Role } from '@lichess-org/chessground/types';
+import '@lichess-org/chessground/assets/chessground.base.css';
+import '@lichess-org/chessground/assets/chessground.brown.css';
+import '@lichess-org/chessground/assets/chessground.cburnett.css';
 import { balance, checkFen, parseReserve, splitBoard } from './setup';
 
 export type BoardName = 'A' | 'B';
 export type Colour = 'white' | 'black';
 export const BOARDS: BoardName[] = ['A', 'B'];
 const COLOURS: Colour[] = ['white', 'black'];
-/** Seats: board A has A (White) and B (Black); board B has D (White) and C (Black). */
 // Partners hold opposite colours, so the teams read A + B and C + D.
 export const SEAT: Record<BoardName, Record<Colour, string>> = { A: { white: 'A', black: 'C' }, B: { white: 'D', black: 'B' } };
 export const PIECE_NAMES: Record<string, string> = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' };
+const ROLES: Record<string, Role> = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' };
 
 export function pieceImage(piece: string): HTMLImageElement {
   const img = document.createElement('img');
@@ -46,6 +55,23 @@ export function readBoard(fen: string): { pieces: Record<string, string>; pocket
   return { pieces, pockets: { white: [...pocket].filter((c) => c === c.toUpperCase()).join(''), black: [...pocket].filter((c) => c !== c.toUpperCase()).join('') } };
 }
 
+/** The piece placement chessground reads, from pieces by square. */
+function placement(pieces: Record<string, string>): string {
+  const rows: string[] = [];
+  for (let rank = 8; rank >= 1; rank--) {
+    let row = '';
+    let empty = 0;
+    for (const file of 'abcdefgh') {
+      const piece = pieces[file + rank];
+      if (!piece) { empty += 1; continue; }
+      if (empty) { row += empty; empty = 0; }
+      row += piece;
+    }
+    rows.push(empty ? row + empty : row);
+  }
+  return rows.join('/');
+}
+
 export interface BoardView {
   pieces: Record<string, string>;
   pockets: Record<Colour, string>;
@@ -66,80 +92,90 @@ export interface BoardsHooks {
   play(name: BoardName, moves: string[]): void;
 }
 
-type Selection = { board: BoardName; from?: string; drop?: string };
-
 export class Boards {
-  selected: Selection | null = null;
-  private drag: (Selection & { piece: string; x: number; y: number; ghost?: HTMLImageElement }) | null = null;
-  private swallowClick = false;
+  private readonly cg: Record<BoardName, Api>;
+  /** A reserve piece picked up by a click, to drop on the next square clicked. */
+  private dropping: { board: BoardName; letter: string } | null = null;
 
   constructor(private readonly prefix: string, private readonly hooks: BoardsHooks) {
-    document.addEventListener('pointermove', (e) => this.dragMove(e));
-    document.addEventListener('pointerup', (e) => this.dragEnd(e));
-    document.addEventListener('pointercancel', () => { this.drag?.ghost?.remove(); this.drag = null; this.selected = null; this.render(); });
-    // The click that ends a drag is not a second, separate click.
-    document.addEventListener('click', (e) => { if (this.swallowClick) { this.swallowClick = false; e.stopPropagation(); e.preventDefault(); } }, true);
+    this.cg = { A: this.mount('A'), B: this.mount('B') };
+    // The boards follow the window; chessground measures its squares once.
+    new ResizeObserver(() => { for (const name of BOARDS) this.cg[name].redrawAll(); }).observe(this.el('board-A'));
   }
 
   private el(id: string): HTMLElement { return document.getElementById(`${this.prefix}-${id}`)!; }
 
+  private mount(name: BoardName): Api {
+    return Chessground(this.el(`board-${name}`), {
+      coordinates: true,
+      autoCastle: true,
+      highlight: { lastMove: true, check: false },
+      animation: { enabled: true, duration: 150 },
+      premovable: { enabled: false },
+      predroppable: { enabled: false },
+      draggable: { showGhost: true },
+      movable: {
+        free: false,
+        showDests: true,
+        events: {
+          after: (orig, dest) => this.moved(name, orig, dest),
+          afterNewPiece: (role, key) => this.dropped(name, role, key),
+        },
+      },
+      events: { select: (key) => this.clicked(name, key) },
+    });
+  }
+
   render() { for (const name of BOARDS) this.renderBoard(name); }
 
-  deselect() { if (this.selected) { this.selected = null; this.render(); } }
-
-  renderArrows() { for (const name of BOARDS) this.drawArrow(name, this.hooks.view(name)); }
-
-  private targets(name: BoardName, view: BoardView): string[] {
-    const s = this.selected;
-    if (s?.board !== name) return [];
-    return view.legal.filter((u) => (s.drop ? u.startsWith(`${s.drop}@`) : !u.includes('@') && u.startsWith(s.from ?? '?')));
+  deselect() {
+    for (const name of BOARDS) this.cg[name].selectSquare(null);
+    if (this.dropping) { this.dropping = null; this.render(); }
   }
+
+  renderArrows() { for (const name of BOARDS) this.cg[name].setAutoShapes(this.shapes(this.hooks.view(name))); }
 
   private renderBoard(name: BoardName) {
     const view = this.hooks.view(name);
-    const files = view.bottom === 'white' ? 'abcdefgh' : 'hgfedcba';
-    const ranks = view.bottom === 'white' ? '87654321' : '12345678';
-    const container = this.el(`board-${name}`);
-    // Keep focus across redraws so keyboard users can keep moving.
-    const focused = container.contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.square : null;
-    container.replaceChildren();
-    const targets = this.targets(name, view).map((u) => u.slice(2, 4));
-    for (let row = 0; row < 8; row++) for (let col = 0; col < 8; col++) {
-      const square = files[col] + ranks[row];
-      const piece = view.pieces[square];
-      const button = document.createElement('button');
-      button.type = 'button';  // the boards can sit inside a form
-      button.className = `bb-square${(row + col) % 2 ? ' dark' : ''}`;
-      button.dataset.board = name;
-      button.dataset.square = square;
-      button.disabled = !!view.disabled;
-      if (view.last.includes(square)) button.classList.add('last');
-      if (this.selected?.board === name && this.selected.from === square) button.classList.add('selected');
-      if (targets.includes(square)) button.classList.add('target');
-      if (this.drag?.ghost && this.drag.board === name && this.drag.from === square) button.classList.add('dragging');
-      button.setAttribute('aria-label', `Board ${name === 'A' ? 1 : 2} ${square}${piece ? ` ${piece === piece.toUpperCase() ? 'white' : 'black'} ${PIECE_NAMES[piece.toLowerCase()]}` : ' empty'}`);
-      if (piece) button.append(pieceImage(piece));
-      if (row === 7) button.append(coord('file', files[col]));
-      if (col === 0) button.append(coord('rank', ranks[row]));
-      if (piece && view.legal.some((u) => u.startsWith(square))) {
-        button.onpointerdown = (e) => this.dragStart(e, { board: name, from: square, piece });
-      }
-      button.onclick = () => this.clickSquare(name, square);
-      button.onkeydown = (e) => {
-        const delta = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -8, ArrowDown: 8 }[e.key];
-        if (delta !== undefined) {
-          e.preventDefault();
-          e.stopPropagation();
-          (container.children[Math.max(0, Math.min(63, row * 8 + col + delta))] as HTMLButtonElement).focus();
-        } else if (e.key === 'Escape') this.deselect();
-      };
-      container.append(button);
+    if (this.dropping?.board === name && (view.disabled || !this.dropTargets(view, this.dropping.letter).length)) this.dropping = null;
+    const dests = new Map<Key, Key[]>();
+    for (const uci of view.legal) {
+      if (uci.includes('@')) continue;
+      const from = uci.slice(0, 2) as Key;
+      const to = uci.slice(2, 4) as Key;
+      const list = dests.get(from) ?? [];
+      if (!list.includes(to)) list.push(to);
+      dests.set(from, list);
     }
-    if (focused) container.querySelector<HTMLButtonElement>(`[data-square="${focused}"]`)?.focus();
-    this.drawArrow(name, view);
+    const drops = this.dropping?.board === name ? this.dropTargets(view, this.dropping.letter) : [];
+    this.cg[name].set({
+      fen: placement(view.pieces),
+      orientation: view.bottom,
+      turnColor: view.turn ?? 'white',
+      lastMove: view.last as Key[],
+      movable: { color: view.disabled || !view.turn ? undefined : view.turn, dests },
+      // The picked-up reserve piece's squares, drawn as Lichess's move dots.
+      highlight: { custom: new Map(drops.map((square) => [square as Key, 'move-dest'])) },
+      drawable: { autoShapes: this.shapes(view) },
+    });
     for (const [where, colour] of [['top', view.bottom === 'white' ? 'black' : 'white'], ['bottom', view.bottom]] as const) {
       this.renderPlayer(this.el(`player-${where}-${name}`), name, colour, view);
     }
+  }
+
+  /** Lichess's explorer arrow for a move; for a drop, the piece on its square. */
+  private shapes(view: BoardView): DrawShape[] {
+    const uci = view.arrow;
+    if (!uci) return [];
+    if (uci.includes('@')) {
+      const piece = { role: ROLES[uci[0].toLowerCase()], color: view.turn ?? 'white', scale: 0.8 };
+      return [{ orig: uci.slice(2, 4) as Key, brush: 'paleBlue', piece }];
+    }
+    return [{ orig: uci.slice(0, 2) as Key, dest: uci.slice(2, 4) as Key, brush: 'paleBlue' }];
+  }
+
+  private dropTargets(view: BoardView, letter: string): string[] {
+    return view.legal.filter((u) => u.startsWith(`${letter}@`)).map((u) => u.slice(2, 4));
   }
 
   private renderPlayer(box: HTMLElement, name: BoardName, colour: Colour, view: BoardView) {
@@ -157,105 +193,64 @@ export class Boards {
       const count = [...pocket].filter((c) => c.toLowerCase() === p).length;
       if (!count) continue;
       const letter = p.toUpperCase();
-      const piece = colour === 'white' ? letter : p;
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'bb-pocket';
-      button.append(pieceImage(piece), document.createTextNode(String(count)));
+      button.append(pieceImage(colour === 'white' ? letter : p), document.createTextNode(String(count)));
       button.setAttribute('aria-label', `Player ${SEAT[name][colour]}: ${count} ${PIECE_NAMES[p]} in reserve`);
-      button.setAttribute('aria-pressed', String(this.selected?.board === name && this.selected.drop === letter));
-      button.disabled = !!view.disabled || view.turn !== colour || !view.legal.some((u) => u.startsWith(`${letter}@`));
-      button.onclick = () => {
-        this.selected = this.selected?.board === name && this.selected.drop === letter ? null : { board: name, drop: letter };
-        this.render();
-      };
-      if (!button.disabled) button.onpointerdown = (e) => this.dragStart(e, { board: name, drop: letter, piece });
+      button.setAttribute('aria-pressed', String(this.dropping?.board === name && this.dropping.letter === letter));
+      button.disabled = !!view.disabled || view.turn !== colour || !this.dropTargets(view, letter).length;
+      if (!button.disabled) {
+        // Pressing and dragging carries the piece onto the board, as on Lichess;
+        // a plain click picks it up for the next square clicked. Mouse and touch
+        // events, as Lichess's reserves use: chessground follows the drag through
+        // them, and cancelling a pointerdown would suppress exactly those.
+        const pickUp = (e: MouseEvent | TouchEvent) => {
+          if (e instanceof MouseEvent && e.button !== 0) return;
+          e.preventDefault();
+          this.cg[name].dragNewPiece({ role: ROLES[p], color: colour } as Piece, e);
+        };
+        button.addEventListener('mousedown', pickUp);
+        button.addEventListener('touchstart', pickUp, { passive: false });
+        button.onclick = () => {
+          const same = this.dropping?.board === name && this.dropping.letter === letter;
+          for (const other of BOARDS) this.cg[other].selectSquare(null);
+          this.dropping = same ? null : { board: name, letter };
+          this.render();
+        };
+      }
       box.append(button);
     }
   }
 
-  private clickSquare(name: BoardName, square: string) {
-    const view = this.hooks.view(name);
-    if (view.disabled) return;
-    if (this.selected?.board === name) {
-      const hit = this.targets(name, view).filter((u) => u.slice(2, 4) === square);
-      if (hit.length) { this.selected = null; this.hooks.play(name, hit); return; }
-    }
-    const start = view.legal.some((u) => !u.includes('@') && u.startsWith(square));
-    this.selected = start && !(this.selected?.board === name && this.selected.from === square) ? { board: name, from: square } : null;
-    this.render();
+  private moved(name: BoardName, orig: Key, dest: Key) {
+    this.dropping = null;
+    const hit = this.hooks.view(name).legal.filter((u) => u.startsWith(orig + dest));
+    if (hit.length) this.hooks.play(name, hit); else this.render();
   }
 
-  /** Lichess's explorer arrow; a drop gets a ring on its square. */
-  private drawArrow(name: BoardName, view: BoardView) {
-    const svg = this.el(`arrow-${name}`);
-    const uci = view.arrow;
-    if (!uci) { svg.innerHTML = ''; return; }
-    const centre = (square: string): [number, number] => {
-      const file = 'abcdefgh'.indexOf(square[0]);
-      const rank = Number(square[1]);
-      return view.bottom === 'white' ? [file + 0.5, 8 - rank + 0.5] : [7 - file + 0.5, rank - 0.5];
-    };
-    const [x2, y2] = centre(uci.slice(2, 4));
-    const brush = 'stroke="#003088" stroke-opacity="0.5"';
-    if (uci.includes('@')) {
-      svg.innerHTML = `<circle cx="${x2}" cy="${y2}" r="0.44" fill="none" ${brush} stroke-width="0.08"/>`;
-      return;
-    }
-    const [x1, y1] = centre(uci.slice(0, 2));
-    const len = Math.hypot(x2 - x1, y2 - y1);
-    const [ex, ey] = [x2 - ((x2 - x1) / len) * 0.3, y2 - ((y2 - y1) / len) * 0.3];
-    const id = `${this.prefix}-head-${name}`;
-    svg.innerHTML = `<defs><marker id="${id}" orient="auto" markerWidth="4" markerHeight="4" refX="2.05" refY="2">`
-      + '<path d="M0,0 V4 L3,2 Z" fill="#003088" fill-opacity="0.5"/></marker></defs>'
-      + `<line x1="${x1}" y1="${y1}" x2="${ex}" y2="${ey}" ${brush} stroke-width="0.2" stroke-linecap="round" marker-end="url(#${id})"/>`;
+  /** A reserve piece dragged onto a square; chessground has already put it there. */
+  private dropped(name: BoardName, role: Role, key: Key) {
+    this.dropping = null;
+    const letter = Object.keys(ROLES).find((k) => ROLES[k] === role)!.toUpperCase();
+    const uci = `${letter}@${key}`;
+    if (this.hooks.view(name).legal.includes(uci)) this.hooks.play(name, [uci]);
+    else this.render();  // not legal here: take it back off
   }
 
-  // A press that moves more than a few pixels becomes a drag; a still press
-  // stays a click, so click-to-move keeps working.
-  private dragStart(e: PointerEvent, from: Selection & { piece: string }) {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    this.drag = { ...from, x: e.clientX, y: e.clientY };
-  }
-
-  private dragMove(e: PointerEvent) {
-    const d = this.drag;
+  /** A square clicked while a reserve piece is picked up drops it there. */
+  private clicked(name: BoardName, key: Key) {
+    const d = this.dropping;
     if (!d) return;
-    if (!d.ghost) {
-      if (Math.hypot(e.clientX - d.x, e.clientY - d.y) < 5) return;
-      const size = this.el(`board-${d.board}`).getBoundingClientRect().width / 8;
-      d.ghost = pieceImage(d.piece);
-      d.ghost.className = 'bb-ghost';
-      d.ghost.style.width = d.ghost.style.height = `${size}px`;
-      document.body.append(d.ghost);
-      this.selected = { board: d.board, from: d.from, drop: d.drop };
+    const uci = `${d.letter}@${key}`;
+    if (d.board === name && this.hooks.view(name).legal.includes(uci)) {
+      this.dropping = null;
+      this.hooks.play(name, [uci]);
+    } else {
+      this.dropping = null;
       this.render();
     }
-    d.ghost.style.left = `${e.clientX}px`;
-    d.ghost.style.top = `${e.clientY}px`;
   }
-
-  private dragEnd(e: PointerEvent) {
-    const d = this.drag;
-    this.drag = null;
-    if (!d?.ghost) return;
-    d.ghost.remove();
-    this.swallowClick = true;
-    setTimeout(() => { this.swallowClick = false; });
-    const target = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest<HTMLElement>(`#${this.prefix}-board-${d.board} .bb-square`);
-    const hit = target ? this.targets(d.board, this.hooks.view(d.board)).filter((u) => u.slice(2, 4) === target.dataset.square) : [];
-    this.selected = null;
-    if (hit.length) { this.hooks.play(d.board, hit); return; }
-    this.render();
-  }
-}
-
-function coord(kind: 'file' | 'rank', text: string): HTMLSpanElement {
-  const span = document.createElement('span');
-  span.className = `bb-coord ${kind}`;
-  span.textContent = text;
-  return span;
 }
 
 // ── Setting a position by hand ────────────────────────────────────

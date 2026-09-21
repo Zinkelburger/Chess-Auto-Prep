@@ -108,7 +108,7 @@ async function load(): Promise<boolean> {
   try {
     state = await engine.request<Position>('position', { dual_fen: lines.root, moves: lines.tokens(), team: choice('team') });
     accepted = asked;
-    boards.selected = null;
+    boards.deselect();
     setup.error('');
     clearResult();
     status('Move on either board, or ask Hivemind for a move.');
@@ -265,7 +265,7 @@ el('bh-reset').onclick = () => { lines.reset(START_DUAL); accepted = lines.snaps
 el('bh-flip').onclick = () => { flipped = !flipped; boards.render(); };
 el('bh-promotion-cancel').onclick = () => el<HTMLDialogElement>('bh-promotion').close();
 for (const input of document.querySelectorAll<HTMLInputElement>('#bh-analyse-form input')) {
-  input.addEventListener('change', () => { boards.selected = null; clearResult(); boards.render(); });
+  input.addEventListener('change', () => { boards.deselect(); clearResult(); boards.render(); });
 }
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') boards.deselect(); });
 void load();
