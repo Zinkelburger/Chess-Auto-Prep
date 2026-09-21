@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart';
 import 'package:document_file_io/document_file_io.dart';
 import 'package:path/path.dart' as p;
 
+import '../chess/pgn/chapter.dart' show readOffThreadFrom;
 import '../diagnostics/log.dart';
 import 'atomic_write.dart';
 import 'backups.dart';
@@ -170,8 +171,11 @@ final class PgnFileStore implements PgnDocumentStore {
     Revision revision,
     EditScope scope,
   ) async {
-    final prepared = await Isolate.run(
-      () => _prepare(current, revision.contentHash, text, scope),
+    final prepared = await _prepared(
+      current,
+      revision.contentHash,
+      text,
+      scope,
     );
     switch (prepared) {
       case _NotReplaceable(:final result, :final detail):
@@ -255,24 +259,32 @@ final class PgnFileStore implements PgnDocumentStore {
 /// [bytes] as a document. A small file is decoded here; a large one on
 /// another isolate, because decoding megabytes is work the screen would
 /// otherwise wait for.
-Future<DocumentText> _decoded(Uint8List bytes) => bytes.length < _offThreadFrom
+Future<DocumentText> _decoded(Uint8List bytes) =>
+    bytes.length < readOffThreadFrom
     ? Future.value(readDocumentText(bytes))
     : Isolate.run(() => readDocumentText(bytes));
 
 /// [text] as the bytes a file will hold, and their hash.
 Future<({Uint8List bytes, String hash})> _encoded(String text) =>
-    text.length < _offThreadFrom
+    text.length < readOffThreadFrom
     ? Future.value(_encode(text))
     : Isolate.run(() => _encode(text));
+
+/// What a save works out before it writes, on another isolate once either
+/// side of the comparison is big enough to be worth the trip.
+Future<_Prepared> _prepared(
+  Uint8List current,
+  String currentHash,
+  String text,
+  EditScope scope,
+) => current.length < readOffThreadFrom && text.length < readOffThreadFrom
+    ? Future.value(_prepare(current, currentHash, text, scope))
+    : Isolate.run(() => _prepare(current, currentHash, text, scope));
 
 ({Uint8List bytes, String hash}) _encode(String text) {
   final bytes = utf8.encode(text);
   return (bytes: bytes, hash: sha256.convert(bytes).toString());
 }
-
-/// Below this many bytes or characters, the work is done where it is asked
-/// for: the trip to another isolate costs more than the work.
-const _offThreadFrom = 64 * 1024;
 
 /// Everything a save works out before it touches the disk: whether the
 /// current bytes may be replaced at all, whether the new text changes only

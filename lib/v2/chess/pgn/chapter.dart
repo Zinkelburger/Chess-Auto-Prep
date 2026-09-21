@@ -101,8 +101,10 @@ Future<Chapter> readChapter({required String name, required String text}) =>
     ? Future.value(parseChapter(name: name, text: text))
     : Isolate.run(() => parseChapter(name: name, text: text));
 
-/// Below this many characters a chapter is parsed on the calling isolate:
-/// the trip to another one costs more than the parse.
+/// Below this many characters or bytes, work that reads every one of them —
+/// parsing a chapter, decoding a file, encoding and hashing text, comparing
+/// two versions game by game — is done on the calling isolate: the trip to
+/// another one costs more than the work.
 const readOffThreadFrom = 64 * 1024;
 
 Chapter parseChapter({required String name, required String text}) {
@@ -210,21 +212,21 @@ String writeChapter(Chapter chapter) {
   return buffer.toString();
 }
 
-/// `// Color: Black` in the `//` lines above the first game reads as Black;
-/// anything else, including no line at all, is White. The old app wrote it
-/// that way and reads it the same way.
+/// `// Color: Black` anywhere above the first game reads as Black; anything
+/// else, including no line at all, is White. The old app wrote it that way
+/// and reads it the same way.
 ///
-/// Only the heading is looked at, so asking a large chapter costs nothing:
-/// the first line that is neither blank nor a `//` line ends the search.
+/// The whole preamble is looked at, because a file can carry anything above
+/// its first game and the colour line may be below it. Nothing below the
+/// first game is, so asking a large chapter still costs only its heading.
 Side chapterSide(String text) {
   var at = 0;
   while (at < text.length) {
     var end = text.indexOf('\n', at);
     if (end < 0) end = text.length;
+    if (isEventLine(text, at, end)) break;
     final line = text.substring(at, end).trim();
     at = end + 1;
-    if (line.isEmpty) continue;
-    if (!line.startsWith('//')) break;
     if (!line.startsWith('// Color:')) continue;
     final color = line.substring('// Color:'.length).trim().toLowerCase();
     return color == 'black' ? Side.black : Side.white;
