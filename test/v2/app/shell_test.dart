@@ -6,6 +6,7 @@ import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/v2/features/library/chapter_outline.dart';
 import 'package:chess_auto_prep/v2/net/lichess_studies.dart';
 import 'package:chess_auto_prep/v2/features/library/library.dart';
+import 'package:chess_auto_prep/v2/features/library/library_panel.dart';
 import 'package:chess_auto_prep/v2/features/library/outline_panel.dart';
 import 'package:chess_auto_prep/v2/features/study/studies.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
@@ -28,6 +29,13 @@ import '../support/study_fixture.dart';
 void main() {
   final kid = ref('KID', 'Main');
   final benko = ref('benko', 'Main');
+
+  /// Both columns list a chapter called Main once one is open, so a row is
+  /// looked for in the column it belongs to.
+  Finder inLibrary(Finder row) =>
+      find.descendant(of: find.byType(LibraryPanel), matching: row);
+  Finder inOutline(Finder row) =>
+      find.descendant(of: find.byType(OutlinePanel), matching: row);
   late ScriptedFiles files;
   late ScriptedDocumentStore store;
   late Library library;
@@ -123,7 +131,7 @@ void main() {
 
   testWidgets('opening a chapter puts it in the workspace', (tester) async {
     await pump(tester);
-    await tester.tap(find.text('Main').last);
+    await tester.tap(inLibrary(find.text('Main')).last);
     await tester.pump();
     expect(session.source, kid);
     expect(session.chapter?.gameCount, 2);
@@ -135,8 +143,8 @@ void main() {
   ) async {
     await pump(tester);
     store.hold = true;
-    await tester.tap(find.text('Main').last); // KID
-    await tester.tap(find.text('Main').first); // benko
+    await tester.tap(inLibrary(find.text('Main')).last); // KID
+    await tester.tap(inLibrary(find.text('Main')).first); // benko
     expect(store.waiting, 2);
     store.releaseAll(); // KID's read answers before benko's
     await tester.pump();
@@ -151,7 +159,7 @@ void main() {
   ) async {
     await pump(tester);
     store.documents.clear();
-    await tester.tap(find.text('Main').last);
+    await tester.tap(inLibrary(find.text('Main')).last);
     await tester.pump();
     expect(session.chapter, isNull);
     expect(find.text('Main is no longer on disk'), findsOneWidget);
@@ -159,7 +167,7 @@ void main() {
   testWidgets('another chapter is not opened over a frozen document until '
       'the user says so', (tester) async {
     await pump(tester);
-    await tester.tap(find.text('Main').last); // KID
+    await tester.tap(inLibrary(find.text('Main')).last); // KID
     await tester.pumpAndSettle();
     store.saves.add(
       const SaveRefused('game 3 would change but the edit was to game 1'),
@@ -169,7 +177,7 @@ void main() {
     expect(saver.state, isA<SaveStopped>());
 
     question.answer = DraftChoice.keepWaiting;
-    await tester.tap(find.text('Main').first); // benko
+    await tester.tap(inLibrary(find.text('Main')).first); // benko
     await tester.pumpAndSettle();
     expect(question.asked.single, contains('was stopped'));
     expect(session.source, kid, reason: 'nothing opened over the words');
@@ -182,14 +190,14 @@ void main() {
     log.install(collect);
     addTearDown(() => log.remove(collect));
     await pump(tester);
-    await tester.tap(find.text('Main').last); // KID
+    await tester.tap(inLibrary(find.text('Main')).last); // KID
     await tester.pumpAndSettle();
     store.saves.add(const SaveRefused('game 3 would change'));
     session.setComment(NodePath.of([0]), 'frozen words');
     await tester.pumpAndSettle();
 
     question.answer = DraftChoice.closeAnyway;
-    await tester.tap(find.text('Main').first); // benko
+    await tester.tap(inLibrary(find.text('Main')).first); // benko
     await tester.pumpAndSettle();
     expect(session.source, benko);
     expect(
@@ -203,14 +211,14 @@ void main() {
     tester,
   ) async {
     await pump(tester);
-    await tester.tap(find.text('Main').last); // KID
+    await tester.tap(inLibrary(find.text('Main')).last); // KID
     await tester.pumpAndSettle();
     store.saves.add(const SaveRefused('game 3 would change'));
     session.setComment(NodePath.of([0]), 'frozen words');
     await tester.pumpAndSettle();
     question.asked.clear();
 
-    await tester.tap(find.text('Main').last); // KID again
+    await tester.tap(inLibrary(find.text('Main')).last); // KID again
     await tester.pumpAndSettle();
     expect(question.asked, isEmpty);
     expect(session.source, kid);
@@ -220,14 +228,14 @@ void main() {
     tester,
   ) async {
     await pump(tester);
-    await tester.tap(find.text('Main').last); // KID
+    await tester.tap(inLibrary(find.text('Main')).last); // KID
     await tester.pumpAndSettle();
     store.saves.add(const SaveRefused('game 3 would change'));
     session.setComment(NodePath.of([0]), 'frozen words');
     await tester.pumpAndSettle();
 
     question.answer = DraftChoice.saveACopy;
-    await tester.tap(find.text('Main').first); // benko
+    await tester.tap(inLibrary(find.text('Main')).first); // benko
     await tester.pumpAndSettle();
     expect(session.source, benko, reason: 'the click still went through');
     expect(find.text('Saved a copy as Main copy.pgn'), findsOneWidget);
@@ -241,7 +249,7 @@ void main() {
     tester,
   ) async {
     await pump(tester);
-    await tester.tap(find.text('Main').last);
+    await tester.tap(inLibrary(find.text('Main')).last);
     await tester.pumpAndSettle();
 
     // Working in another column leaves the focus there: on the row that was
@@ -261,7 +269,7 @@ void main() {
       reason: 'the focus is on a row of the outline column',
     );
 
-    await tester.tap(find.byTooltip('Actions').last);
+    await tester.tap(inOutline(find.byTooltip('Actions')).last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Rename line…'));
     await tester.pumpAndSettle();

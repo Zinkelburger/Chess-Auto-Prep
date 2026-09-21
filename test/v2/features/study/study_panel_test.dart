@@ -24,7 +24,7 @@ void main() {
         theme: darkTheme(),
         home: Scaffold(
           body: SizedBox(
-            width: studyPanelWidth,
+            width: libraryPanelWidth,
             child: StudyPanel(
               studies: study.studies,
               session: study.session,

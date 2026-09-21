@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:multi_split_view/multi_split_view.dart';
 
 import '../ui/theme.dart';
 import 'board_view.dart';
@@ -34,38 +35,41 @@ class WorkspaceView extends StatelessWidget {
   /// study marks where a quiz starts, and nothing else offers anything yet.
   final MoveMenu? moveMenu;
 
+  /// The board and the column beside it, with a divider the user can drag
+  /// between them. The sizes live in the split view's own state, so they
+  /// survive a rebuild and are lost with the window.
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.all(Space.l),
-            child: _BoardWithBar(session: session, analysis: analysis),
-          ),
-        ),
-        const VerticalDivider(width: 1),
-        SizedBox(
-          width: 360,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              ChapterHeader(session: session, saver: saver),
-              const Divider(height: 1),
-              EnginePane(analysis: analysis),
-              const Divider(height: 1),
-              Expanded(
-                child: MoveTreeView(session: session, moveMenu: moveMenu),
-              ),
-              const Divider(height: 1),
-              CommentPanel(session: session),
-            ],
-          ),
-        ),
-      ],
+    return MultiSplitViewTheme(
+      data: paneTheme(Theme.of(context).colorScheme),
+      child: MultiSplitView(
+        initialAreas: [
+          Area(flex: 1, min: boardPaneMinWidth, builder: _board),
+          Area(size: sidePanelWidth, min: paneMinWidth, builder: _column),
+        ],
+      ),
     );
   }
+
+  Widget _board(BuildContext context, Area area) => Padding(
+    padding: const EdgeInsets.all(Space.l),
+    child: _BoardWithBar(session: session, analysis: analysis),
+  );
+
+  Widget _column(BuildContext context, Area area) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      ChapterHeader(session: session, saver: saver),
+      const Divider(height: 1),
+      EnginePane(analysis: analysis),
+      const Divider(height: 1),
+      Expanded(
+        child: MoveTreeView(session: session, moveMenu: moveMenu),
+      ),
+      const Divider(height: 1),
+      CommentPanel(session: session),
+    ],
+  );
 }
 
 /// The largest square board that fits beside the bar, at the top.

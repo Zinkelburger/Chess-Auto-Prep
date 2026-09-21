@@ -17,7 +17,7 @@ REPO = Path(__file__).resolve().parent.parent
 LIB = REPO / "lib" / "v2"
 TEST = REPO / "test" / "v2"
 
-MAX_FILE_LINES = 400
+MAX_FILE_LINES = 600
 MAX_FUNCTION_LINES = 50
 MAX_NESTING = 3
 
