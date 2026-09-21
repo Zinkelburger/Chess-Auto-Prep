@@ -1,9 +1,10 @@
+import '../chess/pgn/comment_edits.dart' as edits;
+
 /// Why an edit to the open document did not happen.
 ///
 /// The session answers with one of these rather than doing nothing quietly:
 /// an edit that silently fails reads as a lost one. The header turns each
 /// into a sentence.
-library;
 
 sealed class EditRefused {
   const EditRefused();
@@ -36,3 +37,15 @@ final class WordsRefused extends EditRefused {
 final class MoveLost extends EditRefused {
   const MoveLost();
 }
+
+/// What the log should say about a refused comment edit; the screen says
+/// its own version of the same thing through [refusalOf].
+String refusalDetail(edits.CommentRefused refusal) => switch (refusal) {
+  edits.GameNotWhole() => 'the game holding that move was not read whole',
+  edits.CommentUnwritable(:final reason) => reason,
+};
+
+EditRefused refusalOf(edits.CommentRefused refusal) => switch (refusal) {
+  edits.GameNotWhole() => const LineNotWhole(),
+  edits.CommentUnwritable(:final reason) => WordsRefused(reason),
+};

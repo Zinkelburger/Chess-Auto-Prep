@@ -30,6 +30,23 @@ final class GamesEdited extends EditScope {
   final GamesWritten written;
 }
 
+/// The save keeps the games of the version on disk and only changes which
+/// order they are in: the file will hold the games at [from], in that order,
+/// each byte for byte as it is now.
+///
+/// This is what moving a study's chapters up and down is, and what deleting
+/// one is — a delete leaves its index out. Nothing else in a save may take a
+/// game out or move one, which is why [GamesEdited] cannot say it and why
+/// this says nothing about content: a save that also changed a game's moves
+/// is refused here.
+final class GamesReordered extends EditScope {
+  const GamesReordered(this.from);
+
+  /// For each game the save will write, where it is in the version on disk,
+  /// counting from zero.
+  final List<int> from;
+}
+
 /// The save replaces the whole file, which is what an import or a paste
 /// does, and what a caller that cannot say says. There is nothing to compare
 /// it against, so the store writes what it was given and says in the log
@@ -91,7 +108,40 @@ String? changeOutsideScope({
 }) => switch (scope) {
   WholeDocument() || RestoredVersion() => null,
   GamesEdited() => _changeOutside(previous, next, scope.written),
+  GamesReordered() => _notTheSameGames(previous, next, scope.from),
 };
+
+/// Why [next] is not [previous]'s games in the order [from] asks for, or
+/// null when it is exactly that.
+///
+/// Every game has to arrive byte for byte from the place the order names, so
+/// a reorder that also rewrote a game — or invented one, or kept one twice —
+/// is refused before anything is written.
+String? _notTheSameGames(List<int> previous, List<int> next, List<int> from) {
+  final before = _cut(previous);
+  final after = _cut(next);
+  if (!_same(previous, (0, before.heading), next, (0, after.heading))) {
+    return 'the chapter heading would change, but the save only reordered '
+        'the games';
+  }
+  if (after.games.length != from.length) {
+    return 'the save would leave ${_count(after.games.length)} but said it '
+        'was leaving ${_count(from.length)}';
+  }
+  final taken = <int>{};
+  for (var index = 0; index < from.length; index++) {
+    final source = from[index];
+    if (source < 0 || source >= before.games.length || !taken.add(source)) {
+      return 'the save asked for game ${source + 1} of '
+          '${_count(before.games.length)}, which it cannot take';
+    }
+    if (!_same(previous, before.games[source], next, after.games[index])) {
+      return 'game ${source + 1} would change, but the save only reordered '
+          'the games';
+    }
+  }
+  return null;
+}
 
 String? _changeOutside(List<int> previous, List<int> next, GamesWritten edit) {
   // An edit that added a negative number of games is an edit that removed

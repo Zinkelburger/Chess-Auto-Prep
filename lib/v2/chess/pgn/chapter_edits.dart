@@ -59,6 +59,14 @@ final class MoveNotWritten extends AddMoveResult {
   final String uci;
 }
 
+/// The game the move belongs in must keep the bytes it has, so nothing was
+/// written. [reason] is one plain English sentence fragment.
+final class MoveRefused extends AddMoveResult {
+  const MoveRefused(this.reason);
+
+  final String reason;
+}
+
 /// Plays [uci] after the node at [at] and writes it into the file.
 ///
 /// Where it lands follows the shape of the tree there. A move that is
@@ -84,9 +92,18 @@ AddMoveResult addMove(
   }
   final siblings = chapter.tree.nodeAt(at)?.children ?? chapter.tree.children;
   final prefix = [for (final step in chapter.tree.lineTo(at)) step.san];
-  final edited =
-      (siblings.isEmpty ? _extended(chapter, prefix, node) : null) ??
-      _appended(chapter, prefix, node);
+  final _Edited edited;
+  if (chapter.game != null) {
+    final inGame = _inTheOneGame(chapter, at, node);
+    if (inGame == null) {
+      return const MoveRefused('the chapter was not read whole');
+    }
+    edited = inGame;
+  } else {
+    edited =
+        (siblings.isEmpty ? _extended(chapter, prefix, node) : null) ??
+        _appended(chapter, prefix, node);
+  }
   // Merging keeps the order of the moves a chapter already had and puts the
   // ones only the edited game plays after them, so a move no sibling matched
   // is the last child of the node it was played from. There is nowhere else
@@ -120,6 +137,30 @@ NodePath? playedAlready(
   final siblings = chapter.tree.nodeAt(at)?.children ?? chapter.tree.children;
   final index = siblings.indexWhere((child) => child.san == node.san);
   return index < 0 ? null : at.child(index);
+}
+
+/// The chapter with [node] played inside the one game it is reading, or
+/// null when that game must keep the bytes it has.
+///
+/// A study chapter is one game, so every move made in it belongs to that
+/// game: a branch is a variation, not a second game, because a second game
+/// in a study file is a second chapter. The tree on screen is that game's
+/// own tree, taken unmerged, so the path the cursor is on is the path in the
+/// game and needs no translation.
+_Edited? _inTheOneGame(Chapter chapter, NodePath at, MoveNode node) {
+  final index = chapter.game;
+  if (index == null || index < 0 || index >= chapter.lines.length) return null;
+  final line = chapter.lines[index];
+  final tree = chapter.writableTree(line);
+  if (tree == null) return null;
+  final written = rewritten(line, withChildAdded(tree, at, node));
+  if (written is! LineRewritten) return null;
+  final lines = [...chapter.lines];
+  lines[index] = written.line;
+  return (
+    chapter: withLines(chapter, lines),
+    written: GamesWritten(rewritten: {index}),
+  );
 }
 
 /// A game an edit may write again, its moves, and where it sits in

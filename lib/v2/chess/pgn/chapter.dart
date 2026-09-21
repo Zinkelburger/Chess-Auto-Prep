@@ -8,6 +8,7 @@ import 'game_text.dart';
 import 'game_tree.dart';
 import 'pgn_issue.dart';
 import 'pgn_reader.dart';
+import 'study.dart';
 import 'tree_merge.dart';
 
 /// A repertoire chapter: the file's preamble, its games, and every game
@@ -17,6 +18,13 @@ import 'tree_merge.dart';
 /// `// Color: Black` comment line above the first game saying whose
 /// repertoire it is. Games that start somewhere else stay in [lines]
 /// untouched and are not part of [tree].
+///
+/// A study file is the same thing read differently: every game is a chapter
+/// of its own, so one of them is the tree and the rest are only listed.
+/// [game] says which, and everything below — the tree, the orientation, the
+/// counts, which games an edit may write — follows from it. That is the
+/// whole difference between the two modes: one document, one session, one
+/// board, and a file that says whether the games belong together.
 final class Chapter {
   const Chapter({
     required this.name,
@@ -24,6 +32,7 @@ final class Chapter {
     required this.preamble,
     required this.lines,
     required this.tree,
+    this.game,
   });
 
   final String name;
@@ -38,15 +47,33 @@ final class Chapter {
 
   final GameTree tree;
 
-  /// Everything no game could carry into the model, in file order.
+  /// The one game of the file [tree] is, counting from zero, or null when
+  /// every game from the same position is merged into it.
+  final int? game;
+
+  /// The games [tree] is about: all of them, or the one [game] names.
+  List<ChapterLine> get treeGames {
+    final index = game;
+    if (index == null) return lines;
+    return index >= 0 && index < lines.length ? [lines[index]] : const [];
+  }
+
+  /// Everything no game of [treeGames] could carry into the model, in file
+  /// order.
   List<ChapterIssue> get issues => [
     for (final (index, line) in lines.indexed)
-      for (final issue in line.issues) ChapterIssue(game: index, issue: issue),
+      if (game == null || game == index)
+        for (final issue in line.issues)
+          ChapterIssue(game: index, issue: issue),
   ];
 
   /// [line]'s own moves when it is one of the games merged into [tree]; null
-  /// when it starts somewhere else or could not be read at all.
+  /// when it starts somewhere else, could not be read at all, or is another
+  /// chapter of the same file.
   GameTree? treeInChapter(ChapterLine line) {
+    if (game != null && !treeGames.any((other) => identical(other, line))) {
+      return null;
+    }
     final lineTree = line.tree;
     return lineTree != null && lineTree.rootFen == tree.rootFen
         ? lineTree
@@ -63,18 +90,19 @@ final class Chapter {
   bool isInTree(ChapterLine line) => treeInChapter(line) != null;
 
   /// Games merged into [tree].
-  int get gameCount => lines.where(isInTree).length;
+  int get gameCount => treeGames.where(isInTree).length;
 
   /// Games nothing could read.
-  int get unreadableGames => lines.where((line) => line.tree == null).length;
+  int get unreadableGames =>
+      treeGames.where((line) => line.tree == null).length;
 
   /// Games that were read but keep their own bytes, because writing them
   /// again would not give back everything they hold.
   int get protectedGames =>
-      lines.where((line) => line.tree != null && !line.isWhole).length;
+      treeGames.where((line) => line.tree != null && !line.isWhole).length;
 
   /// Games left out because their root position differs from the chapter's.
-  int get skippedGames => lines.length - gameCount - unreadableGames;
+  int get skippedGames => treeGames.length - gameCount - unreadableGames;
 }
 
 /// An issue with the game at [game] of the chapter file, counting from zero.
@@ -96,56 +124,91 @@ final class ChapterIssue {
 /// A small chapter is parsed here and now; a large one — a generated book
 /// of thousands of lines — on another isolate, so opening it never holds the
 /// window. Same result either way.
-Future<Chapter> readChapter({required String name, required String text}) =>
-    text.length < readOffThreadFrom
-    ? Future.value(parseChapter(name: name, text: text))
-    : Isolate.run(() => parseChapter(name: name, text: text));
+/// [game] reads one game of the file as the whole chapter, which is what a
+/// study chapter is; null merges the games as a repertoire chapter does.
+Future<Chapter> readChapter({
+  required String name,
+  required String text,
+  int? game,
+}) => text.length < readOffThreadFrom
+    ? Future.value(parseChapter(name: name, text: text, game: game))
+    : Isolate.run(() => parseChapter(name: name, text: text, game: game));
 
 /// Below this many characters a chapter is parsed on the calling isolate:
 /// the trip to another one costs more than the parse.
 const readOffThreadFrom = 64 * 1024;
 
-Chapter parseChapter({required String name, required String text}) {
+Chapter parseChapter({required String name, required String text, int? game}) {
   final document = splitChapterText(text);
   final lines = <ChapterLine>[];
-  for (final game in document.games) {
-    final read = readGame(game.text);
+  for (final span in document.games) {
+    final read = readGame(span.text);
     lines.add(
       ChapterLine(
         tags: read.tags,
         tree: read.tree,
-        text: game.text,
-        trailer: game.trailer,
+        text: span.text,
+        trailer: span.trailer,
         terminator: read.terminator,
         separator: read.separator,
         issues: read.issues,
       ),
     );
   }
-  return Chapter(
+  return _built(
     name: name,
-    side: chapterSide(document.preamble),
     preamble: document.preamble,
-    lines: List.unmodifiable(lines),
-    tree: mergeLines(lines),
+    lines: lines,
+    game: game,
   );
 }
 
-/// [chapter] with [lines] in its place and its tree merged again.
+/// [chapter] with [lines] in its place and its tree built again.
 ///
 /// [preamble] replaces the metadata block, which adding the first game to a
 /// chapter that had none needs: the new game has to start on its own line.
+/// [game] moves the focus, which reordering or removing a study's chapters
+/// does: the chapter the user is on keeps its place on screen while its
+/// index in the file changes.
 Chapter withLines(
   Chapter chapter,
   List<ChapterLine> lines, {
   String? preamble,
-}) => Chapter(
+  int? game,
+}) => _built(
   name: chapter.name,
-  side: chapter.side,
   preamble: preamble ?? chapter.preamble,
-  lines: List.unmodifiable(lines),
-  tree: mergeLines(lines),
+  lines: lines,
+  game: game ?? chapter.game,
 );
+
+/// A chapter over [lines]: the tree is the one game [game] names, or every
+/// game from the same position merged when it names none.
+///
+/// A focused game is taken as it is rather than merged with itself: merging
+/// folds two siblings that play the same move into one, which is right for a
+/// repertoire built from separate games and wrong for one game, where the
+/// path the file wrote is the path the cursor walks.
+Chapter _built({
+  required String name,
+  required String preamble,
+  required List<ChapterLine> lines,
+  required int? game,
+}) {
+  final focused = game != null && game >= 0 && game < lines.length
+      ? lines[game]
+      : null;
+  return Chapter(
+    name: name,
+    side: focused == null ? chapterSide(preamble) : studyOrientation(focused),
+    preamble: preamble,
+    lines: List.unmodifiable(lines),
+    tree: game == null
+        ? mergeLines(lines)
+        : focused?.tree ?? const GameTree(rootFen: Fen.initial),
+    game: game,
+  );
+}
 
 /// Every game from the first readable game's position, folded in file order.
 /// That game fixes the main line; later games can only add variations.
@@ -182,6 +245,7 @@ Chapter renamedChapter(Chapter chapter, String name) => Chapter(
   preamble: chapter.preamble,
   lines: chapter.lines,
   tree: chapter.tree,
+  game: chapter.game,
 );
 
 /// A chapter file with no games yet: the `//` preamble and nothing else.

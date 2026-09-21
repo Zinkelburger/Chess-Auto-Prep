@@ -5,6 +5,7 @@ import '../../ui/choice_dialog.dart';
 import '../../ui/confirm_dialog.dart';
 import '../../ui/name_dialog.dart';
 import '../../ui/relative_time.dart';
+import '../../ui/row_actions.dart';
 import '../../ui/theme.dart';
 import 'library.dart';
 import 'library_messages.dart';
@@ -153,15 +154,23 @@ class _RepertoireRow extends StatelessWidget {
                 ],
               ),
             ),
-            _RowActions(
+            RowActions(
               children: [
-                _action('Rename…', () => _rename(context), busy: library.busy),
-                _action(
+                rowAction(
+                  'Rename…',
+                  () => _rename(context),
+                  busy: library.busy,
+                ),
+                rowAction(
                   'New chapter…',
                   () => _newChapter(context),
                   busy: library.busy,
                 ),
-                _action('Delete…', () => _delete(context), busy: library.busy),
+                rowAction(
+                  'Delete…',
+                  () => _delete(context),
+                  busy: library.busy,
+                ),
               ],
             ),
           ],
@@ -270,15 +279,19 @@ class _ChapterRow extends StatelessWidget {
               Expanded(
                 child: Text(chapter.name, overflow: TextOverflow.ellipsis),
               ),
-              _RowActions(
+              RowActions(
                 children: [
-                  _action(
+                  rowAction(
                     'Rename…',
                     () => _rename(context),
                     busy: library.busy,
                   ),
-                  _action('Move to…', () => _move(context), busy: library.busy),
-                  _action(
+                  rowAction(
+                    'Move to…',
+                    () => _move(context),
+                    busy: library.busy,
+                  ),
+                  rowAction(
                     'Delete…',
                     () => _delete(context),
                     busy: library.busy,
@@ -288,31 +301,6 @@ class _ChapterRow extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-/// A menu entry, off while a catalog change is in flight: two catalog writes
-/// at once is how a half-moved repertoire happens, so the old app greys these
-/// out as well.
-MenuItemButton _action(String label, VoidCallback run, {required bool busy}) =>
-    MenuItemButton(onPressed: busy ? null : run, child: Text(label));
-
-/// The `⋯` menu on a row.
-class _RowActions extends StatelessWidget {
-  const _RowActions({required this.children});
-
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return MenuAnchor(
-      menuChildren: children,
-      builder: (context, controller, _) => IconButton(
-        icon: const Icon(Icons.more_horiz, size: IconSize.action),
-        tooltip: 'Actions',
-        onPressed: controller.isOpen ? controller.close : controller.open,
       ),
     );
   }

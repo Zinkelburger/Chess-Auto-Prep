@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../chess/pgn/comment_text.dart';
 import '../chess/pgn/game_tree.dart';
 import '../chess/pgn/move_label.dart';
+import '../chess/pgn/study.dart';
 import '../ui/theme.dart';
 import 'document_session.dart';
 
@@ -10,9 +11,14 @@ import 'document_session.dart';
 /// indented block right after the move it replaces, the way Lichess lays
 /// out a study. Clicking a move puts the cursor on it.
 class MoveTreeView extends StatelessWidget {
-  const MoveTreeView({super.key, required this.session});
+  const MoveTreeView({super.key, required this.session, this.moveMenu});
 
   final DocumentSession session;
+
+  /// What a right-click on a move offers, or null when the mode showing the
+  /// move list offers nothing. The list knows nothing about the entries: it
+  /// says which move was clicked and shows what it is given.
+  final MoveMenu? moveMenu;
 
   @override
   Widget build(BuildContext context) {
@@ -38,6 +44,7 @@ class MoveTreeView extends StatelessWidget {
                 _Comment(text: prose),
               ..._LineBuilder(
                 session,
+                moveMenu,
               ).line(const NodePath.root(), tree.children),
             ],
           ),
@@ -50,10 +57,14 @@ class MoveTreeView extends StatelessWidget {
 /// Where a line is: one sibling list under one parent, and which sibling.
 typedef _Branch = ({NodePath parent, List<MoveNode> siblings, int branch});
 
+/// The entries a right-click on the move at `path` opens.
+typedef MoveMenu = List<Widget> Function(NodePath path);
+
 final class _LineBuilder {
-  _LineBuilder(this.session);
+  _LineBuilder(this.session, this.moveMenu);
 
   final DocumentSession session;
+  final MoveMenu? moveMenu;
 
   /// The line that starts at `siblings[branch]` and follows main
   /// continuations to the end. The other siblings of a main move are its
@@ -109,6 +120,9 @@ final class _LineBuilder {
       label: moveNumberLabel(node, startsLine: numbered),
       san: node.san + node.nags.map(nagGlyph).nonNulls.join(),
       selected: session.cursor == path,
+      quizStarts: hasToken(node.comment, quizStartMarker),
+      quizEnds: hasToken(node.comment, quizEndMarker),
+      menu: moveMenu?.call(path) ?? const [],
       onTap: () => session.goTo(path),
     );
   }
@@ -154,12 +168,26 @@ class _MoveToken extends StatefulWidget {
     required this.label,
     required this.san,
     required this.selected,
+    required this.quizStarts,
+    required this.quizEnds,
+    required this.menu,
     required this.onTap,
   });
 
   final String label;
   final String san;
   final bool selected;
+
+  /// A quiz starts at this move, or ends after it. Shown as a small flag, so
+  /// a marker that is only a token in the file is still something the reader
+  /// can see.
+  final bool quizStarts;
+  final bool quizEnds;
+
+  /// What a right-click here offers; empty means right-clicking does
+  /// nothing.
+  final List<Widget> menu;
+
   final VoidCallback onTap;
 
   @override
@@ -167,6 +195,8 @@ class _MoveToken extends StatefulWidget {
 }
 
 class _MoveTokenState extends State<_MoveToken> {
+  final _menu = MenuController();
+
   @override
   void initState() {
     super.initState();
@@ -193,7 +223,22 @@ class _MoveTokenState extends State<_MoveToken> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final token = _token(Theme.of(context).colorScheme);
+    if (widget.menu.isEmpty) return token;
+    return MenuAnchor(
+      controller: _menu,
+      menuChildren: widget.menu,
+      child: GestureDetector(
+        onSecondaryTapDown: (details) {
+          widget.onTap();
+          _menu.open(position: details.localPosition);
+        },
+        child: token,
+      ),
+    );
+  }
+
+  Widget _token(ColorScheme scheme) {
     return InkWell(
       onTap: widget.onTap,
       borderRadius: BorderRadius.circular(3),
@@ -205,18 +250,35 @@ class _MoveTokenState extends State<_MoveToken> {
               : null,
           borderRadius: BorderRadius.circular(3),
         ),
-        child: Text.rich(
-          TextSpan(
-            children: [
-              if (widget.label.isNotEmpty)
-                TextSpan(
-                  text: '${widget.label} ',
-                  style: TextStyle(color: scheme.onSurfaceVariant),
-                ),
-              TextSpan(text: widget.san),
-            ],
-          ),
-          style: monoText.copyWith(color: scheme.onSurface),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (widget.quizStarts)
+              Icon(
+                Icons.play_arrow,
+                size: IconSize.menu,
+                color: scheme.onSurfaceVariant,
+              ),
+            Text.rich(
+              TextSpan(
+                children: [
+                  if (widget.label.isNotEmpty)
+                    TextSpan(
+                      text: '${widget.label} ',
+                      style: TextStyle(color: scheme.onSurfaceVariant),
+                    ),
+                  TextSpan(text: widget.san),
+                ],
+              ),
+              style: monoText.copyWith(color: scheme.onSurface),
+            ),
+            if (widget.quizEnds)
+              Icon(
+                Icons.stop,
+                size: IconSize.menu,
+                color: scheme.onSurfaceVariant,
+              ),
+          ],
         ),
       ),
     );

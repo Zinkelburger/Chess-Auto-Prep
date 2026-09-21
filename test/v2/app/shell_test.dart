@@ -3,7 +3,9 @@ import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/diagnostics/log.dart';
 import 'package:chess_auto_prep/v2/app/shell.dart';
 import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
+import 'package:chess_auto_prep/v2/net/lichess_studies.dart';
 import 'package:chess_auto_prep/v2/features/library/library.dart';
+import 'package:chess_auto_prep/v2/features/study/studies.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/workspace/save_state.dart';
@@ -18,6 +20,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../support/fixtures.dart';
 import '../support/scripted_files.dart';
 import '../support/scripted_store.dart';
+import '../support/study_fixture.dart';
 
 void main() {
   final kid = ref('KID', 'Main');
@@ -25,6 +28,7 @@ void main() {
   late ScriptedFiles files;
   late ScriptedDocumentStore store;
   late Library library;
+  late Studies studies;
   late DocumentSaver saver;
   late DocumentSession session;
   late EngineAnalysis analysis;
@@ -53,6 +57,16 @@ void main() {
       saver: saver,
       root: '/repertoires',
     );
+    studies = Studies(
+      files: ScriptedStudyFiles(),
+      documents: store,
+      session: session,
+      saver: saver,
+      lichess: ScriptedLichess(
+        const StudyNotFetched(StudyFetchProblem.unreachable),
+      ),
+      root: studiesRoot,
+    );
     analysis = EngineAnalysis(
       session,
       () async => const StartFailed('no engine in this test'),
@@ -71,6 +85,7 @@ void main() {
 
   tearDown(() {
     analysis.dispose();
+    studies.dispose();
     library.dispose();
     session.dispose();
     saver.dispose();
@@ -83,6 +98,7 @@ void main() {
         theme: darkTheme(),
         home: Shell(
           library: library,
+          studies: studies,
           session: session,
           saver: saver,
           analysis: analysis,

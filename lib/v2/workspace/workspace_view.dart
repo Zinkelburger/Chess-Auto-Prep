@@ -24,11 +24,16 @@ class WorkspaceView extends StatelessWidget {
     required this.session,
     required this.saver,
     required this.analysis,
+    this.moveMenu,
   });
 
   final DocumentSession session;
   final DocumentSaver saver;
   final EngineAnalysis analysis;
+
+  /// What a right-click on a move offers, which is the mode's business: a
+  /// study marks where a quiz starts, and nothing else offers anything yet.
+  final MoveMenu? moveMenu;
 
   void _undo() => unawaited(session.undo());
 
@@ -87,7 +92,9 @@ class WorkspaceView extends StatelessWidget {
                 const Divider(height: 1),
                 EnginePane(analysis: analysis),
                 const Divider(height: 1),
-                Expanded(child: MoveTreeView(session: session)),
+                Expanded(
+                  child: MoveTreeView(session: session, moveMenu: moveMenu),
+                ),
                 const Divider(height: 1),
                 CommentPanel(session: session),
               ],

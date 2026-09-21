@@ -195,3 +195,22 @@ List<MoveNode> _editChildren(
   );
   return List.unmodifiable(out);
 }
+
+/// Where the moves [path] names in [before] are in [after].
+///
+/// The moves are followed by name, not by their places in the lists: a path
+/// is only a route through a particular tree, and the same numbers in a file
+/// the user just took back can name entirely different moves. A move [after]
+/// does not have leaves the answer on the deepest move above it that it
+/// does.
+NodePath samePath(GameTree before, GameTree after, NodePath path) {
+  final kept = <int>[];
+  var siblings = after.children;
+  for (final step in before.lineTo(path)) {
+    final index = siblings.indexWhere((node) => node.san == step.san);
+    if (index < 0) break;
+    kept.add(index);
+    siblings = siblings[index].children;
+  }
+  return NodePath.of(kept);
+}

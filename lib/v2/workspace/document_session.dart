@@ -8,11 +8,13 @@ import '../chess/pgn/chapter_edits.dart' as edits;
 import '../chess/pgn/comment_edits.dart' as edits;
 import '../chess/pgn/games_written.dart';
 import '../chess/pgn/game_tree.dart';
+import '../chess/pgn/tree_edit.dart';
 import '../diagnostics/log.dart';
 import '../storage/chapter_files.dart';
 import '../storage/document_ref.dart';
 import '../storage/edit_scope.dart';
 import '../storage/pgn_document_store.dart' as store;
+import 'copy_aside.dart';
 import 'document_saver.dart';
 import 'edit_refused.dart';
 import 'save_state.dart';
@@ -34,6 +36,7 @@ final class DocumentSession extends ChangeNotifier {
   final DocumentSaver _saver;
   Chapter? _chapter;
   ChapterRef? _source;
+  int? _game;
   String? _readOnly;
   NodePath _cursor = const NodePath.root();
   EditRefused? _refused;
@@ -57,6 +60,10 @@ final class DocumentSession extends ChangeNotifier {
   /// The file the chapter was read from.
   ChapterRef? get source => _source;
 
+  /// Which game of that file is on the board, or null when its games are
+  /// merged. A repertoire chapter is the file; a study chapter is one game.
+  int? get game => _chapter?.game;
+
   GameTree? get tree => _chapter?.tree;
 
   NodePath get cursor => _cursor;
@@ -70,6 +77,7 @@ final class DocumentSession extends ChangeNotifier {
 
   /// The comment on the move at [at], or the chapter's introduction at the
   /// root; machine tokens included.
+
   String? commentAt(NodePath at) =>
       at.isRoot ? tree?.rootComment : tree?.nodeAt(at)?.comment;
 
@@ -80,8 +88,14 @@ final class DocumentSession extends ChangeNotifier {
 
   /// Reads [ref] through the store, so the session holds the revision every
   /// later save is checked against.
-  Future<OpenResult> open(ChapterRef ref) async {
+  ///
+  /// [game] opens one game of the file as the whole document, which is what
+  /// a study chapter is; null merges its games. Another chapter of the same
+  /// file is another [open], so the draft of the one being left goes to disk
+  /// first, exactly as it does when another file is opened.
+  Future<OpenResult> open(ChapterRef ref, {int? game}) async {
     final ticket = ++_opens;
+    _game = game;
     // A rename, move or delete of the document open now may still be running,
     // with a draft waiting behind it. That draft belongs to the file it was
     // typed into, so it goes out first — before this document takes the saver
@@ -93,7 +107,11 @@ final class DocumentSession extends ChangeNotifier {
     if (_disposed || ticket != _opens) return const OpenOvertaken();
     switch (read) {
       case store.Opened(:final text, :final revision, :final readOnly):
-        final chapter = await readChapter(name: ref.name, text: text);
+        final chapter = await readChapter(
+          name: ref.name,
+          text: text,
+          game: game,
+        );
         if (_disposed || ticket != _opens) return const OpenOvertaken();
         _show(chapter, ref, revision, readOnly);
         return const DocumentOpened();
@@ -104,12 +122,12 @@ final class DocumentSession extends ChangeNotifier {
     }
   }
 
-  /// Throws the draft away and takes what is on disk, which is how a
-  /// conflict ends when the user decides the other version wins.
+  /// Throws the draft away and takes what is on disk: how a conflict ends
+  /// when the user decides the other version wins.
   Future<OpenResult> reloadFromDisk() async {
     final ref = _source;
     if (ref == null) return const OpenOvertaken();
-    return open(ref);
+    return open(ref, game: _game);
   }
 
   /// The open document was renamed or moved. It is the same file with the
@@ -131,6 +149,7 @@ final class DocumentSession extends ChangeNotifier {
     _opens++;
     _chapter = null;
     _source = null;
+    _game = null;
     _cursor = const NodePath.root();
     _refused = null;
     _saver.closed();
@@ -183,6 +202,11 @@ final class DocumentSession extends ChangeNotifier {
         _refused = const MoveLost();
         notifyListeners();
         return;
+      case edits.MoveRefused(:final reason):
+        log.w('move ${_source?.path}', reason);
+        _refused = const LineNotWhole();
+        notifyListeners();
+        return;
       case edits.MoveAdded(chapter: final edited, :final path, :final written):
         _clearRefusal();
         _cursor = path;
@@ -207,8 +231,8 @@ final class DocumentSession extends ChangeNotifier {
     final hadRefusal = _refused != null;
     switch (edits.setComment(chapter, at: at, text: text)) {
       case final edits.CommentRefused refusal:
-        log.w('comment ${_source?.path}', _refusalDetail(refusal));
-        _refused = _refusalOf(refusal);
+        log.w('comment ${_source?.path}', refusalDetail(refusal));
+        _refused = refusalOf(refusal);
       case edits.CommentWritten(chapter: final edited, :final written):
         _clearRefusal();
         if (identical(edited, chapter)) {
@@ -220,17 +244,45 @@ final class DocumentSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// What the log should say about a refused edit; the screen says its own
-  /// version of the same thing.
-  String _refusalDetail(edits.CommentRefused refusal) => switch (refusal) {
-    edits.GameNotWhole() => 'the game holding that move was not read whole',
-    edits.CommentUnwritable(:final reason) => reason,
-  };
+  /// Puts the bare token [marker] on the move at [at], or takes it away.
+  ///
+  /// A marker says something about the move rather than to the reader — a
+  /// quiz starts here — so the words on it are left alone. Everything else
+  /// is a comment edit: the same games are written, the same refusals apply.
+  void setMarker(NodePath at, String marker, {required bool on}) {
+    final chapter = _chapter;
+    if (chapter == null) return;
+    if (_refuseWhenReadOnly()) return;
+    switch (edits.setMarker(chapter, at: at, marker: marker, on: on)) {
+      case final edits.CommentRefused refusal:
+        log.w('mark $marker in ${_source?.path}', refusalDetail(refusal));
+        _refused = refusalOf(refusal);
+      case edits.CommentWritten(chapter: final edited, :final written):
+        _clearRefusal();
+        if (!identical(edited, chapter)) _replace(edited, written);
+    }
+    notifyListeners();
+  }
 
-  EditRefused _refusalOf(edits.CommentRefused refusal) => switch (refusal) {
-    edits.GameNotWhole() => const LineNotWhole(),
-    edits.CommentUnwritable(:final reason) => WordsRefused(reason),
-  };
+  /// Shows [edited] and puts it on disk under [scope], for an edit this
+  /// session does not make itself.
+  ///
+  /// A mode that owns a kind of edit — a study's chapters, which are the
+  /// file's games — produces the new chapter and says what it changed. The
+  /// session stays the one owner of what is open and of the writing. The
+  /// scope is the edit's own account of what it did, never worked out from
+  /// the text.
+  void replace(Chapter edited, EditScope scope) {
+    if (_chapter == null || _refuseWhenReadOnly()) return;
+    _clearRefusal();
+    // Another game of the file is another chapter, and a path through the
+    // one being left names nothing in it.
+    if (edited.game != _game) _cursor = const NodePath.root();
+    _game = edited.game;
+    _chapter = edited;
+    _saver.save(writeChapter(edited), scope);
+    notifyListeners();
+  }
 
   /// Whether this document opened to read, in which case the edit does not
   /// happen and the screen says why again.
@@ -259,13 +311,17 @@ final class DocumentSession extends ChangeNotifier {
     final result = await _saver.undo();
     if (_disposed || ticket != _opens) return const UndoRefused();
     if (result case Restored(:final text)) {
-      final restored = await readChapter(name: ref.name, text: text);
+      final restored = await readChapter(
+        name: ref.name,
+        text: text,
+        game: _game,
+      );
       if (_disposed || ticket != _opens) return const UndoRefused();
       final before = _chapter?.tree;
       _chapter = restored;
       _cursor = before == null
           ? const NodePath.root()
-          : _sameMoves(before, restored.tree, _cursor);
+          : samePath(before, restored.tree, _cursor);
       notifyListeners();
     }
     return result;
@@ -288,13 +344,8 @@ final class DocumentSession extends ChangeNotifier {
     // still be reloaded, and its draft is still the user's.
     final frozen = _saver.state is SaveStopped || _readOnly != null;
     if (ref == null || !frozen) return written;
-    final opened = await open(
-      ChapterRef(
-        repertoire: ref.repertoire,
-        name: p.basenameWithoutExtension(written.name),
-        path: p.join(p.dirname(ref.path), written.name),
-      ),
-    );
+    final path = p.join(p.dirname(ref.path), written.name);
+    final opened = await open(ChapterRef.at(path), game: _game);
     return CopySaved(written.name, nowEditing: opened is DocumentOpened);
   }
 
@@ -307,17 +358,7 @@ final class DocumentSession extends ChangeNotifier {
     if (ref == null || chapter == null) {
       return const CopyFailed('there is nothing open to copy');
     }
-    final file = p.extension(name) == '.pgn' ? name : '$name.pgn';
-    final target = DocumentRef(p.join(p.dirname(ref.path), file));
-    // Whatever is on the screen, saved or not: a copy is the one way out of
-    // a stopped save and of a file this app may not write, and it is the
-    // words the user is looking at that they want kept.
-    final created = await _store.create(target, writeChapter(chapter));
-    return switch (created) {
-      store.Created() => CopySaved(file),
-      store.Collision() => const CopyNameTaken(),
-      store.IoFailure(:final detail) => CopyFailed(detail),
-    };
+    return copyChapterAside(_store, chapter, beside: ref, name: name);
   }
 
   void _show(
@@ -349,25 +390,6 @@ final class DocumentSession extends ChangeNotifier {
   OpenFailed _openFailed(ChapterRef ref, String reason) {
     log.w('open ${ref.path}', reason);
     return OpenFailed(reason);
-  }
-
-  /// Where the moves [path] names in [before] are in [after].
-  ///
-  /// The moves are followed by name, not by their places in the lists: a
-  /// path is only a route through a particular tree, and the same numbers in
-  /// a file the user just took back can name entirely different moves. A move
-  /// the restored file does not have leaves the cursor on the deepest move
-  /// above it that it does.
-  NodePath _sameMoves(GameTree before, GameTree after, NodePath path) {
-    final kept = <int>[];
-    var siblings = after.children;
-    for (final step in before.lineTo(path)) {
-      final index = siblings.indexWhere((node) => node.san == step.san);
-      if (index < 0) break;
-      kept.add(index);
-      siblings = siblings[index].children;
-    }
-    return NodePath.of(kept);
   }
 
   @override

@@ -74,13 +74,42 @@ CommentResult setComment(
   final unwritable = text == null ? null : commentRefusal(text);
   if (unwritable != null) return CommentUnwritable(unwritable);
   if (at.isRoot) return _withIntroduction(chapter, text);
+  return _edited(chapter, at, (comment) => withProse(comment, text));
+}
+
+/// Puts the bare token [marker] on the move at [at], or takes it away.
+///
+/// A marker is not prose: it says something about the move to whoever reads
+/// the file next — a quiz starts here, a quiz ends here — and the words the
+/// user typed are left exactly as they are. The root has no move to mark.
+CommentResult setMarker(
+  Chapter chapter, {
+  required NodePath at,
+  required String marker,
+  required bool on,
+}) {
+  if (at.isRoot) return _unchanged(chapter);
+  return _edited(
+    chapter,
+    at,
+    (comment) => withToken(comment, marker, present: on),
+  );
+}
+
+/// The comment on the move at [at], put through [change], in every game the
+/// note belongs in.
+CommentResult _edited(
+  Chapter chapter,
+  NodePath at,
+  String? Function(String? comment) change,
+) {
   final sans = [for (final node in chapter.tree.lineTo(at)) node.san];
   if (sans.isEmpty) return _unchanged(chapter);
   if (_playedByAPartialGame(chapter, sans)) return const GameNotWhole();
   final lines = [...chapter.lines];
   final written = <int>{};
   for (final index in _commentHomes(chapter, sans)) {
-    switch (_commented(chapter, chapter.lines[index], sans, text)) {
+    switch (_commented(chapter, chapter.lines[index], sans, change)) {
       case LineRefused(:final reason):
         // Nothing is committed until every game the edit must write can be
         // written, so a note never lands in some games and not others.
@@ -131,20 +160,20 @@ bool _playedByAPartialGame(Chapter chapter, List<String> sans) {
   return false;
 }
 
-/// [line] with the comment on [sans] set to [text], the reason it cannot
-/// be, or null when there is nothing there to change.
+/// [line] with the comment on [sans] put through [change], the reason it
+/// cannot be, or null when there is nothing there to change.
 LineRewrite? _commented(
   Chapter chapter,
   ChapterLine line,
   List<String> sans,
-  String? text,
+  String? Function(String? comment) change,
 ) {
   final tree = chapter.writableTree(line);
   if (tree == null) return null;
   final path = pathOfSans(tree, sans);
   final node = path == null ? null : tree.nodeAt(path);
   if (path == null || node == null) return null;
-  final comment = withProse(node.comment, text);
+  final comment = change(node.comment);
   if (comment == node.comment) return null;
   return rewritten(line, withComment(tree, path, comment));
 }
