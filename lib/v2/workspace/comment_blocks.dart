@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
@@ -5,7 +7,10 @@ import 'package:flutter/material.dart';
 import '../chess/fen.dart';
 import '../chess/pgn/comment_layout.dart';
 import '../chess/pv_text.dart';
+import '../chess/pgn/game_tree.dart';
 import '../ui/theme.dart';
+import 'document_session.dart';
+import 'line_preview.dart';
 
 /// Asked when the pointer rests on a move written in a comment, with where
 /// on the screen it is; and when it leaves.
@@ -13,6 +18,54 @@ typedef HoverMove = void Function(PvMove move, Offset anchor);
 
 /// Asked to play [moves] from the position the comment belongs to.
 typedef PlayMoves = void Function(List<PvMove> moves);
+
+/// What a view that shows comments does with the moves written in them: a
+/// board under the pointer once it rests on one, and a click plays the line
+/// into [session] from the move the comment belongs to. The view hands
+/// [preview] to a [LinePreviewOverlay].
+mixin CommentPreviews<T extends StatefulWidget> on State<T> {
+  DocumentSession get session;
+
+  final preview = ValueNotifier<LinePreview?>(null);
+  Timer? _settle;
+
+  @override
+  void dispose() {
+    _settle?.cancel();
+    preview.dispose();
+    super.dispose();
+  }
+
+  /// The board appears once the pointer has rested on a move.
+  void hoverMove(PvMove move, Offset anchor) {
+    _settle?.cancel();
+    _settle = Timer(previewDelay, () {
+      if (!mounted) return;
+      preview.value = LinePreview(
+        fen: move.after,
+        lastMove: move.uci,
+        anchor: anchor,
+      );
+    });
+  }
+
+  void leaveMove() {
+    _settle?.cancel();
+    preview.value = null;
+  }
+
+  /// Plays [moves] from the move at [from], where the comment they were
+  /// written in belongs. A move that does not land, because the document
+  /// refused it, ends the walk there.
+  void playFrom(NodePath from, List<PvMove> moves) {
+    leaveMove();
+    session.goTo(from);
+    for (final move in moves) {
+      session.playMove(move.uci);
+      if (session.fen != move.after) return;
+    }
+  }
+}
 
 /// A comment as it reads: paragraphs at a book's measure, headings, quotes,
 /// diagrams, and lines of analysis whose moves float a board under the

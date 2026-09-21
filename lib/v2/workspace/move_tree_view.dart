@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import '../chess/fen.dart';
@@ -7,7 +5,6 @@ import '../chess/pgn/comment_text.dart';
 import '../chess/pgn/game_tree.dart';
 import '../chess/pgn/move_label.dart';
 import '../chess/pgn/study.dart';
-import '../chess/pv_text.dart';
 import '../ui/theme.dart';
 import 'chapter_commands.dart';
 import 'comment_blocks.dart';
@@ -41,47 +38,10 @@ class MoveTreeView extends StatefulWidget {
   State<MoveTreeView> createState() => _MoveTreeViewState();
 }
 
-class _MoveTreeViewState extends State<MoveTreeView> {
-  final _preview = ValueNotifier<LinePreview?>(null);
-  Timer? _settle;
-
+class _MoveTreeViewState extends State<MoveTreeView>
+    with CommentPreviews<MoveTreeView> {
   @override
-  void dispose() {
-    _settle?.cancel();
-    _preview.dispose();
-    super.dispose();
-  }
-
-  /// The board appears once the pointer has rested on a move.
-  void _hover(PvMove move, Offset anchor) {
-    _settle?.cancel();
-    _settle = Timer(previewDelay, () {
-      if (!mounted) return;
-      _preview.value = LinePreview(
-        fen: move.after,
-        lastMove: move.uci,
-        anchor: anchor,
-      );
-    });
-  }
-
-  void _leave() {
-    _settle?.cancel();
-    _preview.value = null;
-  }
-
-  /// Plays [moves] from the move at [from], where the comment they were
-  /// written in belongs. A move that does not land, because the document
-  /// refused it, ends the walk there.
-  void _play(NodePath from, List<PvMove> moves) {
-    _leave();
-    final session = widget.session;
-    session.goTo(from);
-    for (final move in moves) {
-      session.playMove(move.uci);
-      if (session.fen != move.after) return;
-    }
-  }
+  DocumentSession get session => widget.session;
 
   /// Takes the moves out and offers the same way back a deleted line does:
   /// this removes more than a line does, so it may not be the one edit that
@@ -95,9 +55,9 @@ class _MoveTreeViewState extends State<MoveTreeView> {
     comment: comment,
     at: at,
     orientation: widget.session.orientation,
-    onHover: _hover,
-    onLeave: _leave,
-    onPlay: (moves) => _play(from, moves),
+    onHover: hoverMove,
+    onLeave: leaveMove,
+    onPlay: (moves) => playFrom(from, moves),
   );
 
   @override
@@ -121,7 +81,7 @@ class _MoveTreeViewState extends State<MoveTreeView> {
           _comment,
         );
         return LinePreviewOverlay(
-          preview: _preview,
+          preview: preview,
           orientation: widget.session.orientation,
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(

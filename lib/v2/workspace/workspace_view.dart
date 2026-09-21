@@ -12,11 +12,13 @@ import 'edit_strip.dart';
 import 'engine_analysis.dart';
 import 'engine_pane.dart';
 import 'game_counter.dart';
+import 'move_note.dart';
 import 'move_tree_view.dart';
 import 'nav_row.dart';
 import 'reading_header.dart';
 
-/// The board with the game counter under it on the left; on the right the
+/// The board with the game counter and the move's note under it on the
+/// left; on the right the
 /// reading card, top to bottom in a fixed order: the heading, the engine,
 /// the moves, the edit strip while there is editing or trouble, and the
 /// navigation row. The two halves start equal, as the old app's did. The
@@ -101,7 +103,9 @@ class WorkspaceView extends StatelessWidget {
   );
 }
 
-/// The largest square board that fits above the counter, at the top.
+/// The largest square board that fits above the counter, at the top, and
+/// the move's note in what the board leaves below, when that is enough to
+/// read a few lines in.
 class _BoardAndCounter extends StatelessWidget {
   const _BoardAndCounter({required this.session, required this.settings});
 
@@ -116,6 +120,7 @@ class _BoardAndCounter extends StatelessWidget {
           constraints.maxWidth,
           constraints.maxHeight - navRowHeight - Space.s,
         );
+        final below = constraints.maxHeight - side - navRowHeight - 2 * Space.s;
         return Align(
           alignment: Alignment.topCenter,
           child: SizedBox(
@@ -137,6 +142,14 @@ class _BoardAndCounter extends StatelessWidget {
                   height: navRowHeight,
                   child: GameCounter(session: session),
                 ),
+                if (below >= moveNoteMinHeight) ...[
+                  const SizedBox(height: Space.s),
+                  SizedBox(
+                    width: side,
+                    height: below,
+                    child: MoveNote(session: session),
+                  ),
+                ],
               ],
             ),
           ),

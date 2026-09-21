@@ -71,6 +71,10 @@ const readingCardInset = Space.xl;
 /// looked at, so bigger than a hover board and smaller than the board.
 const diagramSize = 160.0;
 
+/// The least room under the board worth showing the move's note in: its
+/// move row and two lines of prose.
+const moveNoteMinHeight = 120.0;
+
 /// How far a variation block sits in from the line it interrupts.
 const variationIndent = 14.0;
 
