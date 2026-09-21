@@ -24,7 +24,6 @@
 /* One priority governs both boards' tables, so it sits above them. */
 .bdb-priority { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 0 0 10px; }
 .bdb-priority-label { color: var(--text-dim); font-size: 14px; }
-.bdb-priority-label .bb-info { display: inline-grid; margin-left: 6px; vertical-align: middle; }
 
 .bdb-tables { grid-template-rows: auto minmax(0, 1fr); }
 .bdb-tables:has(> .bdb-missing:not([hidden])) { grid-template-rows: auto auto minmax(0, 1fr); }

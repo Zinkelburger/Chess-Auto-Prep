@@ -9,7 +9,7 @@ const CHOICES = [
   { name: 'budget', label: 'Search', checked: 0, options: [['3000', '3 s'], ['10000', '10 s'], ['30000', '30 s']] },
   // Hivemind's only clock inputs are the two diagonals, A vs D and C vs B:
   // the team that is up may choose not to move.
-  { name: 'clock', label: 'Priority', checked: 1, options: [['AB', 'AB may sit', 'A + B are up on the clock, so they may sit rather than move'], ['even', 'Equal', 'Nobody is up on the clock: both teams have to move'], ['CD', 'CD may sit', 'C + D are up on the clock, so they may sit rather than move']] },
+  { name: 'clock', label: 'Time', checked: 1, options: [['AB', 'A + B may sit', 'A + B are up on the diagonal clock, so they can wait rather than move'], ['even', 'Even', 'Neither team is up on the clock: both have to move'], ['CD', 'C + D may sit', 'C + D are up on the diagonal clock, so they can wait rather than move']] },
 ];
 ---
 <Base title="Bughouse Lab" description="Explore two-board bughouse positions with Hivemind. Move, drop, and analyse in your browser." fill>
@@ -25,7 +25,7 @@ const CHOICES = [
       <form id="bh-analyse-form" class="bh-find" aria-label="Find a move">
         {CHOICES.map((c) => (
           <div class="bh-row">
-            <span class="bh-label">{c.label}{c.name === 'clock' && <span class="bb-info" tabindex="0" role="img" aria-label="About priority" title="The team up on the diagonal clock may choose not to move. Hivemind compares only A with D and C with B; without priority a team has to move.">i</span>}</span>
+            <span class="bh-label">{c.label}</span>
             <div class="choice-row" role="radiogroup" aria-label={c.label}>
               {c.options.map(([value, text, hint], i) => (
                 <label class="choice" title={hint}><input type="radio" name={c.name} value={value} checked={i === c.checked} /><span>{text}</span></label>
