@@ -6,6 +6,7 @@ import 'package:chess_auto_prep/v2/storage/study_files.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/study_fixture.dart';
+import 'package:path/path.dart' as p;
 
 void main() {
   late StudyFixture study;
@@ -177,6 +178,33 @@ void main() {
       expect(await study.studies.create('Openings'), isA<StudyDone>());
     },
   );
+
+  test(
+    'making a study: a name that would leave the folder is refused',
+    () async {
+      relist();
+      final result = await study.studies.create('../../evil');
+      expect(result, isA<StudyProblem>());
+      expect(study.store.documents.keys.map((ref) => ref.path), [
+        '$studiesRoot/Endgames.pgn',
+      ]);
+    },
+  );
+
+  test('importing: a study whose own name is a path is filed by its file '
+      'name', () async {
+    study.lichess.answer = const StudyFetched(
+      '[Event "../../evil: One"]\n[StudyName "../../evil"]\n\n1. e4 *\n',
+    );
+    relist();
+    final result = await study.studies.importFromUrl(
+      'lichess.org/study/abcd1234',
+    );
+    expect(result, isA<StudyDone>());
+    for (final ref in study.store.documents.keys) {
+      expect(p.dirname(ref.path), studiesRoot);
+    }
+  });
 }
 
 String _nameOf(DocumentRef ref) =>

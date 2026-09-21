@@ -9,6 +9,7 @@ import '../../storage/chapter_files.dart';
 import '../../storage/document_ref.dart';
 import '../../storage/pgn_document_store.dart' as store;
 import '../../storage/study_files.dart';
+import '../../ui/file_names.dart';
 import '../../workspace/document_saver.dart';
 import '../../workspace/document_session.dart';
 import 'study_state.dart';
@@ -119,11 +120,11 @@ final class Studies extends ChangeNotifier {
   }
 
   /// A study with one empty chapter in it, which is what the old app makes.
-  Future<StudyResult> create(String name) =>
-      _run('create the study $name', () => _created(name, newStudyText(
-        study: name,
-        chapter: firstChapter,
-      )));
+  Future<StudyResult> create(String name) => _run('create the study $name', () {
+    final wrong = nameProblem(name);
+    if (wrong != null) return Future.value(StudyProblem(wrong));
+    return _created(name, newStudyText(study: name, chapter: firstChapter));
+  });
 
   /// What [input] is recognised as, for the import dialog to echo back, or
   /// null when it is not a link this app can fetch. Pure, so the dialog can
@@ -141,23 +142,21 @@ final class Studies extends ChangeNotifier {
   Future<StudyResult> importFromUrl(String url) {
     final link = parseStudyLink(url);
     if (link == null) {
-      return Future.value(
-        const StudyProblem('Not a Lichess study link.'),
-      );
+      return Future.value(const StudyProblem('Not a Lichess study link.'));
     }
     return _run('import ${link.describe}', () async {
-        final fetched = await _lichess.fetch(link);
-        if (fetched case StudyNotFetched(:final sentence)) {
-          return StudyProblem(sentence);
-        }
-        final pgn = (fetched as StudyFetched).pgn;
-        final read = await readChapter(name: '', text: pgn);
-        if (read.lines.isEmpty) {
-          return StudyProblem(StudyFetchProblem.empty.sentence);
-        }
-        final wanted = studyNameIn(read.lines) ?? 'Lichess ${link.studyId}';
-        return _createdUnderAFreeName(wanted, pgn);
-      });
+      final fetched = await _lichess.fetch(link);
+      if (fetched case StudyNotFetched(:final sentence)) {
+        return StudyProblem(sentence);
+      }
+      final pgn = (fetched as StudyFetched).pgn;
+      final read = await readChapter(name: '', text: pgn);
+      if (read.lines.isEmpty) {
+        return StudyProblem(StudyFetchProblem.empty.sentence);
+      }
+      final wanted = studyNameIn(read.lines) ?? 'Lichess ${link.studyId}';
+      return _createdUnderAFreeName(wanted, pgn);
+    });
   }
 
   /// Recoverable: the file goes to the recovery folder through the store,
@@ -223,13 +222,18 @@ final class Studies extends ChangeNotifier {
 
   /// A study is its file name, so a name a file cannot take is trimmed down
   /// to one that can rather than refused: the name came from a download, not
-  /// from the user.
-  String _asFileName(String name) {
-    final safe = name.replaceAll(_reservedInAFileName, '_').trim();
-    return safe.isEmpty ? 'Imported study' : safe;
-  }
+  /// from the user, and there is nobody to ask.
+  String _asFileName(String name) =>
+      safeFileName(name, fallback: 'Imported study');
 
+  /// Writes `<name>.pgn` in the studies folder and nowhere else.
+  ///
+  /// The name is checked again here rather than trusted from the caller: a
+  /// name reaches this from a dialog, from a download's own tags and from
+  /// another mode, and one holding a separator or a dot segment would make
+  /// a path out of what is supposed to be a file name.
   Future<StudyResult> _created(String name, String text) async {
+    if (nameProblem(name) case final wrong?) return StudyProblem(wrong);
     final ref = DocumentRef(p.join(_root, '$name.pgn'));
     return switch (await _store.create(ref, text)) {
       store.Created() => StudyDone(opened: ChapterRef.at(ref.path)),
@@ -300,6 +304,3 @@ final class Studies extends ChangeNotifier {
     super.dispose();
   }
 }
-
-/// Characters no file name may hold on any platform this app runs on.
-final _reservedInAFileName = RegExp(r'[<>:"/\\|?*\x00-\x1F]');
