@@ -3,6 +3,7 @@ import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/diagnostics/log.dart';
 import 'package:chess_auto_prep/v2/app/shell.dart';
 import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
+import 'package:chess_auto_prep/v2/features/library/chapter_outline.dart';
 import 'package:chess_auto_prep/v2/net/lichess_studies.dart';
 import 'package:chess_auto_prep/v2/features/library/library.dart';
 import 'package:chess_auto_prep/v2/features/study/studies.dart';
@@ -32,6 +33,7 @@ void main() {
   late DocumentSaver saver;
   late DocumentSession session;
   late EngineAnalysis analysis;
+  late ChapterOutline outline;
   late _Question question;
   late ExitGuard leaving;
 
@@ -57,6 +59,7 @@ void main() {
       saver: saver,
       root: '/repertoires',
     );
+    outline = ChapterOutline(library: library, session: session);
     studies = Studies(
       files: ScriptedStudyFiles(),
       documents: store,
@@ -84,6 +87,7 @@ void main() {
   });
 
   tearDown(() {
+    outline.dispose();
     analysis.dispose();
     studies.dispose();
     library.dispose();
@@ -99,6 +103,7 @@ void main() {
         home: Shell(
           library: library,
           studies: studies,
+          outline: outline,
           session: session,
           saver: saver,
           analysis: analysis,
@@ -120,7 +125,7 @@ void main() {
     await tester.pump();
     expect(session.source, kid);
     expect(session.chapter?.gameCount, 2);
-    expect(find.textContaining('Black · 2 lines'), findsOneWidget);
+    expect(find.text('2 lines, 1 from another position'), findsOneWidget);
   });
 
   testWidgets('the later of two clicks wins, whichever read finishes first', (

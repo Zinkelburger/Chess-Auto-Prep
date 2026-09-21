@@ -134,8 +134,10 @@ Future<Chapter> readChapter({
     ? Future.value(parseChapter(name: name, text: text, game: game))
     : Isolate.run(() => parseChapter(name: name, text: text, game: game));
 
-/// Below this many characters a chapter is parsed on the calling isolate:
-/// the trip to another one costs more than the parse.
+/// Below this many characters or bytes, work that reads every one of them —
+/// parsing a chapter, decoding a file, encoding and hashing text, comparing
+/// two versions game by game — is done on the calling isolate: the trip to
+/// another one costs more than the work.
 const readOffThreadFrom = 64 * 1024;
 
 Chapter parseChapter({required String name, required String text, int? game}) {
@@ -248,6 +250,36 @@ Chapter renamedChapter(Chapter chapter, String name) => Chapter(
   game: chapter.game,
 );
 
+/// [chapter] played from the other side of the board.
+///
+/// The side is not a field of the games; it is one `//` line above them, so
+/// changing it rewrites that line and leaves every game exactly as it is.
+Chapter withSide(Chapter chapter, Side side) => Chapter(
+  name: chapter.name,
+  side: side,
+  preamble: preambleWithSide(chapter.preamble, side),
+  lines: chapter.lines,
+  tree: chapter.tree,
+);
+
+/// [preamble] with its `// Color:` line saying [side].
+///
+/// Upserted in place: a file that has the line keeps everything around it
+/// where it was, and one that has none — an imported PGN, a chapter an older
+/// build wrote — gains it above whatever the preamble already said, which is
+/// where [chapterSide] looks for it.
+String preambleWithSide(String preamble, Side side) {
+  final wanted = '// Color: ${side == Side.white ? 'White' : 'Black'}';
+  final lines = preamble.split('\n');
+  final at = lines.indexWhere((line) => line.trim().startsWith('// Color:'));
+  if (at < 0) return '$wanted\n$preamble';
+  // A file written on Windows ends that line with a carriage return, and the
+  // line beside it keeps one: replacing the words is not a reason to change
+  // how the heading ends its lines.
+  lines[at] = lines[at].endsWith('\r') ? '$wanted\r' : wanted;
+  return lines.join('\n');
+}
+
 /// A chapter file with no games yet: the `//` preamble and nothing else.
 ///
 /// The colour line is the only record of which side the chapter is for, so it
@@ -274,21 +306,21 @@ String writeChapter(Chapter chapter) {
   return buffer.toString();
 }
 
-/// `// Color: Black` in the `//` lines above the first game reads as Black;
-/// anything else, including no line at all, is White. The old app wrote it
-/// that way and reads it the same way.
+/// `// Color: Black` anywhere above the first game reads as Black; anything
+/// else, including no line at all, is White. The old app wrote it that way
+/// and reads it the same way.
 ///
-/// Only the heading is looked at, so asking a large chapter costs nothing:
-/// the first line that is neither blank nor a `//` line ends the search.
+/// The whole preamble is looked at, because a file can carry anything above
+/// its first game and the colour line may be below it. Nothing below the
+/// first game is, so asking a large chapter still costs only its heading.
 Side chapterSide(String text) {
   var at = 0;
   while (at < text.length) {
     var end = text.indexOf('\n', at);
     if (end < 0) end = text.length;
+    if (isEventLine(text, at, end)) break;
     final line = text.substring(at, end).trim();
     at = end + 1;
-    if (line.isEmpty) continue;
-    if (!line.startsWith('//')) break;
     if (!line.startsWith('// Color:')) continue;
     final color = line.substring('// Color:'.length).trim().toLowerCase();
     return color == 'black' ? Side.black : Side.white;

@@ -1,11 +1,10 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 
 import '../diagnostics/log.dart';
 import '../storage/document_ref.dart';
 import '../storage/edit_scope.dart';
 import '../storage/pgn_document_store.dart' as store;
+import 'save_clock.dart';
 import 'save_queue.dart';
 import 'save_state.dart';
 import 'undo_history.dart';
@@ -14,42 +13,32 @@ typedef _Target = ({DocumentRef ref, Revision revision});
 
 /// Keeps one document's file matching the draft the user is editing.
 ///
-/// Saves are settled, not instant: an edit starts a short clock, every edit
-/// inside it restarts the clock, and the file is written once when it runs
-/// out, with the newest text. A burst of moves is one write, not a queue of
-/// stale snapshots. Anything that needs the file now — opening another
-/// document, a rename, the window closing, losing focus — [flush]es, which
-/// ends the wait at once. Only one write is in flight at a time and edits
-/// made during it collapse into a single pending save. Undo is the store's
+/// Saves are settled, not instant: the [SaveClock] says when a draft goes
+/// out, and anything that needs the file now [flush]es. Only one write is in
+/// flight at a time and edits made during it collapse into a single pending
+/// save, so there is never a queue of stale snapshots. Undo is the store's
 /// own receipts played backwards; this owner never remembers a version
 /// itself.
 final class DocumentSaver extends ChangeNotifier {
-  DocumentSaver(this._store, {this.delay = const Duration(seconds: 1)});
-
-  /// How long the file waits after the last edit before it is written.
-  final Duration delay;
+  DocumentSaver(this._store, {Duration delay = const Duration(seconds: 1)})
+    : _clock = SaveClock(delay: delay);
 
   final store.PgnDocumentStore _store;
+
+  /// The second a draft waits before it is written, and what is on its way
+  /// once it is over.
+  final SaveClock _clock;
+
   _Target? _target;
   SaveState _state = const Saved();
   final _pending = SaveQueue();
   bool _writing = false;
-
-  /// The clock a draft is waiting on, and the wait itself. Both are null
-  /// when nothing is waiting.
-  Timer? _clock;
-  Completer<void>? _waiting;
-
-  /// The write going out and everything that collapses behind it, so the
-  /// app can wait for the file to hold the draft before it closes.
-  Future<void>? _inFlight;
   final _undo = UndoHistory();
   int _opens = 0;
   bool _disposed = false;
 
-  /// The file is being renamed, moved or deleted, so nothing is written to it
-  /// until that is done.
-  bool _held = false;
+  /// What a rename, move or delete of the open file is doing to the autosave.
+  _Hold _hold = _Hold.none;
 
   SaveState get state => _state;
 
@@ -80,7 +69,7 @@ final class DocumentSaver extends ChangeNotifier {
     _opens++;
     _target = (ref: ref, revision: revision);
     _pending.clear();
-    _hurry();
+    _clock.hurry();
     _undo.clear();
     _set(readOnly == null ? const Saved() : DocumentReadOnly(readOnly));
   }
@@ -90,27 +79,22 @@ final class DocumentSaver extends ChangeNotifier {
   /// is remembered here then — the words are on the screen, where Save a
   /// copy can have them — and the state says the document is not [settled].
   void save(String text, EditScope scope) {
-    if (!takesWords) return;
+    if (!_state.takesWords) return;
     _pending.typed(text, scope);
     _set(const Unsaved());
     _start();
   }
 
-  /// Ends the wait and answers when nothing is on its way any more: the
-  /// write in flight, the one that collapsed behind it, and a hold that is
-  /// keeping both waiting. Closing the window, losing focus and opening
-  /// another document wait for this, so an edit made a moment before is not
-  /// cut off. Whether the words arrived is [settled]; a write that was
-  /// refused or failed also ends the wait.
-  Future<void> flush() {
-    _hurry();
-    return _inFlight ?? Future<void>.value();
-  }
+  /// Ends the wait and answers when nothing is on its way any more; see
+  /// [SaveClock.flush]. Closing the window, losing focus and opening another
+  /// document wait for this, so an edit made a moment before is not cut off.
+  /// Whether the words arrived is [settled].
+  Future<void> flush() => _clock.flush();
 
   /// Runs [action] against the revision the file has now, with the file held
-  /// still: the write on its way out finishes first, and a save asked for
-  /// while [action] runs waits behind it. Answers null when there is nothing
-  /// open or another hold is running.
+  /// still: the draft waiting on the clock is written first, and a save asked
+  /// for while [action] runs waits behind it. Answers null when there is
+  /// nothing open or another hold is running.
   ///
   /// This is how a rename, move or delete of the open chapter is serialised
   /// with autosave. The alternative — letting the save go and renaming
@@ -118,27 +102,27 @@ final class DocumentSaver extends ChangeNotifier {
   /// a lost race means the user is told their file changed on disk when the
   /// only thing that wrote it was this app.
   Future<T?> holdStill<T>(Future<T> Function(Revision revision) action) {
-    if (_held || _disposed) return Future<T?>.value();
-    final held = _hold(action);
-    // The hold and the draft waiting behind it are now what the draft is
-    // waiting on, so a flush waits for the whole of it rather than for a
-    // write that finished before the hold began. What is kept here can only
-    // complete, never fail: an action that throws is the caller's to handle,
-    // and a failed future left here would throw again at every later flush
-    // and at the end of every later hold.
-    _inFlight = held.then<void>((_) {}, onError: (Object _) {});
+    if (_hold != _Hold.none || _disposed) return Future<T?>.value();
+    _hold = _Hold.settling;
+    final held = _holding(action);
+    _clock.waitsFor(held);
     return held;
   }
 
-  Future<T?> _hold<T>(Future<T> Function(Revision revision) action) async {
-    _held = true;
+  Future<T?> _holding<T>(Future<T> Function(Revision revision) action) async {
     try {
+      // The words waiting on the clock were typed into this file, so they go
+      // to it before [action] renames, moves or deletes it. Written
+      // afterwards they would go to a name that has moved, or — when the file
+      // was deleted and the document closed with it — to no file at all,
+      // leaving the last edit in nothing the user can open again.
       await flush();
+      _hold = _Hold.held;
       final target = _target;
       if (_disposed || target == null) return null;
       return await action(target.revision);
     } finally {
-      _held = false;
+      _hold = _Hold.none;
       await _write();
     }
   }
@@ -158,7 +142,7 @@ final class DocumentSaver extends ChangeNotifier {
     _opens++;
     _target = null;
     _pending.clear();
-    _hurry();
+    _clock.hurry();
     _undo.clear();
     _set(const Saved());
   }
@@ -168,42 +152,8 @@ final class DocumentSaver extends ChangeNotifier {
   /// waits for neither clock: it goes out as soon as the write or the hold
   /// is over.
   void _start() {
-    if (_held || _writing || _disposed) return;
-    if (_waiting != null) {
-      _restartClock();
-      return;
-    }
-    _inFlight = _waitThenWrite();
-  }
-
-  Future<void> _waitThenWrite() async {
-    final waiting = _waiting = Completer<void>();
-    // No wait at all is no clock at all: the draft goes out on the next
-    // turn, and nothing is left ticking for a test's widget tree to trip on.
-    if (delay == Duration.zero) {
-      _hurry();
-    } else {
-      _restartClock();
-    }
-    await waiting.future;
-    await _write();
-  }
-
-  void _restartClock() {
-    _clock?.cancel();
-    _clock = Timer(delay, _hurry);
-  }
-
-  /// Ends the wait, if there is one. The draft goes out now — or, when the
-  /// document was closed or replaced meanwhile, the write finds nothing
-  /// waiting and does nothing. The wait is always ended rather than dropped:
-  /// a flush is waiting on it.
-  void _hurry() {
-    _clock?.cancel();
-    _clock = null;
-    final waiting = _waiting;
-    _waiting = null;
-    waiting?.complete();
+    if (_hold != _Hold.none || _writing || _disposed) return;
+    _clock.edited(_write);
   }
 
   /// The one gate on writing: the end of the wait, the retry after a
@@ -211,8 +161,8 @@ final class DocumentSaver extends ChangeNotifier {
   /// document this saver stopped writing cannot be written by any of them.
   Future<void> _write() async {
     final target = _target;
-    if (_disposed || !_writable || _held || _writing || target == null) return;
-    if (_pending.isEmpty) return;
+    if (_disposed || !_state.writable || _writing || target == null) return;
+    if (_hold == _Hold.held || _pending.isEmpty) return;
     final draft = _pending.take()!;
     _writing = true;
     _set(const Saving());
@@ -233,25 +183,15 @@ final class DocumentSaver extends ChangeNotifier {
       return;
     }
     // Only a write the disk refused comes back to be tried with the next
-    // edit; see [_stopped] for what happens to the others.
+    // edit; see [SaveStopped] and [SaveConflict] for what happens to the
+    // others.
     if (result is store.IoFailure) _pending.returned(draft);
     _adopt(result, target.ref);
     await _write();
   }
 
-  /// Whether a write may go out now: a failed file is written again with
-  /// the next edit, and [takesWords] covers the rest.
-  bool get _writable => takesWords && _state is! SaveFailed;
-
-  /// Whether this saver is still writing this document at all. A stopped
-  /// save freezes it: the words stay on the screen, where Save a copy can
-  /// have them, and nothing else goes to disk under a scope that does not
-  /// name their games. A conflicted file and one this app may not write are
-  /// the same to whoever is about to tell the user that waiting will help.
-  bool get takesWords =>
-      _state is! SaveConflict &&
-      _state is! SaveStopped &&
-      _state is! DocumentReadOnly;
+  /// Whether this saver is still writing this document at all.
+  bool get takesWords => _state.takesWords;
 
   /// The store's answer to one write, with an exception it was not supposed
   /// to throw turned into the failure it is. A throw that got out would
@@ -293,9 +233,9 @@ final class DocumentSaver extends ChangeNotifier {
         // The store logs what it could not do; a conflict is not a failure
         // there, so it is named here.
         log.w('save ${ref.path}', 'the file changed on disk');
-        _conflicted();
+        _stopWriting(const SaveConflict());
       case store.SaveRefused():
-        _stopped();
+        _set(const SaveStopped());
       case store.NotWritable(:final detail):
         _stopWriting(DocumentReadOnly(detail));
       // A restore is the only write that can be refused for not being a
@@ -323,22 +263,20 @@ final class DocumentSaver extends ChangeNotifier {
   /// refused, and the version it wrote becomes the next step back.
   Future<UndoResult> undo() async {
     if (_state is SaveStopped) return undoFrozen;
-    if (_waiting != null) await flush();
+    if (_clock.isWaiting) await flush();
     final target = _target;
     final entry = _undo.newest;
     if (_state is SaveStopped) return undoFrozen;
     if (_disposed ||
         target == null ||
         entry == null ||
-        _held ||
+        _hold != _Hold.none ||
         _writing ||
         !_pending.isEmpty) {
       return const UndoRefused();
     }
     final undoing = _undoTo(entry, target);
-    // What is kept here can only complete, never fail: a future left here
-    // with an error would throw again at every later flush.
-    _inFlight = undoing.then<void>((_) {}, onError: (Object _) {});
+    _clock.waitsFor(undoing);
     return undoing;
   }
 
@@ -408,10 +346,10 @@ final class DocumentSaver extends ChangeNotifier {
         return Restored(entry.before);
       case store.Conflict():
         log.w('undo ${ref.path}', 'the file changed on disk');
-        _conflicted();
+        _stopWriting(const SaveConflict());
         return const UndoRefused();
       case store.SaveRefused():
-        _stopped();
+        _set(const SaveStopped());
         return const UndoRefused();
       case store.RestoreRefused(:final detail):
         log.w('undo ${ref.path}', detail);
@@ -434,14 +372,6 @@ final class DocumentSaver extends ChangeNotifier {
     _set(state);
   }
 
-  void _conflicted() => _stopWriting(const SaveConflict());
-
-  /// The store stopped the save. Nothing is taken away: the words are on
-  /// the screen and whatever was typed behind this write is still waiting,
-  /// so Save a copy has all of them. Nothing more goes to disk until the
-  /// user reloads or saves a copy.
-  void _stopped() => _set(const SaveStopped());
-
   void _set(SaveState state) {
     if (_disposed) return;
     // A draft still waiting its turn is not saved, whatever the write that
@@ -454,7 +384,14 @@ final class DocumentSaver extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
-    _hurry();
+    _clock.hurry();
     super.dispose();
   }
 }
+
+/// What a rename, move or delete of the open file is doing to the autosave:
+/// [none] is the usual state; in [settling] the draft on the clock is going
+/// to the file before the change takes it, and writes still go out, but no
+/// second hold may begin; in [held] the change itself is running and nothing
+/// is written until it is over.
+enum _Hold { none, settling, held }

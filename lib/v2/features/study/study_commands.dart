@@ -2,9 +2,9 @@ import 'package:dartchess/dartchess.dart' show Side;
 
 import '../../chess/fen.dart';
 import '../../chess/pgn/chapter.dart';
+import '../../chess/pgn/chapter_edit.dart';
 import '../../chess/pgn/study.dart';
 import '../../chess/pgn/study_edits.dart';
-import '../../storage/edit_scope.dart';
 import '../../workspace/document_session.dart';
 
 /// The chapter operations of a study, as commands over the open document.
@@ -79,22 +79,9 @@ String? deleteStudyChapter(DocumentSession session, {required int index}) =>
 String studyNameOf(Chapter chapter) =>
     studyNameIn(chapter.lines) ?? chapter.name;
 
-/// Runs [edit] over the open chapter and puts the result on disk.
-String? _apply(DocumentSession session, StudyEdit Function(Chapter) edit) {
-  final chapter = session.chapter;
-  if (chapter == null || chapter.game == null) {
-    return 'Open a study chapter first.';
-  }
-  if (session.readOnly case final reason?) {
-    return 'This study cannot be edited: $reason.';
-  }
-  switch (edit(chapter)) {
-    case ChapterEditRefused(:final reason):
-      return reason;
-    case ChapterWritten(:final chapter, :final written):
-      session.replace(chapter, GamesEdited(written));
-    case ChaptersReordered(:final chapter, :final from):
-      session.replace(chapter, GamesReordered(from));
-  }
-  return null;
+/// Runs [edit] over the open chapter through the session, which is the one
+/// place an edit becomes a file. Answers the sentence to show, or null.
+String? _apply(DocumentSession session, ChapterEdit Function(Chapter) edit) {
+  if (session.chapter?.game == null) return 'Open a study chapter first.';
+  return session.apply(edit);
 }

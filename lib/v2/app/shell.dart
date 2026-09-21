@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../features/library/chapter_outline.dart';
 import '../features/library/library.dart';
 import '../features/library/library_panel.dart';
+import '../features/library/outline_panel.dart';
 import '../features/study/quiz_menu.dart';
 import '../features/study/studies.dart';
 import '../features/study/study_panel.dart';
@@ -24,6 +26,7 @@ class Shell extends StatefulWidget {
     super.key,
     required this.library,
     required this.studies,
+    required this.outline,
     required this.session,
     required this.saver,
     required this.analysis,
@@ -32,6 +35,7 @@ class Shell extends StatefulWidget {
 
   final Library library;
   final Studies studies;
+  final ChapterOutline outline;
   final DocumentSession session;
   final DocumentSaver saver;
   final EngineAnalysis analysis;
@@ -118,6 +122,20 @@ class _ShellState extends State<Shell> {
                   child: _leftColumn(),
                 ),
                 const VerticalDivider(width: 1),
+                // A study's chapters are already in its own left column, so
+                // the repertoire outline is not shown beside them.
+                if (_mode != Mode.study)
+                  ListenableBuilder(
+                    listenable: widget.session,
+                    builder: (context, _) => widget.session.source == null
+                        ? const SizedBox.shrink()
+                        : _OutlineColumn(
+                            outline: widget.outline,
+                            library: widget.library,
+                            session: widget.session,
+                            onOpen: _open,
+                          ),
+                  ),
                 Expanded(
                   child: WorkspaceView(
                     session: widget.session,
@@ -146,6 +164,39 @@ enum Mode {
   const Mode(this.label);
 
   final String label;
+}
+
+/// The outline between the library and the board, with the rule that it is
+/// only there when a chapter is: its rows are that chapter's repertoire and
+/// its lines.
+class _OutlineColumn extends StatelessWidget {
+  const _OutlineColumn({
+    required this.outline,
+    required this.library,
+    required this.session,
+    required this.onOpen,
+  });
+
+  final ChapterOutline outline;
+  final Library library;
+  final DocumentSession session;
+  final ValueChanged<ChapterRef> onOpen;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      SizedBox(
+        width: outlineColumnWidth,
+        child: OutlinePanel(
+          outline: outline,
+          library: library,
+          session: session,
+          onOpen: onOpen,
+        ),
+      ),
+      const VerticalDivider(width: 1),
+    ],
+  );
 }
 
 /// Modes not yet in v2 are listed but disabled, so the menu shows the whole

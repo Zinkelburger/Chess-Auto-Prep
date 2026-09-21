@@ -47,13 +47,23 @@ void main() {
 
   void edit(String words) => fixture.session.setComment(sicilian, words);
 
+  testWidgets('shows which side the chapter is for and changes it', (
+    tester,
+  ) async {
+    await pump(tester);
+
+    expect(find.text('Black'), findsOneWidget);
+    await tester.tap(find.text('White'));
+    await tester.pumpAndSettle();
+
+    expect(fixture.onDisk, startsWith('// Color: White\n'));
+    expect(fixture.session.orientation.name, 'white');
+  });
+
   testWidgets('names the chapter and says the file is saved', (tester) async {
     await pump(tester);
     expect(find.text('Main'), findsOneWidget);
-    expect(
-      find.text('Black · 2 lines, 1 from another position'),
-      findsOneWidget,
-    );
+    expect(find.text('2 lines, 1 from another position'), findsOneWidget);
     expect(find.text('Saved'), findsOneWidget);
   });
 
@@ -71,10 +81,7 @@ void main() {
         ),
       );
       await tester.pump();
-      expect(
-        find.text('White · 2 lines, 1 cannot be edited here'),
-        findsOneWidget,
-      );
+      expect(find.text('2 lines, 1 cannot be edited here'), findsOneWidget);
     });
   });
 
@@ -253,7 +260,7 @@ void main() {
     fixture.dispose();
     fixture = await openSession(unreadableGameChapter);
     await pump(tester);
-    expect(find.text('White · 1 line, 1 could not be read'), findsOneWidget);
+    expect(find.text('1 line, 1 could not be read'), findsOneWidget);
   });
   testWidgets('says when a line could not be read in full', (tester) async {
     fixture.dispose();

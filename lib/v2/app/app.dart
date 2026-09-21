@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 
 import '../diagnostics/log.dart';
 import '../engines/engine_supervisor.dart';
+import '../features/library/chapter_outline.dart';
 import '../features/library/library.dart';
 import '../features/study/studies.dart';
 import '../net/lichess_studies.dart';
@@ -74,6 +75,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     lichess: LichessStudyApi(_lichess, token: readLichessToken),
     root: _studyFolder,
   );
+  late final _outline = ChapterOutline(library: _library, session: _session);
   final _engines = EngineSupervisor();
   late final _analysis = EngineAnalysis(
     _session,
@@ -168,6 +170,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
   void dispose() {
     _lifecycle.dispose();
     _analysis.dispose();
+    _outline.dispose();
     _library.dispose();
     _studies.dispose();
     _lichess.close();
@@ -188,6 +191,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
         leaving: _exit,
         library: _library,
         studies: _studies,
+        outline: _outline,
         session: _session,
         saver: _saver,
         analysis: _analysis,

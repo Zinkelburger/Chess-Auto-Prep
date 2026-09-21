@@ -131,4 +131,22 @@ void main() {
     expect(chapterSide('[Event "x"]\n// Color: Black\n'), Side.white);
     expect(chapterSide(''), Side.white);
   });
+
+  test('the side is found wherever it sits above the first game', () {
+    // Whatever a file carries above its games — a note somebody typed, a tag
+    // a converter left there — the colour line below it still counts.
+    expect(
+      chapterSide('// Main\nmade by hand\n// Color: Black\n\n[Event "x"]\n'),
+      Side.black,
+    );
+    expect(
+      parseChapter(
+        name: 'Main',
+        text:
+            '// Main\n[Source "elsewhere"]\n// Color: Black\n\n'
+            '[Event "x"]\n[Result "*"]\n\n1. e4 *\n',
+      ).side,
+      Side.black,
+    );
+  });
 }

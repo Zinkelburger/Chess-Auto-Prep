@@ -2,6 +2,7 @@ import 'package:dartchess/dartchess.dart' show Side;
 
 import '../fen.dart';
 import 'chapter.dart';
+import 'chapter_edit.dart';
 import 'chapter_line.dart';
 import 'games_written.dart';
 import 'pgn_reader.dart';
@@ -15,41 +16,9 @@ import 'study.dart';
 /// says what it did to that list, because the store checks a save against
 /// what the edit declared and nothing else.
 
-sealed class StudyEdit {
-  const StudyEdit();
-}
-
-/// The study now holds [chapter], having written the games [written] names.
-
-final class ChapterWritten extends StudyEdit {
-  const ChapterWritten(this.chapter, {required this.written});
-
-  final Chapter chapter;
-  final GamesWritten written;
-}
-
-/// The study now holds [chapter], whose games are the ones it had, in the
-/// order [from] gives and byte for byte as they were. Reordering and
-/// deleting a chapter are the only edits that do this.
-final class ChaptersReordered extends StudyEdit {
-  const ChaptersReordered(this.chapter, {required this.from});
-
-  final Chapter chapter;
-
-  /// For each game the file will hold, where it is in the file now.
-  final List<int> from;
-}
-
-/// Nothing changed. [reason] is one plain English sentence for the screen.
-final class ChapterEditRefused extends StudyEdit {
-  const ChapterEditRefused(this.reason);
-
-  final String reason;
-}
-
 /// A new chapter at the end of the study, which is what the file's game
 /// order means by last, and the focus moved onto it.
-StudyEdit addChapter(
+ChapterEdit addChapter(
   Chapter chapter, {
   required String study,
   required String name,
@@ -80,15 +49,15 @@ StudyEdit addChapter(
       separator: read.separator,
     ),
   ]);
-  return ChapterWritten(
+  return ChapterEdited(
     withLines(chapter, lines, game: lines.length - 1),
-    written: GamesWritten(appended: 1),
+    GamesArranged.of(GamesWritten(appended: 1), before: chapter.lines.length),
   );
 }
 
 /// The chapter at [index] under another name, with the study's own tags
 /// written again and every other tag of that game kept.
-StudyEdit renameChapter(
+ChapterEdit renameChapter(
   Chapter chapter, {
   required String study,
   required int index,
@@ -98,7 +67,7 @@ StudyEdit renameChapter(
 /// The chapter at [index] facing [orientation]. The board turns with it when
 /// it is the chapter on screen, because the board faces [Chapter.side] and
 /// that is read from this tag.
-StudyEdit setChapterOrientation(
+ChapterEdit setChapterOrientation(
   Chapter chapter, {
   required String study,
   required int index,
@@ -107,7 +76,11 @@ StudyEdit setChapterOrientation(
 
 /// The chapter at [index] moved [by] places, one at a time through the row
 /// menu. A move past either end changes nothing.
-StudyEdit moveChapter(Chapter chapter, {required int index, required int by}) {
+ChapterEdit moveChapter(
+  Chapter chapter, {
+  required int index,
+  required int by,
+}) {
   final to = index + by;
   if (!_holds(chapter, index) || !_holds(chapter, to)) {
     return ChapterEditRefused(
@@ -123,7 +96,7 @@ StudyEdit moveChapter(Chapter chapter, {required int index, required int by}) {
 
 /// The study without the chapter at [index]. The last chapter stays: a study
 /// with no chapters is a file with no games, which nothing could open again.
-StudyEdit deleteChapter(Chapter chapter, {required int index}) {
+ChapterEdit deleteChapter(Chapter chapter, {required int index}) {
   if (chapter.lines.length <= 1) {
     return const ChapterEditRefused('A study needs at least one chapter.');
   }
@@ -139,7 +112,7 @@ StudyEdit deleteChapter(Chapter chapter, {required int index}) {
 
 /// The chapter at [index] with the study's six tags written again from what
 /// it says now, [name] and [orientation] overriding what the file holds.
-StudyEdit _retagged(
+ChapterEdit _retagged(
   Chapter chapter, {
   required String study,
   required int index,
@@ -176,19 +149,22 @@ StudyEdit _retagged(
   }
   final lines = [...chapter.lines];
   lines[index] = (written as LineRewritten).line;
-  return ChapterWritten(
+  return ChapterEdited(
     withLines(chapter, lines),
-    written: GamesWritten(rewritten: {index}),
+    GamesArranged.of(
+      GamesWritten(rewritten: {index}),
+      before: chapter.lines.length,
+    ),
   );
 }
 
 /// The study holding its games in [order], each byte for byte as it is now,
 /// with the focus on the game at [focus] of the new order.
-StudyEdit _inOrder(Chapter chapter, List<int> order, {required int focus}) {
+ChapterEdit _inOrder(Chapter chapter, List<int> order, {required int focus}) {
   final lines = _separated([for (final from in order) chapter.lines[from]]);
-  return ChaptersReordered(
+  return ChapterEdited(
     withLines(chapter, lines, game: focus),
-    from: List.unmodifiable(order),
+    GamesArranged(order: order, before: chapter.lines.length),
   );
 }
 

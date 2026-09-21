@@ -6,6 +6,7 @@ import '../chess/pgn/move_label.dart';
 import '../chess/pgn/study.dart';
 import '../ui/theme.dart';
 import 'document_session.dart';
+import 'chapter_commands.dart';
 
 /// The move list: the main line as running text, each variation as an
 /// indented block right after the move it replaces, the way Lichess lays
@@ -15,9 +16,9 @@ class MoveTreeView extends StatelessWidget {
 
   final DocumentSession session;
 
-  /// What a right-click on a move offers, or null when the mode showing the
-  /// move list offers nothing. The list knows nothing about the entries: it
-  /// says which move was clicked and shows what it is given.
+  /// What the mode showing the move list adds to a move's menu, under the
+  /// edits every mode has. The list knows nothing about the entries: it says
+  /// which move was clicked and shows what it is given.
   final MoveMenu? moveMenu;
 
   @override
@@ -57,7 +58,7 @@ class MoveTreeView extends StatelessWidget {
 /// Where a line is: one sibling list under one parent, and which sibling.
 typedef _Branch = ({NodePath parent, List<MoveNode> siblings, int branch});
 
-/// The entries a right-click on the move at `path` opens.
+/// What a mode adds to the menu on the move at `path`.
 typedef MoveMenu = List<Widget> Function(NodePath path);
 
 final class _LineBuilder {
@@ -122,8 +123,22 @@ final class _LineBuilder {
       selected: session.cursor == path,
       quizStarts: hasToken(node.comment, quizStartMarker),
       quizEnds: hasToken(node.comment, quizEndMarker),
-      menu: moveMenu?.call(path) ?? const [],
       onTap: () => session.goTo(path),
+      actions: [
+        MenuItemButton(
+          onPressed: () => promoteVariation(session, path),
+          child: const Text('Promote variation'),
+        ),
+        MenuItemButton(
+          onPressed: () => makeMainLine(session, path),
+          child: const Text('Make main line'),
+        ),
+        MenuItemButton(
+          onPressed: () => deleteFrom(session, path),
+          child: const Text('Delete from here'),
+        ),
+        ...?moveMenu?.call(path),
+      ],
     );
   }
 }
@@ -161,8 +176,8 @@ class _VariationBlock extends StatelessWidget {
   }
 }
 
-/// One clickable move. When it becomes the selected one it scrolls itself
-/// into view.
+/// One clickable move, with what can be done to it on the right button.
+/// When it becomes the selected one it scrolls itself into view.
 class _MoveToken extends StatefulWidget {
   const _MoveToken({
     required this.label,
@@ -170,8 +185,8 @@ class _MoveToken extends StatefulWidget {
     required this.selected,
     required this.quizStarts,
     required this.quizEnds,
-    required this.menu,
     required this.onTap,
+    required this.actions,
   });
 
   final String label;
@@ -184,11 +199,10 @@ class _MoveToken extends StatefulWidget {
   final bool quizStarts;
   final bool quizEnds;
 
-  /// What a right-click here offers; empty means right-clicking does
-  /// nothing.
-  final List<Widget> menu;
-
   final VoidCallback onTap;
+
+  /// What the right button offers for this move.
+  final List<Widget> actions;
 
   @override
   State<_MoveToken> createState() => _MoveTokenState();
@@ -221,64 +235,57 @@ class _MoveTokenState extends State<_MoveToken> {
     });
   }
 
+  /// The move's number and SAN, with a flag on either side when a quiz
+  /// starts at it or ends after it.
+  Widget _label(ColorScheme scheme) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      if (widget.quizStarts)
+        Icon(
+          Icons.play_arrow,
+          size: IconSize.menu,
+          color: scheme.onSurfaceVariant,
+        ),
+      Text.rich(
+        TextSpan(
+          children: [
+            if (widget.label.isNotEmpty)
+              TextSpan(
+                text: '${widget.label} ',
+                style: TextStyle(color: scheme.onSurfaceVariant),
+              ),
+            TextSpan(text: widget.san),
+          ],
+        ),
+        style: monoText.copyWith(color: scheme.onSurface),
+      ),
+      if (widget.quizEnds)
+        Icon(Icons.stop, size: IconSize.menu, color: scheme.onSurfaceVariant),
+    ],
+  );
+
+  /// The right button, and a long press for a pointer that has no right
+  /// button, open what can be done to this move.
   @override
   Widget build(BuildContext context) {
-    final token = _token(Theme.of(context).colorScheme);
-    if (widget.menu.isEmpty) return token;
+    final scheme = Theme.of(context).colorScheme;
     return MenuAnchor(
       controller: _menu,
-      menuChildren: widget.menu,
-      child: GestureDetector(
-        onSecondaryTapDown: (details) {
-          widget.onTap();
-          _menu.open(position: details.localPosition);
-        },
-        child: token,
-      ),
-    );
-  }
-
-  Widget _token(ColorScheme scheme) {
-    return InkWell(
-      onTap: widget.onTap,
-      borderRadius: BorderRadius.circular(3),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-        decoration: BoxDecoration(
-          color: widget.selected
-              ? scheme.primary.withValues(alpha: 0.35)
-              : null,
-          borderRadius: BorderRadius.circular(3),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (widget.quizStarts)
-              Icon(
-                Icons.play_arrow,
-                size: IconSize.menu,
-                color: scheme.onSurfaceVariant,
-              ),
-            Text.rich(
-              TextSpan(
-                children: [
-                  if (widget.label.isNotEmpty)
-                    TextSpan(
-                      text: '${widget.label} ',
-                      style: TextStyle(color: scheme.onSurfaceVariant),
-                    ),
-                  TextSpan(text: widget.san),
-                ],
-              ),
-              style: monoText.copyWith(color: scheme.onSurface),
-            ),
-            if (widget.quizEnds)
-              Icon(
-                Icons.stop,
-                size: IconSize.menu,
-                color: scheme.onSurfaceVariant,
-              ),
-          ],
+      menuChildren: widget.actions,
+      child: InkWell(
+        onTap: widget.onTap,
+        onSecondaryTap: _menu.open,
+        onLongPress: _menu.open,
+        borderRadius: BorderRadius.circular(3),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+          decoration: BoxDecoration(
+            color: widget.selected
+                ? scheme.primary.withValues(alpha: 0.35)
+                : null,
+            borderRadius: BorderRadius.circular(3),
+          ),
+          child: _label(scheme),
         ),
       ),
     );

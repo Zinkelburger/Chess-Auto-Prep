@@ -126,6 +126,14 @@ class _RepertoireRow extends StatelessWidget {
     );
   }
 
+  /// What can be done to the repertoire itself, off while a catalog change
+  /// is in flight.
+  List<Widget> _actions(BuildContext context) => [
+    rowAction('Rename…', () => _rename(context), busy: library.busy),
+    rowAction('New chapter…', () => _newChapter(context), busy: library.busy),
+    rowAction('Delete…', () => _delete(context), busy: library.busy),
+  ];
+
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
@@ -154,25 +162,7 @@ class _RepertoireRow extends StatelessWidget {
                 ],
               ),
             ),
-            RowActions(
-              children: [
-                rowAction(
-                  'Rename…',
-                  () => _rename(context),
-                  busy: library.busy,
-                ),
-                rowAction(
-                  'New chapter…',
-                  () => _newChapter(context),
-                  busy: library.busy,
-                ),
-                rowAction(
-                  'Delete…',
-                  () => _delete(context),
-                  busy: library.busy,
-                ),
-              ],
-            ),
+            RowActions(children: _actions(context)),
           ],
         ),
       ),

@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 
 import '../chess/fen.dart';
 import '../chess/pgn/chapter.dart';
+import '../chess/pgn/chapter_edit.dart' as edits;
 import '../chess/pgn/chapter_edits.dart' as edits;
 import '../chess/pgn/comment_edits.dart' as edits;
 import '../chess/pgn/games_written.dart';
@@ -45,13 +46,11 @@ final class DocumentSession extends ChangeNotifier {
 
   Chapter? get chapter => _chapter;
 
-  /// Why the last edit did not happen, or null when it did.
-  ///
-  /// A game reading could not finish keeps its own bytes and is never
-  /// generated again, so an edit that would have to write it is refused, and
-  /// so are words a PGN file cannot hold and every edit to a file this app
-  /// may not write. The next edit that lands, and opening another document,
-  /// clears this.
+  /// Why the last edit did not happen, or null when it did. A game reading
+  /// could not finish keeps its own bytes and is never generated again, so
+  /// an edit that would have to write it is refused, and so are words a PGN
+  /// file cannot hold and every edit to a file this app may not write. The
+  /// next edit that lands, and opening another document, clears this.
   EditRefused? get refusedEdit => _refused;
 
   /// Why this document cannot be written, or null when it can.
@@ -63,13 +62,13 @@ final class DocumentSession extends ChangeNotifier {
   /// Which game of that file is on the board, or null when its games are
   /// merged. A repertoire chapter is the file; a study chapter is one game.
   int? get game => _chapter?.game;
-
   GameTree? get tree => _chapter?.tree;
 
   NodePath get cursor => _cursor;
 
   Fen get fen => tree?.fenAt(_cursor) ?? Fen.initial;
 
+  /// The repertoire's side, or a study chapter's own orientation tag.
   Side get orientation => _chapter?.side ?? Side.white;
 
   /// The move the cursor is on; null at the root.
@@ -77,18 +76,16 @@ final class DocumentSession extends ChangeNotifier {
 
   /// The comment on the move at [at], or the chapter's introduction at the
   /// root; machine tokens included.
-
   String? commentAt(NodePath at) =>
       at.isRoot ? tree?.rootComment : tree?.nodeAt(at)?.comment;
 
   /// The comment the file wrote before the move at [at], which is how a
-  /// variation is introduced. Nothing edits it; it is shown so that a note
-  /// the file holds is not invisible.
+  /// variation is introduced. Nothing edits it; it is shown so a note the
+  /// file holds is not invisible.
   String? startingCommentAt(NodePath at) => tree?.nodeAt(at)?.startingComment;
 
   /// Reads [ref] through the store, so the session holds the revision every
   /// later save is checked against.
-  ///
   /// [game] opens one game of the file as the whole document, which is what
   /// a study chapter is; null merges its games. Another chapter of the same
   /// file is another [open], so the draft of the one being left goes to disk
@@ -130,9 +127,8 @@ final class DocumentSession extends ChangeNotifier {
     return open(ref, game: _game);
   }
 
-  /// The open document was renamed or moved. It is the same file with the
-  /// same bytes, so only the name the workspace shows and the file later
-  /// saves go to change.
+  /// The open document was renamed or moved: the same file with the same
+  /// bytes, so only the name shown and the file later saves go to changes.
   void relocated(ChapterRef ref) {
     final chapter = _chapter;
     if (_source == null || chapter == null) return;
@@ -142,8 +138,8 @@ final class DocumentSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// The open document was deleted. The workspace empties rather than showing
-  /// a chapter whose file is now in the recovery folder.
+  /// The open document was deleted, so the workspace empties rather than
+  /// showing a chapter whose file is now in recovery.
   void closed() {
     if (_source == null) return;
     _opens++;
@@ -178,9 +174,8 @@ final class DocumentSession extends ChangeNotifier {
 
   /// Plays [uci] from the cursor and follows it. A move already in the tree
   /// only moves the cursor; a new one is written into the chapter and saved.
-  /// An illegal move is ignored: the board offers legal moves only, so this
-  /// can only be a request nobody made. A move the chapter comes back
-  /// without is logged and dropped rather than saved.
+  /// An illegal move is ignored — the board offers legal moves only — and a
+  /// move the chapter comes back without is logged rather than saved.
   void playMove(String uci) {
     final chapter = _chapter;
     if (chapter == null) return;
@@ -197,14 +192,14 @@ final class DocumentSession extends ChangeNotifier {
     switch (edits.addMove(chapter, at: _cursor, uci: uci)) {
       case edits.MoveIllegal():
         return;
-      case edits.MoveNotWritten():
-        log.e('move ${_source?.path}', 'the chapter came back without $uci');
-        _refused = const MoveLost();
-        notifyListeners();
-        return;
       case edits.MoveRefused(:final reason):
         log.w('move ${_source?.path}', reason);
         _refused = const LineNotWhole();
+        notifyListeners();
+        return;
+      case edits.MoveNotWritten():
+        log.e('move ${_source?.path}', 'the chapter came back without $uci');
+        _refused = const MoveLost();
         notifyListeners();
         return;
       case edits.MoveAdded(chapter: final edited, :final path, :final written):
@@ -219,11 +214,9 @@ final class DocumentSession extends ChangeNotifier {
   /// introduction when [at] is the root. The path is the caller's, not the
   /// cursor's, so words typed under one move cannot land on another when the
   /// cursor moves first. Text that would leave the file as it is changes
-  /// nothing.
-  ///
-  /// A game reading could not finish cannot take the comment, and neither
-  /// can words a PGN file has no way to hold; then nothing is written and
-  /// [refusedEdit] says so.
+  /// nothing. A game reading could not finish cannot take the comment, and
+  /// neither can words a PGN file has no way to hold; then nothing is
+  /// written and [refusedEdit] says so.
   void setComment(NodePath at, String? text) {
     final chapter = _chapter;
     if (chapter == null) return;
@@ -264,26 +257,6 @@ final class DocumentSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Shows [edited] and puts it on disk under [scope], for an edit this
-  /// session does not make itself.
-  ///
-  /// A mode that owns a kind of edit — a study's chapters, which are the
-  /// file's games — produces the new chapter and says what it changed. The
-  /// session stays the one owner of what is open and of the writing. The
-  /// scope is the edit's own account of what it did, never worked out from
-  /// the text.
-  void replace(Chapter edited, EditScope scope) {
-    if (_chapter == null || _refuseWhenReadOnly()) return;
-    _clearRefusal();
-    // Another game of the file is another chapter, and a path through the
-    // one being left names nothing in it.
-    if (edited.game != _game) _cursor = const NodePath.root();
-    _game = edited.game;
-    _chapter = edited;
-    _saver.save(writeChapter(edited), scope);
-    notifyListeners();
-  }
-
   /// Whether this document opened to read, in which case the edit does not
   /// happen and the screen says why again.
   bool _refuseWhenReadOnly() {
@@ -294,16 +267,16 @@ final class DocumentSession extends ChangeNotifier {
     return true;
   }
 
-  /// Forgets the last refusal, except the standing one: a document that
-  /// opened to read says so until it is closed.
+  /// Forgets the last refusal, except the standing one: a document opened to
+  /// read says so until it is closed.
   void _clearRefusal() {
     final reason = _readOnly;
     _refused = reason == null ? null : NotEditable(reason);
   }
 
   /// Puts the file back as it was before the last edit and shows what came
-  /// back. A refused undo leaves the document and the history alone, and
-  /// says so: nothing happening is something the screen has to tell.
+  /// back. A refused undo leaves the document and the history alone and says
+  /// so: nothing happening is something the screen has to tell.
   Future<UndoResult> undo() async {
     final ref = _source;
     if (ref == null) return const UndoRefused();
@@ -321,27 +294,24 @@ final class DocumentSession extends ChangeNotifier {
       _chapter = restored;
       _cursor = before == null
           ? const NodePath.root()
-          : samePath(before, restored.tree, _cursor);
+          : samePathIn(before, restored.tree, _cursor);
       notifyListeners();
     }
     return result;
   }
 
   /// Writes the draft beside the original as `<name>.pgn`, replacing
-  /// nothing. The session stays on the document it had open.
-  ///
-  /// A copy changes nothing here, so nothing about it goes stale: whatever
-  /// the user opened while it was being written, the answer is about the
-  /// file they asked for and they are told it.
+  /// nothing. A copy changes nothing here, so nothing about it goes stale:
+  /// whatever the user opened while it was being written, the answer is
+  /// about the file they asked for.
   Future<CopyResult> saveCopy(String name) async {
     final written = await copyAside(name);
     if (written is! CopySaved) return written;
     final ref = _source;
-    // A document that can still take words keeps the session; one that
-    // cannot — frozen by a stopped save, or a file this app may not write —
-    // hands it over, because the copy is now the only place those words can
-    // go on being edited. A conflicted document keeps the session: it can
-    // still be reloaded, and its draft is still the user's.
+    // A document that can still take words keeps the session; one frozen by
+    // a stopped save, or that this app may not write, hands it over, because
+    // the copy is the only place those words can go on being edited. A
+    // conflicted document keeps it: it can still be reloaded.
     final frozen = _saver.state is SaveStopped || _readOnly != null;
     if (ref == null || !frozen) return written;
     final path = p.join(p.dirname(ref.path), written.name);
@@ -377,11 +347,9 @@ final class DocumentSession extends ChangeNotifier {
   }
 
   /// Shows [edited] and puts it on disk, saying which games the edit wrote.
-  ///
   /// The scope is what the edit reported, never what the new text turned out
   /// to look like: a scope worked out from the text would agree with the
-  /// text, so a writer that rewrote a game nobody edited would declare that
-  /// game and the store would have nothing to refuse.
+  /// text, and the store would have nothing to refuse.
   void _replace(Chapter edited, GamesWritten written) {
     _chapter = edited;
     _saver.save(writeChapter(edited), GamesEdited(written));
@@ -390,6 +358,38 @@ final class DocumentSession extends ChangeNotifier {
   OpenFailed _openFailed(ChapterRef ref, String reason) {
     log.w('open ${ref.path}', reason);
     return OpenFailed(reason);
+  }
+
+  /// Shows what [edit] made of the open chapter and writes the games it says
+  /// it wrote. Answers why it did not happen, or null when it did.
+  ///
+  /// Public, because a mode owns edits of its own — a study's chapters are
+  /// the file's games — and they go to disk through this one path rather
+  /// than through a second writer. These edits move and remove whole games,
+  /// so the cursor is followed by the moves it was on rather than by its
+  /// path, which after a rearrangement would name somebody else's move; an
+  /// edit that changed which game is the chapter moves the board with it.
+  String? apply(edits.ChapterEdit Function(Chapter chapter) edit) {
+    final chapter = _chapter;
+    if (chapter == null) return 'there is nothing open to edit';
+    if (_refuseWhenReadOnly()) return _readOnly;
+    switch (edit(chapter)) {
+      case edits.ChapterUnchanged():
+        return null;
+      case edits.ChapterEditRefused(:final reason):
+        log.w('edit ${_source?.path}', reason);
+        _refused = EditNotWritten(reason);
+        notifyListeners();
+        return reason;
+      case edits.ChapterEdited(chapter: final edited, :final games):
+        _clearRefusal();
+        _chapter = edited;
+        _game = edited.game;
+        _cursor = samePathIn(chapter.tree, edited.tree, _cursor);
+        _saver.save(writeChapter(edited), GamesRearranged(games));
+    }
+    notifyListeners();
+    return null;
   }
 
   @override

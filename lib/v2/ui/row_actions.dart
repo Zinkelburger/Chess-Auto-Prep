@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 
 import 'theme.dart';
 
-/// The `⋯` menu on a list row.
+/// The `⋯` menu on a row of a list: everything that can be done to that one
+/// thing, out of the way until it is wanted.
 ///
-/// One shape for every list in the app: the repertoire list and the study
-/// list both hang their row operations here, so a row's actions are always
-/// in the same place and look the same.
+/// One shape for every list in the app — the repertoire list, the chapter
+/// outline, the study list — so a row's actions are always in the same place
+/// and look the same.
 class RowActions extends StatelessWidget {
   const RowActions({
     super.key,
@@ -14,8 +15,11 @@ class RowActions extends StatelessWidget {
     this.tooltip = 'Actions',
   });
 
+  /// The menu's items, usually `MenuItemButton`s.
   final List<Widget> children;
 
+  /// What the button says it opens, for a list whose rows are not the only
+  /// things on the panel.
   final String tooltip;
 
   @override
@@ -26,6 +30,7 @@ class RowActions extends StatelessWidget {
         icon: const Icon(Icons.more_horiz, size: IconSize.action),
         tooltip: tooltip,
         onPressed: controller.isOpen ? controller.close : controller.open,
+        visualDensity: VisualDensity.compact,
       ),
     );
   }

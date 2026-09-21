@@ -30,21 +30,19 @@ final class GamesEdited extends EditScope {
   final GamesWritten written;
 }
 
-/// The save keeps the games of the version on disk and only changes which
-/// order they are in: the file will hold the games at [from], in that order,
-/// each byte for byte as it is now.
+/// The save leaves the games of the version on disk in the arrangement
+/// [arranged] names, which is what an edit that removes or reorders games
+/// has to say: `order` places each game of the new file, a game no position
+/// names is gone, and only the games in `rewritten` may read differently.
 ///
-/// This is what moving a study's chapters up and down is, and what deleting
-/// one is — a delete leaves its index out. Nothing else in a save may take a
-/// game out or move one, which is why [GamesEdited] cannot say it and why
-/// this says nothing about content: a save that also changed a game's moves
-/// is refused here.
-final class GamesReordered extends EditScope {
-  const GamesReordered(this.from);
+/// [GamesEdited] cannot say any of that — it assumes every game stayed where
+/// it was — and working the arrangement out by comparing the two versions
+/// would agree with whatever the writer did, which is the one thing the
+/// store is here to refuse.
+final class GamesRearranged extends EditScope {
+  const GamesRearranged(this.arranged);
 
-  /// For each game the save will write, where it is in the version on disk,
-  /// counting from zero.
-  final List<int> from;
+  final GamesArranged arranged;
 }
 
 /// The save replaces the whole file, which is what an import or a paste
@@ -66,26 +64,56 @@ final class RestoredVersion extends EditScope {
 
 /// One scope covering both, for two edits whose saves collapsed into one.
 ///
-/// The indexes still name games of the version on disk, **because an edit
-/// adds games at the end and never removes or reorders one**: a game the
-/// earlier edit added sits past the end of the version on disk, where the
-/// added count covers it. An edit that inserts a game in the middle, or
-/// removes one, would shift the later indexes and has to revisit this.
+/// Two ordinary edits add up: their indexes both name games of the version on
+/// disk, **because an edit that keeps every game where it was only adds at
+/// the end**, and a game the earlier one added sits past the end, where the
+/// added count covers it.
+///
+/// When either of them moved or removed a game that no longer holds, so the
+/// pair is followed through as arrangements instead: the second edit was
+/// worked out on what the first produced, and [composedArrangement] says what
+/// the two together do to the file. An edit that kept its games becomes the
+/// arrangement it implies, whose length the other edit supplies.
 ///
 /// Anything else — a whole document, a restored version — covers everything
 /// the other could have named, so the pair is a whole document, which the
 /// store logs.
 EditScope scopeOfBoth(EditScope first, EditScope second) {
-  if (first is! GamesEdited || second is! GamesEdited) {
-    return const WholeDocument();
+  if (first is GamesEdited && second is GamesEdited) {
+    return GamesEdited(
+      GamesWritten(
+        rewritten: {...first.written.rewritten, ...second.written.rewritten},
+        appended: first.written.appended + second.written.appended,
+      ),
+    );
   }
-  return GamesEdited(
-    GamesWritten(
-      rewritten: {...first.written.rewritten, ...second.written.rewritten},
-      appended: first.written.appended + second.written.appended,
-    ),
-  );
+  final before = _arrangementOf(first, whenKeptAll: _gamesBefore(second));
+  if (before == null) return const WholeDocument();
+  final after = _arrangementOf(second, whenKeptAll: before.order.length);
+  if (after == null) return const WholeDocument();
+  final both = composedArrangement(before, after);
+  return both == null ? const WholeDocument() : GamesRearranged(both);
 }
+
+/// [scope] as an arrangement, taking the games it started from to be
+/// [whenKeptAll] when the scope is one that kept them all where they were.
+/// Null when the scope says nothing about games, or when the count does not
+/// come out.
+GamesArranged? _arrangementOf(EditScope scope, {required int? whenKeptAll}) {
+  switch (scope) {
+    case GamesRearranged(:final arranged):
+      return arranged;
+    case GamesEdited(:final written):
+      final before = (whenKeptAll ?? -1) - written.appended;
+      return before < 0 ? null : GamesArranged.of(written, before: before);
+    case WholeDocument() || RestoredVersion():
+      return null;
+  }
+}
+
+/// How many games [scope] was worked out from, when it says.
+int? _gamesBefore(EditScope scope) =>
+    scope is GamesRearranged ? scope.arranged.before : null;
 
 /// Why [next] may not replace [previous] under [scope], as a sentence, or
 /// null when every game the scope does not name comes through byte for byte.
@@ -108,36 +136,67 @@ String? changeOutsideScope({
 }) => switch (scope) {
   WholeDocument() || RestoredVersion() => null,
   GamesEdited() => _changeOutside(previous, next, scope.written),
-  GamesReordered() => _notTheSameGames(previous, next, scope.from),
+  GamesRearranged() => _changeOutsideArrangement(
+    previous,
+    next,
+    scope.arranged,
+  ),
 };
 
-/// Why [next] is not [previous]'s games in the order [from] asks for, or
-/// null when it is exactly that.
-///
-/// Every game has to arrive byte for byte from the place the order names, so
-/// a reorder that also rewrote a game — or invented one, or kept one twice —
-/// is refused before anything is written.
-String? _notTheSameGames(List<int> previous, List<int> next, List<int> from) {
+/// The same question for an edit that moved or removed games: every game the
+/// arrangement carries over has to be the bytes of the game it says it is,
+/// and the heading has to stay unless the edit was the heading.
+String? _changeOutsideArrangement(
+  List<int> previous,
+  List<int> next,
+  GamesArranged edit,
+) {
   final before = _cut(previous);
   final after = _cut(next);
-  if (!_same(previous, (0, before.heading), next, (0, after.heading))) {
-    return 'the chapter heading would change, but the save only reordered '
-        'the games';
+  if (before.games.length != edit.before) {
+    return 'the save was worked out from ${_count(edit.before)} but the file '
+        'holds ${_count(before.games.length)}';
   }
-  if (after.games.length != from.length) {
-    return 'the save would leave ${_count(after.games.length)} but said it '
-        'was leaving ${_count(from.length)}';
+  if (after.games.length != edit.order.length) {
+    return 'the save would leave ${_count(after.games.length)} where it said '
+        '${_count(edit.order.length)}';
   }
+  final heading = _arrangedHeading(before, after, previous, next, edit);
+  return heading ?? _arrangedGames(before, after, previous, next, edit);
+}
+
+String? _arrangedHeading(
+  _Cut before,
+  _Cut after,
+  List<int> previous,
+  List<int> next,
+  GamesArranged edit,
+) {
+  if (edit.heading) return null;
+  if (after.heading != before.heading ||
+      !_same(previous, (0, before.heading), next, (0, before.heading))) {
+    return 'the chapter heading would change but the edit did not touch it';
+  }
+  return null;
+}
+
+String? _arrangedGames(
+  _Cut before,
+  _Cut after,
+  List<int> previous,
+  List<int> next,
+  GamesArranged edit,
+) {
   final taken = <int>{};
-  for (var index = 0; index < from.length; index++) {
-    final source = from[index];
-    if (source < 0 || source >= before.games.length || !taken.add(source)) {
-      return 'the save asked for game ${source + 1} of '
-          '${_count(before.games.length)}, which it cannot take';
+  for (var place = 0; place < edit.order.length; place++) {
+    final game = edit.order[place];
+    if (game == null) continue;
+    if (game < 0 || game >= before.games.length || !taken.add(game)) {
+      return 'the save named game ${game + 1} of the file, which it may not';
     }
-    if (!_same(previous, before.games[source], next, after.games[index])) {
-      return 'game ${source + 1} would change, but the save only reordered '
-          'the games';
+    if (edit.rewritten.contains(game)) continue;
+    if (!_same(previous, before.games[game], next, after.games[place])) {
+      return 'game ${game + 1} would change but the edit did not write it';
     }
   }
   return null;

@@ -68,7 +68,11 @@ final class BackupArchive {
       }
       final time = DateTime.now().toUtc();
       final name = '${_stamp(time)}-${hash.substring(0, 8)}$_versionSuffix';
-      await File(p.join(folder.path, name)).writeAsBytes(bytes);
+      // Through the atomic writer, like every other file this app publishes:
+      // these bytes are the only copy of what the save is about to replace,
+      // and a machine that stops half way through writing them must leave
+      // either nothing under that name or the whole version.
+      await replaceFile(p.join(folder.path, name), bytes);
       final version = BackupVersion(
         file: name,
         time: time,
@@ -187,6 +191,11 @@ final class BackupArchive {
   /// A version file whose bytes cannot be read is **left out of the index**,
   /// and logged. It stays on the disk, where it can still be recovered by
   /// hand, but nothing here can say when it was written or what it held.
+  ///
+  /// Only a whole version ever carries a version's name: a kept copy is
+  /// staged under a name of its own and put in place with one rename, so what
+  /// a write killed half way leaves behind is a staged copy, which [_isVersion]
+  /// does not match, and never a truncated version listed as a real one.
   Future<List<BackupVersion>> _rebuilt(Directory folder) async {
     final versions = <BackupVersion>[];
     await for (final entry in folder.list()) {
