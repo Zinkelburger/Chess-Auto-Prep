@@ -15,20 +15,11 @@ const TURNSTILE = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
     </form>
 
     <div class="bb-right">
-      <p id="bdb-source" class="bdb-source dim"></p>
       <div class="bdb-tables">
-        <section id="bdb-missing" class="bdb-missing" hidden>
-          <div class="bdb-missing-row">
-            <button id="bdb-analyse" class="btn btn-primary" title="Run Hivemind in this browser and add the position to the book for everyone">Analyze locally</button>
-            <button id="bdb-cancel" class="btn btn-outline" hidden>Cancel</button>
-            <label class="bdb-cores" title="Searches run side by side, one per core. More cores finish sooner.">Cores <input id="bdb-cores" type="number" min="1" step="1" inputmode="numeric" /></label>
-            <span id="bdb-missing-text" class="dim">Not in the book yet.</span>
-          </div>
-          {TURNSTILE && <div id="bdb-captcha"></div>}
-          <div id="bdb-progress" class="bdb-progress" hidden><i></i></div>
-          <p id="bdb-status" class="bdb-status dim" role="status"></p>
-        </section>
-        <div class="bdb-priority">
+        {/* One row for the priority and the analyse controls, and one status line under
+            it that is always there: nothing above the tables moves as a position is
+            found, missing or being analysed. */}
+        <div class="bdb-bar">
           <span class="bdb-priority-label">Time</span>
           <div class="choice-row" role="radiogroup" aria-label="Time">
             {[['ahead', 'A + B may sit', 'A + B are up on the diagonal clock, so they can wait rather than move'],
@@ -41,7 +32,14 @@ const TURNSTILE = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
               </label>
             ))}
           </div>
+          <div id="bdb-missing" class="bdb-missing" data-shown="false">
+            <button id="bdb-analyse" class="btn btn-primary btn-sm" title="Run Hivemind in this browser and add the position to the book for everyone">Analyze locally</button>
+            <button id="bdb-cancel" class="btn btn-outline btn-sm" hidden>Cancel</button>
+            <label class="bdb-cores" title="Cores: searches run side by side, one per core. More cores finish sooner."><input id="bdb-cores" type="number" min="1" step="1" inputmode="numeric" aria-label="Cores" /> cores</label>
+          </div>
+          {TURNSTILE && <div id="bdb-captcha" class="bdb-captcha"></div>}
         </div>
+        <p id="bdb-status" class="bdb-status dim" role="status"><span id="bdb-status-text"></span><span id="bdb-progress" class="bdb-progress" hidden><i></i></span></p>
         {['A', 'B'].map((name, i) => (
           <section class="bdb-table-panel" aria-label={`Board ${i + 1} moves`}>
             <h2 class="bdb-table-title">Board {i + 1}</h2>

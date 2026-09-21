@@ -22,21 +22,22 @@
 /* The board itself is chessground's: its pieces (cburnett), move dots, last-move
    and selection colours come from @lichess-org/chessground's assets. That
    package's brown board is only a demo (black squares at 20% over cream), so
-   the squares and coordinates below are Lichess's own brown: #f0d9b5 and
-   #b58863, lowercase bold coordinates inside the board, ranks at the top right
-   of the right-hand file and files at the bottom left of the bottom rank, each
-   in the colour of the other kind of square. */
+   the squares and coordinates below are Lichess's brown, dimmed (#c4ab88 and
+   #8e6d51 for #f0d9b5 and #b58863) so the board does not outshine the dark
+   page around it. Coordinates are lowercase and bold inside the board, ranks at
+   the top right of the right-hand file and files at the bottom left of the
+   bottom rank, each in the colour of the other kind of square. */
 .bb-board { width: 100%; height: 100%; }
-.bb-board cg-board { background-color: #f0d9b5; background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8" shape-rendering="crispEdges"><rect width="8" height="8" fill="%23f0d9b5"/><path fill="%23b58863" d="M1 0h1v1h-1zM3 0h1v1h-1zM5 0h1v1h-1zM7 0h1v1h-1zM0 1h1v1h-1zM2 1h1v1h-1zM4 1h1v1h-1zM6 1h1v1h-1zM1 2h1v1h-1zM3 2h1v1h-1zM5 2h1v1h-1zM7 2h1v1h-1zM0 3h1v1h-1zM2 3h1v1h-1zM4 3h1v1h-1zM6 3h1v1h-1zM1 4h1v1h-1zM3 4h1v1h-1zM5 4h1v1h-1zM7 4h1v1h-1zM0 5h1v1h-1zM2 5h1v1h-1zM4 5h1v1h-1zM6 5h1v1h-1zM1 6h1v1h-1zM3 6h1v1h-1zM5 6h1v1h-1zM7 6h1v1h-1zM0 7h1v1h-1zM2 7h1v1h-1zM4 7h1v1h-1zM6 7h1v1h-1z"/></svg>'); }
+.bb-board cg-board { background-color: #c4ab88; background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8" shape-rendering="crispEdges"><rect width="8" height="8" fill="%23c4ab88"/><path fill="%238e6d51" d="M1 0h1v1h-1zM3 0h1v1h-1zM5 0h1v1h-1zM7 0h1v1h-1zM0 1h1v1h-1zM2 1h1v1h-1zM4 1h1v1h-1zM6 1h1v1h-1zM1 2h1v1h-1zM3 2h1v1h-1zM5 2h1v1h-1zM7 2h1v1h-1zM0 3h1v1h-1zM2 3h1v1h-1zM4 3h1v1h-1zM6 3h1v1h-1zM1 4h1v1h-1zM3 4h1v1h-1zM5 4h1v1h-1zM7 4h1v1h-1zM0 5h1v1h-1zM2 5h1v1h-1zM4 5h1v1h-1zM6 5h1v1h-1zM1 6h1v1h-1zM3 6h1v1h-1zM5 6h1v1h-1zM7 6h1v1h-1zM0 7h1v1h-1zM2 7h1v1h-1zM4 7h1v1h-1zM6 7h1v1h-1z"/></svg>'); }
 .bb-board coords { opacity: 1; font-family: var(--sans, sans-serif); font-size: 11px; font-weight: 700; line-height: 1; }
 .bb-board coords.ranks { left: auto; right: 0; top: 0; width: 100%; height: 100%; }
 .bb-board coords.ranks coord { transform: none; text-align: right; padding: 2px 3px 0 0; }
 .bb-board coords.files { left: 0; bottom: 0; height: auto; text-transform: none; text-align: left; }
 .bb-board coords.files coord { padding: 0 0 2px 3px; }
 .bb-board.orientation-white .ranks :nth-child(odd), .bb-board.orientation-white .files :nth-child(even),
-.bb-board.orientation-black .ranks :nth-child(even), .bb-board.orientation-black .files :nth-child(odd) { color: #946f51; }
+.bb-board.orientation-black .ranks :nth-child(even), .bb-board.orientation-black .files :nth-child(odd) { color: #745841; }
 .bb-board.orientation-white .ranks :nth-child(even), .bb-board.orientation-white .files :nth-child(odd),
-.bb-board.orientation-black .ranks :nth-child(odd), .bb-board.orientation-black .files :nth-child(even) { color: #f0d9b5; }
+.bb-board.orientation-black .ranks :nth-child(odd), .bb-board.orientation-black .files :nth-child(even) { color: #c4ab88; }
 .bb-board, .bb-pocket:not(:disabled) { touch-action: none; }
 
 .bb-pocket { display: flex; align-items: center; padding: 0 5px 0 0; border: 1px solid transparent; border-radius: 4px; background: none; color: var(--text); font-size: 13px; font-variant-numeric: tabular-nums; cursor: pointer; }
