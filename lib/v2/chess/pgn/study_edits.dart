@@ -91,7 +91,7 @@ ChapterEdit moveChapter(
   }
   final order = [for (var i = 0; i < chapter.lines.length; i++) i];
   order.insert(to, order.removeAt(index));
-  return _inOrder(chapter, order, focus: to);
+  return _inOrder(chapter, order, focus: _stillShowing(chapter, order));
 }
 
 /// The study without the chapter at [index]. The last chapter stays: a study
@@ -107,7 +107,13 @@ ChapterEdit deleteChapter(Chapter chapter, {required int index}) {
     for (var i = 0; i < chapter.lines.length; i++)
       if (i != index) i,
   ];
-  return _inOrder(chapter, order, focus: index.clamp(0, order.length - 1));
+  return _inOrder(
+    chapter,
+    order,
+    // The chapter that took the deleted one's place, for the case where the
+    // one on screen is the one that went.
+    focus: _stillShowing(chapter, order, took: index),
+  );
 }
 
 /// The chapter at [index] with the study's six tags written again from what
@@ -156,6 +162,21 @@ ChapterEdit _retagged(
       before: chapter.lines.length,
     ),
   );
+}
+
+/// Where the chapter on screen is once the games are in [order].
+///
+/// It is followed by which game it is, not by where it sat: moving or
+/// deleting some other chapter must leave the same chapter on the board, or
+/// the next move the user plays is written into a chapter they never opened.
+/// [took] is the place a deleted chapter left, which is where the board goes
+/// when the chapter on screen is the one that went.
+int _stillShowing(Chapter chapter, List<int> order, {int? took}) {
+  final showing = chapter.game;
+  if (showing == null) return 0;
+  final moved = order.indexOf(showing);
+  if (moved >= 0) return moved;
+  return took == null ? 0 : took.clamp(0, order.length - 1);
 }
 
 /// The study holding its games in [order], each byte for byte as it is now,

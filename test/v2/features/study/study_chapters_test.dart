@@ -251,4 +251,51 @@ void main() {
       expect(displayComment('[%tstart]'), isEmpty);
     },
   );
+
+  test('chapter operations: moving another chapter leaves this one on the '
+      'board', () async {
+    await open(text: threeChapterStudy);
+    expect(study.studies.chapters.first.name, 'Alpha');
+    expect(moveStudyChapter(study.session, index: 2, by: -1), isNull);
+    await pumpEventQueue();
+    expect(study.studies.chapters.map((c) => c.name), [
+      'Alpha',
+      'Gamma',
+      'Beta',
+    ]);
+    // The board is still Alpha, so the next move goes into Alpha.
+    expect(study.studies.openChapter, 0);
+    expect(study.session.tree?.children.single.san, 'e4');
+  });
+
+  test(
+    'chapter operations: moving this chapter keeps the board on it',
+    () async {
+      await open(text: threeChapterStudy, chapter: 2);
+      expect(moveStudyChapter(study.session, index: 2, by: -1), isNull);
+      await pumpEventQueue();
+      expect(study.studies.openChapter, 1);
+      expect(study.session.tree?.children.single.san, 'c4');
+    },
+  );
+
+  test('chapter operations: deleting another chapter leaves this one on the '
+      'board', () async {
+    await open(text: threeChapterStudy, chapter: 2);
+    expect(deleteStudyChapter(study.session, index: 0), isNull);
+    await pumpEventQueue();
+    expect(study.studies.chapters.map((c) => c.name), ['Beta', 'Gamma']);
+    expect(study.studies.openChapter, 1);
+    expect(study.session.tree?.children.single.san, 'c4');
+  });
+
+  test('chapter operations: deleting the chapter on the board shows the one '
+      'that took its place', () async {
+    await open(text: threeChapterStudy, chapter: 1);
+    expect(deleteStudyChapter(study.session, index: 1), isNull);
+    await pumpEventQueue();
+    expect(study.studies.chapters.map((c) => c.name), ['Alpha', 'Gamma']);
+    expect(study.studies.openChapter, 1);
+    expect(study.session.tree?.children.single.san, 'c4');
+  });
 }

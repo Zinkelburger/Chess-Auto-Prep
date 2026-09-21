@@ -68,6 +68,28 @@ const twoChapterStudy = '''
 1. d4 d5 *
 ''';
 
+/// A study with three named chapters, for the tests about which one stays
+/// on the board when the others move.
+const threeChapterStudy = '''
+[Event "Openings: Alpha"]
+[StudyName "Openings"]
+[ChapterName "Alpha"]
+
+1. e4 *
+
+[Event "Openings: Beta"]
+[StudyName "Openings"]
+[ChapterName "Beta"]
+
+1. d4 *
+
+[Event "Openings: Gamma"]
+[StudyName "Openings"]
+[ChapterName "Gamma"]
+
+1. c4 *
+''';
+
 /// Everything a study test needs: a scripted store holding [text] under
 /// [name], a session over it and the owner that lists it.
 final class StudyFixture {
