@@ -21,9 +21,13 @@ class BoardView extends StatefulWidget {
     required this.orientation,
     required this.onMove,
     this.lastMove,
+    this.coordinates = true,
   });
 
   final Fen fen;
+
+  /// Whether the rank and file letters are drawn.
+  final bool coordinates;
 
   /// The side shown at the bottom.
   final Side orientation;
@@ -65,7 +69,9 @@ class _BoardViewState extends State<BoardView> {
 
   @override
   Widget build(BuildContext context) {
-    final settings = BoardTheme.of(context).settings;
+    final settings = BoardTheme.of(
+      context,
+    ).settings(coordinates: widget.coordinates);
     return AspectRatio(
       aspectRatio: 1,
       child: LayoutBuilder(

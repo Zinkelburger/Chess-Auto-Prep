@@ -11,6 +11,7 @@ import '../engines/engine_supervisor.dart';
 import '../features/library/chapter_outline.dart';
 import '../features/library/library.dart';
 import '../features/pgn_viewer/pgn_viewer.dart';
+import '../features/settings/setting_rows.dart';
 import '../features/study/studies.dart';
 import '../net/lichess_studies.dart';
 import '../storage/chapter_files.dart';
@@ -19,6 +20,7 @@ import '../storage/pgn_file_import.dart';
 import '../storage/pgn_file_picker.dart';
 import '../storage/pgn_file_store.dart';
 import '../storage/recent_pgn_files.dart';
+import '../storage/settings_store.dart';
 import '../storage/study_files.dart';
 import '../ui/theme.dart';
 import '../workspace/copy_name_dialog.dart';
@@ -28,6 +30,7 @@ import '../workspace/session_results.dart';
 import '../workspace/engine_analysis.dart';
 import 'engine_launch.dart';
 import 'exit_guard.dart';
+import 'open_folder.dart';
 import 'shell.dart';
 
 /// Builds the owners and hands them to the shell. This is the only place
@@ -37,14 +40,19 @@ class ChessAutoPrepV2 extends StatefulWidget {
     super.key,
     required this.documents,
     required this.support,
+    required this.logFolder,
     required this.closeLog,
   });
 
   /// The user's Documents directory; repertoires live under it.
   final Directory documents;
 
-  /// The app's own folder, where the engine is installed.
+  /// The app's own folder, where the engine is installed and the settings
+  /// are kept.
   final Directory support;
+
+  /// Where the log file is, for the settings page to open.
+  final Directory logFolder;
 
   /// Flushes and closes the log file `main_v2` opened. Called on the way
   /// out, after the engines, so their last words reach the file.
@@ -61,6 +69,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     documents: widget.documents,
     support: widget.support,
   );
+  late final _settings = SettingsStore(support: widget.support);
   late final _saver = DocumentSaver(_store);
   late final _session = DocumentSession(_store, _saver);
   late final Library _library = Library(
@@ -87,6 +96,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
       documents: widget.documents.path,
       into: _collections,
     ),
+    settings: _settings,
     session: _session,
     collections: _collections,
   );
@@ -94,7 +104,37 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
   final _engines = EngineSupervisor();
   late final _analysis = EngineAnalysis(
     _session,
-    () => launchStockfish(support: widget.support, engines: _engines),
+    () => launchStockfish(
+      support: widget.support,
+      engines: _engines,
+      cores: _settings.value.engineCores,
+      memoryMb: _settings.value.engineMemoryMb,
+    ),
+    multiPv: _settings.value.engineLines,
+  );
+
+  /// What the engine was last started with, so a settings change that
+  /// touches neither its threads nor its table does not restart it.
+  (int, int)? _engineRunsWith;
+
+  /// The engine follows the settings: more lines at once, a new process for
+  /// new threads or a new table.
+  void _engineSettings() {
+    final s = _settings.value;
+    _analysis.setLines(s.engineLines);
+    final wanted = (s.engineCores, s.engineMemoryMb);
+    if (_engineRunsWith != wanted) {
+      _engineRunsWith = wanted;
+      unawaited(_analysis.restart());
+    }
+  }
+
+  List<SettingGroup> _settingRows() => settingGroups(
+    store: _settings,
+    coresAvailable: Platform.numberOfProcessors,
+    loadLichessToken: readLichessToken,
+    saveLichessToken: writeLichessToken,
+    openLogFolder: () => unawaited(openFolder(widget.logFolder)),
   );
 
   /// The dialog on the way out is raised over the app, not over this widget,
@@ -142,7 +182,18 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
       onHide: _flushDraft,
     );
     unawaited(_library.refresh());
-    unawaited(_analysis.enable());
+    unawaited(_startWithSettings());
+  }
+
+  /// The settings are read before the engine starts, so its first process
+  /// already has the threads and the table the user chose.
+  Future<void> _startWithSettings() async {
+    await _settings.load();
+    final s = _settings.value;
+    _engineRunsWith = (s.engineCores, s.engineMemoryMb);
+    _analysis.setLines(s.engineLines);
+    _settings.addListener(_engineSettings);
+    await _analysis.enable();
   }
 
   void _flushDraft() => unawaited(_saver.flush());
@@ -184,7 +235,9 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
   @override
   void dispose() {
     _lifecycle.dispose();
+    _settings.removeListener(_engineSettings);
     _analysis.dispose();
+    _settings.dispose();
     _outline.dispose();
     _library.dispose();
     _studies.dispose();
@@ -208,6 +261,8 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
         library: _library,
         studies: _studies,
         viewer: _viewer,
+        settings: _settings,
+        settingRows: _settingRows,
         outline: _outline,
         session: _session,
         saver: _saver,

@@ -203,6 +203,7 @@ void main() {
       recent: fixture.recent,
       picker: fixture.picker,
       import: fixture.import,
+      settings: fixture.settings,
       session: fixture.session,
       collections: '/home/me/Documents/pgn_collections',
     );
@@ -212,5 +213,15 @@ void main() {
       'Documents/pgn_collections',
     );
     expect(homed.folderShown('/mnt/usb/a.pgn'), '/mnt/usb');
+  });
+
+  test('with copying switched off, a file outside opens where it is', () async {
+    fixture = await viewerOver(threeGameFile);
+    await fixture.settings.update(
+      fixture.settings.value.copyWith(copyFilesIntoDocuments: false),
+    );
+    final ref = await fixture.viewer.fileFor('/home/me/Downloads/course.pgn');
+    expect(ref?.path, '/home/me/Downloads/course.pgn');
+    expect(fixture.import.asked, isEmpty);
   });
 }

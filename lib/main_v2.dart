@@ -19,7 +19,8 @@ Future<void> main() async {
   installAgentDriver();
   final documents = await getApplicationDocumentsDirectory();
   final support = await getApplicationSupportDirectory();
-  final logFile = LogFile(Directory(p.join(support.path, 'logs')));
+  final logFolder = Directory(p.join(support.path, 'logs'));
+  final logFile = LogFile(logFolder);
   await _installLog(logFile);
   installErrorLog();
   log.i('start');
@@ -27,6 +28,7 @@ Future<void> main() async {
     ChessAutoPrepV2(
       documents: documents,
       support: support,
+      logFolder: logFolder,
       closeLog: logFile.close,
     ),
   );

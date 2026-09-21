@@ -11,6 +11,21 @@ import '../diagnostics/log.dart';
 /// that the key could not be read.
 const lichessTokenKey = 'lichess_access_token';
 
+/// Keeps [token] as the account, or forgets it when [token] is empty.
+/// Answers whether the preferences took it.
+Future<bool> writeLichessToken(String token) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final trimmed = token.trim();
+    return trimmed.isEmpty
+        ? await prefs.remove(lichessTokenKey)
+        : await prefs.setString(lichessTokenKey, trimmed);
+  } on Object catch (error) {
+    log.w('save the Lichess account', error);
+    return false;
+  }
+}
+
 /// The user's Lichess token, or null when they have not signed in — and also
 /// when the preferences could not be read, because a study download without
 /// a token still works for a public study, and the failure is named in the

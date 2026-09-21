@@ -125,16 +125,18 @@ final class BoardTheme extends ThemeExtension<BoardTheme> {
   /// Everything the board is given: colours, pieces, and how it behaves
   /// under a mouse. Both sides may move, there are no premoves, and a
   /// dragged piece stays its own size under the pointer rather than
-  /// growing above a finger.
-  ChessboardSettings get settings => ChessboardSettings(
-    colorScheme: _colors,
-    pieceAssets: PieceSet.cburnettAssets,
-    animationDuration: animation,
-    showValidMoves: showValidMoves,
-    enablePremoves: false,
-    dragFeedbackScale: 1,
-    dragFeedbackOffset: Offset.zero,
-  );
+  /// growing above a finger. [coordinates] is the user's setting.
+  ChessboardSettings settings({required bool coordinates}) =>
+      ChessboardSettings(
+        colorScheme: _colors,
+        pieceAssets: PieceSet.cburnettAssets,
+        animationDuration: animation,
+        showValidMoves: showValidMoves,
+        enableCoordinates: coordinates,
+        enablePremoves: false,
+        dragFeedbackScale: 1,
+        dragFeedbackOffset: Offset.zero,
+      );
 
   /// The small board that floats under a hovered engine move: the same
   /// colours and pieces, no animation because it shows one position.
@@ -288,6 +290,16 @@ TextTheme _sized(TextTheme base) => base.copyWith(
   bodySmall: base.bodySmall?.copyWith(fontSize: 13, color: _muted),
   labelSmall: base.labelSmall?.copyWith(fontSize: 12, color: _muted),
 );
+
+/// The settings dialog: small and fixed, so it never grows into a page.
+/// A list of places on the left, at most a handful of rows on the right,
+/// each one line tall.
+const settingsDialogWidth = 640.0;
+const settingsDialogHeight = 300.0;
+const settingsListWidth = 180.0;
+const settingRowHeight = 36.0;
+const settingNumberWidth = 64.0;
+const settingSecretWidth = 200.0;
 
 /// How tall one row of a list is — a study, its chapters, the games of a
 /// file. Small enough that a long list is one screen, tall enough to hit.

@@ -12,8 +12,11 @@ import '../features/pgn_viewer/pgn_viewer.dart';
 import '../features/pgn_viewer/pgn_viewer_panel.dart';
 import '../features/study/quiz_menu.dart';
 import '../features/study/studies.dart';
+import '../features/settings/setting_rows.dart';
+import '../features/settings/settings_dialog.dart';
 import '../features/study/study_panel.dart';
 import '../storage/chapter_files.dart';
+import '../storage/settings_store.dart';
 import '../ui/app_action.dart';
 import '../ui/choice_dialog.dart';
 import '../ui/theme.dart';
@@ -42,6 +45,8 @@ class Shell extends StatefulWidget {
     required this.session,
     required this.saver,
     required this.analysis,
+    required this.settings,
+    required this.settingRows,
     required this.leaving,
   });
 
@@ -52,6 +57,10 @@ class Shell extends StatefulWidget {
   final DocumentSession session;
   final DocumentSaver saver;
   final EngineAnalysis analysis;
+  final SettingsStore settings;
+
+  /// The settings page's rows, as the app wires them.
+  final List<SettingGroup> Function() settingRows;
 
   /// Asked before another document takes the screen, so words the file
   /// never took are not carried off it without the user saying so.
@@ -278,7 +287,17 @@ class _ShellState extends State<Shell> {
     chosen?.run?.call();
   }
 
+  Future<void> _settings() => showSettingsDialog(
+    context,
+    store: widget.settings,
+    groups: widget.settingRows,
+  );
+
   Map<ShortcutActivator, VoidCallback> get _windowKeys => {
+    const SingleActivator(LogicalKeyboardKey.comma, control: true): () =>
+        unawaited(_settings()),
+    const SingleActivator(LogicalKeyboardKey.comma, meta: true): () =>
+        unawaited(_settings()),
     const SingleActivator(LogicalKeyboardKey.keyB, control: true): _toggleList,
     const SingleActivator(LogicalKeyboardKey.keyB, meta: true): _toggleList,
     const SingleActivator(LogicalKeyboardKey.keyO, control: true): () =>
@@ -328,6 +347,7 @@ class _ShellState extends State<Shell> {
             builder: (context, _) => TopBar(
               mode: _mode,
               onMode: _switchTo,
+              onSettings: () => unawaited(_settings()),
               listShown: _listShown,
               onToggleList: _toggleList,
               actions: _actions(),
@@ -372,6 +392,7 @@ class _ShellState extends State<Shell> {
       saver: widget.saver,
       analysis: widget.analysis,
       editing: _editing,
+      settings: widget.settings,
       moveMenu: _mode == Mode.study
           ? (path) => quizMenuItems(widget.session, path)
           : null,

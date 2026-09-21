@@ -7,15 +7,14 @@ import '../diagnostics/log.dart';
 import '../engines/engine_supervisor.dart';
 import '../engines/stockfish_install.dart';
 
-/// One thread and a modest table: the pane wants an answer within a
-/// second, not the deepest search the machine can run.
-const stockfishOptions = {'Threads': '1', 'Hash': '128'};
-
 /// Where the workspace's Stockfish comes from: the bundled asset, installed
-/// once under the support folder, then started under [engines].
+/// once under the support folder, then started under [engines] with the
+/// threads and the table the settings give it.
 Future<EngineStart> launchStockfish({
   required Directory support,
   required EngineSupervisor engines,
+  required int cores,
+  required int memoryMb,
 }) async {
   final install = StockfishInstall(
     supportDirectory: support,
@@ -29,7 +28,7 @@ Future<EngineStart> launchStockfish({
     StockfishMissing(:final reason) => StartFailed(reason),
     StockfishReady(:final path) => engines.start(
       path,
-      options: stockfishOptions,
+      options: {'Threads': '$cores', 'Hash': '$memoryMb'},
     ),
   };
 }

@@ -12,6 +12,7 @@ class TopBar extends StatelessWidget {
     super.key,
     required this.mode,
     required this.onMode,
+    required this.onSettings,
     required this.listShown,
     required this.onToggleList,
     required this.actions,
@@ -19,6 +20,7 @@ class TopBar extends StatelessWidget {
 
   final Mode mode;
   final ValueChanged<Mode> onMode;
+  final VoidCallback onSettings;
   final bool listShown;
   final VoidCallback onToggleList;
   final List<AppAction> actions;
@@ -45,7 +47,7 @@ class TopBar extends StatelessWidget {
             onPressed: onToggleList,
             visualDensity: VisualDensity.compact,
           ),
-          _ModeMenu(mode: mode, onMode: onMode),
+          _ModeMenu(mode: mode, onMode: onMode, onSettings: onSettings),
           const Spacer(),
           _ActionsMenu(actions: actions),
         ],
@@ -70,11 +72,18 @@ const _modes = [
   'Bughouse lab',
 ];
 
+/// Under the modes, after a line, the settings: not a mode, but the one
+/// other place the app has.
 class _ModeMenu extends StatelessWidget {
-  const _ModeMenu({required this.mode, required this.onMode});
+  const _ModeMenu({
+    required this.mode,
+    required this.onMode,
+    required this.onSettings,
+  });
 
   final Mode mode;
   final ValueChanged<Mode> onMode;
+  final VoidCallback onSettings;
 
   /// The mode this entry switches to, or null when `v2` does not have it yet
   /// and the entry is there only to show that the product does.
@@ -96,6 +105,16 @@ class _ModeMenu extends StatelessWidget {
                 : const SizedBox(width: IconSize.menu),
             child: Text(name),
           ),
+        const Divider(height: 1),
+        MenuItemButton(
+          onPressed: onSettings,
+          leadingIcon: const SizedBox(width: IconSize.menu),
+          trailingIcon: Text(
+            'Ctrl+,',
+            style: Theme.of(context).textTheme.labelSmall,
+          ),
+          child: const Text('Settings…'),
+        ),
       ],
       builder: (context, controller, _) => TextButton.icon(
         onPressed: controller.isOpen ? controller.close : controller.open,

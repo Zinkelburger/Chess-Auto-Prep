@@ -60,13 +60,37 @@ final class AnalysisSnapshot {
 /// when a search ends. Knows nothing of the document beyond its position.
 final class EngineAnalysis extends ChangeNotifier {
   /// [launch] is asked for an engine each time the analysis is enabled.
-  EngineAnalysis(this._session, this._launch, {this.multiPv = 3}) {
+  EngineAnalysis(this._session, this._launch, {int multiPv = 3})
+    : _multiPv = multiPv {
     _session.addListener(_follow);
   }
 
   final DocumentSession _session;
   final Future<EngineStart> Function() _launch;
-  final int multiPv;
+  int _multiPv;
+
+  /// How many lines each search asks for and the pane shows.
+  int get multiPv => _multiPv;
+
+  /// Asks for [lines] from now on: the search under way is started again
+  /// with the new count, so the pane never shows rows a search will not
+  /// fill.
+  void setLines(int lines) {
+    if (lines == _multiPv) return;
+    _multiPv = lines;
+    _stopFollowing();
+    _follow();
+    _notify();
+  }
+
+  /// Quits the engine and starts another, for a change to how it runs —
+  /// its threads or its table — that only a fresh process takes.
+  Future<void> restart() async {
+    if (!enabled) return;
+    await disable();
+    await enable();
+  }
+
   EngineState _state = const EngineOff();
   Engine? _engine;
   _Following? _following;

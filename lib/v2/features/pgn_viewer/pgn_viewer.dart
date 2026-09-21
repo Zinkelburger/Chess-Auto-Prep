@@ -7,6 +7,7 @@ import '../../storage/chapter_files.dart';
 import '../../storage/pgn_file_import.dart';
 import '../../storage/pgn_file_picker.dart';
 import '../../storage/recent_pgn_files.dart';
+import '../../storage/settings_store.dart';
 import '../../workspace/document_session.dart';
 
 /// The PGN Viewer's own state: the files opened before, which file the
@@ -21,11 +22,13 @@ final class PgnViewer extends ChangeNotifier {
     required RecentFiles recent,
     required PgnFilePicker picker,
     required PgnFileImport import,
+    required SettingsStore settings,
     required DocumentSession session,
     required String collections,
   }) : _recentFiles = recent,
        _picker = picker,
        _import = import,
+       _settings = settings,
        _session = session,
        _collections = collections {
     _session.addListener(_followTheDocument);
@@ -37,6 +40,7 @@ final class PgnViewer extends ChangeNotifier {
   final RecentFiles _recentFiles;
   final PgnFilePicker _picker;
   final PgnFileImport _import;
+  final SettingsStore _settings;
   final DocumentSession _session;
 
   /// The `pgn_collections` folder, absolute: where the file dialog starts
@@ -131,7 +135,10 @@ final class PgnViewer extends ChangeNotifier {
   /// recent list: itself when it is inside Documents, otherwise a copy made
   /// in the collections folder, so what goes on the board can be edited and
   /// kept. Null, with [recentProblem] saying why, when no copy could be made.
+  /// With copying switched off in the settings the file opens where it is,
+  /// to read.
   Future<ChapterRef?> fileFor(String path) async {
+    if (!_settings.value.copyFilesIntoDocuments) return ChapterRef.at(path);
     switch (await _import.insideDocuments(path)) {
       case FileToOpen(path: final inside):
         return ChapterRef.at(inside);

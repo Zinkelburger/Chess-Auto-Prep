@@ -1,5 +1,6 @@
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
+import 'package:chess_auto_prep/v2/storage/settings_store.dart';
 import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
@@ -21,6 +22,7 @@ void main() {
   late DocumentSaver saver;
   late EngineAnalysis analysis;
   late ValueNotifier<bool> editing;
+  late SettingsStore settings;
 
   /// The engine stays off; its pane has its own test.
   void startAnalysis() {
@@ -47,6 +49,7 @@ void main() {
               saver: saver,
               analysis: analysis,
               editing: editing,
+              settings: settings,
             ),
           ),
         ),
@@ -60,10 +63,12 @@ void main() {
     session = fixture.session;
     saver = fixture.saver;
     editing = ValueNotifier(false);
+    settings = SettingsStore();
     startAnalysis();
   });
 
   tearDown(() {
+    settings.dispose();
     editing.dispose();
     analysis.dispose();
     fixture.dispose();

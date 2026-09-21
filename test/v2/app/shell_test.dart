@@ -11,6 +11,7 @@ import 'package:chess_auto_prep/v2/features/library/outline_panel.dart';
 import 'package:chess_auto_prep/v2/features/pgn_viewer/pgn_viewer.dart';
 import 'package:chess_auto_prep/v2/features/study/studies.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
+import 'package:chess_auto_prep/v2/storage/settings_store.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/storage/recent_pgn_files.dart';
 import 'package:chess_auto_prep/v2/workspace/save_state.dart';
@@ -48,6 +49,8 @@ void main() {
   late EngineAnalysis analysis;
   late ChapterOutline outline;
   late PgnViewer viewer;
+  // In memory only, so it can be made once and disposed with the rest.
+  late SettingsStore settings;
   late ScriptedRecentFiles recent;
   late _Question question;
   late ExitGuard leaving;
@@ -91,7 +94,7 @@ void main() {
       session,
       () async => const StartFailed('no engine in this test'),
     );
-    question = _Question();
+    (question, settings) = (_Question(), SettingsStore());
     leaving = ExitGuard(
       saver: saver,
       question: question,
@@ -105,6 +108,7 @@ void main() {
 
   tearDown(() {
     viewer.dispose();
+    settings.dispose();
     outline.dispose();
     analysis.dispose();
     studies.dispose();
@@ -122,6 +126,8 @@ void main() {
           library: library,
           studies: studies,
           viewer: viewer,
+          settings: settings,
+          settingRows: () => const [],
           outline: outline,
           session: session,
           saver: saver,

@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:multi_split_view/multi_split_view.dart';
 
+import '../storage/settings_store.dart';
 import '../ui/theme.dart';
 import 'board_view.dart';
 import 'document_saver.dart';
@@ -27,12 +28,16 @@ class WorkspaceView extends StatelessWidget {
     required this.saver,
     required this.analysis,
     required this.editing,
+    required this.settings,
     this.moveMenu,
   });
 
   final DocumentSession session;
   final DocumentSaver saver;
   final EngineAnalysis analysis;
+
+  /// For what the board draws: the coordinates, today.
+  final SettingsStore settings;
 
   /// Whether the edit strip is open. The shell owns it: the Actions menu
   /// and Ctrl+E turn it, and the strip's Done turns it off.
@@ -64,7 +69,7 @@ class WorkspaceView extends StatelessWidget {
 
   Widget _board(BuildContext context, Area area) => Padding(
     padding: const EdgeInsets.all(Space.l),
-    child: _BoardAndCounter(session: session),
+    child: _BoardAndCounter(session: session, settings: settings),
   );
 
   Widget _column(BuildContext context, Area area) => Column(
@@ -86,9 +91,10 @@ class WorkspaceView extends StatelessWidget {
 
 /// The largest square board that fits above the counter, at the top.
 class _BoardAndCounter extends StatelessWidget {
-  const _BoardAndCounter({required this.session});
+  const _BoardAndCounter({required this.session, required this.settings});
 
   final DocumentSession session;
+  final SettingsStore settings;
 
   @override
   Widget build(BuildContext context) {
@@ -105,12 +111,13 @@ class _BoardAndCounter extends StatelessWidget {
             child: Column(
               children: [
                 ListenableBuilder(
-                  listenable: session,
+                  listenable: Listenable.merge([session, settings]),
                   builder: (context, _) => BoardView(
                     fen: session.fen,
                     orientation: session.orientation,
                     lastMove: session.currentMove?.uci,
                     onMove: session.playMove,
+                    coordinates: settings.value.boardCoordinates,
                   ),
                 ),
                 const SizedBox(height: Space.s),

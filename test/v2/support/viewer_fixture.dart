@@ -4,6 +4,7 @@ import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_file_import.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_file_picker.dart';
 import 'package:chess_auto_prep/v2/storage/recent_pgn_files.dart';
+import 'package:chess_auto_prep/v2/storage/settings_store.dart';
 import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
 
@@ -109,6 +110,7 @@ PgnViewer viewerFor(DocumentSession session, ScriptedRecentFiles recent) =>
       recent: recent,
       picker: ScriptedPicker(),
       import: ScriptedImport(),
+      settings: SettingsStore(),
       session: session,
       collections: collectionsRoot,
     );
@@ -124,6 +126,7 @@ final class ViewerFixture {
     required this.recent,
     required this.picker,
     required this.import,
+    required this.settings,
     required this.ref,
   });
 
@@ -134,6 +137,9 @@ final class ViewerFixture {
   final ScriptedRecentFiles recent;
   final ScriptedPicker picker;
   final ScriptedImport import;
+
+  /// In memory only; a test flips a value on it.
+  final SettingsStore settings;
   final ChapterRef ref;
 
   String get onDisk => switch (store.documents[ref]) {
@@ -150,6 +156,7 @@ final class ViewerFixture {
 
   void dispose() {
     viewer.dispose();
+    settings.dispose();
     session.dispose();
     saver.dispose();
   }
@@ -169,10 +176,12 @@ Future<ViewerFixture> viewerOver(
   final recentFiles = ScriptedRecentFiles(recent);
   final picker = ScriptedPicker();
   final import = ScriptedImport();
+  final settings = SettingsStore();
   final viewer = PgnViewer(
     recent: recentFiles,
     picker: picker,
     import: import,
+    settings: settings,
     session: session,
     collections: collectionsRoot,
   );
@@ -184,6 +193,7 @@ Future<ViewerFixture> viewerOver(
     recent: recentFiles,
     picker: picker,
     import: import,
+    settings: settings,
     ref: ref,
   );
 }
