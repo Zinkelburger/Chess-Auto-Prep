@@ -41,10 +41,15 @@ final class LibraryFixture {
 
 /// A loaded library holding [folders], with every chapter in the store as
 /// [text] and, when [open] is given, that chapter open in the workspace.
+///
+/// [delay] is how long the saver waits after an edit. Zero, unless the test
+/// is about a draft that is still waiting when the library changes the file
+/// underneath it.
 Future<LibraryFixture> openLibrary(
   List<RepertoireFolder> folders, {
   String text = '// Main\n// Color: White\n\n',
   ChapterRef? open,
+  Duration delay = Duration.zero,
 }) async {
   final store = ScriptedDocumentStore();
   // A folder is empty when the store holds no document inside it, so
@@ -60,7 +65,7 @@ Future<LibraryFixture> openLibrary(
       store.documents[chapter] = Opened(text, scriptedRevision(text));
     }
   }
-  final saver = DocumentSaver(store, delay: Duration.zero);
+  final saver = DocumentSaver(store, delay: delay);
   final session = DocumentSession(store, saver);
   final library = Library(
     files: files,

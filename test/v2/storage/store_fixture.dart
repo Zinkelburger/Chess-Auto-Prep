@@ -3,6 +3,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:chess_auto_prep/v2/diagnostics/log.dart';
 import 'package:chess_auto_prep/v2/storage/backups.dart';
 import 'package:chess_auto_prep/v2/storage/document_probe.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/games_written.dart';
@@ -10,6 +11,7 @@ import 'package:chess_auto_prep/v2/storage/document_ref.dart';
 import 'package:chess_auto_prep/v2/storage/edit_scope.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_file_store.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 final class StoreFixture {
@@ -99,6 +101,16 @@ final class StoreFixture {
   }
 }
 
+/// Everything the app logs from here until the test ends, so a test can say
+/// what a store did and did not report.
+List<LogEntry> loggedFromNow() {
+  final entries = <LogEntry>[];
+  void collect(LogEntry entry) => entries.add(entry);
+  log.install(collect);
+  addTearDown(() => log.remove(collect));
+  return entries;
+}
+
 /// A chapter with one game in it, the smallest file a save can name a game
 /// of.
 String oneGame(String moves) => '[Event "Line"]\n[Result "*"]\n\n$moves *\n';
@@ -116,6 +128,14 @@ const chapterHeading = '// Main\n// Color: White\n\n';
 /// Three games from the initial position, the file the scope tests edit.
 final threeGames = chapterOf([
   gameOf(1, '1. d4'),
+  gameOf(2, '1. e4'),
+  gameOf(3, '1. c4'),
+]);
+
+/// [threeGames] with a move added to the first game and the other two left
+/// alone: what a save that names game 1 writes.
+final firstGameEdited = chapterOf([
+  gameOf(1, '1. d4 Nf6'),
   gameOf(2, '1. e4'),
   gameOf(3, '1. c4'),
 ]);

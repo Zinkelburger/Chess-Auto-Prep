@@ -30,6 +30,10 @@ final class ScriptedDocumentStore implements PgnDocumentStore {
   /// Every save that was asked for, in the order it was asked.
   final requestedSaves = <SaveRequest>[];
 
+  /// What each deleted document held when it was deleted, which is what the
+  /// real store's recovery copy would hold.
+  final deleted = <DocumentRef, String>{};
+
   bool hold = false;
 
   /// Thrown by the next [save] instead of answering it, for the store
@@ -163,6 +167,7 @@ final class ScriptedDocumentStore implements PgnDocumentStore {
     final current = documents[ref];
     if (current is! Opened) return const Conflict(null);
     if (current.revision != expected) return Conflict(current.revision);
+    deleted[ref] = current.text;
     documents.remove(ref);
     return Deleted('${ref.path}.recovered', training: repoint);
   }

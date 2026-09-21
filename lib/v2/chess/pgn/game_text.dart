@@ -93,7 +93,7 @@ List<int> _gameStarts(String text) {
   while (lineStart <= text.length) {
     var lineEnd = text.indexOf('\n', lineStart);
     if (lineEnd < 0) lineEnd = text.length;
-    if (!commented && _isEventLine(text, lineStart, lineEnd)) {
+    if (!commented && isEventLine(text, lineStart, lineEnd)) {
       starts.add(lineStart);
     }
     commented = commentOpenAfter(text, lineStart, lineEnd, commented);
@@ -102,7 +102,10 @@ List<int> _gameStarts(String text) {
   return starts;
 }
 
-bool _isEventLine(String text, int start, int end) {
+/// Whether the line [start]–[end] is where a game begins: its first
+/// non-blank characters are `[Event` followed by whitespace. Whether a `{}`
+/// comment swallows it is the caller's to know; see [commentOpenAfter].
+bool isEventLine(String text, int start, int end) {
   var i = start;
   while (i < end && isBlank(text.codeUnitAt(i))) {
     i++;

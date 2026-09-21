@@ -25,21 +25,16 @@ void main() {
   test('a save that changes only the game it declared goes through', () async {
     final ref = fixture.ref('KID/Main.pgn');
     final revision = await fixture.put(ref, threeGames);
-    final edited = chapterOf([
-      gameOf(1, '1. d4 Nf6'),
-      gameOf(2, '1. e4'),
-      gameOf(3, '1. c4'),
-    ]);
 
     final saved = await fixture.store.save(
       ref,
-      edited,
+      firstGameEdited,
       expected: revision,
       scope: GamesEdited(GamesWritten(rewritten: {0})),
     );
 
     expect(saved, isA<Saved>());
-    expect(await File(ref.path).readAsString(), edited);
+    expect(await File(ref.path).readAsString(), firstGameEdited);
   });
 
   test('a save that would also change a game nobody edited is refused and '
@@ -171,10 +166,7 @@ void main() {
 
   test('a save that says it replaced the whole document goes through and is '
       'logged', () async {
-    final entries = <LogEntry>[];
-    void collect(LogEntry entry) => entries.add(entry);
-    log.install(collect);
-    addTearDown(() => log.remove(collect));
+    final entries = loggedFromNow();
     final ref = fixture.ref('KID/Main.pgn');
     final revision = await fixture.put(ref, threeGames);
     final text = chapterOf([gameOf(9, '1. f4')]);
@@ -318,75 +310,58 @@ void main() {
     expect((await File(ref.path).readAsBytes()).take(3), [0xEF, 0xBB, 0xBF]);
   });
 
-  group('a restored version', () {
-    test('goes back when the archive kept those bytes', () async {
+  // Putting a kept version back is a save like any other, with one more
+  // check: the bytes have to be a version this store kept for this document.
+  test(
+    'a restored version goes back when the archive kept those bytes',
+    () async {
       final ref = fixture.ref('KID/Main.pgn');
       final first = await fixture.put(ref, threeGames);
-      final edited = chapterOf([
-        gameOf(1, '1. d4 Nf6'),
-        gameOf(2, '1. e4'),
-        gameOf(3, '1. c4'),
-      ]);
-      final saved = await fixture.edit(ref, edited, first) as Saved;
+      final saved = await fixture.edit(ref, firstGameEdited, first) as Saved;
 
       final back = await fixture.restore(
         ref,
         threeGames,
         saved.receipt.committed,
       );
+
       expect(back, isA<Saved>());
       expect(await File(ref.path).readAsString(), threeGames);
-    });
+    },
+  );
 
-    test('is not logged as a guess', () async {
-      final entries = <LogEntry>[];
-      void collect(LogEntry entry) => entries.add(entry);
-      log.install(collect);
-      addTearDown(() => log.remove(collect));
-      final ref = fixture.ref('KID/Main.pgn');
-      final revision = await fixture.put(ref, threeGames);
-      final saved =
-          await fixture.edit(
-                ref,
-                chapterOf([
-                  gameOf(1, '1. d4 Nf6'),
-                  gameOf(2, '1. e4'),
-                  gameOf(3, '1. c4'),
-                ]),
-                revision,
-              )
-              as Saved;
+  test('a restored version is not logged as a guess', () async {
+    final entries = loggedFromNow();
+    final ref = fixture.ref('KID/Main.pgn');
+    final revision = await fixture.put(ref, threeGames);
+    final saved = await fixture.edit(ref, firstGameEdited, revision) as Saved;
 
-      final undone = await fixture.restore(
-        ref,
-        saved.receipt.before,
-        saved.receipt.committed,
-      );
+    final undone = await fixture.restore(
+      ref,
+      saved.receipt.before,
+      saved.receipt.committed,
+    );
 
-      expect(undone, isA<Saved>());
-      expect(await File(ref.path).readAsString(), threeGames);
-      expect(
-        entries.map((entry) => '${entry.error}'),
-        isNot(contains(contains('did not say which game'))),
-      );
-    });
+    expect(undone, isA<Saved>());
+    expect(await File(ref.path).readAsString(), threeGames);
+    expect(
+      entries.map((entry) => '${entry.error}'),
+      isNot(contains(contains('did not say which game'))),
+    );
+  });
 
-    test('is refused when nothing kept those bytes', () async {
-      final ref = fixture.ref('KID/Main.pgn');
-      final revision = await fixture.put(ref, threeGames);
+  test('a restore of bytes nothing kept is refused', () async {
+    final ref = fixture.ref('KID/Main.pgn');
+    final revision = await fixture.put(ref, threeGames);
 
-      final made = await fixture.restore(
-        ref,
-        chapterOf([gameOf(1, '1. d4 Nf6 2. c4 g6')]),
-        revision,
-      );
+    final made = await fixture.restore(
+      ref,
+      chapterOf([gameOf(1, '1. d4 Nf6 2. c4 g6')]),
+      revision,
+    );
 
-      expect(
-        (made as RestoreRefused).detail,
-        contains('kept for this document'),
-      );
-      expect(await File(ref.path).readAsString(), threeGames);
-    });
+    expect((made as RestoreRefused).detail, contains('kept for this document'));
+    expect(await File(ref.path).readAsString(), threeGames);
   });
 
   test('a scope that says games were taken out cannot be made', () {
