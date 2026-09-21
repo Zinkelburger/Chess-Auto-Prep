@@ -35,10 +35,12 @@ import 'training_records.dart' as training;
 /// exclusive and neither side can lose the other's write. Against a program
 /// that does not take the lock — a text editor, a sync client — the file is
 /// read under the lock and the mutation refuses on any change since the
-/// caller's read, but that check and the rename are separate system calls,
-/// so a write that lands between them is replaced rather than reported. What
-/// was replaced is kept in Support before the rename, so even then nothing
-/// is gone for good.
+/// caller's read, but that check and the rename are separate system calls.
+/// What is kept in Support before the rename is the version this app read at
+/// that check, so every version this app replaces can be had back; a write by
+/// a program that took no lock and landed in the moment between the check and
+/// the rename is replaced without being reported, and those bytes are in no
+/// kept version.
 ///
 /// A save also has to survive the app itself. It says which games it means
 /// to change ([EditScope]); before anything is written, the text is compared
