@@ -266,7 +266,7 @@ async function openLine(root: string, tokens: string[], at: number[]) {
  */
 async function load() {
   const asked = lines.snapshot();
-  boards.selected = null; hover = null;
+  boards.deselect(); hover = null;
   try {
     const pos = await bookPosition(lines.root, lines.tokens());
     if (JSON.stringify(lines.snapshot()) !== JSON.stringify(asked)) return;  // moved on meanwhile

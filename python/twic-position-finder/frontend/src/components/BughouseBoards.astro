@@ -21,8 +21,7 @@ const HELP = 'Reserves: P N B R Q, e.g. 2N Q. Outstanding = pieces not on a boar
     <section id={`${prefix}-panel-${name}`} class="bb-board-panel" aria-label={`Board ${i + 1}`}>
       <div id={`${prefix}-player-top-${name}`} class="bb-player"></div>
       <div class="bb-board-wrap">
-        <div id={`${prefix}-board-${name}`} class="bb-board" role="group" aria-label={`Board ${i + 1} squares`}></div>
-        <svg id={`${prefix}-arrow-${name}`} class="bb-arrow" viewBox="0 0 8 8" aria-hidden="true"></svg>
+        <div id={`${prefix}-board-${name}`} class="bb-board" role="group" aria-label={`Board ${i + 1}`}></div>
       </div>
       <div id={`${prefix}-player-bottom-${name}`} class="bb-player"></div>
       <ol id={`${prefix}-history-${name}`} class="bb-history" aria-label={`Moves on board ${i + 1}`}></ol>

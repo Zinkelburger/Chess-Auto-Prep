@@ -1,9 +1,7 @@
 /* Shared by Bughouse Lab and BughouseDB: two boards on the left with their
    move lists and setup boxes, the page's own panel on the right, one screen.
-   Board colours and highlights are Lichess's brown (lila ui/lib/css/theme/board). */
+   The boards are chessground, Lichess's own (styles come with the package). */
 .bb-app {
-  --light: #f0d9b5; --dark: #b58863;
-  --last-move: rgb(155 199 0 / 0.41); --selected: rgb(20 85 30 / 0.5); --dest: rgb(20 85 30 / 0.5);
   --board: clamp(240px, min(calc(100dvh - var(--nav-h) - 440px), calc((100vw - 640px) / 2)), 480px);
   display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 28px; flex: 1; min-height: 0;
 }
@@ -21,25 +19,25 @@
 .bb-player.to-move .who { color: var(--text); }
 
 .bb-board-wrap { position: relative; width: var(--board); height: var(--board); flex: none; }
-.bb-board { display: grid; grid-template: repeat(8, 1fr) / repeat(8, 1fr); width: 100%; height: 100%; }
-.bb-square { position: relative; min-width: 0; min-height: 0; padding: 0; border: 0; border-radius: 0; background: var(--light); cursor: pointer; }
-.bb-square.dark { background: var(--dark); }
-.bb-square:disabled { opacity: 1; cursor: default; }
-.bb-square.dragging img { opacity: 0.3; }
+/* The board itself is chessground's: its pieces (cburnett), move dots, last-move
+   and selection colours come from @lichess-org/chessground's assets. That
+   package's brown board is only a demo (black squares at 20% over cream), so
+   the squares and coordinates below are Lichess's own brown: #f0d9b5 and
+   #b58863, lowercase bold coordinates inside the board, ranks at the top right
+   of the right-hand file and files at the bottom left of the bottom rank, each
+   in the colour of the other kind of square. */
+.bb-board { width: 100%; height: 100%; }
+.bb-board cg-board { background-color: #f0d9b5; background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8" shape-rendering="crispEdges"><rect width="8" height="8" fill="%23f0d9b5"/><path fill="%23b58863" d="M1 0h1v1h-1zM3 0h1v1h-1zM5 0h1v1h-1zM7 0h1v1h-1zM0 1h1v1h-1zM2 1h1v1h-1zM4 1h1v1h-1zM6 1h1v1h-1zM1 2h1v1h-1zM3 2h1v1h-1zM5 2h1v1h-1zM7 2h1v1h-1zM0 3h1v1h-1zM2 3h1v1h-1zM4 3h1v1h-1zM6 3h1v1h-1zM1 4h1v1h-1zM3 4h1v1h-1zM5 4h1v1h-1zM7 4h1v1h-1zM0 5h1v1h-1zM2 5h1v1h-1zM4 5h1v1h-1zM6 5h1v1h-1zM1 6h1v1h-1zM3 6h1v1h-1zM5 6h1v1h-1zM7 6h1v1h-1zM0 7h1v1h-1zM2 7h1v1h-1zM4 7h1v1h-1zM6 7h1v1h-1z"/></svg>'); }
+.bb-board coords { opacity: 1; font-family: var(--sans, sans-serif); font-size: 11px; font-weight: 700; line-height: 1; }
+.bb-board coords.ranks { left: auto; right: 0; top: 0; width: 100%; height: 100%; }
+.bb-board coords.ranks coord { transform: none; text-align: right; padding: 2px 3px 0 0; }
+.bb-board coords.files { left: 0; bottom: 0; height: auto; text-transform: none; text-align: left; }
+.bb-board coords.files coord { padding: 0 0 2px 3px; }
+.bb-board.orientation-white .ranks :nth-child(odd), .bb-board.orientation-white .files :nth-child(even),
+.bb-board.orientation-black .ranks :nth-child(even), .bb-board.orientation-black .files :nth-child(odd) { color: #946f51; }
+.bb-board.orientation-white .ranks :nth-child(even), .bb-board.orientation-white .files :nth-child(odd),
+.bb-board.orientation-black .ranks :nth-child(odd), .bb-board.orientation-black .files :nth-child(even) { color: #f0d9b5; }
 .bb-board, .bb-pocket:not(:disabled) { touch-action: none; }
-.bb-ghost { position: fixed; z-index: 1000; pointer-events: none; transform: translate(-50%, -50%); }
-.bb-square::before { content: ''; position: absolute; inset: 0; }
-.bb-square.last::before { background: var(--last-move); }
-.bb-square.selected::before { background: var(--selected); }
-.bb-square.target::after { content: ''; position: absolute; inset: 0; background: radial-gradient(var(--dest) 19%, transparent 20%); z-index: 2; }
-.bb-square.target:has(img)::after { background: radial-gradient(transparent 79%, rgb(20 85 0 / 0.3) 80%); }
-.bb-square img { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
-.bb-square:focus-visible { z-index: 3; outline: 3px solid var(--accent); outline-offset: -3px; }
-.bb-coord { position: absolute; font-size: 11px; font-weight: 700; line-height: 1; pointer-events: none; z-index: 1; color: #946f51; }
-.bb-square.dark .bb-coord { color: var(--light); }
-.bb-coord.file { right: 2px; bottom: 2px; }
-.bb-coord.rank { left: 2px; top: 2px; }
-.bb-arrow { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 4; }
 
 .bb-pocket { display: flex; align-items: center; padding: 0 5px 0 0; border: 1px solid transparent; border-radius: 4px; background: none; color: var(--text); font-size: 13px; font-variant-numeric: tabular-nums; cursor: pointer; }
 .bb-pocket img { width: 30px; height: 30px; }
