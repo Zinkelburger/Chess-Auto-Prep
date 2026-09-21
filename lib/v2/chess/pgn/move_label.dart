@@ -12,18 +12,26 @@ String moveNumberLabel(MoveNode node, {required bool startsLine}) {
   return startsLine ? '${fen.fullMove - 1}...' : '';
 }
 
-/// The first [plies] moves of [tree]'s main line, numbered: `1.d4 d5 2.c4`.
-/// A line with more moves than that ends in an ellipsis, so a row that shows
-/// it says there is more without having to measure the text.
-String openingMoves(GameTree tree, {required int plies}) {
+/// [plies] moves of [tree]'s main line, numbered, beginning at the move
+/// after [skip]: `1.d4 d5 2.c4`, or `…7.Nge2 Nc6` for a line shown from
+/// where it left another. An ellipsis stands for the moves not shown, at
+/// either end, so a row says there is more without having to measure text.
+String movesFrom(GameTree tree, {required int plies, int skip = 0}) {
   final words = <String>[];
   var siblings = tree.children;
-  var first = true;
+  var at = 0;
   while (siblings.isNotEmpty && words.length < plies) {
     final node = siblings.first;
-    words.add('${moveNumberLabel(node, startsLine: first)}${node.san}');
+    if (at >= skip) {
+      words.add(
+        '${moveNumberLabel(node, startsLine: words.isEmpty)}${node.san}',
+      );
+    }
     siblings = node.children;
-    first = false;
+    at++;
   }
-  return siblings.isEmpty ? words.join(' ') : '${words.join(' ')} …';
+  final start = skip > 0 ? '…' : '';
+  return siblings.isEmpty
+      ? '$start${words.join(' ')}'
+      : '$start${words.join(' ')} …';
 }

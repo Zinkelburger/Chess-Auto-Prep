@@ -68,7 +68,33 @@ void main() {
       outline.lines.first.moves,
       '1.d4 d5 2.c4 e6 3.cxd5 exd5 4.Nc3 Nf6 …',
     );
-    expect(outline.lines.last.moves, '1.d4 Nf6');
+  });
+
+  test('a line is shown from where it leaves the line above it', () async {
+    await open();
+
+    expect(outline.lines.last.moves, '…1...Nf6');
+  });
+
+  test('a name every line repeats is left off the row', () async {
+    fixture = await openLibrary(
+      [
+        folder('KID', ['Main']),
+      ],
+      text: sameName,
+      open: main,
+    );
+    outline = ChapterOutline(
+      library: fixture.library,
+      session: fixture.session,
+    );
+    addTearDown(() {
+      outline.dispose();
+      fixture.dispose();
+    });
+
+    expect(outline.lines.map((line) => line.shared), [true, true]);
+    expect(outline.lines.first.name, 'Book: Repertoire for White');
   });
 
   test('a line with no name of its own is numbered', () async {
@@ -182,6 +208,21 @@ void main() {
     expect(outline.lines, isEmpty);
   });
 }
+
+const sameName = '''
+// Book
+// Color: White
+
+[Event "Book: Repertoire for White"]
+[Result "*"]
+
+1. d4 d5 *
+
+[Event "Book: Repertoire for White"]
+[Result "*"]
+
+1. d4 Nf6 *
+''';
 
 const unnamedLine = '''
 // Book

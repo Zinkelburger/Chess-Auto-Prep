@@ -86,10 +86,12 @@ class LineRow extends StatelessWidget {
             padding: const EdgeInsets.only(left: Space.m + outlineIndent),
             child: Row(
               children: [
-                Flexible(
-                  child: Text(line.name, overflow: TextOverflow.ellipsis),
-                ),
-                const SizedBox(width: Space.s),
+                if (!line.shared) ...[
+                  Flexible(
+                    child: Text(line.name, overflow: TextOverflow.ellipsis),
+                  ),
+                  const SizedBox(width: Space.s),
+                ],
                 Expanded(
                   child: Text(
                     line.moves,

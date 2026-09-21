@@ -78,7 +78,7 @@ void main() {
     expect(find.text('Sidelines'), findsOneWidget);
     expect(find.text('2 lines'), findsOneWidget);
     expect(find.text("Queen's"), findsOneWidget);
-    expect(find.text('1.d4 Nf6'), findsOneWidget);
+    expect(find.text('…1...Nf6'), findsOneWidget);
   });
 
   testWidgets('clicking a chapter asks the host to open it', (tester) async {

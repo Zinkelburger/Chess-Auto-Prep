@@ -12,6 +12,19 @@ import '../../storage/chapter_files.dart';
 import '../../workspace/document_session.dart';
 import 'library.dart';
 
+/// How many opening moves [sans] has in common with the line [above] it,
+/// never all of them: a row with nothing in it would say even less than a
+/// repeated one.
+int _sharedWith(List<String> above, List<String> sans) {
+  var shared = 0;
+  while (shared < above.length &&
+      shared < sans.length - 1 &&
+      above[shared] == sans[shared]) {
+    shared++;
+  }
+  return shared;
+}
+
 /// One chapter of the open repertoire, as the outline lists it.
 final class OutlineChapter {
   const OutlineChapter({required this.ref, required this.open, this.lines});
@@ -37,6 +50,7 @@ final class OutlineLine {
     required this.moves,
     required this.at,
     required this.text,
+    this.shared = false,
   });
 
   /// Where the line sits among the chapter's games, which is what an edit to
@@ -45,6 +59,12 @@ final class OutlineLine {
 
   /// Its `[Event]` tag, or `Line 3` when it has nothing to be called.
   final String name;
+
+  /// Every line of the chapter carries this same name, which a generated
+  /// chapter's lines do: they are all called after the chapter. A label that
+  /// is the same on every row says nothing, so the row leaves it out and
+  /// gives the space to the moves; renaming one still starts from it.
+  final bool shared;
 
   /// Its opening moves, for the row.
   final String moves;
@@ -196,22 +216,43 @@ final class ChapterOutline extends ChangeNotifier {
 /// A game that starts from another position, or that nothing could read, has
 /// no place in the tree the board is showing, so the outline leaves it out
 /// rather than offering a row that goes nowhere; the header counts it.
+///
+/// A row shows its line from the move where it leaves the line above it. A
+/// generated chapter's lines share their whole opening — often every move a
+/// row has room for — so rows that all began at the first move would read
+/// the same and tell the user nothing about which line is which.
 List<OutlineLine> _linesOf(Chapter chapter) {
   final rows = <OutlineLine>[];
+  final names = <String>{};
+  var above = const <String>[];
   for (final (index, line) in chapter.lines.indexed) {
     final tree = chapter.treeInChapter(line);
     if (tree == null) continue;
     final sans = mainlineSans(tree);
+    final shared = _sharedWith(above, sans);
+    above = sans;
     final name = tagValue(line.tags, 'Event')?.trim();
+    if (name != null) names.add(name);
     rows.add(
       OutlineLine(
         game: index,
         name: name == null || name.isEmpty ? 'Line ${index + 1}' : name,
-        moves: openingMoves(tree, plies: ChapterOutline.shownPlies),
+        moves: movesFrom(tree, plies: ChapterOutline.shownPlies, skip: shared),
         at: pathOfSans(chapter.tree, sans) ?? const NodePath.root(),
         text: '${name ?? ''} ${sans.join(' ')}'.toLowerCase(),
       ),
     );
   }
-  return rows;
+  if (names.length != 1 || rows.length < 2) return rows;
+  return [
+    for (final row in rows)
+      OutlineLine(
+        game: row.game,
+        name: row.name,
+        moves: row.moves,
+        at: row.at,
+        text: row.text,
+        shared: true,
+      ),
+  ];
 }
