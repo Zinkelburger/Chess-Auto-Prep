@@ -5,6 +5,12 @@ import '../chess/pgn/game_tree.dart';
 import '../chess/pgn/move_label.dart';
 import '../ui/theme.dart';
 import 'document_session.dart';
+import 'undo_notice.dart';
+
+/// What the move menu says when moves are taken out. The moves are gone from
+/// every line that played them, so the notice names the move rather than a
+/// number of lines.
+String deletedFromHere(String san) => 'Deleted the moves from $san.';
 
 /// The move list: the main line as running text, each variation as an
 /// indented block right after the move it replaces, the way Lichess lays
@@ -13,6 +19,14 @@ class MoveTreeView extends StatelessWidget {
   const MoveTreeView({super.key, required this.session});
 
   final DocumentSession session;
+
+  /// Takes the moves out and offers the same way back a deleted line does:
+  /// this removes more than a line does, so it may not be the one edit that
+  /// cannot be taken back with one click.
+  void _deleteFrom(BuildContext context, MoveNode node, NodePath path) {
+    session.deleteFrom(path);
+    showDeletionNotice(context, session, deletedFromHere(node.san));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,6 +52,7 @@ class MoveTreeView extends StatelessWidget {
                 _Comment(text: prose),
               ..._LineBuilder(
                 session,
+                (node, path) => _deleteFrom(context, node, path),
               ).line(const NodePath.root(), tree.children),
             ],
           ),
@@ -51,9 +66,13 @@ class MoveTreeView extends StatelessWidget {
 typedef _Branch = ({NodePath parent, List<MoveNode> siblings, int branch});
 
 final class _LineBuilder {
-  _LineBuilder(this.session);
+  _LineBuilder(this.session, this.onDeleteFrom);
 
   final DocumentSession session;
+
+  /// Asked for the moves under a move to be taken out, so the screen can say
+  /// what went and offer it back.
+  final void Function(MoveNode node, NodePath path) onDeleteFrom;
 
   /// The line that starts at `siblings[branch]` and follows main
   /// continuations to the end. The other siblings of a main move are its
@@ -120,7 +139,7 @@ final class _LineBuilder {
           child: const Text('Make main line'),
         ),
         MenuItemButton(
-          onPressed: () => session.deleteFrom(path),
+          onPressed: () => onDeleteFrom(node, path),
           child: const Text('Delete from here'),
         ),
       ],

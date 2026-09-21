@@ -163,9 +163,7 @@ List<ChapterLine> spacedAsBefore(Chapter chapter, List<ChapterLine> lines) {
   return [
     for (final (index, line) in lines.indexed)
       line.spacedBy(
-        index == lines.length - 1
-            ? was.last.trailer
-            : was[index].trailer,
+        index == lines.length - 1 ? was.last.trailer : was[index].trailer,
       ),
   ];
 }

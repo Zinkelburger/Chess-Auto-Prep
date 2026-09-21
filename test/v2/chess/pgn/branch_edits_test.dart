@@ -120,15 +120,36 @@ void main() {
     expect(movesOf(after.chapter), '1. d4 d5 2. c4 e6 (2... c6) *');
   });
 
-  test('a game left with no moves at all leaves the file', () {
+  test('a game left with no moves keeps its name and its place', () {
     final before = book();
 
     final after = edited(movesDeleted(before, at: at(before, ['d4'])));
 
-    expect(after.chapter.lines, isEmpty);
-    expect(after.games.order, isEmpty);
-    expect(after.games.before, 3);
-    expect(writeChapter(after.chapter), '// Book\n// Color: White\n\n');
+    expect(namesOf(after.chapter), ["Queen's", 'Indian', 'Slav']);
+    expect(after.games.order, [0, 1, 2]);
+    expect(after.games.rewritten, {0, 1, 2});
+    expect(after.chapter.tree.isEmpty, isTrue);
+  });
+
+  test('a game left with no moves keeps the chapter introduction', () {
+    const one = '''
+// One
+// Color: White
+
+[Event "Only"]
+[Result "*"]
+[LineID "line_one"]
+
+{The chapter introduction} 1. d4 *
+''';
+    final before = parseChapter(name: 'One', text: one);
+
+    final after = edited(movesDeleted(before, at: at(before, ['d4'])));
+
+    final written = writeChapter(after.chapter);
+    expect(written, contains('{The chapter introduction}'));
+    expect(written, contains('[LineID "line_one"]'));
+    expect(parseChapter(name: 'One', text: written).lines, hasLength(1));
   });
 
   test('the file a deletion produces reads back as the tree it made', () {

@@ -5,16 +5,11 @@ import '../../ui/name_dialog.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
 import '../../workspace/document_session.dart';
-import '../../workspace/save_state.dart';
+import '../../workspace/undo_notice.dart';
 import 'chapter_outline.dart';
 import 'library.dart';
 import 'library_messages.dart';
 import 'outline_rows.dart';
-
-/// How long a deleted line's notice stays, with the way back on it. The
-/// delete itself asks nothing first: undo is the answer, so the offer has to
-/// outlast the surprise.
-const undoOffer = Duration(seconds: 8);
 
 /// The chapters of the open repertoire and, under the open one, its lines.
 ///
@@ -85,25 +80,8 @@ class _OutlinePanelState extends State<OutlinePanel> {
   /// workspace shares: no question first, because the answer is one click
   /// away for as long as the notice is up.
   void _delete(OutlineLine line) {
-    final messenger = ScaffoldMessenger.of(context);
     widget.session.deleteLine(line.game);
-    messenger.showSnackBar(
-      SnackBar(
-        content: const Text('Deleted 1 line.'),
-        duration: undoOffer,
-        action: SnackBarAction(label: 'Undo', onPressed: _undo),
-      ),
-    );
-  }
-
-  Future<void> _undo() async {
-    final messenger = ScaffoldMessenger.of(context);
-    final result = await widget.session.undo();
-    if (result case UndoRefused(:final reason)) {
-      messenger.showSnackBar(
-        SnackBar(content: Text(reason ?? 'There is nothing to undo.')),
-      );
-    }
+    showDeletionNotice(context, widget.session, 'Deleted 1 line.');
   }
 
   @override

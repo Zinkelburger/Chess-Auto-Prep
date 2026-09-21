@@ -135,6 +135,24 @@ void main() {
     expect(fixture.textAt(main.path), twoLines);
   });
 
+  testWidgets('the next edit takes the offer of undo away', (tester) async {
+    await show(tester);
+
+    await tester.tap(find.byTooltip('Actions').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete line'));
+    await tester.pumpAndSettle();
+    expect(find.text('Deleted 1 line.'), findsOneWidget);
+
+    // Something else is written while the offer is still up. Undo steps back
+    // one version, so the offer would now take that back instead.
+    fixture.session.renameLine(0, 'Exchange');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Deleted 1 line.'), findsNothing);
+    expect(find.text('Undo'), findsNothing);
+  });
+
   testWidgets('the search narrows the rows and says when nothing matches', (
     tester,
   ) async {
