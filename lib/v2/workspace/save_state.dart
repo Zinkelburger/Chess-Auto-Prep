@@ -32,8 +32,9 @@ final class SaveFailed extends SaveState {
 }
 
 /// The store stopped the save because the text would have changed a game
-/// the edit never touched. The words are still on the screen and the file is
-/// as it was.
+/// the edit never touched. Nothing is taken away: the words are still on the
+/// screen, where Save a copy can have them, the file is as it was, and
+/// nothing more goes to disk until the user reloads or saves a copy.
 ///
 /// A conflict for the user's purposes — reload or save a copy — but it is
 /// the app's mistake, not another writer's, so it says something else. The
@@ -55,6 +56,23 @@ final class DocumentReadOnly extends SaveState {
 
   /// For the log; the widget writes the sentence.
   final String detail;
+}
+
+/// What a state means for the words still to be written.
+extension WordsIn on SaveState {
+  /// Whether the saver is still writing this document at all. A stopped save
+  /// freezes it: the words stay on the screen, where Save a copy can have
+  /// them, and nothing else goes to disk under a scope that does not name
+  /// their games. A conflicted file and one this app may not write are the
+  /// same to whoever is about to tell the user that waiting will help.
+  bool get takesWords =>
+      this is! SaveConflict &&
+      this is! SaveStopped &&
+      this is! DocumentReadOnly;
+
+  /// Whether a write may go out now: a failed file is written again with the
+  /// next edit, and [takesWords] covers the rest.
+  bool get writable => takesWords && this is! SaveFailed;
 }
 
 sealed class UndoResult {
