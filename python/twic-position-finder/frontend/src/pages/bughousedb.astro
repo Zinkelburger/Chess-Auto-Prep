@@ -3,10 +3,9 @@ import Base from '../layouts/Base.astro';
 import BughouseBoards from '../components/BughouseBoards.astro';
 import '../styles/bughouse-board.css';
 import '../styles/bughousedb.css';
-const TURNSTILE = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
 ---
 <Base title="BughouseDB" description="Every legal bughouse move scored by Hivemind for three clock situations. Click through positions; analyse missing ones in your browser." fill>
-  <div id="bughousedb" class="bb-app" data-turnstile={TURNSTILE ?? ''}>
+  <div id="bughousedb" class="bb-app">
     <h1 class="visually-hidden">BughouseDB</h1>
     <noscript><p class="alert alert-error">Enable JavaScript to browse the book.</p></noscript>
 
@@ -37,7 +36,6 @@ const TURNSTILE = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
             <button id="bdb-cancel" class="btn btn-outline btn-sm" hidden>Cancel</button>
             <label class="bdb-cores" title="Cores: searches run side by side, one per core. More cores finish sooner."><input id="bdb-cores" type="number" min="1" step="1" inputmode="numeric" aria-label="Cores" /> cores</label>
           </div>
-          {TURNSTILE && <div id="bdb-captcha" class="bdb-captcha"></div>}
         </div>
         <p id="bdb-status" class="bdb-status dim" role="status"><span id="bdb-status-text"></span><span id="bdb-progress" class="bdb-progress" hidden><i></i></span></p>
         {['A', 'B'].map((name, i) => (
@@ -57,9 +55,6 @@ const TURNSTILE = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
       </div>
     </div>
   </div>
-  {/* Rendered by app.ts when a missing position is analysed: this strip is hidden when
-      the page loads, and an implicit widget there would never be drawn. */}
-  {TURNSTILE && <script is:inline src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>}
 </Base>
 
 <script>

@@ -68,10 +68,11 @@ class UploadTests(unittest.TestCase):
         self.conn.close()
         self._tmp.cleanup()
 
-    def ticket(self, age=3600.0):
-        t = bh.issue_ticket(self.conn, DUAL, "tester")
+    def ticket(self, age=3600.0, contributor="tester"):
+        t = bh.issue_ticket(self.conn, DUAL, contributor)
         with self.conn:
-            self.conn.execute("UPDATE ticket SET issued = issued - ?", (min(age, bh.TICKET_TTL - 1),))
+            self.conn.execute("UPDATE ticket SET issued = issued - ? WHERE id=?",
+                              (min(age, bh.TICKET_TTL - 1), t["ticket"]))
         return t["ticket"]
 
     def upload(self, ticket, drop=0, bad_pv=False):
@@ -167,11 +168,36 @@ class UploadTests(unittest.TestCase):
         self.assertEqual(bh.client_ip(request({"X-Forwarded-For": "1.2.3.4"})), "10.0.0.9")
         self.assertEqual(bh.client_ip(request({"CF-Connecting-IP": "5.6.7.8"})), "5.6.7.8")
 
-    def test_no_ticket_for_a_position_already_in_the_book(self):
+    def test_another_computer_confirms_a_stored_position(self):
         bh.store_upload(self.conn, self.upload(self.ticket()), "tester")
+        self.assertEqual(bh.read_position(self.conn, DUAL)["meta"]["computers"], 1)
+        second = self.upload(self.ticket(contributor="someone"))
+        for m in second.moves:
+            m.off = searches(0.9)  # a disagreeing confirmation does not change the book
+        self.assertEqual(bh.store_upload(self.conn, second, "someone")["computers"], 2)
+        pos = bh.read_position(self.conn, DUAL)
+        self.assertEqual(pos["meta"]["computers"], 2)
+        e4 = next(m for m in pos["moves"] if m["uci"] == "e2e4" and m["board"] == "A")
+        self.assertAlmostEqual(e4["scores"]["even"]["q"], -(-0.5 + 0.58), places=4)
+
+    def test_one_computer_counts_once(self):
+        first = self.ticket()
+        spare = self.ticket()  # taken before the first upload landed
+        bh.store_upload(self.conn, self.upload(first), "tester")
         with self.assertRaises(HTTPException) as e:
-            bh.issue_ticket(self.conn, DUAL, "someone")
+            bh.issue_ticket(self.conn, DUAL, "tester")
         self.assertEqual(e.exception.status_code, 409)
+        with self.assertRaises(HTTPException) as e:
+            bh.store_upload(self.conn, self.upload(spare), "tester")
+        self.assertEqual(e.exception.status_code, 409)
+
+    def test_positions_stored_before_counting_have_their_uploader(self):
+        bh.store_upload(self.conn, self.upload(self.ticket()), "tester")
+        with self.conn:
+            self.conn.execute("DELETE FROM submission")
+            self.conn.execute("DELETE FROM meta WHERE key='submissions'")
+        bh.record_first_submissions(self.conn)
+        self.assertEqual(bh.read_position(self.conn, DUAL)["meta"]["computers"], 1)
 
     def test_admin_import_checks_the_move_set(self):
         moves = bh.legal_moves(bh.parse_dual(DUAL))
