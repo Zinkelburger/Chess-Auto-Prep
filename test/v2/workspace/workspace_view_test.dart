@@ -4,6 +4,7 @@ import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
 import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
+import 'package:chess_auto_prep/v2/workspace/workspace_keys.dart';
 import 'package:chess_auto_prep/v2/workspace/workspace_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -32,11 +33,16 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: darkTheme(),
+        // The keys belong above every column that edits the document, which
+        // is where the shell puts them; here the workspace is the only one.
         home: Scaffold(
-          body: WorkspaceView(
+          body: WorkspaceKeys(
             session: session,
-            saver: saver,
-            analysis: analysis,
+            child: WorkspaceView(
+              session: session,
+              saver: saver,
+              analysis: analysis,
+            ),
           ),
         ),
       ),
