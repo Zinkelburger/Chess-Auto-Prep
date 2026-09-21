@@ -14,6 +14,7 @@ python3 scripts/app_driver.py dump
 python3 scripts/app_driver.py tap tooltip="App settings"
 python3 scripts/app_driver.py type text="example" key=field-key
 python3 scripts/app_driver.py scroll text="Section" dy=400
+python3 scripts/app_driver.py drag x=540 y=400 dx=-120   # press, move, release
 python3 scripts/app_driver.py ss settings
 python3 scripts/app_driver.py reload
 python3 scripts/app_driver.py status

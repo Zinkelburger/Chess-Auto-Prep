@@ -1,4 +1,7 @@
+import 'package:chessground/chessground.dart';
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
+import 'package:multi_split_view/multi_split_view.dart';
 
 /// Spacing scale. Every gap in the app is one of these.
 abstract final class Space {
@@ -8,13 +11,12 @@ abstract final class Space {
   static const l = 16.0;
 }
 
-/// How wide the library panel beside the workspace is.
+/// How wide the list beside the workspace starts out, whichever mode fills
+/// it; the user drags it from there.
 const libraryPanelWidth = 300.0;
 
-/// How wide the chapter outline between the library and the board is.
-///
-/// The old app's column is 18% of the window's body clamped to 220–280 and
-/// draggable; this one is fixed, at a width from inside that range.
+/// How wide the chapter outline between the list and the board starts out.
+/// The old app's column is 18% of the window's body clamped to 220–280.
 const outlineColumnWidth = 240.0;
 
 /// How tall one row of the outline is, and how far a line sits in under the
@@ -55,16 +57,16 @@ const scoreText = TextStyle(
   fontWeight: FontWeight.w600,
 );
 
-/// Board colours, resolved from the theme so a light theme can swap them.
+/// How the board looks, resolved from the theme so a light theme can swap
+/// it. The board itself is Lichess's `chessground`; this is the one place
+/// that says what it draws with.
 final class BoardTheme extends ThemeExtension<BoardTheme> {
   const BoardTheme({
     required this.lightSquare,
     required this.darkSquare,
     required this.lastMove,
     required this.selected,
-    required this.coordinate,
-    required this.scrim,
-    required this.promotionChoice,
+    required this.validMove,
   });
 
   final Color lightSquare;
@@ -77,13 +79,60 @@ final class BoardTheme extends ThemeExtension<BoardTheme> {
   /// than [lastMove], which it wins over.
   final Color selected;
 
-  final Color coordinate;
+  /// The dot on a square the picked-up piece can go to. Shown only when
+  /// [showValidMoves] is on.
+  final Color validMove;
 
-  /// Over the whole board while it is waiting for an answer.
-  final Color scrim;
+  /// Whether picking a piece up marks the squares it can go to, as Lichess
+  /// does. Off: the old app never did, and the marks are noise on a board
+  /// that is mostly read rather than played on.
+  static const showValidMoves = false;
 
-  /// The disc a promotion choice sits on.
-  final Color promotionChoice;
+  /// How long a piece takes to slide to its square when the position
+  /// changes. The route and menu motion is 150 ms and 100 ms; a piece is a
+  /// smaller thing moving a shorter way.
+  static const animation = Duration(milliseconds: 120);
+
+  /// Everything the board is given: colours, pieces, and how it behaves
+  /// under a mouse. Both sides may move, there are no premoves, and a
+  /// dragged piece stays its own size under the pointer rather than
+  /// growing above a finger.
+  ChessboardSettings get settings => ChessboardSettings(
+    colorScheme: _colors,
+    pieceAssets: PieceSet.cburnettAssets,
+    animationDuration: animation,
+    showValidMoves: showValidMoves,
+    enablePremoves: false,
+    dragFeedbackScale: 1,
+    dragFeedbackOffset: Offset.zero,
+  );
+
+  ChessboardColorScheme get _colors {
+    final plain = SolidColorChessboardBackground(
+      lightSquare: lightSquare,
+      darkSquare: darkSquare,
+    );
+    return ChessboardColorScheme(
+      lightSquare: lightSquare,
+      darkSquare: darkSquare,
+      background: plain,
+      whiteCoordBackground: SolidColorChessboardBackground(
+        lightSquare: lightSquare,
+        darkSquare: darkSquare,
+        coordinates: true,
+      ),
+      blackCoordBackground: SolidColorChessboardBackground(
+        lightSquare: lightSquare,
+        darkSquare: darkSquare,
+        coordinates: true,
+        orientation: Side.black,
+      ),
+      lastMove: HighlightDetails(solidColor: lastMove),
+      selected: HighlightDetails(solidColor: selected),
+      validMoves: validMove,
+      validPremoves: validMove,
+    );
+  }
 
   @override
   BoardTheme copyWith({
@@ -91,17 +140,13 @@ final class BoardTheme extends ThemeExtension<BoardTheme> {
     Color? darkSquare,
     Color? lastMove,
     Color? selected,
-    Color? coordinate,
-    Color? scrim,
-    Color? promotionChoice,
+    Color? validMove,
   }) => BoardTheme(
     lightSquare: lightSquare ?? this.lightSquare,
     darkSquare: darkSquare ?? this.darkSquare,
     lastMove: lastMove ?? this.lastMove,
     selected: selected ?? this.selected,
-    coordinate: coordinate ?? this.coordinate,
-    scrim: scrim ?? this.scrim,
-    promotionChoice: promotionChoice ?? this.promotionChoice,
+    validMove: validMove ?? this.validMove,
   );
 
   @override
@@ -112,23 +157,38 @@ final class BoardTheme extends ThemeExtension<BoardTheme> {
       darkSquare: Color.lerp(darkSquare, other.darkSquare, t)!,
       lastMove: Color.lerp(lastMove, other.lastMove, t)!,
       selected: Color.lerp(selected, other.selected, t)!,
-      coordinate: Color.lerp(coordinate, other.coordinate, t)!,
-      scrim: Color.lerp(scrim, other.scrim, t)!,
-      promotionChoice: Color.lerp(promotionChoice, other.promotionChoice, t)!,
+      validMove: Color.lerp(validMove, other.validMove, t)!,
     );
   }
-
-  /// The file letters and rank digits, sized to a board whose squares are
-  /// [side] wide: a share of the square, so they hold their proportion
-  /// whatever the board is scaled to.
-  TextStyle coordinateStyle(double side) =>
-      TextStyle(color: coordinate, fontSize: side * _coordinateShare);
-
-  static const _coordinateShare = 0.18;
 
   static BoardTheme of(BuildContext context) =>
       Theme.of(context).extension<BoardTheme>()!;
 }
+
+/// The bar between two panes the user can drag: one pixel of line, with a
+/// grab area either side of it so it can be found with a mouse.
+const paneDividerWidth = 1.0;
+const paneDividerGrab = 4.0;
+
+/// Narrower than this and a list is unreadable, a board unplayable.
+const paneMinWidth = 180.0;
+const boardPaneMinWidth = 320.0;
+
+/// How wide the column to the right of the board is: the chapter, the
+/// engine, the moves and their comment.
+const sidePanelWidth = 360.0;
+
+/// What the dividers between panes look like: the outline colour, the
+/// accent while one is being dragged.
+MultiSplitViewThemeData paneTheme(ColorScheme scheme) =>
+    MultiSplitViewThemeData(
+      dividerThickness: paneDividerWidth,
+      dividerHandleBuffer: paneDividerGrab,
+      dividerPainter: DividerPainters.background(
+        color: scheme.outline,
+        highlightedColor: scheme.primary,
+      ),
+    );
 
 /// Neutral greys, one muted blue accent, colour kept for meaning.
 const _surface = Color(0xFF1B1B1D);
@@ -143,9 +203,7 @@ const _board = BoardTheme(
   darkSquare: Color(0xFFB58863),
   lastMove: Color(0x559BC700),
   selected: Color(0x669BC700),
-  coordinate: Color(0xCC5A4632),
-  scrim: Color(0x80000000),
-  promotionChoice: Color(0xFFB0B0B0),
+  validMove: Color(0x4014551E),
 );
 
 /// The dark workspace. Type is Inter at 14/13/12 with Source Code Pro for
@@ -186,10 +244,6 @@ TextTheme _sized(TextTheme base) => base.copyWith(
   bodySmall: base.bodySmall?.copyWith(fontSize: 13, color: _muted),
   labelSmall: base.labelSmall?.copyWith(fontSize: 12, color: _muted),
 );
-
-/// How wide the study panel beside the workspace is. Narrower than the
-/// library's: a chapter list is one column of short names.
-const studyPanelWidth = 240.0;
 
 /// How tall one chapter row is. Small enough that a long study is one
 /// screen, tall enough to hit.

@@ -19,6 +19,8 @@ dependencies:
 
   # Chess functionality
   dartchess: ^0.13.1
+  chessground: ^10.2.0
+  multi_split_view: ^3.6.2
   meta: ^1.19.0
 
   # UI and state management

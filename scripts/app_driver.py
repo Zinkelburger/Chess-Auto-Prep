@@ -7,6 +7,7 @@
     driver.py tap text=Play | tooltip=… | key=… | x=10 y=20 [index=N] [count=2]
     driver.py type text="hello" [key=…|text_target=…] [submit=true] [append=true]
     driver.py scroll text=… [dy=300] [dx=0]
+    driver.py drag x=10 y=20 | text=… [dx=0] [dy=0]   press, move, release
     driver.py ss [name]                         screenshot → SHOTS/<name>.png
     driver.py settle | reload | restart | log [n=80] | status | stop
 
@@ -292,7 +293,7 @@ class Daemon:
             path = SHOTS / (name if name.endswith(".png") else f"{name}.png")
             r = self.ext("screenshot", {"path": str(path)})
             return {"result": r}
-        if cmd in ("dump", "tap", "type", "scroll", "settle", "ping"):
+        if cmd in ("dump", "tap", "type", "scroll", "drag", "settle", "ping"):
             return {"result": self.ext(cmd, args)}
         return {"error": f"unknown command {cmd!r}"}
 

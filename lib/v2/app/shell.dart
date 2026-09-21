@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:multi_split_view/multi_split_view.dart';
 
 import '../features/library/chapter_outline.dart';
 import '../features/library/library.dart';
@@ -52,6 +53,61 @@ class Shell extends StatefulWidget {
 class _ShellState extends State<Shell> {
   String? _error;
   var _mode = Mode.repertoires;
+
+  /// The columns and their widths. The user drags the dividers; the outline
+  /// column comes and goes with the chapter, and the widths of the others
+  /// stay what the user made them. The areas are the same three objects for
+  /// the life of the window: the split view keys each pane by its area, and
+  /// a pane rebuilt from a new area loses what it had open.
+  final _panes = MultiSplitViewController();
+  final _list = Area(
+    data: _Pane.list,
+    size: libraryPanelWidth,
+    min: paneMinWidth,
+  );
+  final _outline = Area(
+    data: _Pane.outline,
+    size: outlineColumnWidth,
+    min: paneMinWidth,
+  );
+  final _workspace = Area(
+    data: _Pane.workspace,
+    flex: 1,
+    min: boardPaneMinWidth,
+  );
+  bool _outlineShown = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _outlineShown = _wantsOutline;
+    _panes.areas = [_list, if (_outlineShown) _outline, _workspace];
+    widget.session.addListener(_followTheChapter);
+  }
+
+  @override
+  void dispose() {
+    widget.session.removeListener(_followTheChapter);
+    _panes.dispose();
+    super.dispose();
+  }
+
+  /// The outline is a repertoire chapter's lines, so it is there only when
+  /// a chapter that is a whole file is open. A study chapter is one game of
+  /// its file, its chapters are already in its own left column, and the line
+  /// operations do not mean the same thing there — so it has no outline,
+  /// whichever mode the user switches to.
+  bool get _wantsOutline =>
+      widget.session.source != null && widget.session.game == null;
+
+  /// Puts the outline column in or takes it out when the open chapter
+  /// changes what is wanted. The other two panes are left alone, so the
+  /// list keeps its width and whatever it has open.
+  void _followTheChapter() {
+    if (!mounted || _wantsOutline == _outlineShown) return;
+    _outlineShown = _wantsOutline;
+    _panes.areas = [_list, if (_outlineShown) _outline, _workspace];
+  }
 
   /// Switching mode swaps the left column and nothing else: the same board,
   /// the same document and the same draft stay where they are. A study
@@ -121,52 +177,37 @@ class _ShellState extends State<Shell> {
     );
   }
 
-  /// The outline is a repertoire chapter's lines, so it is there only when
-  /// a chapter that is a whole file is open. A study chapter is one game of
-  /// its file, its chapters are already in its own left column, and the line
-  /// operations do not mean the same thing there — so it has no outline,
-  /// whichever mode the user switches to.
-  Widget _outlineColumn() {
-    if (widget.session.source == null || widget.session.game != null) {
-      return const SizedBox.shrink();
-    }
-    return _OutlineColumn(
+  /// The columns the mode puts side by side, under one set of keys: the
+  /// mode's own list, the outline when a repertoire chapter is open, and the
+  /// workspace filling the rest, with a divider to drag between each pair.
+  Widget _columns() {
+    return MultiSplitViewTheme(
+      data: paneTheme(Theme.of(context).colorScheme),
+      child: MultiSplitView(controller: _panes, builder: _pane),
+    );
+  }
+
+  Widget _pane(BuildContext context, Area area) => switch (area.data) {
+    _Pane.list => _leftColumn(),
+    _Pane.outline => OutlinePanel(
       outline: widget.outline,
       library: widget.library,
       session: widget.session,
       onOpen: _open,
-    );
-  }
-
-  /// The columns the mode puts side by side, under one set of keys: the
-  /// mode's own list, the outline when a repertoire chapter is open, and the
-  /// workspace filling the rest.
-  Widget _columns() {
-    return Row(
-      children: [
-        SizedBox(
-          width: _mode == Mode.study ? studyPanelWidth : libraryPanelWidth,
-          child: _leftColumn(),
-        ),
-        const VerticalDivider(width: 1),
-        ListenableBuilder(
-          listenable: widget.session,
-          builder: (context, _) => _outlineColumn(),
-        ),
-        Expanded(
-          child: WorkspaceView(
-            session: widget.session,
-            saver: widget.saver,
-            analysis: widget.analysis,
-            moveMenu: _mode == Mode.study
-                ? (path) => quizMenuItems(widget.session, path)
-                : null,
-          ),
-        ),
-      ],
-    );
-  }
+    ),
+    _ => WorkspaceView(
+      session: widget.session,
+      saver: widget.saver,
+      analysis: widget.analysis,
+      moveMenu: _mode == Mode.study
+          ? (path) => quizMenuItems(widget.session, path)
+          : null,
+    ),
+  };
 }
+
+/// The columns of the window, left to right.
+enum _Pane { list, outline, workspace }
 
 /// The modes `v2` has. Each one fills the left column; the workspace, the
 /// document and the draft in it are the same whichever is showing.
@@ -177,39 +218,6 @@ enum Mode {
   const Mode(this.label);
 
   final String label;
-}
-
-/// The outline between the library and the board, with the rule that it is
-/// only there when a chapter is: its rows are that chapter's repertoire and
-/// its lines.
-class _OutlineColumn extends StatelessWidget {
-  const _OutlineColumn({
-    required this.outline,
-    required this.library,
-    required this.session,
-    required this.onOpen,
-  });
-
-  final ChapterOutline outline;
-  final Library library;
-  final DocumentSession session;
-  final ValueChanged<ChapterRef> onOpen;
-
-  @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      SizedBox(
-        width: outlineColumnWidth,
-        child: OutlinePanel(
-          outline: outline,
-          library: library,
-          session: session,
-          onOpen: onOpen,
-        ),
-      ),
-      const VerticalDivider(width: 1),
-    ],
-  );
 }
 
 /// Modes not yet in v2 are listed but disabled, so the menu shows the whole

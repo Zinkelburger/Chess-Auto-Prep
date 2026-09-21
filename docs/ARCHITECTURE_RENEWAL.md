@@ -216,14 +216,14 @@ None of these is re-opened during the rewrite.
 |---|---|
 | Dependency passing | Constructors, with Provider for Flutter lookup and listening. No Riverpod, Bloc or GetIt. |
 | State | Plain immutable values and sealed classes. No code generation. |
-| Packages | No new pub dependencies. The existing set (`dartchess`, `provider`, `http`, `sqlite3`/`sqflite_common_ffi`, `shared_preferences`, `stockfish`, `onnxruntime`, `window_manager`, `file_picker`) covers `v2`. |
+| Packages | No new pub dependencies beyond two the owner allowed on 2026-09-21: `chessground` (Lichess's board, by the `dartchess` authors) and `multi_split_view` (draggable panes). The existing set (`dartchess`, `provider`, `http`, `sqlite3`/`sqflite_common_ffi`, `shared_preferences`, `stockfish`, `onnxruntime`, `window_manager`, `file_picker`) covers the rest of `v2`. A hand-rolled piece is replaced by a package only when the package does the whole job; the PGN reader stays, because no package keeps untouched games byte for byte or reports where a bad token is. |
 | Database | The existing SQLite files, schemas and migrations. |
 | Files | A new atomic writer in `v2/storage/` that takes the same SQLite-transaction lock the old app takes (`file_operation_lock.dart` documents the protocol), so the two apps lock each other out. |
 | Network | `http` behind one client per service, each with its own retry policy. |
 | Navigation | A persistent shell with the mode menu and plain `Navigator`. No router package. |
 | Strings | Plain English in widgets. |
 | Credentials | Keep reading the existing SharedPreferences tokens. A vault migration is a separate, later step. |
-| Panels | One `SplitPane` control with minimum sizes and a saved layout, built in the step that first needs two panes. |
+| Panels | `multi_split_view` with minimum sizes; the divider look and the pane widths are tokens in `ui/theme.dart`. A saved layout is not built yet. |
 | Theme | Dark by default with Light/System, tokens in `ui/`. Built in step 0 only as far as a board and a move list need; extended by later steps. |
 | Catalog and visual tests | Widgetbook on production widgets, added at step 12. Widget tests before that; no golden framework. |
 
@@ -243,7 +243,8 @@ decide it, and the reviewer answers each with a file and line, not an opinion.
   contract, not to hit a length; one long linear function that runs top to
   bottom once is better than six that share state through fields (Carmack).
 - A file holds one type or one group of closely related functions, at most
-  about 400 lines. Never `part`.
+  600 lines. Never `part`. The cap was 400 until 2026-09-21, when two core
+  owners sat on it and a commit went in only to shorten a comment.
 - Clear beats clever (Pike). No tricks that need a second reading.
 
 **Can I reason about it?**
@@ -314,7 +315,7 @@ it before saying a step is done.
 
 The independent review of a finished step answers these, each with a location:
 
-1. Any file over 400 lines, function over 50, nesting over 3, class over 10
+1. Any file over 600 lines, function over 50, nesting over 3, class over 10
    fields? (`scripts/check_v2.py` finds the first three.)
 2. Any owner holding data that belongs to another owner in the
    [workspace table](#workspace-owners)?
