@@ -56,13 +56,18 @@ class _StudyPanelState extends State<StudyPanel> {
 
   void _say(String sentence) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(sentence),
-    ));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(sentence)));
   }
 
   /// Shows what became of a change, and opens what it produced.
+  ///
+  /// Nothing happens when this panel is gone: a download that finishes after
+  /// the user has left Study mode must not drive the workspace onto the
+  /// study it fetched, over whatever they opened instead.
   void _became(StudyResult result, {String? done}) {
+    if (!mounted) return;
     switch (result) {
       case StudyProblem(:final sentence):
         _say(sentence);
@@ -123,14 +128,16 @@ class _StudyPanelState extends State<StudyPanel> {
       suggested: nextChapterName(_studies.chapters),
     );
     if (wanted == null || !mounted) return;
-    _edited(addStudyChapter(
-      widget.session,
-      name: wanted.name,
-      orientation:
-          wanted.orientation ??
-          (wanted.root.whiteToMove ? Side.white : Side.black),
-      root: wanted.root,
-    ));
+    _edited(
+      addStudyChapter(
+        widget.session,
+        name: wanted.name,
+        orientation:
+            wanted.orientation ??
+            (wanted.root.whiteToMove ? Side.white : Side.black),
+        root: wanted.root,
+      ),
+    );
   }
 
   Future<void> _renameChapter(StudyChapter chapter) async {
@@ -179,11 +186,9 @@ class _StudyPanelState extends State<StudyPanel> {
         orientation: side,
       ),
     ),
-    move: (by) => _edited(
-      moveStudyChapter(widget.session, index: chapter.index, by: by),
-    ),
-    copyPgn: () =>
-        _copy(_studies.pgnOfChapter(chapter.index), 'Chapter PGN'),
+    move: (by) =>
+        _edited(moveStudyChapter(widget.session, index: chapter.index, by: by)),
+    copyPgn: () => _copy(_studies.pgnOfChapter(chapter.index), 'Chapter PGN'),
     remove: () => _deleteChapter(chapter),
   );
 
@@ -201,8 +206,7 @@ class _StudyPanelState extends State<StudyPanel> {
             onSearch: _studies.search,
             onNewStudy: _newStudy,
             onImport: _import,
-            onCopyStudy: () =>
-                _copy(_studies.pgnOfOpenStudy(), 'Study PGN'),
+            onCopyStudy: () => _copy(_studies.pgnOfOpenStudy(), 'Study PGN'),
             onDeleteStudy: () {
               final open = _studies.open;
               if (open != null) unawaited(_deleteStudy(open));

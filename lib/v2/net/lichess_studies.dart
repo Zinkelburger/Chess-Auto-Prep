@@ -85,12 +85,18 @@ final class StudyFetched extends StudyFetch {
 /// Why the study did not arrive. Each is a sentence the dialog shows as it
 /// is; nothing here reaches the log with a token in it.
 enum StudyFetchProblem {
-  unreachable('Lichess did not respond (rate-limited or offline). Try again '
-      'shortly.'),
-  notFound('Study not found. If it is private or unlisted, sign in to '
-      'Lichess first, then try again.'),
-  rejected('Lichess rejected the request. Sign in to Lichess again, then try '
-      'again.'),
+  unreachable(
+    'Lichess did not respond (rate-limited or offline). Try again '
+    'shortly.',
+  ),
+  notFound(
+    'Study not found. If it is private or unlisted, sign in to '
+    'Lichess first, then try again.',
+  ),
+  rejected(
+    'Lichess rejected the request. Sign in to Lichess again, then try '
+    'again.',
+  ),
   empty('That study is empty — nothing to import.'),
   http('Lichess could not serve that study.');
 
@@ -118,6 +124,13 @@ abstract interface class LichessStudies {
   Future<StudyFetch> fetch(LichessStudyLink link);
 }
 
+/// How long a download may take before it counts as not arriving.
+///
+/// A connection that is open but silent would otherwise hold the study
+/// operations — one at a time — for as long as it stayed open, and every
+/// action the user tried would answer that another change is running.
+const studyDownloadTimeout = Duration(seconds: 20);
+
 /// What the export endpoint is asked for: the things a study is made of,
 /// without the clocks.
 const _exportParams = {
@@ -142,7 +155,9 @@ final class LichessStudyApi implements LichessStudies {
     final url = _url(link);
     final http.Response response;
     try {
-      response = await _client.get(url, headers: await _headers());
+      response = await _client
+          .get(url, headers: await _headers())
+          .timeout(studyDownloadTimeout);
     } on Object catch (error) {
       log.w('download the Lichess study ${link.studyId}', error);
       return const StudyNotFetched(StudyFetchProblem.unreachable);

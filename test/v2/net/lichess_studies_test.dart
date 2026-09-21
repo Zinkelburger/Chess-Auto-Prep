@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:chess_auto_prep/v2/net/lichess_studies.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -14,20 +16,20 @@ import 'package:http/testing.dart';
     asked.add(request);
     return answer(request);
   });
-  return (
-    api: LichessStudyApi(stub, token: () async => token),
-    asked: asked,
-  );
+  return (api: LichessStudyApi(stub, token: () async => token), asked: asked);
 }
 
 const _link = LichessStudyLink(studyId: 'abcd1234');
 
 void main() {
-  test('recognising a link: a study link, with or without a scheme or a slug', () {
-    expect(parseStudyLink('https://lichess.org/study/abcd1234'), _link);
-    expect(parseStudyLink('lichess.org/study/abcd1234'), _link);
-    expect(parseStudyLink('  lichess.org/study/abcd1234/slug?x=1  '), _link);
-  });
+  test(
+    'recognising a link: a study link, with or without a scheme or a slug',
+    () {
+      expect(parseStudyLink('https://lichess.org/study/abcd1234'), _link);
+      expect(parseStudyLink('lichess.org/study/abcd1234'), _link);
+      expect(parseStudyLink('  lichess.org/study/abcd1234/slug?x=1  '), _link);
+    },
+  );
 
   test('recognising a link: a chapter link keeps the chapter', () {
     expect(
@@ -39,8 +41,7 @@ void main() {
   test('recognising a link: anything else is not one', () {
     expect(parseStudyLink(''), isNull);
     expect(parseStudyLink('lichess.org/study/by/thibault'), isNull);
-    expect(parseStudyLink('chessgames.com/perl/chesscollection?cid=1'),
-        isNull);
+    expect(parseStudyLink('chessgames.com/perl/chesscollection?cid=1'), isNull);
     expect(parseStudyLink('lichess.org/study/short'), isNull);
     expect(parseStudyLink('example.com/study/abcd1234'), isNull);
   });
@@ -53,16 +54,19 @@ void main() {
     );
   });
 
-  test('downloading: asks for comments and variations, and no clocks', () async {
-    final stub = client((_) => http.Response('[Event "S: C"]\n\n*\n', 200));
-    await stub.api.fetch(_link);
-    final url = stub.asked.single.url;
-    expect(url.host, 'lichess.org');
-    expect(url.path, '/api/study/abcd1234.pgn');
-    expect(url.queryParameters['clocks'], 'false');
-    expect(url.queryParameters['comments'], 'true');
-    expect(url.queryParameters['variations'], 'true');
-  });
+  test(
+    'downloading: asks for comments and variations, and no clocks',
+    () async {
+      final stub = client((_) => http.Response('[Event "S: C"]\n\n*\n', 200));
+      await stub.api.fetch(_link);
+      final url = stub.asked.single.url;
+      expect(url.host, 'lichess.org');
+      expect(url.path, '/api/study/abcd1234.pgn');
+      expect(url.queryParameters['clocks'], 'false');
+      expect(url.queryParameters['comments'], 'true');
+      expect(url.queryParameters['variations'], 'true');
+    },
+  );
 
   test('downloading: a chapter link asks for that chapter alone', () async {
     final stub = client((_) => http.Response('[Event "S: C"]\n\n*\n', 200));
@@ -84,10 +88,7 @@ void main() {
   });
 
   test('downloading: signs the request when the user has a token', () async {
-    final stub = client(
-      (_) => http.Response('x', 200),
-      token: 'secret-token',
-    );
+    final stub = client((_) => http.Response('x', 200), token: 'secret-token');
     await stub.api.fetch(_link);
     expect(stub.asked.single.headers['Authorization'], 'Bearer secret-token');
   });
@@ -101,36 +102,45 @@ void main() {
   Future<StudyNotFetched> failing(http.Response answer) async =>
       await client((_) => answer).api.fetch(_link) as StudyNotFetched;
 
-  test('when it does not arrive: a request that throws is unreachable, not empty', () async {
-    final stub = MockClient((_) async => throw http.ClientException(
-          'no route to host',
-        ));
-    final result = await LichessStudyApi(
-      stub,
-      token: () async => null,
-    ).fetch(_link);
-    expect(
-      (result as StudyNotFetched).problem,
-      StudyFetchProblem.unreachable,
-    );
-  });
+  test(
+    'when it does not arrive: a request that throws is unreachable, not empty',
+    () async {
+      final stub = MockClient(
+        (_) async => throw http.ClientException('no route to host'),
+      );
+      final result = await LichessStudyApi(
+        stub,
+        token: () async => null,
+      ).fetch(_link);
+      expect(
+        (result as StudyNotFetched).problem,
+        StudyFetchProblem.unreachable,
+      );
+    },
+  );
 
-  test('when it does not arrive: 404 says where to look for a private study', () async {
-    final result = await failing(http.Response('', 404));
-    expect(result.problem, StudyFetchProblem.notFound);
-    expect(result.sentence, contains('private or unlisted'));
-  });
+  test(
+    'when it does not arrive: 404 says where to look for a private study',
+    () async {
+      final result = await failing(http.Response('', 404));
+      expect(result.problem, StudyFetchProblem.notFound);
+      expect(result.sentence, contains('private or unlisted'));
+    },
+  );
 
-  test('when it does not arrive: 401 and 403 say the account was rejected', () async {
-    expect(
-      (await failing(http.Response('', 401))).problem,
-      StudyFetchProblem.rejected,
-    );
-    expect(
-      (await failing(http.Response('', 403))).problem,
-      StudyFetchProblem.rejected,
-    );
-  });
+  test(
+    'when it does not arrive: 401 and 403 say the account was rejected',
+    () async {
+      expect(
+        (await failing(http.Response('', 401))).problem,
+        StudyFetchProblem.rejected,
+      );
+      expect(
+        (await failing(http.Response('', 403))).problem,
+        StudyFetchProblem.rejected,
+      );
+    },
+  );
 
   test('when it does not arrive: 429 and 500 name the status', () async {
     expect(
@@ -143,10 +153,29 @@ void main() {
     );
   });
 
-  test('when it does not arrive: an answer with nothing in it is empty, not a study', () async {
-    expect(
-      (await failing(http.Response('   \n', 200))).problem,
-      StudyFetchProblem.empty,
-    );
-  });
+  test(
+    'when it does not arrive: an answer with nothing in it is empty, not a study',
+    () async {
+      expect(
+        (await failing(http.Response('   \n', 200))).problem,
+        StudyFetchProblem.empty,
+      );
+    },
+  );
+
+  test(
+    'when it does not arrive: a connection that never answers times out',
+    () async {
+      final stub = MockClient((_) => Completer<http.Response>().future);
+      final result = await LichessStudyApi(
+        stub,
+        token: () async => null,
+      ).fetch(_link);
+      expect(
+        (result as StudyNotFetched).problem,
+        StudyFetchProblem.unreachable,
+      );
+    },
+    timeout: const Timeout(Duration(minutes: 1)),
+  );
 }

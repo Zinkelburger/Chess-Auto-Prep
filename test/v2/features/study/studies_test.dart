@@ -33,13 +33,15 @@ void main() {
     expect(study.studies.visible, isEmpty);
   });
 
-  test('the list: a folder it could not read says so rather than showing nothing',
-      () async {
-    study.files.listing = const StudiesUnreadable('permission denied');
-    await study.studies.refresh();
-    expect(study.studies.state, isA<StudiesLoadFailed>());
-    expect(study.studies.studies, isEmpty);
-  });
+  test(
+    'the list: a folder it could not read says so rather than showing nothing',
+    () async {
+      study.files.listing = const StudiesUnreadable('permission denied');
+      await study.studies.refresh();
+      expect(study.studies.state, isA<StudiesLoadFailed>());
+      expect(study.studies.studies, isEmpty);
+    },
+  );
 
   test('the list: knows which study and chapter are open', () {
     expect(study.studies.open, study.ref);
@@ -74,51 +76,61 @@ void main() {
     expect(study.session.source, isNull);
   });
 
-  test('deleting a study: a study that changed on disk is refused, and stays', () async {
-    relist();
-    study.store.deletes.add(const Conflict(null));
-    final result = await study.studies.delete(study.ref);
-    expect((result as StudyProblem).sentence, contains('changed on disk'));
-    expect(study.store.documents.containsKey(study.ref), isTrue);
-  });
+  test(
+    'deleting a study: a study that changed on disk is refused, and stays',
+    () async {
+      relist();
+      study.store.deletes.add(const Conflict(null));
+      final result = await study.studies.delete(study.ref);
+      expect((result as StudyProblem).sentence, contains('changed on disk'));
+      expect(study.store.documents.containsKey(study.ref), isTrue);
+    },
+  );
 
   const downloaded =
       '[Event "Sicilian: Najdorf"]\n[StudyName "Sicilian"]\n'
       '[ChapterName "Najdorf"]\n\n1. e4 c5 *\n';
 
-  test('importing: files the download under the name its tags give it', () async {
-    study.lichess.answer = const StudyFetched(downloaded);
-    relist();
-    final result = await study.studies.importFromUrl(
-      'lichess.org/study/abcd1234',
-    );
-    expect(result, isA<StudyDone>());
-    expect((result as StudyDone).opened?.name, 'Sicilian');
-    expect(study.lichess.asked.single.studyId, 'abcd1234');
-  });
+  test(
+    'importing: files the download under the name its tags give it',
+    () async {
+      study.lichess.answer = const StudyFetched(downloaded);
+      relist();
+      final result = await study.studies.importFromUrl(
+        'lichess.org/study/abcd1234',
+      );
+      expect(result, isA<StudyDone>());
+      expect((result as StudyDone).opened?.name, 'Sicilian');
+      expect(study.lichess.asked.single.studyId, 'abcd1234');
+    },
+  );
 
-  test('importing: a name already taken gets a number, never an overwrite', () async {
-    study.lichess.answer = const StudyFetched(
-      '[Event "Endgames: More"]\n[StudyName "Endgames"]\n\n1. e4 *\n',
-    );
-    relist();
-    final result = await study.studies.importFromUrl(
-      'lichess.org/study/abcd1234',
-    );
-    expect((result as StudyDone).opened?.name, 'Endgames 2');
-    expect(study.onDisk, twoChapterStudy);
-  });
+  test(
+    'importing: a name already taken gets a number, never an overwrite',
+    () async {
+      study.lichess.answer = const StudyFetched(
+        '[Event "Endgames: More"]\n[StudyName "Endgames"]\n\n1. e4 *\n',
+      );
+      relist();
+      final result = await study.studies.importFromUrl(
+        'lichess.org/study/abcd1234',
+      );
+      expect((result as StudyDone).opened?.name, 'Endgames 2');
+      expect(study.onDisk, twoChapterStudy);
+    },
+  );
 
-  test('importing: a link it does not know is refused without a request', () async {
-    final result = await study.studies.importFromUrl('example.com/study/x');
-    expect((result as StudyProblem).sentence, 'Not a Lichess study link.');
-    expect(study.lichess.asked, isEmpty);
-  });
+  test(
+    'importing: a link it does not know is refused without a request',
+    () async {
+      final result = await study.studies.importFromUrl('example.com/study/x');
+      expect((result as StudyProblem).sentence, 'Not a Lichess study link.');
+      expect(study.lichess.asked, isEmpty);
+    },
+  );
 
   test('importing: a failed download takes nothing away', () async {
-    study.lichess.answer = const StudyNotFetched(
-      StudyFetchProblem.unreachable,
-    );
+    study.lichess.answer = const StudyNotFetched(StudyFetchProblem.unreachable);
     relist();
     final result = await study.studies.importFromUrl(
       'lichess.org/study/abcd1234',
@@ -151,6 +163,20 @@ void main() {
   test('copying: a chapter nobody has is nothing to copy', () async {
     expect(await study.studies.pgnOfChapter(9), isNull);
   });
+
+  test(
+    'importing: a download that never answers stops being in the way',
+    () async {
+      study.lichess.answer = const StudyNotFetched(
+        StudyFetchProblem.unreachable,
+      );
+      relist();
+      await study.studies.importFromUrl('lichess.org/study/abcd1234');
+      // The owner is free again, so the next thing the user asks for runs.
+      expect(study.studies.busy, isFalse);
+      expect(await study.studies.create('Openings'), isA<StudyDone>());
+    },
+  );
 }
 
 String _nameOf(DocumentRef ref) =>
