@@ -26,9 +26,9 @@ class PositionTests(unittest.TestCase):
         moves = bh.legal_moves(bh.parse_dual(DUAL))
         self.assertEqual(len(moves), 40)
         e4 = next(m for m in moves if (m["board"], m["uci"]) == ("A", "e2e4"))
-        self.assertEqual((e4["seat"], e4["san"], e4["answerer"]), ("A", "e4", "BD"))
+        self.assertEqual((e4["seat"], e4["san"], e4["answerer"]), ("A", "e4", "CD"))
         d4 = next(m for m in moves if (m["board"], m["uci"]) == ("B", "d2d4"))
-        self.assertEqual((d4["seat"], d4["answerer"]), ("D", "AC"))
+        self.assertEqual((d4["seat"], d4["answerer"]), ("D", "AB"))
 
     def test_a_capture_goes_to_the_partner_with_its_colour(self):
         boards = bh.parse_dual(DUAL)
@@ -39,7 +39,7 @@ class PositionTests(unittest.TestCase):
 
     def test_pv_reads_as_seat_lettered_san(self):
         text = bh.render_pv(bh.parse_dual(DUAL), ["(e2e4,pass)", "(e7e5,d2d4)", "(bogus,pass)"])
-        self.assertEqual(text, "A e4 · B e5 D d4")
+        self.assertEqual(text, "A e4 · C e5 D d4")
 
     def test_centipawns_follow_the_lichess_curve(self):
         self.assertEqual(bh.centipawns(0.0), 0)
@@ -68,16 +68,17 @@ class UploadTests(unittest.TestCase):
         self.conn.close()
         self._tmp.cleanup()
 
-    def ticket(self, age=3600.0):
-        t = bh.issue_ticket(self.conn, DUAL, "tester")
+    def ticket(self, age=3600.0, contributor="tester"):
+        t = bh.issue_ticket(self.conn, DUAL, contributor)
         with self.conn:
-            self.conn.execute("UPDATE ticket SET issued = issued - ?", (min(age, bh.TICKET_TTL - 1),))
+            self.conn.execute("UPDATE ticket SET issued = issued - ? WHERE id=?",
+                              (min(age, bh.TICKET_TTL - 1), t["ticket"]))
         return t["ticket"]
 
     def upload(self, ticket, drop=0, bad_pv=False):
         moves = bh.legal_moves(bh.parse_dual(DUAL))[drop:]
         own = [bh.OwnUpload(team=t, ahead=a, search=searches(q=(0.0 if a else -0.58)))
-               for t in ("AC", "BD") for a in (True, False)]
+               for t in ("AB", "CD") for a in (True, False)]
         pv = ["(e7e5" if bad_pv else "(e7e5,pass)"]
         return bh.PositionUpload(
             ticket=ticket, fen=DUAL, engine="test", nodes=800, child_nodes=100, own=own,
@@ -92,16 +93,33 @@ class UploadTests(unittest.TestCase):
         pos = bh.read_position(self.conn, DUAL)
         self.assertTrue(pos["found"])
         e4 = next(m for m in pos["moves"] if m["uci"] == "e2e4" and m["board"] == "A")
-        # Even: both bits off, offset (-0.58 + -0.58)/2; BD answered with -0.5.
+        # Even: both bits off, offset (-0.58 + -0.58)/2; C + D answered with -0.5.
         self.assertAlmostEqual(e4["scores"]["even"]["q"], -(-0.5 + 0.58), places=4)
-        # Ahead for A + C: BD answers with its bit off, offset (0 + -0.58)/2.
+        # Ahead for A + B: C + D answers with its bit off, offset (0 + -0.58)/2.
         self.assertAlmostEqual(e4["scores"]["ahead"]["q"], -(-0.5 + 0.29), places=4)
-        # Behind: BD's bit is on.
+        # Behind: C + D's bit is on.
         self.assertAlmostEqual(e4["scores"]["behind"]["q"], -(0.1 + 0.29), places=4)
-        self.assertEqual(e4["scores"]["behind"]["pv"], "A e4 · B e5")
-        # Both: B + D answers with its bit on, read against (0 + 0)/2.
+        self.assertEqual(e4["scores"]["behind"]["pv"], "A e4 · C e5")
+        # Both: C + D answers with its bit on, read against (0 + 0)/2.
         self.assertAlmostEqual(e4["scores"]["both"]["q"], -0.1, places=4)
         self.assertEqual({p["clock"] for p in pos["picks"]}, set(bh.CLOCKS))
+
+    def test_unscored_moves_are_stored_without_a_score(self):
+        up = self.upload(self.ticket())
+        for m in up.moves:
+            if m.uci not in ("e2e4", "d2d4"):
+                m.on = m.off = None
+        bh.store_upload(self.conn, up, "tester")
+        moves = bh.read_position(self.conn, DUAL)["moves"]
+        scored = {m["uci"] for m in moves if m["scores"]["even"]["q"] is not None}
+        self.assertEqual(scored, {"e2e4", "d2d4"})
+        self.assertEqual(len(moves), 40)
+
+    def test_the_minimum_time_counts_only_the_searches_sent(self):
+        up = self.upload(self.ticket(age=1.0))
+        for m in up.moves[2:]:
+            m.on = m.off = None
+        bh.store_upload(self.conn, up, "tester")  # 4 own + 4 move searches fit in 1 s
 
     def test_the_move_set_must_be_exactly_the_legal_moves(self):
         with self.assertRaises(HTTPException) as e:
@@ -139,8 +157,8 @@ class UploadTests(unittest.TestCase):
 
     def test_an_illegal_best_move_is_not_shown(self):
         boards = bh.parse_dual(DUAL)
-        self.assertEqual(bh.joint_text(boards, "(e2e5,pass)", "AC"), "")
-        self.assertEqual(bh.joint_text(boards, "(e2e4,pass)", "AC"), "A e4")
+        self.assertEqual(bh.joint_text(boards, "(e2e5,pass)", "AB"), "")
+        self.assertEqual(bh.joint_text(boards, "(e2e4,pass)", "AB"), "A e4")
 
     def test_the_contributor_ip_ignores_forwarded_for(self):
         from starlette.requests import Request
@@ -150,17 +168,42 @@ class UploadTests(unittest.TestCase):
         self.assertEqual(bh.client_ip(request({"X-Forwarded-For": "1.2.3.4"})), "10.0.0.9")
         self.assertEqual(bh.client_ip(request({"CF-Connecting-IP": "5.6.7.8"})), "5.6.7.8")
 
-    def test_no_ticket_for_a_position_already_in_the_book(self):
+    def test_another_computer_confirms_a_stored_position(self):
         bh.store_upload(self.conn, self.upload(self.ticket()), "tester")
+        self.assertEqual(bh.read_position(self.conn, DUAL)["meta"]["computers"], 1)
+        second = self.upload(self.ticket(contributor="someone"))
+        for m in second.moves:
+            m.off = searches(0.9)  # a disagreeing confirmation does not change the book
+        self.assertEqual(bh.store_upload(self.conn, second, "someone")["computers"], 2)
+        pos = bh.read_position(self.conn, DUAL)
+        self.assertEqual(pos["meta"]["computers"], 2)
+        e4 = next(m for m in pos["moves"] if m["uci"] == "e2e4" and m["board"] == "A")
+        self.assertAlmostEqual(e4["scores"]["even"]["q"], -(-0.5 + 0.58), places=4)
+
+    def test_one_computer_counts_once(self):
+        first = self.ticket()
+        spare = self.ticket()  # taken before the first upload landed
+        bh.store_upload(self.conn, self.upload(first), "tester")
         with self.assertRaises(HTTPException) as e:
-            bh.issue_ticket(self.conn, DUAL, "someone")
+            bh.issue_ticket(self.conn, DUAL, "tester")
         self.assertEqual(e.exception.status_code, 409)
+        with self.assertRaises(HTTPException) as e:
+            bh.store_upload(self.conn, self.upload(spare), "tester")
+        self.assertEqual(e.exception.status_code, 409)
+
+    def test_positions_stored_before_counting_have_their_uploader(self):
+        bh.store_upload(self.conn, self.upload(self.ticket()), "tester")
+        with self.conn:
+            self.conn.execute("DELETE FROM submission")
+            self.conn.execute("DELETE FROM meta WHERE key='submissions'")
+        bh.record_first_submissions(self.conn)
+        self.assertEqual(bh.read_position(self.conn, DUAL)["meta"]["computers"], 1)
 
     def test_admin_import_checks_the_move_set(self):
         moves = bh.legal_moves(bh.parse_dual(DUAL))
         good = bh.ImportPosition(
             fen=DUAL, engine="desktop", nodes=1500, child_nodes=200,
-            picks=[bh.ImportPick(clock="even", team="AC", best="A d4", q=0.0)],
+            picks=[bh.ImportPick(clock="even", team="AB", best="A d4", q=0.0)],
             moves=[bh.ImportMove(board=m["board"], uci=m["uci"], clock=c, q=0.01)
                    for m in moves for c in bh.CLOCKS])
         bad = good.model_copy(update={"moves": good.moves[len(bh.CLOCKS):]})  # one move short

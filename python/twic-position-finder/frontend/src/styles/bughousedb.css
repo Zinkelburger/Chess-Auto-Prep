@@ -29,8 +29,6 @@
 .bdb-missing[data-shown="false"] { visibility: hidden; }
 .bdb-cores { display: flex; align-items: center; gap: 5px; margin: 0; color: var(--text-dim); font-size: 14px; }
 .bdb-cores input { width: 3.6em; padding: 5px 6px; }
-/* Turnstile only draws itself when it needs a click; it floats over the tables. */
-.bdb-captcha { position: absolute; top: calc(100% + 4px); right: 0; z-index: 3; }
 .bdb-status { grid-column: 1 / -1; position: relative; height: 30px; margin: 0; padding: 6px 0 0; font-size: 14px; line-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bdb-status[data-error="true"] { color: var(--danger); }
 .bdb-progress { position: absolute; left: 0; right: 0; bottom: 3px; height: 3px; border-radius: 2px; background: var(--bg-input); overflow: hidden; }

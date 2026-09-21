@@ -73,7 +73,10 @@ can be reopened offline: there is no page-caching service worker.
   a `pv` in the native UCI format (`"(d2d4,pass)"`). Its `q` is the value
   native Hivemind turns into `score cp` (180·tan(1.56·q)): the best root
   child's Q from the searched team's side, or the root's proof once solved.
-  The worker exposes it as the `search` action.
+  It also lists `moves`: each board's moves among the root's expanded joint
+  actions, with that board's policy prior and their summed visits, most
+  visited first. BughouseDB's in-browser analysis scores only each board's
+  first four. The worker exposes it as the `search` action.
 * `engine_web.cc`: replaces native ONNX Runtime with an Asyncify call to
   ONNX Runtime Web, keeping the existing plane encoder and neural outputs.
 * `thread_web.cc`: supplies Fairy-Stockfish's thread-local counters without

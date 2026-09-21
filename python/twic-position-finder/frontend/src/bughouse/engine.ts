@@ -22,6 +22,8 @@ export interface NodeSearchResult {
   /** Native UCI pv tokens, e.g. "(d2d4,pass)", "(P@f7,e2e4)". */
   pv: string[];
   lines: { best: JointMove }[];
+  /** Each board's moves the search expanded, most visited first; sitting left out. */
+  moves: { board: 'A' | 'B'; uci: string; prior: number; visits: number }[];
 }
 
 /** One browser worker owns both Hivemind WASM and ONNX inference. No API. */

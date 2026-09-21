@@ -8,11 +8,13 @@ clock, and a principal variation.
 The server never runs an engine. A position that is not in the book is
 analysed in the visitor's browser (the static WASM Hivemind that /bughouse
 already uses) and uploaded here. Uploading takes a one-time ticket for that
-exact position, issued behind the site's Turnstile check; the server checks
-every upload against its own move generation and derives every score itself
-from the raw searches, so the browser only reports what the engine said.
-Nothing can prove a browser computed honestly, so each position records its
-ticket and a hash of the uploader's IP, and `purge` removes a contributor.
+exact position; the server checks every upload against its own move
+generation and derives every score itself from the raw searches, so the
+browser only reports what the engine said. Nothing can prove a browser
+computed honestly, so every submission records its ticket and a hash of the
+uploader's IP, and `purge` removes a contributor. The first upload supplies a
+position's scores; a later upload from another computer counts as a
+confirmation, and the page shows how many computers have analysed it.
 
 Positions computed on the owner's machine (`tools/bughouse_db/hivemind_book.py
 push`) arrive through the admin-key import endpoint.
@@ -78,6 +80,14 @@ CREATE TABLE IF NOT EXISTS move(
   q REAL, mate INTEGER, pv TEXT,
   PRIMARY KEY(pos, board, uci, clock)
 ) WITHOUT ROWID;
+-- Every computer that analysed a position; the first one supplied its scores.
+CREATE TABLE IF NOT EXISTS submission(
+  pos         INTEGER NOT NULL,
+  contributor TEXT NOT NULL,         -- sha256(ip)[:16], or 'admin'
+  ticket      TEXT,
+  created_at  REAL NOT NULL,
+  PRIMARY KEY(pos, contributor)
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS ticket(
   id TEXT PRIMARY KEY, pos INTEGER NOT NULL, contributor TEXT NOT NULL,
@@ -96,7 +106,20 @@ def connect(path: Path | None = None) -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.executescript(SCHEMA)
     relabel_seats(conn)
+    record_first_submissions(conn)
     return conn
+
+
+def record_first_submissions(conn: sqlite3.Connection) -> None:
+    """Positions stored before submissions were counted have one each: their uploader."""
+    if conn.execute("SELECT 1 FROM meta WHERE key='submissions'").fetchone():
+        return
+    with conn:
+        if not conn.execute(
+                "INSERT OR IGNORE INTO meta(key, value) VALUES('submissions', '1')").rowcount:
+            return
+        conn.execute("INSERT OR IGNORE INTO submission "
+                     "SELECT pos, contributor, ticket, created_at FROM position")
 
 
 # The seats were once lettered A and B on board A, D and C on board B, which
@@ -390,7 +413,8 @@ def read_position(conn: sqlite3.Connection, fen: str, moves: str = "") -> dict:
     except BadPosition as e:
         raise HTTPException(400, str(e)) from None
     key = position_key(boards)
-    row = conn.execute("SELECT * FROM position WHERE pos=?", (key,)).fetchone()
+    row = conn.execute("SELECT *, (SELECT COUNT(*) FROM submission s WHERE s.pos = position.pos)"
+                       " AS computers FROM position WHERE pos=?", (key,)).fetchone()
     scores: dict[tuple[str, str], dict] = {}
     picks = []
     if row:
@@ -410,7 +434,8 @@ def read_position(conn: sqlite3.Connection, fen: str, moves: str = "") -> dict:
         "moves": moves, "picks": picks,
         "meta": None if not row else {
             "source": row["source"], "engine": row["engine"], "nodes": row["nodes"],
-            "child_nodes": row["child_nodes"], "created_at": row["created_at"]},
+            "child_nodes": row["child_nodes"], "created_at": row["created_at"],
+            "computers": row["computers"]},
     }
 
 
@@ -438,7 +463,6 @@ def contributor_of(request: Request) -> str:
 
 class TicketRequest(BaseModel):
     fen: str = Field(max_length=400)
-    cf_turnstile_token: str = ""
 
 
 class MoveUpload(BaseModel):
@@ -470,8 +494,9 @@ def issue_ticket(conn: sqlite3.Connection, fen: str, contributor: str) -> dict:
     except BadPosition as e:
         raise HTTPException(400, str(e)) from None
     key = position_key(boards)
-    if conn.execute("SELECT 1 FROM position WHERE pos=?", (key,)).fetchone():
-        raise HTTPException(409, "This position is already in the book.")
+    if conn.execute("SELECT 1 FROM submission WHERE pos=? AND contributor=?",
+                    (key, contributor)).fetchone():
+        raise HTTPException(409, "This computer has already analysed this position.")
     if not any(boards[w].legal_moves for w in (0, 1)):
         raise HTTPException(400, "Nobody can move in this position.")
     ticket = secrets.token_urlsafe(24)
@@ -514,21 +539,27 @@ def store_upload(conn: sqlite3.Connection, up: PositionUpload, contributor: str)
             if s is not None:
                 _check_joints(s.pv)
         moves[(m.board, m.uci)] = {True: m.on, False: m.off}
-    searches = len(own) + 2 * len(moves)
+    # A browser scores only each board's top few moves; the rest carry no search.
+    searches = len(own) + sum(s is not None for m in up.moves for s in (m.on, m.off))
     if now - t["issued"] < searches * MIN_SECONDS_PER_SEARCH:
         raise HTTPException(429, "That was faster than the engine can search. Try again.")
 
     picks, rows = derive(boards, own, moves)
     with conn:
-        if conn.execute("SELECT 1 FROM position WHERE pos=?", (key,)).fetchone():
-            raise HTTPException(409, "Someone else finished this position first.")
+        if conn.execute("SELECT 1 FROM submission WHERE pos=? AND contributor=?",
+                        (key, contributor)).fetchone():
+            raise HTTPException(409, "This computer has already analysed this position.")
         conn.execute("UPDATE ticket SET used=? WHERE id=?", (now, up.ticket))
-        conn.execute("INSERT INTO position VALUES(?,?,?,?,?,?,?,?,?)",
-                     (key, dual_fen(boards), "browser", up.engine, up.nodes, up.child_nodes,
-                      contributor, up.ticket, now))
-        conn.executemany("INSERT INTO pick VALUES(?,?,?,?,?,?,?)", [(key, *p) for p in picks])
-        conn.executemany("INSERT INTO move VALUES(?,?,?,?,?,?,?)", [(key, *r) for r in rows])
-    return {"key": str(key), "moves": len(moves)}
+        conn.execute("INSERT INTO submission VALUES(?,?,?,?)", (key, contributor, up.ticket, now))
+        # The first computer's searches are the book's; a later one confirms them.
+        if not conn.execute("SELECT 1 FROM position WHERE pos=?", (key,)).fetchone():
+            conn.execute("INSERT INTO position VALUES(?,?,?,?,?,?,?,?,?)",
+                         (key, dual_fen(boards), "browser", up.engine, up.nodes, up.child_nodes,
+                          contributor, up.ticket, now))
+            conn.executemany("INSERT INTO pick VALUES(?,?,?,?,?,?,?)", [(key, *p) for p in picks])
+            conn.executemany("INSERT INTO move VALUES(?,?,?,?,?,?,?)", [(key, *r) for r in rows])
+        computers = conn.execute("SELECT COUNT(*) FROM submission WHERE pos=?", (key,)).fetchone()[0]
+    return {"key": str(key), "moves": len(moves), "computers": computers}
 
 
 # ── Owner imports (desktop builder) ───────────────────────────────────
@@ -586,8 +617,10 @@ def store_import(conn: sqlite3.Connection, batch: ImportBatch) -> dict:
                 if not batch.replace:
                     skipped += 1
                     continue
-                for table in ("position", "pick", "move"):
+                # The earlier confirmations were of the scores being replaced.
+                for table in ("position", "pick", "move", "submission"):
                     conn.execute(f"DELETE FROM {table} WHERE pos=?", (key,))
+            conn.execute("INSERT OR IGNORE INTO submission VALUES(?,?,?,?)", (key, "admin", None, now))
             conn.execute("INSERT INTO position VALUES(?,?,?,?,?,?,?,?,?)",
                          (key, dual_fen(boards), "desktop", p.engine, p.nodes, p.child_nodes,
                           "admin", None, now))
@@ -615,7 +648,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="BughouseDB maintenance")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("stats")
-    p = sub.add_parser("purge", help="delete every position one contributor uploaded")
+    p = sub.add_parser("purge", help="delete every position one contributor supplied, and their confirmations")
     p.add_argument("--contributor", required=True)
     args = ap.parse_args(argv)
     conn = connect()
@@ -626,9 +659,11 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     keys = [r[0] for r in conn.execute("SELECT pos FROM position WHERE contributor=?", (args.contributor,))]
     with conn:
-        for table in ("position", "pick", "move"):
+        for table in ("position", "pick", "move", "submission"):
             conn.executemany(f"DELETE FROM {table} WHERE pos=?", [(k,) for k in keys])
-    print(f"purged {len(keys)} positions")
+        confirmations = conn.execute("DELETE FROM submission WHERE contributor=?",
+                                     (args.contributor,)).rowcount
+    print(f"purged {len(keys)} positions and {confirmations} confirmations")
     return 0
 
 
