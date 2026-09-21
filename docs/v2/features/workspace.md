@@ -43,6 +43,9 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
   expanding it to a six-row viewport, and empty slots keeping their height. Defaults: **cores 1**
   (max = logical cores), **memory 128 MB** (16–8192, step 16), **depth 15** (1–99), **lines 3**
   (1–10); evals are White-relative, one decimal (`+0.35`), mate `#5` / `-#5`.
+  (v2 has this bar: the 32px switch row with `Depth {d} · {engine}`, 54px gutters, hover floats a
+  200px board under the move, a click plays the line up to it, the chevron opens six rows; no
+  threat, gear, nodes or settings yet. The old app's large headline score was tried and dropped.)
 - **Explorer (Database dock)** — sources: Engine evals, ChessDB, Repertoire, Opening explorer,
   Local PGN. Live explorer: Lichess, Masters, TWIC (only with a local master database), behind a
   collapsed filter summary; Lichess has speed and rating chips (defaults blitz/rapid/classical,

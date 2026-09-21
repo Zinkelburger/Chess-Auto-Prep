@@ -46,6 +46,5 @@ void main() {
 
   test('moves and evaluations stay monospaced', () {
     expect(monoText.fontFamily, 'SourceCodePro');
-    expect(scoreText.fontFamily, 'SourceCodePro');
   });
 }

@@ -50,12 +50,25 @@ const evalBarWidth = 12.0;
 /// Moves, FENs and evaluations share one monospace style.
 const monoText = TextStyle(fontFamily: 'SourceCodePro', fontSize: 13);
 
-/// The headline evaluation in the engine pane.
-const scoreText = TextStyle(
-  fontFamily: 'SourceCodePro',
-  fontSize: 18,
-  fontWeight: FontWeight.w600,
-);
+/// The engine bar, as the old app laid it out: a row this tall for the
+/// switch and the status, then one row per line, each with a gutter this
+/// wide for the score and the moves after it. The score is read there and
+/// nowhere larger.
+const engineBarHeight = 32.0;
+const engineRowHeight = 28.0;
+const engineScoreWidth = 54.0;
+
+/// How many rows a line opens out to when its chevron is pressed.
+const engineExpandedRows = 6;
+
+/// How wide the board that floats under a hovered engine move is, and how
+/// far under the move it sits.
+const previewBoardSize = 200.0;
+const previewBoardGap = 6.0;
+
+/// The pointer rests on a move this long before its board appears, so
+/// sweeping across a line does not flash every position in it.
+const previewDelay = Duration(milliseconds: 80);
 
 /// How the board looks, resolved from the theme so a light theme can swap
 /// it. The board itself is Lichess's `chessground`; this is the one place
@@ -105,6 +118,14 @@ final class BoardTheme extends ThemeExtension<BoardTheme> {
     enablePremoves: false,
     dragFeedbackScale: 1,
     dragFeedbackOffset: Offset.zero,
+  );
+
+  /// The small board that floats under a hovered engine move: the same
+  /// colours and pieces, no animation because it shows one position.
+  StaticChessboardSettings get previewSettings => StaticChessboardSettings(
+    colorScheme: _colors,
+    pieceAssets: PieceSet.cburnettAssets,
+    animationDuration: Duration.zero,
   );
 
   ChessboardColorScheme get _colors {

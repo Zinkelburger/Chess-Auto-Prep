@@ -61,7 +61,7 @@ class WorkspaceView extends StatelessWidget {
     children: [
       ChapterHeader(session: session, saver: saver),
       const Divider(height: 1),
-      EnginePane(analysis: analysis),
+      EnginePane(session: session, analysis: analysis),
       const Divider(height: 1),
       Expanded(
         child: MoveTreeView(session: session, moveMenu: moveMenu),

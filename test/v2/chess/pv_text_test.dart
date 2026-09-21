@@ -12,6 +12,20 @@ void main() {
     expect(pvText(after1e4, ['c7c5', 'g1f3', 'd7d6']), '1... c5 2. Nf3 d6');
   });
 
+  test('each move knows its label, its UCI and the position after it', () {
+    final moves = pvMoves(after1e4, ['c7c5', 'g1f3']);
+    expect(moves.map((m) => m.label), ['1...', '2.']);
+    expect(moves.map((m) => m.san), ['c5', 'Nf3']);
+    expect(moves.map((m) => m.uci), ['c7c5', 'g1f3']);
+    expect(
+      moves.first.after.value,
+      'rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
+    );
+    expect(moves.last.after.whiteToMove, isFalse);
+    expect(moves.last.text, '2. Nf3');
+    expect(pvMoves(Fen.initial, ['e2e4', 'e7e5']).last.text, 'e5');
+  });
+
   test('stops at a move that is not legal here', () {
     expect(pvText(Fen.initial, ['e2e4', 'e2e4', 'd7d5']), '1. e4');
     expect(pvText(Fen.initial, ['zz']), '');
