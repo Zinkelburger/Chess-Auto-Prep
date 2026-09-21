@@ -27,9 +27,9 @@ import 'session_results.dart';
 /// Holds the chapter (an immutable value), the file it came from and the
 /// cursor. The board, the move list and every panel derive what they show
 /// from these; nothing else in the workspace keeps a copy of the tree, the
-/// position or which file is open. Writing to disk belongs to the
-/// [DocumentSaver] this session was given: an edit replaces the chapter and
-/// hands the saver the new file text.
+/// position or which file is open. Writing belongs to the [DocumentSaver]
+/// this session was given: an edit replaces the chapter and hands the saver
+/// the new file text.
 final class DocumentSession extends ChangeNotifier {
   DocumentSession(this._store, this._saver);
 
@@ -47,20 +47,20 @@ final class DocumentSession extends ChangeNotifier {
   Chapter? get chapter => _chapter;
 
   /// Why the last edit did not happen, or null when it did. A game reading
-  /// could not finish keeps its own bytes and is never generated again, so
-  /// an edit that would have to write it is refused, and so are words a PGN
-  /// file cannot hold and every edit to a file this app may not write. The
-  /// next edit that lands, and opening another document, clears this.
+  /// could not finish keeps its own bytes, so an edit that would write it is
+  /// refused, and so are words a PGN file cannot hold and every edit to a
+  /// file this app may not write. The next edit clears this, as does opening
+  /// another document.
   EditRefused? get refusedEdit => _refused;
 
   /// Why this document cannot be written, or null when it can.
   String? get readOnly => _readOnly;
 
-  /// The file the chapter was read from.
+  /// The file the chapter was read from, and which game of it is on the
+  /// board — null when its games are merged. A repertoire chapter is the
+  /// file; a study chapter is one game.
   ChapterRef? get source => _source;
 
-  /// Which game of that file is on the board, or null when its games are
-  /// merged. A repertoire chapter is the file; a study chapter is one game.
   int? get game => _chapter?.game;
   GameTree? get tree => _chapter?.tree;
 
@@ -178,14 +178,13 @@ final class DocumentSession extends ChangeNotifier {
 
   /// Plays [uci] from the cursor and follows it. A move already in the tree
   /// only moves the cursor; a new one is written into the chapter and saved.
-  /// An illegal move is ignored — the board offers legal moves only — and a
-  /// move the chapter comes back without is logged rather than saved.
+  /// An illegal move is ignored — the board offers legal moves only — and one
+  /// the chapter comes back without is logged rather than saved.
   void playMove(String uci) {
     final chapter = _chapter;
     if (chapter == null) return;
     // A move the chapter already holds writes nothing, so following it is
-    // reading: a file this app may not write still shows its own lines, and
-    // asking costs one move rather than a whole edited chapter.
+    // reading: a file this app may not write still shows its own lines.
     final here = edits.playedAlready(chapter, at: _cursor, uci: uci);
     if (here != null) {
       _cursor = here;
@@ -241,11 +240,10 @@ final class DocumentSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Puts the bare token [marker] on the move at [at], or takes it away.
-  ///
-  /// A marker says something about the move rather than to the reader — a
-  /// quiz starts here — so the words on it are left alone. Everything else
-  /// is a comment edit: the same games are written, the same refusals apply.
+  /// Puts the bare token [marker] on the move at [at], or takes it away. A
+  /// marker says something about the move rather than to the reader — a quiz
+  /// starts here — so the words on it are left alone; everything else is a
+  /// comment edit, with the same games written and the same refusals.
   void setMarker(NodePath at, String marker, {required bool on}) {
     final chapter = _chapter;
     if (chapter == null) return;
@@ -349,9 +347,9 @@ final class DocumentSession extends ChangeNotifier {
   }
 
   /// Shows [edited] and puts it on disk, saying which games the edit wrote.
-  /// The scope is what the edit reported, never what the new text turned out
-  /// to look like: a scope worked out from the text would agree with the
-  /// text, and the store would have nothing to refuse.
+  /// The scope is what the edit reported, never what the text turned out to
+  /// look like: that would agree with the text, and the store would have
+  /// nothing to refuse.
   void _replace(Chapter edited, GamesWritten written) {
     _chapter = edited;
     _saver.save(writeChapter(edited), GamesEdited(written));
