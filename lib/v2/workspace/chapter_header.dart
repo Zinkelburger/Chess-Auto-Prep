@@ -167,8 +167,13 @@ class _SideAndLines extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Row(
     children: [
-      _SideChoice(side: chapter.side, onChanged: onSide),
-      const SizedBox(width: Space.s),
+      // A study chapter's board faces the way its own `[Orientation]` tag
+      // says, which its row in the study list changes; the `// Color:` line
+      // these buttons write belongs to a repertoire chapter and is not what
+      // a study reads.
+      if (chapter.game == null)
+        _SideChoice(side: chapter.side, onChanged: onSide),
+      if (chapter.game == null) const SizedBox(width: Space.s),
       Expanded(
         child: Text(
           _summary(chapter),
