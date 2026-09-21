@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:chess_auto_prep/v2/chess/fen.dart';
 import 'package:chess_auto_prep/v2/engines/engine_line.dart';
 import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
@@ -91,7 +92,7 @@ void main() {
     });
   });
 
-  test('nothing is searched until a chapter is open', () {
+  test('the start position is searched before a chapter is open', () {
     fakeAsync((async) {
       final ref = chapterRef('KID', 'Main');
       final store = ScriptedDocumentStore()
@@ -101,10 +102,19 @@ void main() {
         DocumentSaver(store, delay: Duration.zero),
       );
       running(async);
-      expect(engine.searches, isEmpty);
+      // The board shows the start position, so the engine is on it: a
+      // switch that says on over blank rows reads as a broken engine.
+      expect(engine.searches, hasLength(1));
+      expect(engine.current.fen, Fen.initial);
+      engine.current.emit(line(score: const Centipawns(20)));
+      async.elapse(tick);
+      expect(analysis.snapshot!.best!.score, const Centipawns(20));
+      final start = engine.current;
       unawaited(session.open(ref));
       async.flushMicrotasks();
-      expect(engine.searches, hasLength(1));
+      expect(start.stopped, isTrue);
+      expect(engine.searches, hasLength(2));
+      expect(engine.current.fen, session.fen);
     });
   });
 

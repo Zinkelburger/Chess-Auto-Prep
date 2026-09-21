@@ -132,18 +132,15 @@ final class EngineAnalysis extends ChangeNotifier {
     await engine?.quit();
   }
 
-  /// Analyses the session's position while a document is open; with none,
-  /// the engine idles rather than search a board nobody is looking at.
+  /// Analyses the position the board shows. That is the session's cursor
+  /// position, and the start position before a chapter is open: the board
+  /// is on screen either way, and a switch that says on with blank rows
+  /// under it reads as an engine that does not work.
   void _follow() {
     final engine = _engine;
     if (engine == null) {
       // Nothing is searching, so the last score is about a position the
       // cursor has left; the pane and the bar must not keep showing it.
-      _clearSnapshot();
-      return;
-    }
-    if (_session.chapter == null) {
-      _stopFollowing();
       _clearSnapshot();
       return;
     }
