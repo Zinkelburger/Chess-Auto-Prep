@@ -27,7 +27,57 @@ Future<void> pumpTree(WidgetTester tester, SessionFixture fixture) async {
   await tester.pump();
 }
 
+/// Two lines from 1. d4, the second of them a branch at the first move.
+const twoLines = '''
+// Color: White
+
+[Event "Queen's"]
+[Result "*"]
+
+1. d4 d5 2. c4 *
+
+[Event "Indian"]
+[Result "*"]
+
+1. d4 Nf6 *
+''';
+
 void main() {
+  testWidgets('a move offers what can be done to it, and does it', (
+    tester,
+  ) async {
+    final fixture = await openSession(twoLines);
+    addTearDown(fixture.dispose);
+    await pumpTree(tester, fixture);
+
+    await tester.longPress(find.textContaining('Nf6'));
+    await tester.pumpAndSettle();
+    expect(find.text('Promote variation'), findsOneWidget);
+    expect(find.text('Delete from here'), findsOneWidget);
+    await tester.tap(find.text('Make main line'));
+    await tester.pumpAndSettle();
+
+    expect(fixture.session.tree!.children.first.children.first.san, 'Nf6');
+    expect(
+      fixture.onDisk.indexOf('[Event "Indian"]'),
+      lessThan(fixture.onDisk.indexOf('[Event "Queen\'s"]')),
+    );
+  });
+
+  testWidgets('deleting from a move takes it off the screen', (tester) async {
+    final fixture = await openSession(twoLines);
+    addTearDown(fixture.dispose);
+    await pumpTree(tester, fixture);
+
+    await tester.longPress(find.textContaining('c4'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete from here'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('c4'), findsNothing);
+    expect(fixture.onDisk, contains('1. d4 d5 *'));
+  });
+
   testWidgets('shows the introduction without its machine tokens', (
     tester,
   ) async {

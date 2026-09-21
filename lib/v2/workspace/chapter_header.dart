@@ -114,10 +114,7 @@ class _ChapterHeaderState extends State<ChapterHeader> {
             children: [
               Text(chapter.name, style: text.titleMedium),
               const SizedBox(height: Space.xs),
-              _SideAndLines(
-                chapter: chapter,
-                onSide: widget.session.setSide,
-              ),
+              _SideAndLines(chapter: chapter, onSide: widget.session.setSide),
               const SizedBox(height: Space.xs),
               Row(
                 children: [

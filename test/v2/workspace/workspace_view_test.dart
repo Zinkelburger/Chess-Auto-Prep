@@ -61,10 +61,7 @@ void main() {
   ) async {
     await pump(tester);
     expect(find.text('Main'), findsOneWidget);
-    expect(
-      find.text('2 lines, 1 from another position'),
-      findsOneWidget,
-    );
+    expect(find.text('2 lines, 1 from another position'), findsOneWidget);
     expect(find.textContaining('c5'), findsOneWidget);
     expect(find.textContaining('Nc3'), findsOneWidget);
     expect(find.text('The Sicilian'), findsOneWidget);
