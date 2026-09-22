@@ -19,16 +19,21 @@ import '../features/settings/lichess_account.dart';
 import '../features/study/studies.dart';
 import '../features/trainer/scope_reader.dart';
 import '../features/trainer/trainer.dart';
+import '../features/tactics/my_games.dart';
 import '../features/tactics/puzzle_trainer.dart';
+import '../features/tactics/set_additions.dart';
 import '../features/tactics/tactics_set.dart';
 import '../net/lichess_explorer.dart';
 import '../net/lichess_login.dart';
 import '../net/lichess_studies.dart';
+import '../net/recent_games.dart';
 import '../storage/atomic_write.dart';
 import '../storage/chapter_files.dart';
 import '../storage/eval_cache.dart';
 import '../storage/lichess_token.dart';
 import '../storage/master_book.dart';
+import '../storage/my_accounts.dart';
+import '../storage/my_games_files.dart';
 import '../storage/pgn_file_import.dart';
 import '../storage/pgn_file_picker.dart';
 import '../storage/pgn_file_store.dart';
@@ -329,6 +334,33 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
         await _requests.open(set, game: game) is RequestDone,
   );
 
+  /// The user's accounts and the review that mines their games into the
+  /// set, on a Stockfish of its own with the pane's threads and table.
+  late final _myGames = MyGames(
+    accounts: PreferencesAccounts(),
+    sites: [
+      LichessGamesApi(_lichess, token: readLichessToken),
+      ChesscomGamesApi(_lichess),
+    ],
+    cache: GamesCache(
+      _store,
+      folder: p.join(widget.documents.path, 'games_library'),
+    ),
+    set: SetAdditions(
+      documents: _store,
+      session: _session,
+      saver: _saver,
+      set: _tactics,
+      older: () => readOlderAnalyzed(widget.documents),
+    ),
+    engine: () => launchStockfish(
+      support: widget.support,
+      engines: _engines,
+      cores: _settings.value.engineCores,
+      memoryMb: _settings.value.engineMemoryMb,
+    ),
+  );
+
   late final _quit = AppExit(
     guard: _exit,
     stopEngines: _engines.dispose,
@@ -354,6 +386,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     _fill.addListener(_listTheDraft);
     unawaited(_library.refresh());
     unawaited(_startWithSettings());
+    unawaited(_myGames.load());
   }
 
   /// The settings are read before the engine starts, so its first process
@@ -384,6 +417,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     _account.dispose();
     _requests.dispose();
     _lineTrainer.dispose();
+    _myGames.dispose();
     _tactics.dispose();
     _fill.removeListener(_listTheDraft);
     _fill.dispose();
