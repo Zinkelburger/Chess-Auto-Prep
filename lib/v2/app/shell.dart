@@ -17,8 +17,11 @@ import '../features/settings/setting_rows.dart';
 import '../features/settings/settings_dialog.dart';
 import '../features/study/study_panel.dart';
 import '../chess/tactics/puzzle.dart';
+import '../features/tactics/my_games.dart';
+import '../features/tactics/my_games_block.dart';
 import '../features/tactics/puzzle_pane.dart';
 import '../features/tactics/puzzle_trainer.dart';
+import '../features/tactics/tactics_actions.dart';
 import '../features/tactics/tactics_panel.dart';
 import '../features/tactics/tactics_set.dart';
 import '../features/trainer/train_pane.dart';
@@ -74,6 +77,7 @@ class Shell extends StatefulWidget {
     required this.tactics,
     required this.lineTrainer,
     required this.trainer,
+    required this.myGames,
     required this.settings,
     required this.settingRows,
     required this.settingsAlso,
@@ -94,6 +98,9 @@ class Shell extends StatefulWidget {
   final FillGaps fill;
   final TacticsSet tactics;
   final PuzzleTrainer trainer;
+
+  /// The usernames and the review that mines their games into the set.
+  final MyGames myGames;
 
   /// The Train tab's owner: the repertoire's lines and the sitting.
   final Trainer lineTrainer;
@@ -217,6 +224,15 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     );
   }
 
+  /// Tactics starts with the engine off: it is for solving, and the engine
+  /// comes back with Analyze or E once an answer is on view.
+  void _switchTo(Mode mode) {
+    _requests.switchTo(mode);
+    if (mode == Mode.tactics && widget.analysis.enabled) {
+      unawaited(widget.analysis.disable());
+    }
+  }
+
   /// The solved puzzle's game with the engine on: the Game tab, not
   /// another mode.
   void _analyze() {
@@ -249,45 +265,6 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       ? widget.session.previousGame()
       : unawaited(widget.trainer.previous());
 
-  /// Tactics is for solving: the board, the puzzle and the game it came
-  /// from. Its menu has what a solver reaches for and none of the file and
-  /// repertoire work the other modes do on the same board.
-  List<AppAction> _tacticsActions() {
-    final session = widget.session;
-    final analysis = widget.analysis;
-    final open = session.chapter != null;
-    final hidden = session.shownTo != null;
-    return [
-      ...puzzleActions(),
-      AppAction(
-        'Flip board',
-        open ? session.flip : null,
-        shortcut: 'F',
-        group: 'Board',
-      ),
-      AppAction(
-        analysis.enabled ? 'Engine off' : 'Engine on',
-        analysis.enabled || !hidden
-            ? () => unawaited(
-                analysis.enabled ? analysis.disable() : analysis.enable(),
-              )
-            : null,
-        shortcut: 'E',
-        group: 'Board',
-      ),
-      AppAction(
-        'Copy FEN',
-        open
-            ? () => unawaited(
-                Clipboard.setData(ClipboardData(text: session.fen.value)),
-              )
-            : null,
-        group: 'Board',
-      ),
-      ...tabActions(_tabs),
-    ];
-  }
-
   void _toggleList() {
     if (!mounted) return;
     setState(() => _listShown = !_listShown);
@@ -312,7 +289,14 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   /// Everything the Actions menu offers now: the mode's own doors first,
   /// then what can be done to the document, whichever mode opened it.
   List<AppAction> _actions() => _requests.mode == Mode.tactics
-      ? _tacticsActions()
+      ? tacticsActions(
+          trainer: widget.trainer,
+          games: widget.myGames,
+          session: widget.session,
+          analysis: widget.analysis,
+          tabs: _tabs,
+          onAccounts: () => unawaited(editAccounts(context, widget.myGames)),
+        )
       : [
           AppAction(
             'Open PGN file…',
@@ -360,35 +344,6 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
           ),
           ...tabActions(_tabs),
         ];
-
-  /// What can be done to the puzzle on the board, while one is.
-  List<AppAction> puzzleActions() {
-    final up = widget.trainer.up;
-    if (up == null) return const [];
-    return [
-      AppAction(
-        'Show solution',
-        up.finished ? null : widget.trainer.showSolution,
-        shortcut: 'Space',
-        group: 'Tactics',
-      ),
-      AppAction(
-        up.finished || up.decided != null ? 'Next puzzle' : 'Skip puzzle',
-        () => unawaited(widget.trainer.next()),
-        shortcut: '↓',
-        group: 'Tactics',
-      ),
-      AppAction(
-        'Previous puzzle',
-        widget.trainer.hasPrevious
-            ? () => unawaited(widget.trainer.previous())
-            : null,
-        shortcut: '↑',
-        group: 'Tactics',
-      ),
-      AppAction('End session', widget.trainer.end, group: 'Tactics'),
-    ];
-  }
 
   /// The same actions, typed for: a searchable list that the enter key
   /// takes the one match of.
@@ -471,6 +426,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       Mode.tactics => TacticsPanel(
         set: widget.tactics,
         trainer: widget.trainer,
+        myGames: widget.myGames,
         onPlay: _play,
         trailing: toggle,
       ),
@@ -488,7 +444,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
           children: [
             TopBar(
               mode: _requests.mode,
-              onMode: _requests.switchTo,
+              onMode: _switchTo,
               onSettings: () => unawaited(_settings()),
               listShown: _listShown,
               onToggleList: _toggleList,
@@ -503,6 +459,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
                 widget.fill,
                 widget.viewer,
                 widget.trainer,
+                widget.myGames,
                 _editing,
                 _tabs,
               ]),

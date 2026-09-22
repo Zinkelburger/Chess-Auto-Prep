@@ -281,7 +281,9 @@ final class MyGames extends ChangeNotifier {
         await _cache.keep(site, username, games, when);
         await _store.setDownloaded(site, when);
         _accounts = {..._accounts, site: Account(username, downloaded: when)};
-        texts = games;
+        // A site may answer more than was asked for; the window is the
+        // newest this many, whatever came down.
+        texts = games.take(reviewWindow).toList();
       case final GamesNotFetched failed:
         problems[site] = failed;
         texts = await _cache.read(site, username, max: reviewWindow) ?? [];

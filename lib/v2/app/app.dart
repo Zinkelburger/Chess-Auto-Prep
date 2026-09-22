@@ -451,6 +451,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
       theme: darkTheme(),
       debugShowCheckedModeBanner: false,
       home: Shell(
+        myGames: _myGames,
         requests: _requests,
         library: _library,
         studies: _studies,
