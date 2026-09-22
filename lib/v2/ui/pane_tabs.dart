@@ -35,25 +35,38 @@ final class PaneTab<K extends Object> {
 /// old viewer did; a pinned tab cannot be closed or moved, and nothing can
 /// be moved in front of it.
 class PaneTabs<K extends Object> extends ChangeNotifier {
-  PaneTabs(this.tabs, {Iterable<K> open = const [], K? selected})
-    : assert(tabs.isNotEmpty, 'a pane with no tabs has nothing to show') {
-    for (final tab in tabs) {
-      if (tab.pinned) _open.add(tab.id);
+  PaneTabs(List<PaneTab<K>> tabs, {Iterable<K> open = const [], K? selected})
+    : this._(tabs, _opening(tabs, open), selected);
+
+  PaneTabs._(this.tabs, this._open, K? selected)
+    : _selected = selected != null && _open.contains(selected)
+          ? selected
+          : _open.first;
+
+  /// The tabs open at the start: the pinned ones, then those asked for
+  /// that the pane knows, and the first tab when that leaves none.
+  static List<K> _opening<K extends Object>(
+    List<PaneTab<K>> tabs,
+    Iterable<K> asked,
+  ) {
+    assert(tabs.isNotEmpty, 'a pane with no tabs has nothing to show');
+    final known = {for (final tab in tabs) tab.id};
+    final open = [
+      for (final tab in tabs)
+        if (tab.pinned) tab.id,
+    ];
+    for (final id in asked) {
+      if (known.contains(id) && !open.contains(id)) open.add(id);
     }
-    for (final id in open) {
-      if (_known(id) && !_open.contains(id)) _open.add(id);
-    }
-    if (_open.isEmpty) _open.add(tabs.first.id);
-    _selected = selected != null && _open.contains(selected)
-        ? selected
-        : _open.first;
+    if (open.isEmpty) open.add(tabs.first.id);
+    return open;
   }
 
   /// Every tab the pane can show, in the order they are offered.
   final List<PaneTab<K>> tabs;
 
-  final List<K> _open = [];
-  late K _selected;
+  final List<K> _open;
+  K _selected;
 
   /// The open tabs, left to right.
   List<K> get open => List.unmodifiable(_open);
@@ -347,7 +360,6 @@ class _TabState extends State<_Tab> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final closeable = widget.onClose != null;
-    final closeShown = closeable && (widget.selected || _hovered);
     return Listener(
       onPointerDown: closeable ? _pointerDown : null,
       child: InkWell(
@@ -381,30 +393,32 @@ class _TabState extends State<_Tab> {
                       : FontWeight.normal,
                 ),
               ),
-              if (closeable)
-                Visibility(
-                  visible: closeShown,
-                  maintainSize: true,
-                  maintainAnimation: true,
-                  maintainState: true,
-                  child: IconButton(
-                    onPressed: widget.onClose,
-                    tooltip: widget.selected && widget.closeShortcut != null
-                        ? 'Close ${widget.tab.title} (${widget.closeShortcut})'
-                        : 'Close ${widget.tab.title}',
-                    icon: const Icon(Icons.close, size: IconSize.menu),
-                    color: scheme.onSurfaceVariant,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints.tightFor(
-                      width: paneTabHeight - Space.s,
-                      height: paneTabHeight - Space.s,
-                    ),
-                  ),
-                ),
+              if (closeable) _close(scheme, shown: widget.selected || _hovered),
             ],
           ),
         ),
       ),
     );
   }
+
+  /// The `×`, holding its room while hidden.
+  Widget _close(ColorScheme scheme, {required bool shown}) => Visibility(
+    visible: shown,
+    maintainSize: true,
+    maintainAnimation: true,
+    maintainState: true,
+    child: IconButton(
+      onPressed: widget.onClose,
+      tooltip: widget.selected && widget.closeShortcut != null
+          ? 'Close ${widget.tab.title} (${widget.closeShortcut})'
+          : 'Close ${widget.tab.title}',
+      icon: const Icon(Icons.close, size: IconSize.menu),
+      color: scheme.onSurfaceVariant,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints.tightFor(
+        width: paneTabHeight - Space.s,
+        height: paneTabHeight - Space.s,
+      ),
+    ),
+  );
 }
