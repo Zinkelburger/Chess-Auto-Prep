@@ -19,10 +19,11 @@ import 'nav_row.dart';
 import 'reading_header.dart';
 import 'replies.dart';
 import 'replies_pane.dart';
+import 'workspace_tabs.dart';
 
 /// The board with the game counter and the move's note under it on the
 /// left; on the right the reading card, top to bottom in a fixed order: the
-/// heading, the engine, a tab strip, the moves or the opponent's replies,
+/// heading, the engine, the tab strip, the moves or the opponent's replies,
 /// the edit strip while there is editing or trouble, and the navigation
 /// row. The two halves start equal, as the old app's did. The keys that
 /// walk the line and take an edit back are [WorkspaceKeys], above every
@@ -34,6 +35,7 @@ class WorkspaceView extends StatelessWidget {
     required this.saver,
     required this.analysis,
     required this.replies,
+    required this.tabs,
     required this.editing,
     required this.settings,
     this.moveMenu,
@@ -43,6 +45,10 @@ class WorkspaceView extends StatelessWidget {
   final DocumentSaver saver;
   final EngineAnalysis analysis;
   final Replies replies;
+
+  /// Which of the card's tabs are open and which is up. The shell owns it,
+  /// as it owns [editing]: the keys and the Actions menu turn it too.
+  final PaneTabs tabs;
 
   /// For what the board draws: the coordinates, today.
   final SettingsStore settings;
@@ -100,6 +106,7 @@ class WorkspaceView extends StatelessWidget {
             child: _Tabbed(
               session: session,
               replies: replies,
+              tabs: tabs,
               moveMenu: moveMenu,
             ),
           ),
@@ -112,56 +119,56 @@ class WorkspaceView extends StatelessWidget {
   );
 }
 
-/// The moves, or the opponent's replies, under a tab strip that says which:
-/// the old viewer's way of letting one column show more than one thing
-/// without growing a second column. Which tab is up is this widget's own
-/// business, lost with the window and remembered across documents.
-class _Tabbed extends StatefulWidget {
+/// The moves, or the opponent's replies, under the strip that says which.
+/// The tabs are the window's: the shell owns them, the keys walk them and
+/// the Actions menu opens and closes them, so this only draws what is up.
+/// A new thing the card can show is one more arm of [_body].
+class _Tabbed extends StatelessWidget {
   const _Tabbed({
     required this.session,
     required this.replies,
+    required this.tabs,
     required this.moveMenu,
   });
 
   final DocumentSession session;
   final Replies replies;
+  final PaneTabs tabs;
   final MoveMenu? moveMenu;
 
-  @override
-  State<_Tabbed> createState() => _TabbedState();
-}
-
-class _TabbedState extends State<_Tabbed> {
-  static const _tabs = ['Moves', 'Replies'];
-  int _tab = 0;
-
-  void _select(int index) {
-    if (!mounted) return;
-    setState(() => _tab = index);
+  Widget _body(String id) {
+    if (id == WorkspaceTab.moves.id) {
+      return MoveTreeView(session: session, moveMenu: moveMenu);
+    }
+    if (id == WorkspaceTab.replies.id) {
+      return RepliesPane(session: session, replies: replies);
+    }
+    throw StateError('no body for the $id tab');
   }
+
+  Widget? _trailing(String id) =>
+      id == WorkspaceTab.replies.id ? _NextGap(replies: replies) : null;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: readingCardInset - Space.m,
+    return ListenableBuilder(
+      listenable: tabs,
+      builder: (context, _) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: readingCardInset - Space.m,
+            ),
+            child: PaneTabStrip(
+              tabs: tabs,
+              closeShortcut: 'Ctrl+W',
+              trailing: _trailing(tabs.selected),
+            ),
           ),
-          child: PaneTabs(
-            tabs: _tabs,
-            selected: _tab,
-            onSelected: _select,
-            trailing: _tab == 1 ? _NextGap(replies: widget.replies) : null,
-          ),
-        ),
-        Expanded(
-          child: _tab == 0
-              ? MoveTreeView(session: widget.session, moveMenu: widget.moveMenu)
-              : RepliesPane(session: widget.session, replies: widget.replies),
-        ),
-      ],
+          Expanded(child: _body(tabs.selected)),
+        ],
+      ),
     );
   }
 }

@@ -3,13 +3,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../ui/pane_tabs.dart';
 import 'document_session.dart';
 import 'engine_analysis.dart';
 
 /// The keys of the workspace, wherever the focus is under [child]: the line
 /// (← → Home End PgUp PgDn), the games of the file (↑ ↓), the board (F), the
-/// engine (E), the edit strip (Ctrl+E) and the last edit (Ctrl+Z), plus
-/// whatever the shell adds in [extra] for the window itself.
+/// engine (E), the edit strip (Ctrl+E), the last edit (Ctrl+Z) and the
+/// card's tabs (Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+W), plus whatever the shell
+/// adds in [extra] for the window itself.
 ///
 /// It encloses every column that works on the document, not the board
 /// alone: a click on a row's `⋯` menu leaves the focus on that button, and
@@ -21,6 +23,7 @@ class WorkspaceKeys extends StatelessWidget {
     required this.session,
     required this.analysis,
     required this.editing,
+    required this.tabs,
     this.extra = const {},
     required this.child,
   });
@@ -28,6 +31,7 @@ class WorkspaceKeys extends StatelessWidget {
   final DocumentSession session;
   final EngineAnalysis analysis;
   final ValueNotifier<bool> editing;
+  final PaneTabs tabs;
 
   /// The window's own keys, which the shell binds: the list pane, the
   /// actions, opening a file.
@@ -57,6 +61,13 @@ class WorkspaceKeys extends StatelessWidget {
     const SingleActivator(LogicalKeyboardKey.keyE, meta: true): _edit,
     const SingleActivator(LogicalKeyboardKey.keyZ, control: true): _undo,
     const SingleActivator(LogicalKeyboardKey.keyZ, meta: true): _undo,
+    const SingleActivator(LogicalKeyboardKey.tab, control: true): tabs.next,
+    const SingleActivator(LogicalKeyboardKey.tab, control: true, shift: true):
+        tabs.previous,
+    const SingleActivator(LogicalKeyboardKey.keyW, control: true):
+        tabs.closeCurrent,
+    const SingleActivator(LogicalKeyboardKey.keyW, meta: true):
+        tabs.closeCurrent,
     ...extra,
   };
 

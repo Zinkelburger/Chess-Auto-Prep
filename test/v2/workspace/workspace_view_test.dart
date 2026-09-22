@@ -1,13 +1,17 @@
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/v2/storage/settings_store.dart';
+import 'package:chess_auto_prep/v2/ui/pane_tabs.dart';
 import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
 import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
+import 'package:chess_auto_prep/v2/workspace/move_tree_view.dart';
 import 'package:chess_auto_prep/v2/workspace/repertoire_answers.dart';
 import 'package:chess_auto_prep/v2/workspace/replies.dart';
+import 'package:chess_auto_prep/v2/workspace/replies_pane.dart';
 import 'package:chess_auto_prep/v2/workspace/workspace_keys.dart';
+import 'package:chess_auto_prep/v2/workspace/workspace_tabs.dart';
 import 'package:chess_auto_prep/v2/workspace/workspace_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -27,6 +31,7 @@ void main() {
   late EngineAnalysis analysis;
   late Replies replies;
   late ValueNotifier<bool> editing;
+  late PaneTabs tabs;
   late SettingsStore settings;
 
   /// The engine stays off; its pane has its own test.
@@ -59,11 +64,13 @@ void main() {
             session: session,
             analysis: analysis,
             editing: editing,
+            tabs: tabs,
             child: WorkspaceView(
               session: session,
               saver: saver,
               analysis: analysis,
               replies: replies,
+              tabs: tabs,
               editing: editing,
               settings: settings,
             ),
@@ -79,12 +86,14 @@ void main() {
     session = fixture.session;
     saver = fixture.saver;
     editing = ValueNotifier(false);
+    tabs = newWorkspaceTabs();
     settings = SettingsStore();
     startAnalysis();
   });
 
   tearDown(() {
     settings.dispose();
+    tabs.dispose();
     editing.dispose();
     analysis.dispose();
     fixture.dispose();
@@ -238,6 +247,32 @@ void main() {
       reason: 'Ctrl+Z belongs to the field, not the document',
     );
     expect(saver.canUndo, isTrue);
+  });
+
+  testWidgets('Ctrl+Tab walks the tabs, Ctrl+W closes the one that is up '
+      'and the strip goes with it', (tester) async {
+    await pump(tester);
+    expect(find.text('Moves'), findsOneWidget);
+    expect(find.text('Replies'), findsOneWidget);
+    expect(find.byType(MoveTreeView), findsOneWidget);
+    expect(find.byType(RepliesPane), findsNothing);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pumpAndSettle();
+    expect(tabs.selected, WorkspaceTab.replies.id);
+    expect(find.byType(RepliesPane), findsOneWidget);
+    expect(find.text('Next gap'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyW);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(tabs.open, [WorkspaceTab.moves.id]);
+    expect(find.byType(MoveTreeView), findsOneWidget);
+    expect(find.text('Moves'), findsNothing, reason: 'one tab: no strip');
+    expect(find.text('Next gap'), findsNothing);
+    tabs.show(WorkspaceTab.replies.id);
+    await tester.pumpAndSettle();
+    expect(find.byType(RepliesPane), findsOneWidget);
+    expect(find.byTooltip('Close Replies (Ctrl+W)'), findsOneWidget);
   });
 
   testWidgets('with nothing open it asks for a chapter', (tester) async {

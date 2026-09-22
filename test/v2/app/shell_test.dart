@@ -355,6 +355,28 @@ void main() {
     expect(textOf(store, kid), isNot(contains('[Event "Closed"]')));
   });
 
+  testWidgets('the Actions menu closes and shows the Replies tab', (
+    tester,
+  ) async {
+    await pump(tester);
+    await tester.tap(inLibrary(find.text('Main')).last);
+    await tester.pumpAndSettle();
+    expect(find.text('Replies'), findsOneWidget);
+    await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
+    expect(find.text('Next tab'), findsOneWidget);
+    expect(find.text('Ctrl+Tab'), findsOneWidget);
+    await tester.tap(find.text('Close Replies'));
+    await tester.pumpAndSettle();
+    expect(find.text('Replies'), findsNothing);
+    await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Show Replies'));
+    await tester.pumpAndSettle();
+    expect(find.text('Replies'), findsOneWidget);
+    expect(find.text('Next gap'), findsOneWidget, reason: 'brought up');
+  });
+
   testWidgets('Actions sits beside the mode menu, at the left', (tester) async {
     await pump(tester);
     final mode = tester.getTopRight(find.text('Repertoires').first);

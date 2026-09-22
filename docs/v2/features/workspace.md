@@ -46,10 +46,16 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
   (v2 has this bar: the 32px switch row with `Depth {d} · {engine}`, 54px gutters, hover floats a
   200px board under the move, a click plays the line up to it, the chevron opens six rows; no
   threat, gear, nodes or settings yet. The old app's large headline score was tried and dropped.)
-- **Tab strip and Replies** (v2, 2026-09-21) — under the engine bar, `Moves` | `Replies`, one
-  underlined, the old viewer's tabs; `Next gap` sits at the strip's right edge on the Replies tab.
-  Replies is the Maia-3 table described in `repertoires.md`: share gutter, numbered move, tick or
-  `gap`, a hover board of the position after the move, a click plays it.
+- **Tab strip and Replies** (v2, 2026-09-21; browser tabs 2026-09-22) — under the engine bar,
+  `Moves` | `Replies`, one underlined, the old viewer's closeable side-panel tabs with fixed
+  identities: `Moves` is pinned, the others carry an `×` when up or under the pointer, a middle
+  click closes, a drag puts a tab in front of another, Ctrl+Tab / Ctrl+Shift+Tab walk them and
+  Ctrl+W closes the one that is up. A closed tab comes back from Actions ▸ `Show Replies`; the
+  strip is left out while only one tab is open. Which tabs are open is window state, kept across
+  modes and lost with the window. Both start open, `Moves` up. `Next gap` sits at the strip's
+  right edge on the Replies tab. Replies is the Maia-3 table described in `repertoires.md`: share
+  gutter, numbered move, tick or `gap`, a hover board of the position after the move, a click
+  plays it. A new tab is one `PaneTab` in `workspace/workspace_tabs.dart` and one body in the card.
 - **Explorer (Database dock)** — sources: Engine evals, ChessDB, Repertoire, Opening explorer,
   Local PGN. Live explorer: Lichess, Masters, TWIC (only with a local master database), behind a
   collapsed filter summary; Lichess has speed and rating chips (defaults blitz/rapid/classical,
@@ -77,6 +83,7 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
 | F11 | Fullscreen |
 | Ctrl+V, Ctrl+Shift+V | Paste PGN, paste FEN |
 | Ctrl+Z | Undo the last repertoire add |
+| Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+W | Next / previous tab of the reading card; close the tab that is up (v2) |
 | 1–4 | Rate Again / Hard / Good / Easy (trainer only) |
 
 Nothing fires while a text field has focus, and a screen with a live move box swallows every bare

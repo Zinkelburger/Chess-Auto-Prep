@@ -31,6 +31,7 @@ import '../workspace/side_dialog.dart';
 import '../workspace/engine_analysis.dart';
 import '../workspace/replies.dart';
 import '../workspace/workspace_keys.dart';
+import '../workspace/workspace_tabs.dart';
 import '../workspace/workspace_view.dart';
 import 'exit_guard.dart';
 import 'top_bar.dart';
@@ -87,6 +88,11 @@ class _ShellState extends State<Shell> {
   /// Whether the edit strip is open. The strip's own Done closes it.
   final _editing = ValueNotifier(false);
 
+  /// The reading card's tabs: which are open and which is up. Window state
+  /// like [_editing], kept whichever mode is showing and lost with the
+  /// window, as the old viewer's were.
+  final _tabs = newWorkspaceTabs();
+
   /// The columns and their widths. The user drags the dividers; the list
   /// column goes when hidden and the outline column comes and goes with the
   /// chapter, and the widths of the others stay what the user made them.
@@ -122,6 +128,7 @@ class _ShellState extends State<Shell> {
   void dispose() {
     widget.session.removeListener(_followTheChapter);
     _editing.dispose();
+    _tabs.dispose();
     _panes.dispose();
     super.dispose();
   }
@@ -301,6 +308,33 @@ class _ShellState extends State<Shell> {
     // Not built yet: the expectimax search that writes proposed lines into
     // a draft chapter. The entry is here so the menu has its final shape.
     const AppAction('Fill gaps from here…', null, group: 'Repertoire'),
+    ..._tabActions(),
+  ];
+
+  /// The card's tabs as a browser's menu has them: each one that can be
+  /// closed is shown or closed by name, and the keys that walk them are
+  /// written beside the entries that take them.
+  List<AppAction> _tabActions() => [
+    for (final tab in _tabs.tabs)
+      if (!tab.pinned)
+        _tabs.isOpen(tab.id)
+            ? AppAction(
+                'Close ${tab.title}',
+                () => _tabs.close(tab.id),
+                shortcut: _tabs.selected == tab.id ? 'Ctrl+W' : null,
+                group: 'Tabs',
+              )
+            : AppAction(
+                'Show ${tab.title}',
+                () => _tabs.show(tab.id),
+                group: 'Tabs',
+              ),
+    AppAction(
+      'Next tab',
+      _tabs.open.length < 2 ? null : _tabs.next,
+      shortcut: 'Ctrl+Tab',
+      group: 'Tabs',
+    ),
   ];
 
   /// The same actions, typed for: a searchable list that the enter key
@@ -386,6 +420,7 @@ class _ShellState extends State<Shell> {
               widget.replies,
               widget.viewer,
               _editing,
+              _tabs,
             ]),
             builder: (context, _) => TopBar(
               mode: _mode,
@@ -403,6 +438,7 @@ class _ShellState extends State<Shell> {
               session: widget.session,
               analysis: widget.analysis,
               editing: _editing,
+              tabs: _tabs,
               extra: _windowKeys,
               child: _columns(),
             ),
@@ -435,6 +471,7 @@ class _ShellState extends State<Shell> {
       saver: widget.saver,
       analysis: widget.analysis,
       replies: widget.replies,
+      tabs: _tabs,
       editing: _editing,
       settings: widget.settings,
       moveMenu: _mode == Mode.study
