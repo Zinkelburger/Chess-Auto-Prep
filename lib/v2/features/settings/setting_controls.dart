@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../ui/theme.dart';
+import 'lichess_account.dart';
 import 'setting_rows.dart';
 
 /// One row: the label, its hint under it when there is one, and the
@@ -28,7 +29,14 @@ class SettingRowView extends StatelessWidget {
               children: [
                 Text(row.label, style: text.bodyMedium),
                 if (row.hint case final hint?)
-                  Text(hint, style: text.labelSmall),
+                  Text(
+                    hint,
+                    style: row.warn
+                        ? text.labelSmall?.copyWith(
+                            color: Theme.of(context).colorScheme.error,
+                          )
+                        : text.labelSmall,
+                  ),
               ],
             ),
           ),
@@ -47,12 +55,46 @@ class SettingRowView extends StatelessWidget {
       child: Switch(value: value, onChanged: onChanged),
     ),
     SecretSetting() => _Secret(control),
-    ActionSetting(:final label, :final run) => OutlinedButton(
-      onPressed: run,
-      style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
-      child: Text(label),
-    ),
+    ActionSetting(:final label, :final run) => _button(label, run),
+    AccountSetting(:final account) => _Account(account),
   };
+}
+
+Widget _button(String label, VoidCallback? run) => OutlinedButton(
+  onPressed: run,
+  style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
+  child: Text(label),
+);
+
+/// The one button the account needs now: Log in, Cancel (with Copy link
+/// when the browser did not open), Log out; a word while Lichess is asked.
+class _Account extends StatelessWidget {
+  const _Account(this.account);
+
+  final LichessAccountState account;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return switch (account.status) {
+      SignedOut() => _button('Log in', () => unawaited(account.logIn())),
+      Connecting(:final page, :final browserOpened) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (page != null && !browserOpened) ...[
+            _button('Copy link', () {
+              unawaited(Clipboard.setData(ClipboardData(text: '$page')));
+            }),
+            const SizedBox(width: Space.s),
+          ],
+          _button('Cancel', () => unawaited(account.cancel())),
+        ],
+      ),
+      Checking() => Text('Checking…', style: text.bodySmall),
+      SigningOut() => Text('Logging out…', style: text.bodySmall),
+      SignedIn() => _button('Log out', () => unawaited(account.logOut())),
+    };
+  }
 }
 
 class _Choice extends StatelessWidget {
@@ -230,16 +272,25 @@ class _SecretState extends State<_Secret> {
     if (!_focus.hasFocus) unawaited(_save(_box.text));
   }
 
+  bool _saving = false;
+
+  /// Enter and leaving the field both land here, often for the same
+  /// value one after the other; one write goes out.
   Future<void> _save(String value) async {
-    if (value.trim() == _given.trim()) return;
-    final kept = await widget.setting.save(value);
-    if (!mounted) return;
-    setState(() {
-      if (kept) _given = value;
-      _said = kept
-          ? (value.trim().isEmpty ? 'Signed out' : 'Saved')
-          : 'Not saved';
-    });
+    if (_saving || value.trim() == _given.trim()) return;
+    _saving = true;
+    try {
+      final kept = await widget.setting.save(value);
+      if (!mounted) return;
+      setState(() {
+        if (kept) _given = value;
+        _said = kept
+            ? (value.trim().isEmpty ? 'Signed out' : 'Saved')
+            : 'Not saved';
+      });
+    } finally {
+      _saving = false;
+    }
   }
 
   @override

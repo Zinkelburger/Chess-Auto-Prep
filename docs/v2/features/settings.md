@@ -56,6 +56,21 @@ The title bar reads `Settings` with a close button (`Close settings`, Escape). N
 - **`Analysis panels and move tables`** — `Shared across views that show these panels. Study uses the
   board engine controls above.` Four switches, all on: `Engine continuations`, `Practical move scores
   (Expectimax)`, `Predicted move frequency (Maia)`, `Engine scores in move table`.
+- **`Accounts`** (v2, 2026-09-22) — one row `Lichess` whose hint says where the account stands and
+  whose control is the one button it needs now: signed out, `Log in` (hint: what a login is for);
+  waiting, `Waiting for the browser…` with `Cancel`, or `The browser did not open. Copy the link and
+  open it.` with `Copy link` and `Cancel`; signed in, `Logged in as <name> · until <date>` (or
+  `personal access token`) with `Log out`; while Lichess is asked, `Checking…` / `Logging out…`. A
+  failure replaces the hint in the error colour until the next attempt: `Lichess said the login was
+  declined.`, `No answer from the browser in five minutes.`, `Could not open a port for the browser
+  to come back to.`, `Could not reach lichess.org — it needs a connection.`, `Lichess turned the
+  login away.`, `Lichess rejected that token. Check it was copied fully and has not been revoked.`,
+  `Logged in, but the account could not be saved. Try again.` A second row, `Personal access token`,
+  shows only while signed out: a secret field, checked with `/api/account` when left or submitted.
+  The flow is the old app's PKCE one (port 8919, or any free port when it is taken; `state` checked
+  on the way back; the browser gets a plain `Logged in.` page), the keys are the old app's, so both
+  apps share the account, and an expired OAuth token reads as signed out. Usernames for game
+  downloads are not built yet.
 - **`Repertoire`** (v2, 2026-09-21) — `Opponent rating` (1100–2900, default 2200, step 100; what
   the Replies table, gaps and coverage are predicted for) and `Cover replies met once in` (5–1000
   games, default 50). The dialog grew from 300 to 340 px for the sixth place.

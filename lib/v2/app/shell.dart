@@ -62,6 +62,7 @@ class Shell extends StatefulWidget {
     required this.fill,
     required this.settings,
     required this.settingRows,
+    required this.settingsAlso,
     required this.leaving,
   });
 
@@ -77,8 +78,10 @@ class Shell extends StatefulWidget {
   final FillGaps fill;
   final SettingsStore settings;
 
-  /// The settings page's rows, as the app wires them.
+  /// The settings page's rows, as the app wires them, and the one owner
+  /// besides the store they are built from: the Lichess account.
   final List<SettingGroup> Function() settingRows;
+  final Listenable settingsAlso;
 
   /// Asked before another document takes the screen, so words the file
   /// never took are not carried off it without the user saying so.
@@ -440,6 +443,7 @@ class _ShellState extends State<Shell> {
     context,
     store: widget.settings,
     groups: widget.settingRows,
+    also: widget.settingsAlso,
   );
 
   Map<ShortcutActivator, VoidCallback> get _windowKeys => {

@@ -16,3 +16,17 @@ Future<void> openFolder(Directory folder) async {
     log.w('open ${folder.path}', error);
   }
 }
+
+/// Sends [page] to the desktop's browser and says whether it went. The
+/// caller shows the link when it did not; the log says why.
+Future<bool> openInBrowser(Uri page) async {
+  try {
+    final opened = await launchUrl(page, mode: LaunchMode.externalApplication);
+    if (!opened)
+      log.w('open ${page.host} in the browser', 'the desktop declined');
+    return opened;
+  } on Object catch (error) {
+    log.w('open ${page.host} in the browser', error);
+    return false;
+  }
+}

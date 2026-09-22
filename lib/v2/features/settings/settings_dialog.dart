@@ -12,9 +12,11 @@ Future<void> showSettingsDialog(
   BuildContext context, {
   required SettingsStore store,
   required List<SettingGroup> Function() groups,
+  Listenable? also,
 }) => showDialog<void>(
   context: context,
-  builder: (context) => SettingsDialog(store: store, groups: groups),
+  builder: (context) =>
+      SettingsDialog(store: store, groups: groups, also: also),
 );
 
 /// The settings: a list of places on the left, the rows of the chosen
@@ -22,12 +24,19 @@ Future<void> showSettingsDialog(
 /// however many rows a place has; typing in the search shows the rows
 /// that match from every place.
 class SettingsDialog extends StatefulWidget {
-  const SettingsDialog({super.key, required this.store, required this.groups});
+  const SettingsDialog({
+    super.key,
+    required this.store,
+    required this.groups,
+    this.also,
+  });
 
   final SettingsStore store;
 
-  /// The rows as they are now; asked again on every change to the store.
+  /// The rows as they are now; asked again on every change to the store,
+  /// or to [also], the one other owner rows are built from.
   final List<SettingGroup> Function() groups;
+  final Listenable? also;
 
   @override
   State<SettingsDialog> createState() => _SettingsDialogState();
@@ -56,7 +65,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
         width: settingsDialogWidth,
         height: settingsDialogHeight,
         child: ListenableBuilder(
-          listenable: widget.store,
+          listenable: Listenable.merge([widget.store, ?widget.also]),
           builder: (context, _) {
             final groups = widget.groups();
             return Column(
