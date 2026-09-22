@@ -64,25 +64,29 @@ final class SittingOver extends LessonState {
 /// back of the sitting and comes round once more. A line never trained is
 /// walked through first and rated for the user — Good when the quiz went
 /// clean, Again when not — so the four buttons appear only for a review.
+/// [lines] is never empty: the trainer starts no sitting with nothing in it.
 class Lesson extends ChangeNotifier {
   Lesson({
-    required this.kind,
+    required SittingKind kind,
     required List<TrainingLine> lines,
     required TrainingProgress progress,
-  }) : assert(lines.isNotEmpty, 'a sitting needs a line to start on'),
-       _left = [...lines],
-       _progress = progress {
-    _nextLine();
+  }) : this._(kind, lines, progress, _isNew(progress, lines.first));
+
+  Lesson._(this.kind, List<TrainingLine> lines, this._progress, bool learning)
+    : _left = lines.sublist(1),
+      _learning = learning,
+      _drill = Drill.start(lines.first, learn: learning) {
+    _arm();
   }
 
   final SittingKind kind;
   final TrainingProgress _progress;
   final List<TrainingLine> _left;
-  late Drill _drill;
+  Drill _drill;
 
   /// Whether the line on the board began as one never trained, and so is
   /// walked through first and rated for the user.
-  late bool _learning;
+  bool _learning;
   LessonState _state = const Drilling();
   ({int lines, int right, int wrong}) _tally = (lines: 0, right: 0, wrong: 0);
 
@@ -172,7 +176,7 @@ class Lesson extends ChangeNotifier {
       return;
     }
     final line = _left.removeAt(0);
-    _learning = _progress.status(line) == LineStatus.untrained;
+    _learning = _isNew(_progress, line);
     _state = const Drilling();
     _drill = Drill.start(line, learn: _learning);
     _arm();
@@ -237,6 +241,9 @@ class Lesson extends ChangeNotifier {
     _nextLine();
     notifyListeners();
   }
+
+  static bool _isNew(TrainingProgress progress, TrainingLine line) =>
+      progress.status(line) == LineStatus.untrained;
 
   @override
   void dispose() {

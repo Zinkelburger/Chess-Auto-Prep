@@ -96,19 +96,12 @@ class _OnLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    final line = lesson.line;
     final drill = lesson.drill;
     final wrong = drill.stage is Missed || drill.stage is Corrected;
-    final note = drill.shown == 0 ? null : line.moves[drill.shown - 1].comment;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(line.name, style: text.titleMedium),
-        Text(
-          '${line.chapter} · ${lesson.learning ? 'Learning' : 'Reviewing'}'
-          '${lesson.left > 0 ? ' · ${lesson.left} more after this' : ''}',
-          style: text.bodySmall,
-        ),
+        _Heading(lesson: lesson),
         const SizedBox(height: Space.l),
         Text(
           prompt(lesson),
@@ -117,24 +110,7 @@ class _OnLine extends StatelessWidget {
           ),
         ),
         const SizedBox(height: Space.m),
-        Expanded(
-          child: SingleChildScrollView(
-            reverse: true,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  numberedMoves(line.moves.take(drill.shown)),
-                  style: monoText,
-                ),
-                if (note != null && note.isNotEmpty) ...[
-                  const SizedBox(height: Space.s),
-                  Text(note, style: text.bodyMedium),
-                ],
-              ],
-            ),
-          ),
-        ),
+        Expanded(child: _MovesSoFar(drill: drill)),
         if (lesson.unlogged case final failure?)
           Text(
             progressProblem(failure, doing: 'save that answer'),
@@ -147,6 +123,57 @@ class _OnLine extends StatelessWidget {
         const Divider(height: Space.l),
         _Footer(lesson: lesson, trainer: trainer),
       ],
+    );
+  }
+}
+
+/// The line, its chapter, and how far the sitting has to go.
+class _Heading extends StatelessWidget {
+  const _Heading({required this.lesson});
+
+  final Lesson lesson;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final line = lesson.line;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(line.name, style: text.titleMedium),
+        Text(
+          '${line.chapter} · ${lesson.learning ? 'Learning' : 'Reviewing'}'
+          '${lesson.left > 0 ? ' · ${lesson.left} more after this' : ''}',
+          style: text.bodySmall,
+        ),
+      ],
+    );
+  }
+}
+
+/// The moves on the board, and the note on the last of them: nothing from
+/// further down the line, which is what is being asked.
+class _MovesSoFar extends StatelessWidget {
+  const _MovesSoFar({required this.drill});
+
+  final Drill drill;
+
+  @override
+  Widget build(BuildContext context) {
+    final moves = drill.line.moves;
+    final note = drill.shown == 0 ? null : moves[drill.shown - 1].comment;
+    return SingleChildScrollView(
+      reverse: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(numberedMoves(moves.take(drill.shown)), style: monoText),
+          if (note != null && note.isNotEmpty) ...[
+            const SizedBox(height: Space.s),
+            Text(note, style: Theme.of(context).textTheme.bodyMedium),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -172,27 +199,7 @@ class _Control extends StatelessWidget {
           ),
         ),
       ),
-      AwaitingRating() => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('How well did you know this?', style: text.bodySmall),
-          const SizedBox(height: Space.s),
-          Wrap(
-            spacing: Space.s,
-            runSpacing: Space.s,
-            children: [
-              for (final (i, rating) in Rating.values.indexed)
-                Tooltip(
-                  message: '${ratingLabel(rating, lesson.review)} (${i + 1})',
-                  child: OutlinedButton(
-                    onPressed: () => lesson.rate(rating),
-                    child: Text(ratingLabel(rating, lesson.review)),
-                  ),
-                ),
-            ],
-          ),
-        ],
-      ),
+      AwaitingRating() => _Ratings(lesson: lesson),
       SavingLine() => Text('Saving…', style: text.bodySmall),
       LineNotSaved(:final failure) => Row(
         children: [
@@ -210,6 +217,39 @@ class _Control extends StatelessWidget {
       _ => const SizedBox(height: Space.xl),
     };
   }
+}
+
+/// How well the user knew the line, each button saying what it schedules.
+class _Ratings extends StatelessWidget {
+  const _Ratings({required this.lesson});
+
+  final Lesson lesson;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        'How well did you know this?',
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
+      const SizedBox(height: Space.s),
+      Wrap(
+        spacing: Space.s,
+        runSpacing: Space.s,
+        children: [
+          for (final (i, rating) in Rating.values.indexed)
+            Tooltip(
+              message: '${ratingLabel(rating, lesson.review)} (${i + 1})',
+              child: OutlinedButton(
+                onPressed: () => lesson.rate(rating),
+                child: Text(ratingLabel(rating, lesson.review)),
+              ),
+            ),
+        ],
+      ),
+    ],
+  );
 }
 
 class _Footer extends StatelessWidget {
@@ -260,27 +300,22 @@ class _Over extends StatelessWidget {
           style: text.bodySmall,
         ),
         const SizedBox(height: Space.l),
-        Wrap(
-          spacing: Space.s,
-          runSpacing: Space.s,
-          children: [
-            FilledButton(
-              onPressed: trainer.leave,
-              child: const Text('Back to lines'),
-            ),
-            if (trainer.dueCount > 0)
-              OutlinedButton(
-                onPressed: trainer.review,
-                child: Text('Review ${trainer.dueCount} more'),
-              ),
-            if (trainer.untrainedCount > 0)
-              OutlinedButton(
-                onPressed: trainer.learn,
-                child: Text('Learn more · ${trainer.untrainedCount} left'),
-              ),
-          ],
-        ),
+        Wrap(spacing: Space.s, runSpacing: Space.s, children: _ways()),
       ],
     );
   }
+
+  List<Widget> _ways() => [
+    FilledButton(onPressed: trainer.leave, child: const Text('Back to lines')),
+    if (trainer.dueCount > 0)
+      OutlinedButton(
+        onPressed: trainer.review,
+        child: Text('Review ${trainer.dueCount} more'),
+      ),
+    if (trainer.untrainedCount > 0)
+      OutlinedButton(
+        onPressed: trainer.learn,
+        child: Text('Learn more · ${trainer.untrainedCount} left'),
+      ),
+  ];
 }

@@ -148,6 +148,8 @@ void main() {
     w.session.forward();
     final ply = w.explorer.ply;
     expect(ply, greaterThan(0));
+    // Four tabs can be wider than the card; the strip scrolls.
+    await tester.ensureVisible(find.text('Explorer'));
     await tester.tap(find.text('Explorer'));
     await tester.pumpAndSettle();
     await tester.tap(find.textContaining('Carlsen, M'));
@@ -173,6 +175,8 @@ void main() {
     await tester.tap(inLibrary(find.text('Main')).last); // KID
     await tester.pumpAndSettle();
     w.lichess.pgn = null;
+    // Four tabs can be wider than the card; the strip scrolls.
+    await tester.ensureVisible(find.text('Explorer'));
     await tester.tap(find.text('Explorer'));
     await tester.pumpAndSettle();
     await tester.tap(find.textContaining('Carlsen, M'));

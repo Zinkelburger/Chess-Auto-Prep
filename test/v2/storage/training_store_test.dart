@@ -38,236 +38,224 @@ void main() {
   Future<ProgressLoaded> read(Set<String> sources) async =>
       await store.read(sources) as ProgressLoaded;
 
-  group('reading', () {
-    test('no files is nothing trained yet', () async {
-      final loaded = await read({_kid});
-      expect(loaded.reviews, isEmpty);
-      expect(loaded.streaks, isEmpty);
-      expect(loaded.mistakes, isEmpty);
-    });
+  test('no files is nothing trained yet', () async {
+    final loaded = await read({_kid});
+    expect(loaded.reviews, isEmpty);
+    expect(loaded.streaks, isEmpty);
+    expect(loaded.mistakes, isEmpty);
+  });
 
-    test('only the rows of the chapters asked for', () async {
-      await file(reviewsFile).writeAsString(
-        '$reviewsHeader\n${_review(_kid, 'line_1')}\n'
-        '${_review(_benko, 'line_1')}\n',
-      );
-      final loaded = await read({_kid});
-      final review = loaded.reviews.values.single;
-      expect(review.key, _mainline);
-      expect((review.ease, review.intervalDays), (2.5, 6.0));
-      expect(review.due, DateTime.utc(2026, 9, 20));
-      expect((review.lastRating, review.passes, review.fails), ('good', 3, 1));
-    });
+  test('only the rows of the chapters asked for', () async {
+    await file(reviewsFile).writeAsString(
+      '$reviewsHeader\n${_review(_kid, 'line_1')}\n'
+      '${_review(_benko, 'line_1')}\n',
+    );
+    final loaded = await read({_kid});
+    final review = loaded.reviews.values.single;
+    expect(review.key, _mainline);
+    expect((review.ease, review.intervalDays), (2.5, 6.0));
+    expect(review.due, DateTime.utc(2026, 9, 20));
+    expect((review.lastRating, review.passes, review.fails), ('good', 3, 1));
+  });
 
-    test('rows from older versions: 8 and 10 columns, and an unquoted path '
-        'with a comma', () async {
-      const comma = '/home/me/Documents/repertoires/Open, Closed/Main.pgn';
-      await file(reviewsFile).writeAsString(
-        '$reviewsHeader\n'
-        '$_kid,line_8,Eight,2.50,1.00,,good,\n'
-        '$_kid,line_10,Ten,2.50,1.00,,good,,2,0\n'
-        '$comma,line_c,Comma,2.50,1.00,,good,,1,1,true\n',
-      );
-      final loaded = await read({_kid, comma});
-      expect(loaded.reviews.keys, [
-        (source: _kid, id: 'line_8'),
-        (source: _kid, id: 'line_10'),
-        (source: comma, id: 'line_c'),
-      ]);
-      expect(loaded.reviews[(source: _kid, id: 'line_10')]!.passes, 2);
-      expect(loaded.reviews[(source: comma, id: 'line_c')]!.excluded, isTrue);
-    });
+  test('rows from older versions: 8 and 10 columns, and an unquoted path '
+      'with a comma', () async {
+    const comma = '/home/me/Documents/repertoires/Open, Closed/Main.pgn';
+    await file(reviewsFile).writeAsString(
+      '$reviewsHeader\n'
+      '$_kid,line_8,Eight,2.50,1.00,,good,\n'
+      '$_kid,line_10,Ten,2.50,1.00,,good,,2,0\n'
+      '$comma,line_c,Comma,2.50,1.00,,good,,1,1,true\n',
+    );
+    final loaded = await read({_kid, comma});
+    expect(loaded.reviews.keys, [
+      (source: _kid, id: 'line_8'),
+      (source: _kid, id: 'line_10'),
+      (source: comma, id: 'line_c'),
+    ]);
+    expect(loaded.reviews[(source: _kid, id: 'line_10')]!.passes, 2);
+    expect(loaded.reviews[(source: comma, id: 'line_c')]!.excluded, isTrue);
+  });
 
-    test('streaks and the wrong answers in the log', () async {
-      await file(streaksFile).writeAsString(
-        '$streaksHeader\n$_kid,line_1,4,2,0\n$_benko,line_1,0,3,1\n',
-      );
-      await file(attemptsFile).writeAsString(
-        '${encodeAttempt(_attempt(correct: false))}\n'
-        '${encodeAttempt(_attempt(correct: true))}\n'
-        'not json\n',
-      );
-      final loaded = await read({_kid});
-      expect(loaded.streaks.values.single.streak, 2);
-      expect(loaded.mistakes.single.played, 'd4');
-    });
+  test('streaks and the wrong answers in the log', () async {
+    await file(streaksFile).writeAsString(
+      '$streaksHeader\n$_kid,line_1,4,2,0\n$_benko,line_1,0,3,1\n',
+    );
+    await file(attemptsFile).writeAsString(
+      '${encodeAttempt(_attempt(correct: false))}\n'
+      '${encodeAttempt(_attempt(correct: true))}\n'
+      'not json\n',
+    );
+    final loaded = await read({_kid});
+    expect(loaded.streaks.values.single.streak, 2);
+    expect(loaded.mistakes.single.played, 'd4');
+  });
 
-    test('a row that is not one makes the file unreadable, by line', () async {
-      await file(reviewsFile).writeAsString(
-        '$reviewsHeader\n${_review(_kid, 'line_1')}\n$_kid,line_2,x,y\n',
-      );
-      final read = await store.read({_kid});
-      expect(read, isA<ProgressUnreadable>());
-      expect((read as ProgressUnreadable).line, 3);
+  test('a row that is not one makes the file unreadable, by line', () async {
+    await file(reviewsFile).writeAsString(
+      '$reviewsHeader\n${_review(_kid, 'line_1')}\n$_kid,line_2,x,y\n',
+    );
+    final read = await store.read({_kid});
+    expect(read, isA<ProgressUnreadable>());
+    expect((read as ProgressUnreadable).line, 3);
+  });
+
+  Review rated(Review? before) => asWritten(
+    (before ?? const Review(key: _mainline, lineName: 'Mainline')).copyWith(
+      intervalDays: 25,
+      lastRating: 'good',
+      due: DateTime.utc(2026, 10, 15),
+    ),
+  );
+
+  test('into no files: each with the header the old app writes', () async {
+    final written = await store.write(
+      reviews: [(before: null, after: rated(null))],
+      streaks: [
+        (
+          before: null,
+          after: const MoveStreak(
+            key: _mainline,
+            ply: 2,
+            streak: 1,
+            learned: false,
+          ),
+        ),
+      ],
+      history: [_history()],
+    );
+    expect(written, isA<ProgressWritten>());
+    expect(
+      await file(reviewsFile).readAsString(),
+      '$reviewsHeader\n$_kid,line_1,Mainline,2.50,25.00,'
+      '2026-10-15T00:00:00.000Z,good,,0,0,false\n',
+    );
+    expect(
+      await file(streaksFile).readAsString(),
+      '$streaksHeader\n$_kid,line_1,2,1,0\n',
+    );
+    expect(
+      await file(historyFile).readAsString(),
+      '$historyHeader\n$_kid,line_1,2026-09-22T12:00:00.000Z,good,0,'
+      'trainer\n',
+    );
+    expect(file('$reviewsFile.pre-csv-v2.bak').existsSync(), isFalse);
+  });
+
+  test('replaces the one row and keeps every other byte', () async {
+    // A row quoted more than it needs, a CRLF line and another chapter's
+    // row: a canonical rewrite would change all three.
+    final others =
+        '"$_benko",line_1,"Benko",2.50,6.00,,good,,3,1,false\r\n'
+        '${_review(_kid, 'line_2')}\n';
+    await file(
+      reviewsFile,
+    ).writeAsString('$reviewsHeader\n$others${_review(_kid, 'line_1')}\n');
+    final before = (await read({_kid})).reviews[_mainline];
+    await store.write(reviews: [(before: before, after: rated(before))]);
+    final text = await file(reviewsFile).readAsString();
+    expect(text, startsWith('$reviewsHeader\n$others'));
+    expect(
+      text,
+      endsWith(
+        ',25.00,2026-10-15T00:00:00.000Z,good,'
+        '2026-09-14T00:00:00.000Z,3,1,false\n',
+      ),
+    );
+  });
+
+  test('keeps what the file held first, once', () async {
+    final original = '$reviewsHeader\n${_review(_kid, 'line_1')}\n';
+    await file(reviewsFile).writeAsString(original);
+    final before = (await read({_kid})).reviews[_mainline];
+    await store.write(reviews: [(before: before, after: rated(before))]);
+    await store.write(reviews: [(before: rated(before), after: rated(before))]);
+    expect(await file('$reviewsFile.pre-csv-v2.bak').readAsString(), original);
+  });
+
+  test('refuses a row somebody else changed since it was read', () async {
+    await file(
+      reviewsFile,
+    ).writeAsString('$reviewsHeader\n${_review(_kid, 'line_1')}\n');
+    final before = (await read({_kid})).reviews[_mainline];
+    // The old app rates the same line meanwhile.
+    final theirs = _review(_kid, 'line_1').replaceFirst(',good,', ',easy,');
+    await file(reviewsFile).writeAsString('$reviewsHeader\n$theirs\n');
+    final written = await store.write(
+      reviews: [(before: before, after: rated(before))],
+      history: [_history()],
+    );
+    expect(written, isA<ProgressConflict>());
+    expect(await file(reviewsFile).readAsString(), contains(',easy,'));
+    expect(
+      file(historyFile).existsSync(),
+      isFalse,
+      reason: 'nothing of a refused write lands',
+    );
+  });
+
+  test('refuses to add a row somebody else added first', () async {
+    await file(
+      reviewsFile,
+    ).writeAsString('$reviewsHeader\n${_review(_kid, 'line_1')}\n');
+    final written = await store.write(
+      reviews: [(before: null, after: rated(null))],
+    );
+    expect(written, isA<ProgressConflict>());
+  });
+
+  test('a file it cannot read is left alone, and so are the others', () async {
+    await file(streaksFile).writeAsString('$streaksHeader\n"unclosed\n');
+    final written = await store.write(
+      reviews: [(before: null, after: rated(null))],
+      streaks: [
+        (
+          before: null,
+          after: const MoveStreak(
+            key: _mainline,
+            ply: 0,
+            streak: 1,
+            learned: false,
+          ),
+        ),
+      ],
+    );
+    expect(written, isA<ProgressUnreadable>());
+    expect(file(reviewsFile).existsSync(), isFalse);
+  });
+
+  test('an answer is appended to the log as it is given', () async {
+    await file(attemptsFile).writeAsString('{"old": "row"}');
+    await store.logAttempt(_attempt(correct: false));
+    final lines = await file(attemptsFile).readAsLines();
+    expect(lines.first, '{"old": "row"}');
+    expect(jsonDecode(lines.last), {
+      'repertoireId': _kid,
+      'lineId': 'line_1',
+      'moveIndex': 0,
+      'fen': Fen.initial.value,
+      'playedSan': 'd4',
+      'expectedSan': 'e4',
+      'correct': false,
+      'phase': 'drilling',
+      'timestampUtc': '2026-09-22T12:00:00.000Z',
     });
   });
 
-  group('writing', () {
-    Review rated(Review? before) => asWritten(
-      (before ?? const Review(key: _mainline, lineName: 'Mainline')).copyWith(
-        intervalDays: 25,
-        lastRating: 'good',
-        due: DateTime.utc(2026, 10, 15),
-      ),
-    );
-
-    test('into no files: each with the header the old app writes', () async {
-      final written = await store.write(
-        reviews: [(before: null, after: rated(null))],
-        streaks: [
-          (
-            before: null,
-            after: const MoveStreak(
-              key: _mainline,
-              ply: 2,
-              streak: 1,
-              learned: false,
-            ),
-          ),
-        ],
-        history: [_history()],
-      );
-      expect(written, isA<ProgressWritten>());
-      expect(
-        await file(reviewsFile).readAsString(),
-        '$reviewsHeader\n$_kid,line_1,Mainline,2.50,25.00,'
-        '2026-10-15T00:00:00.000Z,good,,0,0,false\n',
-      );
-      expect(
-        await file(streaksFile).readAsString(),
-        '$streaksHeader\n$_kid,line_1,2,1,0\n',
-      );
-      expect(
-        await file(historyFile).readAsString(),
-        '$historyHeader\n$_kid,line_1,2026-09-22T12:00:00.000Z,good,0,'
-        'trainer\n',
-      );
-      expect(file('$reviewsFile.pre-csv-v2.bak').existsSync(), isFalse);
-    });
-
-    test('replaces the one row and keeps every other byte', () async {
-      // A row quoted more than it needs, a CRLF line and another chapter's
-      // row: a canonical rewrite would change all three.
-      final others =
-          '"$_benko",line_1,"Benko",2.50,6.00,,good,,3,1,false\r\n'
-          '${_review(_kid, 'line_2')}\n';
-      await file(
-        reviewsFile,
-      ).writeAsString('$reviewsHeader\n$others${_review(_kid, 'line_1')}\n');
-      final before = (await read({_kid})).reviews[_mainline];
-      await store.write(reviews: [(before: before, after: rated(before))]);
-      final text = await file(reviewsFile).readAsString();
-      expect(text, startsWith('$reviewsHeader\n$others'));
-      expect(
-        text,
-        endsWith(
-          ',25.00,2026-10-15T00:00:00.000Z,good,'
-          '2026-09-14T00:00:00.000Z,3,1,false\n',
-        ),
-      );
-    });
-
-    test('keeps what the file held first, once', () async {
-      final original = '$reviewsHeader\n${_review(_kid, 'line_1')}\n';
-      await file(reviewsFile).writeAsString(original);
-      final before = (await read({_kid})).reviews[_mainline];
-      await store.write(reviews: [(before: before, after: rated(before))]);
-      await store.write(
-        reviews: [(before: rated(before), after: rated(before))],
-      );
-      expect(
-        await file('$reviewsFile.pre-csv-v2.bak').readAsString(),
-        original,
-      );
-    });
-
-    test('refuses a row somebody else changed since it was read', () async {
-      await file(
-        reviewsFile,
-      ).writeAsString('$reviewsHeader\n${_review(_kid, 'line_1')}\n');
-      final before = (await read({_kid})).reviews[_mainline];
-      // The old app rates the same line meanwhile.
-      final theirs = _review(_kid, 'line_1').replaceFirst(',good,', ',easy,');
-      await file(reviewsFile).writeAsString('$reviewsHeader\n$theirs\n');
-      final written = await store.write(
-        reviews: [(before: before, after: rated(before))],
-        history: [_history()],
-      );
-      expect(written, isA<ProgressConflict>());
-      expect(await file(reviewsFile).readAsString(), contains(',easy,'));
-      expect(
-        file(historyFile).existsSync(),
-        isFalse,
-        reason: 'nothing of a refused write lands',
-      );
-    });
-
-    test('refuses to add a row somebody else added first', () async {
-      await file(
-        reviewsFile,
-      ).writeAsString('$reviewsHeader\n${_review(_kid, 'line_1')}\n');
-      final written = await store.write(
-        reviews: [(before: null, after: rated(null))],
-      );
-      expect(written, isA<ProgressConflict>());
-    });
-
-    test(
-      'a file it cannot read is left alone, and so are the others',
-      () async {
-        await file(streaksFile).writeAsString('$streaksHeader\n"unclosed\n');
-        final written = await store.write(
-          reviews: [(before: null, after: rated(null))],
-          streaks: [
-            (
-              before: null,
-              after: const MoveStreak(
-                key: _mainline,
-                ply: 0,
-                streak: 1,
-                learned: false,
-              ),
-            ),
-          ],
-        );
-        expect(written, isA<ProgressUnreadable>());
-        expect(file(reviewsFile).existsSync(), isFalse);
-      },
-    );
-
-    test('an answer is appended to the log as it is given', () async {
-      await file(attemptsFile).writeAsString('{"old": "row"}');
-      await store.logAttempt(_attempt(correct: false));
-      final lines = await file(attemptsFile).readAsLines();
-      expect(lines.first, '{"old": "row"}');
-      expect(jsonDecode(lines.last), {
-        'repertoireId': _kid,
-        'lineId': 'line_1',
-        'moveIndex': 0,
-        'fen': Fen.initial.value,
-        'playedSan': 'd4',
-        'expectedSan': 'e4',
-        'correct': false,
-        'phase': 'drilling',
-        'timestampUtc': '2026-09-22T12:00:00.000Z',
-      });
-    });
-
-    test('waits for the old app holding the Documents folder', () async {
-      final old = sqlite3.open(await lockPathOf(documents));
-      old.execute('PRAGMA busy_timeout = 0');
-      old.execute('BEGIN IMMEDIATE');
-      var done = false;
-      final logged = store
-          .logAttempt(_attempt(correct: true))
-          .whenComplete(() => done = true);
-      await Future<void>.delayed(const Duration(milliseconds: 200));
-      expect(done, isFalse);
-      old
-        ..execute('ROLLBACK')
-        ..close();
-      expect(await logged, isA<ProgressWritten>());
-    });
+  test('waits for the old app holding the Documents folder', () async {
+    final old = sqlite3.open(await lockPathOf(documents));
+    old.execute('PRAGMA busy_timeout = 0');
+    old.execute('BEGIN IMMEDIATE');
+    var done = false;
+    final logged = store
+        .logAttempt(_attempt(correct: true))
+        .whenComplete(() => done = true);
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    expect(done, isFalse);
+    old
+      ..execute('ROLLBACK')
+      ..close();
+    expect(await logged, isA<ProgressWritten>());
   });
 }
 

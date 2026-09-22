@@ -187,68 +187,22 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final progress = ready.progress;
-    final lines = ready.lines;
-    final counts = countsOf(lines, progress.reviews, progress.now);
+    final counts = countsOf(ready.lines, progress.reviews, progress.now);
     final due = counts[LineStatus.due]!;
     final untrained = counts[LineStatus.untrained]!;
     final learn = untrained < learnSitting ? untrained : learnSitting;
-    final muted = Theme.of(context).textTheme.bodySmall;
+    final excluded = counts[LineStatus.excluded]!;
     final busy = progress.stale;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            SegmentedButton<TrainScope>(
-              segments: const [
-                ButtonSegment(
-                  value: TrainScope.chapter,
-                  label: Text('This chapter'),
-                ),
-                ButtonSegment(
-                  value: TrainScope.repertoire,
-                  label: Text('Whole repertoire'),
-                ),
-              ],
-              selected: {trainer.scope},
-              showSelectedIcon: false,
-              onSelectionChanged: (s) => trainer.setScope(s.single),
-            ),
-            const Spacer(),
-            RowActions(
-              tooltip: 'Training actions',
-              children: [
-                rowAction(
-                  'Mark every line known',
-                  () => onChange(
-                    progress.mark(lines, known: true),
-                    'save training progress',
-                  ),
-                  busy: busy,
-                ),
-                rowAction(
-                  'Mark every line untrained',
-                  () => onChange(
-                    progress.mark(lines, known: false),
-                    'save training progress',
-                  ),
-                  busy: busy,
-                ),
-                rowAction(
-                  'Reload progress',
-                  () => unawaited(trainer.reload()),
-                  busy: false,
-                ),
-              ],
-            ),
-          ],
-        ),
+        Row(children: [_scope(), const Spacer(), _actions(progress)]),
         const SizedBox(height: Space.s),
         Text(
           '${counts[LineStatus.learned]} learned · $due due · '
           '$untrained untrained'
-          '${counts[LineStatus.excluded]! > 0 ? ' · ${counts[LineStatus.excluded]} excluded' : ''}',
-          style: muted,
+          '${excluded > 0 ? ' · $excluded excluded' : ''}',
+          style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: Space.s),
         Row(
@@ -269,6 +223,46 @@ class _Header extends StatelessWidget {
       ],
     );
   }
+
+  Widget _scope() => SegmentedButton<TrainScope>(
+    segments: const [
+      ButtonSegment(value: TrainScope.chapter, label: Text('This chapter')),
+      ButtonSegment(
+        value: TrainScope.repertoire,
+        label: Text('Whole repertoire'),
+      ),
+    ],
+    selected: {trainer.scope},
+    showSelectedIcon: false,
+    onSelectionChanged: (s) => trainer.setScope(s.single),
+  );
+
+  Widget _actions(TrainingProgress progress) => RowActions(
+    tooltip: 'Training actions',
+    children: [
+      rowAction(
+        'Mark every line known',
+        () => onChange(
+          progress.mark(ready.lines, known: true),
+          'save training progress',
+        ),
+        busy: progress.stale,
+      ),
+      rowAction(
+        'Mark every line untrained',
+        () => onChange(
+          progress.mark(ready.lines, known: false),
+          'save training progress',
+        ),
+        busy: progress.stale,
+      ),
+      rowAction(
+        'Reload progress',
+        () => unawaited(trainer.reload()),
+        busy: false,
+      ),
+    ],
+  );
 }
 
 class _LineRow extends StatelessWidget {
@@ -291,7 +285,6 @@ class _LineRow extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     final status = progress.status(line);
     final review = progress.reviews[line.key];
-    final trained = status == LineStatus.due || status == LineStatus.learned;
     final moves = numberedMoves(line.moves);
     return InkWell(
       onTap: status == LineStatus.game ? null : onTrain,
@@ -323,46 +316,46 @@ class _LineRow extends StatelessWidget {
                     )
                   : text.bodySmall,
             ),
-            if (status != LineStatus.game)
-              RowActions(
-                children: [
-                  rowAction('Train this line', onTrain, busy: false),
-                  if (trained)
-                    rowAction(
-                      'Forget this line',
-                      () => onChange(
-                        progress.mark([line], known: false),
-                        'save training progress',
-                      ),
-                      busy: progress.stale,
-                    )
-                  else if (status == LineStatus.untrained)
-                    rowAction(
-                      'I know this line',
-                      () => onChange(
-                        progress.mark([line], known: true),
-                        'save training progress',
-                      ),
-                      busy: progress.stale,
-                    ),
-                  rowAction(
-                    status == LineStatus.excluded
-                        ? 'Include in training'
-                        : 'Exclude from training',
-                    () => onChange(
-                      progress.setExcluded(
-                        line,
-                        excluded: status != LineStatus.excluded,
-                      ),
-                      'save training progress',
-                    ),
-                    busy: progress.stale,
-                  ),
-                ],
-              ),
+            if (status != LineStatus.game) _menu(status),
           ],
         ),
       ),
+    );
+  }
+}
+
+extension on _LineRow {
+  /// What can be done to the line: train it alone, put it on the schedule or
+  /// take it off, leave it out of training or bring it back.
+  Widget _menu(LineStatus status) {
+    const doing = 'save training progress';
+    final trained = status == LineStatus.due || status == LineStatus.learned;
+    return RowActions(
+      children: [
+        rowAction('Train this line', onTrain, busy: false),
+        if (trained)
+          rowAction(
+            'Forget this line',
+            () => onChange(progress.mark([line], known: false), doing),
+            busy: progress.stale,
+          )
+        else if (status == LineStatus.untrained)
+          rowAction(
+            'I know this line',
+            () => onChange(progress.mark([line], known: true), doing),
+            busy: progress.stale,
+          ),
+        rowAction(
+          status == LineStatus.excluded
+              ? 'Include in training'
+              : 'Exclude from training',
+          () => onChange(
+            progress.setExcluded(line, excluded: status != LineStatus.excluded),
+            doing,
+          ),
+          busy: progress.stale,
+        ),
+      ],
     );
   }
 }

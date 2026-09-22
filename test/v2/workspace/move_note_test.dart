@@ -55,9 +55,7 @@ void main() {
     expect(find.textContaining('[%clk'), findsNothing);
   });
 
-  testWidgets('a move written in the note plays into the game', (
-    tester,
-  ) async {
+  testWidgets('a move written in the note plays into the game', (tester) async {
     await pump(tester);
     fixture.session.toEnd();
     await tester.pump();

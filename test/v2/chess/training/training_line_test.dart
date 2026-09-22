@@ -11,25 +11,24 @@ void main() {
     source: '/r/KID/Main.pgn',
   );
 
-  group('line ids are the old app\'s', () {
-    test('a game with no id header is named by its moves and place', () {
-      // base64url("<moves>|<index>") without padding, cut to 22 characters.
-      expect(
-        [for (final l in linesOf(blackChapter)) l.key.id],
-        [
-          'line_YzUgTmYzIGQ2IGQ0IGN4ZD',
-          'line_YzUgTmMzIE5jNnwx',
-          'line_ZDQgZDV8Mg',
-        ],
-      );
-    });
+  test('a game with no id header is named by its moves and place', () {
+    // base64url("<moves>|<index>") without padding, cut to 22 characters.
+    expect(
+      [for (final l in linesOf(blackChapter)) l.key.id],
+      [
+        'line_YzUgTmYzIGQ2IGQ0IGN4ZD',
+        'line_YzUgTmMzIE5jNnwx',
+        'line_ZDQgZDV8Mg',
+      ],
+    );
+  });
 
-    test('a game with an id header keeps it', () {
-      expect(linesOf(whiteChapter).first.key.id, 'line_MS4gZDQgZDUgMi4gYzQ');
-    });
+  test('a game with an id header keeps it', () {
+    expect(linesOf(whiteChapter).first.key.id, 'line_MS4gZDQgZDUgMi4gYzQ');
+  });
 
-    test('a second game claiming a taken id gets the hash of its moves', () {
-      const twice = '''
+  test('a second game claiming a taken id gets the hash of its moves', () {
+    const twice = '''
 [Event "One"]
 [LineID "x"]
 
@@ -40,15 +39,15 @@ void main() {
 
 1. e4 *
 ''';
-      // sha256("e4|1"), cut to 22 characters.
-      expect(
-        [for (final l in linesOf(twice)) l.key.id],
-        ['x', 'line_629324b526e8081092da85'],
-      );
-    });
+    // sha256("e4|1"), cut to 22 characters.
+    expect(
+      [for (final l in linesOf(twice)) l.key.id],
+      ['x', 'line_629324b526e8081092da85'],
+    );
+  });
 
-    test('a game with no moves keeps its place for the games after it', () {
-      const gap = '''
+  test('a game with no moves keeps its place for the games after it', () {
+    const gap = '''
 [Event "Empty"]
 
 *
@@ -57,24 +56,20 @@ void main() {
 
 1. e4 *
 ''';
-      final lines = linesOf(gap);
-      expect(lines.single.key.id, 'line_ZTR8MQ');
-      expect(lines.single.game, 1);
-    });
+    final lines = linesOf(gap);
+    expect(lines.single.key.id, 'line_ZTR8MQ');
+    expect(lines.single.game, 1);
+  });
 
-    test('castling written with zeros is named as with letters', () {
-      // The old app's parser reads `0-0` as `O-O` before naming the line.
-      const zeros = '''
+  test('castling written with zeros is named as with letters', () {
+    // The old app's parser reads `0-0` as `O-O` before naming the line.
+    const zeros = '''
 [Event "Castles"]
 
 1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5 4. 0-0 *
 ''';
-      final line = linesOf(zeros).single;
-      expect(
-        line.key.id,
-        linesOf(zeros.replaceAll('0-0', 'O-O')).single.key.id,
-      );
-    });
+    final line = linesOf(zeros).single;
+    expect(line.key.id, linesOf(zeros.replaceAll('0-0', 'O-O')).single.key.id);
   });
 
   test('every line is keyed under the chapter file and named', () {
