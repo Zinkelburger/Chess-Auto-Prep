@@ -11,9 +11,16 @@ import 'engine_line.dart';
 ///
 /// Each question is one `go depth` search on [engine]; the engine answers
 /// them one after another, and the last best line it reports before
-/// `bestmove` is the verdict. A search that ends with no line at all — an
-/// engine that died, or was quit under the run — is [EvaluationUnavailable],
-/// which is what stops the search rather than scoring the position level.
+/// `bestmove` is the verdict — but only if it reached [depth]. A search that
+/// ends with no line, or whose last line is shallower (an engine that died,
+/// or was quit under the run, part way through), is [EvaluationUnavailable],
+/// which is what stops the search rather than scoring the position level or
+/// letting the cache keep a depth-5 guess labelled depth 14.
+///
+/// Two shallow lines are verdicts all the same: a mate score, which is
+/// proven by the moves after it and is where an engine may stop iterating
+/// early, and a line with no moves, which is a game already over (Stockfish
+/// answers checkmate or stalemate at depth 0).
 final class FixedDepthEvaluator implements PositionEvaluator {
   const FixedDepthEvaluator(this.engine, {required this.depth});
 
@@ -29,6 +36,13 @@ final class FixedDepthEvaluator implements PositionEvaluator {
     }
     if (verdict == null) {
       return EvaluationUnavailable('${engine.name} gave no evaluation');
+    }
+    final settled =
+        verdict.depth >= depth || verdict.score is MateIn || verdict.pv.isEmpty;
+    if (!settled) {
+      return EvaluationUnavailable(
+        '${engine.name} stopped at depth ${verdict.depth} of $depth',
+      );
     }
     return Evaluated(packedCp(verdict.score));
   }

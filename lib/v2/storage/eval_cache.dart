@@ -120,3 +120,23 @@ final class EvalCache {
 
   void close() => _db?.dispose();
 }
+
+/// The cache under [support], opened the first time [cache] is asked for.
+///
+/// Most runs never fill, and opening the file creates it, switches it to
+/// WAL and stamps the old app's schema on it, so a run that never needed
+/// it — or a close on the way out — must not open it. [close] closes only
+/// a cache that was opened.
+final class EvalCacheOnDemand {
+  EvalCacheOnDemand(this.support);
+
+  final Directory support;
+  EvalCache? _opened;
+
+  EvalCache get cache => _opened ??= EvalCache.open(support);
+
+  void close() {
+    _opened?.close();
+    _opened = null;
+  }
+}

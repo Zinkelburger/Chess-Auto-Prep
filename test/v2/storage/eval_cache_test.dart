@@ -28,6 +28,20 @@ void main() {
     expect(cache.read(fen4, minDepth: 8), 50);
   });
 
+  test('opened on demand: closing one never asked for leaves no file', () {
+    final dir = Directory.systemTemp.createTempSync('eval_cache');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final file = File(p.join(dir.path, 'eval_cache.db'));
+    EvalCacheOnDemand(dir).close();
+    expect(file.existsSync(), isFalse);
+
+    final used = EvalCacheOnDemand(dir);
+    used.cache.write(fen4, cpWhite: 35, depth: 14);
+    expect(identical(used.cache, used.cache), isTrue);
+    used.close();
+    expect(file.existsSync(), isTrue);
+  });
+
   test('on disk it is the old app\'s file: its tables and its version', () {
     final dir = Directory.systemTemp.createTempSync('eval_cache');
     addTearDown(() => dir.deleteSync(recursive: true));

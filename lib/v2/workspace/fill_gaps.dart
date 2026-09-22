@@ -217,15 +217,17 @@ final class FillGaps extends ChangeNotifier {
     Position root,
   ) async {
     final tools = await _tools(request);
-    if (_disposed) return;
     switch (tools) {
       case FillUnavailable(:final reason):
-        _failed('fill ${source.path}', reason);
+        if (!_disposed) _failed('fill ${source.path}', reason);
         return;
       case FillReady():
         break;
     }
-    if (_cancelled) {
+    // Disposed or cancelled while the engine was starting: dispose and
+    // cancel had nothing to release then, so this engine is let go here or
+    // its process outlives the run.
+    if (_cancelled || _disposed) {
       await tools.release();
       _set(const FillIdle());
       return;
