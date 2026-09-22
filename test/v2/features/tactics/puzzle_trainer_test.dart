@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/chess/tactics/puzzle_run.dart';
 import 'package:chess_auto_prep/v2/features/tactics/puzzle_trainer.dart';
@@ -18,7 +20,7 @@ void main() {
   /// Runs [body] in fake time with a fresh window, the set read.
   void sitting(void Function(FakeAsync async) body) => fakeAsync((async) {
     w = WindowFixture();
-    w.tactics.load();
+    unawaited(w.tactics.load());
     async.flushMicrotasks();
     body(async);
     w.dispose();
@@ -33,7 +35,7 @@ void main() {
       .toList()[index];
 
   void begin(FakeAsync async) {
-    w.trainer.start();
+    unawaited(w.trainer.start());
     async.flushMicrotasks();
   }
 
@@ -114,9 +116,11 @@ void main() {
   test(
     'show solution steps to the answer and writes nothing',
     () => sitting((async) {
-      w.settings.update(w.settings.value.copyWith(autoAdvance: false));
+      unawaited(
+        w.settings.update(w.settings.value.copyWith(autoAdvance: false)),
+      );
       begin(async);
-      w.trainer.next();
+      unawaited(w.trainer.next());
       async.flushMicrotasks();
       expect(w.session.game, 0);
       w.trainer.showSolution();
@@ -150,21 +154,23 @@ void main() {
     'after the last puzzle the run ends in a recap; retry plays the '
     'failed and skipped again',
     () => sitting((async) {
-      w.settings.update(w.settings.value.copyWith(autoAdvance: false));
+      unawaited(
+        w.settings.update(w.settings.value.copyWith(autoAdvance: false)),
+      );
       begin(async);
       w.trainer.play('d7d5');
-      w.trainer.next();
+      unawaited(w.trainer.next());
       async.flushMicrotasks();
-      w.trainer.next();
+      unawaited(w.trainer.next());
       async.flushMicrotasks();
       expect(w.session.game, 3);
-      w.trainer.next();
+      unawaited(w.trainer.next());
       async.flushMicrotasks();
       final recap = w.trainer.recap!;
       expect((recap.solved, recap.failed, recap.skipped), (0, 1, 2));
       expect(w.trainer.up, isNull);
       expect(w.session.shownTo, isNull);
-      w.trainer.retryMistakes();
+      unawaited(w.trainer.retryMistakes());
       async.flushMicrotasks();
       expect(w.trainer.run?.queue.length, 3);
       expect(w.trainer.up?.puzzle.index, 1);
@@ -191,13 +197,13 @@ void main() {
     'and next brings the set back',
     () => sitting((async) {
       begin(async);
-      w.requests.open(kidMain);
+      unawaited(w.requests.open(kidMain));
       async.flushMicrotasks();
       expect(w.session.source, kidMain);
       expect(w.trainer.up, isNull);
       expect(w.trainer.run, isNotNull);
       expect(w.session.shownTo, isNull);
-      w.trainer.next();
+      unawaited(w.trainer.next());
       async.flushMicrotasks();
       expect(w.session.source, tacticsRef);
       expect(w.trainer.up?.puzzle.index, 0);
@@ -207,7 +213,7 @@ void main() {
   test(
     'with no puzzle up, a board move goes into the document',
     () => sitting((async) {
-      w.requests.open(kidMain);
+      unawaited(w.requests.open(kidMain));
       async.flushMicrotasks();
       final before = w.session.tree;
       // Black to move at the root of this chapter, and a7a6 not in it.

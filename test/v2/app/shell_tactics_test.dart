@@ -24,10 +24,8 @@ void main() {
   ) async {
     await toTactics(tester);
     expect(find.text('Play tactics (3)'), findsOneWidget);
-    expect(
-      find.text('3 of 5 · 1 blunder, 1 mistake, 1 custom'),
-      findsOneWidget,
-    );
+    expect(find.text('3 of 5'), findsOneWidget);
+    expect(find.text('1 blunder, 1 mistake, 1 custom'), findsOneWidget);
     expect(find.text('1... f6?'), findsOneWidget);
     await tester.tap(find.text('Filters'));
     await tester.pumpAndSettle();

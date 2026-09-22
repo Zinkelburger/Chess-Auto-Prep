@@ -111,46 +111,46 @@ class _TacticsPanelState extends State<TacticsPanel> {
             child: Text('Play tactics (${queue.length})'),
           ),
         ),
-        Expanded(
-          child: CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(
-                child: _CountLine(
-                  queue: queue,
-                  total: widget.set.puzzles.length,
-                  filtersOpen: _filtersOpen,
-                  onFilters: _toggleFilters,
-                ),
-              ),
-              if (_filtersOpen)
-                SliverToBoxAdapter(
-                  child: PuzzleFilters(
-                    filter: widget.set.filter,
-                    onChanged: widget.set.setFilter,
-                  ),
-                ),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    Space.m,
-                    Space.s,
-                    Space.s,
-                    Space.s,
-                  ),
-                  child: SearchField(
-                    controller: _search,
-                    hint: 'Search by player, date or move',
-                    onChanged: _searched,
-                  ),
-                ),
-              ),
-              _rows(shown, queue.isEmpty),
-            ],
-          ),
-        ),
+        Expanded(child: _list(queue, shown)),
       ],
     );
   }
+
+  Widget _list(List<Puzzle> queue, List<Puzzle> shown) => CustomScrollView(
+    slivers: [
+      SliverToBoxAdapter(
+        child: _CountLine(
+          queue: queue,
+          total: widget.set.puzzles.length,
+          filtersOpen: _filtersOpen,
+          onFilters: _toggleFilters,
+        ),
+      ),
+      if (_filtersOpen)
+        SliverToBoxAdapter(
+          child: PuzzleFilters(
+            filter: widget.set.filter,
+            onChanged: widget.set.setFilter,
+          ),
+        ),
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            Space.m,
+            Space.s,
+            Space.s,
+            Space.s,
+          ),
+          child: SearchField(
+            controller: _search,
+            hint: 'Search by player, date or move',
+            onChanged: _searched,
+          ),
+        ),
+      ),
+      _rows(shown, queue.isEmpty),
+    ],
+  );
 
   Widget _rows(List<Puzzle> shown, bool noneQueued) {
     if (shown.isEmpty) {
@@ -229,23 +229,32 @@ class _CountLine extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     return Padding(
       padding: const EdgeInsets.fromLTRB(Space.m, Space.xs, Space.xs, 0),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
-            child: Text(
-              '${queue.length} of $total · ${_kinds(queue)}',
-              style: text.labelSmall,
-              overflow: TextOverflow.ellipsis,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '${queue.length} of $total',
+                  style: text.labelSmall,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              TextButton.icon(
+                onPressed: onFilters,
+                icon: Icon(
+                  filtersOpen ? Icons.expand_less : Icons.expand_more,
+                  size: IconSize.action,
+                ),
+                iconAlignment: IconAlignment.end,
+                label: const Text('Filters'),
+              ),
+            ],
           ),
-          TextButton.icon(
-            onPressed: onFilters,
-            icon: Icon(
-              filtersOpen ? Icons.expand_less : Icons.expand_more,
-              size: IconSize.action,
-            ),
-            iconAlignment: IconAlignment.end,
-            label: const Text('Filters'),
+          Padding(
+            padding: const EdgeInsets.only(right: Space.s),
+            child: Text(_kinds(queue), style: text.labelSmall),
           ),
         ],
       ),

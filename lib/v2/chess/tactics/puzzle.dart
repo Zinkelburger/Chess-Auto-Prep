@@ -177,10 +177,10 @@ final class Puzzle {
   /// `23... Nxe5??` — the move played, numbered from the position, with its
   /// glyph; for a custom puzzle, just the side to move.
   String get label {
+    final side = toMove == Side.white;
     final move = played;
-    if (move == null)
-      return '${toMove == Side.white ? 'White' : 'Black'} to play';
-    final dots = toMove == Side.white ? '.' : '...';
+    if (move == null) return '${side ? 'White' : 'Black'} to play';
+    final dots = side ? '.' : '...';
     return '$moveNumber$dots $move${kind.glyph}';
   }
 }

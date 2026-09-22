@@ -114,7 +114,7 @@ $move. e4 *
   });
 
   test('the filter is kept as JSON, every date as a written null', () {
-    final chosen = PuzzleFilter(
+    const chosen = PuzzleFilter(
       order: PuzzleOrder.worstSuccess,
       groupByGame: false,
       kinds: {MistakeKind.inaccuracy},

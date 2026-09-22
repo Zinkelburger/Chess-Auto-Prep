@@ -25,23 +25,16 @@ class PuzzleFilters extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = Theme.of(context).textTheme.labelSmall;
     return Padding(
       padding: const EdgeInsets.fromLTRB(Space.m, 0, Space.m, Space.s),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Wrap(
-            spacing: Space.xs,
-            runSpacing: Space.xs,
+          _Chips(
             children: [
               for (final kind in MistakeKind.values)
                 FilterChip(
-                  label: Text(
-                    kind == MistakeKind.custom
-                        ? 'Custom'
-                        : '${_capital(kind.plural)} ${kind.glyph}',
-                  ),
+                  label: Text(_kindLabel(kind)),
                   selected: filter.kinds.contains(kind),
                   onSelected: (on) => _kind(kind, on),
                   visualDensity: VisualDensity.compact,
@@ -49,11 +42,9 @@ class PuzzleFilters extends StatelessWidget {
             ],
           ),
           const SizedBox(height: Space.s),
-          Text('Order', style: label),
+          Text('Order', style: Theme.of(context).textTheme.labelSmall),
           const SizedBox(height: Space.xs),
-          Wrap(
-            spacing: Space.xs,
-            runSpacing: Space.xs,
+          _Chips(
             children: [
               for (final order in PuzzleOrder.values)
                 ChoiceChip(
@@ -64,21 +55,7 @@ class PuzzleFilters extends StatelessWidget {
                 ),
             ],
           ),
-          _Check(
-            label: 'Group by game',
-            value: filter.groupByGame,
-            onChanged: (on) => onChanged(filter.copyWith(groupByGame: on)),
-          ),
-          _Check(
-            label: 'Unreviewed only',
-            value: filter.unreviewedOnly,
-            onChanged: (on) => onChanged(filter.copyWith(unreviewedOnly: on)),
-          ),
-          _Check(
-            label: 'Hide one-star puzzles',
-            value: filter.hideOneStar,
-            onChanged: (on) => onChanged(filter.copyWith(hideOneStar: on)),
-          ),
+          ..._checks(),
           _Days(
             days: filter.days,
             onChanged: (days) => onChanged(filter.copyWith(days: () => days)),
@@ -87,6 +64,40 @@ class PuzzleFilters extends StatelessWidget {
       ),
     );
   }
+
+  List<Widget> _checks() => [
+    _Check(
+      label: 'Group by game',
+      value: filter.groupByGame,
+      onChanged: (on) => onChanged(filter.copyWith(groupByGame: on)),
+    ),
+    _Check(
+      label: 'Unreviewed only',
+      value: filter.unreviewedOnly,
+      onChanged: (on) => onChanged(filter.copyWith(unreviewedOnly: on)),
+    ),
+    _Check(
+      label: 'Hide one-star puzzles',
+      value: filter.hideOneStar,
+      onChanged: (on) => onChanged(filter.copyWith(hideOneStar: on)),
+    ),
+  ];
+}
+
+/// `Blunders ??`, or `Custom` for the kind with no glyph.
+String _kindLabel(MistakeKind kind) => kind == MistakeKind.custom
+    ? 'Custom'
+    : '${_capital(kind.plural)} ${kind.glyph}';
+
+/// A row of chips that wraps in a narrow column.
+class _Chips extends StatelessWidget {
+  const _Chips({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) =>
+      Wrap(spacing: Space.xs, runSpacing: Space.xs, children: children);
 }
 
 String _capital(String word) =>
