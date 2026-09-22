@@ -10,8 +10,12 @@ import 'library_state.dart';
 
 void reportLibraryResult(String action, LibraryResult result) {
   switch (result) {
-    case LibraryDone() || LibraryBusy():
+    case LibraryDone() || LibraryAdded() || LibraryBusy():
       return;
+    case LibraryNothingToImport():
+      log.w(action, 'no game with a move in it');
+    case LibraryFileUnreadable(:final detail):
+      log.w(action, detail);
     case LibraryNameTaken():
       log.w(action, 'the name is taken');
     case LibraryStale() || LibraryConflicted():

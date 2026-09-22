@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/app_action.dart';
 import '../ui/theme.dart';
-import 'shell.dart';
+import 'mode.dart';
 
 /// The row over the window: the mode menu and, beside it, the Actions menu
 /// — one menu of everything that can be done now, the same shape in every

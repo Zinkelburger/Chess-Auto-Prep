@@ -18,6 +18,10 @@ import 'tree_assembly.dart';
 /// still waited for and thrown away.
 typedef CancelSignal = bool Function();
 
+/// How far a search has got, told after every expansion: the nodes the tree
+/// holds and the deepest ply expanded so far.
+typedef SearchProgress = ({int nodes, int depth});
+
 /// Searches from [root] and returns the tree it found.
 ///
 /// The recurrence, all of it, in expected score for [SearchConfig.side]:
@@ -49,11 +53,13 @@ Future<SearchResult> buildSearchTree({
   required PositionEvaluator evaluator,
   required OpponentPolicy policy,
   CancelSignal isCancelled = _neverCancelled,
+  void Function(SearchProgress progress)? onProgress,
 }) => _Search(
   config: config,
   evaluator: evaluator,
   policy: policy,
   isCancelled: isCancelled,
+  onProgress: onProgress,
 ).run(root);
 
 bool _neverCancelled() => false;
@@ -114,14 +120,19 @@ final class _Search {
     required this.evaluator,
     required this.policy,
     required this.isCancelled,
+    required this.onProgress,
   });
 
   final SearchConfig config;
   final PositionEvaluator evaluator;
   final OpponentPolicy policy;
   final CancelSignal isCancelled;
+  final void Function(SearchProgress progress)? onProgress;
 
   _Stop? _stop;
+
+  /// The deepest ply an expansion has reached.
+  int _deepest = 0;
 
   /// Nodes in the tree so far, the root included, the way the old builder
   /// counts them.
@@ -160,6 +171,11 @@ final class _Search {
   /// The node for [path] before anything below it is expanded: a finished
   /// game, a horizon leaf, or a frontier node carrying the evaluation its
   /// parent's loss window is about to compare.
+  ///
+  /// The horizon is two things: the ply the search was asked to stop at,
+  /// and the reach below which a reply is not worth preparing for
+  /// ([SearchConfig.replyFloor]). A position past either is valued where it
+  /// stands.
   Future<_Leaf> _leaf(SearchPath path) async {
     final kind = terminalKind(path.position, path.history);
     if (kind != null) return _Scored(_terminal(path, kind));
@@ -169,8 +185,10 @@ final class _Search {
         return _Unscored(reason);
       case Evaluated(:final eval):
         final forUs = eval.forUs(config.side, path.position.turn);
+        final beyond =
+            path.ply >= config.horizonPlies || path.reach < config.replyFloor;
         return _Scored(
-          path.ply >= config.horizonPlies
+          beyond
               ? HorizonNode(fen: path.fen, evalForUs: forUs)
               : FrontierNode(fen: path.fen, evalForUs: forUs),
         );
@@ -198,9 +216,13 @@ final class _Search {
 
   /// [named] played: the name the tree will hold it under, and the path its
   /// child is searched in.
-  (MoveRef, SearchPath) _play(SearchPath path, NamedMove named) {
+  (MoveRef, SearchPath) _play(
+    SearchPath path,
+    NamedMove named, {
+    double share = 1,
+  }) {
     final (after, san) = path.position.makeSan(named.move);
-    return (MoveRef(uci: named.uci, san: san), path.next(after));
+    return (MoveRef(uci: named.uci, san: san), path.next(after, share: share));
   }
 
   /// A finished game needs no engine, but the loss window and the tie-break
@@ -234,6 +256,8 @@ final class _Search {
       if (expansion == null) continue;
       pending.expansion = expansion;
       queue.addAll(expansion.children);
+      if (pending.path.ply + 1 > _deepest) _deepest = pending.path.ply + 1;
+      onProgress?.call((nodes: _nodes, depth: _deepest));
     }
   }
 
@@ -242,7 +266,7 @@ final class _Search {
   /// nothing is attached and the node stays a frontier node instead of half
   /// an enumeration.
   Future<Expansion?> _ourMoves(SearchPath path) async {
-    final legal = legalMovesOf(path.position);
+    final legal = _pinnedOrAll(path, legalMovesOf(path.position));
     if (!_fits(legal.length)) return null;
     final played = [for (final named in legal) _play(path, named)];
     final pendings = await _leavesOf([for (final (_, child) in played) child]);
@@ -259,6 +283,21 @@ final class _Search {
       for (final (index, (move, _)) in played.indexed)
         if (kept.contains(move.uci)) (move, pendings[index]),
     ]);
+  }
+
+  /// [legal] narrowed to the moves pinned at [path]'s position, when any of
+  /// them is legal there. A pin names a move in the model's spelling or in
+  /// dartchess's — castling is `e1g1` to one and `e1h1` to the other — so
+  /// both are tried.
+  List<NamedMove> _pinnedOrAll(SearchPath path, List<NamedMove> legal) {
+    final pinned = config.pins[path.fen.position];
+    if (pinned == null || pinned.isEmpty) return legal;
+    final kept = [
+      for (final named in legal)
+        if (pinned.contains(named.uci) || pinned.contains(named.move.uci))
+          named,
+    ];
+    return kept.isEmpty ? legal : kept;
   }
 
   /// The opponent's turn: take the model's whole distribution over the legal
@@ -303,7 +342,7 @@ final class _Search {
     for (final named in legal) {
       final share = shares[named.uci];
       if (share == null) continue;
-      final (move, child) = _play(path, named);
+      final (move, child) = _play(path, named, share: share);
       played.add((move, share, child));
     }
     return played;

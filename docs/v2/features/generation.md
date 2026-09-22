@@ -1,6 +1,6 @@
 # Generation
 
-Status: corrected by the owner (2026-09-21: decisions below; not built)
+Status: corrected by the owner (2026-09-21: decisions below; built 2026-09-22 as `Fill gaps from here…`, see the last section)
 Old code (oracle only): `lib/features/generate/`, `lib/features/generation/`, `lib/features/planner/`,
 `lib/widgets/generation/`, `lib/widgets/repertoire_generation_tab.dart`, `lib/widgets/layout/jobs_panel.dart`,
 `lib/core/generation_session_controller.dart`, `lib/services/tree_build_service.dart`
@@ -178,3 +178,33 @@ download or verification pass is silent; nothing under `.cap-generation/` is cle
 - **The search core exists** (`lib/v2/chess/generation/`, oracle-tested against the old app).
   What the step builds is the wiring: a Stockfish evaluation source with the shared eval cache,
   the run off the UI isolate, progress and cancel, and the draft-chapter writer.
+
+## What was built (2026-09-22)
+- **The dialog** asks `Opponent rating`, `How deep (half-moves)` (default 8, 1–64) and `Cover
+  replies met once in`, prefilled from the Replies settings, over the one source line `Engine +
+  human model`, and one filled `Fill`. `Prefer traps` is not offered: trick lines are not built.
+- **The run** starts from the board for the chapter's side. The chapter's own moves are pins: at a
+  position the chapter answers, only its moves are enumerated. Stockfish scores every position at
+  depth 14, loss window 50 cp, through `eval_cache.db` in the support folder — the old app's file
+  and schema, so a verdict either app has is not asked for again. Maia-3 at the chosen rating is
+  the opponent. `Cover replies met once in N` is a second horizon: a reply reached less than `1/N`
+  of the way from the board is valued where it stands and never answered, so a deep fill costs
+  what the likely lines cost. One run at a time; a second is refused with `A fill is already
+  running.` The engine pane reads `Paused while filling gaps` and follows the board again after.
+- **The card** shows one line under the engine bar: `Filling gaps · depth 3/8 · 412 positions` with
+  `Cancel` (immediate: the engine is let go and nothing is written), then `Proposed 8 lines in Main
+  (draft)` or the failure in the error colour, with a cross to dismiss it.
+- **The draft** is `<chapter> (draft)` beside the chapter (then `(draft 2)`, …), `// Draft` under
+  its name so the outline says `Proposed`. Its lines are rooted at the chapter's root through the
+  chapter's moves to the board, so each can be dragged into the chapter. One game per line the
+  search answered, most reached first, at most 100; a near-copy of a kept line (the old diversity
+  bar: over 70% shared decisions, or under 25% new) hangs off it as a sideline of at most six
+  plies, or is dropped; a line whose every move of ours the chapter already plays is left out. A
+  search that proposes nothing new is a failure, not an empty draft. Every move carries
+  `[%expectimax +0.42]` (the centipawn equivalent of the search's expected score) and
+  `[%score 53.8%]`; a line's first move carries `[%cumProb 29.3%]` and its game `[CumProb]`.
+- **The tree** is kept as a v4 `tree.json` under `.cap-generation/<chapter>.pgn/v2-<stamp>/`,
+  create-only, for a later run; nothing reads it yet.
+- **The Replies tab** at our move shows each candidate's `[%expectimax]` from the open document or
+  `not in tree`; nothing is computed while browsing.
+- Not built: trick lines, resuming a kept tree, ChessDB as a source, the old planner route.

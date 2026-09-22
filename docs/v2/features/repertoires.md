@@ -175,7 +175,7 @@ picker.
   chapter they become lines of it, dragged onto a line they fold into it as variations; the line
   menu's `Move to chapter…` does the first by name. The target file is written first, against the
   revision it was read at, and the lines leave the open chapter only after that write landed.
-- `Fill gaps from here…` sits disabled in the Actions menu until generation exists (`generation.md`).
+- `Fill gaps from here…` is live (2026-09-22): see `generation.md`, "What was built".
 
 ## Decisions (owner, 2026-09-22)
 - **The mode is `Repertoire builder`.** The library and the builder are one mode, named for the
@@ -187,6 +187,9 @@ picker.
   on the library and a file dropped on the window does the same as `Open PGN file…`. Variations
   become lines and a course of several chapters becomes several chapter files, silently, as the old
   import did. `Create new repertoire` is the one-field name dialog `New chapter` already uses.
+  Built 2026-09-22: a dropped file is left out, since the project carries no drop package; the
+  side is inferred from the tree's shape (the branching side is the opponent, else the side most
+  lines end on) when at least eight lines make it plain, and asked otherwise.
 - **The Explorer tab** (`workspace.md`) is where the user looks up what masters and Lichess play
   before choosing their own move; Maia stays the only source of shares, gaps and coverage.
 - **The outline stays as it is** (owner, 2026-09-22: "I like whatever the current UI is"): the

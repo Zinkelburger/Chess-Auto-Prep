@@ -334,19 +334,21 @@ String preambleWithSide(String preamble, Side side) {
 /// A chapter file with no games yet: the `//` preamble and nothing else.
 ///
 /// The colour line is the only record of which side the chapter is for, so it
-/// is written before there are any moves to infer it from. The stamp is the
+/// is written before there are any moves to infer it from — when the side is
+/// known. A chapter made with none is asked about once when it opens, and
+/// the answer is written in then. The stamp is the
 /// local time the old app writes, `2026-09-19 14:07:33`, and nothing reads it
 /// back; it is there for someone looking at the file. [rootMoves] is where
 /// the chapter starts when that is not the start, written the way the old
 /// app writes it and read back by [readHeading].
 String newChapterText({
   required String name,
-  required Side side,
+  required Side? side,
   required DateTime created,
   List<String> rootMoves = const [],
 }) =>
     '// $name\n'
-    '// Color: ${side == Side.white ? 'White' : 'Black'}\n'
+    '${side == null ? '' : '// Color: ${side == Side.white ? 'White' : 'Black'}\n'}'
     '${rootLine(rootMoves)}'
     '// Created on ${created.toString().split('.').first}\n\n';
 

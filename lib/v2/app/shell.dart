@@ -8,6 +8,7 @@ import 'package:multi_split_view/multi_split_view.dart';
 import '../chess/pgn/game_tree.dart' show NodePath;
 import '../features/library/chapter_outline.dart';
 import '../features/library/library.dart';
+import '../features/library/library_messages.dart';
 import '../features/library/library_panel.dart';
 import '../features/library/outline_panel.dart';
 import '../features/pgn_viewer/pgn_viewer.dart';
@@ -21,6 +22,7 @@ import '../storage/chapter_files.dart';
 import '../storage/settings_store.dart';
 import '../ui/app_action.dart';
 import '../ui/choice_dialog.dart';
+import '../ui/error_bar.dart';
 import '../ui/theme.dart';
 import '../workspace/chapter_commands.dart';
 import '../workspace/copy_name_dialog.dart';
@@ -31,11 +33,14 @@ import '../workspace/session_results.dart';
 import '../workspace/side_dialog.dart';
 import '../workspace/engine_analysis.dart';
 import '../workspace/explorer.dart';
+import '../workspace/fill_dialog.dart';
+import '../workspace/fill_gaps.dart';
 import '../workspace/replies.dart';
 import '../workspace/workspace_keys.dart';
 import '../workspace/workspace_tabs.dart';
 import '../workspace/workspace_view.dart';
 import 'exit_guard.dart';
+import 'mode.dart';
 import 'top_bar.dart';
 
 /// The window: a top bar with the mode menu and the Actions menu, the
@@ -54,6 +59,7 @@ class Shell extends StatefulWidget {
     required this.analysis,
     required this.replies,
     required this.explorer,
+    required this.fill,
     required this.settings,
     required this.settingRows,
     required this.leaving,
@@ -68,6 +74,7 @@ class Shell extends StatefulWidget {
   final EngineAnalysis analysis;
   final Replies replies;
   final Explorer explorer;
+  final FillGaps fill;
   final SettingsStore settings;
 
   /// The settings page's rows, as the app wires them.
@@ -126,10 +133,12 @@ class _ShellState extends State<Shell> {
     _outlineShown = _wantsOutline;
     _arrange();
     widget.session.addListener(_followTheChapter);
+    widget.fill.addListener(_followTheFill);
   }
 
   @override
   void dispose() {
+    widget.fill.removeListener(_followTheFill);
     widget.session.removeListener(_followTheChapter);
     _editing.dispose();
     _tabs.dispose();
@@ -158,6 +167,25 @@ class _ShellState extends State<Shell> {
     if (!mounted || _wantsOutline == _outlineShown) return;
     _outlineShown = _wantsOutline;
     _arrange();
+  }
+
+  /// A finished fill wrote a chapter the library has not listed; reading
+  /// the folders again is what puts the draft in the outline.
+  void _followTheFill() {
+    if (widget.fill.state is FillDone) unawaited(widget.library.refresh());
+  }
+
+  /// The three knobs, then the run; what refused it goes in the bar.
+  Future<void> _fill() async {
+    final s = widget.settings.value;
+    final request = await showFillDialog(
+      context,
+      elo: s.opponentElo,
+      onceIn: s.coverOnceIn,
+    );
+    if (request == null || !mounted) return;
+    final refusal = await widget.fill.start(request);
+    if (refusal != null && mounted) _said(refusal);
   }
 
   void _toggleList() {
@@ -238,20 +266,65 @@ class _ShellState extends State<Shell> {
   }
 
   /// A game the explorer listed: kept as a file in the collections folder,
-  /// then opened in the viewer at the position the explorer was showing.
-  /// The one cross-mode request the explorer makes, handled here.
+  /// then opened in the viewer at the ply the explorer was showing. The one
+  /// cross-mode request the explorer makes, handled here.
   Future<void> _openExplorerGame(ExplorerGame game) async {
     final kept = await widget.explorer.keepGame(game);
     if (!mounted) return;
-    switch (kept) {
-      case GameNotKept(:final sentence):
-        _said(sentence);
-      case GameKept(:final ref, :final ply):
-        _switchTo(Mode.pgnViewer);
-        if (!await _open(ref, game: 0)) return;
-        unawaited(widget.viewer.opened(ref));
-        widget.session.goTo(NodePath.of(List.filled(ply, 0)));
+    if (kept is GameNotKept) return _said(kept.sentence);
+    final GameKept(:ref, :ply) = kept as GameKept;
+    _switchTo(Mode.pgnViewer);
+    if (!await _open(ref, game: 0)) return;
+    unawaited(widget.viewer.opened(ref));
+    widget.session.goTo(NodePath.of(List.filled(ply, 0)));
+  }
+
+  /// Ctrl+O and `Open PGN file…` are one door whose other side depends on
+  /// the mode: in the builder a file becomes a repertoire, everywhere else
+  /// it is read in the viewer.
+  Future<void> _openPgnFile() =>
+      _mode == Mode.repertoires ? _importFile() : _browse();
+
+  /// The desktop's file dialog, then the file as a new repertoire named
+  /// after it, opened on its first chapter. No form: the name is changed
+  /// from the list, and the side is asked when the chapter opens if the
+  /// file did not say.
+  Future<void> _importFile() async {
+    final result = await widget.library.importFile();
+    if (result == null || !mounted) return;
+    await _imported(result, name: 'that file');
+  }
+
+  /// The clipboard as a new repertoire, the same way.
+  Future<void> _pasteRepertoire() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    if (!mounted) return;
+    final text = data?.text?.trim() ?? '';
+    if (text.isEmpty) {
+      _said('Nothing to paste: copy a PGN first.');
+      return;
     }
+    await _imported(
+      await widget.library.importText(text, name: Library.pastedName),
+      name: Library.pastedName,
+    );
+  }
+
+  Future<void> _imported(LibraryResult result, {required String name}) async {
+    if (!mounted) return;
+    if (result is LibraryAdded) {
+      _switchTo(Mode.repertoires);
+      await _open(result.first);
+      return;
+    }
+    _said(
+      libraryMessage(
+        result,
+        thing: 'repertoire',
+        name: name,
+        failed: 'Could not import the repertoire.',
+      ),
+    );
   }
 
   /// Takes the document off the board, with the same question about a
@@ -301,11 +374,22 @@ class _ShellState extends State<Shell> {
   /// Everything the Actions menu offers now: the mode's own doors first,
   /// then what can be done to the document, whichever mode opened it.
   List<AppAction> _actions() => [
-    AppAction('Open PGN file…', () => unawaited(_browse()), shortcut: 'Ctrl+O'),
     AppAction(
-      'Close file',
-      widget.viewer.file == null ? null : () => unawaited(_closeFile()),
+      'Open PGN file…',
+      () => unawaited(_openPgnFile()),
+      shortcut: 'Ctrl+O',
     ),
+    if (_mode == Mode.repertoires)
+      AppAction(
+        'Paste PGN',
+        () => unawaited(_pasteRepertoire()),
+        shortcut: 'Ctrl+V',
+      )
+    else
+      AppAction(
+        'Close file',
+        widget.viewer.file == null ? null : () => unawaited(_closeFile()),
+      ),
     ...documentActions(
       session: widget.session,
       saver: widget.saver,
@@ -326,36 +410,12 @@ class _ShellState extends State<Shell> {
         () => setSide(widget.session, chapter.side.opposite),
         group: 'Repertoire',
       ),
-    // Not built yet: the expectimax search that writes proposed lines into
-    // a draft chapter. The entry is here so the menu has its final shape.
-    const AppAction('Fill gaps from here…', null, group: 'Repertoire'),
-    ..._tabActions(),
-  ];
-
-  /// The card's tabs as a browser's menu has them: each one that can be
-  /// closed is shown or closed by name, and the keys that walk them are
-  /// written beside the entries that take them.
-  List<AppAction> _tabActions() => [
-    for (final tab in _tabs.tabs)
-      if (!tab.pinned)
-        _tabs.isOpen(tab.id)
-            ? AppAction(
-                'Close ${tab.title}',
-                () => _tabs.close(tab.id),
-                shortcut: _tabs.selected == tab.id ? 'Ctrl+W' : null,
-                group: 'Tabs',
-              )
-            : AppAction(
-                'Show ${tab.title}',
-                () => _tabs.show(tab.id),
-                group: 'Tabs',
-              ),
     AppAction(
-      'Next tab',
-      _tabs.open.length < 2 ? null : _tabs.next,
-      shortcut: 'Ctrl+Tab',
-      group: 'Tabs',
+      'Fill gaps from here…',
+      widget.fill.canStart ? () => unawaited(_fill()) : null,
+      group: 'Repertoire',
     ),
+    ...tabActions(_tabs),
   ];
 
   /// The same actions, typed for: a searchable list that the enter key
@@ -390,9 +450,15 @@ class _ShellState extends State<Shell> {
     const SingleActivator(LogicalKeyboardKey.keyB, control: true): _toggleList,
     const SingleActivator(LogicalKeyboardKey.keyB, meta: true): _toggleList,
     const SingleActivator(LogicalKeyboardKey.keyO, control: true): () =>
-        unawaited(_browse()),
+        unawaited(_openPgnFile()),
     const SingleActivator(LogicalKeyboardKey.keyO, meta: true): () =>
-        unawaited(_browse()),
+        unawaited(_openPgnFile()),
+    if (_mode == Mode.repertoires) ...{
+      const SingleActivator(LogicalKeyboardKey.keyV, control: true): () =>
+          unawaited(_pasteRepertoire()),
+      const SingleActivator(LogicalKeyboardKey.keyV, meta: true): () =>
+          unawaited(_pasteRepertoire()),
+    },
     const SingleActivator(LogicalKeyboardKey.keyK, control: true): () =>
         unawaited(_palette()),
     const SingleActivator(LogicalKeyboardKey.keyK, meta: true): () =>
@@ -439,6 +505,7 @@ class _ShellState extends State<Shell> {
               widget.saver,
               widget.analysis,
               widget.replies,
+              widget.fill,
               widget.viewer,
               _editing,
               _tabs,
@@ -453,7 +520,7 @@ class _ShellState extends State<Shell> {
             ),
           ),
           const Divider(height: 1),
-          if (_error case final error?) _ErrorBar(error),
+          if (_error case final error?) ErrorBar(error),
           Expanded(
             child: WorkspaceKeys(
               session: widget.session,
@@ -493,6 +560,7 @@ class _ShellState extends State<Shell> {
       analysis: widget.analysis,
       replies: widget.replies,
       explorer: widget.explorer,
+      fill: widget.fill,
       tabs: _tabs,
       editing: _editing,
       settings: widget.settings,
@@ -506,35 +574,3 @@ class _ShellState extends State<Shell> {
 
 /// The columns of the window, left to right.
 enum _Pane { list, outline, workspace }
-
-/// The modes `v2` has. Each one fills the left column; the workspace, the
-/// document and the draft in it are the same whichever is showing.
-enum Mode {
-  repertoires('Repertoire builder'),
-  pgnViewer('PGN Viewer'),
-  study('Study');
-
-  const Mode(this.label);
-
-  final String label;
-}
-
-class _ErrorBar extends StatelessWidget {
-  const _ErrorBar(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      width: double.infinity,
-      color: scheme.errorContainer,
-      padding: const EdgeInsets.symmetric(
-        horizontal: Space.l,
-        vertical: Space.s,
-      ),
-      child: Text(text, style: TextStyle(color: scheme.onErrorContainer)),
-    );
-  }
-}

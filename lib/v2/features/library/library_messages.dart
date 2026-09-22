@@ -16,6 +16,9 @@ String? libraryMessage(
   required String failed,
 }) => switch (result) {
   LibraryDone(:final training) => _stillPointingAtTheOldName(training),
+  LibraryAdded() => null,
+  LibraryNothingToImport() => 'That PGN has no moves to train.',
+  LibraryFileUnreadable() => 'Could not read that file.',
   LibraryNameTaken() => 'A $thing named "$name" already exists.',
   LibraryStale() =>
     'That $thing changed on disk. The list has been refreshed; try again.',
@@ -48,7 +51,7 @@ String? _stillPointingAtTheOldName(records.RepointResult result) =>
 /// [reload] is offered beside the sentence when the change refused because
 /// the open chapter changed on disk, because telling the user to reload
 /// without giving them the button is telling them to go and find it.
-Future<void> announce(
+Future<LibraryResult> announce(
   BuildContext context,
   Future<LibraryResult> command, {
   required String thing,
@@ -64,7 +67,7 @@ Future<void> announce(
     name: name,
     failed: failed,
   );
-  if (message == null) return;
+  if (message == null) return result;
   messenger.showSnackBar(
     SnackBar(
       content: Text(message),
@@ -73,4 +76,5 @@ Future<void> announce(
           : null,
     ),
   );
+  return result;
 }

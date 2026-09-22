@@ -115,6 +115,26 @@ void main() {
     },
   );
 
+  test('a fixed-depth search sends go depth and ends on its own; a search '
+      'queued behind it waits rather than stopping it', () async {
+    final (engine, process) = await started();
+    final fixed = engine.analyse(Fen.initial, multiPv: 1, depth: 12);
+    var fixedDone = false;
+    fixed.lines.listen(null, onDone: () => fixedDone = true);
+    await pumpEventQueue();
+    expect(process.sent.last, 'go depth 12');
+    final next = engine.analyse(after1e4, multiPv: 1);
+    next.lines.listen(null);
+    await pumpEventQueue();
+    expect(process.sent, isNot(contains('stop')));
+    expect(process.sent.last, 'go depth 12', reason: 'still waiting');
+    process.say('info depth 12 score cp 20 pv e2e4');
+    process.say('bestmove e2e4');
+    await pumpEventQueue();
+    expect(fixedDone, isTrue);
+    expect(process.sent.last, 'go infinite');
+  });
+
   test('stopping a queued search cancels it without a go', () async {
     final (engine, process) = await started();
     engine.analyse(Fen.initial, multiPv: 1);

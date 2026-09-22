@@ -45,7 +45,9 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
   (1–10); evals are White-relative, one decimal (`+0.35`), mate `#5` / `-#5`.
   (v2 has this bar: the 32px switch row with `Depth {d} · {engine}`, 54px gutters, hover floats a
   200px board under the move, a click plays the line up to it, the chevron opens six rows; no
-  threat, gear, nodes or settings yet. The old app's large headline score was tried and dropped.)
+  threat, gear, nodes or settings yet. The old app's large headline score was tried and dropped.
+  While a fill runs the row reads `Paused while filling gaps` and the lines are gone; the fill's
+  own line sits under the bar, 2026-09-22.)
 - **Tab strip and Replies** (v2, 2026-09-21; browser tabs 2026-09-22) — under the engine bar,
   `Moves` | `Replies`, one underlined, the old viewer's closeable side-panel tabs with fixed
   identities: `Moves` is pinned, the others carry an `×` when up or under the pointer, a middle

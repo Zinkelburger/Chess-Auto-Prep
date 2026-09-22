@@ -12,6 +12,8 @@ final class SearchConfig {
     this.horizonPlies = 4,
     this.lossLimitCp = 200,
     this.nodeBudget,
+    this.pins = const {},
+    this.replyFloor = 0,
   });
 
   /// The side the repertoire is for. Our nodes are the ones where this side
@@ -37,4 +39,19 @@ final class SearchConfig {
   /// finished tree is usually smaller than its budget and the last of it can
   /// go unused when the next expansion does not fit.
   final int? nodeBudget;
+
+  /// The moves we have already decided on, by the position they are played
+  /// from ([Fen.position], the four fields) to the moves in standard or
+  /// dartchess UCI. At a pinned position only those moves are enumerated,
+  /// so a fill continues the chapter the user has rather than second-guessing
+  /// it; the loss window still ranks the pinned moves among themselves. A
+  /// pin naming no legal move is ignored.
+  final Map<String, Set<String>> pins;
+
+  /// A reply reached less often than this, as a share of the games that
+  /// start at the root, is valued where it stands and never expanded — the
+  /// `Cover replies met once in N` rule, as `1/N`. Zero expands everything
+  /// the horizon allows. Our own moves count as certain, so the reach only
+  /// falls at the opponent's moves.
+  final double replyFloor;
 }

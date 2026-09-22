@@ -54,7 +54,7 @@ APPROVED: dict[str, tuple[int, str]] = {
     "lib/v2/storage/atomic_write.dart": (4, "v2 atomic publication: staged temporary, rename into place, sweep of interrupted writes"),
     "lib/v2/storage/document_relocation.dart": (1, "v2 rename, move and quarantine-delete: revision-checked and backed up; the one direct mutation takes back an empty folder a refused move created"),
     "lib/v2/storage/pgn_file_store.dart": (2, "no filesystem mutation of its own: two calls into DocumentRelocation that the pattern above matches by method name"),
-    "lib/v2/storage/chapter_files.dart": (1, "v2 repertoire listing: the one mutation takes away a repertoire folder whose chapters have all been deleted, and only when nothing is left in it"),
+    "lib/v2/storage/chapter_files.dart": (2, "v2 repertoire listing: one mutation takes away a repertoire folder whose chapters have all been deleted, and only when nothing is left in it; the other takes away an import's own dot-prefixed staging folder directly under the root, which the listing never shows, when the import could not finish"),
     "lib/v2/storage/backups.dart": (2, "v2 kept versions under Support; creates folders, never removes; an unreadable index is renamed aside, not deleted"),
     "lib/v2/storage/relocation_notes.dart": (1, "v2 notes under Support saying which moves still owe their training rows; the one mutation takes a note away once its rows no longer do"),
     "lib/services/eval/cdb_snapshot_download.dart": (4, "resumable downloaded snapshot"),

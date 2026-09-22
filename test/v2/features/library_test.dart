@@ -70,11 +70,23 @@ void main() {
   test('a new repertoire is a folder with one empty chapter', () async {
     await start([kid]);
     final result = await fixture.library.createRepertoire('Benoni', Side.black);
-    expect(result, isA<LibraryDone>());
+    expect(result, isA<LibraryAdded>());
+    expect((result as LibraryAdded).first.path, '/repertoires/Benoni/Main.pgn');
     final text = fixture.textAt('/repertoires/Benoni/Main.pgn');
     expect(text, startsWith('// Benoni\n// Color: Black\n// Created on '));
     expect(text, endsWith('\n\n'));
   });
+
+  test(
+    'a repertoire made with no side leaves the question to its chapter',
+    () async {
+      await start([kid]);
+      await fixture.library.createRepertoire('Benoni');
+      final text = fixture.textAt('/repertoires/Benoni/Main.pgn');
+      expect(text, startsWith('// Benoni\n// Created on '));
+      expect(text, isNot(contains('// Color:')));
+    },
+  );
 
   test('a repertoire name already in the list is refused', () async {
     await start([kid]);

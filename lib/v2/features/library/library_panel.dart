@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../storage/chapter_files.dart';
+import '../../ui/name_dialog.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
 import 'library.dart';
 import 'library_messages.dart';
-import 'new_repertoire_dialog.dart';
 import 'repertoire_tile.dart';
 
 /// The repertoires, searchable, each opening to its chapters. Tapping a
@@ -53,16 +53,26 @@ class _LibraryPanelState extends State<LibraryPanel> {
     });
   }
 
+  /// One question, the name. Which side it is for is asked when its
+  /// chapter opens, which is now: the new repertoire opens at once.
   Future<void> _newRepertoire() async {
-    final wanted = await showNewRepertoireDialog(context);
-    if (wanted == null || !mounted) return;
-    await announce(
+    final name = await showNameDialog(
       context,
-      widget.library.createRepertoire(wanted.name, wanted.side),
+      title: 'Create repertoire',
+      label: 'Repertoire name',
+      hint: 'My Sicilian',
+      confirm: 'Create',
+    );
+    if (name == null || !mounted) return;
+    final result = await announce(
+      context,
+      widget.library.createRepertoire(name),
       thing: 'repertoire',
-      name: wanted.name,
+      name: name,
       failed: 'Could not create the repertoire.',
     );
+    if (!mounted || result is! LibraryAdded) return;
+    widget.onOpen(result.first);
   }
 
   @override

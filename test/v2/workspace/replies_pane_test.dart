@@ -25,9 +25,19 @@ const chapter = '''
 final class OneOpinion implements MovePolicy {
   @override
   Future<MaiaAnswer> policy(Fen fen, int elo) async => fen.whiteToMove
-      ? const MaiaPolicy({'e2e4': 1.0})
+      ? const MaiaPolicy({'e2e4': 0.7, 'd2d4': 0.3})
       : const MaiaPolicy({'e7e5': 0.6, 'c7c5': 0.4});
 }
+
+/// The chapter after a fill: our move carries what the search thought.
+const filledChapter = '''
+// Color: White
+
+[Event "Open"]
+[Result "*"]
+
+1. e4 {[%expectimax +0.42] [%score 56.0%]} e5 *
+''';
 
 void main() {
   late SessionFixture fixture;
@@ -99,5 +109,19 @@ void main() {
     await show(tester);
     expect(find.textContaining('Our candidates'), findsOneWidget);
     expect(find.text('gap'), findsNothing);
+  });
+
+  testWidgets('at our move each candidate shows what a fill said it is '
+      'worth, read off the document, or that no run reached it', (
+    tester,
+  ) async {
+    fixture.dispose();
+    fixture = await openSession(filledChapter);
+    await show(tester);
+    expect(find.text('+0.42'), findsOneWidget);
+    expect(find.text('not in tree'), findsOneWidget);
+    fixture.session.forward();
+    await tester.pumpAndSettle();
+    expect(find.text('not in tree'), findsNothing, reason: 'their move');
   });
 }

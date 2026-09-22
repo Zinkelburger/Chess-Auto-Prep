@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 
 import 'scripted_files.dart';
 import 'scripted_store.dart';
+import 'viewer_fixture.dart';
 
 /// A library over scripted files and a scripted store, with the workspace
 /// owners it changes documents through. Nothing here touches a real file.
@@ -15,6 +16,7 @@ final class LibraryFixture {
   LibraryFixture._(
     this.files,
     this.store,
+    this.picker,
     this.saver,
     this.session,
     this.library,
@@ -22,6 +24,9 @@ final class LibraryFixture {
 
   final ScriptedFiles files;
   final ScriptedDocumentStore store;
+
+  /// What the file dialog answers when the library asks for a file.
+  final ScriptedPicker picker;
   final DocumentSaver saver;
   final DocumentSession session;
   final Library library;
@@ -67,14 +72,16 @@ Future<LibraryFixture> openLibrary(
   }
   final saver = DocumentSaver(store, delay: delay);
   final session = DocumentSession(store, saver);
+  final picker = ScriptedPicker();
   final library = Library(
     files: files,
     documents: store,
     session: session,
     saver: saver,
+    picker: picker,
     root: '/repertoires',
   );
   await library.refresh();
   if (open != null) await session.open(open);
-  return LibraryFixture._(files, store, saver, session, library);
+  return LibraryFixture._(files, store, picker, saver, session, library);
 }

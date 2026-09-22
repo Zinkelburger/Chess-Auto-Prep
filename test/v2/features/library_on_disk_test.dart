@@ -10,6 +10,8 @@ import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+import '../support/viewer_fixture.dart';
+
 /// The library against real files: create a repertoire, add a chapter, rename
 /// it, move it, delete it, and check the chapter PGNs and the training rows
 /// that name them end up where they should.
@@ -51,6 +53,7 @@ void main() {
       documents: store,
       session: session,
       saver: saver,
+      picker: ScriptedPicker(),
       root: root,
     );
     await library.refresh();
@@ -67,7 +70,7 @@ void main() {
   test('a new repertoire is a folder with one chapter in it', () async {
     expect(
       await library.createRepertoire('Benoni', Side.black),
-      isA<LibraryDone>(),
+      isA<LibraryAdded>(),
     );
     expect(
       File(at('repertoires/Benoni/Main.pgn')).readAsStringSync(),
@@ -75,6 +78,35 @@ void main() {
     );
     expect(named('Benoni').chapters.single.name, 'Main');
   });
+
+  test(
+    'an imported study is a folder of chapter files, with no staging left',
+    () async {
+      const study =
+          '[Event "S: A"]\n[ChapterName "A"]\n\n1. e4 e5 (1... c5) *\n\n'
+          '[Event "S: B"]\n[ChapterName "B"]\n\n1. d4 d5 *\n';
+      final result = await library.importText(study, name: 'Study');
+      expect(result, isA<LibraryAdded>());
+      expect(
+        (result as LibraryAdded).first.path,
+        at('repertoires/Study/A.pgn'),
+      );
+      expect(exists('repertoires/Study/A.pgn'), isTrue);
+      expect(exists('repertoires/Study/B.pgn'), isTrue);
+      expect(
+        File(at('repertoires/Study/A.pgn')).readAsStringSync(),
+        contains('1. e4 c5 *'),
+      );
+      expect(
+        Directory(at('repertoires'))
+            .listSync()
+            .map((entry) => p.basename(entry.path))
+            .where((name) => name.startsWith('.')),
+        isEmpty,
+      );
+      expect(named('Study').chapters.map((c) => c.name), ['A', 'B']);
+    },
+  );
 
   test('a renamed chapter takes its training rows with it', () async {
     await library.createRepertoire('Benoni', Side.black);
