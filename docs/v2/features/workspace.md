@@ -65,6 +65,16 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
   repertoire) · **Games** (`1.2k`/`1.2M` plus share, `<1%` under 0.5%) · **White / Draw / Black**
   bar, closed by a `Σ` totals row — no rating, performance or eval column and no sorting. Below it,
   games here (4+4 Lichess, 15 Masters, 12 TWIC).
+- **Tree tab** (v2, 2026-09-22) — the user's own repertoires as an opening explorer, the old
+  PGN viewer's Tree for the whole library. For the board's position, every move any non-draft
+  repertoire file of the board's side plays (a repertoire of one file counts like any other),
+  matched by position so transpositions meet: **Move** · **Lines** through it · **Goes on** (the
+  biggest file's continuation) · **Found in** (a click opens that file there). Files are indexed
+  once and re-parsed only when their text changes; the open file is read live. While the tab is up
+  the board is a free board: a move the file does not play is shown on the board, never written,
+  and the header reads `Off the file: …` with take-back (←) and back-to-the-file; the engine
+  follows the free board. Moving in the file or leaving the tab ends it. Owner:
+  `workspace/repertoire_tree.dart`, pane `workspace/tree_pane.dart`.
 - **Board editor** — dialog (960×720) or embedded panel. Spare strips above and below the board
   swap with the flip, each `[pointer] K Q R B N P [bin]`; then side to move, Start position, Clear
   board, Flip board, an advanced section (four castling checkboxes, enabled only with king and rook

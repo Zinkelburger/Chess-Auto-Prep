@@ -153,6 +153,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
       memoryMb: _settings.value.engineMemoryMb,
     ),
     multiPv: _settings.value.engineLines,
+    elsewhere: _tree.board,
   );
 
   final _maia = MaiaLaunch();

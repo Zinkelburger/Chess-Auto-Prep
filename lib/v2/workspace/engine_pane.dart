@@ -19,10 +19,18 @@ import 'line_preview.dart';
 /// after it on a small board; clicking a move plays the line up to it.
 /// A chevron opens a long line out to several rows.
 class EnginePane extends StatefulWidget {
-  const EnginePane({super.key, required this.session, required this.analysis});
+  const EnginePane({
+    super.key,
+    required this.session,
+    required this.analysis,
+    this.onMove,
+  });
 
   final DocumentSession session;
   final EngineAnalysis analysis;
+
+  /// Where a clicked line's moves go; null plays them into the document.
+  final ValueChanged<String>? onMove;
 
   @override
   State<EnginePane> createState() => _EnginePaneState();
@@ -61,9 +69,10 @@ class _EnginePaneState extends State<EnginePane> {
   /// land, because the document refused it, ends the walk there.
   void _play(List<PvMove> moves, int index) {
     _leave();
+    final play = widget.onMove ?? widget.session.playMove;
     for (final move in moves.take(index + 1)) {
-      widget.session.playMove(move.uci);
-      if (widget.session.fen != move.after) return;
+      play(move.uci);
+      if (widget.analysis.position != move.after) return;
     }
   }
 

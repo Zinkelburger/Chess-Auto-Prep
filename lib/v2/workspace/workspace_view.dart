@@ -57,6 +57,7 @@ class WorkspaceView extends StatelessWidget {
     this.trainTab,
     this.treeTab,
     this.onBoardMove,
+    this.onEngineMove,
     this.puzzle,
     this.header = true,
     this.gameCounter = true,
@@ -105,6 +106,10 @@ class WorkspaceView extends StatelessWidget {
   /// Where a move made on the board goes when not into the document: a
   /// puzzle judges it. Null plays it into the document.
   final ValueChanged<String>? onBoardMove;
+
+  /// Where the moves of a clicked engine line go when not into the
+  /// document: the Tree tab's free board. Null plays them into it.
+  final ValueChanged<String>? onEngineMove;
 
   /// What the Puzzle tab shows, which is the Tactics mode's.
   final Widget? puzzle;
@@ -166,7 +171,11 @@ class WorkspaceView extends StatelessWidget {
               padding: const EdgeInsets.symmetric(
                 horizontal: readingCardInset - Space.s,
               ),
-              child: EnginePane(session: session, analysis: analysis),
+              child: EnginePane(
+                session: session,
+                analysis: analysis,
+                onMove: onEngineMove,
+              ),
             ),
           ),
           Padding(

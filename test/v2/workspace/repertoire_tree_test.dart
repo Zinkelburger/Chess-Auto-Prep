@@ -1,5 +1,7 @@
+import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
 import 'package:chess_auto_prep/v2/workspace/repertoire_tree.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -219,5 +221,20 @@ void main() {
     tree.unwatch();
     expect(tree.board.value, isNull);
     expect(tree.offFile, isEmpty);
+  });
+
+  test('the engine analyses the free board while there is one', () async {
+    final analysis = EngineAnalysis(
+      fixture.session,
+      () async => const StartFailed('no engine in this test'),
+      elsewhere: tree.board,
+    );
+    addTearDown(analysis.dispose);
+    walk(['e4', 'e5', 'Nf3', 'Nc6']);
+    tree.play('f1b5');
+    expect(analysis.position, tree.fen);
+    expect(analysis.position, isNot(fixture.session.fen));
+    tree.backToFile();
+    expect(analysis.position, fixture.session.fen);
   });
 }

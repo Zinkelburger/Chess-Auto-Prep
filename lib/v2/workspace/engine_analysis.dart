@@ -7,6 +7,7 @@ import '../diagnostics/log.dart';
 import '../engines/engine.dart';
 import '../engines/engine_line.dart';
 import '../engines/engine_supervisor.dart';
+import 'board_claim.dart';
 import 'document_session.dart';
 
 sealed class EngineState {
@@ -68,12 +69,23 @@ final class AnalysisSnapshot {
 /// when a search ends. Knows nothing of the document beyond its position.
 final class EngineAnalysis extends ChangeNotifier {
   /// [launch] is asked for an engine each time the analysis is enabled.
-  EngineAnalysis(this._session, this._launch, {int multiPv = 3})
-    : _multiPv = multiPv {
+  ///
+  /// [elsewhere] is a position the board shows in place of the document's
+  /// — the Tree tab's free board — which the engine follows while it is
+  /// there.
+  EngineAnalysis(
+    this._session,
+    this._launch, {
+    int multiPv = 3,
+    ValueListenable<BoardClaim?>? elsewhere,
+  }) : _multiPv = multiPv,
+       _elsewhere = elsewhere {
     _session.anyChange.addListener(_follow);
+    _elsewhere?.addListener(_follow);
   }
 
   final DocumentSession _session;
+  final ValueListenable<BoardClaim?>? _elsewhere;
   final Future<EngineStart> Function() _launch;
   int _multiPv;
 
@@ -101,6 +113,10 @@ final class EngineAnalysis extends ChangeNotifier {
 
   EngineState _state = const EngineOff();
   Engine? _engine;
+
+  /// The position analysed: the board's, which is the free board's while
+  /// [_elsewhere] holds one.
+  Fen get position => _elsewhere?.value?.fen ?? _session.fen;
 
   /// Why the analysis is not following the board, while it is not.
   String? _pausedFor;
@@ -205,7 +221,7 @@ final class EngineAnalysis extends ChangeNotifier {
       _clearSnapshot();
       return;
     }
-    final fen = _session.fen;
+    final fen = position;
     if (fen == _following?.fen) return;
     _stopFollowing();
     final search = engine.analyse(fen, multiPv: multiPv);
@@ -287,6 +303,7 @@ final class EngineAnalysis extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _session.anyChange.removeListener(_follow);
+    _elsewhere?.removeListener(_follow);
     _stopFollowing();
     unawaited(_engine?.quit());
     _engine = null;

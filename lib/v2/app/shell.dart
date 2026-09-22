@@ -271,8 +271,25 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     if (line.place != ReadIn.board) _tabs.show(WorkspaceTab.moves);
   }
 
-  /// A move of the Tree tab that only another file plays: that file, in
-  /// the builder, at the position the move leads to.
+  /// While the Tree tab is up the board is its free board; otherwise a
+  /// move on the board is the puzzle's, or the document's.
+  void _boardMove(String uci) =>
+      widget.tree.watching ? widget.tree.play(uci) : widget.trainer.play(uci);
+
+  /// A clicked engine line's moves: onto the free board while the Tree tab
+  /// is up, into the document otherwise.
+  void _engineMove(String uci) => widget.tree.watching
+      ? widget.tree.play(uci)
+      : widget.session.playMove(uci);
+
+  Widget _treeTab(BuildContext context) => TreePane(
+    session: widget.session,
+    tree: widget.tree,
+    onOpen: (place) => unawaited(_readTree(place)),
+  );
+
+  /// The file a move of the Tree tab was found in: that file, in the
+  /// builder, at the position the move leads to.
   Future<void> _readTree(TreePlace place) async {
     _requests.switchTo(Mode.repertoires);
     await _requests.openAt(place.ref, place.sans);
@@ -545,10 +562,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       moveMenu: _requests.mode == Mode.study
           ? (path) => quizMenuItems(widget.session, path)
           : null,
-      // The Tree tab makes the board a free one while it is up.
-      onBoardMove: (uci) => widget.tree.watching
-          ? widget.tree.play(uci)
-          : widget.trainer.play(uci),
+      onBoardMove: _boardMove,
       puzzle: PuzzlePane(trainer: widget.trainer, onAnalyze: _analyze),
       onExplorerGame: (game) => unawaited(
         _requests.openExplorerGame(
@@ -560,11 +574,8 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       header: _requests.mode != Mode.tactics,
       gameCounter: _requests.mode != Mode.tactics,
       boardClaim: _claim,
-      treeTab: (_) => TreePane(
-        session: widget.session,
-        tree: widget.tree,
-        onOpen: (place) => unawaited(_readTree(place)),
-      ),
+      onEngineMove: _engineMove,
+      treeTab: _treeTab,
       trainTab: (_) => TrainPane(
         trainer: widget.lineTrainer,
         onRead: (line) => unawaited(_readLine(line)),
