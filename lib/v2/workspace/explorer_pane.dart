@@ -239,8 +239,7 @@ class _Header extends StatelessWidget {
             child: Text('Games', style: style, textAlign: TextAlign.right),
           ),
           const SizedBox(width: Space.m),
-          Expanded(child: Text('White / Draw / Black', style: style)),
-          const SizedBox(width: IconSize.menu + Space.m),
+          _BarColumn(bar: Text('White / Draw / Black', style: style)),
         ],
       ),
     );
@@ -291,15 +290,14 @@ class _MoveRow extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: Space.m),
-                Expanded(
-                  child: ResultBar(
+                _BarColumn(
+                  bar: ResultBar(
                     white: row.white,
                     draws: row.draws,
                     black: row.black,
                   ),
+                  tick: _tick(scheme),
                 ),
-                SizedBox(width: IconSize.menu, child: _tick(scheme)),
-                const SizedBox(width: Space.m),
               ],
             ),
           ),
@@ -308,18 +306,9 @@ class _MoveRow extends StatelessWidget {
     );
   }
 
-  /// The move, numbered as a line's first move is.
-  Widget _move(ColorScheme scheme) => Text.rich(
-    TextSpan(
-      children: [
-        if (row.label.isNotEmpty)
-          TextSpan(
-            text: '${row.label} ',
-            style: TextStyle(color: scheme.onSurfaceVariant),
-          ),
-        TextSpan(text: row.san),
-      ],
-    ),
+  /// The move alone: every row would carry the same number.
+  Widget _move(ColorScheme scheme) => Text(
+    row.san,
     style: monoText.copyWith(color: scheme.onSurface),
     overflow: TextOverflow.ellipsis,
   );
@@ -362,23 +351,48 @@ class _Totals extends StatelessWidget {
             ),
           ),
           const SizedBox(width: Space.m),
-          Expanded(
-            child: ResultBar(
+          _BarColumn(
+            bar: ResultBar(
               white: answer.whiteTotal,
               draws: answer.drawTotal,
               black: answer.blackTotal,
             ),
           ),
-          const SizedBox(width: IconSize.menu + Space.m),
         ],
       ),
     );
   }
 }
 
+/// The rest of a table row: the bar at its capped width, then the tick
+/// or the room for one, so every row's bar starts and ends in one place.
+class _BarColumn extends StatelessWidget {
+  const _BarColumn({required this.bar, this.tick});
+
+  final Widget bar;
+  final Widget? tick;
+
+  @override
+  Widget build(BuildContext context) => Expanded(
+    child: Row(
+      children: [
+        Flexible(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: explorerBarMaxWidth),
+            child: bar,
+          ),
+        ),
+        const SizedBox(width: Space.s),
+        SizedBox(width: IconSize.menu, child: tick),
+        const SizedBox(width: Space.m),
+      ],
+    ),
+  );
+}
+
 /// How the games went, as lila draws it: White's wins, the draws and
-/// Black's wins side by side in the row, each as wide as its share, with
-/// the share written in the parts wide enough to carry it.
+/// Black's wins side by side, each as wide as its share, with the share
+/// written in every part wide enough to hold it.
 class ResultBar extends StatelessWidget {
   const ResultBar({
     super.key,
@@ -396,14 +410,15 @@ class ResultBar extends StatelessWidget {
     final total = white + draws + black;
     if (total == 0) return const SizedBox.shrink();
     return ClipRRect(
-      borderRadius: BorderRadius.circular(Space.xs),
+      borderRadius: BorderRadius.circular(Space.xs / 2),
       child: SizedBox(
-        height: replyRowHeight - Space.s,
+        height: explorerBarHeight,
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _part(white, total, resultBarWhite, resultBarBlack),
-            _part(draws, total, resultBarDraw, resultBarWhite),
-            _part(black, total, resultBarBlack, resultBarWhite),
+            _part(white, total, resultBarWhite, resultBarWhiteInk),
+            _part(draws, total, resultBarDraw, resultBarDrawInk),
+            _part(black, total, resultBarBlack, resultBarBlackInk),
           ],
         ),
       ),
@@ -413,22 +428,38 @@ class ResultBar extends StatelessWidget {
   Widget _part(int count, int total, Color fill, Color ink) {
     if (count == 0) return const SizedBox.shrink();
     final share = count / total;
+    final label = '${(share * 100).round()}%';
+    final style = resultBarText.copyWith(color: ink);
     return Expanded(
       flex: (share * 1000).round().clamp(1, 1000),
       child: ColoredBox(
         color: fill,
-        child: share >= resultBarLabelFrom
-            ? Center(
-                child: Text(
-                  '${(share * 100).round()}%',
-                  style: monoText.copyWith(color: ink),
-                  maxLines: 1,
-                  overflow: TextOverflow.clip,
-                ),
-              )
-            : null,
+        child: LayoutBuilder(
+          builder: (context, constraints) =>
+              _fits(label, style, context, constraints.maxWidth)
+              ? Center(child: Text(label, style: style, maxLines: 1))
+              : const SizedBox.expand(),
+        ),
       ),
     );
+  }
+
+  /// Whether [label] fits in [width] with a little room either side.
+  static bool _fits(
+    String label,
+    TextStyle style,
+    BuildContext context,
+    double width,
+  ) {
+    final painter = TextPainter(
+      text: TextSpan(text: label, style: style),
+      textDirection: TextDirection.ltr,
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    final fits = painter.width + Space.xs <= width;
+    painter.dispose();
+    return fits;
   }
 }
 
@@ -468,13 +499,16 @@ class _GameRow extends StatelessWidget {
                 child: Text(
                   '${_player(game.white, game.whiteElo)} – '
                   '${_player(game.black, game.blackElo)}',
-                  style: theme.textTheme.bodyMedium,
+                  style: muted,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
               const SizedBox(width: Space.m),
-              Text(game.result, style: monoText),
+              Text(
+                game.result,
+                style: monoText.copyWith(color: scheme.onSurfaceVariant),
+              ),
               const SizedBox(width: Space.m),
               SizedBox(
                 width: explorerGamesWidth / 2,

@@ -29,7 +29,6 @@ final class TreeRow {
   const TreeRow({
     required this.uci,
     required this.san,
-    required this.label,
     required this.after,
     required this.lines,
     required this.places,
@@ -39,9 +38,6 @@ final class TreeRow {
 
   final String uci;
   final String san;
-
-  /// `5.` or `5...`, what a line's first move is numbered with.
-  final String label;
 
   /// The position it leaves behind, for the small board under the pointer.
   final Fen after;
@@ -327,7 +323,6 @@ final class RepertoireTree extends ChangeNotifier {
     return TreeRow(
       uci: first.uci,
       san: first.san,
-      label: moveNumberLabel(first, startsLine: true),
       after: first.fen,
       lines: seen.fold(0, (sum, s) => sum + s.$1.lines),
       places: [for (final (s, ref) in seen) TreePlace(ref, s.sans)],

@@ -329,18 +329,10 @@ class _MoveRow extends StatelessWidget {
     );
   }
 
-  /// The move, numbered as a line's first move is.
-  Widget _move(ColorScheme scheme) => Text.rich(
-    TextSpan(
-      children: [
-        if (row.label.isNotEmpty)
-          TextSpan(
-            text: '${row.label} ',
-            style: TextStyle(color: scheme.onSurfaceVariant),
-          ),
-        TextSpan(text: row.san),
-      ],
-    ),
+  /// The move alone, as the explorer shows it: every row would carry the
+  /// same number.
+  Widget _move(ColorScheme scheme) => Text(
+    row.san,
     style: monoText.copyWith(color: scheme.onSurface),
     overflow: TextOverflow.ellipsis,
   );
