@@ -34,12 +34,17 @@ final class Chapter {
     required this.lines,
     required this.tree,
     this.game,
+    this.sideStated = true,
   });
 
   final String name;
 
   /// The side the repertoire is for; also the board orientation.
   final Side side;
+
+  /// Whether the file says which side it is for. One that does not is read
+  /// as White, and the app asks the user once and writes the answer down.
+  final bool sideStated;
 
   /// The `//` metadata above the first game, verbatim.
   final String preamble;
@@ -220,9 +225,11 @@ Chapter _built({
   final focused = game != null && game >= 0 && game < lines.length
       ? lines[game]
       : null;
+  final stated = focused == null ? statedSide(preamble) : null;
   return Chapter(
     name: name,
-    side: focused == null ? chapterSide(preamble) : studyOrientation(focused),
+    side: focused == null ? stated ?? Side.white : studyOrientation(focused),
+    sideStated: focused != null || stated != null,
     preamble: preamble,
     lines: List.unmodifiable(lines),
     tree: game == null
@@ -265,6 +272,7 @@ GameTree mergeLines(List<ChapterLine> lines, {Fen orElseFrom = Fen.initial}) {
 Chapter renamedChapter(Chapter chapter, String name) => Chapter(
   name: name,
   side: chapter.side,
+  sideStated: chapter.sideStated,
   preamble: chapter.preamble,
   lines: chapter.lines,
   tree: chapter.tree,
@@ -360,7 +368,11 @@ String writeChapter(Chapter chapter) {
 /// The whole preamble is looked at, because a file can carry anything above
 /// its first game and the colour line may be below it. Nothing below the
 /// first game is, so asking a large chapter still costs only its heading.
-Side chapterSide(String text) {
+Side chapterSide(String text) => statedSide(text) ?? Side.white;
+
+/// The side the `// Color:` line above the first game names, or null when
+/// there is no such line: the file has not said.
+Side? statedSide(String text) {
   var at = 0;
   while (at < text.length) {
     var end = text.indexOf('\n', at);
@@ -372,5 +384,5 @@ Side chapterSide(String text) {
     final color = line.substring('// Color:'.length).trim().toLowerCase();
     return color == 'black' ? Side.black : Side.white;
   }
-  return Side.white;
+  return null;
 }

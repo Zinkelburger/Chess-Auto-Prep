@@ -3,11 +3,14 @@ import 'package:chess_auto_prep/v2/engines/maia/move_policy.dart';
 import 'package:chess_auto_prep/v2/storage/settings.dart';
 import 'package:chess_auto_prep/v2/storage/settings_store.dart';
 import 'package:chess_auto_prep/v2/ui/theme.dart';
+import 'package:chess_auto_prep/v2/workspace/repertoire_answers.dart';
 import 'package:chess_auto_prep/v2/workspace/replies.dart';
 import 'package:chess_auto_prep/v2/workspace/replies_pane.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/scripted_store.dart';
+import '../support/scripted_files.dart';
 import '../support/session_fixture.dart';
 
 const chapter = '''
@@ -49,6 +52,10 @@ void main() {
       session: fixture.session,
       policy: OneOpinion(),
       settings: settings,
+      answers: RepertoireAnswers(
+        files: ScriptedFiles(),
+        documents: ScriptedDocumentStore(),
+      ),
     );
     addTearDown(replies.dispose);
     await tester.pumpWidget(

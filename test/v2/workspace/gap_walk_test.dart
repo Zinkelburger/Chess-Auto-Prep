@@ -77,6 +77,51 @@ void main() {
     expect(found.covered, closeTo(0.05, 1e-9));
   });
 
+  test('a reply or a dead end the repertoire answers elsewhere is not a '
+      'gap', () async {
+    // Another chapter answers 1. e4 e6, and 1. e4 c5 as well, so the e6
+    // reply and the Sicilian dead end are that chapter's, not this one's.
+    final other = parseChapter(
+      name: 'French',
+      text: '''
+// Color: White
+
+[Event "French"]
+[Result "*"]
+
+1. e4 e6 2. d4 *
+
+[Event "Sicilian"]
+[Result "*"]
+
+1. e4 c5 2. Nf3 *
+''',
+    );
+    final elsewhere = {
+      for (final position in answeredPositions(other.tree, Side.white))
+        position: 'French',
+    };
+    final found = await walkGaps(
+      tree: tree,
+      side: Side.white,
+      floor: 0.1,
+      shares: model,
+      overtaken: () => false,
+      elsewhere: elsewhere,
+    );
+    expect(found!.gaps.map((gap) => (gap as MissingReply).san), ['Nc6', 'Nf6']);
+  });
+
+  test('answered positions are the ones where our move is written', () {
+    final answered = answeredPositions(tree, Side.white);
+    // The start (1. e4 is written), after 1. e4 e5 (2. Nf3 is written); not
+    // after 1. e4 c5, where the chapter stops, nor any Black-to-move one.
+    expect(answered, {
+      'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+      'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq -',
+    });
+  });
+
   test('a reply under the floor is neither followed nor a gap', () async {
     final found = await walk(floor: 0.2);
     expect(found.gaps.map((gap) => gap.reach.toStringAsFixed(2)), [

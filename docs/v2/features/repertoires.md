@@ -154,8 +154,18 @@ picker.
 - **Gaps come from Maia only**, offline and the same model the search uses. A gap is a position
   reached at least once in N games (**Cover replies met once in** setting, default 50) at the
   opponent rating with no move of ours. Reach is the product of the opponent's shares from the
-  chapter root; our moves count as certain. Coverage is one minus the reach that ends in gaps. Gaps
-  are per chapter; transpositions into other chapters are not resolved.
+  chapter root; our moves count as certain. Coverage is one minus the reach that ends in gaps. A
+  reply that leads into a position another chapter of the same repertoire answers (or another line
+  of this one) is not a gap; its row names that chapter (`Petroff`, or `this chapter`) where `gap`
+  would stand (owner, 2026-09-22: "it shows moves missing even when they are present in other
+  chapters"). The other chapters are read from disk once and again after any library change or
+  chapter switch; draft chapters do not count as answers.
+- **The side is asked once, not switched.** The reading card says `White · 12 lines`; there is no
+  White/Black control on it. A chapter whose file has no `// Color:` line is asked `Which side is
+  <chapter> for?` when it opens, and the answer is written into the file. Changing it later is
+  `Play as Black` / `Play as White` in the Actions menu (owner, 2026-09-22).
+- **Actions sits beside the mode menu** at the top left, and the list column starts at its
+  narrowest (180 px); the divider widens it (owner, 2026-09-22).
 - **Chapters have a visible root.** `// Root: 1. e4 e5 2. f4` shows under the chapter's name in the
   outline; `New chapter` offers `From here` with the board's moves, which is how a chapter for one
   opening is set up. An empty rooted chapter starts its board at the root.

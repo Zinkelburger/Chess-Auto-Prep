@@ -8,11 +8,18 @@ import '../chess/pgn/move_label.dart';
 import '../chess/pgn/tree_edit.dart';
 import '../diagnostics/log.dart';
 import '../engines/maia/move_policy.dart';
+import '../storage/chapter_files.dart';
 import '../storage/settings_store.dart';
 import 'document_session.dart';
 import 'gap_walk.dart';
 
+import 'repertoire_answers.dart';
+
 export 'gap_walk.dart' show DeadEnd, Gap, GapWalk, MissingReply;
+
+/// What a reply row says when the position after it is answered by another
+/// line of the same chapter rather than by another chapter.
+const hereLabel = 'this chapter';
 
 /// One move the model expects at the position on the board.
 final class ReplyRow {
@@ -24,6 +31,7 @@ final class ReplyRow {
     required this.after,
     required this.inRepertoire,
     required this.gap,
+    this.elsewhere,
   });
 
   /// Standard UCI, as the model names it.
@@ -46,6 +54,10 @@ final class ReplyRow {
   /// The opponent plays it often enough to need an answer, and the chapter
   /// has none: the row the user is here to fill.
   final bool gap;
+
+  /// The chapter of the repertoire that answers the position after it,
+  /// when this chapter does not play it: the answer is on another page.
+  final String? elsewhere;
 }
 
 /// What the Replies table shows for the position on the board.
@@ -88,16 +100,20 @@ final class RepliesFailed extends RepliesState {
 /// Owns the model's answers (cached by position and rating, so a chapter
 /// walked once is cheap to walk again after an edit), the table for the
 /// cursor, the walk over the chapter and the gap the user was last taken
-/// to. Reads the [DocumentSession] and the [SettingsStore]; never holds a
-/// copy of the tree or the cursor.
+/// to. Reads the [DocumentSession], the [SettingsStore] and, through
+/// [RepertoireAnswers], the other chapters of the repertoire, so a reply
+/// another chapter answers is not called a gap here; never holds a copy of
+/// the tree or the cursor.
 final class Replies extends ChangeNotifier {
   Replies({
     required DocumentSession session,
     required MovePolicy policy,
     required SettingsStore settings,
+    required RepertoireAnswers answers,
   }) : _session = session,
        _policy = policy,
-       _settings = settings {
+       _settings = settings,
+       _answers = answers {
     _session.addListener(_followTheSession);
     _settings.addListener(_followTheSettings);
     _followTheSession();
@@ -111,8 +127,15 @@ final class Replies extends ChangeNotifier {
   final DocumentSession _session;
   final MovePolicy _policy;
   final SettingsStore _settings;
+  final RepertoireAnswers _answers;
 
   final _cache = <String, Map<String, double>>{};
+
+  /// What the rest of the repertoire answers, by position, as of the last
+  /// walk: the other chapters' positions and this chapter's own, so a
+  /// transposition into either is not a gap.
+  var _elsewhere = const <String, String>{};
+  ChapterRef? _source;
   RepliesState _table = const RepliesEmpty();
   GapWalk? _walk;
   bool _walking = false;
@@ -177,6 +200,12 @@ final class Replies extends ChangeNotifier {
     if (_highlighted != null && _session.cursor != _highlighted!.at) {
       _highlighted = null;
     }
+    if (_session.source != _source) {
+      // The chapter that was open may have been edited; what it answers is
+      // read again the next time another chapter is walked.
+      _source = _session.source;
+      _answers.forget();
+    }
     if (!identical(chapter, _walkedChapter)) {
       _walkedChapter = chapter;
       unawaited(_rewalk());
@@ -221,16 +250,25 @@ final class Replies extends ChangeNotifier {
       return;
     }
     final chapter = _session.chapter!;
+    final source = _session.source;
     _walking = true;
     final floor = 1 / _settings.value.coverOnceIn;
+    final elsewhere = {
+      if (source != null) ...await _answers.around(source, chapter.side),
+      for (final position in answeredPositions(chapter.tree, chapter.side))
+        position: hereLabel,
+    };
+    if (_disposed || ticket != _walkTicket) return;
     final walk = await walkGaps(
       tree: chapter.tree,
       side: chapter.side,
       floor: floor,
       shares: _sharesFor,
       overtaken: () => _disposed || ticket != _walkTicket,
+      elsewhere: elsewhere,
     );
     if (_disposed || ticket != _walkTicket || walk == null) return;
+    _elsewhere = elsewhere;
     _walk = walk;
     _walking = false;
     _gapIndex = -1;
@@ -250,7 +288,7 @@ final class Replies extends ChangeNotifier {
   /// the model sees, so they are not part of the key.
   Future<MaiaAnswer> _asked(Fen fen) async {
     final elo = _settings.value.opponentElo;
-    final key = '${_positionKey(fen)}|$elo';
+    final key = '${fen.position}|$elo';
     final cached = _cache[key];
     if (cached != null) return MaiaPolicy(cached);
     final answer = await _policy.policy(fen, elo);
@@ -275,6 +313,7 @@ final class Replies extends ChangeNotifier {
       final move = Move.parse(uci);
       final node = move == null ? null : moveNode(fen, move);
       if (node == null) continue;
+      final elsewhere = played ? null : _elsewhere[node.fen.position];
       rows.add(
         ReplyRow(
           uci: uci,
@@ -283,7 +322,13 @@ final class Replies extends ChangeNotifier {
           share: share,
           after: node.fen,
           inRepertoire: played,
-          gap: !ourMove && !played && reach != null && reach * share >= floor,
+          gap:
+              !ourMove &&
+              !played &&
+              elsewhere == null &&
+              reach != null &&
+              reach * share >= floor,
+          elsewhere: ourMove ? null : elsewhere,
         ),
       );
     }
@@ -298,6 +343,3 @@ final class Replies extends ChangeNotifier {
     super.dispose();
   }
 }
-
-/// The four fields of a FEN that make a position, without the counters.
-String _positionKey(Fen fen) => fen.value.split(' ').take(4).join(' ');

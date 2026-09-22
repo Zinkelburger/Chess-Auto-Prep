@@ -236,14 +236,25 @@ class _ReplyRow extends StatelessWidget {
     );
   }
 
-  /// A tick for a move the chapter plays; the word for a reply it must
-  /// answer and does not. Nothing for the rest.
+  /// A tick for a move the chapter plays; the name of the chapter that
+  /// answers a reply this one does not; the word for a reply it must answer
+  /// and nothing does. Nothing for the rest.
   Widget _mark(ThemeData theme) {
+    final scheme = theme.colorScheme;
     if (row.inRepertoire) {
       return Icon(
         Icons.check,
         size: IconSize.menu,
-        color: theme.colorScheme.onSurfaceVariant,
+        color: scheme.onSurfaceVariant,
+      );
+    }
+    if (row.elsewhere case final chapter?) {
+      return Text(
+        chapter,
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: scheme.onSurfaceVariant,
+        ),
+        overflow: TextOverflow.ellipsis,
       );
     }
     if (row.gap) return Text('gap', style: theme.textTheme.labelSmall);

@@ -3,9 +3,14 @@ import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/engines/maia/move_policy.dart';
 import 'package:chess_auto_prep/v2/storage/settings.dart';
 import 'package:chess_auto_prep/v2/storage/settings_store.dart';
+import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
+import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/v2/workspace/repertoire_answers.dart';
 import 'package:chess_auto_prep/v2/workspace/replies.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/scripted_files.dart';
+import '../support/scripted_store.dart';
 import '../support/session_fixture.dart';
 
 const chapter = '''
@@ -15,6 +20,16 @@ const chapter = '''
 [Result "*"]
 
 1. e4 e5 2. Nf3 *
+''';
+
+/// A sibling chapter that answers 1. e4 c5.
+const sicilianChapter = '''
+// Color: White
+
+[Event "Sicilian"]
+[Result "*"]
+
+1. e4 c5 2. Nf3 *
 ''';
 
 /// A model that knows two positions and fails on every other.
@@ -44,6 +59,7 @@ void main() {
   late SessionFixture fixture;
   late ScriptedPolicy policy;
   late SettingsStore settings;
+  late RepertoireAnswers answers;
   late Replies replies;
 
   setUp(() async {
@@ -52,10 +68,19 @@ void main() {
     settings = SettingsStore(
       initial: const Settings(opponentElo: 2000, coverOnceIn: 5),
     );
+    answers = RepertoireAnswers(
+      files: ScriptedFiles(
+        listing: Repertoires([
+          folder('KID', ['Main', 'Sicilian']),
+        ]),
+      ),
+      documents: fixture.store,
+    );
     replies = Replies(
       session: fixture.session,
       policy: policy,
       settings: settings,
+      answers: answers,
     );
   });
 
@@ -125,6 +150,28 @@ void main() {
     await pumpEventQueue();
     expect(replies.table, isA<RepliesFailed>());
     expect((replies.table as RepliesFailed).reason, 'no opinion');
+  });
+
+  test('a reply another chapter of the repertoire answers is not a gap; '
+      'its row names that chapter', () async {
+    // The Sicilian chapter beside Main answers 1. e4 c5, so Main's missing
+    // c5 is not a gap: the answer is on another page.
+    final sicilian = chapterRef('KID', 'Sicilian');
+    fixture.store.documents[sicilian] = Opened(
+      sicilianChapter,
+      scriptedRevision(sicilianChapter),
+    );
+    answers.forget();
+    // A settings change walks the chapter again, now with the sibling there.
+    await settings.update(const Settings(opponentElo: 2000, coverOnceIn: 4));
+    await pumpEventQueue();
+    fixture.session.forward();
+    await pumpEventQueue();
+    final shown = replies.table as RepliesShown;
+    final byMove = {for (final row in shown.rows) row.san: row};
+    expect(byMove['c5']!.gap, isFalse);
+    expect(byMove['c5']!.elsewhere, 'Sicilian');
+    expect(replies.walk!.gaps, isEmpty);
   });
 
   test('closing the document empties the table', () async {

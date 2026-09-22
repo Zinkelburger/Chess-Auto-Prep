@@ -28,6 +28,7 @@ import '../workspace/document_saver.dart';
 import '../workspace/document_session.dart';
 import '../workspace/session_results.dart';
 import '../workspace/engine_analysis.dart';
+import '../workspace/repertoire_answers.dart';
 import '../workspace/replies.dart';
 import 'engine_launch.dart';
 import 'maia_launch.dart';
@@ -75,7 +76,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
   late final _saver = DocumentSaver(_store);
   late final _session = DocumentSession(_store, _saver);
   late final Library _library = Library(
-    files: ChapterDirectory(Directory(_repertoires)),
+    files: _chapterFiles,
     documents: _store,
     session: _session,
     saver: _saver,
@@ -116,10 +117,16 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
   );
 
   final _maia = MaiaLaunch();
+  late final _chapterFiles = ChapterDirectory(Directory(_repertoires));
+  late final _answers = RepertoireAnswers(
+    files: _chapterFiles,
+    documents: _store,
+  );
   late final _replies = Replies(
     session: _session,
     policy: _maia,
     settings: _settings,
+    answers: _answers,
   );
 
   /// What the engine was last started with, so a settings change that
@@ -190,6 +197,9 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
       onInactive: _flushDraft,
       onHide: _flushDraft,
     );
+    // A library change is a chapter file written, so what the other
+    // chapters answer is read again the next time a chapter is walked.
+    _library.addListener(_answers.forget);
     unawaited(_library.refresh());
     unawaited(_startWithSettings());
   }
@@ -250,6 +260,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     _maia.dispose();
     _settings.dispose();
     _outline.dispose();
+    _library.removeListener(_answers.forget);
     _library.dispose();
     _studies.dispose();
     _viewer.dispose();

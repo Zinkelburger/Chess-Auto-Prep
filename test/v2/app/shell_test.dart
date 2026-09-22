@@ -20,7 +20,9 @@ import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
 import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
+import 'package:chess_auto_prep/v2/workspace/repertoire_answers.dart';
 import 'package:chess_auto_prep/v2/workspace/replies.dart';
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -125,6 +127,10 @@ void main() {
       session: session,
       policy: const NoOpinion(),
       settings: settings,
+      answers: RepertoireAnswers(
+        files: ScriptedFiles(),
+        documents: ScriptedDocumentStore(),
+      ),
     );
     addTearDown(replies.dispose);
     await tester.binding.setSurfaceSize(const Size(1400, 800));
@@ -160,7 +166,10 @@ void main() {
     await tester.pump();
     expect(session.source, kid);
     expect(session.chapter?.gameCount, 2);
-    expect(find.text('2 lines, 1 from another position'), findsOneWidget);
+    expect(
+      find.text('Black · 2 lines, 1 from another position'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('the later of two clicks wins, whichever read finishes first', (
@@ -346,6 +355,56 @@ void main() {
     expect(textOf(store, kid), isNot(contains('[Event "Closed"]')));
   });
 
+  testWidgets('Actions sits beside the mode menu, at the left', (tester) async {
+    await pump(tester);
+    final mode = tester.getTopRight(find.text('Repertoires').first);
+    final actions = tester.getTopLeft(find.text('Actions'));
+    expect(actions.dx, greaterThan(mode.dx));
+    expect(actions.dx, lessThan(paneMinWidth * 2));
+  });
+
+  testWidgets('the side is changed from Actions and written to the file', (
+    tester,
+  ) async {
+    await pump(tester);
+    await tester.tap(inLibrary(find.text('Main')).last);
+    await tester.pumpAndSettle();
+    expect(find.byType(SegmentedButton<Side>), findsNothing);
+    await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Play as White'));
+    await tester.pumpAndSettle();
+    expect(session.chapter?.side, Side.white);
+    expect(
+      find.text('White · 2 lines, 1 from another position'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a chapter whose file does not say its side is asked once, '
+      'and the answer is written down', (tester) async {
+    const unsaid = '[Event "Open"]\n[Result "*"]\n\n1. e4 e5 *\n';
+    store.documents[benko] = Opened(unsaid, scriptedRevision(unsaid));
+    await pump(tester);
+    await tester.tap(inLibrary(find.text('Main')).first);
+    await tester.pumpAndSettle();
+    expect(find.text('Which side is Main for?'), findsOneWidget);
+    await tester.tap(find.text('Black'));
+    await tester.pumpAndSettle();
+    expect(find.text('Which side is Main for?'), findsNothing);
+    expect(session.chapter?.side, Side.black);
+    expect(session.chapter?.sideStated, isTrue);
+    await saver.flush();
+    expect(
+      (store.documents[benko] as Opened).text,
+      startsWith('// Color: Black\n'),
+    );
+    // The stated chapter is not asked.
+    await tester.tap(inLibrary(find.text('Main')).last);
+    await tester.pumpAndSettle();
+    expect(find.text('Which side is Main for?'), findsNothing);
+  });
+
   testWidgets('the list toggle sits at the edge of the pane, shown or not', (
     tester,
   ) async {
@@ -355,7 +414,7 @@ void main() {
     expect(hide, findsOneWidget);
     expect(find.byTooltip('Show the list (Ctrl+B)'), findsNothing);
     final corner = tester.getTopRight(hide);
-    expect(corner.dx, closeTo(libraryPanelWidth, Space.l));
+    expect(corner.dx, closeTo(paneMinWidth, Space.l));
     expect(corner.dy, greaterThan(40));
     await tester.tap(hide);
     await tester.pumpAndSettle();

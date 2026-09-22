@@ -1,6 +1,7 @@
 import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
 import 'package:chess_auto_prep/v2/workspace/reading_header.dart';
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -41,23 +42,15 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('shows which side the chapter is for and changes it', (
-    tester,
-  ) async {
-    await pump(tester, fixture.session);
-    expect(find.text('Black'), findsOneWidget);
-    await tester.tap(find.text('White'));
-    await tester.pumpAndSettle();
-    expect(fixture.onDisk, startsWith('// Color: White\n'));
-    expect(fixture.session.orientation.name, 'white');
-  });
-
-  testWidgets('names the chapter and its lines, and nothing about saving', (
-    tester,
-  ) async {
+  testWidgets('names the chapter, its side and its lines, with nothing to '
+      'switch and nothing about saving', (tester) async {
     await pump(tester, fixture.session);
     expect(find.text('Main'), findsOneWidget);
-    expect(find.text('2 lines, 1 from another position'), findsOneWidget);
+    expect(
+      find.text('Black · 2 lines, 1 from another position'),
+      findsOneWidget,
+    );
+    expect(find.byType(SegmentedButton<Side>), findsNothing);
     expect(find.text('Saved'), findsNothing);
     expect(find.byType(IconButton), findsNothing);
   });
@@ -68,14 +61,17 @@ void main() {
     final other = await openSession(_partial);
     addTearDown(other.dispose);
     await pump(tester, other.session);
-    expect(find.text('2 lines, 1 cannot be edited here'), findsOneWidget);
+    expect(
+      find.text('White · 2 lines, 1 cannot be edited here'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('says when a game could not be read at all', (tester) async {
     final other = await openSession(unreadableGameChapter);
     addTearDown(other.dispose);
     await pump(tester, other.session);
-    expect(find.text('1 line, 1 could not be read'), findsOneWidget);
+    expect(find.text('White · 1 line, 1 could not be read'), findsOneWidget);
   });
 
   testWidgets('a study chapter is not offered a repertoire playing side', (

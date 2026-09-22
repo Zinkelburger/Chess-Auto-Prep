@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:multi_split_view/multi_split_view.dart';
@@ -20,11 +21,13 @@ import '../storage/settings_store.dart';
 import '../ui/app_action.dart';
 import '../ui/choice_dialog.dart';
 import '../ui/theme.dart';
+import '../workspace/chapter_commands.dart';
 import '../workspace/copy_name_dialog.dart';
 import '../workspace/document_actions.dart';
 import '../workspace/document_saver.dart';
 import '../workspace/document_session.dart';
 import '../workspace/session_results.dart';
+import '../workspace/side_dialog.dart';
 import '../workspace/engine_analysis.dart';
 import '../workspace/replies.dart';
 import '../workspace/workspace_keys.dart';
@@ -91,11 +94,9 @@ class _ShellState extends State<Shell> {
   /// split view keys each pane by its area, and a pane rebuilt from a new
   /// area loses what it had open.
   final _panes = MultiSplitViewController();
-  final _list = Area(
-    data: _Pane.list,
-    size: libraryPanelWidth,
-    min: paneMinWidth,
-  );
+  // The list starts as narrow as it goes: the board is what the window is
+  // for, and the divider is there for whoever wants more of the list.
+  final _list = Area(data: _Pane.list, size: paneMinWidth, min: paneMinWidth);
   final _outline = Area(
     data: _Pane.outline,
     size: outlineColumnWidth,
@@ -185,11 +186,25 @@ class _ShellState extends State<Shell> {
         return false;
       case DocumentOpened():
         _said(null);
+        unawaited(_askTheSide());
         return true;
       case OpenFailed(:final reason):
         _said(reason);
         return false;
     }
+  }
+
+  /// A repertoire chapter whose file does not say which side it is for is
+  /// asked about once, and the answer is written into the file, so the
+  /// question never comes back. Dismissing it leaves the file as it was,
+  /// read as White, and it is asked again the next time the chapter opens.
+  Future<void> _askTheSide() async {
+    final chapter = widget.session.chapter;
+    if (chapter == null || chapter.game != null || chapter.sideStated) return;
+    final source = widget.session.source;
+    final side = await showSideDialog(context, chapter: chapter.name);
+    if (!mounted || side == null || widget.session.source != source) return;
+    setSide(widget.session, side);
   }
 
   /// A file from the viewer's recent list: brought inside Documents if it
@@ -277,6 +292,12 @@ class _ShellState extends State<Shell> {
           : widget.replies.nextGap,
       group: 'Repertoire',
     ),
+    if (widget.session.chapter case final chapter? when chapter.game == null)
+      AppAction(
+        chapter.side == Side.white ? 'Play as Black' : 'Play as White',
+        () => setSide(widget.session, chapter.side.opposite),
+        group: 'Repertoire',
+      ),
     // Not built yet: the expectimax search that writes proposed lines into
     // a draft chapter. The entry is here so the menu has its final shape.
     const AppAction('Fill gaps from here…', null, group: 'Repertoire'),

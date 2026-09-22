@@ -79,6 +79,23 @@ final class GapWalk {
   }
 }
 
+/// The positions at which [tree], played from [side], has a move of ours:
+/// where it is our move and the tree goes on. Keyed by [Fen.position], so a
+/// position reached by another road is the same position.
+Set<String> answeredPositions(GameTree tree, Side side) {
+  final answered = <String>{};
+  void visit(Fen fen, List<MoveNode> children) {
+    if (children.isEmpty) return;
+    if (fen.whiteToMove == (side == Side.white)) answered.add(fen.position);
+    for (final child in children) {
+      visit(child.fen, child.children);
+    }
+  }
+
+  visit(tree.rootFen, tree.children);
+  return answered;
+}
+
 /// Walks [tree] as [side]'s repertoire and lists the gaps above [floor].
 ///
 /// At our move every continuation is followed with the reach it arrived
@@ -91,14 +108,20 @@ final class GapWalk {
 /// [overtaken] is asked after every model answer; once it says so the walk
 /// stops and answers null, so a chapter edited mid-walk never gets a report
 /// about the version before.
+///
+/// [elsewhere] names, by [Fen.position], the positions the rest of the
+/// repertoire answers — another chapter, or another line of this one. A
+/// reply that leads into one of them is not a gap, and neither is a line
+/// that stops in one: the answer is there, only not on this page.
 Future<GapWalk?> walkGaps({
   required GameTree tree,
   required Side side,
   required double floor,
   required ReplyShares shares,
   required bool Function() overtaken,
+  Map<String, String> elsewhere = const {},
 }) async {
-  final walk = _Walk(tree, side, floor, shares, overtaken);
+  final walk = _Walk(tree, side, floor, shares, overtaken, elsewhere);
   if (!await walk.visit(const NodePath.root(), 1.0)) return null;
   walk.gaps.sort((a, b) => b.reach.compareTo(a.reach));
   return GapWalk(
@@ -110,13 +133,21 @@ Future<GapWalk?> walkGaps({
 }
 
 final class _Walk {
-  _Walk(this.tree, this.side, this.floor, this.shares, this.overtaken);
+  _Walk(
+    this.tree,
+    this.side,
+    this.floor,
+    this.shares,
+    this.overtaken,
+    this.elsewhere,
+  );
 
   final GameTree tree;
   final Side side;
   final double floor;
   final ReplyShares shares;
   final bool Function() overtaken;
+  final Map<String, String> elsewhere;
 
   final gaps = <Gap>[];
   final reach = <NodePath, double>{};
@@ -137,7 +168,9 @@ final class _Walk {
 
   Future<bool> _ours(NodePath path, double reached, List<MoveNode> kids) async {
     if (kids.isEmpty) {
-      gaps.add(DeadEnd(at: path, reach: reached));
+      if (!elsewhere.containsKey(tree.fenAt(path).position)) {
+        gaps.add(DeadEnd(at: path, reach: reached));
+      }
       return true;
     }
     for (var i = 0; i < kids.length; i++) {
@@ -164,7 +197,8 @@ final class _Walk {
       if (onward < floor) continue;
       final index = indexOfReply(fen, kids, uci);
       if (index < 0) {
-        gaps.add(_missing(fen, path, uci, onward));
+        final gap = _missing(fen, path, uci, onward);
+        if (gap != null) gaps.add(gap);
       } else if (!await visit(path.child(index), onward)) {
         return false;
       }
@@ -172,9 +206,12 @@ final class _Walk {
     return true;
   }
 
-  Gap _missing(Fen fen, NodePath at, String uci, double reached) {
+  /// The gap the opponent's [uci] at [at] opens, or null when the position
+  /// it leads to is answered elsewhere in the repertoire.
+  Gap? _missing(Fen fen, NodePath at, String uci, double reached) {
     final move = Move.parse(uci);
     final node = move == null ? null : moveNode(fen, move);
+    if (node != null && elsewhere.containsKey(node.fen.position)) return null;
     return MissingReply(
       at: at,
       reach: reached,

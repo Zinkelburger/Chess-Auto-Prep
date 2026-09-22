@@ -4,12 +4,13 @@ import '../ui/app_action.dart';
 import '../ui/theme.dart';
 import 'shell.dart';
 
-/// The row over the window: the mode menu, and on the right the Actions
-/// menu — one menu of everything that can be done now, the same shape in
-/// every mode. While the list pane is hidden, the `»` that brings it back
-/// sits at the left, where the pane would be; shown, the pane carries its
-/// own `«` in its top right corner, so the toggle is always at the pane's
-/// edge.
+/// The row over the window: the mode menu and, beside it, the Actions menu
+/// — one menu of everything that can be done now, the same shape in every
+/// mode. Both sit at the left, where the pointer already is, and the rest
+/// of the row is empty. While the list pane is hidden, the `»` that brings
+/// it back sits before them, where the pane would be; shown, the pane
+/// carries its own `«` in its top right corner, so the toggle is always at
+/// the pane's edge.
 class TopBar extends StatelessWidget {
   const TopBar({
     super.key,
@@ -39,8 +40,9 @@ class TopBar extends StatelessWidget {
         children: [
           if (!listShown) ListToggle(shown: false, onPressed: onToggleList),
           _ModeMenu(mode: mode, onMode: onMode, onSettings: onSettings),
-          const Spacer(),
+          const SizedBox(width: Space.s),
           _ActionsMenu(actions: actions),
+          const Spacer(),
         ],
       ),
     );

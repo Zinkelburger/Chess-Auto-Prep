@@ -5,6 +5,7 @@ import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
 import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
+import 'package:chess_auto_prep/v2/workspace/repertoire_answers.dart';
 import 'package:chess_auto_prep/v2/workspace/replies.dart';
 import 'package:chess_auto_prep/v2/workspace/workspace_keys.dart';
 import 'package:chess_auto_prep/v2/workspace/workspace_view.dart';
@@ -12,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/scripted_files.dart';
 import '../support/fixtures.dart';
 import '../support/scripted_store.dart';
 import '../support/scripted_policy.dart';
@@ -37,6 +39,10 @@ void main() {
       session: session,
       policy: const NoOpinion(),
       settings: settings,
+      answers: RepertoireAnswers(
+        files: ScriptedFiles(),
+        documents: ScriptedDocumentStore(),
+      ),
     );
     addTearDown(replies.dispose);
   }
@@ -88,7 +94,10 @@ void main() {
       'navigation row', (tester) async {
     await pump(tester);
     expect(find.text('Main'), findsOneWidget);
-    expect(find.text('2 lines, 1 from another position'), findsOneWidget);
+    expect(
+      find.text('Black · 2 lines, 1 from another position'),
+      findsOneWidget,
+    );
     expect(find.textContaining('c5'), findsOneWidget);
     expect(find.textContaining('Nc3'), findsOneWidget);
     expect(find.text('The Sicilian'), findsOneWidget);
