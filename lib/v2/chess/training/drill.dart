@@ -213,13 +213,19 @@ final class Drill {
       pass: Pass.replay,
       replaying: [...missed]..sort(),
     )._ask(),
-    _ => _with(stage: Finished(clean: missed.isEmpty)),
+    _ => _finished(),
   };
+
+  /// The whole line on the board, the opponent's last moves included.
+  Drill _finished() => _with(
+    shown: line.moves.length,
+    stage: Finished(clean: missed.isEmpty),
+  );
 
   /// Replay: the next missed ply, once the current one has been answered.
   Drill _nextReplay() {
     final left = replaying.skip(1).toList();
-    if (left.isEmpty) return _with(stage: Finished(clean: missed.isEmpty));
+    if (left.isEmpty) return _finished();
     return _with(replaying: left)._ask();
   }
 

@@ -151,7 +151,7 @@ class Lesson extends ChangeNotifier {
   /// The rating that could not be written, again.
   void retry() {
     if (_state case LineNotSaved(:final rating, :final clean)) {
-      unawaited(_save(rating, clean: clean));
+      unawaited(_save(rating, clean: clean, again: true));
     }
   }
 
@@ -221,11 +221,19 @@ class Lesson extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _save(Rating rating, {required bool clean}) async {
+  /// Writes the line's rating; [again] writes the rows the last try worked
+  /// out, which may be partly on disk already.
+  Future<void> _save(
+    Rating rating, {
+    required bool clean,
+    bool again = false,
+  }) async {
     final line = this.line;
     _state = const SavingLine();
     notifyListeners();
-    final result = await _progress.finished(line, rating, clean: clean);
+    final result = again
+        ? await _progress.retry(line)
+        : await _progress.finished(line, rating, clean: clean);
     if (_disposed) return;
     if (result is! ProgressWritten) {
       _state = LineNotSaved(result, rating, clean: clean);

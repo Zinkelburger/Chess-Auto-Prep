@@ -100,6 +100,10 @@ class Trainer extends ChangeNotifier {
   /// later load or a newer chapter overtakes.
   ({ChapterRef? ref, TrainScope scope, Object? chapter})? _read;
 
+  /// Counts loads, so an older one that finishes late is not taken for the
+  /// newest when both asked for the same thing.
+  var _loads = 0;
+
   /// The board while a sitting holds it; null otherwise.
   final board = ValueNotifier<BoardClaim?>(null);
 
@@ -173,7 +177,11 @@ class Trainer extends ChangeNotifier {
   ) {
     final state = _state;
     if (state is! TrainerReady || state.progress.stale) return;
-    final lines = pick(state.lines, state.progress);
+    // A line with none of the user's moves in it has nothing to ask.
+    final lines = [
+      for (final line in pick(state.lines, state.progress))
+        if (line.yourMoves > 0) line,
+    ];
     if (lines.isEmpty) return;
     leave();
     _lesson = Lesson(kind: kind, lines: lines, progress: state.progress)
@@ -225,6 +233,10 @@ class Trainer extends ChangeNotifier {
     final wanted = (ref: ref, scope: _scope, chapter: chapter);
     if (!force && _read == wanted && _state is! TrainerIdle) return;
     _read = wanted;
+    final load = ++_loads;
+    // The sitting was over the progress this replaces; it ends with it, so
+    // nothing writes through a copy the files have moved past.
+    leave();
     if (chapter == null || ref == null) {
       return _become(const TrainerEmpty(NothingToTrain.noChapter));
     }
@@ -236,9 +248,9 @@ class Trainer extends ChangeNotifier {
     final chapters = _scope == TrainScope.chapter
         ? [(ref: ref, lines: open)]
         : await _chapters.repertoireOf(ref, open);
-    if (_read != wanted) return;
+    if (load != _loads) return;
     final read = await _files.read({for (final c in chapters) c.ref.path});
-    if (_read != wanted) return;
+    if (load != _loads) return;
     _become(switch (read) {
       ProgressLoaded() => TrainerReady(
         chapters: chapters,
@@ -246,11 +258,13 @@ class Trainer extends ChangeNotifier {
       ),
       _ => TrainerFailed(read),
     });
+    // An edit made while the files were read is in the lines too.
+    _follow();
   }
 
   void _become(TrainerState state) {
     final was = _state;
-    if (was is TrainerReady && _lesson == null) was.progress.dispose();
+    if (was is TrainerReady) was.progress.dispose();
     _state = state;
     notifyListeners();
   }

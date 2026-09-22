@@ -37,7 +37,7 @@ String prompt(Lesson lesson) {
     Asking() when drill.pass == Pass.replay =>
       'Replay — ${drill.replaying.length} left',
     Asking() => 'Your move',
-    Answered() => drill.pass == Pass.walkthrough ? 'Their move' : 'Correct',
+    Answered() => drill.line.isYours(drill.ply) ? 'Correct' : 'Their move',
     Finished(:final clean) =>
       clean ? 'Line complete!' : 'Line complete — with mistakes.',
   };

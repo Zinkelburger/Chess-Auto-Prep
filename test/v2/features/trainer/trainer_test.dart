@@ -372,4 +372,76 @@ void main() {
       expect(readyState(trainer).progress, same(before.progress));
     });
   });
+
+  test('a retry writes the rows the failed try worked out, not new ones', () {
+    fakeAsync((async) {
+      final ruy = (source: source(), id: 'line_ZTQgZTUgTmYzIE5jNiBCYj');
+      files.reviews[ruy] = Review(
+        key: ruy,
+        lineName: 'Ruy',
+        intervalDays: 10,
+        lastRating: 'good',
+        due: _now,
+      );
+      // Each spread is different, so a row worked out again would differ.
+      var spread = 0.0;
+      final trainer = Trainer(
+        session: fixture.session,
+        chapters: ScopeReader(files: ScriptedFiles(), documents: fixture.store),
+        files: files,
+        analysis: analysis,
+        time: (now: () => _now, jitter: () => spread += 0.5),
+      );
+      addTearDown(trainer.dispose);
+      trainer.show();
+      async.flushMicrotasks();
+      trainer.review();
+      final lesson = trainer.lesson!;
+      for (final uci in ['e2e4', 'g1f3', 'f1b5']) {
+        play(async, lesson, uci);
+      }
+      files.nextWrite = const ProgressFailed('disk full');
+      lesson.rate(Rating.good);
+      async.flushMicrotasks();
+      lesson.retry();
+      async.flushMicrotasks();
+      // 10 days × 2.5 = 25, spread by the first try's +0.5 of 1.25 days.
+      expect(files.reviews[ruy]!.intervalDays, closeTo(25.625, 0.01));
+    });
+  });
+
+  test('a line with none of the user\'s moves is never put in a sitting', () {
+    fakeAsync((async) {
+      fixture.session.closed();
+      const stub = '''
+// Color: Black
+
+[Event "Stub"]
+
+1. e4 *
+
+[Event "Line"]
+
+1. e4 e5 *
+''';
+      fixture.externalEdit(stub);
+      fixture.session.open(fixture.ref);
+      async.flushMicrotasks();
+      final trainer = ready(async)..learn();
+      expect(trainer.lesson!.left, 0);
+      expect(trainer.lesson!.line.name, 'Line');
+    });
+  });
+
+  test('reading the progress again ends the sitting over the old copy', () {
+    fakeAsync((async) {
+      final trainer = ready(async)..learn();
+      expect(trainer.lesson, isNotNull);
+      trainer.reload();
+      async.flushMicrotasks();
+      expect(trainer.lesson, isNull);
+      expect(trainer.board.value, isNull);
+      expect(trainer.state, isA<TrainerReady>());
+    });
+  });
 }

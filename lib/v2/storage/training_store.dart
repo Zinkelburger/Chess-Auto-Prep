@@ -62,15 +62,20 @@ final class TrainingStore implements ProgressFiles {
     try {
       final reviews = await _rows(reviewsFile, _reviewCodec);
       final streaks = await _rows(streaksFile, _streakCodec);
+      // A key written twice is read as its first row, the one a write
+      // replaces.
+      final byLine = <LineKey, Review>{};
+      for (final r in reviews) {
+        if (sources.contains(r.key.source)) byLine.putIfAbsent(r.key, () => r);
+      }
+      final byMove = <StreakKey, MoveStreak>{};
+      for (final s in streaks) {
+        if (!sources.contains(s.key.source)) continue;
+        byMove.putIfAbsent((line: s.key, ply: s.ply), () => s);
+      }
       return ProgressLoaded(
-        reviews: {
-          for (final r in reviews)
-            if (sources.contains(r.key.source)) r.key: r,
-        },
-        streaks: {
-          for (final s in streaks)
-            if (sources.contains(s.key.source)) (line: s.key, ply: s.ply): s,
-        },
+        reviews: byLine,
+        streaks: byMove,
         mistakes: await _mistakes(sources),
       );
     } on _Unreadable catch (unreadable) {
@@ -262,12 +267,8 @@ final class _Codec<T, K> {
   String row(T value) => encodeCsvRecord(encode(value));
 
   /// The cells of a data row, or null for the header and blank lines.
-  List<String>? cells(CsvRecord record, int? header) {
-    if (record.isBlank || record.fields.first == idColumn) return null;
-    final columns = width(record, header);
-    if (columns == null) return record.fields;
-    return dataCells(record, columns);
-  }
+  List<String>? cells(CsvRecord record, int? header) =>
+      dataCells(record, record.isBlank ? null : width(record, header));
 }
 
 const _reviewCodec = _Codec<Review, LineKey>(

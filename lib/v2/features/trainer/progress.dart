@@ -45,6 +45,9 @@ class TrainingProgress extends ChangeNotifier {
   final Map<StreakKey, MoveStreak> _saved;
   final List<Attempt> _mistakes;
   Future<void> _writes = Future.value();
+
+  /// Line outcomes a write did not finish, for [retry].
+  final _unsaved = <LineKey, _Outcome>{};
   bool _stale = false;
   bool _disposed = false;
 
@@ -102,8 +105,19 @@ class TrainingProgress extends ChangeNotifier {
     TrainingLine line,
     Rating rating, {
     required bool clean,
-  }) => _serially(() {
-    final before = _reviews[line.key];
+  }) => _serially(() => _land(_outcome(line, rating, clean: clean)));
+
+  /// Writes again, row for row, the outcome of [line] that did not all reach
+  /// the files. The files are replaced one at a time, so some of its rows may
+  /// be there already; working the outcome out afresh — a new time, a new
+  /// spread — would make those rows look like somebody else's.
+  Future<ProgressWrite> retry(TrainingLine line) => _serially(() {
+    final outcome = _unsaved[line.key];
+    if (outcome == null) return Future.value(const ProgressWritten());
+    return _land(outcome);
+  });
+
+  _Outcome _outcome(TrainingLine line, Rating rating, {required bool clean}) {
     final after = asWritten(
       rated(
         reviewOf(line).copyWith(lineName: line.name),
@@ -113,25 +127,37 @@ class TrainingProgress extends ChangeNotifier {
         jitter: _time.jitter(),
       ),
     );
-    final streaks = [
-      for (final MapEntry(:key, :value) in _streaks.entries)
-        if (key.line == line.key && _saved[key] != value)
-          (before: _saved[key], after: value),
-    ];
-    return _write(
-      reviews: [(before: before, after: after)],
-      streaks: streaks,
-      history: [
-        HistoryRow(
-          key: line.key,
-          at: now,
-          rating: rating.name,
-          mistake: !clean,
-          kind: HistoryKind.trainer,
-        ),
+    return (
+      review: (before: _reviews[line.key], after: after),
+      streaks: [
+        for (final MapEntry(:key, :value) in _streaks.entries)
+          if (key.line == line.key && _saved[key] != value)
+            (before: _saved[key], after: value),
       ],
+      history: HistoryRow(
+        key: line.key,
+        at: now,
+        rating: rating.name,
+        mistake: !clean,
+        kind: HistoryKind.trainer,
+      ),
     );
-  });
+  }
+
+  Future<ProgressWrite> _land(_Outcome outcome) async {
+    final key = outcome.review.after.key;
+    final result = await _write(
+      reviews: [outcome.review],
+      streaks: outcome.streaks,
+      history: [outcome.history],
+    );
+    if (result is ProgressWritten) {
+      _unsaved.remove(key);
+    } else {
+      _unsaved[key] = outcome;
+    }
+    return result;
+  }
 
   /// Takes [line] out of every queue, or puts it back.
   Future<ProgressWrite> setExcluded(
@@ -221,3 +247,10 @@ class TrainingProgress extends ChangeNotifier {
     super.dispose();
   }
 }
+
+/// Everything one finished line writes.
+typedef _Outcome = ({
+  Change<Review> review,
+  List<Change<MoveStreak>> streaks,
+  HistoryRow history,
+});

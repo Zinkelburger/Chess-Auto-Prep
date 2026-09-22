@@ -40,10 +40,11 @@ int? headerWidth(List<CsvRecord> records) {
 }
 
 /// The cells of a record that names a chapter, or null for the header and
-/// for blank lines.
-List<String>? dataCells(CsvRecord record, int width) {
+/// for blank lines. [width] is how many columns the record should have; null
+/// when nothing says, and the cells are taken as they are.
+List<String>? dataCells(CsvRecord record, int? width) {
   if (record.isBlank || record.fields.first == idColumn) return null;
-  return record.source.startsWith('"')
+  return width == null || record.source.startsWith('"')
       ? record.fields
       : _rejoinLegacyPath(record.fields, width);
 }
