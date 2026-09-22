@@ -78,7 +78,6 @@ void main() {
     await start();
     final rows = shown().rows;
     expect(rows.map((r) => r.san), ['e4', 'd4']);
-    expect(rows.first.label, '1.');
     expect(rows.first.share, '60%');
     expect(rows.first.inRepertoire, isTrue);
     expect(rows.last.inRepertoire, isFalse);
@@ -97,7 +96,6 @@ void main() {
     expect(explorer.state, isA<ExplorerAsking>());
     await pumpEventQueue();
     expect(shown().rows.single.san, 'e5');
-    expect(shown().rows.single.label, '1...');
     fixture.session.back();
     expect(shown().rows.first.san, 'e4', reason: 'at once');
     await pumpEventQueue();

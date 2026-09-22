@@ -440,20 +440,26 @@ const gameOrdinalWidth = 40.0;
 const gameNumberWidth = 52.0;
 
 /// The Explorer tab's table: the move gutter, the games gutter, the header
-/// row over them and the menu the gear opens. The result bar takes what is
-/// left of the row.
-const explorerMoveWidth = 88.0;
+/// row over them and the menu the gear opens. The result bar sits after the
+/// games, no wider than [explorerBarMaxWidth]: a bar across the whole card
+/// is a stripe the eye reads before the moves.
+const explorerMoveWidth = 64.0;
 const explorerGamesWidth = 96.0;
+const explorerBarMaxWidth = 220.0;
+const explorerBarHeight = 16.0;
 const explorerHeaderHeight = 22.0;
 const explorerMenuWidth = 300.0;
 
-/// The three parts of a result bar: White's wins are light, draws are the
-/// muted grey, Black's wins are the near-black of the reading card, so the
-/// bar reads like a chessboard's two colours with a grey between.
-const resultBarWhite = Color(0xFFE6E6E8);
-const resultBarDraw = Color(0xFF6E6E74);
+/// The three parts of a result bar, kept dimmer than the moves beside them:
+/// White's wins a soft grey, draws a mid grey, Black's wins a step above
+/// the reading card. Each part's number is in its own ink, quiet on all
+/// three.
+const resultBarWhite = Color(0xFFA4A4AA);
+const resultBarWhiteInk = Color(0xFF1B1B1D);
+const resultBarDraw = Color(0xFF55555B);
+const resultBarDrawInk = Color(0xFFC4C4C8);
 const resultBarBlack = Color(0xFF2A2A2E);
+const resultBarBlackInk = Color(0xFF9A9AA0);
 
-/// A part of the bar narrower than this share of the row carries no
-/// number: the number would not fit.
-const resultBarLabelFrom = 0.14;
+/// The number in a bar part: mono at the small size.
+const resultBarText = TextStyle(fontFamily: 'SourceCodePro', fontSize: 12);

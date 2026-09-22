@@ -7,7 +7,6 @@ import '../chess/explorer_answer.dart';
 import '../chess/explorer_choice.dart';
 import '../chess/fen.dart';
 import '../chess/pgn/game_tree.dart';
-import '../chess/pgn/move_label.dart';
 import '../chess/pgn/tree_edit.dart';
 import '../diagnostics/log.dart';
 import '../storage/settings_store.dart';
@@ -25,7 +24,6 @@ final class ExplorerRow {
   const ExplorerRow({
     required this.uci,
     required this.san,
-    required this.label,
     required this.games,
     required this.share,
     required this.white,
@@ -37,9 +35,6 @@ final class ExplorerRow {
 
   final String uci;
   final String san;
-
-  /// `5.` or `5...`, what a line's first move is numbered with.
-  final String label;
 
   final int games;
 
@@ -292,7 +287,6 @@ final class Explorer extends ChangeNotifier {
         ExplorerRow(
           uci: move.uci,
           san: node.san,
-          label: moveNumberLabel(node, startsLine: true),
           games: move.games,
           share: formatShare(move.games, answer.total),
           white: move.white,

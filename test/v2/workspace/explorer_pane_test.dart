@@ -185,4 +185,27 @@ void main() {
     expect(find.text('95%'), findsOneWidget);
     expect(find.text('3%'), findsNothing);
   });
+
+  testWidgets('a part too narrow for its number is still drawn full height', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: darkTheme(),
+        home: const Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 200,
+              child: ResultBar(white: 60, draws: 5, black: 35),
+            ),
+          ),
+        ),
+      ),
+    );
+    final draws = find.byWidgetPredicate(
+      (w) => w is ColoredBox && w.color == resultBarDraw,
+    );
+    expect(tester.getSize(draws).height, explorerBarHeight);
+    expect(find.text('5%'), findsNothing);
+  });
 }
