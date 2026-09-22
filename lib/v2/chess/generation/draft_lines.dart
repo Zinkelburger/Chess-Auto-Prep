@@ -304,6 +304,11 @@ GameTree draftTree(
   return GameTree(rootFen: rootFen, children: root.build());
 }
 
+/// Adds [moves] under [at]. A move already there is followed, not added a
+/// second time: two sidelines that leave the line at the same move and share
+/// their start (`a b x y`, `a b x z` off `a b c`) are one `x` with `y` and
+/// `z` after it, not two `x` branches. The move keeps the tokens it was
+/// first written with.
 void _graft(
   _Branch at,
   List<DraftMove> moves, {
@@ -312,6 +317,13 @@ void _graft(
 }) {
   var here = at;
   for (final (index, move) in moves.indexed) {
+    final existing = here.children
+        .where((b) => b.node!.uci == move.move.uci)
+        .firstOrNull;
+    if (existing != null) {
+      here = existing;
+      continue;
+    }
     final tokens = [
       if (first && index == 0)
         '[%cumProb ${(reach * 100).toStringAsFixed(1)}%]',

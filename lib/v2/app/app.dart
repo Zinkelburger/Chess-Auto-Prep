@@ -156,7 +156,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
 
   /// The engine's verdicts, shared with the old app, opened the first time
   /// a fill needs them.
-  late final _evalCache = EvalCache.open(widget.support);
+  late final _evalCache = EvalCacheOnDemand(widget.support);
   late final _fill = FillGaps(
     session: _session,
     analysis: _analysis,
@@ -181,7 +181,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
       Started(:final engine) => FillReady(
         evaluator: CachedEvaluator(
           FixedDepthEvaluator(engine, depth: fillEvalDepth),
-          _evalCache,
+          _evalCache.cache,
           depth: fillEvalDepth,
         ),
         policy: MaiaOpponent(_maia, elo: request.elo),
