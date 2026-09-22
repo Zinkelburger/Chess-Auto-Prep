@@ -99,7 +99,8 @@ class _MoveTreeViewState extends State<MoveTreeView>
       listenable: widget.session,
       builder: (context, _) {
         final tree = widget.session.tree;
-        if (tree == null || tree.isEmpty) {
+        final shownTo = widget.session.shownTo;
+        if (tree == null || tree.isEmpty || shownTo?.isRoot == true) {
           _built = null;
           return Center(
             child: Text(
@@ -107,6 +108,10 @@ class _MoveTreeViewState extends State<MoveTreeView>
               style: Theme.of(context).textTheme.bodySmall,
             ),
           );
+        }
+        if (shownTo != null) {
+          _built = null;
+          return _found(tree, shownTo);
         }
         final side = widget.session.orientation;
         final built = _built;
@@ -119,6 +124,28 @@ class _MoveTreeViewState extends State<MoveTreeView>
         _built = (tree: tree, side: side, lines: lines);
         return lines;
       },
+    );
+  }
+
+  /// The moves found so far of a line the user is asked to find: one row
+  /// of moves and nothing else, so no note or variation gives the rest away.
+  Widget _found(GameTree tree, NodePath shownTo) {
+    _selection.reset();
+    final builder = _LineBuilder(
+      widget.session,
+      _selection,
+      (path) => const [],
+      _deleteFrom,
+      _comment,
+    );
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(
+        readingCardInset,
+        Space.s,
+        readingCardInset,
+        Space.l,
+      ),
+      child: _Row(builder.found(tree, shownTo)),
     );
   }
 
@@ -234,6 +261,21 @@ final class _LineBuilder {
     breakRow();
     return blocks;
   }
+
+  /// The moves from the start to [limit] as tokens that only move the
+  /// cursor: nothing can be done to a move of a line still being found.
+  List<Widget> found(GameTree tree, NodePath limit) => [
+    for (final (depth, node) in tree.lineTo(limit).indexed)
+      _MoveToken(
+        label: moveNumberLabel(node, startsLine: depth == 0),
+        san: node.san,
+        selected: selection.of(NodePath.of(limit.indexes.take(depth + 1))),
+        quizStarts: false,
+        quizEnds: false,
+        onTap: () => session.goTo(NodePath.of(limit.indexes.take(depth + 1))),
+        actions: () => const [],
+      ),
+  ];
 
   Iterable<Widget> _variations(_Branch at) sync* {
     for (var branch = 1; branch < at.siblings.length; branch++) {

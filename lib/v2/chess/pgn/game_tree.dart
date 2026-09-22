@@ -99,6 +99,15 @@ final class NodePath {
 
   NodePath get mainChild => child(0);
 
+  /// Whether [other] is this path or a move somewhere before it on the way
+  /// here: the root leads to every path.
+  bool startsWith(NodePath other) =>
+      other.indexes.length <= indexes.length &&
+      const ListEquality<int>().equals(
+        indexes.sublist(0, other.indexes.length),
+        other.indexes,
+      );
+
   @override
   bool operator ==(Object other) =>
       other is NodePath &&

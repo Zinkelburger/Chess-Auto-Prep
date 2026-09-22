@@ -3,7 +3,8 @@
 enum Mode {
   repertoires('Repertoire builder'),
   pgnViewer('PGN Viewer'),
-  study('Study');
+  study('Study'),
+  tactics('Tactics');
 
   const Mode(this.label);
 

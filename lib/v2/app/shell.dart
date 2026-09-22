@@ -16,6 +16,11 @@ import '../features/study/studies.dart';
 import '../features/settings/setting_rows.dart';
 import '../features/settings/settings_dialog.dart';
 import '../features/study/study_panel.dart';
+import '../chess/tactics/puzzle.dart';
+import '../features/tactics/puzzle_pane.dart';
+import '../features/tactics/puzzle_trainer.dart';
+import '../features/tactics/tactics_panel.dart';
+import '../features/tactics/tactics_set.dart';
 import '../storage/settings_store.dart';
 import '../ui/app_action.dart';
 import '../ui/choice_dialog.dart';
@@ -63,6 +68,8 @@ class Shell extends StatefulWidget {
     required this.explorer,
     required this.games,
     required this.fill,
+    required this.tactics,
+    required this.trainer,
     required this.settings,
     required this.settingRows,
     required this.settingsAlso,
@@ -81,6 +88,8 @@ class Shell extends StatefulWidget {
   final Explorer explorer;
   final GameFetcher games;
   final FillGaps fill;
+  final TacticsSet tactics;
+  final PuzzleTrainer trainer;
   final SettingsStore settings;
 
   /// The settings page's rows, as the app wires them, and the one owner
@@ -181,6 +190,26 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     if (refusal != null && mounted) _requests.say(refusal);
   }
 
+  /// Starts a sitting, from [first] when the list asked for one, with the
+  /// Puzzle tab up.
+  void _play({Puzzle? first}) {
+    if (!mounted) return;
+    _tabs.show(WorkspaceTab.puzzle);
+    unawaited(
+      first == null ? widget.trainer.start() : widget.trainer.show(first),
+    );
+  }
+
+  /// Space and ↓ are the puzzle's while one is on the board, and the
+  /// document's otherwise.
+  void _space() {
+    if (widget.trainer.up != null) widget.trainer.showSolution();
+  }
+
+  void _down() => widget.trainer.up == null
+      ? widget.session.nextGame()
+      : unawaited(widget.trainer.next());
+
   void _toggleList() {
     if (!mounted) return;
     setState(() => _listShown = !_listShown);
@@ -246,8 +275,30 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       widget.fill.canStart ? () => unawaited(_fill()) : null,
       group: 'Repertoire',
     ),
+    ...puzzleActions(),
     ...tabActions(_tabs),
   ];
+
+  /// What can be done to the puzzle on the board, while one is.
+  List<AppAction> puzzleActions() {
+    final up = widget.trainer.up;
+    if (up == null) return const [];
+    return [
+      AppAction(
+        'Show solution',
+        up.finished ? null : widget.trainer.showSolution,
+        shortcut: 'Space',
+        group: 'Tactics',
+      ),
+      AppAction(
+        up.finished || up.decided != null ? 'Next puzzle' : 'Skip puzzle',
+        () => unawaited(widget.trainer.next()),
+        shortcut: '↓',
+        group: 'Tactics',
+      ),
+      AppAction('End session', widget.trainer.end, group: 'Tactics'),
+    ];
+  }
 
   /// The same actions, typed for: a searchable list that the enter key
   /// takes the one match of.
@@ -295,6 +346,8 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         unawaited(_palette()),
     const SingleActivator(LogicalKeyboardKey.keyK, meta: true): () =>
         unawaited(_palette()),
+    const SingleActivator(LogicalKeyboardKey.space): _space,
+    const SingleActivator(LogicalKeyboardKey.arrowDown): _down,
   };
 
   /// The mode's list, with the `«` that hides it in its top right corner:
@@ -322,6 +375,12 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         viewer: widget.viewer,
         onOpen: (file) => unawaited(_requests.openFile(file)),
         onBrowse: () => unawaited(_requests.browse()),
+        trailing: toggle,
+      ),
+      Mode.tactics => TacticsPanel(
+        set: widget.tactics,
+        trainer: widget.trainer,
+        onPlay: _play,
         trailing: toggle,
       ),
     };
@@ -352,6 +411,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
                 widget.gaps,
                 widget.fill,
                 widget.viewer,
+                widget.trainer,
                 _editing,
                 _tabs,
               ]),
@@ -407,6 +467,8 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       moveMenu: _requests.mode == Mode.study
           ? (path) => quizMenuItems(widget.session, path)
           : null,
+      onBoardMove: widget.trainer.play,
+      puzzle: PuzzlePane(trainer: widget.trainer),
       onExplorerGame: (game) => unawaited(
         _requests.openExplorerGame(
           game,

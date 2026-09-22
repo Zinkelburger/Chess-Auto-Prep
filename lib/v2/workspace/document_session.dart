@@ -50,6 +50,7 @@ final class DocumentSession extends ChangeNotifier {
   String? _readOnly;
   final _cursor = ValueNotifier<NodePath>(const NodePath.root());
   EditRefused? _refused;
+  NodePath? _shownTo;
   bool _flipped = false;
   int _opens = 0;
   bool _disposed = false;
@@ -96,6 +97,25 @@ final class DocumentSession extends ChangeNotifier {
   }
 
   bool get flipped => _flipped;
+
+  /// While set, the game is shown only as far as this move: the moves after
+  /// it and every note are hidden, the cursor cannot pass it, and the board
+  /// plays nothing into the document. A puzzle asks the user to find what
+  /// comes next, so the answer must not be one arrow key or one glance at
+  /// the move list away. Null shows everything.
+  ///
+  /// Another document or another game of this one shows everything again;
+  /// whoever hid the rest hides it again for the game they put up.
+  NodePath? get shownTo => _shownTo;
+
+  /// Shows the game only as far as [path], or all of it when null. A cursor
+  /// past [path] is brought back to it.
+  void showOnlyTo(NodePath? path) {
+    if (path == _shownTo) return;
+    _shownTo = path;
+    notifyListeners();
+    if (path != null && !path.startsWith(cursor)) _cursor.value = path;
+  }
 
   void flip() {
     _flipped = !_flipped;
@@ -194,6 +214,7 @@ final class DocumentSession extends ChangeNotifier {
     _source = null;
     _game = null;
     _refused = null;
+    _shownTo = null;
     _saver.closed();
     _cursor.value = const NodePath.root();
     notifyListeners();
@@ -213,6 +234,7 @@ final class DocumentSession extends ChangeNotifier {
     if (index == chapter.game) return;
     _chapter = withLines(chapter, chapter.lines, game: index);
     _game = index;
+    _shownTo = null;
     _clearRefusal();
     _cursor.value = const NodePath.root();
     notifyListeners();
@@ -223,6 +245,7 @@ final class DocumentSession extends ChangeNotifier {
     final tree = this.tree;
     if (tree == null || path == cursor) return;
     if (!path.isRoot && tree.nodeAt(path) == null) return;
+    if (_shownTo case final limit? when !limit.startsWith(path)) return;
     _cursor.value = path;
   }
 
@@ -243,7 +266,7 @@ final class DocumentSession extends ChangeNotifier {
   /// the chapter comes back without is logged rather than saved.
   void playMove(String uci) {
     final chapter = _chapter;
-    if (chapter == null) return;
+    if (chapter == null || _shownTo != null) return;
     // A move the chapter already holds writes nothing, so following it is
     // reading: a file this app may not write still shows its own lines.
     final here = edits.playedAlready(chapter, at: cursor, uci: uci);
@@ -418,6 +441,7 @@ final class DocumentSession extends ChangeNotifier {
     _chapter = chapter;
     _source = ref;
     _flipped = false;
+    _shownTo = null;
     _readOnly = readOnly;
     _refused = readOnly == null ? null : NotEditable(readOnly);
     _saver.opened(ref, revision, readOnly: readOnly);

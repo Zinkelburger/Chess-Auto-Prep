@@ -7,6 +7,8 @@ import 'package:chess_auto_prep/v2/features/library/chapter_outline.dart';
 import 'package:chess_auto_prep/v2/features/library/library.dart';
 import 'package:chess_auto_prep/v2/features/pgn_viewer/pgn_viewer.dart';
 import 'package:chess_auto_prep/v2/features/study/studies.dart';
+import 'package:chess_auto_prep/v2/features/tactics/puzzle_trainer.dart';
+import 'package:chess_auto_prep/v2/features/tactics/tactics_set.dart';
 import 'package:chess_auto_prep/v2/net/lichess_studies.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
@@ -30,6 +32,7 @@ import 'scripted_files.dart';
 import 'scripted_policy.dart';
 import 'scripted_store.dart';
 import 'study_fixture.dart';
+import 'tactics_fixture.dart';
 import 'viewer_fixture.dart';
 
 /// KID/Main: a Black chapter of two lines.
@@ -78,6 +81,22 @@ final class WindowFixture {
       leaving: _leaving(),
       input: input ?? DialogInput(navigator),
     );
+    tactics = TacticsSet(
+      documents: store,
+      session: session,
+      settings: settings,
+      ref: tacticsRef,
+      now: () => tacticsToday,
+    );
+    trainer = PuzzleTrainer(
+      set: tactics,
+      session: session,
+      analysis: analysis,
+      settings: settings,
+      open: (set, game) async =>
+          await requests.open(set, game: game) is RequestDone,
+      now: () => tacticsToday,
+    );
   }
 
   final store = ScriptedDocumentStore()
@@ -85,7 +104,8 @@ final class WindowFixture {
     ..documents[benkoMain] = Opened(
       '// Color: White\n',
       scriptedRevision('// Color: White\n'),
-    );
+    )
+    ..documents[tacticsRef] = Opened(tacticsSet, scriptedRevision(tacticsSet));
   late final saver = DocumentSaver(store, delay: Duration.zero);
   late final DocumentSession session;
 
@@ -114,6 +134,8 @@ final class WindowFixture {
   /// [ScriptedDraftQuestion.answer].
   final question = ScriptedDraftQuestion();
   late final WorkspaceRequests requests;
+  late final TacticsSet tactics;
+  late final PuzzleTrainer trainer;
   final navigator = GlobalKey<NavigatorState>();
 
   /// The owners of the workspace pane, none with an engine behind it.
@@ -183,6 +205,8 @@ final class WindowFixture {
           explorer: explorer,
           games: games,
           fill: fill,
+          tactics: tactics,
+          trainer: trainer,
         ),
       ),
     );
@@ -194,6 +218,8 @@ final class WindowFixture {
   }
 
   void dispose() {
+    trainer.dispose();
+    tactics.dispose();
     requests.dispose();
     games.dispose();
     explorer.dispose();

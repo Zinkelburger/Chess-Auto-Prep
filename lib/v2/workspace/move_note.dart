@@ -38,16 +38,28 @@ class _MoveNoteState extends State<MoveNote> with CommentPreviews<MoveNote> {
         if (tree == null) return const SizedBox.shrink();
         final path = session.cursor;
         final move = session.currentMove;
+        // A line still being found shows no notes: a note is often the
+        // answer, written down.
+        final hidden = session.shownTo != null;
         // Each note with the position it is read from and the move a line
         // written in it is played from.
-        final notes = <(String?, Fen, NodePath)>[
-          if (move == null)
-            (tree.rootComment, tree.rootFen, path)
-          else ...[
-            (move.startingComment, tree.fenAt(path.parent), path.parent),
-            (move.comment, move.fen, path),
-          ],
-        ].where((note) => displayComment(note.$1 ?? '').isNotEmpty).toList();
+        final notes =
+            <(String?, Fen, NodePath)>[
+                  if (move == null)
+                    (tree.rootComment, tree.rootFen, path)
+                  else ...[
+                    (
+                      move.startingComment,
+                      tree.fenAt(path.parent),
+                      path.parent,
+                    ),
+                    (move.comment, move.fen, path),
+                  ],
+                ]
+                .where(
+                  (note) => !hidden && displayComment(note.$1 ?? '').isNotEmpty,
+                )
+                .toList();
         if (move == null && notes.isEmpty) return const SizedBox.shrink();
         final scheme = Theme.of(context).colorScheme;
         return LinePreviewOverlay(

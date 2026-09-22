@@ -2,14 +2,15 @@ import '../ui/app_action.dart';
 import '../ui/pane_tabs.dart';
 
 /// The tabs of the reading card: the moves, which are always there, the
-/// opponent's replies, and the explorer. A new thing the card can show is a
+/// opponent's replies, the explorer, and the puzzle being solved. A new thing the card can show is a
 /// new value here, and the compiler then asks for its arm in the card's
 /// body; the strip, the keys and the Actions menu know nothing about which
 /// tabs there are.
 enum WorkspaceTab {
   moves('Moves', pinned: true),
   replies('Replies'),
-  explorer('Explorer');
+  explorer('Explorer'),
+  puzzle('Puzzle');
 
   const WorkspaceTab(this.title, {this.pinned = false});
 
@@ -19,10 +20,11 @@ enum WorkspaceTab {
   PaneTab<WorkspaceTab> get tab => PaneTab(this, title, pinned: pinned);
 }
 
-/// The card's tabs as a window starts: all three open, moves up. The old
+/// The card's tabs as a window starts: all but the puzzle open, moves up. The old
 /// viewer started with its reader alone; here the replies and the explorer
 /// are what building a repertoire is about, so they are there from the
-/// start and closed by whoever is only reading.
+/// start and closed by whoever is only reading. The puzzle opens with the
+/// first puzzle.
 PaneTabs<WorkspaceTab> newWorkspaceTabs() => PaneTabs(
   [for (final tab in WorkspaceTab.values) tab.tab],
   open: const [WorkspaceTab.replies, WorkspaceTab.explorer],
