@@ -7,6 +7,7 @@ import '../ui/theme.dart';
 import 'document_session.dart';
 import 'explorer.dart';
 import 'explorer_menu.dart';
+import 'game_fetcher.dart';
 import 'line_preview.dart';
 
 export 'explorer_menu.dart' show ExplorerGear;
@@ -27,11 +28,15 @@ class ExplorerPane extends StatefulWidget {
     super.key,
     required this.session,
     required this.explorer,
+    required this.games,
     this.onOpenGame,
   });
 
   final DocumentSession session;
   final Explorer explorer;
+
+  /// The game being fetched, whose row says so while the others wait.
+  final GameFetcher games;
 
   /// Asked to open one of the listed games, which is the shell's business:
   /// the game becomes a file and the viewer shows it. Null when nothing
@@ -78,7 +83,11 @@ class _ExplorerPaneState extends State<ExplorerPane> {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: Listenable.merge([widget.explorer, widget.session]),
+      listenable: Listenable.merge([
+        widget.explorer,
+        widget.games,
+        widget.session,
+      ]),
       builder: (context, _) => LinePreviewOverlay(
         preview: _preview,
         orientation: widget.session.orientation,
@@ -111,6 +120,7 @@ class _ExplorerPaneState extends State<ExplorerPane> {
 
   Widget _table(List<ExplorerRow> rows, ExplorerAnswer answer) {
     final explorer = widget.explorer;
+    final fetching = widget.games.fetching;
     // Each row is made when it scrolls into view.
     final items = <WidgetBuilder>[
       if (explorer.notice case final notice?)
@@ -130,8 +140,8 @@ class _ExplorerPaneState extends State<ExplorerPane> {
         (_) => _GameRow(
           key: ValueKey(game.id),
           game: game,
-          fetching: explorer.fetchingGame == game.id,
-          onTap: widget.onOpenGame == null || explorer.fetchingGame != null
+          fetching: fetching == game.id,
+          onTap: widget.onOpenGame == null || fetching != null
               ? null
               : () => widget.onOpenGame!(game),
         ),

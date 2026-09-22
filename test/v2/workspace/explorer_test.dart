@@ -2,7 +2,6 @@ import 'package:chess_auto_prep/v2/chess/explorer_answer.dart';
 import 'package:chess_auto_prep/v2/chess/fen.dart';
 import 'package:chess_auto_prep/v2/net/lichess_explorer.dart';
 import 'package:chess_auto_prep/v2/storage/master_book.dart';
-import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/storage/settings.dart';
 import 'package:chess_auto_prep/v2/storage/settings_store.dart';
 import 'package:chess_auto_prep/v2/workspace/explorer.dart';
@@ -64,7 +63,7 @@ void main() {
 
   Future<void> start() async {
     explorer = explorerOver(
-      fixture,
+      fixture.session,
       settings: settings,
       lichess: lichess,
       book: book,
@@ -260,42 +259,6 @@ void main() {
       'The database is not asked past move 25.',
     );
     expect(lichess.asked, hasLength(1));
-  });
-
-  test('a listed game is fetched and kept as a file in the collections '
-      'folder, to open at the ply on the board', () async {
-    await start();
-    fixture.session.forward();
-    await pumpEventQueue();
-    final game = startAnswer.games.single;
-    final kept = await explorer.keepGame(game) as GameKept;
-    expect(kept.ply, 1);
-    expect(
-      kept.ref.path,
-      '$explorerCollections/explorer games/'
-      'Carlsen, M - Nakamura, H 2024 (masters abcd1234).pgn',
-    );
-    expect(lichess.gamesAsked.single, ('abcd1234', true));
-    expect(fixture.store.documents[kept.ref], isA<Opened>());
-    // A second click on the same game opens the file already there.
-    expect(await explorer.keepGame(game), isA<GameKept>());
-    lichess.pgn = null;
-    expect(
-      (await explorer.keepGame(game) as GameNotKept).sentence,
-      'Could not fetch that game.',
-    );
-  });
-
-  test('a TWIC game comes from the book, and a name that cannot be a file '
-      'name is made one', () async {
-    await start();
-    const game = ExplorerGame(
-      id: '7',
-      white: 'A/B: "C"',
-      black: 'D?',
-      result: '*',
-    );
-    expect(gameFileName(game, ExplorerSource.twic), 'A_B_ _C_ - D_ (twic 7)');
   });
 
   test('nothing open is idle', () async {

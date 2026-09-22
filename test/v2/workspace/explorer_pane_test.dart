@@ -1,4 +1,3 @@
-import 'package:chess_auto_prep/v2/chess/explorer_answer.dart';
 import 'package:chess_auto_prep/v2/net/lichess_explorer.dart';
 import 'package:chess_auto_prep/v2/storage/settings_store.dart';
 import 'package:chess_auto_prep/v2/ui/theme.dart';
@@ -44,12 +43,14 @@ void main() {
   /// test's clock.
   Future<void> show(WidgetTester tester, {bool withGear = false}) async {
     explorer = explorerOver(
-      fixture,
+      fixture.session,
       settings: settings,
       lichess: lichess,
       book: book,
     );
     addTearDown(explorer.dispose);
+    final games = gamesOver(fixture.store, lichess: lichess, book: book);
+    addTearDown(games.dispose);
     await tester.pumpWidget(
       MaterialApp(
         theme: darkTheme(),
@@ -63,6 +64,7 @@ void main() {
                   child: ExplorerPane(
                     session: fixture.session,
                     explorer: explorer,
+                    games: games,
                     onOpenGame: opened.add,
                   ),
                 ),

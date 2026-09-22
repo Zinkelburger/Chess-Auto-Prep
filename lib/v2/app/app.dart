@@ -38,10 +38,14 @@ import '../workspace/document_session.dart';
 import '../workspace/session_results.dart';
 import '../workspace/engine_analysis.dart';
 import '../workspace/explorer.dart';
+import '../workspace/explorer_databases.dart';
 import '../workspace/fill_gaps.dart';
 import '../workspace/fill_sources.dart';
 import '../workspace/repertoire_answers.dart';
+import '../workspace/gap_hunt.dart';
+import '../workspace/game_fetcher.dart';
 import '../workspace/replies.dart';
+import '../workspace/reply_model.dart';
 import 'engine_launch.dart';
 import 'maia_launch.dart';
 import 'exit_guard.dart';
@@ -89,9 +93,14 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
   late final _session = DocumentSession(_store, _saver);
   late final Library _library = Library(
     files: _chapterFiles,
-    documents: _store,
+    writes: LibraryWrites(
+      files: _chapterFiles,
+      documents: _store,
+      session: _session,
+      saver: _saver,
+      root: _repertoires,
+    ),
     session: _session,
-    saver: _saver,
     picker: const NativePgnFilePicker(),
     root: _repertoires,
   );
@@ -138,11 +147,18 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     files: _chapterFiles,
     documents: _store,
   );
-  late final _replies = Replies(
+  late final _replyModel = ReplyModel(policy: _maia, settings: _settings);
+  late final _gaps = GapHunt(
     session: _session,
-    policy: _maia,
+    model: _replyModel,
     settings: _settings,
     answers: _answers,
+  );
+  late final _replies = Replies(
+    session: _session,
+    model: _replyModel,
+    settings: _settings,
+    gaps: _gaps,
   );
 
   /// The old app's master database, in the same support folder, read as it
@@ -150,11 +166,17 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
   late final _book = SqliteMasterBook(
     p.join(widget.support.path, 'master_games.db'),
   );
+  late final _databases = ExplorerDatabases(
+    lichess: LichessExplorerApi(_lichess, token: readLichessToken),
+    book: _book,
+  );
   late final _explorer = Explorer(
     session: _session,
     settings: _settings,
-    lichess: LichessExplorerApi(_lichess, token: readLichessToken),
-    book: _book,
+    databases: _databases,
+  );
+  late final _games = GameFetcher(
+    databases: _databases,
     documents: _store,
     collections: _collections,
   );
@@ -341,7 +363,9 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     _evalCache.close();
     _analysis.dispose();
     _replies.dispose();
+    _gaps.dispose();
     _explorer.dispose();
+    _games.dispose();
     _book.close();
     _maia.dispose();
     _settings.dispose();
@@ -377,7 +401,9 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
         saver: _saver,
         analysis: _analysis,
         replies: _replies,
+        gaps: _gaps,
         explorer: _explorer,
+        games: _games,
         fill: _fill,
       ),
     );

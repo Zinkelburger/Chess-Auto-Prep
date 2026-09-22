@@ -21,21 +21,20 @@ import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
 import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
-import 'package:chess_auto_prep/v2/workspace/explorer.dart';
 import 'package:chess_auto_prep/v2/workspace/fill_gaps.dart';
-import 'package:chess_auto_prep/v2/workspace/repertoire_answers.dart';
-import 'package:chess_auto_prep/v2/workspace/replies.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/replies_fixture.dart';
 import '../support/scripted_explorer.dart';
 import '../support/scripted_policy.dart';
 import '../support/fixtures.dart';
 import '../support/scripted_files.dart';
 import '../support/scripted_store.dart';
 import '../support/study_fixture.dart';
+import '../support/library_fixture.dart';
 import '../support/viewer_fixture.dart';
 
 void main() {
@@ -55,8 +54,6 @@ void main() {
   late DocumentSaver saver;
   late DocumentSession session;
   late EngineAnalysis analysis;
-  late Replies replies;
-  late Explorer explorer;
   late FillGaps fill;
   late ChapterOutline outline;
   late PgnViewer viewer;
@@ -82,17 +79,9 @@ void main() {
       );
     saver = DocumentSaver(store, delay: Duration.zero);
     session = DocumentSession(store, saver);
-    picker = ScriptedPicker();
-    library = Library(
-      files: files,
-      documents: store,
-      session: session,
-      saver: saver,
-      picker: picker,
-      root: '/repertoires',
-    );
+    (picker, recent) = (ScriptedPicker(), ScriptedRecentFiles());
+    library = libraryOver(files, store, session, saver, picker: picker);
     outline = ChapterOutline(library: library, session: session);
-    recent = ScriptedRecentFiles();
     viewer = viewerFor(session, recent);
     studies = Studies(
       files: ScriptedStudyFiles(),
@@ -139,26 +128,16 @@ void main() {
   });
 
   Future<void> pump(WidgetTester tester) async {
-    replies = Replies(
-      session: session,
+    final owners = RepliesFixture(
+      session,
       policy: const NoOpinion(),
       settings: settings,
-      answers: RepertoireAnswers(
-        files: ScriptedFiles(),
-        documents: ScriptedDocumentStore(),
-      ),
     );
-    addTearDown(replies.dispose);
-    explorer = Explorer(
-      session: session,
-      settings: settings,
-      lichess: ScriptedExplorerApi(),
-      book: ScriptedBook(),
-      documents: store,
-      collections: explorerCollections,
-      debounce: Duration.zero,
-    );
+    addTearDown(owners.dispose);
+    final explorer = explorerOver(session, settings: settings);
     addTearDown(explorer.dispose);
+    final games = gamesOver(store);
+    addTearDown(games.dispose);
     await tester.binding.setSurfaceSize(const Size(1400, 800));
     await tester.pumpWidget(
       MaterialApp(
@@ -174,8 +153,10 @@ void main() {
           session: session,
           saver: saver,
           analysis: analysis,
-          replies: replies,
+          replies: owners.replies,
+          gaps: owners.gaps,
           explorer: explorer,
+          games: games,
           fill: fill,
           leaving: leaving,
         ),

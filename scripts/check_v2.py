@@ -51,6 +51,9 @@ IMPORT = re.compile(r"^import\s+'([^']+)'")
 LITERAL_STYLE = re.compile(r"Color\(0x|fontSize:|fontFamily:\s*'|Icon\([^)]*\bsize:\s*[\d.]")
 WIDGET_IMPORT = re.compile(r"^import 'package:flutter/(?:material|widgets|cupertino)\.dart'")
 WRITE_CALL = re.compile(r"\b(writeAsString|writeAsBytes|openWrite|\.create\(|\.delete\(|rename\()")
+# A file that builds a `File(` is one that could write outside the store; a
+# method that only has File in its name, such as `importFile(`, is not.
+FILE_CONSTRUCTOR = re.compile(r"\bFile\(")
 
 
 def relative_folder(path: Path) -> str:
@@ -137,7 +140,7 @@ def check_file(path: Path, findings: list[str]) -> None:
         if is_lib and re.search(r"\blate\b", code) and "late final" not in code:
             findings.append(f"{where}:{n}: `late` that is not `late final`")
         writer = is_lib and (folder == "storage" or str(path.relative_to(LIB)) in WRITERS_ALLOWED)
-        if is_lib and not writer and WRITE_CALL.search(code) and "File(" in "".join(lines):
+        if is_lib and not writer and WRITE_CALL.search(code) and FILE_CONSTRUCTOR.search("".join(lines)):
             findings.append(f"{where}:{n}: file write outside storage/")
     if is_lib:
         check_imports(path, lines, findings)

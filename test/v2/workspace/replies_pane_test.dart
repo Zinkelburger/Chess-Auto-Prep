@@ -3,14 +3,11 @@ import 'package:chess_auto_prep/v2/engines/maia/move_policy.dart';
 import 'package:chess_auto_prep/v2/storage/settings.dart';
 import 'package:chess_auto_prep/v2/storage/settings_store.dart';
 import 'package:chess_auto_prep/v2/ui/theme.dart';
-import 'package:chess_auto_prep/v2/workspace/repertoire_answers.dart';
-import 'package:chess_auto_prep/v2/workspace/replies.dart';
 import 'package:chess_auto_prep/v2/workspace/replies_pane.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../support/scripted_store.dart';
-import '../support/scripted_files.dart';
+import '../support/replies_fixture.dart';
 import '../support/session_fixture.dart';
 
 const chapter = '''
@@ -42,7 +39,6 @@ const filledChapter = '''
 void main() {
   late SessionFixture fixture;
   late SettingsStore settings;
-  late Replies replies;
 
   setUp(() async {
     fixture = await openSession(chapter);
@@ -58,16 +54,12 @@ void main() {
   /// and one started in `setUp` lives outside the test's fake clock and
   /// never runs while the test pumps.
   Future<void> show(WidgetTester tester) async {
-    replies = Replies(
-      session: fixture.session,
+    final owners = RepliesFixture(
+      fixture.session,
       policy: OneOpinion(),
       settings: settings,
-      answers: RepertoireAnswers(
-        files: ScriptedFiles(),
-        documents: ScriptedDocumentStore(),
-      ),
     );
-    addTearDown(replies.dispose);
+    addTearDown(owners.dispose);
     await tester.pumpWidget(
       MaterialApp(
         theme: darkTheme(),
@@ -75,7 +67,11 @@ void main() {
           body: SizedBox(
             width: 400,
             height: 400,
-            child: RepliesPane(session: fixture.session, replies: replies),
+            child: RepliesPane(
+              session: fixture.session,
+              replies: owners.replies,
+              gaps: owners.gaps,
+            ),
           ),
         ),
       ),

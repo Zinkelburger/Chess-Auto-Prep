@@ -35,6 +35,8 @@ import '../workspace/engine_analysis.dart';
 import '../workspace/explorer.dart';
 import '../workspace/fill_dialog.dart';
 import '../workspace/fill_gaps.dart';
+import '../workspace/game_fetcher.dart';
+import '../workspace/gap_hunt.dart';
 import '../workspace/replies.dart';
 import '../workspace/workspace_keys.dart';
 import '../workspace/workspace_tabs.dart';
@@ -58,7 +60,9 @@ class Shell extends StatefulWidget {
     required this.saver,
     required this.analysis,
     required this.replies,
+    required this.gaps,
     required this.explorer,
+    required this.games,
     required this.fill,
     required this.settings,
     required this.settingRows,
@@ -74,7 +78,9 @@ class Shell extends StatefulWidget {
   final DocumentSaver saver;
   final EngineAnalysis analysis;
   final Replies replies;
+  final GapHunt gaps;
   final Explorer explorer;
+  final GameFetcher games;
   final FillGaps fill;
   final SettingsStore settings;
 
@@ -272,7 +278,11 @@ class _ShellState extends State<Shell> {
   /// then opened in the viewer at the ply the explorer was showing. The one
   /// cross-mode request the explorer makes, handled here.
   Future<void> _openExplorerGame(ExplorerGame game) async {
-    final kept = await widget.explorer.keepGame(game);
+    final kept = await widget.games.keep(
+      game,
+      source: widget.explorer.choice.source,
+      ply: widget.explorer.ply,
+    );
     if (!mounted) return;
     if (kept is GameNotKept) return _said(kept.sentence);
     final GameKept(:ref, :ply) = kept as GameKept;
@@ -402,9 +412,7 @@ class _ShellState extends State<Shell> {
     ),
     AppAction(
       'Next gap',
-      (widget.replies.walk?.gaps ?? const []).isEmpty
-          ? null
-          : widget.replies.nextGap,
+      (widget.gaps.walk?.gaps ?? const []).isEmpty ? null : widget.gaps.nextGap,
       group: 'Repertoire',
     ),
     if (widget.session.chapter case final chapter? when chapter.game == null)
@@ -516,7 +524,7 @@ class _ShellState extends State<Shell> {
               widget.session,
               widget.saver,
               widget.analysis,
-              widget.replies,
+              widget.gaps,
               widget.fill,
               widget.viewer,
               _editing,
@@ -563,7 +571,9 @@ class _ShellState extends State<Shell> {
       saver: widget.saver,
       analysis: widget.analysis,
       replies: widget.replies,
+      gaps: widget.gaps,
       explorer: widget.explorer,
+      games: widget.games,
       fill: widget.fill,
       tabs: _tabs,
       editing: _editing,

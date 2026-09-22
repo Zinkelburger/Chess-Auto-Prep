@@ -52,6 +52,7 @@ final class GapWalk {
     required this.reach,
     required this.positionsAsked,
     required this.positionsUnanswered,
+    this.elsewhere = const {},
   });
 
   /// Most reached first.
@@ -67,6 +68,11 @@ final class GapWalk {
   /// How many of those it could not answer; their replies are not gaps,
   /// they are unknown.
   final int positionsUnanswered;
+
+  /// What the rest of the repertoire answers, by [Fen.position], as the walk
+  /// counted it: the other chapters' positions and this chapter's own, so a
+  /// transposition into either is not a gap.
+  final Map<String, String> elsewhere;
 
   /// The share of games above the floor that reach a gap, taken off one.
   ///
@@ -129,6 +135,7 @@ Future<GapWalk?> walkGaps({
     reach: Map.unmodifiable(walk.reach),
     positionsAsked: walk.asked,
     positionsUnanswered: walk.unanswered,
+    elsewhere: elsewhere,
   );
 }
 

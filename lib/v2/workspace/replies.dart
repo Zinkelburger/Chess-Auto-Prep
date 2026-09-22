@@ -7,20 +7,12 @@ import '../chess/fen.dart';
 import '../chess/generation/draft_lines.dart' show expectimaxIn;
 import '../chess/pgn/move_label.dart';
 import '../chess/pgn/tree_edit.dart';
-import '../diagnostics/log.dart';
 import '../engines/maia/move_policy.dart';
-import '../storage/chapter_files.dart';
 import '../storage/settings_store.dart';
 import 'document_session.dart';
-import 'gap_walk.dart';
-
-import 'repertoire_answers.dart';
-
-export 'gap_walk.dart' show DeadEnd, Gap, GapWalk, MissingReply;
-
-/// What a reply row says when the position after it is answered by another
-/// line of the same chapter rather than by another chapter.
-const hereLabel = 'this chapter';
+import 'gap_hunt.dart';
+import 'gap_walk.dart' show GapWalk, indexOfReply;
+import 'reply_model.dart';
 
 /// One move the model expects at the position on the board.
 final class ReplyRow {
@@ -100,30 +92,28 @@ final class RepliesFailed extends RepliesState {
   final String reason;
 }
 
-/// The opponent model's view of the document: what they play at the
-/// position on the board, and where in the whole chapter their likely
-/// replies go unanswered.
+/// The Replies table: what the opponent model expects at the position on
+/// the board, each move marked with whether the chapter plays it, whether
+/// another chapter answers it and whether it is a gap.
 ///
-/// Owns the model's answers (cached by position and rating, so a chapter
-/// walked once is cheap to walk again after an edit), the table for the
-/// cursor, the walk over the chapter and the gap the user was last taken
-/// to. Reads the [DocumentSession], the [SettingsStore] and, through
-/// [RepertoireAnswers], the other chapters of the repertoire, so a reply
-/// another chapter answers is not called a gap here; never holds a copy of
-/// the tree or the cursor.
+/// Asks the [ReplyModel] again when the board is on another position, the
+/// rating or the floor changed, or the [GapHunt] finished a walk whose
+/// reach the gap marks read; notifies only then. Never holds a copy of the
+/// tree or the cursor.
 final class Replies extends ChangeNotifier {
   Replies({
     required DocumentSession session,
-    required MovePolicy policy,
+    required ReplyModel model,
     required SettingsStore settings,
-    required RepertoireAnswers answers,
+    required GapHunt gaps,
   }) : _session = session,
-       _policy = policy,
+       _model = model,
        _settings = settings,
-       _answers = answers {
-    _session.anyChange.addListener(_followTheSession);
-    _settings.addListener(_followTheSettings);
-    _followTheSession();
+       _gaps = gaps {
+    _session.anyChange.addListener(_follow);
+    _settings.addListener(_follow);
+    _gaps.addListener(_follow);
+    _follow();
   }
 
   /// A reply rarer than this at the position on the board gets no row,
@@ -132,189 +122,60 @@ final class Replies extends ChangeNotifier {
   static const shownFrom = 0.01;
 
   final DocumentSession _session;
-  final MovePolicy _policy;
+  final ReplyModel _model;
   final SettingsStore _settings;
-  final RepertoireAnswers _answers;
+  final GapHunt _gaps;
 
-  final _cache = <String, Map<String, double>>{};
-
-  /// What the rest of the repertoire answers, by position, as of the last
-  /// walk: the other chapters' positions and this chapter's own, so a
-  /// transposition into either is not a gap.
-  var _elsewhere = const <String, String>{};
-  ChapterRef? _source;
   RepliesState _table = const RepliesEmpty();
-  GapWalk? _walk;
-  bool _walking = false;
-  Gap? _highlighted;
-  int _gapIndex = -1;
-  Fen? _tableFor;
-  Object? _walkedChapter;
-  int _tableTicket = 0;
-  int _walkTicket = 0;
-  int _elo = 0;
-  int _onceIn = 0;
-  bool _disposed = false;
+
+  /// What the table on screen was asked for.
+  ({Fen fen, int elo, int onceIn, GapWalk? walk})? _tableFor;
+
+  /// Bumped for every ask and on dispose: an answer that finds it moved on
+  /// was overtaken.
+  int _ticket = 0;
 
   RepliesState get table => _table;
-
-  /// The last finished walk over the open chapter, or null before the
-  /// first one finishes. Stale while [walking], and says so.
-  GapWalk? get walk => _walk;
-
-  bool get walking => _walking;
 
   /// The rating the shares are predicted for.
   int get elo => _settings.value.opponentElo;
 
-  /// The gap Next took the user to, until the cursor leaves it.
-  Gap? get highlighted => _highlighted;
-
-  /// A repertoire chapter is walked; a single game of a file is not, since
-  /// its gaps are not anybody's to fill.
-  bool get _walkable => _session.chapter != null && _session.game == null;
-
-  /// Takes the board to the next gap, most reached first, round and round.
-  /// A missing reply lands on the position before it, with the reply's row
-  /// marked in the table; a dead end lands where the chapter stops.
-  void nextGap() {
-    final gaps = _walk?.gaps ?? const [];
-    if (gaps.isEmpty) return;
-    _gapIndex = (_gapIndex + 1) % gaps.length;
-    final gap = gaps[_gapIndex];
-    _highlighted = gap;
-    _session.goTo(gap.at);
-    notifyListeners();
-  }
-
-  void _followTheSettings() {
-    final s = _settings.value;
-    if (s.opponentElo == _elo && s.coverOnceIn == _onceIn) return;
-    _elo = s.opponentElo;
-    _onceIn = s.coverOnceIn;
-    _tableFor = null;
-    _walkedChapter = null;
-    _followTheSession();
-  }
-
-  /// Walks the chapter again when it is another value and asks for the
-  /// table when the board is on another position, and tells the pane only
-  /// when one of those, or the gap it was taken to, changed: a refusal or a
-  /// flip changes nothing here.
-  void _followTheSession() {
-    if (_disposed) return;
-    final chapter = _session.chapter;
-    if (chapter == null) {
-      if (_walkedChapter != null || _table is! RepliesEmpty) _clear();
+  void _follow() {
+    if (_session.chapter == null) {
+      if (_table is RepliesEmpty) return;
+      _table = const RepliesEmpty();
+      _tableFor = null;
+      _ticket++;
+      notifyListeners();
       return;
     }
-    var changed = false;
-    if (_highlighted != null && _session.cursor != _highlighted!.at) {
-      _highlighted = null;
-      changed = true;
-    }
-    if (_session.source != _source) {
-      // The chapter that was open may have been edited; what it answers is
-      // read again the next time another chapter is walked.
-      _source = _session.source;
-      _answers.forget();
-    }
-    if (!identical(chapter, _walkedChapter)) {
-      _walkedChapter = chapter;
-      unawaited(_rewalk());
-      changed = true;
-    }
-    // Asking for the table tells the pane itself, before it waits.
-    if (_session.fen != _tableFor) {
-      unawaited(_retable());
-    } else if (changed) {
-      notifyListeners();
-    }
+    final s = _settings.value;
+    final wanted = (
+      fen: _session.fen,
+      elo: s.opponentElo,
+      onceIn: s.coverOnceIn,
+      walk: _gaps.walk,
+    );
+    if (wanted == _tableFor) return;
+    unawaited(_retable(wanted));
   }
 
-  void _clear() {
-    _table = const RepliesEmpty();
-    _walk = null;
-    _walking = false;
-    _highlighted = null;
-    _gapIndex = -1;
-    _tableFor = null;
-    _walkedChapter = null;
-    _tableTicket++;
-    _walkTicket++;
-    notifyListeners();
-  }
-
-  Future<void> _retable() async {
-    final ticket = ++_tableTicket;
-    final fen = _session.fen;
-    _tableFor = fen;
+  /// Tells the pane before it waits, so a table for another position never
+  /// stays on screen while the model is asked.
+  Future<void> _retable(
+    ({Fen fen, int elo, int onceIn, GapWalk? walk}) wanted,
+  ) async {
+    final ticket = ++_ticket;
+    _tableFor = wanted;
     _table = const RepliesPending();
     notifyListeners();
-    final answer = await _asked(fen);
-    if (_disposed || ticket != _tableTicket) return;
+    final answer = await _model.answerAt(wanted.fen);
+    if (ticket != _ticket) return;
     _table = switch (answer) {
-      MaiaPolicy(:final shares) => _rowsOf(fen, shares),
+      MaiaPolicy(:final shares) => _rowsOf(wanted.fen, shares),
       MaiaFailed(:final reason) => RepliesFailed(reason),
     };
     notifyListeners();
-  }
-
-  Future<void> _rewalk() async {
-    final ticket = ++_walkTicket;
-    if (!_walkable) {
-      _walk = null;
-      _walking = false;
-      return;
-    }
-    final chapter = _session.chapter!;
-    final source = _session.source;
-    _walking = true;
-    final floor = 1 / _settings.value.coverOnceIn;
-    final elsewhere = {
-      if (source != null) ...await _answers.around(source, chapter.side),
-      for (final position in answeredPositions(chapter.tree, chapter.side))
-        position: hereLabel,
-    };
-    if (_disposed || ticket != _walkTicket) return;
-    final walk = await walkGaps(
-      tree: chapter.tree,
-      side: chapter.side,
-      floor: floor,
-      shares: _sharesFor,
-      overtaken: () => _disposed || ticket != _walkTicket,
-      elsewhere: elsewhere,
-    );
-    if (_disposed || ticket != _walkTicket || walk == null) return;
-    _elsewhere = elsewhere;
-    _walk = walk;
-    _walking = false;
-    _gapIndex = -1;
-    // The table's gap marks read the reach the walk just found.
-    _tableFor = null;
-    _followTheSession();
-  }
-
-  Future<Map<String, double>?> _sharesFor(Fen fen) async =>
-      switch (await _asked(fen)) {
-        MaiaPolicy(:final shares) => shares,
-        MaiaFailed() => null,
-      };
-
-  /// The model's answer for [fen] at the chosen rating, from the cache when
-  /// it has been asked before. The counters are not part of the position
-  /// the model sees, so they are not part of the key.
-  Future<MaiaAnswer> _asked(Fen fen) async {
-    final elo = _settings.value.opponentElo;
-    final key = '${fen.position}|$elo';
-    final cached = _cache[key];
-    if (cached != null) return MaiaPolicy(cached);
-    final answer = await _policy.policy(fen, elo);
-    if (answer case MaiaPolicy(:final shares)) _cache[key] = shares;
-    if (answer case MaiaFailed(:final reason)) {
-      log.w('predict replies at ${fen.value}', reason);
-    }
-    return answer;
   }
 
   RepliesShown _rowsOf(Fen fen, Map<String, double> shares) {
@@ -322,7 +183,9 @@ final class Replies extends ChangeNotifier {
     final cursor = _session.cursor;
     final siblings = tree.nodeAt(cursor)?.children ?? tree.children;
     final ourMove = fen.whiteToMove == (_session.chapter!.side == Side.white);
-    final reach = _walk?.reach[cursor];
+    final walk = _gaps.walk;
+    final reach = walk?.reach[cursor];
+    final answered = walk?.elsewhere ?? const {};
     final floor = 1 / _settings.value.coverOnceIn;
     final rows = <ReplyRow>[];
     for (final MapEntry(key: uci, value: share) in shares.entries) {
@@ -332,7 +195,7 @@ final class Replies extends ChangeNotifier {
       final move = Move.parse(uci);
       final node = move == null ? null : moveNode(fen, move);
       if (node == null) continue;
-      final elsewhere = played ? null : _elsewhere[node.fen.position];
+      final elsewhere = played ? null : answered[node.fen.position];
       rows.add(
         ReplyRow(
           uci: uci,
@@ -359,9 +222,10 @@ final class Replies extends ChangeNotifier {
 
   @override
   void dispose() {
-    _disposed = true;
-    _session.anyChange.removeListener(_followTheSession);
-    _settings.removeListener(_followTheSettings);
+    _ticket++;
+    _session.anyChange.removeListener(_follow);
+    _settings.removeListener(_follow);
+    _gaps.removeListener(_follow);
     super.dispose();
   }
 }

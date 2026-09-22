@@ -17,6 +17,8 @@ import 'explorer_pane.dart';
 import 'fill_gaps.dart';
 import 'fill_line.dart';
 import 'game_counter.dart';
+import 'game_fetcher.dart';
+import 'gap_hunt.dart';
 import 'move_note.dart';
 import 'move_tree_view.dart';
 import 'nav_row.dart';
@@ -40,7 +42,9 @@ class WorkspaceView extends StatelessWidget {
     required this.saver,
     required this.analysis,
     required this.replies,
+    required this.gaps,
     required this.explorer,
+    required this.games,
     required this.fill,
     required this.tabs,
     required this.editing,
@@ -53,7 +57,9 @@ class WorkspaceView extends StatelessWidget {
   final DocumentSaver saver;
   final EngineAnalysis analysis;
   final Replies replies;
+  final GapHunt gaps;
   final Explorer explorer;
+  final GameFetcher games;
 
   /// Asked to open a game the explorer lists, which is the shell's
   /// business: another mode shows it.
@@ -126,7 +132,9 @@ class WorkspaceView extends StatelessWidget {
             child: _Tabbed(
               session: session,
               replies: replies,
+              gaps: gaps,
               explorer: explorer,
+              games: games,
               tabs: tabs,
               moveMenu: moveMenu,
               onExplorerGame: onExplorerGame,
@@ -150,7 +158,9 @@ class _Tabbed extends StatelessWidget {
   const _Tabbed({
     required this.session,
     required this.replies,
+    required this.gaps,
     required this.explorer,
+    required this.games,
     required this.tabs,
     required this.moveMenu,
     required this.onExplorerGame,
@@ -158,7 +168,9 @@ class _Tabbed extends StatelessWidget {
 
   final DocumentSession session;
   final Replies replies;
+  final GapHunt gaps;
   final Explorer explorer;
+  final GameFetcher games;
   final PaneTabs tabs;
   final MoveMenu? moveMenu;
   final ValueChanged<ExplorerGame>? onExplorerGame;
@@ -168,12 +180,13 @@ class _Tabbed extends StatelessWidget {
       return MoveTreeView(session: session, moveMenu: moveMenu);
     }
     if (id == WorkspaceTab.replies.id) {
-      return RepliesPane(session: session, replies: replies);
+      return RepliesPane(session: session, replies: replies, gaps: gaps);
     }
     if (id == WorkspaceTab.explorer.id) {
       return ExplorerPane(
         session: session,
         explorer: explorer,
+        games: games,
         onOpenGame: onExplorerGame,
       );
     }
@@ -181,7 +194,7 @@ class _Tabbed extends StatelessWidget {
   }
 
   Widget? _trailing(String id) {
-    if (id == WorkspaceTab.replies.id) return _NextGap(replies: replies);
+    if (id == WorkspaceTab.replies.id) return _NextGap(gaps: gaps);
     if (id == WorkspaceTab.explorer.id) return ExplorerGear(explorer: explorer);
     return null;
   }
@@ -213,18 +226,18 @@ class _Tabbed extends StatelessWidget {
 /// The one control the Replies tab owns: the way to the next unanswered
 /// position. Off while there is no gap to go to.
 class _NextGap extends StatelessWidget {
-  const _NextGap({required this.replies});
+  const _NextGap({required this.gaps});
 
-  final Replies replies;
+  final GapHunt gaps;
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: replies,
+      listenable: gaps,
       builder: (context, _) {
-        final gaps = replies.walk?.gaps ?? const [];
+        final found = gaps.walk?.gaps ?? const [];
         return TextButton.icon(
-          onPressed: gaps.isEmpty ? null : replies.nextGap,
+          onPressed: found.isEmpty ? null : gaps.nextGap,
           icon: const Icon(Icons.skip_next, size: IconSize.action),
           label: const Text('Next gap'),
         );

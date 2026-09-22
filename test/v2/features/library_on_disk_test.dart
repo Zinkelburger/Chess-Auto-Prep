@@ -10,7 +10,7 @@ import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
-import '../support/viewer_fixture.dart';
+import '../support/library_fixture.dart';
 
 /// The library against real files: create a repertoire, add a chapter, rename
 /// it, move it, delete it, and check the chapter PGNs and the training rows
@@ -48,14 +48,8 @@ void main() {
     final store = PgnFileStore(documents: documents, support: support);
     saver = DocumentSaver(store, delay: Duration.zero);
     session = DocumentSession(store, saver);
-    library = Library(
-      files: ChapterDirectory(Directory(root)),
-      documents: store,
-      session: session,
-      saver: saver,
-      picker: ScriptedPicker(),
-      root: root,
-    );
+    final files = ChapterDirectory(Directory(root));
+    library = libraryOver(files, store, session, saver, root: root);
     await library.refresh();
   });
 

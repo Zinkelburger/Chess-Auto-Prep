@@ -2,6 +2,7 @@ import 'package:chess_auto_prep/v2/features/library/library.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/document_ref.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/v2/storage/pgn_file_picker.dart';
 import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
 import 'package:path/path.dart' as p;
@@ -73,15 +74,31 @@ Future<LibraryFixture> openLibrary(
   final saver = DocumentSaver(store, delay: delay);
   final session = DocumentSession(store, saver);
   final picker = ScriptedPicker();
-  final library = Library(
-    files: files,
-    documents: store,
-    session: session,
-    saver: saver,
-    picker: picker,
-    root: '/repertoires',
-  );
+  final library = libraryOver(files, store, session, saver, picker: picker);
   await library.refresh();
   if (open != null) await session.open(open);
   return LibraryFixture._(files, store, picker, saver, session, library);
 }
+
+/// A library over [files] and [documents] under [root], changing documents
+/// through [session] and [saver] as the app wires it.
+Library libraryOver(
+  ChapterFiles files,
+  PgnDocumentStore documents,
+  DocumentSession session,
+  DocumentSaver saver, {
+  PgnFilePicker? picker,
+  String root = '/repertoires',
+}) => Library(
+  files: files,
+  writes: LibraryWrites(
+    files: files,
+    documents: documents,
+    session: session,
+    saver: saver,
+    root: root,
+  ),
+  session: session,
+  picker: picker ?? ScriptedPicker(),
+  root: root,
+);

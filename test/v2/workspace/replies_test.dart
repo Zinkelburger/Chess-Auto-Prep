@@ -1,14 +1,15 @@
 import 'package:chess_auto_prep/v2/chess/fen.dart';
-import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/engines/maia/move_policy.dart';
 import 'package:chess_auto_prep/v2/storage/settings.dart';
 import 'package:chess_auto_prep/v2/storage/settings_store.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/workspace/repertoire_answers.dart';
+import 'package:chess_auto_prep/v2/workspace/gap_walk.dart';
 import 'package:chess_auto_prep/v2/workspace/replies.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/replies_fixture.dart';
 import '../support/scripted_files.dart';
 import '../support/scripted_store.dart';
 import '../support/session_fixture.dart';
@@ -60,6 +61,7 @@ void main() {
   late ScriptedPolicy policy;
   late SettingsStore settings;
   late RepertoireAnswers answers;
+  late RepliesFixture owners;
   late Replies replies;
 
   setUp(() async {
@@ -76,16 +78,17 @@ void main() {
       ),
       documents: fixture.store,
     );
-    replies = Replies(
-      session: fixture.session,
+    owners = RepliesFixture(
+      fixture.session,
       policy: policy,
       settings: settings,
       answers: answers,
     );
+    replies = owners.replies;
   });
 
   tearDown(() {
-    replies.dispose();
+    owners.dispose();
     settings.dispose();
     fixture.dispose();
   });
@@ -113,21 +116,11 @@ void main() {
     expect(byMove['e5']!.inRepertoire, isTrue);
     expect(byMove['c5']!.gap, isTrue);
     expect(byMove['a6']!.gap, isFalse, reason: 'one in ten is under 1 in 5');
-    final walk = replies.walk!;
+    final walk = owners.gaps.walk!;
     expect(walk.gaps.whereType<MissingReply>().single.san, 'c5');
     // After 2. Nf3 the model has no opinion: unanswered, not a gap.
     expect(walk.positionsUnanswered, 1);
-    expect(replies.walking, isFalse);
-  });
-
-  test('Next gap takes the board to the gap and marks its row; moving on '
-      'clears the mark', () async {
-    await pumpEventQueue();
-    replies.nextGap();
-    expect(fixture.session.cursor, NodePath.of([0]));
-    expect((replies.highlighted as MissingReply).san, 'c5');
-    fixture.session.back();
-    expect(replies.highlighted, isNull);
+    expect(owners.gaps.walking, isFalse);
   });
 
   test('the model is asked once per position and rating', () async {
@@ -171,13 +164,12 @@ void main() {
     final byMove = {for (final row in shown.rows) row.san: row};
     expect(byMove['c5']!.gap, isFalse);
     expect(byMove['c5']!.elsewhere, 'Sicilian');
-    expect(replies.walk!.gaps, isEmpty);
+    expect(owners.gaps.walk!.gaps, isEmpty);
   });
 
   test('closing the document empties the table', () async {
     await pumpEventQueue();
     fixture.session.closed();
     expect(replies.table, isA<RepliesEmpty>());
-    expect(replies.walk, isNull);
   });
 }
