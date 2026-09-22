@@ -300,7 +300,11 @@ void main() {
     expect(find.text('Next gap'), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyW);
     await tester.pumpAndSettle();
-    expect(tabs.open, [WorkspaceTab.moves, WorkspaceTab.explorer]);
+    expect(tabs.open, [
+      WorkspaceTab.moves,
+      WorkspaceTab.explorer,
+      WorkspaceTab.tree,
+    ]);
     expect(find.byType(MoveTreeView), findsOneWidget);
     expect(find.text('Next gap'), findsNothing);
     // The explorer is the third tab, with its gear at the strip's edge.
@@ -312,6 +316,9 @@ void main() {
     expect(find.text('Masters'), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyW);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(tabs.open, [WorkspaceTab.moves, WorkspaceTab.tree]);
+    tabs.close(WorkspaceTab.tree);
     await tester.pumpAndSettle();
     expect(tabs.open, [WorkspaceTab.moves]);
     expect(find.text('Moves'), findsNothing, reason: 'one tab: no strip');

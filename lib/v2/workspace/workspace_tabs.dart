@@ -2,8 +2,8 @@ import '../ui/app_action.dart';
 import '../ui/pane_tabs.dart';
 
 /// The tabs of the reading card: the moves, which are always there, the
-/// trainer, the opponent's replies, the explorer, and the puzzle being
-/// solved. A new thing the card can show is a new value here, and the
+/// trainer, the opponent's replies, the explorer, the tree of the user's
+/// own repertoires, and the puzzle being solved. A new thing the card can show is a new value here, and the
 /// compiler then asks for its arm in the card's body; the strip, the keys
 /// and the Actions menu know nothing about which tabs there are.
 enum WorkspaceTab {
@@ -11,6 +11,7 @@ enum WorkspaceTab {
   train('Train'),
   replies('Replies'),
   explorer('Explorer'),
+  tree('Tree'),
   puzzle('Puzzle');
 
   const WorkspaceTab(this.title, {this.pinned = false});
@@ -30,17 +31,22 @@ PaneTabs<WorkspaceTab> newWorkspaceTabs() => PaneTabs(
     for (final tab in WorkspaceTab.values)
       if (tab != WorkspaceTab.puzzle) tab.tab,
   ],
-  open: const [WorkspaceTab.train, WorkspaceTab.replies, WorkspaceTab.explorer],
+  open: const [
+    WorkspaceTab.train,
+    WorkspaceTab.replies,
+    WorkspaceTab.explorer,
+    WorkspaceTab.tree,
+  ],
 );
 
-/// The card's tabs as the PGN Viewer and Study start: the moves and the
-/// explorer. The repertoire's tabs can be shown from the Actions menu.
+/// The card's tabs as the PGN Viewer and Study start: the moves, the
+/// explorer and the tree. The repertoire's tabs can be shown from the Actions menu.
 PaneTabs<WorkspaceTab> readingTabs() => PaneTabs(
   [
     for (final tab in WorkspaceTab.values)
       if (tab != WorkspaceTab.puzzle) tab.tab,
   ],
-  open: const [WorkspaceTab.explorer],
+  open: const [WorkspaceTab.explorer, WorkspaceTab.tree],
 );
 
 /// The card's tabs in Tactics: the puzzle first and always there, the game

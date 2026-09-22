@@ -47,6 +47,7 @@ import '../workspace/document_saver.dart';
 import '../workspace/document_session.dart';
 import '../workspace/session_results.dart';
 import '../workspace/engine_analysis.dart';
+import '../workspace/repertoire_tree.dart';
 import '../workspace/explorer.dart';
 import '../workspace/explorer_databases.dart';
 import '../workspace/fill_gaps.dart';
@@ -187,6 +188,11 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     session: _session,
     settings: _settings,
     databases: _databases,
+  );
+  late final _tree = RepertoireTree(
+    session: _session,
+    files: _chapterFiles,
+    documents: _store,
   );
   late final _games = GameFetcher(
     databases: _databases,
@@ -383,6 +389,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     // A library change is a chapter file written, so what the other
     // chapters answer is read again the next time a chapter is walked.
     _library.addListener(_answers.forget);
+    _library.addListener(_tree.forget);
     _fill.addListener(_listTheDraft);
     unawaited(_library.refresh());
     unawaited(_startWithSettings());
@@ -427,12 +434,14 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     _replies.dispose();
     _gaps.dispose();
     _explorer.dispose();
+    _tree.dispose();
     _games.dispose();
     _book.close();
     _maia.dispose();
     _settings.dispose();
     _outline.dispose();
     _library.removeListener(_answers.forget);
+    _library.removeListener(_tree.forget);
     _library.dispose();
     _studies.dispose();
     _viewer.dispose();
@@ -466,6 +475,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
         replies: _replies,
         gaps: _gaps,
         explorer: _explorer,
+        tree: _tree,
         games: _games,
         fill: _fill,
         tactics: _tactics,

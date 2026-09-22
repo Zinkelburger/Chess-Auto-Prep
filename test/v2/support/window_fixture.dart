@@ -22,6 +22,7 @@ import 'package:chess_auto_prep/v2/workspace/document_session.dart';
 import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
 import 'package:chess_auto_prep/v2/features/trainer/scope_reader.dart';
 import 'package:chess_auto_prep/v2/features/trainer/trainer.dart';
+import 'package:chess_auto_prep/v2/workspace/repertoire_tree.dart';
 import 'package:chess_auto_prep/v2/workspace/explorer.dart';
 import 'package:chess_auto_prep/v2/workspace/fill_gaps.dart';
 import 'package:chess_auto_prep/v2/workspace/game_fetcher.dart';
@@ -58,12 +59,7 @@ final class WindowFixture {
   WindowFixture({WindowInput? input}) {
     session = DocumentSession(store, saver);
     library = libraryOver(
-      ScriptedFiles(
-        listing: Repertoires([
-          folder('benko', ['Main']),
-          folder('KID', ['Main']),
-        ]),
-      ),
+      chapterFiles,
       store,
       session,
       saver,
@@ -153,6 +149,15 @@ final class WindowFixture {
   late final RepliesFixture replies;
   final lichess = ScriptedExplorerApi();
   late final Explorer explorer;
+  late final RepertoireTree tree;
+
+  /// The two repertoires the library lists, each of one chapter.
+  final chapterFiles = ScriptedFiles(
+    listing: Repertoires([
+      folder('benko', ['Main']),
+      folder('KID', ['Main']),
+    ]),
+  );
   late final GameFetcher games;
   final progress = ScriptedProgress();
   late final Trainer lineTrainer;
@@ -194,6 +199,11 @@ final class WindowFixture {
     );
     explorer = explorerOver(session, settings: settings, lichess: lichess);
     games = gamesOver(store, lichess: lichess);
+    tree = RepertoireTree(
+      session: session,
+      files: chapterFiles,
+      documents: store,
+    );
     lineTrainer = Trainer(
       session: session,
       chapters: ScopeReader(files: ScriptedFiles(), documents: store),
@@ -237,6 +247,7 @@ final class WindowFixture {
           replies: replies.replies,
           gaps: replies.gaps,
           explorer: explorer,
+          tree: tree,
           games: games,
           fill: fill,
           tactics: tactics,
@@ -261,6 +272,7 @@ final class WindowFixture {
     trainer.dispose();
     games.dispose();
     explorer.dispose();
+    tree.dispose();
     replies.dispose();
     viewer.dispose();
     settings.dispose();

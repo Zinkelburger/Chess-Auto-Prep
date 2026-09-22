@@ -36,10 +36,13 @@ import '../ui/theme.dart';
 import '../workspace/chapter_commands.dart';
 import '../workspace/copy_name_dialog.dart';
 import '../workspace/document_actions.dart';
+import '../workspace/board_claim.dart';
 import '../workspace/document_saver.dart';
 import '../workspace/document_session.dart';
 import '../workspace/session_results.dart';
 import '../workspace/engine_analysis.dart';
+import '../workspace/repertoire_tree.dart';
+import '../workspace/tree_pane.dart';
 import '../workspace/explorer.dart';
 import '../workspace/game_fetcher.dart';
 import '../workspace/gap_hunt.dart';
@@ -73,6 +76,7 @@ class Shell extends StatefulWidget {
     required this.replies,
     required this.gaps,
     required this.explorer,
+    required this.tree,
     required this.games,
     required this.fill,
     required this.tactics,
@@ -95,6 +99,9 @@ class Shell extends StatefulWidget {
   final Replies replies;
   final GapHunt gaps;
   final Explorer explorer;
+
+  /// The user's own repertoires, looked up by position: the Tree tab.
+  final RepertoireTree tree;
   final GameFetcher games;
   final FillGaps fill;
   final TacticsSet tactics;
@@ -119,6 +126,9 @@ class Shell extends StatefulWidget {
 class _ShellState extends State<Shell> with ListeningState<Shell> {
   /// Whether the edit strip is open. The strip's own Done closes it.
   final _editing = ValueNotifier(false);
+
+  /// Who holds the board: a lesson first, then the Tree tab's free board.
+  late final _claim = FirstClaim([widget.lineTrainer.board, widget.tree.board]);
 
   /// The reading card's tabs of each mode: which are open and which is up.
   /// Each mode starts with its own — the builder its four, Tactics the
@@ -176,6 +186,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   void dispose() {
     _sitting.dispose();
     _editing.dispose();
+    _claim.dispose();
     for (final tabs in _tabsByMode.values) {
       tabs.dispose();
     }
@@ -258,6 +269,13 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     final result = await _requests.openAt(line.ref, line.sans);
     if (!mounted || result is! RequestDone) return;
     if (line.place != ReadIn.board) _tabs.show(WorkspaceTab.moves);
+  }
+
+  /// A move of the Tree tab that only another file plays: that file, in
+  /// the builder, at the position the move leads to.
+  Future<void> _readTree(TreePlace place) async {
+    _requests.switchTo(Mode.repertoires);
+    await _requests.openAt(place.ref, place.sans);
   }
 
   /// Space and ↓ are the puzzle's while one is on the board, and the
@@ -380,6 +398,9 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   );
 
   Map<ShortcutActivator, VoidCallback> get _windowKeys => {
+    // ← takes back a move made past the file on the Tree tab's free board
+    // before it steps back in the file.
+    const SingleActivator(LogicalKeyboardKey.arrowLeft): widget.tree.back,
     const SingleActivator(LogicalKeyboardKey.comma, control: true): () =>
         unawaited(_settings()),
     const SingleActivator(LogicalKeyboardKey.comma, meta: true): () =>
@@ -524,7 +545,10 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       moveMenu: _requests.mode == Mode.study
           ? (path) => quizMenuItems(widget.session, path)
           : null,
-      onBoardMove: widget.trainer.play,
+      // The Tree tab makes the board a free one while it is up.
+      onBoardMove: (uci) => widget.tree.watching
+          ? widget.tree.play(uci)
+          : widget.trainer.play(uci),
       puzzle: PuzzlePane(trainer: widget.trainer, onAnalyze: _analyze),
       onExplorerGame: (game) => unawaited(
         _requests.openExplorerGame(
@@ -535,7 +559,12 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       ),
       header: _requests.mode != Mode.tactics,
       gameCounter: _requests.mode != Mode.tactics,
-      boardClaim: widget.lineTrainer.board,
+      boardClaim: _claim,
+      treeTab: (_) => TreePane(
+        session: widget.session,
+        tree: widget.tree,
+        onOpen: (place) => unawaited(_readTree(place)),
+      ),
       trainTab: (_) => TrainPane(
         trainer: widget.lineTrainer,
         onRead: (line) => unawaited(_readLine(line)),

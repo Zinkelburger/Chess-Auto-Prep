@@ -1,4 +1,5 @@
 import 'package:dartchess/dartchess.dart' show Side;
+import 'package:flutter/foundation.dart';
 
 import '../chess/fen.dart';
 
@@ -23,4 +24,29 @@ final class BoardClaim {
 
   /// The move that reached [fen], as UCI, for the highlight.
   final String? lastMove;
+}
+
+/// The first of several owners' claims that holds the board: a lesson
+/// before the Tree tab's free board, say.
+final class FirstClaim extends ChangeNotifier
+    implements ValueListenable<BoardClaim?> {
+  FirstClaim(this._claims) {
+    for (final claim in _claims) {
+      claim.addListener(notifyListeners);
+    }
+  }
+
+  final List<ValueListenable<BoardClaim?>> _claims;
+
+  @override
+  BoardClaim? get value =>
+      _claims.map((claim) => claim.value).nonNulls.firstOrNull;
+
+  @override
+  void dispose() {
+    for (final claim in _claims) {
+      claim.removeListener(notifyListeners);
+    }
+    super.dispose();
+  }
 }

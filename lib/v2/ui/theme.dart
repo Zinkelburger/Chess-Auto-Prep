@@ -447,6 +447,11 @@ const explorerGamesWidth = 96.0;
 const explorerHeaderHeight = 22.0;
 const explorerMenuWidth = 300.0;
 
+/// The Tree tab's table: the lines gutter and the files column; the move
+/// gutter is the explorer's, and how the line goes on takes the rest.
+const treeLinesWidth = 56.0;
+const treeFilesWidth = 140.0;
+
 /// The three parts of a result bar: White's wins are light, draws are the
 /// muted grey, Black's wins are the near-black of the reading card, so the
 /// bar reads like a chessboard's two colours with a grey between.
