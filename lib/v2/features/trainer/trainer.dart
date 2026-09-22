@@ -136,14 +136,23 @@ class Trainer extends ChangeNotifier {
 
   TrainerState get state => _state;
 
-  /// How many lines of the scope are due now, and never trained.
-  int get dueCount => _count(LineStatus.due);
-  int get untrainedCount => _count(LineStatus.untrained);
+  /// How many lines of the scope a Review sitting takes now, and how many
+  /// Learn has left to take.
+  int get dueCount => _queue(dueNow).length;
+  int get untrainedCount => _queue(toLearn).length;
 
-  int _count(LineStatus status) {
+  List<TrainingLine> _queue(
+    List<TrainingLine> Function(
+      List<TrainingLine>,
+      Map<LineKey, Review>,
+      DateTime,
+    )
+    queue,
+  ) {
     final state = _state;
-    if (state is! TrainerReady) return 0;
-    return state.lines.where((l) => state.progress.status(l) == status).length;
+    if (state is! TrainerReady) return const [];
+    final progress = state.progress;
+    return queue(state.lines, progress.reviews, progress.now);
   }
 
   TrainScope get scope => _scope;

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' show min;
 
 import 'package:flutter/material.dart';
 
@@ -188,7 +189,9 @@ class _LineListState extends State<LineList> {
       return _Muted(_query.isEmpty ? 'No lines here yet.' : 'No line matches.');
     }
     final many = widget.ready.chapters.length > 1;
-    final departs = _departures(all);
+    // Worked out over the rows shown, so a search never trims a row
+    // against a line it hides.
+    final departs = _departures(lines);
     void read(TrainingLine line, ReadIn place) =>
         widget.onRead(widget.ready.toRead(line, place));
     return ListView.builder(
@@ -240,7 +243,7 @@ class _LineListState extends State<LineList> {
   /// For each line, how many of its first moves the line above it in its
   /// chapter plays too: a row shows its line from where it leaves, since
   /// lines of one chapter mostly share their opening. [lines] is the list
-  /// in the order it is shown.
+  /// as it is shown, search and all.
   static Map<LineKey, int> _departures(List<TrainingLine> lines) {
     final shared = <LineKey, int>{};
     for (var i = 1; i < lines.length; i++) {
@@ -279,9 +282,9 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     final progress = ready.progress;
     final counts = countsOf(ready.lines, progress.reviews, progress.now);
-    final due = counts[LineStatus.due]!;
+    final due = trainer.dueCount;
     final untrained = counts[LineStatus.untrained]!;
-    final learn = untrained < learnSitting ? untrained : learnSitting;
+    final learn = min(trainer.untrainedCount, learnSitting);
     final excluded = counts[LineStatus.excluded]!;
     final busy = progress.stale;
     return Column(
@@ -290,7 +293,8 @@ class _Header extends StatelessWidget {
         Row(children: [_scope(), const Spacer(), _actions(progress)]),
         const SizedBox(height: Space.s),
         Text(
-          '${counts[LineStatus.learned]} learned · $due due · '
+          '${counts[LineStatus.learned]} learned · '
+          '${counts[LineStatus.due]} due · '
           '$untrained untrained'
           '${excluded > 0 ? ' · $excluded excluded' : ''}',
           style: Theme.of(context).textTheme.bodySmall,
@@ -317,14 +321,13 @@ class _Header extends StatelessWidget {
 
   Widget _scope() => SegmentedButton<TrainScope>(
     segments: const [
-      ButtonSegment(value: TrainScope.chapter, label: Text('This chapter')),
-      ButtonSegment(
-        value: TrainScope.repertoire,
-        label: Text('Whole repertoire'),
-      ),
+      ButtonSegment(value: TrainScope.chapter, label: Text('Chapter')),
+      ButtonSegment(value: TrainScope.repertoire, label: Text('Repertoire')),
     ],
     selected: {trainer.scope},
     showSelectedIcon: false,
+    // Beside the actions in a card as narrow as the board leaves it.
+    style: const ButtonStyle(visualDensity: VisualDensity.compact),
     onSelectionChanged: (s) => trainer.setScope(s.single),
   );
 

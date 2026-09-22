@@ -108,7 +108,7 @@ class _LessonViewState extends State<LessonView> {
     }
     _box.requestFocus();
     _typed.text += character;
-    playTyped(widget.lesson, _typed);
+    playTyped(widget.lesson, _typed, typing: true);
     return true;
   }
 

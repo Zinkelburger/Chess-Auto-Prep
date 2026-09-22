@@ -28,12 +28,19 @@ void main() {
 
   String reviews() => File(at('repertoire_reviews.csv')).readAsStringSync();
 
+  /// A review row naming [chapter], as the trainer writes it.
+  String review(String chapter, String line) =>
+      '"${at(chapter)}",$line,Main,2.50,1.00,2026-09-20T00:00:00.000Z,good,,'
+      '1,0,false';
+
+  const reviewsHeader =
+      'repertoire_id,line_id,line_name,difficulty,interval_days,due_utc,'
+      'last_rating,last_reviewed_utc,pass_count,fail_count,excluded';
+
   /// One review row naming [chapter], as the trainer would leave it.
-  void trainOn(String chapter) =>
-      File(at('repertoire_reviews.csv')).writeAsStringSync(
-        'repertoire_id,line_id,due\n'
-        '"${at(chapter)}","line_1","2026-09-20"\n',
-      );
+  void trainOn(String chapter) => File(
+    at('repertoire_reviews.csv'),
+  ).writeAsStringSync('$reviewsHeader\n${review(chapter, 'line_1')}\n');
 
   RepertoireFolder named(String name) =>
       library.repertoires.firstWhere((folder) => folder.name == name);
@@ -188,9 +195,9 @@ void main() {
   test('the training rows of every chapter follow the folder', () async {
     await generatedRepertoire();
     File(at('repertoire_reviews.csv')).writeAsStringSync(
-      'repertoire_id,line_id,due\n'
-      '"${at('repertoires/Benoni/Main.pgn')}","line_1","2026-09-20"\n'
-      '"${at('repertoires/Benoni/Modern.pgn')}","line_2","2026-09-21"\n',
+      '$reviewsHeader\n'
+      '${review('repertoires/Benoni/Main.pgn', 'line_1')}\n'
+      '${review('repertoires/Benoni/Modern.pgn', 'line_2')}\n',
     );
     expect(
       await library.renameRepertoire(named('Benoni'), 'Modern Benoni'),

@@ -481,6 +481,58 @@ void main() {
     });
   });
 
+  test('Learn takes its lines from those with something to ask', () {
+    fakeAsync((async) {
+      fixture.session.closed();
+      // More stubs than one sitting takes, ahead of the one real line.
+      final stubs = [
+        for (var i = 0; i < learnSitting + 2; i++)
+          '[Event "Stub $i"]\n\n1. e4 *\n',
+      ].join('\n');
+      fixture.externalEdit(
+        '// Color: Black\n\n$stubs\n[Event "Line"]\n\n1. e4 e5 *\n',
+      );
+      unawaited(fixture.session.open(fixture.ref));
+      async.flushMicrotasks();
+      final trainer = ready(async);
+      expect(trainer.untrainedCount, 1, reason: 'the stubs ask nothing');
+      trainer.learn();
+      expect(trainer.lesson!.line.name, 'Line');
+    });
+  });
+
+  test('a line restarted after a failed save lands that save first', () {
+    fakeAsync((async) {
+      final ruy = (source: source(), id: 'line_ZTQgZTUgTmYzIE5jNiBCYj');
+      files.reviews[ruy] = Review(
+        key: ruy,
+        lineName: 'Ruy',
+        intervalDays: 4,
+        lastRating: 'good',
+        due: _now,
+      );
+      final trainer = ready(async);
+      trainer.review();
+      final lesson = trainer.lesson!;
+      for (final uci in ['e2e4', 'g1f3', 'f1b5']) {
+        play(async, lesson, uci);
+      }
+      files.nextWrite = const ProgressFailed('disk full');
+      lesson.rate(Rating.good);
+      async.flushMicrotasks();
+      expect(lesson.state, isA<LineNotSaved>());
+      lesson.restart();
+      for (final uci in ['e2e4', 'g1f3', 'f1b5']) {
+        play(async, lesson, uci);
+      }
+      lesson.rate(Rating.easy);
+      async.flushMicrotasks();
+      expect(files.history.map((h) => h.rating), ['good', 'easy']);
+      expect(files.reviews[ruy]!.lastRating, 'easy');
+      expect(readyState(trainer).progress.stale, isFalse);
+    });
+  });
+
   test('reading the progress again ends the sitting over the old copy', () {
     fakeAsync((async) {
       final trainer = ready(async)..learn();

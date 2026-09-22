@@ -101,11 +101,33 @@ class TrainingProgress extends ChangeNotifier {
 
   /// Writes a finished line's rating, with the streaks its answers changed
   /// and a history row.
+  ///
   Future<ProgressWrite> finished(
     TrainingLine line,
     Rating rating, {
     required bool clean,
-  }) => _serially(() => _land(_outcome(line, rating, clean: clean)));
+  }) => _serially(
+    () => _afterUnsaved([
+      line,
+    ], () => _land(_outcome(line, rating, clean: clean))),
+  );
+
+  /// Runs [write] once every outcome of [lines] that did not all land —
+  /// the line restarted, skipped or marked after a failed write — has
+  /// landed, as [retry] writes it. Its rows may be on disk already, and a
+  /// new write's `before` must be what they hold.
+  Future<ProgressWrite> _afterUnsaved(
+    List<TrainingLine> lines,
+    Future<ProgressWrite> Function() write,
+  ) async {
+    for (final line in lines) {
+      final earlier = _unsaved[line.key];
+      if (earlier == null) continue;
+      final landed = await _land(earlier);
+      if (landed is! ProgressWritten) return landed;
+    }
+    return write();
+  }
 
   /// Writes again, row for row, the outcome of [line] that did not all reach
   /// the files. The files are replaced one at a time, so some of its rows may
@@ -164,45 +186,50 @@ class TrainingProgress extends ChangeNotifier {
     TrainingLine line, {
     required bool excluded,
   }) => _serially(
-    () => _write(
-      reviews: [
-        (
-          before: _reviews[line.key],
-          after: asWritten(reviewOf(line).copyWith(excluded: excluded)),
-        ),
-      ],
+    () => _afterUnsaved(
+      [line],
+      () => _write(
+        reviews: [
+          (
+            before: _reviews[line.key],
+            after: asWritten(reviewOf(line).copyWith(excluded: excluded)),
+          ),
+        ],
+      ),
     ),
   );
 
   /// Puts the untrained lines of [lines] on the schedule as known, or — when
   /// not [known] — the trained ones back to untrained.
   Future<ProgressWrite> mark(List<TrainingLine> lines, {required bool known}) =>
-      _serially(() {
-        final changes = <Change<Review>>[];
-        final history = <HistoryRow>[];
-        for (final line in lines) {
-          final status = this.status(line);
-          final trained =
-              status == LineStatus.due || status == LineStatus.learned;
-          if (known ? status != LineStatus.untrained : !trained) continue;
-          final review = reviewOf(line);
-          final after = known
-              ? markedKnown(review, now: now, nth: changes.length)
-              : markedUnknown(review);
-          changes.add((before: _reviews[line.key], after: asWritten(after)));
-          history.add(
-            HistoryRow(
-              key: line.key,
-              at: now,
-              rating: known ? Rating.good.name : '',
-              mistake: false,
-              kind: HistoryKind.marked,
-            ),
-          );
-        }
-        if (changes.isEmpty) return Future.value(const ProgressWritten());
-        return _write(reviews: changes, history: history);
-      });
+      _serially(
+        () => _afterUnsaved(lines, () {
+          final changes = <Change<Review>>[];
+          final history = <HistoryRow>[];
+          for (final line in lines) {
+            final status = this.status(line);
+            final trained =
+                status == LineStatus.due || status == LineStatus.learned;
+            if (known ? status != LineStatus.untrained : !trained) continue;
+            final review = reviewOf(line);
+            final after = known
+                ? markedKnown(review, now: now, nth: changes.length)
+                : markedUnknown(review);
+            changes.add((before: _reviews[line.key], after: asWritten(after)));
+            history.add(
+              HistoryRow(
+                key: line.key,
+                at: now,
+                rating: known ? Rating.good.name : '',
+                mistake: false,
+                kind: HistoryKind.marked,
+              ),
+            );
+          }
+          if (changes.isEmpty) return Future.value(const ProgressWritten());
+          return _write(reviews: changes, history: history);
+        }),
+      );
 
   Future<ProgressWrite> _write({
     List<Change<Review>> reviews = const [],

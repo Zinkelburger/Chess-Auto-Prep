@@ -50,9 +50,12 @@ final class PuzzleRun {
           seconds: {...seconds, puzzle: took},
         );
 
-  /// The puzzle after [current] that has not been on the board, or null at
-  /// the end: a run never wraps round.
+  /// The puzzle after [current]: the next one already shown when the user
+  /// stepped back to [current], else the next that has not been on the
+  /// board, or null at the end: a run never wraps round.
   Fen? after(Fen? current) {
+    final shown = current == null ? -1 : seen.indexOf(current);
+    if (shown >= 0 && shown + 1 < seen.length) return seen[shown + 1];
     final from = current == null ? 0 : queue.indexOf(current) + 1;
     for (final fen in queue.skip(from)) {
       if (!seen.contains(fen)) return fen;

@@ -12,8 +12,18 @@ void main() {
     run = run.shown(a);
     expect(run.after(a), b);
     run = run.shown(c);
-    expect(run.after(a), b);
-    expect(run.after(c), isNull);
+    expect(run.after(c), isNull, reason: 'a run never wraps round');
+  });
+
+  test('after stepping back, the next is the one shown after it', () {
+    // All three shown, back from c to b: next is c again, then the end.
+    final all = const PuzzleRun(queue: [a, b, c]).shown(a).shown(b).shown(c);
+    expect(all.after(b), c);
+    expect(all.after(c), isNull);
+    // a and b shown, back from b to a: next is b, not c.
+    final two = const PuzzleRun(queue: [a, b, c]).shown(a).shown(b);
+    expect(two.after(a), b);
+    expect(two.after(b), c);
   });
 
   test(

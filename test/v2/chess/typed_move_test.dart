@@ -39,6 +39,21 @@ void main() {
     expect(typedMove(busy, 'e7e8q'), 'e7e8q');
   });
 
+  test('while typing, words that could name a longer move wait', () {
+    expect(typedMoveSoFar(busy, 'O-O'), isNull, reason: 'O-O-O is coming');
+    expect(typedMoveSoFar(busy, '0-0'), isNull);
+    expect(typedMoveSoFar(busy, 'o-o'), isNull);
+    expect(typedMoveSoFar(busy, 'O-O-O'), 'e1c1');
+    expect(typedMove(busy, 'O-O'), 'e1g1', reason: 'Enter plays it');
+    expect(typedMoveSoFar(busy, 'Bc4'), 'd3c4');
+    expect(typedMoveSoFar(start, 'Nf3'), 'g1f3');
+    // Only short castling is legal here, so it plays at once.
+    expect(
+      typedMoveSoFar(const Fen('4k3/8/8/8/8/8/8/4K2R w K - 0 1'), 'O-O'),
+      'e1g1',
+    );
+  });
+
   test('nothing, or no legal move, is null', () {
     expect(typedMove(start, ''), isNull);
     expect(typedMove(start, 'N'), isNull);

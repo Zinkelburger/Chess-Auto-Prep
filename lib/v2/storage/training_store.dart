@@ -197,9 +197,7 @@ final class TrainingStore implements ProgressFiles {
     final stat = await file.stat();
     if (stat.type == FileSystemEntityType.notFound) return const [];
     final log = _log;
-    if (log != null &&
-        log.size == stat.size &&
-        log.modified == stat.modified) {
+    if (log != null && log.size == stat.size && log.modified == stat.modified) {
       return log.wrong;
     }
     // Stamped with the size and time from before the read: a write in
@@ -299,10 +297,8 @@ final class _Codec<T, K> {
 
   /// The cells of a data row, or null for the header and blank lines. The
   /// width rule is the one a chapter move reads the file with too.
-  List<String>? cells(CsvRecord record, int? header) => dataCells(
-    record,
-    record.isBlank ? null : rowWidth(file, record, header),
-  );
+  List<String>? cells(CsvRecord record, int? header) =>
+      dataCells(record, record.isBlank ? null : rowWidth(file, record, header));
 }
 
 const _reviewCodec = _Codec<Review, LineKey>(

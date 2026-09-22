@@ -10,10 +10,18 @@ bool askingFor(Lesson lesson) =>
     lesson.state is Drilling && lesson.drill.stage is Asking;
 
 /// Plays the move [words] name, if the lesson is asking and they name
-/// exactly one, and clears them. Whether a move was played.
-bool playTyped(Lesson lesson, TextEditingController words) {
+/// exactly one, and clears them. Whether a move was played. While the user
+/// is still [typing], words that could go on to name another move wait.
+bool playTyped(
+  Lesson lesson,
+  TextEditingController words, {
+  required bool typing,
+}) {
   if (!askingFor(lesson)) return false;
-  final uci = typedMove(lesson.drill.fen, words.text);
+  final fen = lesson.drill.fen;
+  final uci = typing
+      ? typedMoveSoFar(fen, words.text)
+      : typedMove(fen, words.text);
   if (uci == null) return false;
   words.clear();
   lesson.play(uci);
@@ -21,8 +29,9 @@ bool playTyped(Lesson lesson, TextEditingController words) {
 }
 
 /// The move typed rather than played: SAN or UCI, played as soon as the
-/// words name exactly one legal move, with no Enter needed. Enter on words
-/// that name none says so.
+/// words name exactly one legal move and cannot go on to name another, with
+/// no Enter needed; `O-O` waits for Enter while `O-O-O` is legal too. Enter
+/// on words that name none says so.
 ///
 /// The lesson view owns the words and the focus, so it can send a key typed
 /// on the lesson into the box and take the focus back once the lesson stops
@@ -48,12 +57,12 @@ class _MoveBoxState extends State<MoveBox> {
   var _refused = false;
 
   void _changed(String _) {
-    playTyped(widget.lesson, widget.controller);
+    playTyped(widget.lesson, widget.controller, typing: true);
     if (_refused) setState(() => _refused = false);
   }
 
   void _submitted(String text) {
-    if (playTyped(widget.lesson, widget.controller)) return;
+    if (playTyped(widget.lesson, widget.controller, typing: false)) return;
     setState(() => _refused = text.trim().isNotEmpty);
     widget.focusNode.requestFocus();
   }

@@ -12,13 +12,44 @@ import 'pgn/tree_edit.dart' show positionOf;
 /// when both can, `bc4` names two moves and waits for more.
 String? typedMove(Fen fen, String text) {
   final typed = _plain(text);
-  if (typed.isEmpty) return null;
+  final named = _named(fen);
+  if (typed.isEmpty || named == null) return null;
+  return _match(named, typed);
+}
+
+/// [typedMove] while the words are still being typed: null too while they
+/// could go on to name another move, so `O-O` waits until `O-O-O` is ruled
+/// out. Enter plays what [typedMove] finds.
+String? typedMoveSoFar(Fen fen, String text) {
+  final typed = _plain(text);
+  final named = _named(fen);
+  if (typed.isEmpty || named == null) return null;
+  final found = _match(named, typed);
+  if (found == null) return null;
+  final start = typed.toLowerCase();
+  final longer = named.any(
+    (move) =>
+        move.uci != found &&
+        move.san.length > typed.length &&
+        move.san.toLowerCase().startsWith(start),
+  );
+  return longer ? null : found;
+}
+
+typedef _Named = ({String uci, String san});
+
+/// Every legal move in [fen] as UCI and as plain SAN, or null when [fen] is
+/// not a position.
+List<_Named>? _named(Fen fen) {
   final position = positionOf(fen);
   if (position == null) return null;
-  final named = [
+  return [
     for (final move in legalMovesOf(position))
       (uci: move.uci, san: _plain(position.makeSan(move.move).$2)),
   ];
+}
+
+String? _match(List<_Named> named, String typed) {
   for (final matches in [
     (String san, String uci) => san == typed,
     (String san, String uci) => uci == typed.toLowerCase(),

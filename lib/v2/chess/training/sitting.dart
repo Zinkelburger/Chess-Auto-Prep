@@ -28,14 +28,17 @@ LineStatus statusOf(TrainingLine line, Review? review, DateTime now) {
 }
 
 /// The lines never trained, in file order: the order the author wrote them,
-/// which is most likely first in a generated chapter.
+/// which is most likely first in a generated chapter. A line with none of
+/// the user's moves in it has nothing to ask, so it is in neither queue.
 List<TrainingLine> toLearn(
   List<TrainingLine> lines,
   Map<LineKey, Review> reviews,
   DateTime now,
 ) => [
   for (final line in lines)
-    if (statusOf(line, reviews[line.key], now) == LineStatus.untrained) line,
+    if (line.yourMoves > 0 &&
+        statusOf(line, reviews[line.key], now) == LineStatus.untrained)
+      line,
 ];
 
 /// The lines due now, the longest overdue first.
@@ -46,7 +49,9 @@ List<TrainingLine> dueNow(
 ) {
   final due = [
     for (final line in lines)
-      if (statusOf(line, reviews[line.key], now) == LineStatus.due) line,
+      if (line.yourMoves > 0 &&
+          statusOf(line, reviews[line.key], now) == LineStatus.due)
+        line,
   ];
   final never = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
   DateTime dueOf(TrainingLine line) => reviews[line.key]?.due ?? never;

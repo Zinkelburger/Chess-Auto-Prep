@@ -1,4 +1,5 @@
 import 'package:chess_auto_prep/v2/app/exit_guard.dart';
+import 'package:chess_auto_prep/v2/app/mode.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/diagnostics/log.dart';
 import 'package:chess_auto_prep/v2/features/library/library_panel.dart';
@@ -42,6 +43,46 @@ void main() {
       find.text('Black · 2 lines, 1 from another position'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('a sitting ends when the mode it was started in is left', (
+    tester,
+  ) async {
+    await pump(tester);
+    await tester.tap(inLibrary(find.text('Main')).last); // KID
+    await tester.pumpAndSettle();
+    w.lineTrainer.show();
+    await tester.pumpAndSettle();
+    w.lineTrainer.learn();
+    await tester.pump();
+    expect(w.lineTrainer.board.value, isNotNull);
+    w.requests.switchTo(Mode.tactics);
+    await tester.pump();
+    expect(w.lineTrainer.lesson, isNull);
+    expect(w.lineTrainer.board.value, isNull, reason: 'the board is back');
+    expect(w.analysis.pausedFor, isNull);
+    // A sitting started afresh in another mode is that mode's.
+    w.requests.switchTo(Mode.repertoires);
+    await tester.pumpAndSettle();
+    w.lineTrainer.learn();
+    await tester.pump();
+    expect(w.lineTrainer.lesson, isNotNull);
+  });
+
+  testWidgets('a sitting ends with its Train tab closed', (tester) async {
+    await pump(tester);
+    await tester.tap(inLibrary(find.text('Main')).last); // KID
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Train'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'the tab fits');
+    w.lineTrainer.learn();
+    await tester.pump();
+    expect(w.lineTrainer.lesson, isNotNull);
+    await tester.tap(find.byTooltip(RegExp(r'^Close Train')));
+    await tester.pump();
+    expect(w.lineTrainer.lesson, isNull);
+    expect(w.lineTrainer.board.value, isNull);
   });
 
   testWidgets('the later of two clicks wins, whichever read finishes first', (

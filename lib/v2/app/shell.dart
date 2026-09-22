@@ -47,6 +47,7 @@ import '../workspace/workspace_keys.dart';
 import '../workspace/workspace_tabs.dart';
 import '../workspace/workspace_view.dart';
 import 'mode.dart';
+import 'sitting_in_view.dart';
 import 'top_bar.dart';
 import 'workspace_requests.dart';
 
@@ -123,7 +124,13 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         Mode.repertoires => newWorkspaceTabs(),
         Mode.pgnViewer || Mode.study => readingTabs(),
         Mode.tactics => puzzleTabs(),
-      };
+      }..addListener(_sitting.check);
+
+  late final _sitting = SittingInView(
+    trainer: widget.lineTrainer,
+    requests: _requests,
+    trainTabOpen: () => _tabs.open.contains(WorkspaceTab.train),
+  );
 
   /// The columns and their widths. The user drags the dividers; the list
   /// column goes when hidden and the outline column comes and goes with the
@@ -155,10 +162,12 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     super.initState();
     _outlineShown = _wantsOutline;
     _arrange();
+    _sitting.check();
   }
 
   @override
   void dispose() {
+    _sitting.dispose();
     _editing.dispose();
     for (final tabs in _tabsByMode.values) {
       tabs.dispose();
