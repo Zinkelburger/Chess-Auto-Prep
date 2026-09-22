@@ -29,6 +29,7 @@ import '../diagnostics/log.dart';
 import 'atomic_write.dart';
 import 'csv_records.dart';
 import 'document_ref.dart';
+import 'training_rows.dart';
 
 /// The training records under one Documents folder.
 final class TrainingRecords {
@@ -165,23 +166,15 @@ final class IoFailure extends RepointResult {
 
 /// These four files, and only these: a legacy `<name>.pre-csv-v2.bak` holds
 /// the bytes from before the quoting migration and is never rewritten.
-const _files = [
-  'repertoire_reviews.csv',
-  'repertoire_move_progress.csv',
-  'repertoire_review_history.csv',
-  _attempts,
-];
+const _files = [reviewsFile, streaksFile, historyFile, _attempts];
 
 /// The log of answered moves: one JSON object per line, only ever appended.
-const _attempts = 'repertoire_move_attempts.jsonl';
+const _attempts = attemptsFile;
 
 /// Where the old app keeps what a relocation replaced, under Documents, one
 /// folder per operation. Both apps read it, so the name and the shape stay
 /// as they are.
 const _replacedFolder = '.cap-reference-history';
-
-/// The first column of every one of the three CSVs, and of their headers.
-const _idColumn = 'repertoire_id';
 
 /// What the attempt log calls the same thing.
 const _attemptIdKey = 'repertoireId';
@@ -279,14 +272,14 @@ _Plan _planRecords(
   String from,
   String to,
 ) {
-  final width = _headerWidth(records);
+  final width = headerWidth(records);
   // Without the header there is no way to tell a pre-v2 record whose path
   // held commas from a record with the wrong number of fields.
   if (width == null) return _Refused(Malformed(name, 1));
   final out = StringBuffer();
   var rows = 0;
   for (final record in records) {
-    final cells = _dataCells(record, width);
+    final cells = dataCells(record, width);
     if (cells != null && cells.length != width) {
       return _Refused(Malformed(name, record.line));
     }
@@ -307,15 +300,6 @@ _Plan _planRecords(
   );
 }
 
-/// The cells of a record that names a chapter, or null for the header and
-/// for blank lines, which pass through untouched.
-List<String>? _dataCells(CsvRecord record, int width) {
-  if (record.isBlank || record.fields.first == _idColumn) return null;
-  return record.source.startsWith('"')
-      ? record.fields
-      : _rejoinLegacyPath(record.fields, width);
-}
-
 String _rewritten(
   CsvRecord record,
   List<String> cells,
@@ -332,25 +316,6 @@ String? _moved(String path, String from, String to) {
   if (p.equals(path, from)) return to;
   if (p.isWithin(from, path)) return p.join(to, p.relative(path, from: from));
   return null;
-}
-
-/// The width the header declares, or null when the file has no header.
-int? _headerWidth(List<CsvRecord> records) {
-  for (final record in records) {
-    if (record.isBlank) continue;
-    return record.fields.first == _idColumn ? record.fields.length : null;
-  }
-  return null;
-}
-
-/// Writers before the quoting migration put the chapter path in unquoted,
-/// commas and all, so a path with a comma spilled into the columns after it.
-/// Every later column has a fixed position, so the path is whatever is left
-/// once they are accounted for.
-List<String> _rejoinLegacyPath(List<String> cells, int width) {
-  if (cells.length <= width) return cells;
-  final spilled = cells.length - width + 1;
-  return [cells.take(spilled).join(','), ...cells.skip(spilled)];
 }
 
 String _detail(Object error) => error is FileSystemException

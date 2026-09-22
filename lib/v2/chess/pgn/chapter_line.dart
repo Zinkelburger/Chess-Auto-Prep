@@ -81,4 +81,11 @@ final class ChapterLine {
     }
     return null;
   }
+
+  /// What a list calls the line at [index] of its file: its `Event`, where
+  /// both apps write a line's name, else its place in the file.
+  String nameAt(int index) {
+    final event = tagValue(tags, 'Event')?.trim();
+    return event == null || event.isEmpty ? 'Line ${index + 1}' : event;
+  }
 }

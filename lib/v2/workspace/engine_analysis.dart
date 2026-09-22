@@ -133,6 +133,9 @@ final class EngineAnalysis extends ChangeNotifier {
 
   bool get paused => _pausedFor != null;
 
+  /// Why the engine is paused, as [pause] was told; null while it is not.
+  String? get pausedFor => _pausedFor;
+
   /// Stops following the board and says [reason] in the pane, keeping the
   /// engine warm, until [resume]: a fill has the machine, and two searches
   /// at once would each get half of it.

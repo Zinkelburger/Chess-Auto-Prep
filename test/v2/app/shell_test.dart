@@ -10,6 +10,8 @@ import 'package:chess_auto_prep/v2/features/library/library_panel.dart';
 import 'package:chess_auto_prep/v2/features/library/outline_panel.dart';
 import 'package:chess_auto_prep/v2/features/pgn_viewer/pgn_viewer.dart';
 import 'package:chess_auto_prep/v2/features/study/studies.dart';
+import 'package:chess_auto_prep/v2/features/trainer/scope_reader.dart';
+import 'package:chess_auto_prep/v2/features/trainer/trainer.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/document_ref.dart';
 import 'package:chess_auto_prep/v2/storage/settings_store.dart';
@@ -30,6 +32,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/scripted_progress.dart';
 import '../support/scripted_explorer.dart';
 import '../support/scripted_policy.dart';
 import '../support/fixtures.dart';
@@ -159,6 +162,17 @@ void main() {
       debounce: Duration.zero,
     );
     addTearDown(explorer.dispose);
+    final trainer = Trainer(
+      session: session,
+      chapters: ScopeReader(
+        files: ScriptedFiles(),
+        documents: ScriptedDocumentStore(),
+      ),
+      files: ScriptedProgress(),
+      analysis: analysis,
+      time: (now: DateTime.now, jitter: () => 0),
+    );
+    addTearDown(trainer.dispose);
     await tester.binding.setSurfaceSize(const Size(1400, 800));
     await tester.pumpWidget(
       MaterialApp(
@@ -177,6 +191,7 @@ void main() {
           replies: replies,
           explorer: explorer,
           fill: fill,
+          trainer: trainer,
           leaving: leaving,
         ),
       ),

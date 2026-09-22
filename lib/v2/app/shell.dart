@@ -18,6 +18,8 @@ import '../features/study/studies.dart';
 import '../features/settings/setting_rows.dart';
 import '../features/settings/settings_dialog.dart';
 import '../features/study/study_panel.dart';
+import '../features/trainer/train_pane.dart';
+import '../features/trainer/trainer.dart';
 import '../storage/chapter_files.dart';
 import '../storage/settings_store.dart';
 import '../ui/app_action.dart';
@@ -60,6 +62,7 @@ class Shell extends StatefulWidget {
     required this.replies,
     required this.explorer,
     required this.fill,
+    required this.trainer,
     required this.settings,
     required this.settingRows,
     required this.settingsAlso,
@@ -76,6 +79,7 @@ class Shell extends StatefulWidget {
   final Replies replies;
   final Explorer explorer;
   final FillGaps fill;
+  final Trainer trainer;
   final SettingsStore settings;
 
   /// The settings page's rows, as the app wires them, and the one owner
@@ -572,6 +576,10 @@ class _ShellState extends State<Shell> {
           ? (path) => quizMenuItems(widget.session, path)
           : null,
       onExplorerGame: (game) => unawaited(_openExplorerGame(game)),
+      boardClaim: widget.trainer.board,
+      featureTabs: {
+        WorkspaceTab.train.id: (_) => TrainPane(trainer: widget.trainer),
+      },
     ),
   };
 }

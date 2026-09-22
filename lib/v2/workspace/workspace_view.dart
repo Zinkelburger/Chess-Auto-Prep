@@ -1,11 +1,13 @@
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:multi_split_view/multi_split_view.dart';
 
 import '../storage/settings_store.dart';
 import '../ui/pane_tabs.dart';
 import '../ui/theme.dart';
+import 'board_claim.dart';
 import 'board_view.dart';
 import 'document_saver.dart';
 import 'document_session.dart';
@@ -47,6 +49,8 @@ class WorkspaceView extends StatelessWidget {
     required this.settings,
     this.moveMenu,
     this.onExplorerGame,
+    this.boardClaim,
+    this.featureTabs = const {},
   });
 
   final DocumentSession session;
@@ -77,18 +81,27 @@ class WorkspaceView extends StatelessWidget {
   /// study marks where a quiz starts, and nothing else offers anything yet.
   final MoveMenu? moveMenu;
 
-  /// The board and the card beside it, half the workspace each, with a
-  /// divider the user can drag between them. The sizes live in the split
-  /// view's own state, so they survive a rebuild and are lost with the
-  /// window. The board shrinks to what its half leaves it.
+  /// A position another owner is showing on the board instead of the
+  /// document's, while it holds one: a lesson.
+  final ValueListenable<BoardClaim?>? boardClaim;
+
+  /// The bodies of the tabs a feature fills, by tab id: the trainer's.
+  final Map<String, WidgetBuilder> featureTabs;
+
+  /// The board and the card beside it, with a divider the user can drag
+  /// between them. The card starts the wider of the two: training, the
+  /// replies and the explorer have more to say than a board needs room for.
+  /// The sizes live in the split view's own state, so they survive a
+  /// rebuild and are lost with the window. The board shrinks to what its
+  /// side leaves it.
   @override
   Widget build(BuildContext context) {
     return MultiSplitViewTheme(
       data: paneTheme(Theme.of(context).colorScheme),
       child: MultiSplitView(
         initialAreas: [
-          Area(flex: 1, min: boardPaneMinWidth, builder: _board),
-          Area(flex: 1, min: readingPaneMinWidth, builder: _column),
+          Area(flex: boardShare, min: boardPaneMinWidth, builder: _board),
+          Area(flex: cardShare, min: readingPaneMinWidth, builder: _column),
         ],
       ),
     );
@@ -96,7 +109,12 @@ class WorkspaceView extends StatelessWidget {
 
   Widget _board(BuildContext context, Area area) => Padding(
     padding: const EdgeInsets.all(Space.l),
-    child: _BoardAndCounter(session: session, settings: settings),
+    child: ValueListenableBuilder<BoardClaim?>(
+      valueListenable: boardClaim ?? const _NoClaim(),
+      builder: (context, claim, _) => claim == null
+          ? _BoardAndCounter(session: session, settings: settings)
+          : _ClaimedBoard(claim: claim, settings: settings),
+    ),
   );
 
   /// The reading column is a card: darker than the window around it, its
@@ -130,6 +148,7 @@ class WorkspaceView extends StatelessWidget {
               tabs: tabs,
               moveMenu: moveMenu,
               onExplorerGame: onExplorerGame,
+              featureTabs: featureTabs,
             ),
           ),
           EditStrip(session: session, saver: saver, editing: editing),
@@ -154,6 +173,7 @@ class _Tabbed extends StatelessWidget {
     required this.tabs,
     required this.moveMenu,
     required this.onExplorerGame,
+    required this.featureTabs,
   });
 
   final DocumentSession session;
@@ -162,8 +182,9 @@ class _Tabbed extends StatelessWidget {
   final PaneTabs tabs;
   final MoveMenu? moveMenu;
   final ValueChanged<ExplorerGame>? onExplorerGame;
+  final Map<String, WidgetBuilder> featureTabs;
 
-  Widget _body(String id) {
+  Widget _body(BuildContext context, String id) {
     if (id == WorkspaceTab.moves.id) {
       return MoveTreeView(session: session, moveMenu: moveMenu);
     }
@@ -177,7 +198,8 @@ class _Tabbed extends StatelessWidget {
         onOpenGame: onExplorerGame,
       );
     }
-    throw StateError('no body for the $id tab');
+    if (featureTabs[id] case final body?) return body(context);
+    return const SizedBox.shrink();
   }
 
   Widget? _trailing(String id) {
@@ -203,7 +225,7 @@ class _Tabbed extends StatelessWidget {
               trailing: _trailing(tabs.selected),
             ),
           ),
-          Expanded(child: _body(tabs.selected)),
+          Expanded(child: _body(context, tabs.selected)),
         ],
       ),
     );
@@ -287,4 +309,59 @@ class _BoardAndCounter extends StatelessWidget {
       },
     );
   }
+}
+
+/// The board while another owner holds it: its position alone, with the
+/// room the counter and the note would take left empty, so the board does
+/// not change size as a lesson starts and ends.
+class _ClaimedBoard extends StatelessWidget {
+  const _ClaimedBoard({required this.claim, required this.settings});
+
+  final BoardClaim claim;
+  final SettingsStore settings;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final side = min(
+          constraints.maxWidth,
+          constraints.maxHeight - navRowHeight - Space.s,
+        );
+        return Align(
+          alignment: Alignment.topCenter,
+          child: SizedBox(
+            width: side,
+            child: ListenableBuilder(
+              listenable: settings,
+              builder: (context, _) => BoardView(
+                fen: claim.fen,
+                orientation: claim.orientation,
+                lastMove: claim.lastMove,
+                onMove: claim.onMove ?? _still,
+                movable: claim.onMove != null,
+                coordinates: settings.value.boardCoordinates,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  static void _still(String uci) {}
+}
+
+/// No claim, ever: the board of a workspace nothing can take over.
+class _NoClaim implements ValueListenable<BoardClaim?> {
+  const _NoClaim();
+
+  @override
+  BoardClaim? get value => null;
+
+  @override
+  void addListener(VoidCallback listener) {}
+
+  @override
+  void removeListener(VoidCallback listener) {}
 }
