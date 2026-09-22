@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../chess/training/line_order.dart';
+import '../../chess/training/schedule.dart';
 import '../../chess/training/sitting.dart';
 import '../../chess/training/training_line.dart';
 import '../../storage/chapter_files.dart';
@@ -16,6 +18,14 @@ import 'scope_reader.dart';
 /// How much of the repertoire the trainer takes in: the chapter on the
 /// board, or every chapter of its repertoire.
 enum TrainScope { chapter, repertoire }
+
+/// Where a line sent to be read goes: the board alone, the tab staying
+/// where it is; the Moves tab; or the builder.
+enum ReadIn { board, moves, builder }
+
+/// A line sent to be read: its chapter, the moves up to the position to
+/// show, and where.
+typedef LineToRead = ({ChapterRef ref, List<String> sans, ReadIn place});
 
 /// Why there is nothing to train.
 enum NothingToTrain { noChapter, studyChapter }
@@ -56,6 +66,20 @@ final class TrainerReady extends TrainerState {
   List<TrainingLine> get lines => [
     for (final chapter in chapters) ...chapter.lines,
   ];
+
+  /// The line [key] names, if the scope has it.
+  TrainingLine? lineOf(LineKey key) =>
+      lines.where((line) => line.key == key).firstOrNull;
+
+  /// [line] as far as [ply] — the whole of it when null — to be read in
+  /// [place].
+  LineToRead toRead(TrainingLine line, ReadIn place, {int? ply}) => (
+    ref: chapters.firstWhere((c) => c.ref.path == line.key.source).ref,
+    sans: [
+      for (final move in line.moves.take(ply ?? line.moves.length)) move.san,
+    ],
+    place: place,
+  );
 }
 
 /// How many new lines one Learn sitting takes: enough to learn in one go,
@@ -94,6 +118,7 @@ class Trainer extends ChangeNotifier {
   final TrainerTime _time;
   TrainerState _state = const TrainerIdle();
   TrainScope _scope = TrainScope.chapter;
+  LineOrder _order = LineOrder.training;
   Lesson? _lesson;
 
   /// What was last read: the chapter and scope a load was for, which a
@@ -123,6 +148,16 @@ class Trainer extends ChangeNotifier {
 
   TrainScope get scope => _scope;
   Lesson? get lesson => _lesson;
+
+  /// How the tab lists the lines. Kept here, not in the list, so a sitting
+  /// comes back to the order it left.
+  LineOrder get order => _order;
+
+  set order(LineOrder order) {
+    if (order == _order) return;
+    _order = order;
+    notifyListeners();
+  }
 
   /// Reads what the tab shows, if it has not been read for this chapter.
   void show() {
@@ -199,14 +234,26 @@ class Trainer extends ChangeNotifier {
   }
 
   /// Keeps up with the session: another chapter reads everything again,
-  /// an edit to this one works its lines out again.
+  /// an edit to this one works its lines out again. Another chapter of the
+  /// repertoire being trained whole is one already read — a line sent to be
+  /// read from the list — so only its lines are worked out again.
   void _follow() {
     final read = _read;
     if (read == null || _session.source != read.ref) {
+      if (_inRepertoire(_session.source)) return _relined();
       if (_state is! TrainerIdle) unawaited(_load());
       return;
     }
     if (!identical(_session.chapter, read.chapter)) _relined();
+  }
+
+  bool _inRepertoire(ChapterRef? ref) {
+    final state = _state;
+    return ref != null &&
+        _scope == TrainScope.repertoire &&
+        _session.chapter?.game == null &&
+        state is TrainerReady &&
+        state.chapters.any((c) => c.ref == ref);
   }
 
   /// The open chapter's lines again, after an edit: the progress stays.

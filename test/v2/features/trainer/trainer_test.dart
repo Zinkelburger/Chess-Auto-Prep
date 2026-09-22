@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:chess_auto_prep/v2/chess/pgn/chapter_heading.dart';
 import 'package:chess_auto_prep/v2/chess/training/drill.dart';
+import 'package:chess_auto_prep/v2/chess/training/line_order.dart';
 import 'package:chess_auto_prep/v2/chess/training/records.dart';
 import 'package:chess_auto_prep/v2/chess/training/schedule.dart';
 import 'package:chess_auto_prep/v2/features/trainer/lesson.dart';
@@ -357,6 +360,51 @@ void main() {
         "Queen's Gambit",
       ]);
       expect(files.reads, 2);
+    });
+  });
+
+  test('opening another chapter of the repertoire reads nothing again', () {
+    fakeAsync((async) {
+      final qgd = ref('KID', 'QGD');
+      fixture.store.documents[qgd] = Opened(_other, scriptedRevision(_other));
+      final listing = ScriptedFiles(
+        listing: Repertoires([
+          RepertoireFolder(
+            name: 'KID',
+            path: '/repertoires/KID',
+            modified: _now,
+            chapters: [fixture.ref, qgd],
+          ),
+        ]),
+      );
+      final trainer = ready(async, listing: listing)
+        ..setScope(TrainScope.repertoire);
+      async.flushMicrotasks();
+      final before = readyState(trainer);
+      unawaited(fixture.session.open(qgd));
+      async.flushMicrotasks();
+      expect(fixture.session.source, qgd);
+      expect(files.reads, 2, reason: 'the chapter and the repertoire');
+      expect(readyState(trainer).progress, same(before.progress));
+      expect(readyState(trainer).lines.map((l) => l.name), [
+        'Ruy',
+        'Italian',
+        "Queen's Gambit",
+      ]);
+    });
+  });
+
+  test('the lines sort as the tab asks, and a line reads up to a ply', () {
+    fakeAsync((async) {
+      final trainer = ready(async)..order = LineOrder.course;
+      expect(trainer.order, LineOrder.course);
+      final state = readyState(trainer);
+      final italian = state.lines[1];
+      expect(state.lineOf(italian.key), same(italian));
+      final read = state.toRead(italian, ReadIn.board, ply: 2);
+      expect(read.ref, fixture.ref);
+      expect(read.sans, ['e4', 'e5']);
+      expect(state.toRead(italian, ReadIn.moves).sans, hasLength(5));
     });
   });
 

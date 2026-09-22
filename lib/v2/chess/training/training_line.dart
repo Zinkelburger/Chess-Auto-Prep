@@ -21,6 +21,7 @@ final class TrainingLine {
     required this.moves,
     required this.game,
     required this.modelGame,
+    this.likelihood,
   });
 
   /// The chapter file and the line's id in it, as the progress files have it.
@@ -44,6 +45,11 @@ final class TrainingLine {
   /// ended in a result — rather than a line to learn. It is listed and never
   /// drilled.
   final bool modelGame;
+
+  /// How likely the opponent is to steer into the line, from 0 to 1, as a
+  /// generated chapter writes it in `CumProb`; null when the file does not
+  /// say.
+  final double? likelihood;
 
   /// The position before the move at [ply].
   Fen fenBefore(int ply) => ply == 0 ? start : moves[ply - 1].fen;
@@ -93,6 +99,7 @@ List<TrainingLine> trainingLines(Chapter chapter, {required String source}) {
         moves: List.unmodifiable(game.moves),
         game: game.index,
         modelGame: _isModelGame(game.line),
+        likelihood: _likelihood(game.line),
       ),
   ];
 }
@@ -114,4 +121,20 @@ bool _isModelGame(ChapterLine line) {
   }
   final result = tagValue(line.tags, 'Result')?.trim() ?? '*';
   return result.isNotEmpty && result != '*';
+}
+
+/// `[CumProb "0.1253"]` as this app writes it, `[CumProb "12.53%"]` as the
+/// old one did, or the older `[Importance "0.125"]`.
+double? _likelihood(ChapterLine line) {
+  for (final key in const ['CumProb', 'Importance']) {
+    final raw = tagValue(line.tags, key)?.trim();
+    if (raw == null || raw.isEmpty) continue;
+    final percent = raw.endsWith('%');
+    final value = double.tryParse(
+      percent ? raw.substring(0, raw.length - 1) : raw,
+    );
+    if (value == null) continue;
+    return percent || value > 1 ? value / 100 : value;
+  }
+  return null;
 }

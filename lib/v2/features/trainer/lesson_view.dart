@@ -6,6 +6,7 @@ import '../../chess/training/drill.dart';
 import '../../chess/training/schedule.dart';
 import '../../ui/theme.dart';
 import 'lesson.dart';
+import 'move_box.dart';
 import 'trainer.dart';
 import 'trainer_words.dart';
 
@@ -13,7 +14,9 @@ import 'trainer_words.dart';
 /// to go, what the lesson wants now, the moves played so far with the note
 /// on the last, the one control the moment needs, and the way out.
 ///
-/// Keys: Space goes on, 1–4 rate, ↓ skips the line, Escape leaves.
+/// Keys: Space goes on, 1–4 rate, ↓ skips the line, Escape leaves, `/`
+/// goes to the move box — and a move typed while one is asked for goes
+/// there by itself.
 class LessonView extends StatefulWidget {
   const LessonView({super.key, required this.lesson, required this.trainer});
 
@@ -26,17 +29,52 @@ class LessonView extends StatefulWidget {
 
 class _LessonViewState extends State<LessonView> {
   final _focus = FocusNode(debugLabel: 'lesson');
+  final _box = FocusNode(debugLabel: 'move box');
+  final _typed = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    widget.lesson.addListener(_lessonChanged);
+  }
+
+  @override
+  void didUpdateWidget(LessonView old) {
+    super.didUpdateWidget(old);
+    if (old.lesson == widget.lesson) return;
+    old.lesson.removeListener(_lessonChanged);
+    widget.lesson.addListener(_lessonChanged);
+  }
 
   @override
   void dispose() {
+    widget.lesson.removeListener(_lessonChanged);
     _focus.dispose();
+    _box.dispose();
+    _typed.dispose();
     super.dispose();
+  }
+
+  /// Once the lesson stops asking, the keys go back to it: Space, the
+  /// ratings and ↓ are the lesson's, not letters of a move.
+  void _lessonChanged() {
+    if (!mounted || askingFor(widget.lesson)) return;
+    _typed.clear();
+    if (_box.hasFocus) _focus.requestFocus();
   }
 
   KeyEventResult _key(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     final lesson = widget.lesson;
     final key = event.logicalKey;
+    if (_box.hasFocus) {
+      // Every other key is the box's words.
+      if (key != LogicalKeyboardKey.escape) return KeyEventResult.ignored;
+      _typed.clear();
+      _focus.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (askingFor(lesson) && _typeInBox(event)) return KeyEventResult.handled;
     final rating = _ratingKeys[key];
     if (rating != null) {
       lesson.rate(rating);
@@ -51,6 +89,30 @@ class _LessonViewState extends State<LessonView> {
     }
     return KeyEventResult.handled;
   }
+
+  /// `/` goes to the box; a letter a move is written with goes there too,
+  /// typed, so a move can be typed without going there first.
+  bool _typeInBox(KeyEvent event) {
+    if (event.logicalKey == LogicalKeyboardKey.slash) {
+      _box.requestFocus();
+      return true;
+    }
+    final character = event.character;
+    final keys = HardwareKeyboard.instance;
+    if (character == null ||
+        !_moveLetter.hasMatch(character) ||
+        keys.isControlPressed ||
+        keys.isAltPressed ||
+        keys.isMetaPressed) {
+      return false;
+    }
+    _box.requestFocus();
+    _typed.text += character;
+    playTyped(widget.lesson, _typed);
+    return true;
+  }
+
+  static final _moveLetter = RegExp(r'^[a-hA-HKQRNOo0-8x=-]$');
 
   static final _ratingKeys = {
     LogicalKeyboardKey.digit1: Rating.again,
@@ -79,7 +141,15 @@ class _LessonViewState extends State<LessonView> {
             ),
             child: widget.lesson.state is SittingOver
                 ? _Over(lesson: widget.lesson, trainer: widget.trainer)
-                : _OnLine(lesson: widget.lesson, trainer: widget.trainer),
+                : _OnLine(
+                    lesson: widget.lesson,
+                    trainer: widget.trainer,
+                    box: MoveBox(
+                      lesson: widget.lesson,
+                      controller: _typed,
+                      focusNode: _box,
+                    ),
+                  ),
           ),
         ),
       ),
@@ -88,10 +158,15 @@ class _LessonViewState extends State<LessonView> {
 }
 
 class _OnLine extends StatelessWidget {
-  const _OnLine({required this.lesson, required this.trainer});
+  const _OnLine({
+    required this.lesson,
+    required this.trainer,
+    required this.box,
+  });
 
   final Lesson lesson;
   final Trainer trainer;
+  final Widget box;
 
   @override
   Widget build(BuildContext context) {
@@ -118,6 +193,8 @@ class _OnLine extends StatelessWidget {
               color: Theme.of(context).colorScheme.error,
             ),
           ),
+        const SizedBox(height: Space.s),
+        box,
         const SizedBox(height: Space.s),
         _Control(lesson: lesson),
         const Divider(height: Space.l),

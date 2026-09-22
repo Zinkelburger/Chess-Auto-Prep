@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../chess/pgn/game_tree.dart' show NodePath;
+import '../chess/pgn/tree_edit.dart' show pathAlong;
 import '../features/library/library.dart';
 import '../features/library/library_messages.dart';
 import '../features/pgn_viewer/pgn_viewer.dart';
@@ -130,6 +131,16 @@ final class WorkspaceRequests extends ChangeNotifier {
       case OpenFailed(:final reason):
         return _refused(reason);
     }
+  }
+
+  /// Puts [ref] on the board at the position [sans] reach from its start,
+  /// or as far along them as the chapter still goes: a line the trainer
+  /// sends to be read, which the file may have changed under since.
+  Future<RequestResult> openAt(ChapterRef ref, List<String> sans) async {
+    final result = await open(ref);
+    if (_disposed || result is! RequestDone) return result;
+    if (_session.tree case final tree?) _session.goTo(pathAlong(tree, sans));
+    return result;
   }
 
   /// A file from the viewer's recent list: brought inside Documents if it

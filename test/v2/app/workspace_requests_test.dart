@@ -68,6 +68,28 @@ void main() {
     });
   });
 
+  group('openAt', () {
+    test('opens the chapter at the position the moves reach', () async {
+      expect(
+        await w.requests.openAt(kid, ['c5', 'Nc3', 'Nc6']),
+        isA<RequestDone>(),
+      );
+      expect(w.session.source, kid);
+      expect(w.session.cursor, NodePath.of([0, 1, 0]));
+    });
+
+    test('goes as far along the moves as the chapter still does', () async {
+      await w.requests.openAt(kid, ['c5', 'Nc3', 'e5']);
+      expect(w.session.cursor, NodePath.of([0, 1]));
+    });
+
+    test('a chapter that cannot open goes nowhere', () async {
+      w.store.documents.clear();
+      expect(await w.requests.openAt(kid, ['c5']), isA<RequestRefused>());
+      expect(w.session.source, isNull);
+    });
+  });
+
   group('open over a draft the file refused', () {
     test('the chapter already open is not left, so nothing is asked', () async {
       await freezeKid();

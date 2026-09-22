@@ -88,11 +88,18 @@ List<String> mainlineSans(GameTree tree) {
 /// Where [sans] leads in [tree], variations included, or null when the tree
 /// does not hold that sequence.
 NodePath? pathOfSans(GameTree tree, List<String> sans) {
+  final path = pathAlong(tree, sans);
+  return path.indexes.length == sans.length ? path : null;
+}
+
+/// As far along [sans] as [tree] goes: the whole way when it holds them,
+/// else the last move of theirs it has, or the root.
+NodePath pathAlong(GameTree tree, List<String> sans) {
   var path = const NodePath.root();
   var siblings = tree.children;
   for (final san in sans) {
     final index = siblings.indexWhere((node) => node.san == san);
-    if (index < 0) return null;
+    if (index < 0) break;
     path = path.child(index);
     siblings = siblings[index].children;
   }
