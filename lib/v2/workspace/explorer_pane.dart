@@ -111,33 +111,34 @@ class _ExplorerPaneState extends State<ExplorerPane> {
 
   Widget _table(List<ExplorerRow> rows, ExplorerAnswer answer) {
     final explorer = widget.explorer;
-    return ListView(
-      children: [
-        if (explorer.notice case final notice?)
-          _Sentence(notice, retry: explorer.retry),
-        const _Header(),
-        for (final row in rows)
-          _MoveRow(
-            key: ValueKey(row.uci),
-            row: row,
-            onHover: (anchor) => _hover(row, anchor),
-            onLeave: _leave,
-            onTap: () => _play(row),
-          ),
-        _Totals(answer: answer),
-        if (answer.games.isNotEmpty) ...[
-          const Divider(height: 1),
-          for (final game in answer.games)
-            _GameRow(
-              key: ValueKey(game.id),
-              game: game,
-              fetching: explorer.fetchingGame == game.id,
-              onTap: widget.onOpenGame == null || explorer.fetchingGame != null
-                  ? null
-                  : () => widget.onOpenGame!(game),
-            ),
-        ],
-      ],
+    // Each row is made when it scrolls into view.
+    final items = <WidgetBuilder>[
+      if (explorer.notice case final notice?)
+        (_) => _Sentence(notice, retry: explorer.retry),
+      (_) => const _Header(),
+      for (final row in rows)
+        (_) => _MoveRow(
+          key: ValueKey(row.uci),
+          row: row,
+          onHover: (anchor) => _hover(row, anchor),
+          onLeave: _leave,
+          onTap: () => _play(row),
+        ),
+      (_) => _Totals(answer: answer),
+      if (answer.games.isNotEmpty) (_) => const Divider(height: 1),
+      for (final game in answer.games)
+        (_) => _GameRow(
+          key: ValueKey(game.id),
+          game: game,
+          fetching: explorer.fetchingGame == game.id,
+          onTap: widget.onOpenGame == null || explorer.fetchingGame != null
+              ? null
+              : () => widget.onOpenGame!(game),
+        ),
+    ];
+    return ListView.builder(
+      itemCount: items.length,
+      itemBuilder: (context, index) => items[index](context),
     );
   }
 }

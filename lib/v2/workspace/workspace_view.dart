@@ -258,7 +258,7 @@ class _BoardAndCounter extends StatelessWidget {
             child: Column(
               children: [
                 ListenableBuilder(
-                  listenable: Listenable.merge([session, settings]),
+                  listenable: Listenable.merge([session.anyChange, settings]),
                   builder: (context, _) => BoardView(
                     fen: session.fen,
                     orientation: session.orientation,

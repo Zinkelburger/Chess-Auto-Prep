@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../chess/fen.dart';
+import '../ui/listening_state.dart';
 import '../ui/theme.dart';
 
 /// What the small board under a hovered engine move shows: the position
@@ -46,32 +47,15 @@ class LinePreviewOverlay extends StatefulWidget {
   State<LinePreviewOverlay> createState() => _LinePreviewOverlayState();
 }
 
-class _LinePreviewOverlayState extends State<LinePreviewOverlay> {
+class _LinePreviewOverlayState extends State<LinePreviewOverlay>
+    with ListeningState<LinePreviewOverlay> {
   final _portal = OverlayPortalController();
 
   @override
-  void initState() {
-    super.initState();
-    widget.preview.addListener(_follow);
-  }
+  Listenable listenableOf(LinePreviewOverlay widget) => widget.preview;
 
   @override
-  void didUpdateWidget(LinePreviewOverlay old) {
-    super.didUpdateWidget(old);
-    if (old.preview != widget.preview) {
-      old.preview.removeListener(_follow);
-      widget.preview.addListener(_follow);
-    }
-  }
-
-  @override
-  void dispose() {
-    widget.preview.removeListener(_follow);
-    super.dispose();
-  }
-
-  void _follow() {
-    if (!mounted) return;
+  void changed() {
     if (widget.preview.value == null) {
       _portal.hide();
     } else if (_portal.isShowing) {

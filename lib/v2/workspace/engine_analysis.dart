@@ -70,7 +70,7 @@ final class EngineAnalysis extends ChangeNotifier {
   /// [launch] is asked for an engine each time the analysis is enabled.
   EngineAnalysis(this._session, this._launch, {int multiPv = 3})
     : _multiPv = multiPv {
-    _session.addListener(_follow);
+    _session.anyChange.addListener(_follow);
   }
 
   final DocumentSession _session;
@@ -283,7 +283,7 @@ final class EngineAnalysis extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
-    _session.removeListener(_follow);
+    _session.anyChange.removeListener(_follow);
     _stopFollowing();
     unawaited(_engine?.quit());
     _engine = null;

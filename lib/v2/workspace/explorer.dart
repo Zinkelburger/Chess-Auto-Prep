@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import '../chess/explorer_answer.dart';
 import '../chess/explorer_choice.dart';
 import '../chess/fen.dart';
+import '../chess/pgn/game_tree.dart';
 import '../chess/pgn/move_label.dart';
 import '../chess/pgn/tree_edit.dart';
 import '../diagnostics/log.dart';
@@ -147,10 +148,10 @@ final class Explorer extends ChangeNotifier {
        _documents = documents,
        _collections = collections {
     _choiceNow = _settings.value.explorer;
-    _session.addListener(_followTheSession);
+    _session.anyChange.addListener(_followTheBoard);
     _settings.addListener(_followTheSettings);
     unawaited(_checkTheBook());
-    _followTheSession();
+    _followTheBoard();
   }
 
   /// How long the cursor must rest before a database is asked.
@@ -185,6 +186,7 @@ final class Explorer extends ChangeNotifier {
   int _emptyRun = 0;
   int _emptyPly = -1;
   String? _fetchingGame;
+  ({GameTree? tree, NodePath at})? _board;
   bool _disposed = false;
 
   ExplorerState get state => _state;
@@ -270,6 +272,22 @@ final class Explorer extends ChangeNotifier {
     _choiceNow = choice;
     _emptyRun = 0;
     _notice = null;
+    _followTheSession();
+  }
+
+  /// Asks again when the board is somewhere else or the tree it marks the
+  /// rows against changed; a refusal, a flip or a save leaves the rows as
+  /// they are. A move just written tells this twice, cursor then chapter,
+  /// and is asked about once.
+  void _followTheBoard() {
+    final board = (tree: _session.tree, at: _session.cursor);
+    final seen = _board;
+    if (seen != null &&
+        identical(seen.tree, board.tree) &&
+        seen.at == board.at) {
+      return;
+    }
+    _board = board;
     _followTheSession();
   }
 
@@ -421,7 +439,7 @@ final class Explorer extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _rest?.cancel();
-    _session.removeListener(_followTheSession);
+    _session.anyChange.removeListener(_followTheBoard);
     _settings.removeListener(_followTheSettings);
     super.dispose();
   }

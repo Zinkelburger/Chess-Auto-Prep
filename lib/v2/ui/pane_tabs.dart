@@ -1,6 +1,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
+import 'listening_state.dart';
 import 'theme.dart';
 
 /// One thing a pane can show, by a name that never changes: what the tab
@@ -161,35 +162,22 @@ class PaneTabStrip extends StatefulWidget {
   State<PaneTabStrip> createState() => _PaneTabStripState();
 }
 
-class _PaneTabStripState extends State<PaneTabStrip> {
+class _PaneTabStripState extends State<PaneTabStrip>
+    with ListeningState<PaneTabStrip> {
   final _keys = <String, GlobalKey>{};
   final _scroll = ScrollController();
   String? _shown;
 
   @override
-  void initState() {
-    super.initState();
-    widget.tabs.addListener(_changed);
-  }
+  Listenable listenableOf(PaneTabStrip widget) => widget.tabs;
 
   @override
-  void didUpdateWidget(PaneTabStrip old) {
-    super.didUpdateWidget(old);
-    if (old.tabs != widget.tabs) {
-      old.tabs.removeListener(_changed);
-      widget.tabs.addListener(_changed);
-    }
-  }
+  void changed() => setState(() {});
 
   @override
   void dispose() {
-    widget.tabs.removeListener(_changed);
     _scroll.dispose();
     super.dispose();
-  }
-
-  void _changed() {
-    if (mounted) setState(() {});
   }
 
   /// After the frame that drew the tab that came up, scroll it into view.

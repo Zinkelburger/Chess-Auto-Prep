@@ -32,7 +32,7 @@ class _MoveNoteState extends State<MoveNote> with CommentPreviews<MoveNote> {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: session,
+      listenable: session.anyChange,
       builder: (context, _) {
         final tree = session.tree;
         if (tree == null) return const SizedBox.shrink();

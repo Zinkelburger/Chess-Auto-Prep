@@ -30,6 +30,15 @@ import 'session_results.dart';
 /// position or which file is open. Writing belongs to the [DocumentSaver]
 /// this session was given: an edit replaces the chapter and hands the saver
 /// the new file text.
+///
+/// It notifies in two parts, so a listener hears only what it shows. The
+/// session itself notifies when the document changes — another chapter or
+/// game, an edit, a refusal, a flip — and [cursorListenable] when the cursor
+/// moves, which is every arrow key: the library, the outline and the game
+/// list never need to hear that. What follows the position, the board and
+/// the engine, listens to [anyChange]. The chapter is always replaced before
+/// the cursor moves into it, so a cursor listener never reads a path the
+/// tree does not have yet.
 final class DocumentSession extends ChangeNotifier {
   DocumentSession(this._store, this._saver);
 
@@ -39,7 +48,7 @@ final class DocumentSession extends ChangeNotifier {
   ChapterRef? _source;
   int? _game;
   String? _readOnly;
-  NodePath _cursor = const NodePath.root();
+  final _cursor = ValueNotifier<NodePath>(const NodePath.root());
   EditRefused? _refused;
   bool _flipped = false;
   int _opens = 0;
@@ -65,9 +74,18 @@ final class DocumentSession extends ChangeNotifier {
   int? get game => _chapter?.game;
   GameTree? get tree => _chapter?.tree;
 
-  NodePath get cursor => _cursor;
+  NodePath get cursor => _cursor.value;
 
-  Fen get fen => tree?.fenAt(_cursor) ?? Fen.initial;
+  /// Notifies when the cursor moves, and only then.
+  ValueListenable<NodePath> get cursorListenable => _cursor;
+
+  /// Notifies for a cursor move and for everything the session notifies
+  /// for: what a view of the position, rather than of the document, needs.
+  /// One object for the session's life, so a widget rebuilt with it keeps
+  /// its subscription.
+  late final Listenable anyChange = Listenable.merge([this, _cursor]);
+
+  Fen get fen => tree?.fenAt(cursor) ?? Fen.initial;
 
   /// The side at the bottom of the board: the repertoire's side, or a study
   /// chapter's own orientation tag, turned over while the user has flipped
@@ -97,7 +115,7 @@ final class DocumentSession extends ChangeNotifier {
   }
 
   /// The move the cursor is on; null at the root.
-  MoveNode? get currentMove => tree?.nodeAt(_cursor);
+  MoveNode? get currentMove => tree?.nodeAt(cursor);
 
   /// The comment on the move at [at], or the chapter's introduction at the
   /// root; machine tokens included.
@@ -175,9 +193,9 @@ final class DocumentSession extends ChangeNotifier {
     _chapter = null;
     _source = null;
     _game = null;
-    _cursor = const NodePath.root();
     _refused = null;
     _saver.closed();
+    _cursor.value = const NodePath.root();
     notifyListeners();
   }
 
@@ -195,29 +213,28 @@ final class DocumentSession extends ChangeNotifier {
     if (index == chapter.game) return;
     _chapter = withLines(chapter, chapter.lines, game: index);
     _game = index;
-    _cursor = const NodePath.root();
     _clearRefusal();
+    _cursor.value = const NodePath.root();
     notifyListeners();
   }
 
   /// Moves the cursor; a path not in the tree is ignored.
   void goTo(NodePath path) {
     final tree = this.tree;
-    if (tree == null || path == _cursor) return;
+    if (tree == null || path == cursor) return;
     if (!path.isRoot && tree.nodeAt(path) == null) return;
-    _cursor = path;
-    notifyListeners();
+    _cursor.value = path;
   }
 
-  void forward() => goTo(_cursor.mainChild);
+  void forward() => goTo(cursor.mainChild);
 
-  void back() => goTo(_cursor.parent);
+  void back() => goTo(cursor.parent);
 
   void toStart() => goTo(const NodePath.root());
 
   void toEnd() {
     final tree = this.tree;
-    if (tree != null) goTo(tree.endOfLineFrom(_cursor));
+    if (tree != null) goTo(tree.endOfLineFrom(cursor));
   }
 
   /// Plays [uci] from the cursor and follows it. A move already in the tree
@@ -229,14 +246,13 @@ final class DocumentSession extends ChangeNotifier {
     if (chapter == null) return;
     // A move the chapter already holds writes nothing, so following it is
     // reading: a file this app may not write still shows its own lines.
-    final here = edits.playedAlready(chapter, at: _cursor, uci: uci);
+    final here = edits.playedAlready(chapter, at: cursor, uci: uci);
     if (here != null) {
-      _cursor = here;
-      notifyListeners();
+      _cursor.value = here;
       return;
     }
     if (_refuseWhenReadOnly()) return;
-    switch (edits.addMove(chapter, at: _cursor, uci: uci)) {
+    switch (edits.addMove(chapter, at: cursor, uci: uci)) {
       case edits.MoveIllegal():
         return;
       case edits.MoveRefused(:final reason):
@@ -251,8 +267,8 @@ final class DocumentSession extends ChangeNotifier {
         return;
       case edits.MoveAdded(chapter: final edited, :final path, :final written):
         _clearRefusal();
-        _cursor = path;
         if (!identical(edited, chapter)) _replace(edited, written);
+        _cursor.value = path;
         notifyListeners();
     }
   }
@@ -355,9 +371,9 @@ final class DocumentSession extends ChangeNotifier {
       final before = _chapter?.tree;
       _chapter = restored;
       _game = restored.game;
-      _cursor = before == null
+      _cursor.value = before == null
           ? const NodePath.root()
-          : samePathIn(before, restored.tree, _cursor);
+          : samePathIn(before, restored.tree, cursor);
       notifyListeners();
     }
     return result;
@@ -401,11 +417,11 @@ final class DocumentSession extends ChangeNotifier {
   ) {
     _chapter = chapter;
     _source = ref;
-    _cursor = const NodePath.root();
     _flipped = false;
     _readOnly = readOnly;
     _refused = readOnly == null ? null : NotEditable(readOnly);
     _saver.opened(ref, revision, readOnly: readOnly);
+    _cursor.value = const NodePath.root();
     notifyListeners();
   }
 
@@ -448,8 +464,8 @@ final class DocumentSession extends ChangeNotifier {
         _clearRefusal();
         _chapter = edited;
         _game = edited.game;
-        _cursor = samePathIn(chapter.tree, edited.tree, _cursor);
         _saver.save(writeChapter(edited), GamesRearranged(games));
+        _cursor.value = samePathIn(chapter.tree, edited.tree, cursor);
     }
     notifyListeners();
     return null;
@@ -458,6 +474,7 @@ final class DocumentSession extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _cursor.dispose();
     super.dispose();
   }
 }

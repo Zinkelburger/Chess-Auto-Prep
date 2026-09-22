@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../chess/pgn/comment_edits.dart' show isGlyph;
 import '../chess/pgn/comment_text.dart';
+import '../chess/pgn/game_tree.dart';
+import '../ui/listening_state.dart';
 import '../ui/theme.dart';
 import 'comment_field.dart';
 import 'copy_name_dialog.dart';
@@ -36,27 +38,25 @@ class EditStrip extends StatefulWidget {
   State<EditStrip> createState() => _EditStripState();
 }
 
-class _EditStripState extends State<EditStrip> {
+class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
   /// The answer to the last thing the user asked for here, until the
   /// document changes under it.
   String? _notice;
   Object? _about;
 
   @override
+  Listenable listenableOf(EditStrip widget) => widget.session;
+
+  @override
   void initState() {
     super.initState();
     _about = widget.session.source;
-    widget.session.addListener(_onChapter);
   }
 
+  /// Another document drops the answer about the last one.
   @override
-  void dispose() {
-    widget.session.removeListener(_onChapter);
-    super.dispose();
-  }
-
-  void _onChapter() {
-    if (!mounted || widget.session.source == _about) return;
+  void changed() {
+    if (widget.session.source == _about) return;
     setState(() {
       _about = widget.session.source;
       _notice = null;
@@ -279,7 +279,7 @@ class _Notice extends StatelessWidget {
 
 /// The six marks a reader prints after a move, one at a time: pressing the
 /// one the move has takes it off. Off at the start position, which is not a
-/// move.
+/// move. It follows the cursor itself; the strip around it does not.
 class _Glyphs extends StatelessWidget {
   const _Glyphs({required this.session});
 
@@ -288,8 +288,12 @@ class _Glyphs extends StatelessWidget {
   static const _nags = [3, 1, 5, 6, 2, 4];
 
   @override
-  Widget build(BuildContext context) {
-    final at = session.cursor;
+  Widget build(BuildContext context) => ValueListenableBuilder(
+    valueListenable: session.cursorListenable,
+    builder: (context, at, _) => _buttons(at),
+  );
+
+  Widget _buttons(NodePath at) {
     final move = session.currentMove;
     final current = move?.nags.where(isGlyph).firstOrNull;
     return ToggleButtons(

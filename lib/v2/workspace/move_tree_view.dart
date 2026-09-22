@@ -1,3 +1,5 @@
+import 'package:dartchess/dartchess.dart' show Side;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../chess/fen.dart';
@@ -5,6 +7,8 @@ import '../chess/pgn/comment_text.dart';
 import '../chess/pgn/game_tree.dart';
 import '../chess/pgn/move_label.dart';
 import '../chess/pgn/study.dart';
+import '../ui/listening_state.dart';
+import '../ui/selection.dart';
 import '../ui/theme.dart';
 import 'chapter_commands.dart';
 import 'comment_blocks.dart';
@@ -24,6 +28,10 @@ String deletedFromHere(String san) => 'Deleted the moves from $san.';
 /// A move written inside a comment floats its position under the pointer,
 /// and plays into the document when it follows on from the move the
 /// comment is on.
+///
+/// The lines are built once for each tree and kept while the tree is the
+/// same value: moving the cursor rebuilds only the move it left and the
+/// move it reached, not a whole book of moves per arrow key.
 class MoveTreeView extends StatefulWidget {
   const MoveTreeView({super.key, required this.session, this.moveMenu});
 
@@ -42,6 +50,31 @@ class _MoveTreeViewState extends State<MoveTreeView>
     with CommentPreviews<MoveTreeView> {
   @override
   DocumentSession get session => widget.session;
+
+  final _selection = Selection<NodePath>();
+
+  /// The lines last built, and the tree and orientation they show.
+  ({GameTree tree, Side side, Widget lines})? _built;
+
+  @override
+  void initState() {
+    super.initState();
+    _selection.follow(widget.session.cursorListenable);
+  }
+
+  @override
+  void didUpdateWidget(MoveTreeView old) {
+    super.didUpdateWidget(old);
+    if (old.session == widget.session) return;
+    _selection.follow(widget.session.cursorListenable);
+    _built = null;
+  }
+
+  @override
+  void dispose() {
+    _selection.dispose();
+    super.dispose();
+  }
 
   /// Takes the moves out and offers the same way back a deleted line does:
   /// this removes more than a line does, so it may not be the one edit that
@@ -67,6 +100,7 @@ class _MoveTreeViewState extends State<MoveTreeView>
       builder: (context, _) {
         final tree = widget.session.tree;
         if (tree == null || tree.isEmpty) {
+          _built = null;
           return Center(
             child: Text(
               'No moves',
@@ -74,37 +108,48 @@ class _MoveTreeViewState extends State<MoveTreeView>
             ),
           );
         }
-        final builder = _LineBuilder(
-          widget.session,
-          widget.moveMenu,
-          _deleteFrom,
-          _comment,
-        );
-        return LinePreviewOverlay(
-          preview: preview,
-          orientation: widget.session.orientation,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(
-              readingCardInset,
-              Space.s,
-              readingCardInset,
-              Space.l,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (displayComment(tree.rootComment ?? '').isNotEmpty)
-                  _comment(
-                    tree.rootComment!,
-                    tree.rootFen,
-                    const NodePath.root(),
-                  ),
-                ...builder.line(const NodePath.root(), tree.children),
-              ],
-            ),
-          ),
-        );
+        final side = widget.session.orientation;
+        final built = _built;
+        if (built != null &&
+            identical(built.tree, tree) &&
+            built.side == side) {
+          return built.lines;
+        }
+        final lines = _lines(tree, side);
+        _built = (tree: tree, side: side, lines: lines);
+        return lines;
       },
+    );
+  }
+
+  Widget _lines(GameTree tree, Side side) {
+    _selection.reset();
+    final builder = _LineBuilder(
+      widget.session,
+      _selection,
+      (path) => widget.moveMenu?.call(path) ?? const [],
+      _deleteFrom,
+      _comment,
+    );
+    return LinePreviewOverlay(
+      preview: preview,
+      orientation: side,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(
+          readingCardInset,
+          Space.s,
+          readingCardInset,
+          Space.l,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (displayComment(tree.rootComment ?? '').isNotEmpty)
+              _comment(tree.rootComment!, tree.rootFen, const NodePath.root()),
+            ...builder.line(const NodePath.root(), tree.children),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -120,10 +165,20 @@ typedef MoveMenu = List<Widget> Function(NodePath path);
 typedef _CommentWidget = Widget Function(String comment, Fen at, NodePath from);
 
 final class _LineBuilder {
-  _LineBuilder(this.session, this.moveMenu, this.onDeleteFrom, this.comment);
+  _LineBuilder(
+    this.session,
+    this.selection,
+    this.moveMenu,
+    this.onDeleteFrom,
+    this.comment,
+  );
 
   final DocumentSession session;
-  final MoveMenu? moveMenu;
+  final Selection<NodePath> selection;
+
+  /// Asked when a move's menu opens, not when the lines are built, so the
+  /// entries are the mode's as they are then.
+  final MoveMenu moveMenu;
 
   /// Asked for the moves under a move to be taken out, so the screen can say
   /// what went and offer it back.
@@ -192,11 +247,11 @@ final class _LineBuilder {
     return _MoveToken(
       label: moveNumberLabel(node, startsLine: numbered),
       san: node.san + node.nags.map(nagGlyph).nonNulls.join(),
-      selected: session.cursor == path,
+      selected: selection.of(path),
       quizStarts: hasToken(node.comment, quizStartMarker),
       quizEnds: hasToken(node.comment, quizEndMarker),
       onTap: () => session.goTo(path),
-      actions: [
+      actions: () => [
         MenuItemButton(
           onPressed: () => promoteVariation(session, path),
           child: const Text('Promote variation'),
@@ -209,7 +264,7 @@ final class _LineBuilder {
           onPressed: () => onDeleteFrom(node, path),
           child: const Text('Delete from here'),
         ),
-        ...?moveMenu?.call(path),
+        ...moveMenu(path),
       ],
     );
   }
@@ -256,7 +311,9 @@ class _VariationBlock extends StatelessWidget {
 }
 
 /// One clickable move, with what can be done to it on the right button.
-/// When it becomes the selected one it scrolls itself into view.
+/// When it becomes the selected one it scrolls itself into view. The menu's
+/// entries are made when it opens: a list of a thousand moves has no use for
+/// a thousand menus nobody opened.
 class _MoveToken extends StatefulWidget {
   const _MoveToken({
     required this.label,
@@ -270,7 +327,7 @@ class _MoveToken extends StatefulWidget {
 
   final String label;
   final String san;
-  final bool selected;
+  final ValueListenable<bool> selected;
 
   /// A quiz starts at this move, or ends after it. Shown as a small flag, so
   /// a marker that is only a token in the file is still something the reader
@@ -280,26 +337,41 @@ class _MoveToken extends StatefulWidget {
 
   final VoidCallback onTap;
 
-  /// What the right button offers for this move.
-  final List<Widget> actions;
+  /// What the right button offers for this move, asked when it opens.
+  final List<Widget> Function() actions;
 
   @override
   State<_MoveToken> createState() => _MoveTokenState();
 }
 
-class _MoveTokenState extends State<_MoveToken> {
+class _MoveTokenState extends State<_MoveToken>
+    with ListeningState<_MoveToken> {
   final _menu = MenuController();
+
+  /// Whether this move was the selected one when last drawn, so a rebuilt
+  /// list does not scroll to a move that was already selected.
+  bool _selected = false;
+  bool _menuOpen = false;
+
+  @override
+  Listenable listenableOf(_MoveToken widget) => widget.selected;
 
   @override
   void initState() {
     super.initState();
-    if (widget.selected) _reveal();
+    _selected = widget.selected.value;
+    if (_selected) _reveal();
   }
 
   @override
-  void didUpdateWidget(_MoveToken old) {
-    super.didUpdateWidget(old);
-    if (widget.selected && !old.selected) _reveal();
+  void changed() {
+    final now = widget.selected.value;
+    if (now && !_selected) _reveal();
+    setState(() => _selected = now);
+  }
+
+  void _menuShown(bool open) {
+    if (mounted && open != _menuOpen) setState(() => _menuOpen = open);
   }
 
   /// After the frame, because the token has no position until it is laid out.
@@ -350,7 +422,9 @@ class _MoveTokenState extends State<_MoveToken> {
     final scheme = Theme.of(context).colorScheme;
     return MenuAnchor(
       controller: _menu,
-      menuChildren: widget.actions,
+      onOpen: () => _menuShown(true),
+      onClose: () => _menuShown(false),
+      menuChildren: _menuOpen ? widget.actions() : const [],
       child: InkWell(
         onTap: widget.onTap,
         onSecondaryTap: _menu.open,
@@ -359,9 +433,7 @@ class _MoveTokenState extends State<_MoveToken> {
         child: Container(
           padding: moveTokenPadding,
           decoration: BoxDecoration(
-            color: widget.selected
-                ? scheme.primary.withValues(alpha: 0.35)
-                : null,
+            color: _selected ? scheme.primary.withValues(alpha: 0.35) : null,
             borderRadius: BorderRadius.circular(3),
           ),
           child: _label(scheme),

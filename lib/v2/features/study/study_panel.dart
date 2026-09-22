@@ -239,11 +239,13 @@ class _StudyPanelState extends State<StudyPanel> {
     if (_studies.visible.isEmpty) {
       return _Message('Nothing matches "${_studies.query}".');
     }
-    final rows = <Widget>[];
+    // A study list and an open study's chapters, flattened, each row made
+    // when it scrolls into view.
+    final rows = <WidgetBuilder>[];
     for (final study in _studies.visible) {
       final open = study == _studies.open;
       rows.add(
-        StudyRow(
+        (_) => StudyRow(
           study: study,
           open: open,
           busy: _studies.busy,
@@ -255,7 +257,7 @@ class _StudyPanelState extends State<StudyPanel> {
       if (!open) continue;
       for (final chapter in _studies.chapters) {
         rows.add(
-          ChapterRow(
+          (_) => ChapterRow(
             chapter: chapter,
             open: chapter.index == _studies.openChapter,
             busy: _studies.busy,
@@ -265,7 +267,10 @@ class _StudyPanelState extends State<StudyPanel> {
         );
       }
     }
-    return ListView(children: rows);
+    return ListView.builder(
+      itemCount: rows.length,
+      itemBuilder: (context, index) => rows[index](context),
+    );
   }
 }
 

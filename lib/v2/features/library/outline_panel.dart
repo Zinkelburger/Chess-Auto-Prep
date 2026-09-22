@@ -229,15 +229,22 @@ class _OutlinePanelState extends State<OutlinePanel> {
             : 'No chapter or line matches "${outline.query}".',
       );
     }
-    return ListView(
-      children: [
-        for (final chapter in chapters) ..._chapterRows(outline, chapter),
-      ],
+    // A book-sized chapter has thousands of lines, so each row is built when
+    // it scrolls into view rather than all of them up front.
+    final rows = [
+      for (final chapter in chapters) ..._chapterRows(outline, chapter),
+    ];
+    return ListView.builder(
+      itemCount: rows.length,
+      itemBuilder: (context, index) => rows[index](context),
     );
   }
 
-  List<Widget> _chapterRows(ChapterOutline outline, OutlineChapter chapter) {
-    final row = ChapterRow(
+  List<WidgetBuilder> _chapterRows(
+    ChapterOutline outline,
+    OutlineChapter chapter,
+  ) {
+    Widget row(BuildContext context) => ChapterRow(
       chapter: chapter,
       onOpen: widget.onOpen,
       // Lines are dragged out of the open chapter, so every other chapter
@@ -249,14 +256,26 @@ class _OutlinePanelState extends State<OutlinePanel> {
     return [
       row,
       if (lines.isEmpty)
-        const OutlineMessage('Empty — add lines to fill this chapter.'),
-      for (final line in lines) _lineRow(line, chapter.ref),
+        (_) => const OutlineMessage('Empty — add lines to fill this chapter.'),
+      for (final line in lines) (_) => _lineRow(line, chapter.ref),
     ];
   }
 
-  Widget _lineRow(OutlineLine line, ChapterRef open) => LineRow(
+  /// The row follows whether it is [ChapterOutline.currentLine] by itself,
+  /// so the cursor going from one line to another redraws those two rows
+  /// and not the list.
+  Widget _lineRow(OutlineLine line, ChapterRef open) => ValueListenableBuilder(
+    valueListenable: widget.outline.isCurrent(line.game),
+    builder: (context, current, _) => _lineRowAt(line, open, current: current),
+  );
+
+  Widget _lineRowAt(
+    OutlineLine line,
+    ChapterRef open, {
+    required bool current,
+  }) => LineRow(
     line: line,
-    current: line.game == widget.outline.currentLine,
+    current: current,
     selected: _selected.contains(line.game),
     drag: _dragOf(line),
     onTap: () => _pick(line),

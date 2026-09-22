@@ -103,19 +103,20 @@ class _RepliesPaneState extends State<RepliesPane> {
       MissingReply(:final uci) => uci,
       _ => null,
     };
-    return ListView(
-      children: [
-        for (final row in rows)
-          _ReplyRow(
-            key: ValueKey(row.uci),
-            row: row,
-            marked: row.uci == marked,
-            ourMove: ourMove,
-            onHover: (anchor) => _hover(row, anchor),
-            onLeave: _leave,
-            onTap: () => _play(row),
-          ),
-      ],
+    return ListView.builder(
+      itemCount: rows.length,
+      itemBuilder: (context, index) {
+        final row = rows[index];
+        return _ReplyRow(
+          key: ValueKey(row.uci),
+          row: row,
+          marked: row.uci == marked,
+          ourMove: ourMove,
+          onHover: (anchor) => _hover(row, anchor),
+          onLeave: _leave,
+          onTap: () => _play(row),
+        );
+      },
     );
   }
 }

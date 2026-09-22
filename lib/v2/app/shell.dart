@@ -499,8 +499,16 @@ class _ShellState extends State<Shell> {
     return Scaffold(
       body: Column(
         children: [
-          ListenableBuilder(
-            listenable: Listenable.merge([
+          TopBar(
+            mode: _mode,
+            onMode: _switchTo,
+            onSettings: () => unawaited(_settings()),
+            listShown: _listShown,
+            onToggleList: _toggleList,
+            actions: _actions,
+            // What the entries' enabled states read, heard only while the
+            // menu is open: the bar itself shows none of it.
+            actionsChange: Listenable.merge([
               widget.session,
               widget.saver,
               widget.analysis,
@@ -510,14 +518,6 @@ class _ShellState extends State<Shell> {
               _editing,
               _tabs,
             ]),
-            builder: (context, _) => TopBar(
-              mode: _mode,
-              onMode: _switchTo,
-              onSettings: () => unawaited(_settings()),
-              listShown: _listShown,
-              onToggleList: _toggleList,
-              actions: _actions(),
-            ),
           ),
           const Divider(height: 1),
           if (_error case final error?) ErrorBar(error),

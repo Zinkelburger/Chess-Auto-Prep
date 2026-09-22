@@ -121,7 +121,7 @@ final class Replies extends ChangeNotifier {
        _policy = policy,
        _settings = settings,
        _answers = answers {
-    _session.addListener(_followTheSession);
+    _session.anyChange.addListener(_followTheSession);
     _settings.addListener(_followTheSettings);
     _followTheSession();
   }
@@ -197,15 +197,21 @@ final class Replies extends ChangeNotifier {
     _followTheSession();
   }
 
+  /// Walks the chapter again when it is another value and asks for the
+  /// table when the board is on another position, and tells the pane only
+  /// when one of those, or the gap it was taken to, changed: a refusal or a
+  /// flip changes nothing here.
   void _followTheSession() {
     if (_disposed) return;
     final chapter = _session.chapter;
     if (chapter == null) {
-      _clear();
+      if (_walkedChapter != null || _table is! RepliesEmpty) _clear();
       return;
     }
+    var changed = false;
     if (_highlighted != null && _session.cursor != _highlighted!.at) {
       _highlighted = null;
+      changed = true;
     }
     if (_session.source != _source) {
       // The chapter that was open may have been edited; what it answers is
@@ -216,9 +222,14 @@ final class Replies extends ChangeNotifier {
     if (!identical(chapter, _walkedChapter)) {
       _walkedChapter = chapter;
       unawaited(_rewalk());
+      changed = true;
     }
-    if (_session.fen != _tableFor) unawaited(_retable());
-    notifyListeners();
+    // Asking for the table tells the pane itself, before it waits.
+    if (_session.fen != _tableFor) {
+      unawaited(_retable());
+    } else if (changed) {
+      notifyListeners();
+    }
   }
 
   void _clear() {
@@ -349,7 +360,7 @@ final class Replies extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
-    _session.removeListener(_followTheSession);
+    _session.anyChange.removeListener(_followTheSession);
     _settings.removeListener(_followTheSettings);
     super.dispose();
   }

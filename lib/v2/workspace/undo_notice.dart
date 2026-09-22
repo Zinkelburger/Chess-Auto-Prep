@@ -23,7 +23,6 @@ void showDeletionNotice(
 ) {
   final messenger = ScaffoldMessenger.of(context);
   final deleted = session.chapter;
-  var standing = true;
   final notice = messenger.showSnackBar(
     SnackBar(
       content: Text(message),
@@ -34,20 +33,17 @@ void showDeletionNotice(
       ),
     ),
   );
+  // One subscription, gone when the notice goes, whatever took it away.
+  // The first edit takes it away, and only once: closing a notice twice
+  // would close whichever one came up after it.
   void whenEdited() {
-    if (!standing || identical(session.chapter, deleted)) return;
-    standing = false;
+    if (identical(session.chapter, deleted)) return;
     session.removeListener(whenEdited);
     notice.close();
   }
 
   session.addListener(whenEdited);
-  unawaited(
-    notice.closed.then((_) {
-      standing = false;
-      session.removeListener(whenEdited);
-    }),
-  );
+  unawaited(notice.closed.then((_) => session.removeListener(whenEdited)));
 }
 
 /// Takes the deletion back, and says so when it could not: an undo that does

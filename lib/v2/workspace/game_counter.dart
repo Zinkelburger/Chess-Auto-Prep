@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../ui/listening_state.dart';
 import '../ui/theme.dart';
 import 'document_session.dart';
 
@@ -16,29 +17,31 @@ class GameCounter extends StatefulWidget {
   State<GameCounter> createState() => _GameCounterState();
 }
 
-class _GameCounterState extends State<GameCounter> {
+class _GameCounterState extends State<GameCounter>
+    with ListeningState<GameCounter> {
   final _number = TextEditingController();
   final _focus = FocusNode();
 
   @override
+  Listenable listenableOf(GameCounter widget) => widget.session;
+
+  @override
   void initState() {
     super.initState();
-    widget.session.addListener(_follow);
-    _follow();
+    changed();
   }
 
   @override
   void dispose() {
-    widget.session.removeListener(_follow);
     _focus.dispose();
     _number.dispose();
     super.dispose();
   }
 
   /// The box shows the game on the board unless the user is typing in it.
-  void _follow() {
-    if (!mounted || _focus.hasFocus) return;
-    _show();
+  @override
+  void changed() {
+    if (!_focus.hasFocus) _show();
   }
 
   void _show() {

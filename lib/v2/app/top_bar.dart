@@ -21,6 +21,7 @@ class TopBar extends StatelessWidget {
     required this.listShown,
     required this.onToggleList,
     required this.actions,
+    required this.actionsChange,
   });
 
   final Mode mode;
@@ -28,7 +29,14 @@ class TopBar extends StatelessWidget {
   final VoidCallback onSettings;
   final bool listShown;
   final VoidCallback onToggleList;
-  final List<AppAction> actions;
+
+  /// Everything the Actions menu offers, asked each time it opens rather
+  /// than each time something it reads changes: the engine alone would ask
+  /// five times a second.
+  final List<AppAction> Function() actions;
+
+  /// Notifies when what [actions] reads changes, so an open menu keeps up.
+  final Listenable actionsChange;
 
   @override
   Widget build(BuildContext context) {
@@ -42,7 +50,7 @@ class TopBar extends StatelessWidget {
           if (!listShown) ListToggle(shown: false, onPressed: onToggleList),
           _ModeMenu(mode: mode, onMode: onMode),
           const SizedBox(width: Space.s),
-          _ActionsMenu(actions: actions),
+          _ActionsMenu(actions: actions, changes: actionsChange),
           const Spacer(),
           IconButton(
             icon: const Icon(Icons.settings_outlined, size: IconSize.action),
@@ -111,18 +119,57 @@ class _ModeMenu extends StatelessWidget {
 }
 
 /// Every action by name with its key after it, grouped by a thin line.
-/// Ctrl+K opens the same list as something to type into.
-class _ActionsMenu extends StatelessWidget {
-  const _ActionsMenu({required this.actions});
+/// Ctrl+K opens the same list as something to type into. The entries are
+/// made when the menu opens and kept up to date only while it is open.
+class _ActionsMenu extends StatefulWidget {
+  const _ActionsMenu({required this.actions, required this.changes});
 
-  final List<AppAction> actions;
+  final List<AppAction> Function() actions;
+  final Listenable changes;
 
   @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
+  State<_ActionsMenu> createState() => _ActionsMenuState();
+}
+
+class _ActionsMenuState extends State<_ActionsMenu> {
+  /// What the menu is listening to while it is open; null while shut.
+  Listenable? _heard;
+
+  @override
+  void didUpdateWidget(_ActionsMenu old) {
+    super.didUpdateWidget(old);
+    final heard = _heard;
+    if (heard == null || heard == widget.changes) return;
+    heard.removeListener(_changed);
+    _heard = widget.changes..addListener(_changed);
+  }
+
+  @override
+  void dispose() {
+    _heard?.removeListener(_changed);
+    super.dispose();
+  }
+
+  void _opened() {
+    if (_heard != null) return;
+    _heard = widget.changes..addListener(_changed);
+    setState(() {});
+  }
+
+  void _closed() {
+    _heard?.removeListener(_changed);
+    _heard = null;
+    if (mounted) setState(() {});
+  }
+
+  void _changed() {
+    if (mounted) setState(() {});
+  }
+
+  List<Widget> _entries(TextTheme text) {
     final children = <Widget>[];
     String? group;
-    for (final action in actions) {
+    for (final action in widget.actions()) {
       if (action.group != group && children.isNotEmpty) {
         children.add(const Divider(height: 1));
       }
@@ -137,8 +184,17 @@ class _ActionsMenu extends StatelessWidget {
         ),
       );
     }
+    return children;
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return MenuAnchor(
-      menuChildren: children,
+      onOpen: _opened,
+      onClose: _closed,
+      menuChildren: _heard == null
+          ? const []
+          : _entries(Theme.of(context).textTheme),
       builder: (context, controller, _) => TextButton.icon(
         onPressed: controller.isOpen ? controller.close : controller.open,
         icon: const Icon(Icons.arrow_drop_down, size: IconSize.action),

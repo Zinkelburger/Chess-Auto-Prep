@@ -9,6 +9,7 @@ import '../../chess/pgn/game_tree.dart';
 import '../../chess/pgn/move_label.dart';
 import '../../chess/pgn/tree_edit.dart';
 import '../../storage/chapter_files.dart';
+import '../../ui/selection.dart';
 import '../../workspace/document_session.dart';
 import 'library.dart';
 
@@ -82,8 +83,9 @@ final class OutlineLine {
 ///
 /// It owns the search — the words and the wait after them — and nothing
 /// else: the chapters come from the [Library] and the lines from the
-/// [DocumentSession], and both are read again whenever either of them says
-/// something changed.
+/// [DocumentSession]. It tells the panel only when what it lists changed,
+/// never for a cursor move or a save: which line the cursor is inside is
+/// [currentLine], which the one row it concerns follows by itself.
 final class ChapterOutline extends ChangeNotifier {
   ChapterOutline({
     required Library library,
@@ -93,6 +95,8 @@ final class ChapterOutline extends ChangeNotifier {
        _session = session {
     _library.addListener(_reread);
     _session.addListener(_reread);
+    _session.cursorListenable.addListener(_followTheCursor);
+    _currentRows.follow(_current);
     _reread();
   }
 
@@ -111,9 +115,12 @@ final class ChapterOutline extends ChangeNotifier {
   String _query = '';
   Timer? _waiting;
   Chapter? _chapter;
+  ChapterRef? _source;
+  List<RepertoireFolder>? _repertoires;
   List<OutlineLine> _lines = const [];
   NodePath _cursor = const NodePath.root();
-  int? _current;
+  final _current = ValueNotifier<int?>(null);
+  final _currentRows = Selection<int?>();
   bool _disposed = false;
 
   /// What the user has typed, which the field shows at once even though the
@@ -152,13 +159,19 @@ final class ChapterOutline extends ChangeNotifier {
       if (_matches(line.text)) line,
   ];
 
-  /// The line the cursor is inside, or null when it is on no line's moves —
-  /// at the start, or on a move only another chapter's game plays.
+  /// The line the cursor is inside, by game, or null when it is on no line's
+  /// moves — at the start, or on a move only another chapter's game plays.
   ///
   /// Worked out once for each place the cursor goes, not once for each row
   /// that asks: finding it walks every line's moves, and a book of a
-  /// thousand lines would then cost a thousand walks per row.
-  int? get currentLine => _current;
+  /// thousand lines would then cost a thousand walks per row. A step
+  /// forward usually costs one: see [_followTheCursor].
+  ValueListenable<int?> get currentLine => _current;
+
+  /// Whether the line at [game] is [currentLine], notifying only when that
+  /// changes: what one row listens to, so the cursor going from one line to
+  /// another redraws two rows rather than every row on screen.
+  ValueListenable<bool> isCurrent(int game) => _currentRows.of(game);
 
   /// What the line at [game] is called now, whatever the search is showing,
   /// or null when the chapter has no such line any more.
@@ -185,35 +198,68 @@ final class ChapterOutline extends ChangeNotifier {
   }
 
   /// Reads the lines again when the chapter on the board is another value,
-  /// and tells the panel either way: the cursor, the save state and the
-  /// listing all show here.
+  /// and tells the panel when anything it lists changed: another chapter,
+  /// file or listing. An edit that refused, a flip or a busy library change
+  /// nothing here, so they rebuild nothing.
   void _reread() {
     if (_disposed) return;
     final chapter = _session.chapter;
-    final moved = _cursor != _session.cursor;
-    final another = !identical(chapter, _chapter);
-    if (another) {
+    final source = _session.source;
+    final repertoires = _library.repertoires;
+    if (identical(chapter, _chapter) &&
+        source == _source &&
+        identical(repertoires, _repertoires)) {
+      return;
+    }
+    if (!identical(chapter, _chapter)) {
       _chapter = chapter;
       _lines = chapter == null ? const [] : _linesOf(chapter);
-    }
-    if (another || moved) {
       _cursor = _session.cursor;
-      _current = _lineHolding(_cursor);
+      _current.value = _lineHolding(_cursor);
     }
+    _source = source;
+    _repertoires = repertoires;
     notifyListeners();
+  }
+
+  /// Keeps [currentLine] on the line the cursor is inside.
+  ///
+  /// Going deeper can only narrow which lines play the moves to the cursor,
+  /// so a step forward keeps the line it was in whenever that line still
+  /// plays it: the first of a smaller set that still holds it is still the
+  /// first. Likewise no line holding the move before means none holds the
+  /// move after. Only a step back or aside walks every line again.
+  void _followTheCursor() {
+    // A move that was just written moves the cursor before the session says
+    // the chapter changed; the lines are read again when it does.
+    if (_disposed || !identical(_session.chapter, _chapter)) return;
+    final from = _cursor;
+    final to = _session.cursor;
+    _cursor = to;
+    final current = _current.value;
+    final deeper = _extends(to, from) && !from.isRoot;
+    if (deeper && (current == null || _holds(current, to))) return;
+    _current.value = _lineHolding(to);
   }
 
   /// Which line plays the moves down to [cursor]; the first of them when
   /// several do, as the tree shows them once.
   int? _lineHolding(NodePath cursor) {
-    final chapter = _chapter;
-    if (chapter == null || cursor.isRoot) return null;
-    final sans = [for (final node in chapter.tree.lineTo(cursor)) node.san];
+    if (_chapter == null || cursor.isRoot) return null;
     for (final line in _lines) {
-      final tree = chapter.treeInChapter(chapter.lines[line.game]);
-      if (tree != null && pathOfSans(tree, sans) != null) return line.game;
+      if (_holds(line.game, cursor)) return line.game;
     }
     return null;
+  }
+
+  /// Whether the line at [game] plays the moves down to [cursor].
+  bool _holds(int game, NodePath cursor) {
+    final chapter = _chapter;
+    if (chapter == null || game >= chapter.lines.length) return false;
+    final tree = chapter.treeInChapter(chapter.lines[game]);
+    if (tree == null) return false;
+    final sans = [for (final node in chapter.tree.lineTo(cursor)) node.san];
+    return pathOfSans(tree, sans) != null;
   }
 
   bool _matches(String lowercased) =>
@@ -231,8 +277,20 @@ final class ChapterOutline extends ChangeNotifier {
     _waiting?.cancel();
     _library.removeListener(_reread);
     _session.removeListener(_reread);
+    _session.cursorListenable.removeListener(_followTheCursor);
+    _currentRows.dispose();
+    _current.dispose();
     super.dispose();
   }
+}
+
+/// Whether [path] goes through [from]: the same moves, then more.
+bool _extends(NodePath path, NodePath from) {
+  if (path.indexes.length <= from.indexes.length) return false;
+  for (final (i, index) in from.indexes.indexed) {
+    if (path.indexes[i] != index) return false;
+  }
+  return true;
 }
 
 /// Every game of [chapter] that is merged into its tree, as a row.

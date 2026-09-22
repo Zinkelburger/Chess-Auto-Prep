@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../chess/pgn/comment_text.dart';
 import '../chess/pgn/game_tree.dart';
+import '../ui/listening_state.dart';
 import '../ui/theme.dart';
 import 'document_session.dart';
 
@@ -25,7 +26,8 @@ class CommentField extends StatefulWidget {
   State<CommentField> createState() => _CommentFieldState();
 }
 
-class _CommentFieldState extends State<CommentField> {
+class _CommentFieldState extends State<CommentField>
+    with ListeningState<CommentField> {
   final _controller = TextEditingController();
   final _focus = FocusNode();
 
@@ -33,19 +35,33 @@ class _CommentFieldState extends State<CommentField> {
   NodePath? _at;
   String _given = '';
 
+  /// The note follows the cursor and the words on the move it is on.
+  @override
+  Listenable listenableOf(CommentField widget) => widget.session.anyChange;
+
   @override
   void initState() {
     super.initState();
-    widget.session.addListener(_follow);
     _focus.addListener(_onFocusChanged);
-    _follow();
+    changed();
+  }
+
+  /// Words typed for the document this field was showing are written to it
+  /// before the field takes up another one.
+  @override
+  void didUpdateWidget(CommentField old) {
+    if (old.session != widget.session) {
+      _commit(old.session);
+      _at = null;
+    }
+    super.didUpdateWidget(old);
   }
 
   @override
   void dispose() {
     // Words typed into the field are the user's whether or not they left it
     // first, so the field going away writes them like any other commit.
-    widget.session.removeListener(_follow);
+    stopListening();
     _focus.removeListener(_onFocusChanged);
     _commit();
     _focus.dispose();
@@ -59,8 +75,8 @@ class _CommentFieldState extends State<CommentField> {
 
   /// Takes the text of the node the cursor is on now, keeping what the user
   /// typed for the one it was on before.
-  void _follow() {
-    if (!mounted) return;
+  @override
+  void changed() {
     final session = widget.session;
     final at = session.chapter == null ? null : session.cursor;
     final text = _textFor(at);
@@ -84,12 +100,12 @@ class _CommentFieldState extends State<CommentField> {
   String _textFor(NodePath? at) =>
       at == null ? '' : displayComment(widget.session.commentAt(at) ?? '');
 
-  void _commit() {
+  void _commit([DocumentSession? into]) {
     final at = _at;
     final text = _controller.text;
     if (at == null || text == _given) return;
     _given = text;
-    widget.session.setComment(at, text);
+    (into ?? widget.session).setComment(at, text);
   }
 
   /// The note the file wrote before the move the field is on, if it had one.

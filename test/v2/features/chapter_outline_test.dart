@@ -132,16 +132,16 @@ void main() {
     final tree = fixture.session.tree!;
 
     fixture.session.goTo(pathOfSans(tree, ['d4', 'd5', 'c4'])!);
-    expect(outline.currentLine, 0);
+    expect(outline.currentLine.value, 0);
 
     fixture.session.goTo(pathOfSans(tree, ['d4', 'Nf6'])!);
-    expect(outline.currentLine, 1);
+    expect(outline.currentLine.value, 1);
   });
 
   test('at the start of the chapter no line is the current one', () async {
     await open();
 
-    expect(outline.currentLine, isNull);
+    expect(outline.currentLine.value, isNull);
   });
 
   test(
