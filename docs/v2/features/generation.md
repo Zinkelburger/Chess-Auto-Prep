@@ -1,6 +1,6 @@
 # Generation
 
-Status: draft from the old app
+Status: corrected by the owner (2026-09-21: decisions below; not built)
 Old code (oracle only): `lib/features/generate/`, `lib/features/generation/`, `lib/features/planner/`,
 `lib/widgets/generation/`, `lib/widgets/repertoire_generation_tab.dart`, `lib/widgets/layout/jobs_panel.dart`,
 `lib/core/generation_session_controller.dart`, `lib/services/tree_build_service.dart`
@@ -135,33 +135,7 @@ never resumes: `Automatic resume is unavailable: this unfinished build has no ve
   optimizes and what each knob means.
 
 ## Keep / Change / Drop
-Keep — Starting-position card
-Keep — `WHAT TO BUILD`
-Keep — `OPPONENT`
-Keep — `SEARCH`
-Keep — `Your lines & structures (optional)`
-Keep — `Evaluation databases (optional)`
-Keep — Presets and summary
-Keep — `Advanced…`
-Keep — `Generate Repertoire`
-Keep — Run overlay
-Keep — Jobs panel card
-Keep — Unfinished-build card
-Keep — Results
-Keep — `Turn this repertoire into a study`
-Keep — Planner
-Keep — Planner banner
-Keep — `Recover generated outputs…`
-Keep — Start a build
-Keep — Pause / resume
-Keep — Finish Now
-Keep — Export Lines
-Keep — Cancel
-Keep — Discard
-Keep — Publish
-Keep — Cut the result
-Keep — Planner walk
-Keep — Recover
+Keep — every item under Screen and Actions (27 items), read against the decisions below.
 
 Quirks to rule on: four build sources share one form, so most knobs never apply to the chosen one; the search
 starts from the board rather than the chapter root; a modal overlay blocks the whole tab for a run that can last
@@ -170,10 +144,24 @@ and no diff, and the only undo is a destructive line cut; a preset can carry an 
 with no field to correct; the form's engine-loss default (30) differs from the model's own (50); a failed
 download or verification pass is silent; nothing under `.cap-generation/` is cleaned up.
 
-## Questions for the owner
-- Should a run publish itself, or should the user see the proposed lines and approve the write?
-- Do all four build sources survive, or is `Engine + human model` plus `ChessDB mainline book` enough?
-- Must the Builder lock during a build, or should the run live entirely in the Jobs panel?
-- Is the line cut part of Generation, or a Builder editing action over any chapter?
-- Does the planner stay a separate route, or become the front of the launch panel?
-- How long should retained run directories live before the app deletes them?
+## Decisions (owner, 2026-09-21)
+- **Stubbed for now.** `Fill gaps from here…` is a disabled entry in the Actions menu so the menu
+  has its final shape; the expectimax search is rewritten later, from ALGORITHM.md, with the UI
+  right first. The launch panel, when it comes, has three knobs — opponent rating, how deep, cover
+  one in N games — plus a `Prefer traps` toggle, and a source of `Engine + human model` or `ChessDB
+  mainline book`. No Advanced sections, presets, Results tab, Jobs pane or planner route.
+- **The planner is the Replies tab** (`repertoires.md`): Next gap is the question loop, and the moves
+  the user answered by hand are the pins the search keeps.
+- **A run never writes into the chapter.** It writes a chapter with `// Draft` in its heading beside
+  the one it was started from; the outline shows it as `Proposed`, its lines are read and edited in
+  the same workspace, and the user drags the ones they want onto the real chapter. Near-copies fold
+  into their host as variations first (the line-diversity bar); the hundred most-reached lines are
+  what the user sees first. Deleting the draft chapter is discarding the run.
+- **One run at a time**, no lock on the screen: the engine pane is paused while it runs and says so;
+  a second run is refused until the first ends.
+- **Trick lines** are lines, not flags: our moves, a reply the opponent plays at least 20% of the
+  time that loses at least 50 cp, our punishment to the final position (the October 2025 greedy
+  finder's rule). They appear under a `Tricks` chip in the outline, full line in mono with the
+  blunder marked `?`, with a hover board of the final position, and are accepted like any line.
+- Retained run directories, the model-games sidecars and the `.cap-generation/` layout are the old
+  app's; whether v2 keeps them is decided when the search is built.

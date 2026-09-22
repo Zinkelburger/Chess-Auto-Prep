@@ -1,6 +1,6 @@
 # Repertoire builder
 
-Status: draft from the old app
+Status: folded into repertoires.md on 2026-09-21 (owner: no builder mode); oracle for the old outline and save behaviour only
 Old code (oracle only): `lib/screens/repertoire_screen.dart`, `lib/screens/repertoire/`,
 `lib/features/repertoire/`, `lib/features/repertoires/`, `lib/services/repertoire_file_editor.dart`,
 `lib/chess_core/pgn/repertoire_*.dart`, `lib/widgets/chapter_list_body.dart`, `lib/widgets/lines/`

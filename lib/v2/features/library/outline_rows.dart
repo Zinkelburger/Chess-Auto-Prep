@@ -4,6 +4,7 @@ import '../../storage/chapter_files.dart';
 import '../../ui/row_actions.dart';
 import '../../ui/theme.dart';
 import 'chapter_outline.dart';
+import 'line_drag.dart';
 
 /// One chapter of the outline. The one on the board is bold and accented, as
 /// the old app's is, because it is where every other panel is pointing.
@@ -12,13 +13,29 @@ import 'chapter_outline.dart';
 /// chapter set up for one opening says which. A draft — proposed lines
 /// nobody has accepted yet — is muted and says "Proposed".
 class ChapterRow extends StatelessWidget {
-  const ChapterRow({super.key, required this.chapter, required this.onOpen});
+  const ChapterRow({
+    super.key,
+    required this.chapter,
+    required this.onOpen,
+    this.onDrop,
+  });
 
   final OutlineChapter chapter;
   final ValueChanged<ChapterRef> onOpen;
 
+  /// Lines dropped on this chapter become lines of it. Null for a chapter
+  /// that cannot take them: the one they are being dragged out of.
+  final ValueChanged<LineDrag>? onDrop;
+
   @override
   Widget build(BuildContext context) {
+    final row = _row(context);
+    final drop = onDrop;
+    if (drop == null) return row;
+    return LineDropTarget(accepts: (_) => true, onDrop: drop, child: row);
+  }
+
+  Widget _row(BuildContext context) {
     final theme = Theme.of(context);
     final heading = chapter.ref.heading;
     final rooted = !heading.startsAtTheStart;
@@ -87,13 +104,17 @@ class ChapterRow extends StatelessWidget {
 }
 
 /// One line of the open chapter: what it is called, where it starts, and the
-/// menu of what can be done to it.
+/// menu of what can be done to it. It can be picked up and dropped on a
+/// chapter or on another line, and other lines can be dropped on it.
 class LineRow extends StatelessWidget {
   const LineRow({
     super.key,
     required this.line,
     required this.current,
+    required this.selected,
+    required this.drag,
     required this.onTap,
+    required this.onDrop,
     required this.actions,
   });
 
@@ -102,14 +123,39 @@ class LineRow extends StatelessWidget {
   /// The cursor is on one of this line's moves.
   final bool current;
 
+  /// Picked with Ctrl or Shift, so it moves with the others picked.
+  final bool selected;
+
+  /// What a drag starting on this row carries.
+  final LineDrag drag;
+
   final VoidCallback onTap;
+
+  /// Lines dropped on this one fold into it as variations.
+  final ValueChanged<LineDrag> onDrop;
+
   final List<Widget> actions;
 
   @override
   Widget build(BuildContext context) {
+    return LineDropTarget(
+      accepts: (dropped) => !dropped.games.contains(line.game),
+      onDrop: onDrop,
+      child: Draggable<LineDrag>(
+        data: drag,
+        feedback: LineDragChip(label: drag.label),
+        childWhenDragging: Opacity(opacity: 0.4, child: _row(context)),
+        child: _row(context),
+      ),
+    );
+  }
+
+  Widget _row(BuildContext context) {
     final theme = Theme.of(context);
     return Material(
-      color: current
+      color: selected
+          ? theme.colorScheme.primary.withValues(alpha: 0.2)
+          : current
           ? theme.colorScheme.surfaceContainerHighest
           : Colors.transparent,
       child: InkWell(

@@ -5,9 +5,14 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import '../../chess/pgn/chapter.dart';
+import '../../chess/pgn/chapter_edit.dart';
+import '../../chess/pgn/chapter_line.dart';
+import '../../chess/pgn/games_written.dart';
+import '../../chess/pgn/line_moves.dart';
 import '../../diagnostics/log.dart';
 import '../../storage/chapter_files.dart';
 import '../../storage/document_ref.dart';
+import '../../storage/edit_scope.dart';
 import '../../storage/pgn_document_store.dart' as store;
 import '../../storage/training_records.dart' as records;
 import '../../workspace/document_saver.dart';
@@ -156,6 +161,109 @@ final class Library extends ChangeNotifier {
 
   Future<LibraryResult> deleteChapter(ChapterRef ref) =>
       _run('delete ${ref.path}', () => _remove(ref));
+
+  /// Moves the lines at [games] of the open chapter into [to]: as lines of
+  /// their own, or folded into the line at [asSidelineOf] there as
+  /// variations. This is what dropping lines on a chapter, or on a line,
+  /// does — and how proposed lines are accepted into a real chapter.
+  ///
+  /// Two files, two saves, in the safe order: the lines are written into
+  /// [to] first, against the revision it was read at, and only then taken
+  /// out of the open chapter. A refusal on the way in changes nothing; a
+  /// refusal on the way out leaves the lines in both files and says so,
+  /// which is a duplicate the user can see rather than a loss they cannot.
+  /// Within one chapter — a line dropped on another line of the same file —
+  /// it is one document folded and then trimmed, through the session.
+  Future<LibraryResult> moveLines({
+    required Set<int> games,
+    required ChapterRef to,
+    int? asSidelineOf,
+  }) => _run('move ${games.length} lines to ${to.path}', () async {
+    final chapter = _session.chapter;
+    final from = _session.source;
+    if (chapter == null || from == null) {
+      return const LibraryFailure('there is no chapter open to move from');
+    }
+    final moving = games.where((g) => g != asSidelineOf || to != from).toSet();
+    final lines = [
+      for (final game in moving.toList()..sort())
+        if (game >= 0 && game < chapter.lines.length) chapter.lines[game],
+    ];
+    if (lines.isEmpty) return const LibraryDone();
+    if (to == from) return _foldedHere(moving, asSidelineOf);
+    final written = await _writtenInto(to, lines, asSidelineOf);
+    if (written != null) return written;
+    final reason = _session.apply((c) => linesTakenOut(c, games: moving));
+    if (reason == null) return const LibraryDone();
+    return LibraryFailure(
+      'the lines were added to ${to.name} but not taken out of '
+      '${from.name}: $reason',
+    );
+  });
+
+  /// One line folded into another of the open chapter, then taken out.
+  LibraryResult _foldedHere(Set<int> games, int? host) {
+    if (host == null) return const LibraryDone();
+    for (final game in games) {
+      final reason = _session.apply(
+        (c) => lineGraftedInto(c, host: host, line: c.lines[game]),
+      );
+      if (reason != null) return LibraryFailure(reason);
+    }
+    final reason = _session.apply((c) => linesTakenOut(c, games: games));
+    return reason == null ? const LibraryDone() : LibraryFailure(reason);
+  }
+
+  /// Puts [lines] into [to] on disk, or answers why it could not.
+  Future<LibraryResult?> _writtenInto(
+    ChapterRef to,
+    List<ChapterLine> lines,
+    int? host,
+  ) async {
+    final read = await _store.open(to);
+    if (read is! store.Opened) {
+      return LibraryFailure('${to.name} could not be read');
+    }
+    var target = await readChapter(name: to.name, text: read.text);
+    var arranged = GamesArranged.of(
+      GamesWritten(),
+      before: target.lines.length,
+    );
+    for (final edit in _editsInto(target, lines, host)) {
+      switch (edit(target)) {
+        case ChapterUnchanged():
+          continue;
+        case ChapterEditRefused(:final reason):
+          return LibraryFailure(reason);
+        case ChapterEdited(:final chapter, :final games):
+          target = chapter;
+          arranged = composedArrangement(arranged, games) ?? games;
+      }
+    }
+    return switch (await _store.save(
+      to,
+      writeChapter(target),
+      expected: read.revision,
+      scope: GamesRearranged(arranged),
+    )) {
+      store.Saved() => null,
+      store.Conflict() => const LibraryStale(),
+      store.SaveDidNotLand(:final detail) => LibraryFailure(detail),
+    };
+  }
+
+  /// The edits that put [lines] into a chapter: one append, or one graft
+  /// per line into the game at [host].
+  List<ChapterEdit Function(Chapter)> _editsInto(
+    Chapter target,
+    List<ChapterLine> lines,
+    int? host,
+  ) => host == null
+      ? [(c) => linesAddedTo(c, lines: lines)]
+      : [
+          for (final line in lines)
+            (c) => lineGraftedInto(c, host: host, line: line),
+        ];
 
   /// The folder moves whole, in one rename: its chapters, the raw-game
   /// sidecars written beside them and the generation bundles under it. A

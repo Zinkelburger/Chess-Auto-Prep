@@ -1,6 +1,6 @@
 # Checks
 
-Status: draft from the old app
+Status: partly superseded (2026-09-21): gaps and coverage are the Replies tab in repertoires.md; the rest is not built
 Old code (oracle only): `lib/features/audit/`, `lib/features/holes/`, `lib/features/coverage/`,
 `lib/features/traps/`, `lib/services/coherence_service.dart`, `lib/screens/repertoire/`,
 `lib/screens/analysis_screen_holes.dart`

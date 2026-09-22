@@ -46,6 +46,10 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
   (v2 has this bar: the 32px switch row with `Depth {d} · {engine}`, 54px gutters, hover floats a
   200px board under the move, a click plays the line up to it, the chevron opens six rows; no
   threat, gear, nodes or settings yet. The old app's large headline score was tried and dropped.)
+- **Tab strip and Replies** (v2, 2026-09-21) — under the engine bar, `Moves` | `Replies`, one
+  underlined, the old viewer's tabs; `Next gap` sits at the strip's right edge on the Replies tab.
+  Replies is the Maia-3 table described in `repertoires.md`: share gutter, numbered move, tick or
+  `gap`, a hover board of the position after the move, a click plays it.
 - **Explorer (Database dock)** — sources: Engine evals, ChessDB, Repertoire, Opening explorer,
   Local PGN. Live explorer: Lichess, Masters, TWIC (only with a local master database), behind a
   collapsed filter summary; Lichess has speed and rating chips (defaults blitz/rapid/classical,

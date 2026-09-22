@@ -1,14 +1,15 @@
 # Repertoires
 
-Status: draft from the old app
+Status: corrected by the owner (2026-09-21: this mode is the builder; decisions below)
 Old code (oracle only): `lib/screens/repertoire_library_screen.dart`, `lib/features/repertoires/`,
 `lib/widgets/chapter_list_body.dart`, `lib/services/repertoire_file_editor.dart`
 Plan step: 3
 
 ## Purpose
-Someone keeps their opening material here: every repertoire they own, the chapters inside it and the
-shelves those sit on. They leave having found a repertoire and sent it to the builder, the trainer or
-the reader — or having created, imported, renamed, reorganised, deleted or restored one.
+Someone keeps and builds their opening material here: every repertoire they own, the chapters inside
+it, and the moves, replies and gaps of the chapter on the board. There is no separate builder: a
+repertoire chapter open in the workspace is editable, and reading one is the PGN Viewer's job. They
+leave with a chapter that answers more of what opponents actually play.
 
 ## Screen
 Reached from the mode menu under **Library → Repertoires**, and pushed as a picker by any mode that
@@ -129,40 +130,7 @@ when a folder is open), so edits other modes made show up.
   files; studies are read from `Documents/studies/`.
 
 ## Keep / Change / Drop
-Keep — Toolbar heading
-Keep — `Open PGN file…`
-Keep — `Create new repertoire`
-Keep — `Paste PGN`
-Keep — `Recovery`
-Keep — Search repertoires
-Keep — Repertoire row
-Keep — Row actions
-Keep — Studies section
-Keep — Empty states
-Keep — Failure panel
-Keep — `Recover library`
-Keep — Recovery view
-Keep — Chapter picker
-Keep — Course chapters
-Keep — Folder view (and its folder-view actions)
-Keep — Outline panel
-Keep — `Refresh library`
-Keep — Open a repertoire
-Keep — Browse chapters
-Keep — Create
-Keep — Import a PGN file
-Keep — Paste PGN
-Keep — Search
-Keep — Rename a repertoire
-Keep — Delete a repertoire
-Keep — Restore
-Keep — Recover library
-Keep — Add a chapter
-Keep — Rename a chapter
-Keep — Delete a chapter
-Keep — Reorganise
-Keep — Hand off
-Keep — Refresh
+Keep — every item under Screen and Actions (34 items), read against the decisions below.
 
 Quirks to rule on: a repertoire is a folder but a chapter file is what every other mode loads, so
 "repertoire" means three things (folder, file, course chapter inside a file); a recoverable delete
@@ -172,8 +140,31 @@ order with no sort control and the chapter count ignores subfolders; an import n
 after the file with no chance to correct it; a row tap opens the folder view here, a chapter in a
 picker.
 
-## Questions for the owner
-- Should the library list folders, or every chapter, with the folder only a grouping?
-- Does a recoverable delete have to work the same on Windows and macOS before the rewrite ships?
-- Should chapter deletion join the same Recovery view as repertoire deletion?
-- Does the folder view stay a separate screen, or become the outline inside the Builder?
+## Decisions (owner, 2026-09-21)
+- **No Repertoire builder mode.** The old builder's screen folds into this mode; `builder.md` is
+  kept only as the oracle for the old outline and save behaviour. No Build switch: a move played on a
+  repertoire chapter is saved, as it is today. The folder view is the outline column, not a screen.
+- **One loop, as Chessbook does it.** The reading card gets a tab strip under the engine bar, `Moves`
+  | `Replies` (`workspace.md`). Replies lists what Maia-3 predicts at the position on the board for
+  the **Opponent rating** setting, most likely first: share, move, a tick when the chapter plays it,
+  the word `gap` when the opponent plays it often enough and the chapter has no answer. Clicking a
+  row plays it. The status line reads `Their replies · 2200 · 4 gaps · 87% covered` (`Our candidates`
+  at our move). **Next gap** on the tab strip walks the chapter's gaps most-reached first: a missing
+  reply lands on the position before it with its row marked, a dead end where the chapter stops.
+- **Gaps come from Maia only**, offline and the same model the search uses. A gap is a position
+  reached at least once in N games (**Cover replies met once in** setting, default 50) at the
+  opponent rating with no move of ours. Reach is the product of the opponent's shares from the
+  chapter root; our moves count as certain. Coverage is one minus the reach that ends in gaps. Gaps
+  are per chapter; transpositions into other chapters are not resolved.
+- **Chapters have a visible root.** `// Root: 1. e4 e5 2. f4` shows under the chapter's name in the
+  outline; `New chapter` offers `From here` with the board's moves, which is how a chapter for one
+  opening is set up. An empty rooted chapter starts its board at the root.
+- **A draft is a chapter.** `// Draft` in the heading shows it muted with `Proposed` in the outline.
+  Its lines are read and edited in the same workspace; accepting them is moving them.
+- **Lines move by drag and drop.** Ctrl-click and Shift-click pick lines; dragged onto another
+  chapter they become lines of it, dragged onto a line they fold into it as variations; the line
+  menu's `Move to chapter…` does the first by name. The target file is written first, against the
+  revision it was read at, and the lines leave the open chapter only after that write landed.
+- `Fill gaps from here…` sits disabled in the Actions menu until generation exists (`generation.md`).
+- Left for later: training rows do not follow a line that changes chapter; the model's answers are
+  cached in memory only; the trainer must skip draft chapters.

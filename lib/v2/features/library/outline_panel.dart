@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../storage/chapter_files.dart';
+import '../../ui/choice_dialog.dart';
 import '../../ui/name_dialog.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
@@ -10,13 +12,18 @@ import '../../workspace/undo_notice.dart';
 import 'chapter_outline.dart';
 import 'library.dart';
 import 'library_messages.dart';
+import 'line_drag.dart';
 import 'new_chapter_dialog.dart';
 import 'outline_rows.dart';
 
 /// The chapters of the open repertoire and, under the open one, its lines.
 ///
 /// Clicking a chapter opens it; clicking a line puts the cursor on its last
-/// move. The line a line's `⋯` menu acts on is that line, never the cursor's.
+/// move. Ctrl-click and Shift-click pick several lines, and picked lines go
+/// together: dragged onto a chapter they become lines of it, dragged onto a
+/// line they fold into it as variations, and the `⋯` menu moves them to a
+/// chapter by name. That is also how proposed lines are accepted. The line
+/// a line's `⋯` menu acts on is that line, never the cursor's.
 class OutlinePanel extends StatefulWidget {
   const OutlinePanel({
     super.key,
@@ -40,6 +47,14 @@ class OutlinePanel extends StatefulWidget {
 
 class _OutlinePanelState extends State<OutlinePanel> {
   final _search = TextEditingController();
+
+  /// The lines picked with Ctrl or Shift, by game. Empty means whatever row
+  /// the pointer is on is the one that moves.
+  var _selected = <int>{};
+
+  /// Where a Shift-click extends from: the last line clicked plainly or
+  /// with Ctrl.
+  int? _anchor;
 
   @override
   void dispose() {
@@ -108,6 +123,84 @@ class _OutlinePanelState extends State<OutlinePanel> {
     showDeletionNotice(context, widget.session, 'Deleted 1 line.');
   }
 
+  /// A plain click goes to the line and drops the selection; Ctrl adds or
+  /// removes the line; Shift takes every line between the anchor and it.
+  void _pick(OutlineLine line) {
+    final keys = HardwareKeyboard.instance;
+    final toggle = keys.isControlPressed || keys.isMetaPressed;
+    setState(() {
+      if (keys.isShiftPressed && _anchor != null) {
+        _selected = _between(_anchor!, line.game);
+      } else if (toggle) {
+        if (!_selected.remove(line.game)) _selected.add(line.game);
+        _anchor = line.game;
+      } else {
+        _selected = {};
+        _anchor = line.game;
+        widget.session.goTo(line.at);
+      }
+    });
+  }
+
+  /// The games of the rows from [a] to [b], in the order the list shows.
+  Set<int> _between(int a, int b) {
+    final games = [for (final line in widget.outline.lines) line.game];
+    final from = games.indexOf(a);
+    final to = games.indexOf(b);
+    if (from < 0 || to < 0) return {b};
+    final (low, high) = from < to ? (from, to) : (to, from);
+    return games.sublist(low, high + 1).toSet();
+  }
+
+  /// What moves when [line] is dragged or its menu is used: the selection
+  /// when the line is in it, else the line alone.
+  LineDrag _dragOf(OutlineLine line) {
+    final games = _selected.contains(line.game) ? {..._selected} : {line.game};
+    return LineDrag(
+      games,
+      label: games.length == 1 ? line.moves : '${games.length} lines',
+    );
+  }
+
+  Future<void> _moveTo(OutlineLine line) async {
+    final open = widget.session.source;
+    final chapters = [
+      for (final ref
+          in widget.outline.repertoire?.chapters ?? const <ChapterRef>[])
+        if (ref != open) ref,
+    ];
+    final to = await showChoiceDialog<ChapterRef>(
+      context,
+      title: 'Move to chapter',
+      options: chapters,
+      label: (ref) => ref.name,
+      hint: 'Type a chapter',
+      empty: 'This repertoire has no other chapter.',
+    );
+    if (to == null || !mounted) return;
+    await _move(_dragOf(line), to);
+  }
+
+  Future<void> _move(LineDrag drag, ChapterRef to, {int? asSidelineOf}) async {
+    setState(() => _selected = {});
+    final result = await widget.library.moveLines(
+      games: drag.games,
+      to: to,
+      asSidelineOf: asSidelineOf,
+    );
+    if (!mounted) return;
+    await announce(
+      context,
+      Future.value(result),
+      thing: 'line',
+      name: drag.label,
+      failed: switch (result) {
+        LibraryFailure(:final detail) => 'Could not move the lines: $detail',
+        _ => 'Could not move the lines.',
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -144,36 +237,46 @@ class _OutlinePanelState extends State<OutlinePanel> {
   }
 
   List<Widget> _chapterRows(ChapterOutline outline, OutlineChapter chapter) {
-    if (!chapter.open) {
-      return [ChapterRow(chapter: chapter, onOpen: widget.onOpen)];
-    }
+    final row = ChapterRow(
+      chapter: chapter,
+      onOpen: widget.onOpen,
+      // Lines are dragged out of the open chapter, so every other chapter
+      // can take them and the open one cannot.
+      onDrop: chapter.open ? null : (drag) => _move(drag, chapter.ref),
+    );
+    if (!chapter.open) return [row];
     final lines = outline.lines;
     return [
-      ChapterRow(chapter: chapter, onOpen: widget.onOpen),
+      row,
       if (lines.isEmpty)
         const OutlineMessage('Empty — add lines to fill this chapter.'),
-      for (final line in lines)
-        LineRow(
-          line: line,
-          current: line.game == outline.currentLine,
-          onTap: () => widget.session.goTo(line.at),
-          actions: [
-            MenuItemButton(
-              onPressed: () => _rename(line),
-              child: const Text('Rename line…'),
-            ),
-            MenuItemButton(
-              onPressed: () => _delete(line),
-              child: const Text('Delete line'),
-            ),
-            MenuItemButton(
-              onPressed: _newChapter,
-              child: const Text('New chapter…'),
-            ),
-          ],
-        ),
+      for (final line in lines) _lineRow(line, chapter.ref),
     ];
   }
+
+  Widget _lineRow(OutlineLine line, ChapterRef open) => LineRow(
+    line: line,
+    current: line.game == widget.outline.currentLine,
+    selected: _selected.contains(line.game),
+    drag: _dragOf(line),
+    onTap: () => _pick(line),
+    onDrop: (drag) => _move(drag, open, asSidelineOf: line.game),
+    actions: [
+      MenuItemButton(
+        onPressed: () => _moveTo(line),
+        child: const Text('Move to chapter…'),
+      ),
+      MenuItemButton(
+        onPressed: () => _rename(line),
+        child: const Text('Rename line…'),
+      ),
+      MenuItemButton(
+        onPressed: () => _delete(line),
+        child: const Text('Delete line'),
+      ),
+      MenuItemButton(onPressed: _newChapter, child: const Text('New chapter…')),
+    ],
+  );
 }
 
 class _Toolbar extends StatelessWidget {

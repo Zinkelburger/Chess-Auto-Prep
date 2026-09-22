@@ -13,8 +13,8 @@ when its spec says `Status: corrected by the owner`.
 |---|---|---|
 | The workspace (board, moves, engine, explorer) | [workspace.md](workspace.md) | 0, 1, 6 |
 | PGN Viewer | [pgn-viewer.md](pgn-viewer.md) | 6 |
-| Repertoires (the library) | [repertoires.md](repertoires.md) | 3 |
-| Repertoire builder: chapters, outline, editing, publishing | [builder.md](builder.md) | 2, 4 |
+| Repertoires (the library, the outline, the Replies tab: this is the builder) | [repertoires.md](repertoires.md) | 3, 4a, 8 |
+| The old builder screen, folded into Repertoires; oracle only | [builder.md](builder.md) | 2, 4 |
 | Generation (expectimax builds, planner) | [generation.md](generation.md) | 7 |
 | Checks (holes and tricks, coverage, audit) | [checks.md](checks.md) | 8 |
 | Study | [study.md](study.md) | 4 |

@@ -137,6 +137,69 @@ void main() {
     );
   });
 
+  testWidgets('the ⋯ menu moves a line to a chapter picked by name', (
+    tester,
+  ) async {
+    await show(tester);
+    await tester.tap(find.byTooltip('Actions').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Move to chapter…'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sidelines').last);
+    await tester.pumpAndSettle();
+    await fixture.saver.flush();
+    expect(
+      fixture.textAt('/repertoires/KID/Main.pgn'),
+      isNot(contains('Indian')),
+    );
+    expect(
+      fixture.textAt('/repertoires/KID/Sidelines.pgn'),
+      contains('[Event "Indian"]'),
+    );
+  });
+
+  testWidgets('a line dragged onto another chapter moves there', (
+    tester,
+  ) async {
+    await show(tester);
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.textContaining('Nf6')),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    await gesture.moveTo(tester.getCenter(find.text('Sidelines')));
+    await tester.pump(const Duration(milliseconds: 100));
+    await gesture.up();
+    await tester.pumpAndSettle();
+    await fixture.saver.flush();
+    expect(
+      fixture.textAt('/repertoires/KID/Main.pgn'),
+      isNot(contains('Indian')),
+    );
+    expect(
+      fixture.textAt('/repertoires/KID/Sidelines.pgn'),
+      contains('[Event "Indian"]'),
+    );
+  });
+
+  testWidgets('a line dragged onto another line folds into it', (tester) async {
+    await show(tester);
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.textContaining('Nf6')),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    await gesture.moveTo(
+      tester.getCenter(find.textContaining('1.d4 d5 2.c4 e6')),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    await gesture.up();
+    await tester.pumpAndSettle();
+    await fixture.saver.flush();
+    expect(
+      fixture.textAt('/repertoires/KID/Main.pgn'),
+      contains('1. d4 d5 (1... Nf6) 2. c4 e6 *'),
+    );
+  });
+
   testWidgets('shows the chapters and the open chapter’s lines', (
     tester,
   ) async {

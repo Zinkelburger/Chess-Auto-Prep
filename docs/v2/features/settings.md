@@ -56,6 +56,9 @@ The title bar reads `Settings` with a close button (`Close settings`, Escape). N
 - **`Analysis panels and move tables`** — `Shared across views that show these panels. Study uses the
   board engine controls above.` Four switches, all on: `Engine continuations`, `Practical move scores
   (Expectimax)`, `Predicted move frequency (Maia)`, `Engine scores in move table`.
+- **`Repertoire`** (v2, 2026-09-21) — `Opponent rating` (1100–2900, default 2200, step 100; what
+  the Replies table, gaps and coverage are predicted for) and `Cover replies met once in` (5–1000
+  games, default 50). The dialog grew from 300 to 340 px for the sixth place.
 - **`Repertoires`** — `My repertoires`: `Compare your games with these books to see where you left your
   prep.` Owned by [repertoires.md](repertoires.md). **`Data & storage`** is the whole Databases page
   embedded; see [databases.md](databases.md).
