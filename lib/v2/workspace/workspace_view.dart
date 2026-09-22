@@ -1,11 +1,13 @@
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:multi_split_view/multi_split_view.dart';
 
 import '../storage/settings_store.dart';
 import '../ui/pane_tabs.dart';
 import '../ui/theme.dart';
+import 'board_claim.dart';
 import 'board_view.dart';
 import 'document_saver.dart';
 import 'document_session.dart';
@@ -32,7 +34,7 @@ import 'workspace_tabs.dart';
 /// heading, the engine, the fill's line while there is a fill to speak of,
 /// the tab strip, the moves, the opponent's replies or the explorer, the
 /// edit strip while there is editing or trouble, and the navigation row.
-/// The two halves start equal, as the old app's did. The keys that
+/// The card starts wider than the board. The keys that
 /// walk the line and take an edit back are [WorkspaceKeys], above every
 /// column that edits the document.
 class WorkspaceView extends StatelessWidget {
@@ -51,6 +53,8 @@ class WorkspaceView extends StatelessWidget {
     required this.settings,
     this.moveMenu,
     this.onExplorerGame,
+    this.boardClaim,
+    this.trainTab,
     this.onBoardMove,
     this.puzzle,
   });
@@ -85,6 +89,13 @@ class WorkspaceView extends StatelessWidget {
   /// study marks where a quiz starts, and nothing else offers anything yet.
   final MoveMenu? moveMenu;
 
+  /// A position another owner is showing on the board instead of the
+  /// document's, while it holds one: a lesson.
+  final ValueListenable<BoardClaim?>? boardClaim;
+
+  /// The Train tab's body, which is a feature's: the shell hands it in.
+  final WidgetBuilder? trainTab;
+
   /// Where a move made on the board goes when not into the document: a
   /// puzzle judges it. Null plays it into the document.
   final ValueChanged<String>? onBoardMove;
@@ -92,18 +103,20 @@ class WorkspaceView extends StatelessWidget {
   /// What the Puzzle tab shows, which is the Tactics mode's.
   final Widget? puzzle;
 
-  /// The board and the card beside it, half the workspace each, with a
-  /// divider the user can drag between them. The sizes live in the split
-  /// view's own state, so they survive a rebuild and are lost with the
-  /// window. The board shrinks to what its half leaves it.
+  /// The board and the card beside it, with a divider the user can drag
+  /// between them. The card starts the wider of the two: training, the
+  /// replies and the explorer have more to say than a board needs room for.
+  /// The sizes live in the split view's own state, so they survive a
+  /// rebuild and are lost with the window. The board shrinks to what its
+  /// side leaves it.
   @override
   Widget build(BuildContext context) {
     return MultiSplitViewTheme(
       data: paneTheme(Theme.of(context).colorScheme),
       child: MultiSplitView(
         initialAreas: [
-          Area(flex: 1, min: boardPaneMinWidth, builder: _board),
-          Area(flex: 1, min: readingPaneMinWidth, builder: _column),
+          Area(flex: boardShare, min: boardPaneMinWidth, builder: _board),
+          Area(flex: cardShare, min: readingPaneMinWidth, builder: _column),
         ],
       ),
     );
@@ -111,10 +124,15 @@ class WorkspaceView extends StatelessWidget {
 
   Widget _board(BuildContext context, Area area) => Padding(
     padding: const EdgeInsets.all(Space.l),
-    child: _BoardAndCounter(
-      session: session,
-      settings: settings,
-      onMove: onBoardMove ?? session.playMove,
+    child: ValueListenableBuilder<BoardClaim?>(
+      valueListenable: boardClaim ?? const _NoClaim(),
+      builder: (context, claim, _) => claim == null
+          ? _BoardAndCounter(
+              session: session,
+              settings: settings,
+              onMove: onBoardMove ?? session.playMove,
+            )
+          : _ClaimedBoard(claim: claim, settings: settings),
     ),
   );
 
@@ -151,6 +169,7 @@ class WorkspaceView extends StatelessWidget {
               tabs: tabs,
               moveMenu: moveMenu,
               onExplorerGame: onExplorerGame,
+              trainTab: trainTab,
               puzzle: puzzle,
             ),
           ),
@@ -178,6 +197,7 @@ class _Tabbed extends StatelessWidget {
     required this.tabs,
     required this.moveMenu,
     required this.onExplorerGame,
+    required this.trainTab,
     required this.puzzle,
   });
 
@@ -189,10 +209,12 @@ class _Tabbed extends StatelessWidget {
   final PaneTabs<WorkspaceTab> tabs;
   final MoveMenu? moveMenu;
   final ValueChanged<ExplorerGame>? onExplorerGame;
+  final WidgetBuilder? trainTab;
   final Widget? puzzle;
 
-  Widget _body(WorkspaceTab tab) => switch (tab) {
+  Widget _body(BuildContext context, WorkspaceTab tab) => switch (tab) {
     WorkspaceTab.moves => MoveTreeView(session: session, moveMenu: moveMenu),
+    WorkspaceTab.train => trainTab?.call(context) ?? const SizedBox.shrink(),
     WorkspaceTab.replies => RepliesPane(
       session: session,
       replies: replies,
@@ -208,7 +230,7 @@ class _Tabbed extends StatelessWidget {
   };
 
   Widget? _trailing(WorkspaceTab tab) => switch (tab) {
-    WorkspaceTab.moves => null,
+    WorkspaceTab.moves || WorkspaceTab.train => null,
     WorkspaceTab.replies => _NextGap(gaps: gaps),
     WorkspaceTab.explorer => ExplorerGear(explorer: explorer),
     WorkspaceTab.puzzle => null,
@@ -231,7 +253,7 @@ class _Tabbed extends StatelessWidget {
               trailing: _trailing(tabs.selected),
             ),
           ),
-          Expanded(child: _body(tabs.selected)),
+          Expanded(child: _body(context, tabs.selected)),
         ],
       ),
     );
@@ -320,4 +342,59 @@ class _BoardAndCounter extends StatelessWidget {
       },
     );
   }
+}
+
+/// The board while another owner holds it: its position alone, with the
+/// room the counter and the note would take left empty, so the board does
+/// not change size as a lesson starts and ends.
+class _ClaimedBoard extends StatelessWidget {
+  const _ClaimedBoard({required this.claim, required this.settings});
+
+  final BoardClaim claim;
+  final SettingsStore settings;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final side = min(
+          constraints.maxWidth,
+          constraints.maxHeight - navRowHeight - Space.s,
+        );
+        return Align(
+          alignment: Alignment.topCenter,
+          child: SizedBox(
+            width: side,
+            child: ListenableBuilder(
+              listenable: settings,
+              builder: (context, _) => BoardView(
+                fen: claim.fen,
+                orientation: claim.orientation,
+                lastMove: claim.lastMove,
+                onMove: claim.onMove ?? _still,
+                movable: claim.onMove != null,
+                coordinates: settings.value.boardCoordinates,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  static void _still(String uci) {}
+}
+
+/// No claim, ever: the board of a workspace nothing can take over.
+class _NoClaim implements ValueListenable<BoardClaim?> {
+  const _NoClaim();
+
+  @override
+  BoardClaim? get value => null;
+
+  @override
+  void addListener(VoidCallback listener) {}
+
+  @override
+  void removeListener(VoidCallback listener) {}
 }

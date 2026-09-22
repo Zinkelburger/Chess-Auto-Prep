@@ -21,6 +21,8 @@ import '../features/tactics/puzzle_pane.dart';
 import '../features/tactics/puzzle_trainer.dart';
 import '../features/tactics/tactics_panel.dart';
 import '../features/tactics/tactics_set.dart';
+import '../features/trainer/train_pane.dart';
+import '../features/trainer/trainer.dart';
 import '../storage/settings_store.dart';
 import '../ui/app_action.dart';
 import '../ui/choice_dialog.dart';
@@ -69,6 +71,7 @@ class Shell extends StatefulWidget {
     required this.games,
     required this.fill,
     required this.tactics,
+    required this.lineTrainer,
     required this.trainer,
     required this.settings,
     required this.settingRows,
@@ -90,6 +93,9 @@ class Shell extends StatefulWidget {
   final FillGaps fill;
   final TacticsSet tactics;
   final PuzzleTrainer trainer;
+
+  /// The Train tab's owner: the repertoire's lines and the sitting.
+  final Trainer lineTrainer;
   final SettingsStore settings;
 
   /// The settings page's rows, as the app wires them, and the one owner
@@ -476,6 +482,8 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
           ply: widget.explorer.ply,
         ),
       ),
+      boardClaim: widget.lineTrainer.board,
+      trainTab: (_) => TrainPane(trainer: widget.lineTrainer),
     ),
   };
 }

@@ -35,3 +35,10 @@ String movesFrom(GameTree tree, {required int plies, int skip = 0}) {
       ? '$start${words.join(' ')}'
       : '$start${words.join(' ')} …';
 }
+
+/// [moves], one after another from where they start, numbered: `1.e4 e5
+/// 2.Nf3`, or `5...Nc6 6.Bb5` for moves that begin with Black's.
+String numberedMoves(Iterable<MoveNode> moves) => [
+  for (final (i, move) in moves.indexed)
+    '${moveNumberLabel(move, startsLine: i == 0)}${move.san}',
+].join(' ');

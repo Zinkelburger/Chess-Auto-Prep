@@ -17,6 +17,8 @@ import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
 import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
+import 'package:chess_auto_prep/v2/features/trainer/scope_reader.dart';
+import 'package:chess_auto_prep/v2/features/trainer/trainer.dart';
 import 'package:chess_auto_prep/v2/workspace/explorer.dart';
 import 'package:chess_auto_prep/v2/workspace/fill_gaps.dart';
 import 'package:chess_auto_prep/v2/workspace/game_fetcher.dart';
@@ -28,6 +30,7 @@ import 'fixtures.dart';
 import 'library_fixture.dart';
 import 'replies_fixture.dart';
 import 'scripted_explorer.dart';
+import 'scripted_progress.dart';
 import 'scripted_files.dart';
 import 'scripted_policy.dart';
 import 'scripted_store.dart';
@@ -129,6 +132,8 @@ final class WindowFixture {
   final lichess = ScriptedExplorerApi();
   late final Explorer explorer;
   late final GameFetcher games;
+  final progress = ScriptedProgress();
+  late final Trainer lineTrainer;
 
   /// The question before a document is left, answering [DraftQuestion]'s
   /// [ScriptedDraftQuestion.answer].
@@ -167,6 +172,13 @@ final class WindowFixture {
     );
     explorer = explorerOver(session, settings: settings, lichess: lichess);
     games = gamesOver(store, lichess: lichess);
+    lineTrainer = Trainer(
+      session: session,
+      chapters: ScopeReader(files: ScriptedFiles(), documents: store),
+      files: progress,
+      analysis: analysis,
+      time: (now: DateTime.now, jitter: () => 0),
+    );
   }
 
   /// A copy on the way out is written beside the chapter as `Main copy`.
@@ -207,6 +219,7 @@ final class WindowFixture {
           fill: fill,
           tactics: tactics,
           trainer: trainer,
+          lineTrainer: lineTrainer,
         ),
       ),
     );
@@ -218,9 +231,10 @@ final class WindowFixture {
   }
 
   void dispose() {
-    trainer.dispose();
+    lineTrainer.dispose();
     tactics.dispose();
     requests.dispose();
+    trainer.dispose();
     games.dispose();
     explorer.dispose();
     replies.dispose();

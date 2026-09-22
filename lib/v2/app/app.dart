@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -16,6 +17,8 @@ import '../features/pgn_viewer/pgn_viewer.dart';
 import '../features/settings/setting_rows.dart';
 import '../features/settings/lichess_account.dart';
 import '../features/study/studies.dart';
+import '../features/trainer/scope_reader.dart';
+import '../features/trainer/trainer.dart';
 import '../features/tactics/puzzle_trainer.dart';
 import '../features/tactics/tactics_set.dart';
 import '../net/lichess_explorer.dart';
@@ -32,6 +35,7 @@ import '../storage/pgn_file_store.dart';
 import '../storage/recent_pgn_files.dart';
 import '../storage/settings_store.dart';
 import '../storage/study_files.dart';
+import '../storage/training_store.dart';
 import '../ui/theme.dart';
 import '../workspace/copy_name_dialog.dart';
 import '../workspace/document_saver.dart';
@@ -183,6 +187,15 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     databases: _databases,
     documents: _store,
     collections: _collections,
+  );
+
+  final _dice = Random();
+  late final _lineTrainer = Trainer(
+    session: _session,
+    chapters: ScopeReader(files: _chapterFiles, documents: _store),
+    files: TrainingStore(widget.documents),
+    analysis: _analysis,
+    time: (now: DateTime.now, jitter: () => _dice.nextDouble() * 2 - 1),
   );
 
   /// The engine's verdicts, shared with the old app, opened the first time
@@ -370,10 +383,11 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     _settings.removeListener(_engineSettings);
     _account.dispose();
     _requests.dispose();
-    _trainer.dispose();
+    _lineTrainer.dispose();
     _tactics.dispose();
     _fill.removeListener(_listTheDraft);
     _fill.dispose();
+    _trainer.dispose();
     _evalCache.close();
     _analysis.dispose();
     _replies.dispose();
@@ -421,6 +435,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
         fill: _fill,
         tactics: _tactics,
         trainer: _trainer,
+        lineTrainer: _lineTrainer,
       ),
     );
   }

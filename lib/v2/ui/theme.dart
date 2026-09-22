@@ -248,6 +248,14 @@ const paneDividerGrab = 4.0;
 /// paragraph a ribbon.
 const paneMinWidth = 180.0;
 const boardPaneMinWidth = 320.0;
+
+/// How the workspace is first shared between the board and the card beside
+/// it: two parts to three, the card the wider. The split view reads a flex
+/// pane's `min` as a flex too, not as pixels, so the shares are written in
+/// the same units as [boardPaneMinWidth] and [readingPaneMinWidth] and the
+/// minimums keep the proportion they were meant to have.
+const boardShare = 400.0;
+const cardShare = 600.0;
 const readingPaneMinWidth = 300.0;
 
 /// One of the six glyph buttons in the edit strip.
@@ -340,6 +348,9 @@ const settingSecretWidth = 200.0;
 /// How tall one row of a list is — a study, its chapters, the games of a
 /// file. Small enough that a long list is one screen, tall enough to hit.
 const listRowHeight = 34.0;
+
+/// A row of the trainer's lists: a name over a line of moves.
+const trainRowHeight = 44.0;
 
 /// A row of the puzzle list: the move and its result on one line, the
 /// opponent and the date under it.

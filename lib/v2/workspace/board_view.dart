@@ -22,6 +22,7 @@ class BoardView extends StatefulWidget {
     required this.onMove,
     this.lastMove,
     this.coordinates = true,
+    this.movable = true,
   });
 
   final Fen fen;
@@ -37,6 +38,9 @@ class BoardView extends StatefulWidget {
   /// The move just played, as UCI, for the highlight; null at the start.
   final String? lastMove;
 
+  /// Whether a piece may be moved; the position is shown either way.
+  final bool movable;
+
   @override
   State<BoardView> createState() => _BoardViewState();
 }
@@ -48,7 +52,7 @@ class _BoardViewState extends State<BoardView> {
   void initState() {
     super.initState();
     _controller.updatePosition(
-      gameOf(widget.fen, widget.lastMove),
+      gameOf(widget.fen, widget.lastMove, movable: widget.movable),
       animate: false,
     );
   }
@@ -56,8 +60,12 @@ class _BoardViewState extends State<BoardView> {
   @override
   void didUpdateWidget(BoardView old) {
     super.didUpdateWidget(old);
-    if (old.fen != widget.fen || old.lastMove != widget.lastMove) {
-      _controller.updatePosition(gameOf(widget.fen, widget.lastMove));
+    if (old.fen != widget.fen ||
+        old.lastMove != widget.lastMove ||
+        old.movable != widget.movable) {
+      _controller.updatePosition(
+        gameOf(widget.fen, widget.lastMove, movable: widget.movable),
+      );
     }
   }
 
@@ -100,15 +108,15 @@ const _noPosition = GameData(
   validMoves: {},
 );
 
-/// What the board needs to show [fen] and let either side move on it:
-/// the pieces, whose move it is, every legal move, the last move and the
-/// king in check.
-GameData gameOf(Fen fen, String? lastMove) {
+/// What the board needs to show [fen] and, when [movable], let either side
+/// move on it: the pieces, whose move it is, every legal move, the last move
+/// and the king in check.
+GameData gameOf(Fen fen, String? lastMove, {bool movable = true}) {
   final position = positionOf(fen);
   if (position == null) return _noPosition;
   return GameData(
     fen: fen.value,
-    playerSide: PlayerSide.both,
+    playerSide: movable ? PlayerSide.both : PlayerSide.none,
     sideToMove: position.turn,
     validMoves: makeLegalMoves(position),
     lastMove: lastMove == null ? null : Move.parse(lastMove),

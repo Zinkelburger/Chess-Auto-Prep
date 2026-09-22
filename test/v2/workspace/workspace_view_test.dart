@@ -289,6 +289,12 @@ void main() {
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.tab);
     await tester.pumpAndSettle();
+    expect(tabs.selected, WorkspaceTab.train);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyW);
+    await tester.pumpAndSettle();
+    expect(tabs.selected, WorkspaceTab.moves);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pumpAndSettle();
     expect(tabs.selected, WorkspaceTab.replies);
     expect(find.byType(RepliesPane), findsOneWidget);
     expect(find.text('Next gap'), findsOneWidget);

@@ -345,7 +345,7 @@ List<OutlineLine> _linesOf(Chapter chapter) {
     rows.add(
       OutlineLine(
         game: index,
-        name: name == null || name.isEmpty ? 'Line ${index + 1}' : name,
+        name: line.nameAt(index),
         moves: movesFrom(tree, plies: ChapterOutline.shownPlies, skip: shared),
         at: pathOfSans(chapter.tree, sans) ?? const NodePath.root(),
         text: '${name ?? ''} ${sans.join(' ')}'.toLowerCase(),
