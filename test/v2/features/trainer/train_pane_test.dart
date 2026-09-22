@@ -82,7 +82,11 @@ void main() {
     expect(find.text('Nothing due'), findsOneWidget);
     expect(find.text('Learn 2'), findsOneWidget);
     expect(find.text('Ruy'), findsOneWidget);
-    expect(find.text('1.e4 e5 2.Nf3 Nc6 3.Bc4'), findsOneWidget);
+    expect(
+      find.text('…3.Bc4'),
+      findsOneWidget,
+      reason: 'from where it branches',
+    );
     expect(find.text('Untrained'), findsNWidgets(2));
   });
 
