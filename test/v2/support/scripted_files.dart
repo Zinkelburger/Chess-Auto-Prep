@@ -52,6 +52,14 @@ final class ScriptedFiles implements ChapterFiles {
     if (isEmpty?.call(folder) ?? true) removed.add(folder);
   }
 
+  /// The staging folders an import took away, in order.
+  final stagingRemoved = <String>[];
+
+  @override
+  Future<void> removeStaging(String folder) async {
+    stagingRemoved.add(folder);
+  }
+
   Future<void> _wait() {
     if (!hold) return Future<void>.value();
     final completer = Completer<void>();

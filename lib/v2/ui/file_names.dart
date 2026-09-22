@@ -63,3 +63,25 @@ String safeFileName(String name, {required String fallback}) {
       .trim();
   return nameProblem(safe) == null ? safe : fallback;
 }
+
+/// The longest name an import gives a folder or file, which is what the old
+/// app allowed for a name it made up from a file's.
+const maxImportedNameLength = 100;
+
+/// A name for something the user did not name — the repertoire made from a
+/// file, the chapter made from a course title — made safe to be a file:
+/// the characters a file cannot take become `_`, a leading dot and trailing
+/// dots and spaces go, and it is cut to [maxImportedNameLength]. What is
+/// left with nothing in it, or a name the operating system reserves, is
+/// [fallback].
+///
+/// Dots inside the name stay: `6.Bg5 e6` is a chapter title, not a path.
+String importedName(String name, {required String fallback}) {
+  var safe = name.replaceAll(_illegalCharacters, '_').trim();
+  safe = safe.replaceFirst(RegExp(r'^\.+'), '');
+  if (safe.length > maxImportedNameLength) {
+    safe = safe.substring(0, maxImportedNameLength);
+  }
+  safe = safe.replaceFirst(RegExp(r'[. ]+$'), '');
+  return nameProblem(safe) == null ? safe : fallback;
+}

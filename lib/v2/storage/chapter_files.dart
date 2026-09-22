@@ -128,7 +128,17 @@ abstract interface class ChapterFiles {
   /// then no longer a repertoire, because it has no chapters, and the list
   /// stops showing it either way.
   Future<void> removeIfEmpty(String folder);
+
+  /// Takes away a staging folder an import made and could not finish, with
+  /// whatever it had written into it. Only a folder the import named — a
+  /// dot folder directly under the root — is ever removed; anything else is
+  /// left alone, because nothing but an import should be deleting a folder.
+  Future<void> removeStaging(String folder);
 }
+
+/// What an import's staging folder is called: a dot folder, which the
+/// listing skips, so a half-written import is never a repertoire.
+const stagingPrefix = '.import-';
 
 /// One folder per repertoire, one `.pgn` per chapter, plus index files and
 /// sidecars the app ignores.
@@ -161,6 +171,21 @@ final class ChapterDirectory implements ChapterFiles {
       if (await directory.list().isEmpty) await directory.delete();
     } on FileSystemException catch (error) {
       log.w('remove the empty folder $folder', error);
+    }
+  }
+
+  @override
+  Future<void> removeStaging(String folder) async {
+    if (!p.equals(p.dirname(folder), root.path) ||
+        !p.basename(folder).startsWith(stagingPrefix)) {
+      log.w('remove the staging folder $folder', 'it is not a staging folder');
+      return;
+    }
+    try {
+      final directory = Directory(folder);
+      if (await directory.exists()) await directory.delete(recursive: true);
+    } on FileSystemException catch (error) {
+      log.w('remove the staging folder $folder', error);
     }
   }
 
