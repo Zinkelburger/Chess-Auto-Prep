@@ -326,8 +326,6 @@ class _Header extends StatelessWidget {
     ],
     selected: {trainer.scope},
     showSelectedIcon: false,
-    // Beside the actions in a card as narrow as the board leaves it.
-    style: const ButtonStyle(visualDensity: VisualDensity.compact),
     onSelectionChanged: (s) => trainer.setScope(s.single),
   );
 
