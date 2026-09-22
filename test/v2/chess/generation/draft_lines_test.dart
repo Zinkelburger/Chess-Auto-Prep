@@ -298,6 +298,20 @@ void main() {
       expect(chapter.tree.nodeAt(nf6)!.children, hasLength(2));
     });
 
+    test('sidelines that leave at the same move and share their start are '
+        'one branch, not two copies of the shared move', () {
+      final kept = line(['e4', 'e5', 'Nf3', 'Nc6', 'Bb5']);
+      final bishop = line(['e4', 'e5', 'Bc4', 'Nc6']);
+      final bishopBc5 = line(['e4', 'e5', 'Bc4', 'Bc5']);
+      final tree = draftTree(
+        DraftEntry(line: kept, sidelines: [(2, bishop), (2, bishopBc5)]),
+        rootFen: Fen.initial,
+      );
+      final e5 = tree.nodeAt(NodePath.of([0, 0]))!;
+      expect(e5.children.map((n) => n.san), ['Nf3', 'Bc4']);
+      expect(e5.children.last.children.map((n) => n.san), ['Nc6', 'Bc5']);
+    });
+
     test('lines are rooted at the chapter, through the prefix to the board, '
         'so they can be dropped into it', () {
       final prefix = lineTree(Fen.initial, ['d4', 'd5']);

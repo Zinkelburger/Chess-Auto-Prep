@@ -15,8 +15,10 @@ import '../features/library/chapter_outline.dart';
 import '../features/library/library.dart';
 import '../features/pgn_viewer/pgn_viewer.dart';
 import '../features/settings/setting_rows.dart';
+import '../features/settings/lichess_account.dart';
 import '../features/study/studies.dart';
 import '../net/lichess_explorer.dart';
+import '../net/lichess_login.dart';
 import '../net/lichess_studies.dart';
 import '../storage/atomic_write.dart';
 import '../storage/chapter_files.dart';
@@ -94,6 +96,9 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     root: _repertoires,
   );
   final _lichess = http.Client();
+  late final _account = LichessAccountState(
+    login: LichessLoginApi(_lichess, openBrowser: openInBrowser),
+  );
   late final Studies _studies = Studies(
     files: StudyDirectory(Directory(_studyFolder)),
     documents: _store,
@@ -156,7 +161,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
 
   /// The engine's verdicts, shared with the old app, opened the first time
   /// a fill needs them.
-  late final _evalCache = EvalCache.open(widget.support);
+  late final _evalCache = EvalCacheOnDemand(widget.support);
   late final _fill = FillGaps(
     session: _session,
     analysis: _analysis,
@@ -181,7 +186,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
       Started(:final engine) => FillReady(
         evaluator: CachedEvaluator(
           FixedDepthEvaluator(engine, depth: fillEvalDepth),
-          _evalCache,
+          _evalCache.cache,
           depth: fillEvalDepth,
         ),
         policy: MaiaOpponent(_maia, elo: request.elo),
@@ -224,8 +229,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
   List<SettingGroup> _settingRows() => settingGroups(
     store: _settings,
     coresAvailable: Platform.numberOfProcessors,
-    loadLichessToken: readLichessToken,
-    saveLichessToken: writeLichessToken,
+    account: _account,
     openLogFolder: () => unawaited(openFolder(widget.logFolder)),
   );
 
@@ -284,6 +288,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
   /// already has the threads and the table the user chose.
   Future<void> _startWithSettings() async {
     await _settings.load();
+    unawaited(_account.load());
     final s = _settings.value;
     _engineRunsWith = (s.engineCores, s.engineMemoryMb);
     _analysis.setLines(s.engineLines);
@@ -331,6 +336,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
   void dispose() {
     _lifecycle.dispose();
     _settings.removeListener(_engineSettings);
+    _account.dispose();
     _fill.dispose();
     _evalCache.close();
     _analysis.dispose();
@@ -365,6 +371,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
         viewer: _viewer,
         settings: _settings,
         settingRows: _settingRows,
+        settingsAlso: _account,
         outline: _outline,
         session: _session,
         saver: _saver,

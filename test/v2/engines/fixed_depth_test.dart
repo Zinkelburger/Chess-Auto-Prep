@@ -56,6 +56,38 @@ void main() {
     },
   );
 
+  test('a search cut short below its depth is unavailable, not a verdict '
+      '(the engine quit mid-search)', () async {
+    final engine = ScriptedEngine();
+    final evaluator = FixedDepthEvaluator(engine, depth: 14);
+    final asked = evaluator.evaluate(start);
+    await pumpEventQueue();
+    engine.current.emit(line(depth: 5, score: const Centipawns(80)));
+    await engine.quit();
+    expect(await asked, isA<EvaluationUnavailable>());
+  });
+
+  test(
+    'a shallow mate and a finished game are verdicts all the same',
+    () async {
+      final engine = ScriptedEngine();
+      final evaluator = FixedDepthEvaluator(engine, depth: 14);
+      final mate = evaluator.evaluate(start);
+      await pumpEventQueue();
+      engine.current
+        ..emit(line(depth: 3, score: const MateIn(2)))
+        ..end();
+      expect(await mate, isA<Evaluated>().having((e) => e.eval.cp, 'cp', 9998));
+
+      final over = evaluator.evaluate(start);
+      await pumpEventQueue();
+      engine.current
+        ..emit(line(depth: 0, score: const Centipawns(0), pv: const []))
+        ..end();
+      expect(await over, isA<Evaluated>().having((e) => e.eval.cp, 'cp', 0));
+    },
+  );
+
   group('with the cache in front', () {
     test('a kept verdict is answered without the engine, from the side to '
         'move', () async {
@@ -92,6 +124,23 @@ void main() {
         ..end();
       await asked;
       expect(cache.read(Fen(afterE4.fen).position, minDepth: 14), 20);
+    });
+
+    test('a search cut short is not written to the cache', () async {
+      final cache = EvalCache.inMemory();
+      addTearDown(cache.close);
+      final engine = ScriptedEngine();
+      final evaluator = CachedEvaluator(
+        FixedDepthEvaluator(engine, depth: 14),
+        cache,
+        depth: 14,
+      );
+      final asked = evaluator.evaluate(start);
+      await pumpEventQueue();
+      engine.current.emit(line(depth: 5, score: const Centipawns(80)));
+      await engine.quit();
+      expect(await asked, isA<EvaluationUnavailable>());
+      expect(cache.read(Fen(start.fen).position, minDepth: 0), isNull);
     });
 
     test('a verdict too shallow for this run is asked again', () async {

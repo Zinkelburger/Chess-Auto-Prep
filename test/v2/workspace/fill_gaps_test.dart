@@ -203,6 +203,29 @@ void main() {
     },
   );
 
+  test('an engine that finishes starting after dispose is still handed '
+      'back', () async {
+    final starting = Completer<FillToolsResult>();
+    final fill = FillGaps(
+      session: fixture.session,
+      analysis: analysis,
+      documents: fixture.store,
+      tools: (_) => starting.future,
+    );
+    final run = fill.start(request);
+    await pumpEventQueue();
+    fill.dispose();
+    starting.complete(
+      FillReady(
+        evaluator: ScriptedEvaluator(),
+        policy: const ScriptedPolicy({'e8d8': 1}),
+        release: () async => releases++,
+      ),
+    );
+    await run;
+    expect(releases, 1);
+  });
+
   test('a model that cannot answer stops the run with the reason', () async {
     final fill = fillWith(ScriptedEvaluator(), policy: const AbsentPolicy());
     await fill.start(request);

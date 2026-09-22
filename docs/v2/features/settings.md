@@ -6,7 +6,7 @@ Old code (oracle only): `lib/screens/settings_screen.dart`, `lib/features/settin
 Plan step: 13
 
 ## Purpose
-Someone wants the app to behave differently everywhere — a labelled board, more cores, a dark theme —
+Someone wants the app to behave differently everywhere — a labelled board, more cores —
 or wants to connect an account, take an update, or find the log after something went wrong. They leave
 with the preference saved and confirmed on disk, or with an honest failure and a `Retry`.
 
@@ -16,16 +16,13 @@ The title bar reads `Settings` with a close button (`Close settings`, Escape). N
 
 - **Find a setting** — a search box over the navigation, matching label plus hidden keywords (`cores`,
   `figurines`, `token`…); all terms must match. Nothing matches: `No matching settings`.
-- **Navigation** (220 px, left) — `Appearance`, `Accounts`, `Board & moves`, `Analysis`, one entry per
+- **Navigation** (220 px, left) — `Accounts`, `Board & moves`, `Analysis`, one entry per
   mode that registered a page (`Training`, `Tactics`, `Game viewer`, `Repertoires`, `Tournament
   engines`, `Bughouse`), then `Data & storage`, `App`, `Shortcuts`. Below 760 px it becomes a
   horizontal strip of 170 px tiles above the content.
 - **Save status line** — one per section: `Loading saved preferences…`, `Saving preferences…`, `Saved
   preferences could not be loaded.`, `Preferences were not saved. Your changes are kept for retry.`
   with `Retry`, or the section's policy sentence when idle.
-- **`Appearance`** — `Dark` / `Light` / `System`, default `Dark`; help `System follows your desktop's
-  light or dark appearance.` Busy: `Loading appearance…` / `Saving appearance…`. Failure: `Could not
-  confirm the appearance setting. Your last confirmed appearance is still applied.` + `Reload saved choice`.
 - **`Accounts` ▸ Your chess usernames** — `Used to find your games for review and tactics. No login
   required.` Two plain boxes, `Lichess` (autofocused) and `Chess.com`; under a filled box, `Last
   downloaded Sep 4, 2026` or `Not downloaded yet`. `Save usernames` → `Usernames saved.`
@@ -56,6 +53,21 @@ The title bar reads `Settings` with a close button (`Close settings`, Escape). N
 - **`Analysis panels and move tables`** — `Shared across views that show these panels. Study uses the
   board engine controls above.` Four switches, all on: `Engine continuations`, `Practical move scores
   (Expectimax)`, `Predicted move frequency (Maia)`, `Engine scores in move table`.
+- **`Accounts`** (v2, 2026-09-22) — one row `Lichess` whose hint says where the account stands and
+  whose control is the one button it needs now: signed out, `Log in` (hint: what a login is for);
+  waiting, `Waiting for the browser…` with `Cancel`, or `The browser did not open. Copy the link and
+  open it.` with `Copy link` and `Cancel`; signed in, `Logged in as <name> · until <date>` (or
+  `personal access token`) with `Log out`; while Lichess is asked, `Checking…` / `Logging out…`. A
+  failure replaces the hint in the error colour until the next attempt: `Lichess said the login was
+  declined.`, `No answer from the browser in five minutes.`, `Could not open a port for the browser
+  to come back to.`, `Could not reach lichess.org — it needs a connection.`, `Lichess turned the
+  login away.`, `Lichess rejected that token. Check it was copied fully and has not been revoked.`,
+  `Logged in, but the account could not be saved. Try again.` A second row, `Personal access token`,
+  shows only while signed out: a secret field, checked with `/api/account` when left or submitted.
+  The flow is the old app's PKCE one (port 8919, or any free port when it is taken; `state` checked
+  on the way back; the browser gets a plain `Logged in.` page), the keys are the old app's, so both
+  apps share the account, and an expired OAuth token reads as signed out. Usernames for game
+  downloads are not built yet.
 - **`Repertoire`** (v2, 2026-09-21) — `Opponent rating` (1100–2900, default 2200, step 100; what
   the Replies table, gaps and coverage are predicted for) and `Cover replies met once in` (5–1000
   games, default 50). The dialog grew from 300 to 340 px for the sixth place.
@@ -122,7 +134,7 @@ section.`
 
 ## Data
 - Everything is SharedPreferences, one key per field, written individually and confirmed by rereading:
-  appearance; board coordinates / legal moves / piece notation; engine cores, hash MB, board depth,
+  board coordinates / legal moves / piece notation; engine cores, hash MB, board depth,
   MultiPV, moves shown, Maia Elo, panel visibility, explorer defaults; game-analysis depth (migrated
   from the old tactics-import depth key); the evaluation-database and designated-repertoire paths;
   update switches, last attempt and cached payload path.
@@ -138,10 +150,10 @@ section.`
   read by the board, every engine job, the explorer, generation and reviews.
 
 ## Keep / Change / Drop
+Drop — `Appearance`: v2 is dark only; no Light or System theme (owner, 2026-09-22)
 Keep — Find a setting
 Keep — Navigation
 Keep — Save status line
-Keep — `Appearance`
 Keep — `Accounts` ▸ Your chess usernames
 Keep — `Accounts` ▸ Lichess login
 Keep — `Board & moves`
@@ -168,7 +180,7 @@ Keep — Reset settings
 Quirks to rule on: tokens sit in plaintext preferences; "Lichess login" and "Lichess username" are two
 unrelated settings storing two different names on one page; a failed OAuth in Settings says nothing
 while the same flow elsewhere prints a sentence; logging out needs no confirmation; `Reset settings`
-covers engine, display and database preferences but not appearance, accounts, updates or any per-mode
+covers engine, display and database preferences but not accounts, updates or any per-mode
 page; `Data & storage` is a whole other mode embedded in a pane; `Show legal moves` defaults off while
 every other display aid defaults on; the update dialog can interrupt work at startup; nothing copies
 the log or a diagnostics summary from inside the app.
@@ -178,4 +190,4 @@ the log or a diagnostics summary from inside the app.
 - Should `Copy diagnostics` (log tail + version + OS, like the bughouse engine report) ship here, so a
   bug report is one button rather than a file manager?
 - Is one flat settings screen still right, or do per-mode pages belong beside their mode?
-- Should `Reset settings` also cover appearance and the per-mode pages?
+- Should `Reset settings` also cover the per-mode pages?

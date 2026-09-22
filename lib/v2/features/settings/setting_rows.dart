@@ -2,14 +2,18 @@ import 'package:flutter/foundation.dart';
 
 import '../../storage/settings.dart';
 import '../../storage/settings_store.dart';
+import 'lichess_account.dart';
 
 /// One row of the settings page: what it is called, one line more when the
 /// name cannot carry it, and the one control that changes it.
 final class SettingRow {
-  const SettingRow(this.label, this.control, {this.hint});
+  const SettingRow(this.label, this.control, {this.hint, this.warn = false});
 
   final String label;
   final String? hint;
+
+  /// The hint is a problem, and is drawn as one.
+  final bool warn;
   final SettingControl control;
 
   /// Whether [query] finds this row.
@@ -94,13 +98,21 @@ final class ActionSetting extends SettingControl {
   final VoidCallback run;
 }
 
+/// The Lichess account: log in, the wait for the browser, log out. The
+/// row's hint says where it stands; the control is the one button it
+/// needs now.
+final class AccountSetting extends SettingControl {
+  const AccountSetting(this.account);
+
+  final LichessAccountState account;
+}
+
 /// The page's rows, from the settings as they are now. Built again on every
 /// change, so a row always shows the value the store holds.
 List<SettingGroup> settingGroups({
   required SettingsStore store,
   required int coresAvailable,
-  required Future<String?> Function() loadLichessToken,
-  required Future<bool> Function(String token) saveLichessToken,
+  required LichessAccountState account,
   required VoidCallback openLogFolder,
 }) {
   final s = store.value;
@@ -185,10 +197,17 @@ List<SettingGroup> settingGroups({
     ]),
     SettingGroup('Accounts', [
       SettingRow(
-        'Lichess token',
-        SecretSetting(load: loadLichessToken, save: saveLichessToken),
-        hint: 'a personal access token; empty signs out',
+        'Lichess',
+        AccountSetting(account),
+        hint: account.problem ?? _accountHint(account.status),
+        warn: account.problem != null,
       ),
+      if (account.status case SignedOut() || Checking())
+        SettingRow(
+          'Personal access token',
+          SecretSetting(load: () async => null, save: account.useToken),
+          hint: 'instead of logging in; from lichess.org/account/oauth/token',
+        ),
     ]),
     SettingGroup('App', [
       SettingRow(
@@ -199,3 +218,19 @@ List<SettingGroup> settingGroups({
     ]),
   ];
 }
+
+String _accountHint(AccountStatus status) => switch (status) {
+  SignedOut() =>
+    'lifts the API limits; needed for private studies and the explorer',
+  Connecting(browserOpened: true) => 'Waiting for the browser…',
+  Connecting() => 'The browser did not open. Copy the link and open it.',
+  Checking() => 'Checking the token…',
+  SigningOut() => 'Logging out…',
+  SignedIn(:final account) =>
+    'Logged in as ${account.username ?? 'an unnamed account'} · '
+        '${account.personal ? 'personal access token' : 'until ${_day(account.until)}'}',
+};
+
+String _day(DateTime? when) => when == null
+    ? 'revoked'
+    : when.toLocal().toIso8601String().substring(0, 10);

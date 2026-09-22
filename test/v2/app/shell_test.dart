@@ -169,6 +169,7 @@ void main() {
           viewer: viewer,
           settings: settings,
           settingRows: () => const [],
+          settingsAlso: settings,
           outline: outline,
           session: session,
           saver: saver,
