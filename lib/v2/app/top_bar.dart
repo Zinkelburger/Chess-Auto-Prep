@@ -48,11 +48,11 @@ class TopBar extends StatelessWidget {
 }
 
 /// Modes not yet in v2 are listed but disabled, so the menu shows the whole
-/// product from day one and each step turns one entry on.
+/// product from day one and each step turns one entry on. There is no
+/// builder entry: Repertoires is the builder (owner, 2026-09-21).
 const _modes = [
   'Repertoires',
   'PGN Viewer',
-  'Repertoire builder',
   'Repertoire trainer',
   'Study',
   'Tactics',
