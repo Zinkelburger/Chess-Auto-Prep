@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
+import 'package:chess_auto_prep/v2/chess/tactics/puzzle_queue.dart';
 import 'package:chess_auto_prep/v2/chess/tactics/puzzle_run.dart';
 import 'package:chess_auto_prep/v2/features/tactics/puzzle_trainer.dart';
 import 'package:chess_auto_prep/v2/features/tactics/puzzle_up.dart';
@@ -12,14 +13,19 @@ import '../../support/tactics_fixture.dart';
 import '../../support/window_fixture.dart';
 
 /// A sitting of puzzles over the real session, requests and saver, with a
-/// scripted store holding the set: the default queue is #1 (Black, two moves
-/// to find), #0 (White, mate in one), #3 (custom).
+/// scripted store holding the set and a fortnight's window on the queue:
+/// #1 (Black, two moves to find), #0 (White, mate in one), #3 (custom).
 void main() {
   late WindowFixture w;
 
   /// Runs [body] in fake time with a fresh window, the set read.
   void sitting(void Function(FakeAsync async) body) => fakeAsync((async) {
     w = WindowFixture();
+    unawaited(
+      w.settings.update(
+        w.settings.value.copyWith(puzzles: const PuzzleFilter(days: 14)),
+      ),
+    );
     unawaited(w.tactics.load());
     async.flushMicrotasks();
     body(async);

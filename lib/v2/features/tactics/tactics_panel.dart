@@ -106,9 +106,10 @@ class _TacticsPanelState extends State<TacticsPanel> {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.m, 0),
-          child: FilledButton(
+          child: FilledButton.icon(
             onPressed: queue.isEmpty ? null : () => widget.onPlay(),
-            child: Text('Play tactics (${queue.length})'),
+            icon: const Icon(Icons.play_arrow, size: IconSize.action),
+            label: Text('Play (${queue.length})'),
           ),
         ),
         Expanded(child: _list(queue, shown)),
@@ -154,6 +155,20 @@ class _TacticsPanelState extends State<TacticsPanel> {
 
   Widget _rows(List<Puzzle> shown, bool noneQueued) {
     if (shown.isEmpty) {
+      final filter = widget.set.filter;
+      final days = filter.days;
+      if (noneQueued && days != null) {
+        return SliverToBoxAdapter(
+          child: _Message(
+            'No puzzles from the last $days days.',
+            action: TextButton(
+              onPressed: () =>
+                  widget.set.setFilter(filter.copyWith(days: () => null)),
+              child: const Text('Include older puzzles'),
+            ),
+          ),
+        );
+      }
       return SliverToBoxAdapter(
         child: _Message(
           noneQueued
@@ -296,7 +311,8 @@ class _PuzzleRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final stats = puzzle.stats;
-    final record = stats.isNew ? 'new' : '${stats.successes}/${stats.reviews}';
+    // A new puzzle says nothing: most are, and a column of `new` is noise.
+    final record = stats.isNew ? '' : '${stats.successes}/${stats.reviews}';
     return Material(
       color: open ? theme.colorScheme.surfaceContainerHighest : null,
       child: InkWell(
@@ -343,15 +359,27 @@ class _PuzzleRow extends StatelessWidget {
 }
 
 class _Message extends StatelessWidget {
-  const _Message(this.text);
+  const _Message(this.text, {this.action});
 
   final String text;
+
+  /// The one thing that fixes it, under the words.
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(Space.l),
-      child: Text(text, style: Theme.of(context).textTheme.bodySmall),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(text, style: Theme.of(context).textTheme.bodyMedium),
+          if (action case final action?) ...[
+            const SizedBox(height: Space.s),
+            action,
+          ],
+        ],
+      ),
     );
   }
 }

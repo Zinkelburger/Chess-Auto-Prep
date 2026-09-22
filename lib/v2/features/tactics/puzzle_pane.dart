@@ -17,9 +17,13 @@ import 'puzzle_up.dart';
 /// Nothing on it moves when the feedback changes: each line keeps its
 /// height whether it has words in it or not.
 class PuzzlePane extends StatelessWidget {
-  const PuzzlePane({super.key, required this.trainer});
+  const PuzzlePane({super.key, required this.trainer, this.onAnalyze});
 
   final PuzzleTrainer trainer;
+
+  /// Opens the puzzle's game with the engine on, once the answer is on
+  /// view: the host owns the tabs and the engine.
+  final VoidCallback? onAnalyze;
 
   @override
   Widget build(BuildContext context) {
@@ -27,7 +31,11 @@ class PuzzlePane extends StatelessWidget {
       listenable: trainer,
       builder: (context, _) {
         final body = switch ((trainer.up, trainer.recap)) {
-          (final PuzzleUp up, _) => _Solving(trainer: trainer, up: up),
+          (final PuzzleUp up, _) => _Solving(
+            trainer: trainer,
+            up: up,
+            onAnalyze: onAnalyze,
+          ),
           (null, final Recap recap) => _RecapView(
             trainer: trainer,
             recap: recap,
@@ -53,16 +61,21 @@ class _Idle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Text(
-    'Press Play tactics in the list to start, or pick a puzzle from it.',
-    style: Theme.of(context).textTheme.bodySmall,
+    'Press Play in the list to start, or click a puzzle in it.',
+    style: Theme.of(context).textTheme.bodyMedium,
   );
 }
 
 class _Solving extends StatelessWidget {
-  const _Solving({required this.trainer, required this.up});
+  const _Solving({
+    required this.trainer,
+    required this.up,
+    required this.onAnalyze,
+  });
 
   final PuzzleTrainer trainer;
   final PuzzleUp up;
+  final VoidCallback? onAnalyze;
 
   @override
   Widget build(BuildContext context) {
@@ -78,6 +91,15 @@ class _Solving extends StatelessWidget {
           style: text.titleMedium,
         ),
         const SizedBox(height: Space.xs),
+        Text(
+          [
+            if (puzzle.opponent.isNotEmpty) 'vs ${puzzle.opponent}',
+            if (puzzle.date.isNotEmpty) puzzle.date,
+          ].join(' · '),
+          style: text.bodySmall,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: Space.m),
         _GameLine(puzzle: puzzle, finished: up.finished),
         const SizedBox(height: Space.m),
         SizedBox(
@@ -85,15 +107,15 @@ class _Solving extends StatelessWidget {
           child: _FeedbackLine(up: up),
         ),
         const SizedBox(height: Space.s),
-        _Buttons(trainer: trainer, up: up),
+        _Buttons(trainer: trainer, up: up, onAnalyze: onAnalyze),
         const SizedBox(height: Space.m),
         SizedBox(
           height: starRowHeight,
           child: up.finished ? _Stars(trainer: trainer, up: up) : null,
         ),
-        _AutoAdvance(trainer: trainer),
         const Divider(height: Space.xl),
         _Progress(trainer: trainer),
+        _AutoAdvance(trainer: trainer),
       ],
     );
   }
@@ -153,7 +175,7 @@ class _FeedbackLine extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme.bodyMedium;
     final (words, colour) = switch (up.feedback) {
-      null => ('Find the best move.', scheme.onSurfaceVariant),
+      null => ('Find the best move.', scheme.onSurface),
       Correct(:final found, :final of) => (
         'Correct! ($found/$of)',
         scheme.primary,
@@ -193,49 +215,76 @@ class _FeedbackLine extends StatelessWidget {
 }
 
 /// Show solution, Reset and Skip in the same places whatever happened; Skip
-/// reads Next once there is nothing left to find.
+/// reads Next once the attempt is scored, and becomes the filled button:
+/// the thing to do now. Analyze takes Show solution's place once the answer
+/// is on view.
 class _Buttons extends StatelessWidget {
-  const _Buttons({required this.trainer, required this.up});
+  const _Buttons({
+    required this.trainer,
+    required this.up,
+    required this.onAnalyze,
+  });
 
   final PuzzleTrainer trainer;
   final PuzzleUp up;
+  final VoidCallback? onAnalyze;
 
   @override
   Widget build(BuildContext context) {
     final atStart = up.found == 0 && up.feedback == null;
     final moved = up.finished || up.decided != null;
+    void next() => unawaited(trainer.next());
     return Wrap(
       spacing: Space.s,
       runSpacing: Space.s,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        OutlinedButton(
-          onPressed: up.finished ? null : trainer.showSolution,
-          child: const Tooltip(
+        if (up.finished)
+          Tooltip(
+            message: 'Open the game with the engine on',
+            child: FilledButton.icon(
+              style: secondaryButtonStyle,
+              onPressed: onAnalyze,
+              icon: const Icon(Icons.insights, size: IconSize.action),
+              label: const Text('Analyze'),
+            ),
+          )
+        else
+          Tooltip(
             message: 'Show solution (Space)',
-            child: Text('Show solution'),
+            child: FilledButton.icon(
+              style: secondaryButtonStyle,
+              onPressed: trainer.showSolution,
+              icon: const Icon(Icons.lightbulb_outline, size: IconSize.action),
+              label: const Text('Show solution'),
+            ),
           ),
-        ),
         IconButton(
           icon: const Icon(Icons.replay, size: IconSize.action),
           tooltip: 'Try it again from the start',
           onPressed: atStart ? null : trainer.reset,
         ),
-        moved
-            ? FilledButton(
-                onPressed: () => unawaited(trainer.next()),
-                child: const Tooltip(
-                  message: 'Next puzzle (↓)',
-                  child: Text('Next'),
-                ),
-              )
-            : OutlinedButton(
-                onPressed: () => unawaited(trainer.next()),
-                child: const Tooltip(
-                  message: 'Skip this puzzle (↓)',
-                  child: Text('Skip'),
-                ),
-              ),
+        if (moved)
+          Tooltip(
+            message: 'Next puzzle (↓)',
+            child: FilledButton.icon(
+              onPressed: next,
+              icon: const Icon(Icons.arrow_forward, size: IconSize.action),
+              iconAlignment: IconAlignment.end,
+              label: const Text('Next'),
+            ),
+          )
+        else
+          Tooltip(
+            message: 'Skip this puzzle (↓)',
+            child: FilledButton.icon(
+              style: secondaryButtonStyle,
+              onPressed: next,
+              icon: const Icon(Icons.skip_next, size: IconSize.action),
+              iconAlignment: IconAlignment.end,
+              label: const Text('Skip'),
+            ),
+          ),
       ],
     );
   }
@@ -275,6 +324,7 @@ class _Stars extends StatelessWidget {
   }
 }
 
+/// A small tick under the progress line: a setting, not a thing to do.
 class _AutoAdvance extends StatelessWidget {
   const _AutoAdvance({required this.trainer});
 
@@ -284,11 +334,15 @@ class _AutoAdvance extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Switch(value: trainer.autoAdvance, onChanged: trainer.setAutoAdvance),
-        const SizedBox(width: Space.s),
-        const Flexible(
+        Checkbox(
+          value: trainer.autoAdvance,
+          onChanged: (on) => trainer.setAutoAdvance(on ?? false),
+          visualDensity: VisualDensity.compact,
+        ),
+        Flexible(
           child: Text(
-            'Next puzzle by itself after a solve',
+            'Go to the next puzzle after a solve',
+            style: Theme.of(context).textTheme.bodySmall,
             overflow: TextOverflow.ellipsis,
           ),
         ),
@@ -297,7 +351,7 @@ class _AutoAdvance extends StatelessWidget {
   }
 }
 
-/// `Puzzle 3 of 26 · 2 solved · 1 failed`, and the way to stop.
+/// `‹  Puzzle 3 of 26 · 2 solved · 1 failed`, and the way to stop.
 class _Progress extends StatelessWidget {
   const _Progress({required this.trainer});
 
@@ -308,12 +362,24 @@ class _Progress extends StatelessWidget {
     final run = trainer.run;
     if (run == null) return const SizedBox.shrink();
     final recap = run.recap;
+    final current = trainer.up?.puzzle.fen;
+    final at = current == null
+        ? run.seen.length
+        : run.seen.indexOf(current) + 1;
     return Row(
       children: [
+        IconButton(
+          icon: const Icon(Icons.chevron_left, size: IconSize.action),
+          tooltip: 'Previous puzzle (↑)',
+          onPressed: trainer.hasPrevious
+              ? () => unawaited(trainer.previous())
+              : null,
+          visualDensity: VisualDensity.compact,
+        ),
         Expanded(
           child: Text(
             [
-              'Puzzle ${run.seen.length} of ${run.queue.length}',
+              'Puzzle $at of ${run.queue.length}',
               if (recap.solved > 0) '${recap.solved} solved',
               if (recap.failed > 0) '${recap.failed} failed',
             ].join(' · '),
@@ -369,7 +435,8 @@ class _RecapView extends StatelessWidget {
                 onPressed: () => unawaited(trainer.retryMistakes()),
                 child: Text('Retry mistakes (${recap.retry.length})'),
               ),
-            OutlinedButton(
+            FilledButton(
+              style: secondaryButtonStyle,
               onPressed: trainer.closeRecap,
               child: const Text('Done'),
             ),

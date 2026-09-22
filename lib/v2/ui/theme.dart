@@ -286,6 +286,22 @@ const _text = Color(0xFFE6E6E8);
 const _muted = Color(0xFF9A9AA0);
 const _accent = Color(0xFF5F93CC);
 
+/// The accent a step darker, under white words: the filled button, the one
+/// strongest action on a screen. White on [_accent] is 3.2:1 and reads as
+/// faded; on this it is 5.3:1 and the button still stands off the card.
+const _accentFill = Color(0xFF3A6EA8);
+
+/// A second action: a dark blue-grey button with pale words, 9.6:1, so it
+/// reads as a button and not as a disabled chip, without competing with
+/// the filled one.
+const _tonal = Color(0xFF26354A);
+const _onTonal = Color(0xFFD6E4F5);
+
+/// A control that cannot be used now: legible at 4:1, plainly not on.
+const _disabledFill = Color(0xFF2C2C30);
+const _disabledText = Color(0xFF8A8A90);
+const _buttonOutline = Color(0xFF5A5A60);
+
 const _board = BoardTheme(
   lightSquare: Color(0xFFF0D9B5),
   darkSquare: Color(0xFFB58863),
@@ -307,6 +323,8 @@ ThemeData darkTheme() {
     surfaceContainerHighest: _panel,
     surfaceContainerLowest: _reading,
     onSurfaceVariant: _muted,
+    secondaryContainer: _tonal,
+    onSecondaryContainer: _onTonal,
   );
   final base = ThemeData(
     colorScheme: scheme,
@@ -317,9 +335,59 @@ ThemeData darkTheme() {
   );
   return base.copyWith(
     textTheme: _sized(base.textTheme),
+    filledButtonTheme: FilledButtonThemeData(style: _filled),
+    outlinedButtonTheme: OutlinedButtonThemeData(style: _outlined),
+    textButtonTheme: TextButtonThemeData(style: _textButton),
     extensions: const [_board],
   );
 }
+
+/// Button words are medium weight at the body size: thin words in a thin
+/// outline are what made the old buttons look switched off.
+const _buttonLabel = TextStyle(fontSize: 14, fontWeight: FontWeight.w600);
+
+/// Filled: white on the darker accent.
+final _filled = ButtonStyle(
+  textStyle: const WidgetStatePropertyAll(_buttonLabel),
+  backgroundColor: _whenOn(_accentFill, _disabledFill),
+  foregroundColor: _whenOn(Colors.white, _disabledText),
+);
+
+/// A second action beside a filled one — Show solution beside Next: the
+/// dark blue-grey fill with pale words. Pass it to a [FilledButton]; the
+/// theme's filled style is the strong one.
+final secondaryButtonStyle = ButtonStyle(
+  backgroundColor: _whenOn(_tonal, _disabledFill),
+  foregroundColor: _whenOn(_onTonal, _disabledText),
+);
+
+WidgetStateProperty<Color> _whenOn(Color on, Color off) =>
+    WidgetStateProperty.resolveWith(
+      (states) => states.contains(WidgetState.disabled) ? off : on,
+    );
+
+/// Outlined: near-white words in a grey line that can be seen.
+final _outlined = ButtonStyle(
+  textStyle: const WidgetStatePropertyAll(_buttonLabel),
+  foregroundColor: WidgetStateProperty.resolveWith(
+    (states) => states.contains(WidgetState.disabled) ? _disabledText : _text,
+  ),
+  side: WidgetStateProperty.resolveWith(
+    (states) => BorderSide(
+      color: states.contains(WidgetState.disabled)
+          ? _disabledFill
+          : _buttonOutline,
+    ),
+  ),
+);
+
+/// Text buttons stay in the accent, at the medium weight.
+final _textButton = ButtonStyle(
+  textStyle: const WidgetStatePropertyAll(_buttonLabel),
+  foregroundColor: WidgetStateProperty.resolveWith(
+    (states) => states.contains(WidgetState.disabled) ? _disabledText : null,
+  ),
+);
 
 /// The type scale, sized from the styles the theme built rather than from
 /// bare ones: a fresh TextStyle carries no family, and a style put into the

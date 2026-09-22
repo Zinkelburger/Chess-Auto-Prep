@@ -57,6 +57,8 @@ class WorkspaceView extends StatelessWidget {
     this.trainTab,
     this.onBoardMove,
     this.puzzle,
+    this.header = true,
+    this.gameCounter = true,
   });
 
   final DocumentSession session;
@@ -103,6 +105,12 @@ class WorkspaceView extends StatelessWidget {
   /// What the Puzzle tab shows, which is the Tactics mode's.
   final Widget? puzzle;
 
+  /// Whether the card is headed with the game's players and the board has
+  /// the file's game counter under it. Tactics has neither: the puzzle says
+  /// whose game it was and the list is how to get to another.
+  final bool header;
+  final bool gameCounter;
+
   /// The board and the card beside it, with a divider the user can drag
   /// between them. The card starts the wider of the two: training, the
   /// replies and the explorer have more to say than a board needs room for.
@@ -111,18 +119,10 @@ class WorkspaceView extends StatelessWidget {
   /// side leaves it.
   @override
   Widget build(BuildContext context) {
-    return MultiSplitViewTheme(
-      data: paneTheme(Theme.of(context).colorScheme),
-      child: MultiSplitView(
-        initialAreas: [
-          Area(flex: boardShare, min: boardPaneMinWidth, builder: _board),
-          Area(flex: cardShare, min: readingPaneMinWidth, builder: _column),
-        ],
-      ),
-    );
+    return _BoardAndCard(board: _board, card: _column);
   }
 
-  Widget _board(BuildContext context, Area area) => Padding(
+  Widget _board(BuildContext context) => Padding(
     padding: const EdgeInsets.all(Space.l),
     child: ValueListenableBuilder<BoardClaim?>(
       valueListenable: boardClaim ?? const _NoClaim(),
@@ -131,6 +131,7 @@ class WorkspaceView extends StatelessWidget {
               session: session,
               settings: settings,
               onMove: onBoardMove ?? session.playMove,
+              counter: gameCounter,
             )
           : _ClaimedBoard(claim: claim, settings: settings),
     ),
@@ -139,7 +140,7 @@ class WorkspaceView extends StatelessWidget {
   /// The reading column is a card: darker than the window around it, its
   /// corners rounded, the board's margin kept on three sides and the
   /// divider's on the fourth. The words sit in from its edge.
-  Widget _column(BuildContext context, Area area) => Padding(
+  Widget _column(BuildContext context) => Padding(
     padding: const EdgeInsets.fromLTRB(0, Space.l, Space.l, Space.l),
     child: Material(
       color: Theme.of(context).colorScheme.surfaceContainerLowest,
@@ -148,12 +149,21 @@ class WorkspaceView extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          ReadingHeader(session: session),
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: readingCardInset - Space.s,
+          if (header)
+            ReadingHeader(session: session)
+          else
+            const SizedBox(height: Space.s),
+          // While part of the game is hidden — a puzzle's answer — the
+          // engine would read it out and the arrows would walk into it, so
+          // neither is on the card until it is found or shown.
+          _UnlessHidden(
+            session: session,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: readingCardInset - Space.s,
+              ),
+              child: EnginePane(session: session, analysis: analysis),
             ),
-            child: EnginePane(session: session, analysis: analysis),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: readingCardInset),
@@ -174,13 +184,63 @@ class WorkspaceView extends StatelessWidget {
             ),
           ),
           EditStrip(session: session, saver: saver, editing: editing),
-          const Divider(height: 1),
-          NavRow(session: session),
+          _UnlessHidden(
+            session: session,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Divider(height: 1),
+                NavRow(session: session),
+              ],
+            ),
+          ),
         ],
       ),
     ),
   );
 }
+
+/// The board and the card side by side. The split view keeps its areas —
+/// and so the sizes the user dragged them to — in this state for the life
+/// of the window, while what fills them is built from the widget of the
+/// moment: an area's own builder would keep the first mode's panes.
+class _BoardAndCard extends StatefulWidget {
+  const _BoardAndCard({required this.board, required this.card});
+
+  final WidgetBuilder board;
+  final WidgetBuilder card;
+
+  @override
+  State<_BoardAndCard> createState() => _BoardAndCardState();
+}
+
+class _BoardAndCardState extends State<_BoardAndCard> {
+  final _split = MultiSplitViewController(
+    areas: [
+      Area(data: _Side.board, flex: boardShare, min: boardPaneMinWidth),
+      Area(data: _Side.card, flex: cardShare, min: readingPaneMinWidth),
+    ],
+  );
+
+  @override
+  void dispose() {
+    _split.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => MultiSplitViewTheme(
+    data: paneTheme(Theme.of(context).colorScheme),
+    child: MultiSplitView(
+      controller: _split,
+      builder: (context, area) => area.data == _Side.board
+          ? widget.board(context)
+          : widget.card(context),
+    ),
+  );
+}
+
+enum _Side { board, card }
 
 /// The moves, the opponent's replies or the explorer, under the strip that
 /// says which. The tabs are the window's: the shell owns them, the keys
@@ -260,6 +320,22 @@ class _Tabbed extends StatelessWidget {
   }
 }
 
+/// [child] while the whole game is on view, nothing while the session
+/// hides part of it.
+class _UnlessHidden extends StatelessWidget {
+  const _UnlessHidden({required this.session, required this.child});
+
+  final DocumentSession session;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: session,
+    builder: (context, _) =>
+        session.shownTo == null ? child : const SizedBox.shrink(),
+  );
+}
+
 /// The one control the Replies tab owns: the way to the next unanswered
 /// position. Off while there is no gap to go to.
 class _NextGap extends StatelessWidget {
@@ -291,11 +367,15 @@ class _BoardAndCounter extends StatelessWidget {
     required this.session,
     required this.settings,
     required this.onMove,
+    required this.counter,
   });
 
   final DocumentSession session;
   final SettingsStore settings;
   final ValueChanged<String> onMove;
+
+  /// Whether the game counter sits under the board.
+  final bool counter;
 
   @override
   Widget build(BuildContext context) {
@@ -325,7 +405,7 @@ class _BoardAndCounter extends StatelessWidget {
                 const SizedBox(height: Space.s),
                 SizedBox(
                   height: navRowHeight,
-                  child: GameCounter(session: session),
+                  child: counter ? GameCounter(session: session) : null,
                 ),
                 if (below >= moveNoteMinHeight) ...[
                   const SizedBox(height: Space.s),

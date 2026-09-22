@@ -29,7 +29,7 @@ final class PuzzleFilter {
     },
     this.unreviewedOnly = false,
     this.hideOneStar = true,
-    this.days = 14,
+    this.days,
   });
 
   final PuzzleOrder order;
@@ -42,7 +42,8 @@ final class PuzzleFilter {
   final bool hideOneStar;
 
   /// Only games played in the last this many days, today being the first;
-  /// null for every date. Puzzles with no date always pass.
+  /// null for every date, as a set starts: an old set opened for the first
+  /// time must not look empty. Puzzles with no date always pass.
   final int? days;
 
   static const defaults = PuzzleFilter();

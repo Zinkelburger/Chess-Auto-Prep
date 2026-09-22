@@ -41,8 +41,12 @@ class WorkspaceKeys extends StatelessWidget {
 
   void _undo() => unawaited(session.undo());
 
-  void _engine() =>
-      unawaited(analysis.enabled ? analysis.disable() : analysis.enable());
+  /// E turns the engine off at any time, and on only while the whole game
+  /// is on view: it would read a hidden puzzle answer out.
+  void _engine() {
+    if (analysis.enabled) return unawaited(analysis.disable());
+    if (session.shownTo == null) unawaited(analysis.enable());
+  }
 
   void _edit() => editing.value = !editing.value;
 

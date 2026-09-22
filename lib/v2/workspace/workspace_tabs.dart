@@ -21,14 +21,38 @@ enum WorkspaceTab {
   PaneTab<WorkspaceTab> get tab => PaneTab(this, title, pinned: pinned);
 }
 
-/// The card's tabs as a window starts: all but the puzzle open, moves up.
-/// The old viewer started with its reader alone; here training, the replies
-/// and the explorer are what a repertoire is for, so they are there from the
-/// start and closed by whoever is only reading. The puzzle opens with the
-/// first puzzle.
+/// The card's tabs as the Repertoire builder starts: all but the puzzle
+/// open, moves up. Training, the replies and the explorer are what a
+/// repertoire is for, so they are there from the start and closed by
+/// whoever is only reading.
 PaneTabs<WorkspaceTab> newWorkspaceTabs() => PaneTabs(
-  [for (final tab in WorkspaceTab.values) tab.tab],
+  [
+    for (final tab in WorkspaceTab.values)
+      if (tab != WorkspaceTab.puzzle) tab.tab,
+  ],
   open: const [WorkspaceTab.train, WorkspaceTab.replies, WorkspaceTab.explorer],
+);
+
+/// The card's tabs as the PGN Viewer and Study start: the moves and the
+/// explorer. The repertoire's tabs can be shown from the Actions menu.
+PaneTabs<WorkspaceTab> readingTabs() => PaneTabs(
+  [
+    for (final tab in WorkspaceTab.values)
+      if (tab != WorkspaceTab.puzzle) tab.tab,
+  ],
+  open: const [WorkspaceTab.explorer],
+);
+
+/// The card's tabs in Tactics: the puzzle first and always there, the game
+/// it came from beside it, and the explorer to be shown when wanted. The
+/// repertoire's tabs mean nothing here and are not offered.
+PaneTabs<WorkspaceTab> puzzleTabs() => PaneTabs(
+  const [
+    PaneTab(WorkspaceTab.puzzle, 'Puzzle', pinned: true),
+    PaneTab(WorkspaceTab.moves, 'Game'),
+    PaneTab(WorkspaceTab.explorer, 'Explorer'),
+  ],
+  open: const [WorkspaceTab.moves],
 );
 
 /// The card's tabs as a browser's menu has them: each one that can be

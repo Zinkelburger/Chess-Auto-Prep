@@ -236,6 +236,26 @@ final class PuzzleTrainer extends ChangeNotifier {
     await _bringUp(following);
   }
 
+  /// The puzzle shown before the one on the board in this run, or null.
+  Fen? get _before {
+    final run = _run;
+    final current = _up?.puzzle.fen;
+    if (run == null) return null;
+    final at = current == null ? run.seen.length : run.seen.indexOf(current);
+    return at > 0 ? run.seen[at - 1] : null;
+  }
+
+  bool get hasPrevious => _before != null;
+
+  /// Back to the puzzle shown before this one. An attempt already made at
+  /// it still stands, so trying it again writes nothing.
+  Future<void> previous() async {
+    final before = _before;
+    if (before == null) return;
+    _cancelTimer();
+    await _bringUp(before);
+  }
+
   /// Rates the puzzle on the board, 1 to 5; 0 takes the rating away. One
   /// star hides it from the queue from now on; a run never shows a puzzle
   /// twice, so the run under way is not changed.
@@ -290,7 +310,11 @@ final class PuzzleTrainer extends ChangeNotifier {
 
   void _putUp(Puzzle puzzle) {
     _cancelTimer();
-    _up = PuzzleUp.start(puzzle, at: _now());
+    _up = PuzzleUp.start(
+      puzzle,
+      at: _now(),
+      decided: _run?.outcomes[puzzle.fen],
+    );
     _run = _run?.shown(puzzle.fen);
     _session.showOnlyTo(const NodePath.root());
     // The engine would read the answer out; the user turns it back on.

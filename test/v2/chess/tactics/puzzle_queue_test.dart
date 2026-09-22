@@ -12,29 +12,35 @@ void main() {
       puzzlesOf(parseChapter(name: 'Default', text: text, game: 0).lines);
   final puzzles = read(tacticsSet);
 
+  // The tests below were written against a fortnight's window, which
+  // keeps the month-old #4 out of what they are about.
+  const fortnight = PuzzleFilter(days: 14);
+
   List<int> queued(PuzzleFilter filter, [List<Puzzle>? from]) => [
     for (final p in queueOf(from ?? puzzles, filter, today: tacticsToday))
       p.index,
   ];
 
-  test('the default queue: blunders, mistakes and custom puzzles from the '
-      'last fortnight, newest game first', () {
-    // #2 is an inaccuracy and #4 a month old; the custom puzzle has no date,
-    // which passes the window and sorts last.
-    expect(queued(PuzzleFilter.defaults), [1, 0, 3]);
+  test('the default queue: blunders, mistakes and custom puzzles of every '
+      'date, newest game first', () {
+    // #2 is an inaccuracy; #4 is a month old and still in, so an old set
+    // does not open empty; the custom puzzle has no date and sorts last.
+    expect(queued(PuzzleFilter.defaults), [1, 0, 4, 3]);
   });
 
   test('the window counts today as the first day and can be switched off', () {
-    const fortnight = PuzzleFilter();
     expect(queued(fortnight.copyWith(days: () => 3)), [1, 0, 3]);
     expect(queued(fortnight.copyWith(days: () => 2)), [1, 3]);
     expect(queued(fortnight.copyWith(days: () => null)), [1, 0, 4, 3]);
   });
 
   test('each mistake kind can be taken in or left out', () {
-    final all = PuzzleFilter(kinds: MistakeKind.values.toSet());
+    final all = PuzzleFilter(days: 14, kinds: MistakeKind.values.toSet());
     expect(queued(all), [1, 0, 2, 3]);
-    expect(queued(const PuzzleFilter(kinds: {MistakeKind.inaccuracy})), [2]);
+    expect(
+      queued(const PuzzleFilter(days: 14, kinds: {MistakeKind.inaccuracy})),
+      [2],
+    );
   });
 
   test('one-star puzzles are hidden until asked for, and reviewed ones on '
@@ -45,11 +51,15 @@ void main() {
         '[ReviewCount "1"]\n[SuccessCount "1"]\n[StarRating "1"]\n[FlawTags',
       ),
     );
-    expect(queued(PuzzleFilter.defaults, rated), [1, 3]);
-    expect(queued(const PuzzleFilter(hideOneStar: false), rated), [1, 0, 3]);
+    expect(queued(fortnight, rated), [1, 3]);
+    expect(queued(const PuzzleFilter(days: 14, hideOneStar: false), rated), [
+      1,
+      0,
+      3,
+    ]);
     expect(
       queued(
-        const PuzzleFilter(hideOneStar: false, unreviewedOnly: true),
+        const PuzzleFilter(days: 14, hideOneStar: false, unreviewedOnly: true),
         rated,
       ),
       [1, 3],
@@ -64,14 +74,19 @@ void main() {
       ),
     );
     expect(
-      queued(const PuzzleFilter(order: PuzzleOrder.leastReviewed), tried),
+      queued(
+        const PuzzleFilter(days: 14, order: PuzzleOrder.leastReviewed),
+        tried,
+      ),
       [0, 3, 1],
     );
-    expect(queued(const PuzzleFilter(order: PuzzleOrder.worstSuccess), tried), [
-      0,
-      3,
-      1,
-    ]);
+    expect(
+      queued(
+        const PuzzleFilter(days: 14, order: PuzzleOrder.worstSuccess),
+        tried,
+      ),
+      [0, 3, 1],
+    );
   });
 
   test('grouping by game plays one game\'s puzzles together, earliest move '
@@ -99,14 +114,22 @@ $move. e4 *
         game(4, '2026.09.21', 'one'),
       ].join('\n'),
     );
-    expect(queued(PuzzleFilter.defaults, set), [2, 0, 1]);
-    expect(queued(const PuzzleFilter(groupByGame: false), set), [0, 1, 2]);
+    expect(queued(fortnight, set), [2, 0, 1]);
+    expect(queued(const PuzzleFilter(days: 14, groupByGame: false), set), [
+      0,
+      1,
+      2,
+    ]);
   });
 
   test('random order is a shuffle of the same puzzles', () {
     final shuffled = queueOf(
       puzzles,
-      const PuzzleFilter(order: PuzzleOrder.random, groupByGame: false),
+      const PuzzleFilter(
+        days: 14,
+        order: PuzzleOrder.random,
+        groupByGame: false,
+      ),
       today: tacticsToday,
       random: Random(1),
     );
@@ -123,7 +146,7 @@ $move. e4 *
       days: null,
     );
     expect(PuzzleFilter.fromJson(chosen.toJson()), chosen);
-    expect(PuzzleFilter.fromJson(const {'order': 'random'}).days, 14);
+    expect(PuzzleFilter.fromJson(const {'order': 'random'}).days, isNull);
     expect(PuzzleFilter.fromJson('nonsense'), PuzzleFilter.defaults);
   });
 }

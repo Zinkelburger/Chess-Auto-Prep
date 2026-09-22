@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -23,27 +24,27 @@ void main() {
     tester,
   ) async {
     await toTactics(tester);
-    expect(find.text('Play tactics (3)'), findsOneWidget);
-    expect(find.text('3 of 5'), findsOneWidget);
-    expect(find.text('1 blunder, 1 mistake, 1 custom'), findsOneWidget);
+    expect(find.text('Play (4)'), findsOneWidget);
+    expect(find.text('4 of 5'), findsOneWidget);
+    expect(find.text('2 blunders, 1 mistake, 1 custom'), findsOneWidget);
     expect(find.text('1... f6?'), findsOneWidget);
     await tester.tap(find.text('Filters'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Inaccuracies ?!'));
     await tester.pumpAndSettle();
-    expect(find.text('Play tactics (4)'), findsOneWidget);
+    expect(find.text('Play (5)'), findsOneWidget);
     expect(w.settings.value.puzzles.kinds.length, 4);
   });
 
   testWidgets('play brings the Puzzle tab up over a hidden answer; Space '
       'shows it', (tester) async {
     await toTactics(tester);
-    await tester.tap(find.text('Play tactics (3)'));
+    await tester.tap(find.text('Play (4)'));
     await tester.pumpAndSettle();
     expect(w.session.source, tacticsRef);
     expect(find.text('Black to play · 2 moves'), findsOneWidget);
     expect(find.text('Find the best move.'), findsOneWidget);
-    expect(find.text('Puzzle 1 of 3'), findsOneWidget);
+    expect(find.text('Puzzle 1 of 4'), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.space);
     await tester.pumpAndSettle();
     expect(find.text('Solution: e5 Nf3 Nc6'), findsOneWidget);
@@ -63,5 +64,42 @@ void main() {
     await tester.pump(const Duration(seconds: 4));
     await tester.pumpAndSettle();
     expect(w.session.game, 1);
+  });
+
+  testWidgets('Tactics shows the puzzle and its game only; the engine and '
+      'the arrows wait for the answer, and Analyze opens the game', (
+    tester,
+  ) async {
+    await toTactics(tester);
+    expect(find.text('Puzzle'), findsOneWidget);
+    expect(find.text('Game'), findsOneWidget);
+    for (final builder in ['Train', 'Replies', 'Explorer', 'Moves']) {
+      expect(find.text(builder), findsNothing, reason: builder);
+    }
+    await tester.tap(find.text('Play (4)'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Toggle engine'), findsNothing);
+    expect(find.byTooltip('Previous puzzle (↑)'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
+    await tester.pumpAndSettle();
+    expect(
+      w.analysis.state,
+      isNot(isA<EngineFailed>()),
+      reason: 'E is not heard while the answer is hidden',
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Toggle engine'), findsOneWidget);
+    await tester.tap(find.text('Analyze'));
+    await tester.pumpAndSettle();
+    expect(w.analysis.state, isA<EngineFailed>(), reason: 'it was asked');
+    expect(find.text('Solution: e5 Nf3 Nc6'), findsNothing);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(w.trainer.up?.puzzle.index, 0);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    expect(w.trainer.up?.puzzle.index, 1);
+    expect(w.trainer.up?.finished, isFalse);
   });
 }

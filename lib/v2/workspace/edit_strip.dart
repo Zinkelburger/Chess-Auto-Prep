@@ -160,7 +160,9 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
       if (editing) ...[
         FilledButton.tonal(
           onPressed: () => widget.editing.value = false,
-          style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+          style: secondaryButtonStyle.merge(
+            FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+          ),
           child: const Text('Done'),
         ),
         const SizedBox(width: Space.s),

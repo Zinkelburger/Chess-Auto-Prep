@@ -28,6 +28,7 @@ import '../ui/app_action.dart';
 import '../ui/choice_dialog.dart';
 import '../ui/error_bar.dart';
 import '../ui/listening_state.dart';
+import '../ui/pane_tabs.dart';
 import '../ui/theme.dart';
 import '../workspace/chapter_commands.dart';
 import '../workspace/copy_name_dialog.dart';
@@ -111,10 +112,18 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   /// Whether the edit strip is open. The strip's own Done closes it.
   final _editing = ValueNotifier(false);
 
-  /// The reading card's tabs: which are open and which is up. Window state
-  /// like [_editing], kept whichever mode is showing and lost with the
-  /// window, as the old viewer's were.
-  final _tabs = newWorkspaceTabs();
+  /// The reading card's tabs of each mode: which are open and which is up.
+  /// Each mode starts with its own — the builder its four, Tactics the
+  /// puzzle and its game — and keeps what the user did to them while the
+  /// window lasts, as the old viewer's did.
+  final _tabsByMode = <Mode, PaneTabs<WorkspaceTab>>{};
+
+  PaneTabs<WorkspaceTab> get _tabs =>
+      _tabsByMode[_requests.mode] ??= switch (_requests.mode) {
+        Mode.repertoires => newWorkspaceTabs(),
+        Mode.pgnViewer || Mode.study => readingTabs(),
+        Mode.tactics => puzzleTabs(),
+      };
 
   /// The columns and their widths. The user drags the dividers; the list
   /// column goes when hidden and the outline column comes and goes with the
@@ -151,7 +160,9 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   @override
   void dispose() {
     _editing.dispose();
-    _tabs.dispose();
+    for (final tabs in _tabsByMode.values) {
+      tabs.dispose();
+    }
     _panes.dispose();
     super.dispose();
   }
@@ -206,6 +217,14 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     );
   }
 
+  /// The solved puzzle's game with the engine on: the Game tab, not
+  /// another mode.
+  void _analyze() {
+    if (!mounted) return;
+    _tabs.show(WorkspaceTab.moves);
+    unawaited(widget.analysis.enable());
+  }
+
   /// Space and ↓ are the puzzle's while one is on the board, and the
   /// document's otherwise.
   void _space() {
@@ -215,6 +234,49 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   void _down() => widget.trainer.up == null
       ? widget.session.nextGame()
       : unawaited(widget.trainer.next());
+
+  void _up() => widget.trainer.up == null
+      ? widget.session.previousGame()
+      : unawaited(widget.trainer.previous());
+
+  /// Tactics is for solving: the board, the puzzle and the game it came
+  /// from. Its menu has what a solver reaches for and none of the file and
+  /// repertoire work the other modes do on the same board.
+  List<AppAction> _tacticsActions() {
+    final session = widget.session;
+    final analysis = widget.analysis;
+    final open = session.chapter != null;
+    final hidden = session.shownTo != null;
+    return [
+      ...puzzleActions(),
+      AppAction(
+        'Flip board',
+        open ? session.flip : null,
+        shortcut: 'F',
+        group: 'Board',
+      ),
+      AppAction(
+        analysis.enabled ? 'Engine off' : 'Engine on',
+        analysis.enabled || !hidden
+            ? () => unawaited(
+                analysis.enabled ? analysis.disable() : analysis.enable(),
+              )
+            : null,
+        shortcut: 'E',
+        group: 'Board',
+      ),
+      AppAction(
+        'Copy FEN',
+        open
+            ? () => unawaited(
+                Clipboard.setData(ClipboardData(text: session.fen.value)),
+              )
+            : null,
+        group: 'Board',
+      ),
+      ...tabActions(_tabs),
+    ];
+  }
 
   void _toggleList() {
     if (!mounted) return;
@@ -239,51 +301,55 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
 
   /// Everything the Actions menu offers now: the mode's own doors first,
   /// then what can be done to the document, whichever mode opened it.
-  List<AppAction> _actions() => [
-    AppAction(
-      'Open PGN file…',
-      () => unawaited(_requests.openPgnFile()),
-      shortcut: 'Ctrl+O',
-    ),
-    if (_requests.mode == Mode.repertoires)
-      AppAction(
-        'Paste PGN',
-        () => unawaited(_requests.pasteRepertoire()),
-        shortcut: 'Ctrl+V',
-      )
-    else
-      AppAction(
-        'Close file',
-        widget.viewer.file == null
-            ? null
-            : () => unawaited(_requests.closeFile()),
-      ),
-    ...documentActions(
-      session: widget.session,
-      saver: widget.saver,
-      analysis: widget.analysis,
-      editing: _editing,
-      onSaveCopy: () => unawaited(_saveCopy()),
-    ),
-    AppAction(
-      'Next gap',
-      (widget.gaps.walk?.gaps ?? const []).isEmpty ? null : widget.gaps.nextGap,
-      group: 'Repertoire',
-    ),
-    if (widget.session.chapter case final chapter? when chapter.game == null)
-      AppAction(
-        chapter.side == Side.white ? 'Play as Black' : 'Play as White',
-        () => setSide(widget.session, chapter.side.opposite),
-        group: 'Repertoire',
-      ),
-    AppAction(
-      'Fill gaps from here…',
-      widget.fill.canStart ? () => unawaited(_fill()) : null,
-      group: 'Repertoire',
-    ),
-    ...puzzleActions(),
-    ...tabActions(_tabs),
-  ];
+  List<AppAction> _actions() => _requests.mode == Mode.tactics
+      ? _tacticsActions()
+      : [
+          AppAction(
+            'Open PGN file…',
+            () => unawaited(_requests.openPgnFile()),
+            shortcut: 'Ctrl+O',
+          ),
+          if (_requests.mode == Mode.repertoires)
+            AppAction(
+              'Paste PGN',
+              () => unawaited(_requests.pasteRepertoire()),
+              shortcut: 'Ctrl+V',
+            )
+          else
+            AppAction(
+              'Close file',
+              widget.viewer.file == null
+                  ? null
+                  : () => unawaited(_requests.closeFile()),
+            ),
+          ...documentActions(
+            session: widget.session,
+            saver: widget.saver,
+            analysis: widget.analysis,
+            editing: _editing,
+            onSaveCopy: () => unawaited(_saveCopy()),
+          ),
+          AppAction(
+            'Next gap',
+            (widget.gaps.walk?.gaps ?? const []).isEmpty
+                ? null
+                : widget.gaps.nextGap,
+            group: 'Repertoire',
+          ),
+          if (widget.session.chapter case final chapter?
+              when chapter.game == null)
+            AppAction(
+              chapter.side == Side.white ? 'Play as Black' : 'Play as White',
+              () => setSide(widget.session, chapter.side.opposite),
+              group: 'Repertoire',
+            ),
+          AppAction(
+            'Fill gaps from here…',
+            widget.fill.canStart ? () => unawaited(_fill()) : null,
+            group: 'Repertoire',
+          ),
+          ...tabActions(_tabs),
+        ];
 
   /// What can be done to the puzzle on the board, while one is.
   List<AppAction> puzzleActions() {
@@ -300,6 +366,14 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         up.finished || up.decided != null ? 'Next puzzle' : 'Skip puzzle',
         () => unawaited(widget.trainer.next()),
         shortcut: '↓',
+        group: 'Tactics',
+      ),
+      AppAction(
+        'Previous puzzle',
+        widget.trainer.hasPrevious
+            ? () => unawaited(widget.trainer.previous())
+            : null,
+        shortcut: '↑',
         group: 'Tactics',
       ),
       AppAction('End session', widget.trainer.end, group: 'Tactics'),
@@ -354,6 +428,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         unawaited(_palette()),
     const SingleActivator(LogicalKeyboardKey.space): _space,
     const SingleActivator(LogicalKeyboardKey.arrowDown): _down,
+    const SingleActivator(LogicalKeyboardKey.arrowUp): _up,
   };
 
   /// The mode's list, with the `«` that hides it in its top right corner:
@@ -474,7 +549,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
           ? (path) => quizMenuItems(widget.session, path)
           : null,
       onBoardMove: widget.trainer.play,
-      puzzle: PuzzlePane(trainer: widget.trainer),
+      puzzle: PuzzlePane(trainer: widget.trainer, onAnalyze: _analyze),
       onExplorerGame: (game) => unawaited(
         _requests.openExplorerGame(
           game,
@@ -482,6 +557,8 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
           ply: widget.explorer.ply,
         ),
       ),
+      header: _requests.mode != Mode.tactics,
+      gameCounter: _requests.mode != Mode.tactics,
       boardClaim: widget.lineTrainer.board,
       trainTab: (_) => TrainPane(trainer: widget.lineTrainer),
     ),
