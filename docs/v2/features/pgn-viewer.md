@@ -189,5 +189,10 @@ reach the same explorer; the tab bar disappears entirely during solitaire.
 - **One Actions menu** in the top bar, the same shape whatever mode opened the document, with Ctrl+K
   as a typeable palette over the same list.
 - **Solitaire is an action of the viewer**, not a mode. **A file outside Documents is copied into
-  `pgn_collections` on open** (default on; a setting later). Autosave stays on; Scid export, Tree,
-  Explorer and paging remain open questions.
+  `pgn_collections` on open** (default on; a setting later). Autosave stays on; Scid export and
+  paging remain open questions.
+- **`Tree` and `Database explorer` are one `Explorer` tab** of the reading card (owner, 2026-09-22;
+  `workspace.md`). The old `Tree` tab's merged opening tree of the open file is the `This file`
+  source behind the tab's gear, beside `My games`, `Masters`, `Lichess` and `TWIC`; the old app's
+  own note that both tabs "reach the same explorer" is taken at its word. `Collection` and
+  `Filter` are unchanged by this.

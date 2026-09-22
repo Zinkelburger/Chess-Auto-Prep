@@ -6,11 +6,12 @@ import 'shell.dart';
 
 /// The row over the window: the mode menu and, beside it, the Actions menu
 /// — one menu of everything that can be done now, the same shape in every
-/// mode. Both sit at the left, where the pointer already is, and the rest
-/// of the row is empty. While the list pane is hidden, the `»` that brings
-/// it back sits before them, where the pane would be; shown, the pane
-/// carries its own `«` in its top right corner, so the toggle is always at
-/// the pane's edge.
+/// mode. Both sit at the left, where the pointer already is; the settings
+/// gear sits alone at the right end, where the old app kept it (owner,
+/// 2026-09-22), and the rest of the row is empty. While the list pane is
+/// hidden, the `»` that brings it back sits before the menus, where the
+/// pane would be; shown, the pane carries its own `«` in its top right
+/// corner, so the toggle is always at the pane's edge.
 class TopBar extends StatelessWidget {
   const TopBar({
     super.key,
@@ -39,10 +40,16 @@ class TopBar extends StatelessWidget {
       child: Row(
         children: [
           if (!listShown) ListToggle(shown: false, onPressed: onToggleList),
-          _ModeMenu(mode: mode, onMode: onMode, onSettings: onSettings),
+          _ModeMenu(mode: mode, onMode: onMode),
           const SizedBox(width: Space.s),
           _ActionsMenu(actions: actions),
           const Spacer(),
+          IconButton(
+            icon: const Icon(Icons.settings_outlined, size: IconSize.action),
+            tooltip: 'Settings (Ctrl+,)',
+            onPressed: onSettings,
+            visualDensity: VisualDensity.compact,
+          ),
         ],
       ),
     );
@@ -50,10 +57,10 @@ class TopBar extends StatelessWidget {
 }
 
 /// Modes not yet in v2 are listed but disabled, so the menu shows the whole
-/// product from day one and each step turns one entry on. There is no
-/// builder entry: Repertoires is the builder (owner, 2026-09-21).
+/// product from day one and each step turns one entry on. The library and
+/// the builder are one mode, named for the building (owner, 2026-09-22).
 const _modes = [
-  'Repertoires',
+  'Repertoire builder',
   'PGN Viewer',
   'Repertoire trainer',
   'Study',
@@ -65,18 +72,13 @@ const _modes = [
   'Bughouse lab',
 ];
 
-/// Under the modes, after a line, the settings: not a mode, but the one
-/// other place the app has.
+/// The modes, and nothing else: the settings are the gear at the other end
+/// of the row.
 class _ModeMenu extends StatelessWidget {
-  const _ModeMenu({
-    required this.mode,
-    required this.onMode,
-    required this.onSettings,
-  });
+  const _ModeMenu({required this.mode, required this.onMode});
 
   final Mode mode;
   final ValueChanged<Mode> onMode;
-  final VoidCallback onSettings;
 
   /// The mode this entry switches to, or null when `v2` does not have it yet
   /// and the entry is there only to show that the product does.
@@ -98,16 +100,6 @@ class _ModeMenu extends StatelessWidget {
                 : const SizedBox(width: IconSize.menu),
             child: Text(name),
           ),
-        const Divider(height: 1),
-        MenuItemButton(
-          onPressed: onSettings,
-          leadingIcon: const SizedBox(width: IconSize.menu),
-          trailingIcon: Text(
-            'Ctrl+,',
-            style: Theme.of(context).textTheme.labelSmall,
-          ),
-          child: const Text('Settings…'),
-        ),
       ],
       builder: (context, controller, _) => TextButton.icon(
         onPressed: controller.isOpen ? controller.close : controller.open,

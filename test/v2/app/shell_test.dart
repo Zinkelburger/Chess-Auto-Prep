@@ -379,7 +379,7 @@ void main() {
 
   testWidgets('Actions sits beside the mode menu, at the left', (tester) async {
     await pump(tester);
-    final mode = tester.getTopRight(find.text('Repertoires').first);
+    final mode = tester.getTopRight(find.text('Repertoire builder').first);
     final actions = tester.getTopLeft(find.text('Actions'));
     expect(actions.dx, greaterThan(mode.dx));
     expect(actions.dx, lessThan(paneMinWidth * 2));

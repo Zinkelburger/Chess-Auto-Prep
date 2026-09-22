@@ -1,4 +1,4 @@
-# Repertoires
+# Repertoire builder
 
 Status: corrected by the owner (2026-09-21: this mode is the builder; decisions below)
 Old code (oracle only): `lib/screens/repertoire_library_screen.dart`, `lib/features/repertoires/`,
@@ -12,7 +12,7 @@ repertoire chapter open in the workspace is editable, and reading one is the PGN
 leave with a chapter that answers more of what opponents actually play.
 
 ## Screen
-Reached from the mode menu under **Library → Repertoires**, and pushed as a picker by any mode that
+Reached from the mode menu as **Repertoire builder** (owner, 2026-09-22: the library and the builder are one mode, named for the building), and pushed as a picker by any mode that
 needs a repertoire before it can work (Builder, Trainer, generation). No screenshot.
 
 - **Toolbar heading** — `Your repertoires`, or `Repertoire recovery` in the recovery view.
@@ -141,7 +141,7 @@ after the file with no chance to correct it; a row tap opens the folder view her
 picker.
 
 ## Decisions (owner, 2026-09-21)
-- **No Repertoire builder mode.** The old builder's screen folds into this mode; `builder.md` is
+- **No separate builder mode.** The old builder's screen folds into this mode, which carries its name; `builder.md` is
   kept only as the oracle for the old outline and save behaviour. No Build switch: a move played on a
   repertoire chapter is saved, as it is today. The folder view is the outline column, not a screen.
 - **One loop, as Chessbook does it.** The reading card gets a tab strip under the engine bar, `Moves`
@@ -176,5 +176,24 @@ picker.
   menu's `Move to chapter…` does the first by name. The target file is written first, against the
   revision it was read at, and the lines leave the open chapter only after that write landed.
 - `Fill gaps from here…` sits disabled in the Actions menu until generation exists (`generation.md`).
+
+## Decisions (owner, 2026-09-22)
+- **The mode is `Repertoire builder`.** The library and the builder are one mode, named for the
+  building. The settings gear is in the top bar's right corner, not in the mode menu.
+- **Import has no form.** The old Create dialog is dropped whole. `Open PGN file…` picks a file and
+  the repertoire appears in the list named after the file (the old app's naming rules), opened on
+  its first chapter; the name is changed with the list's own rename. The side is the existing
+  `Which side is <chapter> for?` question when the file carries no `// Color:` line. Paste is Ctrl+V
+  on the library and a file dropped on the window does the same as `Open PGN file…`. Variations
+  become lines and a course of several chapters becomes several chapter files, silently, as the old
+  import did. `Create new repertoire` is the one-field name dialog `New chapter` already uses.
+- **The Explorer tab** (`workspace.md`) is where the user looks up what masters and Lichess play
+  before choosing their own move; Maia stays the only source of shares, gaps and coverage.
+- **Expectimax is a column of the Replies tab at our move.** `Our candidates` shows, beside the
+  share, the expectimax value a run stored for that move, read from the `[%expectimax]` and
+  `[%score]` tokens in the move's comment; a move no run reached reads a muted `not in tree`. The
+  values ride in the comments, so they follow a line dragged from a draft into a real chapter.
+  Nothing is computed while browsing (owner, 2026-08-21); `Fill gaps from here…` is the one way
+  to get a value.
 - Left for later: training rows do not follow a line that changes chapter; the model's answers are
   cached in memory only; the trainer must skip draft chapters.

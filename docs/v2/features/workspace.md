@@ -188,10 +188,31 @@ Quirks worth a verdict:
   move" has no key on any of its three screens. Its cache never expiring or reaching disk is
   deliberate — see **Explorer offline** above.
 
+## Decisions (owner, 2026-09-22)
+- **Keeping the UI clean.** A new capability is a tab on the reading card or a source behind an
+  existing tab's gear, never a new dialog, dock or top-level control. Each tab owns at most one
+  control at the strip's right edge (`Next gap` on Replies, the gear on Explorer); configuration
+  lives behind it, never on the page. A dialog asks one question and closes; anything with more
+  than three fields is wrong. The old app's import form (a tagline, a name, a colour switch, a
+  paste box and two paths in one dialog) is the example of what not to build.
+- **The explorer is a tab**, as lila's book button swaps the move list for the explorer in the
+  same column: `Moves | Replies | Explorer`. The only new control on screen is the tab. Its gear,
+  at the strip's right edge, holds the source and that source's chips: `Masters`, `Lichess`
+  (speed and rating chips), `TWIC` (`Classical OTB only`; the one source that works offline, and
+  only with a local master database), `This file` (the games the viewer has open) and `My games`
+  (the player-analysis corpus). Under the strip one muted line summarises the choice
+  (`Lichess · blitz rapid classical · 2000+`) and clicking it opens the gear. The body is the
+  table — move (ticked when the chapter plays it), games and share, the white/draw/black bar, a
+  `Σ` totals row — and the games list under it, which opens a game in the PGN Viewer at that
+  position. Clicking a row plays the move; on a repertoire chapter playing saves, so there is no
+  `Add to repertoire`. No sorting. The old viewer's `Tree` tab is the `This file` source, not a
+  tab of its own. Offline the Lichess sources say so with `Try again`, as decided above.
+- **The settings gear sits at the right end of the top bar**, the old app's place, and is the one
+  way in besides Ctrl+,; the mode menu lists modes only.
+- **No eval bar** (question 1; the viewer's decision of 2026-09-21). **One move list** for reading
+  and editing, the reading card (question 2). **Esc cancels a promotion** (question 6).
+
 ## Questions for the owner
-1. Should the eval bar lead, showing a stored `[%eval]` when the engine is off?
-2. One move list for reading and editing, or does reading keep folding and the 900px column?
-3. Should the workspace say so when a played move already exists or forks a line?
-4. Should `[%…]` tokens keep their place in a comment instead of being hoisted to the front?
-5. Should the explorer expose average rating, performance and last-played year, and sort?
-6. Is promotion cancellable with Esc?
+1. Should the workspace say so when a played move already exists or forks a line?
+2. Should `[%…]` tokens keep their place in a comment instead of being hoisted to the front?
+3. Should the explorer table carry lila's average-rating column beside the bar?

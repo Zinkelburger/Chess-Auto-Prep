@@ -165,3 +165,16 @@ download or verification pass is silent; nothing under `.cap-generation/` is cle
   blunder marked `?`, with a hover board of the final position, and are accepted like any line.
 - Retained run directories, the model-games sidecars and the `.cap-generation/` layout are the old
   app's; whether v2 keeps them is decided when the search is built.
+
+## Decisions (owner, 2026-09-22)
+- **The launch is one small dialog** from `Fill gaps from here…`: opponent rating, how deep, cover
+  one in N games, `Prefer traps`, and the source (`Engine + human model` / `ChessDB mainline book`),
+  with one filled `Fill` button. The run reports as one line in the reading card while the engine
+  pane says it is paused; there is no overlay, results tab or jobs pane.
+- **The run writes its values into the draft.** Every move of the draft chapter carries
+  `[%expectimax]` and `[%score]` in its comment, which is what the Replies tab's expectimax
+  column reads (`repertoires.md`). The tree file stays under `.cap-generation/` for a later run to
+  extend; it is not what the UI reads.
+- **The search core exists** (`lib/v2/chess/generation/`, oracle-tested against the old app).
+  What the step builds is the wiring: a Stockfish evaluation source with the shared eval cache,
+  the run off the UI isolate, progress and cancel, and the draft-chapter writer.
