@@ -68,8 +68,19 @@ class AgentIntegrateTests(unittest.TestCase):
         self.assertEqual((self.main / 'user.txt').read_text(), 'unfinished user edit\n')
         self.assertEqual((self.main / 'untracked.txt').read_text(), 'unfinished new file\n')
         self.assertIn('not part of this backup', result.stdout)
-        self.assertEqual(self.integrate().returncode, 0)  # retry is safe
+        self.assertFalse(self.task.exists())
+        self.assertNotIn('codex/task', git(self.main, 'branch', '--list', 'codex/task'))
+        self.assertEqual(git(self.remote, 'branch', '--list', 'codex/task'), '')
+
+    def test_keep_leaves_task_and_retry_is_safe(self):
+        result = self.integrate('--keep')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(self.task.exists())
+        self.assertEqual(self.remote_head('codex/task'), self.head)
+        self.assertEqual(self.integrate('--keep').returncode, 0)
         self.assertEqual(self.integrate('--verify').returncode, 0)
+        self.assertEqual(self.integrate().returncode, 0)
+        self.assertFalse(self.task.exists())
 
     def test_overlapping_main_edit_is_not_stashed_or_overwritten(self):
         (self.main / 'task.txt').write_text('unfinished overlapping edit\n')
@@ -105,6 +116,7 @@ class AgentIntegrateTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((self.main / 'other.txt').read_text(), 'another completed task\n')
         self.assertEqual(self.remote_head('main'), self.base)
+        self.assertFalse(self.task.exists())
 
     def test_failed_backup_keeps_local_integration_and_remote_history(self):
         git(self.task, 'switch', '-c', 'codex/other')
@@ -115,6 +127,8 @@ class AgentIntegrateTests(unittest.TestCase):
         result = self.integrate()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('on local main but its backup push failed', result.stderr)
+        self.assertTrue(self.task.exists())
+        self.assertEqual(self.remote_head('codex/task'), self.head)
         self.assertEqual(git(self.main, 'rev-parse', 'HEAD'), self.head)
         self.assertEqual(self.remote_head('backup/local-main'), ahead)
         self.assertEqual(self.remote_head('main'), self.base)
