@@ -39,6 +39,34 @@ int? headerWidth(List<CsvRecord> records) {
   return null;
 }
 
+/// How many columns a data [record] of the CSV [file] should have, given
+/// the width its header declares.
+///
+/// A review row says for itself: it ends in `true` or `false` when it has
+/// the exclusion column, which is how the old app tells an 11-column row
+/// from a 10-column one whatever the header says. Every other row has the
+/// header's width.
+int? rowWidth(String file, CsvRecord record, int? header) {
+  if (file != reviewsFile) return header;
+  final last = record.fields.last;
+  return last == 'true' || last == 'false' ? 11 : 10;
+}
+
+/// Whether [cells] of the CSV [file] are a whole row: a review row may be
+/// any of its three widths.
+bool isWholeRow(String file, List<String> cells, int? header) =>
+    file == reviewsFile
+    ? const {8, 10, 11}.contains(cells.length)
+    : cells.length == header;
+
+/// The header the file [file] is written with.
+String headerOf(String file) => switch (file) {
+  reviewsFile => reviewsHeader,
+  streaksFile => streaksHeader,
+  historyFile => historyHeader,
+  _ => throw ArgumentError.value(file, 'file', 'not a training CSV'),
+};
+
 /// The cells of a record that names a chapter, or null for the header and
 /// for blank lines. [width] is how many columns the record should have; null
 /// when nothing says, and the cells are taken as they are.

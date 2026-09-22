@@ -279,8 +279,10 @@ _Plan _planRecords(
   final out = StringBuffer();
   var rows = 0;
   for (final record in records) {
-    final cells = dataCells(record, width);
-    if (cells != null && cells.length != width) {
+    final cells = record.isBlank
+        ? null
+        : dataCells(record, rowWidth(name, record, width));
+    if (cells != null && !isWholeRow(name, cells, width)) {
       return _Refused(Malformed(name, record.line));
     }
     final text = cells == null

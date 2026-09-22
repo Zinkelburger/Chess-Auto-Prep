@@ -197,6 +197,25 @@ void main() {
     );
   });
 
+  test('an 11-column review under an older header moves whole', () async {
+    // Rows of each width under the 10-column header of an older version:
+    // the row says its own width, as the old app reads it.
+    const olderHeader =
+        'repertoire_id,line_id,line_name,difficulty,interval_days,due_utc,'
+        'last_rating,last_reviewed_utc,pass_count,fail_count';
+    final ten =
+        '${kid.path},line_10,Ten,2.5,6,2026-09-20T00:00:00Z,good,'
+        '2026-09-14T00:00:00Z,3,1';
+    write(_reviews, '$olderHeader\n${_review(kid.path)}\n$ten\n');
+    final renamed = fixture.ref('repertoires/KID/Classical.pgn');
+    expect((await records.repoint(kid, renamed) as Repointed).rowsChanged, 2);
+    expect(
+      read(_reviews),
+      '$olderHeader\n${_review(renamed.path)}\n'
+      '${ten.replaceFirst(kid.path, renamed.path)}\n',
+    );
+  });
+
   test('a quote inside an unquoted path is a character, not a field', () async {
     final quoted = fixture.ref('repertoires/KID/My "best line.pgn');
     write(

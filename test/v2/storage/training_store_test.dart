@@ -91,6 +91,22 @@ void main() {
     expect(loaded.mistakes.single.played, 'd4');
   });
 
+  test('the log read again once it has grown, by either app', () async {
+    await file(
+      attemptsFile,
+    ).writeAsString('${encodeAttempt(_attempt(correct: false))}\n');
+    expect((await read({_kid})).mistakes, hasLength(1));
+    await store.logAttempt(_attempt(correct: false));
+    expect((await read({_kid})).mistakes, hasLength(2));
+    // The old app's own answer, written behind this store's back.
+    await file(attemptsFile).writeAsString(
+      '${encodeAttempt(_attempt(correct: false))}\n',
+      mode: FileMode.append,
+    );
+    expect((await read({_kid})).mistakes, hasLength(3));
+    expect((await read({_benko})).mistakes, isEmpty);
+  });
+
   test('a row that is not one makes the file unreadable, by line', () async {
     await file(reviewsFile).writeAsString(
       '$reviewsHeader\n${_review(_kid, 'line_1')}\n$_kid,line_2,x,y\n',
@@ -162,6 +178,22 @@ void main() {
         '2026-09-14T00:00:00.000Z,3,1,false\n',
       ),
     );
+  });
+
+  test('a write under an older header writes the current one', () async {
+    const eightColumns =
+        'repertoire_id,line_id,line_name,difficulty,interval_days,due_utc,'
+        'last_rating,last_reviewed_utc';
+    const eight = '$_benko,line_8,Eight,2.50,1.00,,good,';
+    await file(
+      reviewsFile,
+    ).writeAsString('$eightColumns\n$eight\n${_review(_kid, 'line_1')}\n');
+    final before = (await read({_kid})).reviews[_mainline];
+    await store.write(reviews: [(before: before, after: rated(before))]);
+    final lines = await file(reviewsFile).readAsLines();
+    expect(lines.first, reviewsHeader);
+    expect(lines[1], eight, reason: 'an older row keeps its bytes');
+    expect((await read({_kid, _benko})).reviews.length, 2);
   });
 
   test('keeps what the file held first, once', () async {

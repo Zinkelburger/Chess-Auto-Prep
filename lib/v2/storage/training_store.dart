@@ -52,16 +52,21 @@ abstract interface class ProgressFiles {
 }
 
 final class TrainingStore implements ProgressFiles {
-  const TrainingStore(this.documents);
+  TrainingStore(this.documents);
 
   /// The folder the four files sit in, beside `repertoires/`.
   final Directory documents;
 
+  /// The wrong answers of the whole log as last read, with the size and
+  /// time the file had then. The log only grows, and every chapter opened
+  /// reads it, so it is read again only when the file changed.
+  ({int size, DateTime modified, List<Attempt> wrong})? _log;
+
   @override
   Future<ProgressRead> read(Set<String> sources) async {
     try {
-      final reviews = await _rows(reviewsFile, _reviewCodec);
-      final streaks = await _rows(streaksFile, _streakCodec);
+      final reviews = await _rows(_reviewCodec);
+      final streaks = await _rows(_streakCodec);
       // A key written twice is read as its first row, the one a write
       // replaces.
       final byLine = <LineKey, Review>{};
@@ -93,12 +98,10 @@ final class TrainingStore implements ProgressFiles {
     List<HistoryRow> history = const [],
   }) => _locked('write the training progress', () async {
     final planned = <_Planned>[
-      if (reviews.isNotEmpty)
-        await _merged(reviewsFile, reviewsHeader, reviews, _reviewCodec),
-      if (streaks.isNotEmpty)
-        await _merged(streaksFile, streaksHeader, streaks, _streakCodec),
+      if (reviews.isNotEmpty) await _merged(reviews, _reviewCodec),
+      if (streaks.isNotEmpty) await _merged(streaks, _streakCodec),
       if (history.isNotEmpty)
-        await _appended(historyFile, historyHeader, [
+        await _appended(historyFile, [
           for (final row in history) encodeCsvRecord(encodeHistory(row)),
         ]),
     ];
@@ -112,6 +115,9 @@ final class TrainingStore implements ProgressFiles {
     return const ProgressWritten();
   });
 
+  /// The file is replaced whole rather than appended to in place: an
+  /// append cut short leaves half a line, which the old app will not read
+  /// past.
   @override
   Future<ProgressWrite> logAttempt(Attempt attempt) =>
       _locked('log an answer', () async {
@@ -164,7 +170,8 @@ final class TrainingStore implements ProgressFiles {
 
   /// Every row of the CSV [name]; a row that is not one makes the whole file
   /// unreadable rather than silently missing.
-  Future<List<T>> _rows<T, K>(String name, _Codec<T, K> codec) async {
+  Future<List<T>> _rows<T, K>(_Codec<T, K> codec) async {
+    final name = codec.file;
     final records = await _records(name, await _text(name));
     final header = headerWidth(records);
     return [
@@ -178,23 +185,48 @@ final class TrainingStore implements ProgressFiles {
   /// cannot read is passed over: the log is the old app's too, and one torn
   /// line must not hide the rest.
   Future<List<Attempt>> _mistakes(Set<String> sources) async {
-    final text = await _text(attemptsFile) ?? '';
+    final wrong = await _wrongAnswers();
     return [
-      for (final line in const LineSplitter().convert(text))
-        if (decodeAttempt(line) case final a?
-            when !a.correct && sources.contains(a.key.source))
-          a,
+      for (final a in wrong)
+        if (sources.contains(a.key.source)) a,
     ];
   }
 
-  /// [name] with each of [changes] in place of the row it names, or added at
-  /// the end when the file has no such row.
+  Future<List<Attempt>> _wrongAnswers() async {
+    final file = File(_path(attemptsFile));
+    final stat = await file.stat();
+    if (stat.type == FileSystemEntityType.notFound) return const [];
+    final log = _log;
+    if (log != null &&
+        log.size == stat.size &&
+        log.modified == stat.modified) {
+      return log.wrong;
+    }
+    // Stamped with the size and time from before the read: a write in
+    // between makes the next read look again rather than miss it.
+    final wrong = [
+      for (final line in const LineSplitter().convert(
+        await _text(attemptsFile) ?? '',
+      ))
+        if (decodeAttempt(line) case final a? when !a.correct) a,
+    ];
+    _log = (size: stat.size, modified: stat.modified, wrong: wrong);
+    return wrong;
+  }
+
+  /// The file [codec] reads with each of [changes] in place of the row it
+  /// names, or added at the end when the file has no such row.
+  ///
+  /// Rows are written in the current width, so an older header is written
+  /// as the current one, as the old app writes it: a chapter move reads the
+  /// rows by the header's width, and 11 columns under an 8-column header
+  /// would be read as a path with a comma in it.
   Future<_Planned> _merged<T, K>(
-    String name,
-    String header,
     List<Change<T>> changes,
     _Codec<T, K> codec,
   ) async {
+    final name = codec.file;
+    final header = headerOf(name);
     final original = await _text(name);
     final records = await _records(name, original);
     final width = headerWidth(records);
@@ -205,8 +237,13 @@ final class TrainingStore implements ProgressFiles {
       final row = cells == null ? null : codec.decode(cells);
       if (cells != null && row == null) throw _Unreadable(name, record.line);
       final change = row == null ? null : wanted.remove(codec.key(row));
+      final text = cells == null
+          ? (record.isBlank ? record.source : header)
+          : change == null
+          ? record.source
+          : _replaced(row, change, codec);
       out
-        ..write(change == null ? record.source : _replaced(row, change, codec))
+        ..write(text)
         ..write(record.terminator);
     }
     for (final change in wanted.values) {
@@ -227,11 +264,8 @@ final class TrainingStore implements ProgressFiles {
     return after;
   }
 
-  Future<_Planned> _appended(
-    String name,
-    String header,
-    List<String> rows,
-  ) async {
+  Future<_Planned> _appended(String name, List<String> rows) async {
+    final header = headerOf(name);
     final original = await _text(name);
     final was = original == null || original.trim().isEmpty
         ? '$header\n'
@@ -254,44 +288,36 @@ final class TrainingStore implements ProgressFiles {
 
 /// How the rows of one CSV are read, told apart and written.
 final class _Codec<T, K> {
-  const _Codec(this.decode, this.encode, this.key, this.width);
+  const _Codec(this.file, this.decode, this.encode, this.key);
 
+  final String file;
   final T? Function(List<String>) decode;
   final List<String> Function(T) encode;
   final K Function(T) key;
 
-  /// How many columns [record] has, given the header's count, or null when
-  /// the file has no header and nothing else can say.
-  final int? Function(CsvRecord record, int? header) width;
-
   String row(T value) => encodeCsvRecord(encode(value));
 
-  /// The cells of a data row, or null for the header and blank lines.
-  List<String>? cells(CsvRecord record, int? header) =>
-      dataCells(record, record.isBlank ? null : width(record, header));
+  /// The cells of a data row, or null for the header and blank lines. The
+  /// width rule is the one a chapter move reads the file with too.
+  List<String>? cells(CsvRecord record, int? header) => dataCells(
+    record,
+    record.isBlank ? null : rowWidth(file, record, header),
+  );
 }
 
 const _reviewCodec = _Codec<Review, LineKey>(
+  reviewsFile,
   decodeReview,
   encodeReview,
   _reviewKey,
-  _reviewWidth,
 );
 
 const _streakCodec = _Codec<MoveStreak, StreakKey>(
+  streaksFile,
   decodeStreak,
   encodeStreak,
   _streakKey,
-  _headerWidth,
 );
-
-/// A review row ends in `true` or `false` when it has the exclusion column,
-/// which is how the old app tells an 11-column row from a 10-column one in a
-/// file whose header is older than either.
-int _reviewWidth(CsvRecord record, int? header) =>
-    record.fields.last == 'true' || record.fields.last == 'false' ? 11 : 10;
-
-int? _headerWidth(CsvRecord record, int? header) => header;
 
 LineKey _reviewKey(Review review) => review.key;
 
