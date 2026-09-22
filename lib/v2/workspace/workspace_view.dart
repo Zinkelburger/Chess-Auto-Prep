@@ -70,7 +70,7 @@ class WorkspaceView extends StatelessWidget {
 
   /// Which of the card's tabs are open and which is up. The shell owns it,
   /// as it owns [editing]: the keys and the Actions menu turn it too.
-  final PaneTabs tabs;
+  final PaneTabs<WorkspaceTab> tabs;
 
   /// For what the board draws: the coordinates, today.
   final SettingsStore settings;
@@ -171,33 +171,30 @@ class _Tabbed extends StatelessWidget {
   final GapHunt gaps;
   final Explorer explorer;
   final GameFetcher games;
-  final PaneTabs tabs;
+  final PaneTabs<WorkspaceTab> tabs;
   final MoveMenu? moveMenu;
   final ValueChanged<ExplorerGame>? onExplorerGame;
 
-  Widget _body(String id) {
-    if (id == WorkspaceTab.moves.id) {
-      return MoveTreeView(session: session, moveMenu: moveMenu);
-    }
-    if (id == WorkspaceTab.replies.id) {
-      return RepliesPane(session: session, replies: replies, gaps: gaps);
-    }
-    if (id == WorkspaceTab.explorer.id) {
-      return ExplorerPane(
-        session: session,
-        explorer: explorer,
-        games: games,
-        onOpenGame: onExplorerGame,
-      );
-    }
-    throw StateError('no body for the $id tab');
-  }
+  Widget _body(WorkspaceTab tab) => switch (tab) {
+    WorkspaceTab.moves => MoveTreeView(session: session, moveMenu: moveMenu),
+    WorkspaceTab.replies => RepliesPane(
+      session: session,
+      replies: replies,
+      gaps: gaps,
+    ),
+    WorkspaceTab.explorer => ExplorerPane(
+      session: session,
+      explorer: explorer,
+      games: games,
+      onOpenGame: onExplorerGame,
+    ),
+  };
 
-  Widget? _trailing(String id) {
-    if (id == WorkspaceTab.replies.id) return _NextGap(gaps: gaps);
-    if (id == WorkspaceTab.explorer.id) return ExplorerGear(explorer: explorer);
-    return null;
-  }
+  Widget? _trailing(WorkspaceTab tab) => switch (tab) {
+    WorkspaceTab.moves => null,
+    WorkspaceTab.replies => _NextGap(gaps: gaps),
+    WorkspaceTab.explorer => ExplorerGear(explorer: explorer),
+  };
 
   @override
   Widget build(BuildContext context) {

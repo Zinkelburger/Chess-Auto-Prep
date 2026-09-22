@@ -33,12 +33,32 @@ abstract interface class DraftQuestion {
   void withdraw();
 }
 
+/// Whether the workspace may go where it was asked to.
+sealed class LeaveAnswer {
+  const LeaveAnswer();
+}
+
+/// Stay where it is: the user chose to, or a copy they asked for was not
+/// written.
+final class Stay extends LeaveAnswer {
+  const Stay();
+}
+
+/// Go on. [copy] names the file the words were written to first when the
+/// user answered by saving a copy, for the screen to say so once it has
+/// gone where it was going; null when nothing had to be kept elsewhere.
+final class Go extends LeaveAnswer {
+  const Go({this.copy});
+
+  final String? copy;
+}
+
 /// What the user is walking away from.
-enum _Leaving {
+enum _Away {
   window('close the window', 'Close and lose the words'),
   document('leave this document', 'Leave and lose the words');
 
-  const _Leaving(this.action, this.button);
+  const _Away(this.action, this.button);
 
   /// For the log.
   final String action;
@@ -80,11 +100,7 @@ final class ExitGuard {
   /// One decision at a time per kind. Sharing one across both would let the
   /// answer to a question about leaving the document grant a close nobody
   /// asked about.
-  final _deciding = <_Leaving, Future<bool>>{};
-
-  /// The file the last question's copy was written to, for the screen to
-  /// say so once the user has gone where they were going.
-  String? lastCopy;
+  final _deciding = <_Away, Future<LeaveAnswer>>{};
 
   /// Whether the window may close now.
   ///
@@ -92,17 +108,18 @@ final class ExitGuard {
   /// click on the close button, or one made while the question is up — every
   /// caller gets that one answer rather than a second dialog and a second
   /// way out.
-  Future<bool> mayClose() => _mayGo(_Leaving.window);
+  Future<bool> mayClose() async => await _mayGo(_Away.window) is Go;
 
   /// Whether the workspace may put another document on the screen now.
   ///
   /// Opening one takes the saver off this file, and a draft it never wrote
   /// goes with it. The same question, the same three answers: it is the
   /// document being left rather than the window, and that is the whole
-  /// difference.
-  Future<bool> mayLeaveDocument() => _mayGo(_Leaving.document);
+  /// difference. Callers asking while one answer is being worked out share
+  /// it, copy and all.
+  Future<LeaveAnswer> mayLeaveDocument() => _mayGo(_Away.document);
 
-  Future<bool> _mayGo(_Leaving kind) {
+  Future<LeaveAnswer> _mayGo(_Away kind) {
     final asked = _deciding[kind];
     if (asked != null) return asked;
     // A question already on screen is answered first: two at once, and the
@@ -112,19 +129,19 @@ final class ExitGuard {
     return decided.whenComplete(() => _deciding.remove(kind));
   }
 
-  Future<bool> _afterTheOthers(_Leaving kind) async {
+  Future<LeaveAnswer> _afterTheOthers(_Away kind) async {
     for (final other in [..._deciding.values]) {
       await other;
     }
     return _decide(kind);
   }
 
-  Future<bool> _decide(_Leaving kind) async {
+  Future<LeaveAnswer> _decide(_Away kind) async {
     // Nothing to wait for and nothing to ask about, so no clock is started:
     // a timer left running is a timer a widget test waits on for nothing.
-    if (_saver.settled) return true;
+    if (_saver.settled) return const Go();
     final settling = _settle();
-    if (await Future.any([settling, _clock()])) return true;
+    if (await Future.any([settling, _clock()])) return const Go();
     log.w(kind.action, '${_saver.documentPath} is not saved yet');
     return _answered(settling, kind);
   }
@@ -149,7 +166,7 @@ final class ExitGuard {
     return _saver.settled;
   }
 
-  Future<bool> _answered(Future<bool> settling, _Leaving kind) async {
+  Future<LeaveAnswer> _answered(Future<bool> settling, _Away kind) async {
     final saved = Completer<_Answer>();
     // _settle never fails, so this only ever completes with an answer.
     unawaited(
@@ -169,24 +186,24 @@ final class ExitGuard {
         // The file caught up while the question was on screen, so there is
         // nothing left to ask about.
         _question.withdraw();
-        return true;
+        return const Go();
       case _Answer.copy:
         return _copied();
       case _Answer.close:
         log.w('${kind.action} with unsaved words', _saver.documentPath);
-        return true;
+        return const Go();
       case _Answer.stay:
-        return false;
+        return const Stay();
     }
   }
 
   /// Writes the words beside the original and goes on when they are there.
   /// A copy nobody wrote leaves the user where they were.
-  Future<bool> _copied() async {
+  Future<LeaveAnswer> _copied() async {
     final copy = _saveCopy;
-    if (copy == null) return false;
-    lastCopy = await copy();
-    return lastCopy != null;
+    if (copy == null) return const Stay();
+    final written = await copy();
+    return written == null ? const Stay() : Go(copy: written);
   }
 
   _Answer _answerFor(DraftChoice? choice) => switch (choice) {
@@ -196,7 +213,7 @@ final class ExitGuard {
   };
 
   /// What is known about why the file is behind and what the answers mean.
-  String _body(_Leaving kind) => '${_trouble()}\n\n${_ways(kind)}';
+  String _body(_Away kind) => '${_trouble()}\n\n${_ways(kind)}';
 
   /// What waiting, copying and going will do.
   ///
@@ -205,8 +222,8 @@ final class ExitGuard {
   /// conflicted file and a frozen one both take no more words, and telling
   /// the user to wait for a save that is never coming is telling them to
   /// wait for ever.
-  String _ways(_Leaving kind) {
-    final going = kind == _Leaving.window ? 'Closing now' : 'Leaving now';
+  String _ways(_Away kind) {
+    final going = kind == _Away.window ? 'Closing now' : 'Leaving now';
     if (_saver.takesWords) {
       return 'You can stay until it is saved, or save a copy. $going loses '
           'what you typed since the last save.';

@@ -41,7 +41,7 @@ void main() {
   late Explorer explorer;
   late FillGaps fill;
   late ValueNotifier<bool> editing;
-  late PaneTabs tabs;
+  late PaneTabs<WorkspaceTab> tabs;
   late SettingsStore settings;
 
   /// The engine stays off; its pane has its own test.
@@ -289,27 +289,27 @@ void main() {
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.tab);
     await tester.pumpAndSettle();
-    expect(tabs.selected, WorkspaceTab.replies.id);
+    expect(tabs.selected, WorkspaceTab.replies);
     expect(find.byType(RepliesPane), findsOneWidget);
     expect(find.text('Next gap'), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyW);
     await tester.pumpAndSettle();
-    expect(tabs.open, [WorkspaceTab.moves.id, WorkspaceTab.explorer.id]);
+    expect(tabs.open, [WorkspaceTab.moves, WorkspaceTab.explorer]);
     expect(find.byType(MoveTreeView), findsOneWidget);
     expect(find.text('Next gap'), findsNothing);
     // The explorer is the third tab, with its gear at the strip's edge.
     await tester.sendKeyEvent(LogicalKeyboardKey.tab);
     await tester.pumpAndSettle();
-    expect(tabs.selected, WorkspaceTab.explorer.id);
+    expect(tabs.selected, WorkspaceTab.explorer);
     expect(find.byType(ExplorerPane), findsOneWidget);
     expect(find.byTooltip('Choose the database'), findsOneWidget);
     expect(find.text('Masters'), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyW);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pumpAndSettle();
-    expect(tabs.open, [WorkspaceTab.moves.id]);
+    expect(tabs.open, [WorkspaceTab.moves]);
     expect(find.text('Moves'), findsNothing, reason: 'one tab: no strip');
-    tabs.show(WorkspaceTab.replies.id);
+    tabs.show(WorkspaceTab.replies);
     await tester.pumpAndSettle();
     expect(find.byType(RepliesPane), findsOneWidget);
     expect(find.byTooltip('Close Replies (Ctrl+W)'), findsOneWidget);
