@@ -11,7 +11,8 @@ library;
 import 'package:flutter/foundation.dart';
 
 import '../models/tactics_position.dart';
-import '../../../widgets/common/list_search_field.dart' show matchesSearch;
+import '../../../design_system/components/list_search_field.dart'
+    show matchesSearch;
 
 /// How positions are sorted in the browse list.
 enum TacticsBrowseSort {

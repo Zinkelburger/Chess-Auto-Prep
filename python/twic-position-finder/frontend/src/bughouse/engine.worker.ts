@@ -38,15 +38,20 @@ async function sha256(buffer: ArrayBuffer): Promise<string> {
   return [...new Uint8Array(await crypto.subtle.digest('SHA-256', buffer))].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-async function modelChunk(chunk: Chunk, cache: Cache | null): Promise<ArrayBuffer> {
+/** The chunk kept in this browser, or null when it has to be downloaded. */
+async function cachedChunk(chunk: Chunk, cache: Cache | null): Promise<ArrayBuffer | null> {
   const url = directory + chunk.file;
-  let response = await cache?.match(url);
-  if (response) {
-    const buffer = await response.arrayBuffer();
-    if (buffer.byteLength === chunk.bytes && await sha256(buffer) === chunk.sha256) return buffer;
-    await cache?.delete(url);
-  }
-  response = await fetch(url);
+  const response = await cache?.match(url);
+  if (!response) return null;
+  const buffer = await response.arrayBuffer();
+  if (buffer.byteLength === chunk.bytes && await sha256(buffer) === chunk.sha256) return buffer;
+  await cache?.delete(url);
+  return null;
+}
+
+async function downloadChunk(chunk: Chunk, cache: Cache | null): Promise<ArrayBuffer> {
+  const url = directory + chunk.file;
+  const response = await fetch(url);
   if (!response.ok) throw new Error('The engine download failed. Please check your connection and retry.');
   const buffer = await response.arrayBuffer();
   if (buffer.byteLength !== chunk.bytes || await sha256(buffer) !== chunk.sha256)
@@ -63,13 +68,20 @@ async function session(engine: Wasm): Promise<ort.InferenceSession> {
       const manifest: Manifest = await response.json();
       let cache: Cache | null = null;
       try { cache = await caches.open('hivemind-model-v1'); } catch { /* Cache is optional. */ }
+      // Only a part missing from this browser's cache is downloaded, and only
+      // then does the message speak of a download: once kept, it never repeats.
+      progress('Starting Hivemind…');
       const buffers: ArrayBuffer[] = [];
       for (let i = 0; i < manifest.chunks.length; i++) {
-        progress(`Loading Hivemind’s network · part ${i + 1} of ${manifest.chunks.length} (about 32 MB once)`);
-        buffers.push(await modelChunk(manifest.chunks[i], cache));
+        let buffer = await cachedChunk(manifest.chunks[i], cache);
+        if (!buffer) {
+          progress(`Downloading Hivemind’s network · part ${i + 1} of ${manifest.chunks.length} (about 32 MB, once)`);
+          buffer = await downloadChunk(manifest.chunks[i], cache);
+        }
+        buffers.push(buffer);
         if (cancelled) throw new Error('Analysis cancelled. Downloaded parts are kept for next time.');
       }
-      progress('Preparing the neural network on this device…');
+      progress('Starting Hivemind…');
       const stream = new Blob(buffers).stream().pipeThrough(new DecompressionStream('gzip'));
       const model = await new Response(stream).arrayBuffer();
       if (await sha256(model) !== manifest.model_sha256) throw new Error('The network checksum did not match. Please reload.');

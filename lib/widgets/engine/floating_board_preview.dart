@@ -8,7 +8,6 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
-import '../../theme/app_colors.dart';
 import '../../utils/chess_utils.dart' show uciHighlightSquares;
 import '../chess_board_widget.dart';
 
@@ -87,7 +86,7 @@ class _FloatingBoardPreviewState extends State<FloatingBoardPreview> {
     final overlay = Overlay.maybeOf(context, rootOverlay: true);
     if (overlay == null) return;
     _overlayEntry?.remove();
-    _overlayEntry = OverlayEntry(builder: (_) => _buildBoard());
+    _overlayEntry = OverlayEntry(builder: _buildBoard);
     overlay.insert(_overlayEntry!);
   }
 
@@ -96,7 +95,7 @@ class _FloatingBoardPreviewState extends State<FloatingBoardPreview> {
     _overlayEntry = null;
   }
 
-  Widget _buildBoard() {
+  Widget _buildBoard(BuildContext context) {
     final ctrl = widget.controller;
     if (ctrl.previewFen == null || ctrl.anchorGlobal == null) {
       return const SizedBox.shrink();
@@ -137,7 +136,7 @@ class _FloatingBoardPreviewState extends State<FloatingBoardPreview> {
       child: IgnorePointer(
         child: Material(
           elevation: 8,
-          shadowColor: AppColors.shadow,
+          shadowColor: Theme.of(context).colorScheme.shadow,
           borderRadius: BorderRadius.circular(4),
           clipBehavior: Clip.antiAlias,
           child: ChessBoardWidget(

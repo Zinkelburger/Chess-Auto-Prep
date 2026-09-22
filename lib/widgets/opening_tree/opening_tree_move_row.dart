@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/chess_core/moves/opening_graph.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/opening_tree.dart';
@@ -13,7 +14,7 @@ import 'win_draw_loss_bar.dart';
 /// how often it was played, the score from the displayed point of view, and a
 /// result bar carrying its own percentages (exact counts in its tooltip).
 class OpeningTreeMoveRow extends StatefulWidget {
-  final PositionGroup entry;
+  final OpeningPositionView entry;
   final int parentGamesPlayed;
   final CoverageStatus? coverageStatus;
   final VoidCallback? onTap;
@@ -59,7 +60,7 @@ class _OpeningTreeMoveRowState extends State<OpeningTreeMoveRow> {
   }
 
   /// Exact result counts, worded from the displayed point of view.
-  String _countsTooltip(PositionGroup entry) {
+  String _countsTooltip(OpeningPositionView entry) {
     switch (widget.perspective) {
       case WdlPerspective.whiteBlack:
         return '${entry.wins} white wins · ${entry.draws} draws · '

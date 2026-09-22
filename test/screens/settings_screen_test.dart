@@ -1,13 +1,22 @@
+import '../support/runtime_settings.dart';
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/features/settings/models/board_display_configuration.dart';
 import 'package:chess_auto_prep/core/app_state.dart';
-import 'package:chess_auto_prep/models/board_display_settings.dart';
-import 'package:chess_auto_prep/models/engine_settings.dart';
 import 'package:chess_auto_prep/screens/settings_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+RuntimeSettings? _runtimeSettings;
+RuntimeSettings get runtimeSettings =>
+    _runtimeSettings ??= RuntimeSettings.preferences();
 void main() {
+  setUp(() {
+    _runtimeSettings = null;
+    addTearDown(() => _runtimeSettings?.dispose());
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
@@ -15,10 +24,14 @@ void main() {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(
+    await pumpRuntimeWidget(
+      tester,
+      runtimeSettings,
       ChangeNotifierProvider<AppState>(
         create: (_) => AppState(),
         child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           theme: ThemeData.dark(),
           home: const SettingsScreen(),
         ),
@@ -89,10 +102,14 @@ void main() {
     tester.view.physicalSize = const Size(1280, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(
+    await pumpRuntimeWidget(
+      tester,
+      runtimeSettings,
       ChangeNotifierProvider(
         create: (_) => AppState(),
         child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: SettingsScreen(initialMode: AppMode.study),
         ),
       ),
@@ -157,7 +174,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    final cores = EngineSettings.instance.cores;
+    final cores = runtimeSettings.engine.cores;
     await tester.tap(find.text('Reset settings…'));
     await tester.pumpAndSettle();
     expect(
@@ -166,7 +183,7 @@ void main() {
     );
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
-    expect(EngineSettings.instance.cores, cores);
+    expect(runtimeSettings.engine.cores, cores);
     expect(tester.takeException(), isNull);
   });
 
@@ -184,7 +201,7 @@ void main() {
     await tester.enterText(field, '19');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
-    expect(EngineSettings.instance.depth, 19);
+    expect(runtimeSettings.engine.depth, 19);
     await tester.enterText(search, 'coordinates');
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('settings-nav-1')));
@@ -196,7 +213,6 @@ void main() {
   testWidgets('display preferences change the live preview and persist', (
     tester,
   ) async {
-    addTearDown(() => BoardDisplaySettings.instance.resetToDefaults());
     await pumpSettings(tester, const Size(1280, 720));
     await selectGlobal(tester, find.byKey(const Key('settings-nav-1')));
     await tester.pumpAndSettle();
@@ -213,19 +229,13 @@ void main() {
     await tester.tap(find.text('Figurines (♔♕♖♗♘)').last);
     await tester.pumpAndSettle();
     expect(previewLine().data, contains('♘f3'));
-    expect(
-      BoardDisplaySettings.instance.pieceNotation,
-      PieceNotation.figurines,
-    );
+    expect(runtimeSettings.display.pieceNotation, PieceNotation.figurines);
 
     await tester.tap(find.text('Inside the board'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Every square').last);
     await tester.pumpAndSettle();
-    expect(
-      BoardDisplaySettings.instance.coordinates,
-      BoardCoordinates.everySquare,
-    );
+    expect(runtimeSettings.display.coordinates, BoardCoordinates.everySquare);
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getString('display.board_coordinates'), 'everySquare');
     expect(tester.takeException(), isNull);
@@ -237,10 +247,14 @@ void main() {
     tester.view.physicalSize = const Size(1280, 720);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(
+    await pumpRuntimeWidget(
+      tester,
+      runtimeSettings,
       ChangeNotifierProvider<AppState>(
         create: (_) => AppState(),
         child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           theme: ThemeData.dark(),
           home: Builder(
             builder: (context) => Scaffold(

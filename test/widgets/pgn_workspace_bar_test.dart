@@ -1,4 +1,4 @@
-import 'package:chess_auto_prep/core/pgn/pgn_workspace.dart';
+import 'package:chess_auto_prep/features/documents/controllers/pgn_workspace.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_workspace_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -23,11 +23,17 @@ void main() {
         ),
       ),
     );
-    for (var i = 0; i < 5; i++) {
-      workspace.index = workspace.add('Reference database $i');
+    for (final tab in [
+      PgnWorkspace.books,
+      PgnWorkspace.analysis,
+      PgnWorkspace.tree,
+      PgnWorkspace.collection,
+      PgnWorkspace.filters,
+    ]) {
+      workspace.index = tab;
     }
     await tester.pumpAndSettle();
-    final close = find.byTooltip('Close Reference database 4 tab');
+    final close = find.byTooltip('Close Filter tab');
     expect(tester.getRect(close).right, lessThanOrEqualTo(320));
     await tester.tap(close);
     await tester.pumpAndSettle();

@@ -1,14 +1,11 @@
 /// Single source of truth for engine state across analysis and generation.
 ///
-/// Replaces the implicit lifecycle spread across MainScreen,
-/// UnifiedEnginePane, RepertoireController, and RepertoireGenerationTab.
 library;
 
 import 'dart:async';
 
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../utils/safe_change_notifier.dart';
 import 'board_engine.dart';
@@ -18,27 +15,22 @@ import 'stockfish_pool.dart';
 enum EngineState { off, idle, analyzing, generating }
 
 class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
-  /// Application-wide shared instance.
-  static final EngineLifecycle instance = EngineLifecycle._();
+  EngineLifecycle({
+    required StockfishPool pool,
+    required BoardEngine board,
+    required Future<bool> Function() loadEnabled,
+    required Future<void> Function(bool) saveEnabled,
+  }) : _pool = pool,
+       _board = board,
+       _loadEnabled = loadEnabled,
+       _saveEnabled = saveEnabled;
 
-  /// Create an independent instance (unit tests only).
-  @visibleForTesting
-  EngineLifecycle.fresh({StockfishPool? pool, BoardEngine? board})
-    : this._(pool: pool, board: board);
-
-  EngineLifecycle._({StockfishPool? pool, BoardEngine? board})
-    : _pool = pool ?? StockfishPool.instance,
-      _board = board ?? BoardEngine.instance;
-
-  static const _toggleKey = 'engine_lifecycle.toggle_on';
-
-  /// When true, [toggleOn]/[toggleOff] skip pool I/O (unit tests only).
-  @visibleForTesting
-  static bool testMode = false;
+  final Future<bool> Function() _loadEnabled;
+  final Future<void> Function(bool) _saveEnabled;
 
   final StockfishPool _pool;
   final BoardEngine _board;
-  var _queue = EngineSerialQueue();
+  final _queue = EngineSerialQueue();
 
   EngineState _state = EngineState.off;
   EngineState get state => _state;
@@ -51,7 +43,8 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
   /// user actions) change it — [suspend] shuts the engine down without
   /// touching it, so app-driven shutdowns (mode switch, app close) can't
   /// masquerade as the user disabling the engine.
-  bool _userWantsEngine = true;
+  bool _userWantsEngine = false;
+  bool _preferenceLoaded = false;
 
   /// Number of background jobs currently borrowing the shared pool (e.g. a
   /// tactics import). While positive, [suspend]/[toggleOff] cancel
@@ -60,7 +53,10 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
   /// repro: start a tactics import, visit the Repertoire tab, leave it).
   int _poolLeases = 0;
 
-  Future<void> _serialExec(Future<void> Function() fn) => _queue.run(fn);
+  Future<void> _serialExec(Future<void> Function() fn) => _queue.run(() async {
+    if (isDisposed) throw StateError('Engine lifecycle is disposed');
+    await fn();
+  });
 
   /// Notify now, or after the current frame when called mid-build.
   void _notifyListenersSafe() {
@@ -71,16 +67,24 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
     }
   }
 
-  /// Load persisted toggle state. Call once at app startup.
-  ///
-  /// Engine is **on** by default; only a stored `false` disables it.
-  Future<void> loadPersistedState() async {
-    final prefs = await SharedPreferences.getInstance();
-    _userWantsEngine = prefs.getBool(_toggleKey) ?? true;
-    if (_userWantsEngine) {
-      await _doToggleOn();
+  /// Initialize in the same queue as toggles and generation transitions.
+  /// Failed reads leave the preference unknown and may be retried. A successful
+  /// explicit toggle also initializes it, so a late startup call cannot undo it.
+  /// Missing preferences default to enabled only after a successful read.
+  Future<void> loadPersistedState() => _serialExec(() async {
+    if (_preferenceLoaded) return;
+    final enabled = await _loadEnabled();
+    if (isDisposed) return;
+    _userWantsEngine = enabled;
+    _preferenceLoaded = true;
+    if (_state == EngineState.generating) {
+      _toggleStateBeforeGeneration = enabled;
+    } else if (enabled) {
+      _resumeBoard();
+      _state = EngineState.idle;
+      notifyListeners();
     }
-  }
+  });
 
   Future<void> toggleOn() => _serialExec(_doToggleOn);
   Future<void> toggleOff() => _serialExec(_doToggleOff);
@@ -93,7 +97,10 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
 
   /// Mark the shared pool as in use by a background job. Pair every call
   /// with [releasePool] in a `finally`.
-  void retainPool() => _poolLeases++;
+  void retainPool() {
+    if (isDisposed) throw StateError('Engine lifecycle is disposed');
+    _poolLeases++;
+  }
 
   /// Release a [retainPool] lease. The pool is not shut down here — the
   /// next [suspend]/[toggleOff] disposes it once no leases remain.
@@ -103,13 +110,15 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
 
   /// Restart after [suspend] when the user preference allows it.
   Future<void> resume() => _serialExec(() async {
-    if (_state == EngineState.generating) return;
+    if (_state == EngineState.generating || !_userWantsEngine) return;
     _resumeBoard();
-    if (_userWantsEngine) await _doToggleOn();
+    if (_state == EngineState.off) {
+      _state = EngineState.idle;
+      notifyListeners();
+    }
   });
 
   void _resumeBoard() {
-    if (testMode) return;
     unawaited(
       _board.resume().catchError((Object error) {
         debugPrint('[EngineLifecycle] Board preparation failed: $error');
@@ -119,8 +128,10 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
 
   Future<void> _doToggleOn() async {
     if (_state == EngineState.generating) return;
+    await _saveEnabled(true);
+    if (isDisposed) return;
     _userWantsEngine = true;
-    _persistToggle(true);
+    _preferenceLoaded = true;
     _resumeBoard();
     if (_state != EngineState.off) return;
     // Mounted boards prepare one shared process. Bulk workers are only
@@ -131,8 +142,10 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
 
   Future<void> _doToggleOff() async {
     if (_state == EngineState.generating) return;
+    await _saveEnabled(false);
+    if (isDisposed) return;
     _userWantsEngine = false;
-    _persistToggle(false);
+    _preferenceLoaded = true;
     await _doShutdown();
   }
 
@@ -143,7 +156,7 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
     // alive. On app close the orphaned engines still exit on their own:
     // stdin hits EOF when this process dies and UCI engines quit on EOF.
     if (_poolLeases == 0) {
-      _pool.dispose();
+      _pool.releaseWorkers();
     }
     _state = EngineState.off;
     notifyListeners();
@@ -156,7 +169,7 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
     _notifyListenersSafe();
   }
 
-  /// Called when AnalysisService completes.
+  /// Called when the interactive search completes.
   void onAnalysisComplete() {
     if (_state == EngineState.analyzing) {
       _state = EngineState.idle;
@@ -178,8 +191,9 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
     _state = EngineState.generating;
     notifyListeners();
     try {
-      if (!testMode) await _pool.prepareForTreeBuild(threads);
+      await _pool.prepareForTreeBuild(threads);
     } catch (_) {
+      if (isDisposed) rethrow;
       _state = previous;
       _resumeBoard();
       notifyListeners();
@@ -208,7 +222,7 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
     _resumeBoard();
     // Interactive analysis no longer borrows the generation pool. Keep only
     // workers leased by another job after the build has ended.
-    if (_poolLeases == 0) _pool.dispose();
+    if (_poolLeases == 0) _pool.releaseWorkers();
     _restoreToggleState();
   }
 
@@ -217,30 +231,11 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
   }
 
-  void _persistToggle(bool on) {
-    unawaited(_writeToggle(on));
-  }
-
-  Future<void> _writeToggle(bool on) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_toggleKey, on);
-    } catch (e) {
-      debugPrint('[EngineLifecycle] Failed to persist toggle: $e');
-    }
-  }
-
-  /// Resets singleton state between tests. Does not notify listeners.
-  @visibleForTesting
-  void resetForTest() {
-    _queue = EngineSerialQueue();
-    _board.pauseAll();
-    _pool.dispose();
-    _board.dispose();
-    _state = EngineState.off;
-    _userWantsEngine = true;
-    _toggleStateBeforeGeneration = false;
-    _poolLeases = 0;
-    testMode = false;
+  @override
+  void dispose() {
+    if (isDisposed) return;
+    _board.suspend();
+    _pool.releaseWorkers();
+    super.dispose();
   }
 }

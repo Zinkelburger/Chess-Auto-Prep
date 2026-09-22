@@ -1,4 +1,4 @@
-import 'package:chess_auto_prep/models/build_tree_node.dart';
+import 'package:chess_auto_prep/chess_core/generation/build_tree_node.dart';
 import 'package:chess_auto_prep/services/eval/chessdb_api_provider.dart';
 import 'package:chess_auto_prep/services/eval/eval_chain.dart';
 import 'package:chess_auto_prep/services/eval_cache.dart';

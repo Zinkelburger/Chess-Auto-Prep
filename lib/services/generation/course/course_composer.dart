@@ -74,7 +74,7 @@ class ComposedCourse {
 
   /// The model games again, as *games*: real `White`/`Black`/`Result`
   /// headers and the same annotated movetext, for a companion
-  /// `<title>_model_games.pgn` a PGN viewer opens as a game collection.
+  /// run-local `model_games.pgn` a PGN viewer opens as a game collection.
   /// Inside the course they travel as a chapter with study headers (see
   /// [ModelGameWriter.chapterPgn]); this is the other shape.
   final List<String> modelGamePgns;

@@ -1,7 +1,7 @@
 /// SAN matching for the Games feature's opening review.
 ///
 /// Reading the mainline off a downloaded game is `mainlineSansOf` in
-/// `services/pgn_mainline_lexer.dart` — the shared lexer that is pinned
+/// `chess_core/pgn/mainline_lexer.dart` — the shared lexer that is pinned
 /// against dartchess — not a second parser here.
 library;
 

@@ -7,6 +7,9 @@
 /// `course_chapter_headers.dart`.
 library;
 
+import 'package:chess_auto_prep/chess_core/pgn/repertoire_document_mutation.dart';
+
+import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
 import 'dart:isolate';
 
 import 'package:dartchess/dartchess.dart';
@@ -16,14 +19,15 @@ import '../models/repertoire_line.dart';
 import '../utils/chess_utils.dart';
 import '../utils/pgn_comment_utils.dart';
 import '../utils/training_markers.dart' show hasPuzzleStart;
-import 'course_chapter_headers.dart';
-import 'pgn_mainline_lexer.dart' as pgn;
-import 'pgn_parsing_service.dart' as pgn;
+import '../chess_core/pgn/course_chapter_headers.dart';
+import '../chess_core/pgn/mainline_lexer.dart' as pgn;
+import '../chess_core/pgn/pgn_text.dart' as pgn;
 import 'repertoire_color_inference.dart';
 import 'repertoire_file_editor.dart';
-import 'repertoire_line_ids.dart';
+import '../chess_core/pgn/repertoire_line_ids.dart';
 import 'storage/storage_factory.dart';
-import 'training/chapter_layout.dart' show ChapterSummary;
+import 'storage/storage_service.dart';
+import '../features/training/models/chapter_layout.dart' show ChapterSummary;
 
 /// A game cut from a chapter file and parsed once: the parse tree, the raw
 /// text it came from, and its position in the file.
@@ -92,6 +96,12 @@ class _ChapterLayout {
 }
 
 class RepertoireService {
+  RepertoireService({this._storage});
+
+  // Pure text parsing never resolves the legacy default. File callers can
+  // supply the same storage owner as their outline/split workflow.
+  final StorageService? _storage;
+
   /// The editor for the files these lines come from.
   RepertoireFileEditor get files => const RepertoireFileEditor();
 
@@ -121,7 +131,8 @@ class RepertoireService {
     bool colorFromStartingSide = false,
     bool inferColorWhenUnknown = false,
   }) async {
-    final content = await StorageFactory.instance.readRepertoirePgn(filePath);
+    final content = await (_storage ?? StorageFactory.instance)
+        .readRepertoirePgn(filePath);
 
     if (content == null) {
       throw Exception('Repertoire file not found: $filePath');
@@ -188,7 +199,8 @@ class RepertoireService {
   /// 3 MB course without paying for a parse. Model games are left out of the
   /// counts because the trainer never drills them.
   Future<List<ChapterSummary>> courseChaptersInFile(String filePath) async {
-    final content = await StorageFactory.instance.readRepertoirePgn(filePath);
+    final content = await (_storage ?? StorageFactory.instance)
+        .readRepertoirePgn(filePath);
     if (content == null || content.trim().isEmpty) return const [];
     return Isolate.run(() => RepertoireService().courseChaptersOf(content));
   }
@@ -257,7 +269,7 @@ class RepertoireService {
     for (var gameIndex = 0; gameIndex < games.length; gameIndex++) {
       try {
         parsed.add((
-          game: PgnGame.parsePgn(games[gameIndex]),
+          game: parsePgnGame(games[gameIndex]),
           text: games[gameIndex],
           index: gameIndex,
         ));
@@ -467,7 +479,7 @@ class RepertoireService {
 
   Position extractStartPositionFromPgn(String pgnText) {
     try {
-      return extractStartPosition(PgnGame.parsePgn(pgnText));
+      return extractStartPosition(parsePgnGame(pgnText));
     } catch (_) {
       // Unparsable text has no start of its own.
       return Chess.initial;

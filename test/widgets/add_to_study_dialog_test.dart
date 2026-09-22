@@ -1,15 +1,13 @@
-import 'package:chess_auto_prep/models/repertoire_metadata.dart';
-import 'package:chess_auto_prep/services/storage/storage_factory.dart';
-import 'package:chess_auto_prep/services/storage/storage_service.dart';
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
+import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
 import 'package:chess_auto_prep/widgets/pgn/add_to_study_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-class _Studies extends Fake implements StorageService {
+class _Studies {
   _Studies(this.names);
   final List<String> names;
 
-  @override
   Future<List<RepertoireMetadata>> listStudyFiles() async => [
     for (final name in names)
       RepertoireMetadata(
@@ -21,17 +19,16 @@ class _Studies extends Fake implements StorageService {
 }
 
 void main() {
-  tearDown(() => StorageFactory.instanceForTest = null);
-
   Future<void> openPicker(
     WidgetTester tester, {
     List<String> studies = const [],
     String? summary,
     required ValueChanged<AddToStudyResult?> onResult,
   }) async {
-    StorageFactory.instanceForTest = _Studies(studies);
+    final library = _Studies(studies);
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates, supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: Builder(
             builder: (context) => TextButton(
@@ -39,6 +36,7 @@ void main() {
                 await showDialog<AddToStudyResult>(
                   context: context,
                   builder: (_) => AddToStudyDialog(
+                    loadStudies: library.listStudyFiles,
                     initialChapterName: 'My line',
                     selectionSummary: summary,
                   ),

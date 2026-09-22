@@ -8,7 +8,7 @@
 /// which is what lets the whole of Phase 3 be unit-tested on synthetic trees.
 library;
 
-import '../../models/build_tree_node.dart';
+import '../../chess_core/generation/build_tree_node.dart';
 import '../../utils/movetext_builder.dart';
 import 'export/move_annotation.dart';
 import 'export/move_annotator.dart';

@@ -1,8 +1,18 @@
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../support/runtime_settings.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/services/solitaire_trophy_detector.dart';
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   group('trophyAdvantageCp', () {
     // The two inputs use different conventions on purpose: the game move's
     // eval is White-normalized (MoveEval), the user's comes off a raw engine
@@ -82,6 +92,7 @@ void main() {
     test('returns nothing without guesses or evals', () async {
       expect(
         await detectSolitaireTrophies(
+          pool: engines.pool,
           guesses: const [],
           evals: const [],
           userIsWhite: true,

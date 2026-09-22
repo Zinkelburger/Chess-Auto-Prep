@@ -2,9 +2,20 @@
 /// plus a tactics mode for training studies of custom puzzles.
 library;
 
+import '../features/generation/services/generation_artifacts.dart';
+import '../app/training_dependencies.dart';
+import '../features/training/controllers/training_settings_controller.dart';
+
+import '../features/repertoires/controllers/repertoire_board_controller.dart';
+
+import '../app/legacy_theme_boundary.dart';
+
 import '../models/repertoire_review_entry.dart' show ReviewRating;
 
 import 'dart:async' show unawaited;
+import '../design_system/layout/workspace_navigation_controller.dart';
+import '../design_system/layout/workspace_shell.dart';
+import '../app/navigation/workspace_destination_toolbar.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -14,10 +25,10 @@ import 'package:provider/provider.dart';
 import '../core/app_state.dart';
 import '../models/line_status.dart';
 import '../models/repertoire_line.dart';
-import '../models/repertoire_metadata.dart';
-import '../models/training_settings.dart';
-import '../services/training/training_phase.dart';
-import '../services/training/training_session_controller.dart';
+import '../features/repertoires/models/repertoire_metadata.dart';
+import '../features/training/models/training_settings.dart';
+import '../features/training/models/training_phase.dart';
+import '../features/training/controllers/training_session_controller.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/app_shortcuts.dart';
@@ -29,19 +40,18 @@ import '../widgets/app_settings_button.dart';
 import '../widgets/pgn_viewer_widget.dart';
 import '../widgets/shortcut_tooltip.dart';
 import '../widgets/board_keyboard_scope.dart';
-import '../services/storage/storage_factory.dart';
 import '../widgets/training/training_mistakes_panel.dart';
 import '../widgets/training/chapter_setup_dialog.dart';
 import '../widgets/training/move_input_widget.dart';
 import '../widgets/chapter_list_body.dart' show ChapterPick;
-import '../widgets/repertoire_list_body.dart';
+import '../features/repertoires/widgets/repertoire_list_body.dart';
 import '../widgets/training/repertoire_selector_panel.dart';
 import '../widgets/training/trainer_browser.dart';
 import '../widgets/training/training_board_controls.dart';
 import '../widgets/training/training_results_panel.dart';
 import '../widgets/training/training_settings_panel.dart';
-import 'repertoire_selection_screen.dart';
-import 'repertoire_chapters_screen.dart';
+import '../features/repertoires/widgets/repertoire_selection_screen.dart';
+import '../features/repertoires/widgets/repertoire_chapters_screen.dart';
 
 // ---------------------------------------------------------------------------
 // TRAINING SCREEN
@@ -64,6 +74,7 @@ class RepertoireTrainingScreen extends StatefulWidget {
 
 class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
   late final TrainingSessionController _training;
+  final _workspaceNavigation = WorkspaceNavigationController();
   bool _showPgn = false;
 
   final PgnViewerWidgetController _pgnController = PgnViewerWidgetController();
@@ -78,7 +89,12 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
   @override
   void initState() {
     super.initState();
-    _training = TrainingSessionController();
+    _workspaceNavigation.addListener(_resumePendingHandoff);
+    _training = createTrainingSession(
+      artifacts: context.read<GenerationArtifacts>().repository,
+      configuration: context.read<TrainingSettingsController>(),
+      session: RepertoireBoardController(),
+    );
     _training.onLineStarted = () {
       _pgnRevealedLineId = null;
       _showPgn = false;
@@ -97,6 +113,8 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
     _appStateRef?.removeListener(_onAppStateChanged);
     _training.removeListener(_onTrainingChanged);
     _training.dispose();
+    _workspaceNavigation.removeListener(_resumePendingHandoff);
+    _workspaceNavigation.dispose();
     super.dispose();
   }
 
@@ -127,7 +145,14 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
     }
   }
 
+  void _resumePendingHandoff() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _onAppStateChanged();
+    });
+  }
+
   void _onAppStateChanged() {
+    if (_workspaceNavigation.hasDestination) return;
     final appState = _appStateRef;
     if (appState == null || !mounted) return;
     if (appState.currentMode != AppMode.repertoireTrainer) return;
@@ -155,10 +180,11 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
   }
 
   Future<void> _selectRepertoire() async {
-    final pick = await Navigator.of(context).push<ChapterPick>(
+    final pick = await _workspaceNavigation.push<ChapterPick>(
       MaterialPageRoute(builder: (_) => const RepertoireSelectionScreen()),
     );
     if (mounted && pick != null) {
+      _appStateRef?.takeHandoff<TrainerHandoff>();
       _training.setRepertoire(pick.chapter);
       await _training.loadRepertoire(startChapter: pick.courseChapter);
     }
@@ -170,7 +196,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
     final directory = p.extension(source.filePath).toLowerCase() == '.pgn'
         ? p.dirname(source.filePath)
         : source.filePath;
-    final pick = await Navigator.of(context).push<ChapterPick>(
+    final pick = await _workspaceNavigation.push<ChapterPick>(
       MaterialPageRoute(
         builder: (_) => RepertoireChaptersScreen(
           repertoire: RepertoireMetadata(
@@ -182,6 +208,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
       ),
     );
     if (!mounted || pick == null) return;
+    _appStateRef?.takeHandoff<TrainerHandoff>();
     _training.setRepertoire(pick.chapter);
     await _training.loadRepertoire(startChapter: pick.courseChapter);
   }
@@ -218,10 +245,21 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return BoardKeyboardScope(
-      moveInputKey: _moveInputKey,
-      bindings: () => _keyBindings,
-      child: Scaffold(appBar: _buildAppBar(), body: _buildBody()),
+    return WorkspaceShell(
+      navigation: _workspaceNavigation,
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(kToolbarHeight),
+        child: LegacyThemeBoundary(child: _buildAppBar()),
+      ),
+      destinationAppBar: WorkspaceDestinationToolbar(
+        mode: AppMode.repertoireTrainer,
+        navigation: _workspaceNavigation,
+      ),
+      body: BoardKeyboardScope(
+        moveInputKey: _moveInputKey,
+        bindings: () => _keyBindings,
+        child: LegacyThemeBoundary(child: _buildBody()),
+      ),
     );
   }
 
@@ -248,15 +286,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
       (AppShortcut.rateEasy, ReviewRating.easy),
     ])
       ...KeyBinding.forShortcutIf(shortcut, 'Rate recall', () {
-        if (_training.phase != TrainingPhase.finished ||
-            _training.currentLine == null ||
-            _training.runComplete ||
-            _training.dueQueue.isEmpty ||
-            _training.repetitionMode != RepetitionMode.spaced ||
-            !_training.settings.showRatingButtons ||
-            _training.hadLearnPhaseThisSession) {
-          return false;
-        }
+        if (!_training.canRate) return false;
         unawaited(_training.rateLine(rating));
         return true;
       }),
@@ -267,11 +297,22 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
     ),
     ...KeyBinding.forShortcut(
       AppShortcut.autoAdvance,
-      'Toggle manual advance',
+      'Toggle manual advance for next sitting',
       () {
-        final settings = _training.settings;
-        settings.learnRequiresClick = !settings.learnRequiresClick;
-        settings.saveSoon();
+        if (!mounted) return;
+        final configuration = _training.configuration;
+        final before =
+            configuration.state.draft ?? configuration.state.committed;
+        if (before == null) return;
+        unawaited(
+          configuration
+              .edit({
+                'trainer_learn_requires_click': !before
+                    .toSettings()
+                    .learnRequiresClick,
+              })
+              .catchError((Object _) {}),
+        );
         setState(() {});
       },
     ),
@@ -498,11 +539,14 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
 
     if (_training.isLoading ||
         _training.error != null ||
+        _training.progressNeedsReload ||
         _training.lines.isEmpty) {
       return RepertoireSelectorPanel(
         isLoading: _training.isLoading,
         loadingStatus: _training.loadingStatus,
         error: _training.error,
+        progressNeedsReload: _training.progressNeedsReload,
+        onRetry: () => unawaited(_training.retryFailure()),
         hasLines: _training.lines.isNotEmpty,
         canStartTraining: false,
         onSelectRepertoire: _selectRepertoire,
@@ -553,26 +597,10 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
         ),
         Expanded(
           child: TrainerBrowser(
-            title: _training.repertoire!.name,
-            subtitle: _browserSubtitle(),
-            lines: _training.lines,
-            reviewMap: _training.reviewMap,
-            chapterOf: _training.chapterOf,
-            activeChapter: _training.activeChapter,
-            onChapterSelected: _training.setActiveChapter,
-            ungroupedChapter: TrainingSessionController.ungroupedChapter,
+            session: _training,
             onBrowseChapters: _training.sourceIsStudy ? null : _chooseChapter,
-            onLearn: _training.startLearnSession,
-            onReview: _training.startReviewSession,
-            learnBatchSize: _sessionCap(_training.settings.newLinesPerSession),
-            reviewBatchSize: _sessionCap(_training.settings.reviewsPerSession),
-            onTrainLine: (line) => _training.startLine(line),
             onPreviewLine: _previewLine,
             onReadLines: _readLines,
-            onApplyLearnedSelection: _applyLearnedSelection,
-            introEnabled: _training.settings.skipToFirstComment,
-            onExcludeLine: (line, excluded) =>
-                unawaited(_training.setLineExcluded(line, excluded)),
           ),
         ),
       ],
@@ -583,10 +611,6 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
   /// by definition, so it never advertises a batch.
   int _sessionCap(int setting) =>
       _training.repetitionMode == RepetitionMode.linear ? 0 : setting;
-
-  String? _browserSubtitle() => _training.sourceIsStudy
-      ? null
-      : '${_training.sourceIsBlack ? 'Black' : 'White'} repertoire';
 
   /// Trainer settings as a dialog — the landing page has no tab bar, and
   /// knobs belong behind one labelled entry point either way.
@@ -726,25 +750,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
             child: _training.runComplete
                 ? _buildRunCompletePanel()
                 : _training.phase == TrainingPhase.finished
-                ? TrainingResultsPanel(
-                    phase: _training.phase,
-                    currentLine: _training.currentLine,
-                    dueQueue: _training.dueQueue,
-                    reviewMap: _training.reviewMap,
-                    repertoireId: _training.repertoireId,
-                    lineHadMistake: _training.lineHadMistake,
-                    hadLearnPhaseThisSession:
-                        _training.hadLearnPhaseThisSession == true,
-                    repetitionMode: _training.repetitionMode,
-                    trainingMode: _training.trainingMode,
-                    settings: _training.settings,
-                    sessionCorrect: _training.sessionCorrect,
-                    sessionIncorrect: _training.sessionIncorrect,
-                    sessionStreak: _training.sessionStreak,
-                    reviewService: _training.reviewService,
-                    onRateLine: _training.rateLine,
-                    onNextLine: _training.nextLine,
-                  )
+                ? TrainingResultsPanel(session: _training)
                 : TrainingPhasePanel(
                     phase: _training.phase,
                     feedback: _training.feedback,
@@ -818,34 +824,28 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
     String? initialLineId,
     int? initialPly,
   }) async {
-    if (lines.isEmpty) return;
-    final path = p.join(
-      'cache',
-      'trainer-reading',
-      '${p.basename(_training.repertoire!.name)}.pgn',
+    final source = _training.repertoire;
+    if (!mounted ||
+        _training.isLoading ||
+        _training.error != null ||
+        source == null ||
+        lines.isEmpty ||
+        lines.any((line) => !_training.lines.contains(line))) {
+      return;
+    }
+    context.read<AppState>().handOff(
+      OpenPgnViewer.content(
+        content: lines.map((line) => line.fullPgn).join('\n\n'),
+        title: source.name,
+        gameIndex: initialLineId == null
+            ? 0
+            : lines
+                  .indexWhere((line) => line.id == initialLineId)
+                  .clamp(0, lines.length - 1),
+        ply: initialPly,
+      ),
+      historyLabel: 'Read ${source.name}',
     );
-    await StorageFactory.instance.writeFile(
-      path,
-      lines.map((line) => line.fullPgn).join('\n\n'),
-    );
-    if (!mounted) return;
-    context.read<AppState>().switchToPgnViewer(
-      path: path,
-      gameIndex: initialLineId == null
-          ? 0
-          : lines
-                .indexWhere((line) => line.id == initialLineId)
-                .clamp(0, lines.length - 1),
-      ply: initialPly,
-      historyLabel: 'Read ${_training.repertoire!.name}',
-    );
-  }
-
-  Future<void> _applyLearnedSelection(
-    Set<String> checkedLineIds,
-    Set<String> scope,
-  ) async {
-    await _training.applyLearnedSelection(checkedLineIds, within: scope);
   }
 
   Widget _buildPgnTab() {
@@ -943,12 +943,8 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
 
   Widget _buildSettingsPanel({VoidCallback? onOpenAppSettings}) {
     return TrainingSettingsPanel(
-      settings: _training.settings,
-      onQueueSettingsChanged: _training.updateDueQueue,
-      onSettingsChanged: () {
-        if (mounted) setState(() {});
-      },
-      onChapterSettingsChanged: _training.onChapterSettingsChanged,
+      configuration: _training.configuration,
+      applyNextSitting: _training.settingsApplyNextSitting,
       trainingMode: _training.trainingMode,
       repetitionMode: _training.repetitionMode,
       onTrainingModeChanged: _training.setTrainingMode,

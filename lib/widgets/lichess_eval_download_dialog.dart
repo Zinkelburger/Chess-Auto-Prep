@@ -19,6 +19,7 @@ import '../services/eval/storage_volumes.dart';
 import '../services/eval/zstd_stream.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
+import '../utils/app_messages.dart';
 import 'storage_destination_picker.dart';
 
 /// What the user chose.
@@ -30,13 +31,11 @@ class LichessDownloadRequest {
 
 Future<LichessDownloadRequest?> showLichessDownloadDialog(
   BuildContext context, {
-  LichessEvalController? controller,
+  required LichessEvalController controller,
 }) {
   return showDialog<LichessDownloadRequest>(
     context: context,
-    builder: (_) => _LichessDownloadDialog(
-      controller: controller ?? LichessEvalController.instance,
-    ),
+    builder: (_) => _LichessDownloadDialog(controller: controller),
   );
 }
 
@@ -67,14 +66,18 @@ class _LichessDownloadDialogState extends State<_LichessDownloadDialog> {
   }
 
   Future<void> _load() async {
-    final info = await widget.controller.refreshSource();
-    final backend = await probeZstdBackend();
-    if (!mounted) return;
-    setState(() {
+    try {
+      final info = await widget.controller.refreshSource();
+      if (!mounted) return;
+      final backend = await probeZstdBackend();
+      if (!mounted) return;
       _info = info;
       _backend = backend;
-      _loading = false;
-    });
+    } catch (error) {
+      if (mounted) showAppSnackBar(context, '$error', isError: true);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   int? get _peakBytes {
@@ -144,7 +147,9 @@ class _LichessDownloadDialogState extends State<_LichessDownloadDialog> {
                           'about 12 GB across it and every lookup afterwards '
                           'is a round trip; a local drive is a much better '
                           'home.',
-                      onChanged: (d) => setState(() => _destination = d),
+                      onChanged: (d) {
+                        if (mounted) setState(() => _destination = d);
+                      },
                     ),
                   ],
                 ),
@@ -191,6 +196,16 @@ class _LichessDownloadDialogState extends State<_LichessDownloadDialog> {
           SizedBox(width: 10),
           Text('Asking database.lichess.org how big the file is…'),
         ],
+      );
+    }
+    if (_info == null) {
+      return TextButton(
+        onPressed: () {
+          if (!mounted) return;
+          setState(() => _loading = true);
+          unawaited(_load());
+        },
+        child: const Text('Could not read download details. Retry'),
       );
     }
     final info = _info!;

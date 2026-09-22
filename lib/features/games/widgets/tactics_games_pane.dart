@@ -7,7 +7,8 @@ import '../../../core/app_state.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../widgets/accounts/accounts_dialog.dart';
-import '../../../widgets/common/list_search_field.dart' show matchesSearch;
+import '../../../design_system/components/list_search_field.dart'
+    show matchesSearch;
 import '../controllers/recent_games_controller.dart';
 import '../models/recent_game.dart';
 import '../services/home_review_runner.dart';

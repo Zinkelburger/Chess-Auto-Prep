@@ -1,6 +1,11 @@
+import 'package:path/path.dart' as p;
+import '../../repertoires/repositories/repertoire_catalog_repository.dart';
+import '../../../utils/app_messages.dart';
 import 'package:flutter/material.dart';
 
-import '../../../models/repertoire_metadata.dart';
+import '../../../l10n/generated/app_localizations.dart';
+
+import '../../repertoires/models/repertoire_metadata.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../widgets/app_breadcrumb_trail.dart';
@@ -10,7 +15,6 @@ import '../../games/widgets/my_repertoires_section.dart';
 import '../../../core/app_state.dart';
 import '../../../widgets/app_overflow_menu.dart';
 import '../../../widgets/common/searchable_picker_dialog.dart';
-import '../../../widgets/layout/board_zone.dart';
 
 /// App bar for the repertoire screen: title, generation status, and actions.
 ///
@@ -52,6 +56,7 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
     this.onImportPgn,
     this.onReload,
     this.onGenerationSettings,
+    this.onRecoverAnalysis,
     this.repertoireSettingsBuilder,
   });
 
@@ -78,6 +83,7 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback? onImportPgn;
   final VoidCallback? onReload;
   final VoidCallback? onGenerationSettings;
+  final VoidCallback? onRecoverAnalysis;
 
   /// Controls for the selected repertoire, embedded in the shared settings pane.
   final WidgetBuilder? repertoireSettingsBuilder;
@@ -101,7 +107,7 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
             : title,
       ),
       actions: [
-        BoardZoneControls(trapNavigation: trapNavigation),
+        ?trapNavigation,
         if (isGenerating)
           RepertoireGenerationStatusChip(
             isPaused: isGenerationPaused,
@@ -115,6 +121,7 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
           onImportPgn: onImportPgn,
           onReload: onReload,
           onGenerationSettings: onGenerationSettings,
+          onRecoverAnalysis: onRecoverAnalysis,
           onSettings: () =>
               openAppSettings(context, initialMode: AppMode.repertoire),
           onTrain: showTrainAction ? onTrainRepertoire : null,
@@ -232,13 +239,12 @@ class RepertoireToolbarTitle extends StatelessWidget {
 /// "Add chapter" and "View all chapters" actions. This makes the folder →
 /// chapter hierarchy visible at all times and turns chapter switching into a
 /// single click instead of a full-screen detour.
-class RepertoireBreadcrumbTitle extends StatelessWidget {
+class RepertoireBreadcrumbTitle extends StatefulWidget {
   const RepertoireBreadcrumbTitle({
     super.key,
-    required this.repertoireName,
-    required this.chapterName,
-    required this.chapters,
-    required this.currentChapterPath,
+    required this.chapter,
+    required this.catalog,
+    required this.isCurrent,
     this.onSwitchRepertoire,
     required this.onSelectChapter,
     this.onAddChapter,
@@ -246,23 +252,29 @@ class RepertoireBreadcrumbTitle extends StatelessWidget {
     this.enabled = true,
   });
 
-  final String repertoireName;
-  final String chapterName;
-  final List<RepertoireMetadata> chapters;
-  final String? currentChapterPath;
+  final RepertoireMetadata chapter;
+  final RepertoireCatalogRepository catalog;
+  final bool Function() isCurrent;
   final VoidCallback? onSwitchRepertoire;
   final ValueChanged<RepertoireMetadata> onSelectChapter;
   final VoidCallback? onAddChapter;
   final VoidCallback? onViewChapters;
   final bool enabled;
 
+  @override
+  State<RepertoireBreadcrumbTitle> createState() =>
+      _RepertoireBreadcrumbTitleState();
+}
+
+class _RepertoireBreadcrumbTitleState extends State<RepertoireBreadcrumbTitle> {
+  bool _opening = false;
   static const _addValue = '__add_chapter__';
   static const _viewAllValue = '__view_chapters__';
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final repTap = enabled ? onSwitchRepertoire : null;
+    final repTap = widget.enabled ? widget.onSwitchRepertoire : null;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -291,7 +303,7 @@ class RepertoireBreadcrumbTitle extends StatelessWidget {
                       vertical: 2,
                     ),
                     child: Text(
-                      repertoireName,
+                      p.basename(p.dirname(widget.chapter.filePath)),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.titleMedium,
@@ -320,7 +332,7 @@ class RepertoireBreadcrumbTitle extends StatelessWidget {
         children: [
           Flexible(
             child: Text(
-              chapterName,
+              widget.chapter.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.titleMedium?.copyWith(
@@ -331,13 +343,13 @@ class RepertoireBreadcrumbTitle extends StatelessWidget {
           Icon(
             Icons.arrow_drop_down,
             size: 20,
-            color: enabled ? AppColors.onSurfaceMuted : Colors.grey[700],
+            color: widget.enabled ? AppColors.onSurfaceMuted : Colors.grey[700],
           ),
         ],
       ),
     );
 
-    if (!enabled) return child;
+    if (!widget.enabled || _opening) return child;
 
     // A searchable dialog rather than a popup menu: a real repertoire runs to
     // dozens of chapters, and a menu has nowhere to put a text box. The two
@@ -347,57 +359,79 @@ class RepertoireBreadcrumbTitle extends StatelessWidget {
       waitDuration: const Duration(milliseconds: 600),
       child: InkWell(
         borderRadius: BorderRadius.circular(4),
-        onTap: () => _openChapterPicker(context),
+        onTap: _openChapterPicker,
         child: child,
       ),
     );
   }
 
-  Future<void> _openChapterPicker(BuildContext context) async {
-    final picked = await showSearchablePicker<String>(
-      context: context,
-      title: 'Switch chapter',
-      searchHint: 'Search chapters',
-      selected: currentChapterPath,
-      items: [
-        for (final c in chapters)
-          PickerItem(
-            value: c.filePath,
-            label: c.name,
-            subtitle: '${c.gameCount} line${c.gameCount == 1 ? '' : 's'}',
-            icon: Icons.bookmark_outline,
-            // The counts are noise to type against; chapters are found by
-            // name.
-            searchText: c.name,
+  Future<void> _openChapterPicker() async {
+    final isCurrent = widget.isCurrent;
+    final onSelect = widget.onSelectChapter;
+    final onAdd = widget.onAddChapter;
+    final onView = widget.onViewChapters;
+    if (_opening || !widget.enabled || !isCurrent()) return;
+    setState(() => _opening = true);
+    try {
+      final chapters = await widget.catalog.listChapters(
+        p.dirname(widget.chapter.filePath),
+      );
+      if (!mounted || !widget.enabled || !isCurrent()) return;
+      final picked = await showSearchablePicker<String>(
+        context: context,
+        title: 'Switch chapter',
+        searchHint: 'Search chapters',
+        selected: widget.chapter.filePath,
+        items: [
+          for (final c in chapters)
+            PickerItem(
+              value: c.filePath,
+              label: c.name,
+              subtitle: '${c.gameCount} line${c.gameCount == 1 ? '' : 's'}',
+              icon: Icons.bookmark_outline,
+              // The counts are noise to type against; chapters are found by
+              // name.
+              searchText: c.name,
+            ),
+          const PickerItem(
+            value: _addValue,
+            label: 'Add chapter',
+            icon: Icons.add,
           ),
-        const PickerItem(
-          value: _addValue,
-          label: 'Add chapter',
-          icon: Icons.add,
-        ),
-        const PickerItem(
-          value: _viewAllValue,
-          label: 'View all chapters',
-          icon: Icons.list_alt,
-        ),
-      ],
-      emptyMessage: 'This repertoire has no chapters yet.',
-    );
+          const PickerItem(
+            value: _viewAllValue,
+            label: 'View all chapters',
+            icon: Icons.list_alt,
+          ),
+        ],
+        emptyMessage: 'This repertoire has no chapters yet.',
+      );
 
-    if (picked == null) return;
-    if (picked == _addValue) {
-      onAddChapter?.call();
-      return;
-    }
-    if (picked == _viewAllValue) {
-      onViewChapters?.call();
-      return;
-    }
-    for (final c in chapters) {
-      if (c.filePath == picked) {
-        onSelectChapter(c);
+      if (picked == null || !mounted || !widget.enabled || !isCurrent()) return;
+      if (picked == _addValue) {
+        onAdd?.call();
         return;
       }
+      if (picked == _viewAllValue) {
+        onView?.call();
+        return;
+      }
+      for (final c in chapters) {
+        if (c.filePath == picked) {
+          onSelect(c);
+          return;
+        }
+      }
+    } catch (error) {
+      if (mounted && isCurrent()) {
+        showAppSnackBar(
+          context,
+          'Could not load chapters. $error',
+          isError: true,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _opening = false);
     }
   }
 }
@@ -500,6 +534,7 @@ class RepertoireActionsMenu extends StatelessWidget {
     this.onChoose,
     this.onReload,
     this.onGenerationSettings,
+    this.onRecoverAnalysis,
     this.onSettings,
     this.trainEnabled = true,
   });
@@ -512,6 +547,7 @@ class RepertoireActionsMenu extends StatelessWidget {
   final VoidCallback? onChoose;
   final VoidCallback? onReload;
   final VoidCallback? onGenerationSettings;
+  final VoidCallback? onRecoverAnalysis;
   final VoidCallback? onSettings;
 
   /// False keeps the Train row visible but greyed — while a build runs the
@@ -526,7 +562,7 @@ class RepertoireActionsMenu extends StatelessWidget {
   static const _train = 'Train';
   static const _check = 'Check';
 
-  List<AppMenuEntry> get _entries {
+  List<AppMenuEntry> _entries(BuildContext context) {
     final generate = <AppMenuEntry>[
       if (onPlanBuild != null)
         AppMenuEntry(
@@ -583,6 +619,12 @@ class RepertoireActionsMenu extends StatelessWidget {
           icon: Icons.refresh,
           onRun: onReload!,
         ),
+      if (onRecoverAnalysis != null)
+        AppMenuEntry(
+          label: AppLocalizations.of(context).generationRecoveryAction,
+          icon: Icons.history,
+          onRun: onRecoverAnalysis!,
+        ),
       if (onGenerationSettings != null)
         AppMenuEntry(
           label: 'Generation settings…',
@@ -624,7 +666,7 @@ class RepertoireActionsMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final entries = _entries;
+    final entries = _entries(context);
     if (entries.isEmpty) return const SizedBox.shrink();
 
     // A quiet control: the bar's one labelled menu, drawn like the mode

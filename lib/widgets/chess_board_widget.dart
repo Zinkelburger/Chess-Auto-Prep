@@ -1,3 +1,6 @@
+import 'package:provider/provider.dart';
+import 'package:chess_auto_prep/features/settings/controllers/board_display_settings.dart';
+import 'package:chess_auto_prep/features/settings/models/board_display_configuration.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart' show kSecondaryButton;
@@ -5,7 +8,6 @@ import 'package:flutter/material.dart';
 import 'package:dartchess/dartchess.dart';
 
 import '../models/board_annotation.dart';
-import '../models/board_display_settings.dart';
 import '../models/completed_move.dart';
 import '../theme/app_colors.dart';
 import '../utils/chess_utils.dart'
@@ -27,8 +29,8 @@ class ChessBoardWidget extends StatefulWidget {
   /// Borderless square tints for hints and preview emphasis.
   final Set<String> highlightedSquares;
 
-  /// Additional legal destinations, e.g. bughouse drops. Empty squares use
-  /// dots and occupied squares use rings, just like normal move selection.
+  /// Additional legal destinations, e.g. bughouse drops. Tinted like the
+  /// destinations of a piece picked up on this board.
   final Set<String> legalMoveSquares;
 
   /// From/to squares of the most recent half-move (two, in the trainer), kept
@@ -95,7 +97,9 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final display = BoardDisplaySettings.of(context);
+    final display =
+        (context.watch<BoardDisplaySettings?>()?.committed ??
+        BoardDisplayConfiguration());
     final coordinates = widget.coordinates ?? display.coordinates;
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -157,10 +161,6 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
                       ...widget.legalMoveSquares,
                       if (display.showLegalMoves) ..._legalMoveSquares,
                     },
-                    occupiedSquares: {
-                      for (final (square, _) in widget.position.board.pieces)
-                        toAlgebraic(square),
-                    },
                     recentMoveSquares: widget.recentMoveSquares,
                     flipped: widget.flipped,
                   ),
@@ -172,6 +172,9 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
                     coordinates == BoardCoordinates.everySquare)
                   CustomPaint(
                     painter: BoardCoordinatesPainter(
+                      outsideInk: Theme.of(
+                        context,
+                      ).colorScheme.onSurfaceVariant,
                       mode: coordinates,
                       flipped: widget.flipped,
                       squareSize: squareSize,
@@ -218,6 +221,7 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
               Positioned.fill(
                 child: CustomPaint(
                   painter: BoardCoordinatesPainter(
+                    outsideInk: Theme.of(context).colorScheme.onSurfaceVariant,
                     mode: coordinates,
                     flipped: widget.flipped,
                     squareSize: squareSize,

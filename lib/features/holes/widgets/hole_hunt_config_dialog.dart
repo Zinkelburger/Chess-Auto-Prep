@@ -6,8 +6,10 @@
 /// moves, verified refutations, and Maia-probed tricks.
 library;
 
+import 'package:provider/provider.dart';
+
 import 'package:flutter/material.dart';
-import '../../../models/bulk_analysis_settings.dart';
+import '../../settings/controllers/bulk_analysis_settings.dart';
 
 import '../../../services/maia/maia_factory.dart';
 import '../../../theme/app_text_styles.dart';
@@ -81,7 +83,7 @@ class _HoleHuntConfigDialogState extends State<HoleHuntConfigDialog> {
   HoleHuntConfig _buildConfig() {
     final defaults = widget.initialConfig ?? const HoleHuntConfig();
     return defaults.copyWith(
-      discoveryDepth: BulkAnalysisSettings.instance.depth,
+      discoveryDepth: context.read<BulkAnalysisSettings>().depth,
       maxPly: int.tryParse(_maxPlyCtrl.text) ?? defaults.maxPly,
       maiaElo: int.tryParse(_maiaEloCtrl.text) ?? defaults.maiaElo,
       probeBudget: _canProbe
@@ -91,11 +93,11 @@ class _HoleHuntConfigDialogState extends State<HoleHuntConfigDialog> {
           int.tryParse(_strongWindowCtrl.text) ?? defaults.strongMoveWindowCp,
       refutationThresholdCp:
           int.tryParse(_refutationCtrl.text) ?? defaults.refutationThresholdCp,
-      verifyDepth: BulkAnalysisSettings.instance.depth,
+      verifyDepth: context.read<BulkAnalysisSettings>().depth,
       candidateWindowCp:
           int.tryParse(_windowCtrl.text) ?? defaults.candidateWindowCp,
       probePly: int.tryParse(_probePlyCtrl.text) ?? defaults.probePly,
-      probeEvalDepth: BulkAnalysisSettings.instance.depth,
+      probeEvalDepth: context.read<BulkAnalysisSettings>().depth,
       minNetGainCp: int.tryParse(_minNetGainCtrl.text) ?? defaults.minNetGainCp,
     );
   }

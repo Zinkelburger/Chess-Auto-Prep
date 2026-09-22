@@ -8,10 +8,11 @@
 /// go prepare one) and book ends (the prep ran out — go extend it).
 library;
 
+import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
 import 'dart:io';
 import 'dart:isolate';
 
-import 'package:dartchess/dartchess.dart' show Chess, PgnGame;
+import 'package:dartchess/dartchess.dart' show Chess;
 
 import '../../../models/repertoire_line.dart';
 import '../../../services/repertoire_service.dart';
@@ -225,7 +226,7 @@ List<RepertoireLine> matchingBookLines(
     if (line.fullPgn.isEmpty || !line.fullPgn.contains('(')) return false;
     try {
       return pgnTreeReachesPosition(
-        PgnGame.parsePgn(line.fullPgn).moves,
+        parsePgnGame(line.fullPgn).moves,
         target,
         depth,
       );

@@ -3,6 +3,7 @@
 library;
 
 import 'dart:collection';
+import '../chess_core/moves/opening_graph.dart';
 
 import 'package:dartchess/dartchess.dart';
 
@@ -30,53 +31,37 @@ enum WdlPerspective {
   whiteBlack,
 }
 
-/// Estimated likelihood that the tree's protagonist steers the game into a
-/// position, together with how many real choices they had on the way.
-///
-/// [probability] is the product of the protagonist's empirical move
-/// frequencies at each of *their* turns along the path. Moves by the other
-/// side are treated as certain (probability 1) — the viewer controls those.
-/// [decisionPoints] counts the protagonist's moves on the path where the
-/// database shows they did not always continue this way (frequency < 100%).
-class ReachEstimate {
-  final double probability;
-  final int decisionPoints;
-
-  const ReachEstimate(this.probability, this.decisionPoints);
-
-  double get percent => probability * 100;
-
-  /// Compact percentage label: '100', '<0.1', or one decimal place.
-  String get percentLabel {
-    if (percent >= 99.95) return '100';
-    if (percent > 0 && percent < 0.05) return '<0.1';
-    return percent.toStringAsFixed(1);
-  }
-}
-
 /// One position on one move-order path, with the results of the games that
 /// reached it that way.  Transpositions are separate nodes; see
 /// [PositionGroup] for the FEN-keyed view.
-class OpeningTreeNode {
+class OpeningTreeNode implements OpeningNodeView {
   /// The move that led to this node (SAN notation, e.g. "e4", "Nf3")
   /// Empty string for root node
+  @override
   final String move;
 
   /// The FEN position after this move was played
+  @override
   final String fen;
 
   /// Statistics for games where this move was played
+  @override
   int gamesPlayed;
+  @override
   int wins;
+  @override
   int losses;
+  @override
   int draws;
 
   /// Child nodes (next moves from this position)
   /// Key: move in SAN notation
   /// Value: the resulting node
+  @override
   final Map<String, OpeningTreeNode> children;
 
   /// Parent node (for navigation back up the tree)
+  @override
   OpeningTreeNode? parent;
 
   OpeningTreeNode({
@@ -96,18 +81,21 @@ class OpeningTreeNode {
   /// protagonist (the user/repertoire side the tree was built for), not for
   /// White. Contrast with `BuildTreeNode.whiteWinRate`, which is always
   /// White's score.
+  @override
   double get winRate {
     if (gamesPlayed == 0) return 0.0;
     return (wins + 0.5 * draws) / gamesPlayed;
   }
 
   /// Win rate as percentage
+  @override
   double get winRatePercent => winRate * 100;
 
   List<OpeningTreeNode>? _sortedChildrenCache;
 
   /// Get sorted list of children by number of games played (descending).
   /// Cached and invalidated when children or stats change.
+  @override
   List<OpeningTreeNode> get sortedChildren =>
       _sortedChildrenCache ??= children.values.toList()
         ..sort((a, b) => b.gamesPlayed.compareTo(a.gamesPlayed));
@@ -115,6 +103,7 @@ class OpeningTreeNode {
   void _invalidateSortCache() => _sortedChildrenCache = null;
 
   /// Whether any of the counted games have a real result (not just `*`).
+  @override
   bool get hasWdl => wins + losses + draws > 0;
 
   /// Update statistics with a game result.
@@ -150,12 +139,14 @@ class OpeningTreeNode {
   /// position *after* the move, so the mover is the side that is no longer to
   /// move. FEN-derived (rather than ply parity) so custom start positions and
   /// transposed paths stay correct.
+  @override
   bool get moverWasWhite => !isWhiteToMove(fen);
 
   /// How likely the protagonist (the player whose games built this tree,
   /// playing White when [protagonistIsWhite]) is to reach this node's
   /// position, assuming the viewer plays down this exact path themselves.
   /// See [ReachEstimate].
+  @override
   ReachEstimate reachEstimate({required bool protagonistIsWhite}) {
     var probability = 1.0;
     var decisionPoints = 0;
@@ -173,6 +164,7 @@ class OpeningTreeNode {
   }
 
   /// Get path from root to this node (list of moves)
+  @override
   List<String> getMovePath() {
     final path = <String>[];
     OpeningTreeNode? current = this;
@@ -191,6 +183,7 @@ class OpeningTreeNode {
   /// the walk will visit: a node at [maxPly] is counted, its children are not.
   /// Breadth-first and iterative because a deep repertoire will blow the
   /// stack on recursion.
+  @override
   int countDescendants({required int maxPly}) {
     var count = 0;
     final queue = Queue<(OpeningTreeNode, int)>()..add((this, 0));
@@ -206,6 +199,7 @@ class OpeningTreeNode {
   }
 
   /// Get the full move path as a string (e.g. "1.e4 e5 2.Nf3 Nc6")
+  @override
   String getMovePathString() {
     final moves = getMovePath();
     if (moves.isEmpty) return 'Starting position';
@@ -226,8 +220,9 @@ class OpeningTreeNode {
 /// split across several [OpeningTreeNode]s. Summing here is what makes tree
 /// counts agree with the FEN-keyed position statistics shown elsewhere
 /// (e.g. the FEN list in player analysis).
-class PositionGroup {
+class PositionGroup implements OpeningPositionView {
   /// The nodes sharing this position. Never empty.
+  @override
   final List<OpeningTreeNode> nodes;
 
   /// SAN to display for this group when it differs from [primaryNode.move]
@@ -237,6 +232,7 @@ class PositionGroup {
 
   /// True when this continuation was not actually played from the parent
   /// FEN, but is a legal move that lands on a FEN the tree already has.
+  @override
   final bool viaTransposition;
 
   PositionGroup(this.nodes, {this.displayMove, this.viaTransposition = false})
@@ -245,43 +241,54 @@ class PositionGroup {
   /// The node reached by the most games — the representative concrete path
   /// used where a single node is required (navigation cursor, move-path
   /// display, coverage checks).
+  @override
   late final OpeningTreeNode primaryNode = nodes.reduce(
     (a, b) => b.gamesPlayed > a.gamesPlayed ? b : a,
   );
 
   /// Full FEN of the position (from [primaryNode]).
+  @override
   String get fen => primaryNode.fen;
 
   /// SAN of the move leading here. Continuation groups built by [children]
   /// share one SAN; for an arbitrary position group this is the primary
   /// node's last move. One-ply transpositions pass [displayMove] so the
   /// row shows the SAN from *this* position, not the database's move order.
+  @override
   String get move => displayMove ?? primaryNode.move;
 
   // A group is a snapshot built for one read (a row, a header, a sort), so
   // its sums are computed once on first use rather than re-folded on every
   // access — a sort comparator alone reads [gamesPlayed] O(n log n) times.
+  @override
   late final int gamesPlayed = nodes.fold(0, (sum, n) => sum + n.gamesPlayed);
+  @override
   late final int wins = nodes.fold(0, (sum, n) => sum + n.wins);
+  @override
   late final int losses = nodes.fold(0, (sum, n) => sum + n.losses);
+  @override
   late final int draws = nodes.fold(0, (sum, n) => sum + n.draws);
 
   /// Whether any path into this group has a scored result.
+  @override
   bool get hasWdl => wins + losses + draws > 0;
 
   /// Win rate across all paths (user perspective, like
   /// [OpeningTreeNode.winRate]).
+  @override
   double get winRate {
     final games = gamesPlayed;
     if (games == 0) return 0.0;
     return (wins + 0.5 * draws) / games;
   }
 
+  @override
   double get winRatePercent => winRate * 100;
 
   /// Reach estimate summed across every path (transposition) into this
   /// position — the paths are disjoint, so their probabilities add. Decision
   /// points are reported for the most-played path ([primaryNode]).
+  @override
   ReachEstimate reachEstimate({required bool protagonistIsWhite}) {
     var probability = 0.0;
     for (final node in nodes) {
@@ -299,6 +306,7 @@ class PositionGroup {
 
   /// Continuations from this position, merged across all [nodes] (grouped by
   /// SAN) and sorted by games played, descending.
+  @override
   late final List<PositionGroup> children = _groupChildren();
 
   List<PositionGroup> _groupChildren() {
@@ -314,17 +322,22 @@ class PositionGroup {
 }
 
 /// Opening tree - contains the root node and provides navigation
-class OpeningTree {
+class OpeningTree implements OpeningGraph {
+  @override
   final OpeningTreeNode root;
+  @override
   OpeningTreeNode currentNode;
 
   /// Collection viewers retain disconnected setup chapters as separate roots.
   /// Other consumers keep their existing single-root repertoire layout.
   final bool preserveSetupRoots;
+  @override
   final List<OpeningTreeNode> setupRoots = [];
+  @override
   OpeningTreeNode cursorRoot;
 
   /// FEN to node mapping for quick lookup
+  @override
   final Map<String, List<OpeningTreeNode>> fenToNodes = {};
 
   /// SAN path the cursor actually walked (click order / board history),
@@ -358,16 +371,21 @@ class OpeningTree {
 
   /// FEN the cursor is sitting on — the off-book board when the walked
   /// path left the database, otherwise [currentNode.fen].
+  @override
   String get currentFen => _offBookFen ?? currentNode.fen;
 
   /// Whether [currentFen] occurs in the tree (any move order).
+  @override
   bool get inBook => _nodesAt(currentFen) != null;
 
   /// SAN path shown in the header: the walk that produced [currentFen].
+  @override
   List<String> get currentMovePath => List<String>.of(_walkedSans);
 
+  @override
   bool get canGoBack => _walkedSans.isNotEmpty;
 
+  @override
   String get currentMovePathString => _walkedSans.isEmpty
       ? 'Starting position'
       : buildNumberedMovetext(
@@ -381,6 +399,7 @@ class OpeningTree {
   /// legal moves that land on a FEN the tree already has (one-ply
   /// transpositions). So after 1.d4 c5 2.e3, ...Nf6 appears if the
   /// database only has 1.d4 Nf6 2.e3 c5.
+  @override
   List<PositionGroup> get continuations => continuationsAt(currentFen);
 
   /// See [continuations].
@@ -389,6 +408,7 @@ class OpeningTree {
   /// destination is actually in the book; the legal-move list itself is
   /// memoised per FEN, so a widget rebuild costs one map lookup per legal
   /// move rather than a move generation per legal move.
+  @override
   List<PositionGroup> continuationsAt(String fen) {
     final bySan = <String, PositionGroup>{};
     final nodes = _nodesAt(fen);
@@ -488,6 +508,7 @@ class OpeningTree {
   }
 
   /// Transposition-aware view of the current position (FEN, not path).
+  @override
   PositionGroup get currentGroup {
     final indexed = _nodesAt(currentFen);
     if (indexed != null) return PositionGroup(indexed);
@@ -508,14 +529,17 @@ class OpeningTree {
   }
 
   /// Get total number of games in the tree (games at root)
+  @override
   int get totalGames =>
       root.gamesPlayed +
       setupRoots.fold<int>(0, (total, node) => total + node.gamesPlayed);
 
   /// Get current depth in the tree (walked plies, including off-book).
+  @override
   int get currentDepth => _walkedSans.length;
 
   /// Whether [san] is already a child of any node at [fen].
+  @override
   bool hasMove(String fen, String san) {
     final key = normalizeFen(fen);
     final nodes = fenToNodes[key];
@@ -533,6 +557,7 @@ class OpeningTree {
   ///
   /// [fenToNodes] is keyed by [normalizeFen], so this is a single map lookup.
   /// Returns `false` when [fen] is unparsable or [san] is illegal in it.
+  @override
   bool doesMoveTranspose(String fen, String san) {
     // Best-effort; an unparsable position simply isn't a transposition.
     final next = _fenAfter(fen, san);
@@ -544,12 +569,14 @@ class OpeningTree {
   /// Read-only: does not move the cursor.  Callers ask this once per candidate
   /// row, and the previous implementation reset and re-walked the shared
   /// cursor every time.
+  @override
   bool hasMoveOnPath(List<String> pathFromRoot, String san) =>
       nodeAtPath(pathFromRoot)?.children.containsKey(san) ?? false;
 
   /// The node reached by walking [sans] from the root with the same
   /// transposition rules as [makeMove], or null when the path leaves the
   /// tree.  Pure: the cursor is untouched.
+  @override
   OpeningTreeNode? nodeAtPath(List<String> sans) {
     var node = root;
     for (final san in sans) {

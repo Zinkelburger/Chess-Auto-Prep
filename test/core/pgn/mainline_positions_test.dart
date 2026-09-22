@@ -1,4 +1,4 @@
-import 'package:chess_auto_prep/core/pgn/mainline_positions.dart';
+import 'package:chess_auto_prep/chess_core/pgn/mainline_positions.dart';
 import 'package:chess_auto_prep/utils/fen_utils.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -61,6 +61,25 @@ void main() {
   });
 
   group('memoisation', () {
+    test(
+      'published positions share a revision and detach on append or clear',
+      () {
+        final history = sans(['e4']);
+        final memo = MainlinePositions.of(history, Chess.initial);
+        final first = memo.positions;
+        expect(memo.positions, same(first));
+        history.add(PgnNodeData(san: 'e5'));
+        MainlinePositions.of(history, Chess.initial);
+        expect(memo.positions, hasLength(3));
+        expect(first, hasLength(2));
+        final extended = memo.positions;
+        history.clear();
+        MainlinePositions.of(history, Chess.initial);
+        expect(memo.positions, hasLength(1));
+        expect(extended, hasLength(3));
+      },
+    );
+
     test('the same list and start hand back the same instance', () {
       final history = sans(['e4', 'e5']);
       final first = MainlinePositions.of(history, Chess.initial);

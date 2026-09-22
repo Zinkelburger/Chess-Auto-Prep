@@ -5,23 +5,26 @@
 /// every explanation in its original place in the PGN.
 library;
 
+import 'package:chess_auto_prep/chess_core/pgn/pgn_game_view.dart';
 import '../../utils/pgn_nags.dart';
+import '../../features/documents/models/viewer_document_layout.dart';
+import '../../design_system/layout/anchored_document_viewport.dart';
 import 'package:dartchess/dartchess.dart';
-import 'package:flutter/foundation.dart' show listEquals;
+import 'package:flutter/foundation.dart' show listEquals, setEquals;
 import 'package:flutter/material.dart';
 
-import '../../core/pgn/mainline_positions.dart';
-import '../../core/pgn/solitaire_reveal.dart';
-import '../../models/move_tree.dart';
-import '../../services/move_eval.dart'
+import '../../chess_core/pgn/mainline_positions.dart';
+import '../../features/documents/models/solitaire_reveal.dart';
+import '../../chess_core/moves/move_tree_view.dart';
+import 'package:chess_auto_prep/chess_core/analysis/move_eval.dart'
     show MoveClassification, classifyMove, cpToWinningChance, initialWinChance;
-import '../../theme/app_colors.dart';
-import '../../theme/pgn_text_styles.dart';
+import 'pgn_text_styles.dart';
 import 'comment_editor.dart';
 import 'comment_diagram.dart';
 import '../../utils/course_comment_spacing.dart';
 import '../../utils/prose_comment_parser.dart';
 import 'pgn_reading_pane.dart';
+import 'pgn_reading_scroll.dart';
 import 'pgn_reading_passage.dart';
 import 'movetext_primitives.dart' show MoveChip, PgnMoveDecorations;
 import '../../utils/chess_utils.dart'
@@ -56,25 +59,29 @@ part 'pgn_movetext_variations.dart';
 
 // Also used by the prose-preview chips in the comment renderer.
 const _kReservedBorder = PgnMoveDecorations.idle;
-final _kHoverDecoration = PgnMoveDecorations.hover;
 
 class PgnMovetextView extends StatefulWidget {
   /// The parsed game (for game-level comments before any move).
-  final PgnGame? game;
+  final PgnGameMetadata? game;
   final PgnReadingBranch? readingScope;
   final bool expandAll;
+  final Widget? header;
+  final PgnReadingViewport? viewport;
 
   /// Mainline moves in display order.
-  final List<PgnNodeData> moveHistory;
+  final List<PgnMoveSnapshot> moveHistory;
+
+  /// Shared owner memo; annotation-only revisions do not replay the game.
+  final MainlinePositions? mainlinePositions;
 
   /// ply (0-based mainline index) -> root variation nodes branching there.
-  final Map<int, List<MoveNode>> variationsByPly;
+  final Map<int, List<MoveNodeView>> variationsByPly;
 
   /// 1-based index of the current mainline position (0 = start).
   final int mainLineIndex;
 
   /// Path into the current variation (empty = on the mainline).
-  final List<MoveNode> analysisPath;
+  final List<MoveNodeView> analysisPath;
 
   /// Mainline index whose comment is being edited inline, or null.
   final int? editingCommentIndex;
@@ -107,10 +114,10 @@ class PgnMovetextView extends StatefulWidget {
   onShowMoveContextMenu;
   final void Function(int moveIndex, String text) onSaveComment;
   final VoidCallback onCancelEditingComment;
-  final void Function(MoveNode node, int branchPly) onGoToAnalysisNode;
+  final void Function(MoveNodeView node, int branchPly) onGoToAnalysisNode;
 
   /// Right-click on a variation node (copy line / add to study / delete menu).
-  final void Function(MoveNode node, int branchPly, Offset globalPosition)?
+  final void Function(MoveNodeView node, int branchPly, Offset globalPosition)?
   onShowVariationContextMenu;
 
   /// What a running solitaire session lets the reader see: mainline moves
@@ -150,7 +157,10 @@ class PgnMovetextView extends StatefulWidget {
     required this.game,
     this.readingScope,
     this.expandAll = false,
+    this.header,
+    this.viewport,
     required this.moveHistory,
+    this.mainlinePositions,
     required this.variationsByPly,
     required this.mainLineIndex,
     required this.analysisPath,
@@ -179,55 +189,267 @@ class PgnMovetextView extends StatefulWidget {
 
 class _PgnMovetextViewState extends State<PgnMovetextView> {
   final Map<int, bool> _branchVisibility = {};
+  final _selectionKey = GlobalKey();
+  final _session = Object();
+  final _commentDrafts = <Object, String>{};
+  ViewerDocumentLayout? _layout;
+  Object? _layoutInputs;
+  Set<int> _selectedBranches = {};
+  List<PgnMoveSnapshot>? _evaluatedHistory;
+  bool? _evaluatedWhiteTurn;
+  bool _machineAnnotated = false;
+  Map<int, _EvalNote> _evalNotes = const {};
+  Map<int, int> _engineRoots = const {};
+
+  bool _visible(MoveNodeView node, int ply) =>
+      widget.reveal?.isNodeVisible(node, ply) ?? true;
+  bool _visibleComment(String raw) =>
+      filterDisplayComment(raw).isNotEmpty ||
+      MoveMetrics.parse(raw).summary.isNotEmpty;
+
+  bool _inline(int ply) =>
+      _engineRoots[ply] == null &&
+      _inlineVariationNodes(
+            widget,
+            ply,
+            nodeVisible: (n) => _visible(n, ply),
+          ) !=
+          null;
+
+  ViewerDocumentLayout _documentLayout() {
+    if (!identical(_evaluatedHistory, widget.moveHistory) ||
+        _evaluatedWhiteTurn != widget.startingWhiteTurn) {
+      _evaluatedHistory = widget.moveHistory;
+      _evaluatedWhiteTurn = widget.startingWhiteTurn;
+      _machineAnnotated = _isMachineAnnotated(widget.moveHistory);
+      _evalNotes = _machineAnnotated ? _buildEvalNotes(widget) : const {};
+    }
+    final path = widget.analysisPath;
+    final selected = <int>{
+      for (var i = 0; i < path.length; i++)
+        if (i == 0 || path[i - 1].children.firstOrNull?.id != path[i].id)
+          path[i].id,
+      if (widget.readingScope != null) widget.readingScope!.root.id,
+    };
+    final inputs = (
+      widget.moveHistory,
+      widget.variationsByPly,
+      widget.game,
+      widget.readingScope?.root,
+      widget.reveal,
+      widget.expandAll,
+      widget.editMode,
+      widget.editingCommentIndex,
+      widget.startingWhiteTurn,
+    );
+    if (_layout != null &&
+        inputs == _layoutInputs &&
+        setEquals(selected, _selectedBranches)) {
+      return _layout!;
+    }
+    _layoutInputs = inputs;
+    _selectedBranches = selected;
+    _engineRoots = {
+      for (final entry in _evalNotes.entries)
+        if (entry.value.pv.isNotEmpty &&
+            widget.editingCommentIndex != entry.key)
+          for (final root
+              in (widget.variationsByPly[entry.key] ?? const <MoveNodeView>[])
+                  .where(
+                    (n) =>
+                        n.san == entry.value.pv.first && _visible(n, entry.key),
+                  )
+                  .take(1))
+            entry.key: root.id,
+    };
+    return _layout = ViewerDocumentLayout(
+      moves: widget.moveHistory,
+      variations: widget.variationsByPly,
+      visible: _visible,
+      proseReference: (n, ply) => _isRepeatedProseReference(widget, n, ply),
+      inlineVariation: _inline,
+      visibility: _branchVisibility,
+      selectedPath: selected,
+      expandAll: widget.expandAll,
+      frontier: widget.reveal?.mainlinePly ?? widget.moveHistory.length,
+      engineRoots: _engineRoots,
+      scope: widget.readingScope?.root,
+      scopePly: widget.readingScope?.ply ?? 0,
+      scopeBranchPly: widget.readingScope?.branchPly ?? 0,
+      editingCommentIndex: widget.editingCommentIndex,
+      breaksMainline: (move, i) =>
+          widget.editingCommentIndex == i ||
+          _evalNotes.containsKey(i) ||
+          (move.startingComments?.any(_visibleComment) ?? false) ||
+          (move.comments?.any(
+                (raw) =>
+                    !(_machineAnnotated && _isEvalOnlyComment(raw)) &&
+                    _visibleComment(raw),
+              ) ??
+              false),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final layout = _documentLayout();
+    final selected = widget.analysisPath.lastOrNull;
+    final selectedRow = selected == null
+        ? layout.mainlineRow(widget.mainLineIndex - 1) ?? 0
+        : layout.nodeRow(selected.id);
+    final config = widget.viewport;
+    return AnchoredDocumentViewport(
+      rows: _ViewerRows(layout),
+      session: (_session, widget.readingScope?.root.id),
+      selection: config?.revision ?? (widget.mainLineIndex, selected?.id),
+      selectedRow: selectedRow,
+      selectionKey: widget.currentMoveKey is GlobalKey
+          ? widget.currentMoveKey as GlobalKey
+          : _selectionKey,
+      controller: config?.controller,
+      scrollViewKey: config == null
+          ? null
+          : const ValueKey('pgn-reading-scroll'),
+      revealSelection: config == null,
+      restoreAnchor: config?.restoreAnchor,
+      onAnchorChanged: config?.onAnchorChanged,
+      rowBuilder: (index) {
+        final row = layout.rows[index];
+        var child = switch (row) {
+          ViewerIntroductionRow() => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (widget.header != null) widget.header!,
+              _buildMainlineRange(context, 0, 0, introduction: true),
+            ],
+          ),
+          ViewerMainlineRow() => _buildMainlineRange(
+            context,
+            row.start,
+            row.end,
+          ),
+          ViewerVariationRow() => _buildVariationRow(
+            context,
+            widget,
+            row,
+            onToggleBranch: _toggleBranch,
+          ),
+          ViewerFrontierRow() => RichText(
+            text: TextSpan(
+              style: PgnTextStyles.rowRootAt(context, 0),
+              children: _buildInlineVariationAtPly(
+                context,
+                widget,
+                row.ply,
+                nodeVisible: (n) => _visible(n, row.ply),
+              ),
+            ),
+          ),
+        };
+        if (row is ViewerVariationRow && row.engineMove != null) {
+          final note = _evalNotes[row.engineMove]!;
+          final continues =
+              index + 1 < layout.rows.length &&
+              layout.rows[index + 1] is ViewerVariationRow &&
+              (layout.rows[index + 1] as ViewerVariationRow).engineMove ==
+                  row.engineMove;
+          child = Container(
+            key: ValueKey((
+              'pgn-analysis-variation',
+              row.engineMove,
+              row.nodes.first.id,
+            )),
+            margin: EdgeInsets.fromLTRB(20, 0, 0, continues ? 0 : 14),
+            padding: const EdgeInsets.fromLTRB(12, 0, 8, 0),
+            decoration: BoxDecoration(
+              border: Border(
+                left: BorderSide(
+                  color: PgnTextStyles.nagInk(
+                    context,
+                    note.classification.nag ?? 0,
+                  ).withValues(alpha: .55),
+                  width: 2,
+                ),
+              ),
+            ),
+            child: child,
+          );
+        }
+        final padding = config?.padding ?? EdgeInsets.zero;
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+            padding.left,
+            index == 0 ? padding.top : 0,
+            padding.right,
+            index == layout.rows.length - 1 ? padding.bottom : 0,
+          ),
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 900),
+              child: PgnReadingAnchorLayout(
+                revision: config?.revision ?? 0,
+                child: child,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
 
   void _toggleBranch(int id) {
     if (!mounted) return;
-    setState(() => _branchVisibility[id] = !(_branchVisibility[id] ?? true));
+    setState(() {
+      _branchVisibility[id] =
+          !(_branchVisibility[id] ??
+              (widget.expandAll ||
+                  (_layout?.rows
+                              .whereType<ViewerVariationRow>()
+                              .where((r) => r.root.id == id)
+                              .firstOrNull
+                              ?.depth ??
+                          1) <=
+                      2));
+      _layout = null;
+    });
   }
 
   @override
   void didUpdateWidget(PgnMovetextView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.editingCommentIndex != widget.editingCommentIndex ||
+        oldWidget.moveHistory.firstOrNull?.identity !=
+            widget.moveHistory.firstOrNull?.identity) {
+      _commentDrafts.clear();
+    }
     if (oldWidget.expandAll != widget.expandAll ||
+        oldWidget.viewport?.foldRevision != widget.viewport?.foldRevision ||
         oldWidget.game != widget.game) {
       _branchVisibility.clear();
+      _layout = null;
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildMainlineRange(
+    BuildContext context,
+    int start,
+    int end, {
+    bool introduction = false,
+  }) {
     final view = widget;
-    if (view.readingScope case final scope?) {
-      return _buildVariationDocument(
-        view,
-        scope.root,
-        ply: scope.ply,
-        branchPly: scope.branchPly,
-        depth: 0,
-        branchVisibility: _branchVisibility,
-        onToggleBranch: _toggleBranch,
-        nodeVisible: view.reveal == null
-            ? null
-            : (node) => view.reveal!.isNodeVisible(node, scope.branchPly),
-      );
-    }
-    if (view.moveHistory.isEmpty &&
-        view.variationsByPly.isEmpty &&
-        (view.game == null || view.game!.comments.isEmpty)) {
-      return const SizedBox();
-    }
-
     final children = <Widget>[];
     final spans = <InlineSpan>[];
-    var moveNumber = view.startingMoveNumber;
-    var isWhiteTurn = view.startingWhiteTurn;
+    final coords = _coordsAtPly(view, start);
+    var moveNumber = coords.moveNumber;
+    var isWhiteTurn = coords.isWhite;
     // After a comment/variation/editor breaks the mainline Wrap run, the next
     // Black move must show `N...` (same as the start-of-game Black case).
-    var forceBlackEllipsis = false;
+    var forceBlackEllipsis = start > 0;
 
     // Root style for RichText runs of mainline moves; comments/variations
     // use their own styles via [PgnTextStyles].
-    final baseStyle = PgnTextStyles.rowRootAt(0);
+    final baseStyle = PgnTextStyles.rowRootAt(context, 0);
 
     void flushSpans() {
       if (spans.isNotEmpty) {
@@ -257,7 +479,7 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
     void emitComment(String raw, {Position? anchorPos, int anchorPly = 0}) {
       // Measured facts first, on their own row: a generated line annotates
       // every move, and interleaving that with prose would bury both.
-      final metrics = _metricsSpans(raw);
+      final metrics = _metricsSpans(context, raw);
       if (metrics.isNotEmpty) {
         emitFullWidthRow(
           RichText(text: TextSpan(children: List.of(metrics))),
@@ -265,6 +487,7 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
         );
       }
       final rendered = _renderComment(
+        context,
         view,
         raw,
         anchorPos: anchorPos,
@@ -278,7 +501,7 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
           _readableProse(
             RichText(
               text: TextSpan(
-                style: PgnTextStyles.commentAt(0),
+                style: PgnTextStyles.commentAt(context, 0),
                 children: List.of(rendered.spans),
               ),
             ),
@@ -287,29 +510,21 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
       }
     }
 
-    final decoratedRoots = <int>{};
-
-    /// Keep the verdict and suggested line together, inset from the game and
-    /// with enough space below to clearly resume the played moves.
     void emitEvalNote(_EvalNote note, int moveIndex) {
-      final root = note.pv.isEmpty
-          ? null
-          : view.variationsByPly[moveIndex]
-                ?.where(
-                  (node) =>
-                      node.san == note.pv.first &&
-                      (view.reveal?.isNodeVisible(node, moveIndex) ?? true),
-                )
-                .firstOrNull;
-      if (root != null) decoratedRoots.add(root.id);
       emitFullWidthRow(
         Container(
-          margin: const EdgeInsets.fromLTRB(20, 6, 0, 14),
+          margin: EdgeInsets.fromLTRB(
+            20,
+            6,
+            0,
+            _engineRoots[moveIndex] == null ? 14 : 0,
+          ),
           padding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
           decoration: BoxDecoration(
             border: Border(
               left: BorderSide(
-                color: nagColor(
+                color: PgnTextStyles.nagInk(
+                  context,
                   note.classification.nag ?? 0,
                 ).withValues(alpha: 0.55),
                 width: 2,
@@ -322,24 +537,10 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
             children: [
               RichText(
                 text: TextSpan(
-                  style: PgnTextStyles.commentAt(0),
-                  children: _evalNoteSpans(note),
+                  style: PgnTextStyles.commentAt(context, 0),
+                  children: _evalNoteSpans(context, note),
                 ),
               ),
-              if (root != null)
-                _buildVariationDocument(
-                  view,
-                  root,
-                  ply: moveIndex,
-                  branchPly: moveIndex,
-                  depth: 1,
-                  branchVisibility: _branchVisibility,
-                  onToggleBranch: _toggleBranch,
-                  leadingLabel: 'Best: ',
-                  nodeVisible: view.reveal == null
-                      ? null
-                      : (node) => view.reveal!.isNodeVisible(node, moveIndex),
-                ),
             ],
           ),
         ),
@@ -347,36 +548,15 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
       );
     }
 
-    /// Emit every sideline at [ply] as one cohesive block. The breathing room
-    /// goes *around* the group, not between its rows — uniform per-row padding
-    /// is what turns a page of sidelines into an even gray mass with no
-    /// entry points.
     void emitVariationsAtPly(int ply) {
-      final reveal = view.reveal;
-      final inline = _buildInlineVariationAtPly(
-        view,
-        ply,
-        nodeVisible: (node) =>
-            !decoratedRoots.contains(node.id) &&
-            (reveal?.isNodeVisible(node, ply) ?? true),
-      );
-      if (inline != null) {
-        spans.addAll(inline);
-        return;
-      }
-      final rows = _buildVariationRowsAtPly(
-        view,
-        ply,
-        nodeVisible: (node) =>
-            !decoratedRoots.contains(node.id) &&
-            (reveal?.isNodeVisible(node, ply) ?? true),
-        branchVisibility: _branchVisibility,
-        onToggleBranch: _toggleBranch,
-      );
-      if (rows.isEmpty) return;
-      emitFullWidthRow(
-        Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: rows),
-        vertical: 0,
+      if (!_inline(ply)) return;
+      spans.addAll(
+        _buildInlineVariationAtPly(
+          context,
+          view,
+          ply,
+          nodeVisible: (n) => _visible(n, ply),
+        )!,
       );
     }
 
@@ -388,19 +568,17 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
     // not rendered at all — every classified move gets a mark, including
     // interesting moves identified by Maia. A game with no mistakes in it still hides them, which is why this
     // is a separate flag and not "are there any notes".
-    final machineAnnotated = _isMachineAnnotated(view.moveHistory);
-    final evalNotes = machineAnnotated
-        ? _buildEvalNotes(view)
-        : const <int, _EvalNote>{};
+    final machineAnnotated = _machineAnnotated;
+    final evalNotes = _evalNotes;
 
     // Game-level comments (before any moves) — common in book PGNs
-    if (view.game != null && view.game!.comments.isNotEmpty) {
+    if (introduction && view.game != null && view.game!.comments.isNotEmpty) {
       for (final comment in view.game!.comments) {
         emitComment(comment, anchorPos: _posAt(prefix, 0), anchorPly: 0);
       }
     }
 
-    for (int i = 0; i < view.moveHistory.length; i++) {
+    for (int i = start; i < end; i++) {
       // Solitaire mode: stop rendering at the revealed boundary
       if (view.reveal != null && !view.reveal!.isMainlineVisible(i)) break;
 
@@ -440,7 +618,10 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
 
       if (isWhiteTurn) {
         spans.add(
-          TextSpan(text: '$moveNumber. ', style: PgnTextStyles.moveNumberAt(0)),
+          TextSpan(
+            text: '$moveNumber. ',
+            style: PgnTextStyles.moveNumberAt(context, 0),
+          ),
         );
         forceBlackEllipsis = false;
       } else if (forceBlackEllipsis || (i == 0 && !view.startingWhiteTurn)) {
@@ -448,7 +629,7 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
         spans.add(
           TextSpan(
             text: '$moveNumber... ',
-            style: PgnTextStyles.moveNumberAt(0),
+            style: PgnTextStyles.moveNumberAt(context, 0),
           ),
         );
         forceBlackEllipsis = false;
@@ -464,8 +645,11 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
       // The current move keeps the mainline's weight and size; only the pill
       // changes, so navigating never reflows the wrapped movetext.
       final moveStyle = isCurrentMove
-          ? PgnTextStyles.moveAt(0).copyWith(color: AppColors.pgnMoveCurrentFg)
-          : PgnTextStyles.moveAt(0);
+          ? PgnTextStyles.moveAt(
+              context,
+              0,
+            ).copyWith(color: Theme.of(context).colorScheme.onPrimaryContainer)
+          : PgnTextStyles.moveAt(context, 0);
 
       // Build SAN + NAG text (always shown — annotations survive view mode).
       // Every NAG, not just the six editable quality glyphs: `⩲`, `∞`, `→` and
@@ -485,9 +669,18 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
             san: san,
             nagSuffix: nagSuffix,
             sanStyle: moveStyle,
-            nagStyle: PgnTextStyles.nagAt(0, moveStyle: moveStyle, nags: nags),
-            decoration: PgnMoveDecorations.resolve(selected: isCurrentMove),
+            nagStyle: PgnTextStyles.nagAt(
+              context,
+              0,
+              moveStyle: moveStyle,
+              nags: nags,
+            ),
+            decoration: PgnMoveDecorations.resolve(
+              context,
+              selected: isCurrentMove,
+            ),
             hoverDecoration: PgnMoveDecorations.resolve(
+              context,
               selected: isCurrentMove,
               hovered: true,
             ),
@@ -510,9 +703,21 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
         forceBlackEllipsis = true;
         children.add(
           PgnCommentEditor(
-            initialText: commentProse(_rawComment(moveData)),
-            onSave: (text) => view.onSaveComment(i, text),
-            onCancel: view.onCancelEditingComment,
+            key: ValueKey(moveData.identity),
+            initialText:
+                _commentDrafts[moveData.identity] ??
+                commentProse(_rawComment(moveData)),
+            onChanged: (text) => _commentDrafts[moveData.identity] = text,
+            onSave: (text) {
+              if (!mounted) return;
+              _commentDrafts.remove(moveData.identity);
+              view.onSaveComment(i, text);
+            },
+            onCancel: () {
+              if (!mounted) return;
+              _commentDrafts.remove(moveData.identity);
+              view.onCancelEditingComment();
+            },
           ),
         );
       } else {
@@ -552,13 +757,6 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
       isWhiteTurn = !isWhiteTurn;
     }
 
-    // Continuations added beyond the spine, and revealed solitaire attempts
-    // at an unplayed frontier, still need a place after the last visible move.
-    final frontier =
-        view.reveal?.mainlinePly.clamp(0, view.moveHistory.length) ??
-        view.moveHistory.length;
-    emitVariationsAtPly(frontier);
-
     flushSpans();
 
     return Column(
@@ -566,4 +764,17 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
       children: children,
     );
   }
+}
+
+final class _ViewerRows implements DocumentRows {
+  const _ViewerRows(this.layout);
+  final ViewerDocumentLayout layout;
+  @override
+  Object get revision => layout;
+  @override
+  int get length => layout.rows.length;
+  @override
+  Object keyAt(int index) => layout.rows[index].key;
+  @override
+  int? indexOfKey(Object key) => layout.indexOfKey(key);
 }

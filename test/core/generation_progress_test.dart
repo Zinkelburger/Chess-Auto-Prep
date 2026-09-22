@@ -4,29 +4,19 @@ library;
 
 import 'package:chess_auto_prep/core/generation_progress.dart';
 import 'package:chess_auto_prep/services/jobs/generation_phase.dart';
-import 'package:chess_auto_prep/models/build_tree_node.dart';
+import 'package:chess_auto_prep/chess_core/generation/build_tree_node.dart';
 import 'package:chess_auto_prep/services/jobs/repertoire_job.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _Harness {
-  _Harness({this.withJob = true});
-
-  final bool withJob;
   int notifies = 0;
-  bool running = true;
-  bool paused = false;
-  final Stopwatch stopwatch = Stopwatch()..start();
-  late final RepertoireJob? job = withJob
-      ? RepertoireJob(id: 'j', type: JobType.generation, label: 'build')
-      : null;
-
+  JobProgress published = JobProgress.zero;
   late final GenerationProgress progress = GenerationProgress(
-    notify: () => notifies++,
-    job: () => job,
-    isRunning: () => running,
-    isPaused: () => paused,
-    elapsed: () => stopwatch,
+    notify: () {
+      notifies++;
+      published = progress.jobProgress;
+    },
   );
 }
 
@@ -39,7 +29,7 @@ void main() {
 
     expect(h.notifies, 1);
     expect(h.progress.nodes, 42);
-    final jp = h.job!.progress;
+    final jp = h.published;
     expect(jp.nodesProcessed, 42);
     expect(jp.message, contains('42 nodes'));
     expect(jp.message, contains('Depth 2/8'));
@@ -57,32 +47,31 @@ void main() {
       expect(h.notifies, 1);
       // The fields are live immediately; only the notification waits.
       expect(h.progress.nodes, 3);
-      expect(h.job!.progress.nodesProcessed, 1);
+      expect(h.published.nodesProcessed, 1);
 
-      await Future<void>.delayed(const Duration(milliseconds: 150));
+      await Future<void>.delayed(const Duration(milliseconds: 300));
       expect(h.notifies, 2);
-      expect(h.job!.progress.nodesProcessed, 3);
+      expect(h.published.nodesProcessed, 3);
       h.progress.dispose();
     },
   );
 
-  test(
-    'setStatus flushes through the throttle and cancels the timer',
-    () async {
-      final h = _Harness();
+  test('explicit lifecycle flush cancels the ordinary status timer', () async {
+    final h = _Harness();
 
-      h.progress.update(nodes: 1);
-      h.progress.update(nodes: 2); // deferred
-      h.progress.setStatus('Building tree', GenerationPhase.buildingTree);
-      expect(h.notifies, 2);
-      expect(h.progress.status, 'Building tree');
-      expect(h.job!.progress.nodesProcessed, 2);
+    h.progress.update(nodes: 1);
+    h.progress.update(nodes: 2); // deferred
+    h.progress.setStatus('Building tree', GenerationPhase.buildingTree);
+    expect(h.notifies, 1);
+    h.progress.flushNotify();
+    expect(h.notifies, 2);
+    expect(h.progress.status, 'Building tree');
+    expect(h.published.nodesProcessed, 2);
 
-      await Future<void>.delayed(const Duration(milliseconds: 150));
-      expect(h.notifies, 2, reason: 'the deferred notify was absorbed');
-      h.progress.dispose();
-    },
-  );
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    expect(h.notifies, 2, reason: 'the deferred notify was absorbed');
+    h.progress.dispose();
+  });
 
   test('dispose drops a pending notify', () async {
     final h = _Harness();
@@ -91,19 +80,56 @@ void main() {
     h.progress.update(nodes: 2);
     h.progress.dispose();
 
-    await Future<void>.delayed(const Duration(milliseconds: 150));
+    await Future<void>.delayed(const Duration(milliseconds: 300));
     expect(h.notifies, 1);
   });
 
-  test('no job: fields still update and listeners are still told', () {
-    final h = _Harness(withJob: false);
+  test('mixed stats and phase bursts publish only latest state at250ms', () {
+    fakeAsync((async) {
+      final h = _Harness();
+      h.progress.update(nodes: 1);
+      for (var i = 2; i <= 20; i++) {
+        h.progress.update(nodes: i);
+        h.progress.setStatus('phase $i', GenerationPhase.verifying);
+      }
+      async.elapse(const Duration(milliseconds: 249));
+      expect(h.notifies, 1);
+      async.elapse(const Duration(milliseconds: 1));
+      expect(h.notifies, 2);
+      expect(h.published.nodesProcessed, 20);
+      expect(h.progress.status, 'phase 20');
+      h.progress.finish();
+      h.progress.flushNotify();
+      expect(h.notifies, 3);
+      async.elapse(const Duration(seconds: 2));
+      expect(h.notifies, 3);
+      h.progress.dispose();
+      h.progress.begin();
+      h.progress.resume();
+      h.progress.update(nodes: 99);
+      h.progress.setStatus('late', GenerationPhase.buildingTree);
+      h.progress.flushNotify();
+      async.elapse(const Duration(seconds: 2));
+      expect(h.notifies, 3);
+      expect(async.periodicTimerCount, 0);
+      expect(async.nonPeriodicTimerCount, 0);
+    });
+  });
 
-    h.progress.update(nodes: 5, lines: 2);
-
-    expect(h.notifies, 1);
-    expect(h.progress.nodes, 5);
-    expect(h.progress.lines, 2);
-    h.progress.dispose();
+  test('paused elapsed freezes and resumes the same clock', () async {
+    final p = GenerationProgress(notify: () {});
+    p.begin();
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    p.pause();
+    final paused = p.elapsed;
+    expect(paused, greaterThan(Duration.zero));
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(p.elapsed, paused);
+    p.resume();
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    p.pause();
+    expect(p.elapsed, greaterThan(paused));
+    p.dispose();
   });
 
   group('handleBuildProgress', () {
@@ -174,7 +200,7 @@ void main() {
       );
 
       // 0.5 of the depth at weight 0.85, 0.75 of the layer at weight 0.15.
-      expect(h.job!.progress.fraction, closeTo(0.5 * 0.85 + 0.75 * 0.15, 1e-9));
+      expect(h.published.fraction, closeTo(0.5 * 0.85 + 0.75 * 0.15, 1e-9));
       h.progress.dispose();
     });
 
@@ -188,8 +214,9 @@ void main() {
         ),
       );
       h.progress.setStatus('Building', GenerationPhase.buildingTree);
+      h.progress.flushNotify();
 
-      expect(h.job!.progress.fraction, 1.0);
+      expect(h.published.fraction, 1.0);
       h.progress.dispose();
     });
 
@@ -198,8 +225,8 @@ void main() {
       h.progress.setStatus('Selecting', GenerationPhase.selectingRepertoire);
       h.progress.update(depth: 3, maxPlyConfig: 4);
 
-      expect(h.job!.progress.fraction, 0);
-      expect(h.job!.progress.message, contains('nodes in tree'));
+      expect(h.published.fraction, 0);
+      expect(h.published.message, contains('nodes in tree'));
       h.progress.dispose();
     });
   });
@@ -253,13 +280,13 @@ void main() {
     test('ticks once a second while running, and not while paused', () {
       fakeAsync((async) {
         final h = _Harness();
-        h.progress.startElapsedTicker();
+        h.progress.begin();
 
         async.elapse(const Duration(seconds: 3));
         final whileRunning = h.notifies;
         expect(whileRunning, greaterThanOrEqualTo(1));
 
-        h.paused = true;
+        h.progress.pause();
         async.elapse(const Duration(seconds: 3));
         // A deferred notify from the running phase may still land, but no
         // new tick reaches update().
@@ -268,8 +295,8 @@ void main() {
         async.elapse(const Duration(seconds: 3));
         expect(h.notifies, afterPause);
 
-        h.progress.stopElapsedTicker();
-        h.paused = false;
+        h.progress.finish();
+        h.progress.resume();
         async.elapse(const Duration(seconds: 3));
         expect(h.notifies, afterPause);
         h.progress.dispose();
@@ -279,8 +306,8 @@ void main() {
     test('starting again replaces the previous ticker', () {
       fakeAsync((async) {
         final h = _Harness();
-        h.progress.startElapsedTicker();
-        h.progress.startElapsedTicker();
+        h.progress.begin();
+        h.progress.begin();
         h.progress.dispose();
 
         async.elapse(const Duration(seconds: 5));

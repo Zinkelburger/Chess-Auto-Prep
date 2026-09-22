@@ -1,3 +1,5 @@
+import 'package:chess_auto_prep/features/documents/models/pgn_workspace_snapshot.dart';
+import 'package:chess_auto_prep/features/studies/models/study_workspace_snapshot.dart';
 // This is a basic Flutter widget test.
 //
 // To perform an interaction with a widget in your test, use the WidgetTester
@@ -6,6 +8,8 @@
 // tree, read text, and verify that the values of widget properties are correct.
 
 import 'package:flutter/material.dart';
+import 'support/memory_desktop_close_port.dart';
+import 'support/memory_workspace_recovery_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -48,7 +52,15 @@ void main() {
   });
 
   testWidgets('App loads without crashing', (WidgetTester tester) async {
-    await _pumpDesktopSizedWidget(tester, const ChessAutoPrepApp());
+    await _pumpDesktopSizedWidget(
+      tester,
+      ChessAutoPrepApp(
+        closePort: MemoryDesktopClosePort(),
+        studyRecoveryStore:
+            MemoryWorkspaceRecoveryStore<StudyWorkspaceSnapshot>(),
+        pgnRecoveryStore: MemoryWorkspaceRecoveryStore<PgnWorkspaceSnapshot>(),
+      ),
+    );
 
     // Boots into the unified Tactics home: the app-bar title says Tactics,
     // and the left pane shows the recent-games empty state (fresh

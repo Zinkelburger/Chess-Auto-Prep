@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../constants/engine_defaults.dart';
-import '../../models/engine_settings.dart';
+import '../../features/settings/controllers/engine_settings.dart';
 import '../../theme/app_text_styles.dart';
 import '../common/number_stepper.dart';
 

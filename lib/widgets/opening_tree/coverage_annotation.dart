@@ -1,6 +1,6 @@
+import 'package:chess_auto_prep/chess_core/moves/opening_graph.dart';
 import 'package:flutter/material.dart';
 
-import '../../models/opening_tree.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/fen_utils.dart';
@@ -54,7 +54,7 @@ class CoverageIndex {
   }
 
   /// Coverage status for a child move (a transposition [group]).
-  CoverageStatus? statusOf(PositionGroup group) {
+  CoverageStatus? statusOf(OpeningPositionView group) {
     // FEN-based classification is identical for every node in the group.
     final byLeaf = _leafStatus[normalizeFen(group.primaryNode.fen)];
     if (byLeaf != null) return byLeaf;
@@ -68,7 +68,7 @@ class CoverageIndex {
   /// Whether the repertoire leaves an opponent reply from [node]'s path
   /// unanswered (the reply is listed as unaccounted from exactly this path
   /// and is not among the node's children).
-  bool _hasUnaccountedFrom(OpeningTreeNode node) {
+  bool _hasUnaccountedFrom(OpeningNodeView node) {
     final moves = _unaccountedByPath[node.getMovePath().join(' ')];
     if (moves == null) return false;
     for (final move in moves) {
@@ -82,8 +82,8 @@ class CoverageIndex {
 /// on [coverageResult].  One-off convenience over [CoverageIndex]; a widget
 /// that classifies many rows should build the index once per result.
 CoverageStatus? resolveCoverageStatus({
-  required PositionGroup group,
-  required OpeningTree tree,
+  required OpeningPositionView group,
+  required OpeningGraph tree,
   CoverageResult? coverageResult,
 }) {
   if (coverageResult == null) return null;

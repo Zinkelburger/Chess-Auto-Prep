@@ -12,11 +12,16 @@
 @TestOn('vm')
 library;
 
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../../../support/runtime_settings.dart';
+
 import 'dart:io';
 
 import 'package:chess_auto_prep/features/tactics/services/tactics_database.dart';
 import 'package:chess_auto_prep/features/tactics/services/tactics_import_service.dart';
 import 'package:chess_auto_prep/services/eval_cache.dart';
+import 'package:chess_auto_prep/chess_core/analysis/game_eval_annotations.dart';
 import 'package:chess_auto_prep/services/game_store/game_store_service.dart';
 import 'package:chess_auto_prep/services/games_library/game_review_store.dart';
 import 'package:chess_auto_prep/services/maia/maia_factory.dart';
@@ -44,7 +49,14 @@ class _FakePathProvider extends PathProviderPlatform
 
 const int kDepth = 8;
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late Directory tempDir;
@@ -62,7 +74,7 @@ void main() {
   Future<TacticsImportService> newService() async {
     final database = TacticsDatabase();
     await database.loadPositions();
-    return TacticsImportService(database: database)..pool = pool;
+    return TacticsImportService(pool: pool, database: database);
   }
 
   setUpAll(() async {
@@ -82,7 +94,9 @@ void main() {
     await EvalCache.instance.clear();
     await StorageFactory.instance.saveAnalyzedGameIds(const <String>[]);
 
-    worker = ScriptedWorker();
+    worker = ScriptedWorker()
+      ..script[afterE4e5] = cp(0)
+      ..script[fenAfter(const ['e4', 'e5', 'Nf3', 'Nc6'])] = cp(0);
     pool = ScriptedPool(worker);
     service = await newService();
 
@@ -153,6 +167,59 @@ $moves''';
     return '$buf*';
   }
 
+  group('complete saved graphs', () {
+    for (final asWhite in [true, false]) {
+      test(
+        'includes the final opponent move when I am ${asWhite ? 'White' : 'Black'}',
+        () async {
+          worker.script[start] = cp(10, pv: const ['e2e4']);
+          worker.script[afterE4] = cp(-15, pv: const ['e7e5']);
+          worker.script[afterE4e5] = cp(25);
+          worker.script[afterE4e5Nf3] = cp(-35);
+          final moves = asWhite ? '1. e4 e5 *' : '1. e4 e5 2. Nf3 *';
+          String fixture(String moves) => game(
+            'full$asWhite',
+            moves: moves,
+            white: asWhite ? 'me' : 'opp',
+            black: asWhite ? 'opp' : 'me',
+          );
+          await review(fixture(moves));
+          final saved = parseCachedEvals(
+            fixture(annotated[key('full$asWhite')]!),
+          )!;
+          expect(saved.evals, hasLength(saved.totalMoves));
+          expect(saved.evals.last.ply, asWhite ? 2 : 3);
+          expect(saved.evals.last.scoreCp, asWhite ? 25 : 35);
+          expect(worker.searched.last, asWhite ? afterE4e5 : afterE4e5Nf3);
+        },
+      );
+
+      test(
+        'terminal opponent or user draws need no final engine search ($asWhite)',
+        () async {
+          const fen = '7k/8/6K1/8/8/8/5Q2/8 w - - 0 1';
+          final before = Chess.fromSetup(Setup.parseFen(fen));
+          worker.script[before.fen] = mateIn(1, pv: const ['f2f8']);
+          String fixture(String moves) => game(
+            'draw$asWhite',
+            moves: moves,
+            fen: fen,
+            result: '1/2-1/2',
+            white: asWhite ? 'me' : 'opp',
+            black: asWhite ? 'opp' : 'me',
+          );
+          await review(fixture('1. Qf7 1/2-1/2'));
+          final saved = parseCachedEvals(
+            fixture(annotated[key('draw$asWhite')]!),
+          )!;
+          expect(saved.evals, hasLength(1));
+          expect(saved.evals.single.scoreCp, 0);
+          expect(worker.searched, asWhite ? [before.fen] : isEmpty);
+        },
+      );
+    }
+  });
+
   // ── The opening memo ─────────────────────────────────────────────────────
   group('the per-run opening memo', () {
     test('a position two games share is searched once up to move 10, and '
@@ -166,8 +233,9 @@ $moves''';
         'Nf6',
       ];
       final fens = fensBefore(sans);
-      // Every one of my moves is the engine's own, so only the position
-      // before each is ever searched.
+      worker.script[fenAfter(sans)] = cp(0);
+      // My moves reuse the engine's score; searches cover their before-
+      // positions and the final opponent position.
       for (var ply = 0; ply < sans.length; ply += 2) {
         final uci = (ply ~/ 2).isEven ? 'g1f3' : 'f3g1';
         worker.script[fens[ply]] = cp(0, pv: [uci]);
@@ -182,7 +250,7 @@ $moves''';
       expect(reviewed[key('shuffle1')], clean);
       expect(reviewed[key('shuffle2')], clean);
       final mine = [for (var ply = 0; ply < sans.length; ply += 2) fens[ply]];
-      expect(worker.searched.length, mine.length + 1);
+      expect(worker.searched.length, mine.length + 3);
       for (final fen in mine.sublist(0, mine.length - 1)) {
         expect(
           worker.searched.where((f) => f == fen).length,
@@ -215,7 +283,7 @@ $moves''';
 
       await review(pgn);
 
-      expect(worker.searched, [start, start, afterE4]);
+      expect(worker.searched, [start, start, afterE4, afterE4e5]);
       expect(reviewed.keys, [key('fail2')]);
       expect(reviewed[key('fail2')], clean);
     });
@@ -285,10 +353,11 @@ $moves''';
       // the opponent still needs three of their moves, so the distance
       // written after my move is unchanged.
       worker.script[start] = mateIn(-3, pv: const ['e2e4']);
+      worker.script[afterE4e5] = mateIn(-2);
       await review(game('mated3', moves: '1. e4 e5 *'));
       expect(
         annotated[key('mated3')],
-        '1. e4 \$4 { [%eval #-3,$kDepth] [%bestline e4] } ( 1. e4 ) 1... e5 *',
+        '1. e4 \$4 { [%eval #-3,$kDepth] [%bestline e4] } ( 1. e4 ) 1... e5 { [%eval #-2,$kDepth] } *',
       );
 
       // As Black with a mate in two, my first move of it reads #-1 in the
@@ -358,12 +427,12 @@ $moves''';
 
       final result = await review(game('slower', moves: '1. e4 e5 *'));
 
-      expect(worker.searched, [start, afterE4]);
+      expect(worker.searched, [start, afterE4, afterE4e5]);
       expect(result.positions, isEmpty);
       expect(reviewed[key('slower')], clean);
       expect(
         annotated[key('slower')],
-        '1. e4 { [%eval #4,$kDepth] [%pv d4] } e5 *',
+        '1. e4 { [%eval #4,$kDepth] [%pv d4] } e5 { [%eval 0.00,$kDepth] [%pv e5] } *',
       );
     });
   });
@@ -417,7 +486,7 @@ $moves''';
       final evalText = (-at.loses / 100).toStringAsFixed(2);
       expect(
         annotated[key('nopv')],
-        '1. e4 \$4 { [%eval -$evalText,$kDepth] } 1... e5 *',
+        '1. e4 \$4 { [%eval -$evalText,$kDepth] } 1... e5 \$4 { [%eval 0.00,$kDepth] [%bestline e5] } ( 1... e5 ) *',
       );
     });
   });
@@ -431,6 +500,7 @@ $moves''';
       final afterE5 = before.play(before.parseSan('e5')!);
       worker.script[before.fen] = cp(40, pv: const ['d7d5']);
       worker.script[afterE5.fen] = cp(30, pv: const ['g1f3']);
+      worker.script[afterE4e5Nf3] = cp(-70);
 
       final result = await review(
         game(
@@ -442,7 +512,7 @@ $moves''';
         ),
       );
 
-      expect(worker.searched, [before.fen, afterE5.fen]);
+      expect(worker.searched, [before.fen, afterE5.fen, afterE4e5Nf3]);
       final mined = result.positions.single;
       expect(mined.fen, before.fen);
       expect(mined.userMove, 'e5');
@@ -455,7 +525,7 @@ $moves''';
       // The movetext keeps its start rather than being renumbered from 1.
       expect(
         annotated[key('fenstart')],
-        '1... e5 { [%eval 0.30,$kDepth] [%pv d5] } 2. Nf3 *',
+        '1... e5 { [%eval 0.30,$kDepth] [%pv d5] } 2. Nf3 { [%eval 0.70,$kDepth] [%pv Nf3] } *',
       );
       // Both positions reach the shared cache White-normalized: my +0.40 as
       // Black files as -40, the opponent's +0.30 as White as +30.
@@ -534,6 +604,16 @@ $moves''';
       );
 
       expect(worker.searched, [before.fen]);
+      final saved = parseCachedEvals(
+        game(
+          'stale1',
+          moves: annotated[key('stale1')]!,
+          result: '1/2-1/2',
+          fen: fen,
+        ),
+      )!;
+      expect(saved.evals, hasLength(saved.totalMoves));
+      expect(saved.evals.single.scoreCp, 0);
     });
 
     test(

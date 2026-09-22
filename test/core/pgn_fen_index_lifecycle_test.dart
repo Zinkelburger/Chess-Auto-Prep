@@ -1,6 +1,7 @@
+import 'package:chess_auto_prep/app/viewer_dependencies.dart';
 import 'dart:io';
 
-import 'package:chess_auto_prep/core/pgn/pgn_fen_index.dart';
+import 'package:chess_auto_prep/features/documents/controllers/pgn_fen_index.dart';
 import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -23,20 +24,22 @@ void main() {
   ];
 
   test(
-    'background codec round-trips and cancellation preserves pending persistence',
+    'source-bound cache round-trips after navigation cancellation',
     () async {
       final file = File('${directory.path}/games.pgn')
         ..writeAsStringSync(games.first.pgnText);
-      final index = PgnFenIndex(isActive: () => true, onChanged: () {});
-      await index.build(games, filePath: file.path, gameTotal: 1);
+      final index = PgnFenIndex(
+        repository: createViewerPositionIndex(),
+        isActive: () => true,
+        onChanged: () {},
+      );
+      await index.build(games, filePath: file.path);
       expect(index.value, isNotEmpty);
       final expected = index.value;
       file.writeAsStringSync('${games.first.pgnText}\n');
-      index.markStale();
       index.cancel();
-      await index.flushIfStale(filePath: file.path, gameTotal: 1);
       index.reset();
-      await index.tryLoadPersisted(file.path, 1);
+      await index.tryLoadPersisted(file.path, games);
       expect(index.value, expected);
     },
   );
@@ -46,10 +49,11 @@ void main() {
     () async {
       var changes = 0;
       final index = PgnFenIndex(
+        repository: createViewerPositionIndex(),
         isActive: () => true,
         onChanged: () => changes++,
       );
-      final pending = index.build(games, filePath: null, gameTotal: 1);
+      final pending = index.build(games, filePath: null);
       index.reset();
       await pending;
       expect(changes, 0);

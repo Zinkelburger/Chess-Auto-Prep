@@ -2,15 +2,15 @@
 part of 'pgn_viewer_screen.dart';
 
 mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
-  PgnViewerController get _controller;
+  ViewerDocumentController get _document;
   bool get _editMode;
   bool get _canReturnToFilters;
   void _returnToFilters();
   bool get _onLineTab;
-  bool get _onReferenceTab;
   bool get _viewingStudy;
   set _singleGameFocus(bool value);
   GameViewPreferences get _viewPreferences;
+  String? get _viewerError;
   void _setViewPreferences(GameViewPreferences value);
   int get _analysisTabIndex;
   void _showPanel(int index);
@@ -27,17 +27,15 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
   Future<void> _exportSliceAsScid();
   Future<void> _pickFile();
   Future<void> _pastePgn();
-  Future<void> _loadFile(String path);
+  Future<bool> _loadFile(String path);
   Future<void> _closeFile();
   Future<bool> _savePgn();
   bool _toggleSolitaireMode();
   void _reclaimFocus();
 
   PreferredSizeWidget _buildAppBar(ThemeData theme) {
-    final loaded = _controller.allGames.isNotEmpty;
-    final fileName = _controller.filePath == null
-        ? (loaded ? 'Pasted games' : '')
-        : p.basenameWithoutExtension(_controller.filePath!);
+    final loaded = _document.collection.games.isNotEmpty;
+    final fileName = _document.collectionTitle ?? (loaded ? 'Pasted games' : '');
     return AppBar(
       titleSpacing: 16,
       title: Row(
@@ -52,7 +50,9 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
             Expanded(
               flex: 2,
               child: PgnSliceChips(
-                controller: _controller,
+                config: _document.filters.selection.config,
+                onRemoveChip: (index) =>
+                    unawaited(_document.removeSliceChip(index)),
                 onOpenSliceDialog: _openSliceDialog,
               ),
             ),
@@ -83,18 +83,28 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
   }
 
   bool get _showSaveAction =>
-      _controller.filePath == null ||
+      _document.editor.needsSaveRecovery ||
+      (_document.editor.state.outcome != null &&
+          _document.editor.state.outcome is! PgnSaved) ||
+      _document.editor.state.retainedDrafts.isNotEmpty ||
+      _document.filePath == null ||
       !_viewPreferences.autoSave ||
-      (_controller.errorMessage != null && _controller.hasUnsavedChanges);
+      (_document.errorMessage != null && _document.editor.hasUnsavedChanges);
 
   Widget _buildViewMenu() {
-    final hasGame = _controller.filteredGames.isNotEmpty;
-    final solitaire = _controller.isSolitaireMode;
+    final hasGame = _document.collection.visibleGames.isNotEmpty;
+    final solitaire = _document.reading.solitaire.isActive;
     return AppOverflowMenu(
       label: 'Actions',
       tooltip: 'Actions',
       openOnHover: true,
       entries: [
+        if (!hasGame && _document.editor.state.retainedDrafts.isNotEmpty)
+          AppMenuEntry(
+            label: AppLocalizations.of(context).documentSaveRecovery,
+            icon: Icons.save_outlined,
+            onRun: () => unawaited(_savePgn()),
+          ),
         if (!hasGame) ...[
           AppMenuEntry(
             label: 'Open PGN file…',
@@ -108,7 +118,7 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
             onRun: () => unawaited(_pastePgn()),
           ),
         ],
-        if (_controller.allGames.isNotEmpty && !solitaire)
+        if (_document.collection.games.isNotEmpty && !solitaire)
           AppMenuEntry(
             label: 'Filter games',
             icon: Icons.filter_alt_outlined,
@@ -139,11 +149,11 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
           if (!solitaire && _showSaveAction)
             AppMenuEntry(
               icon: Icons.save_outlined,
-              label: _controller.filePath == null ? 'Save as…' : 'Save PGN',
-              enabled: !_controller.isSaving,
+              label: AppLocalizations.of(context).documentSaveRecovery,
+              enabled: !_document.editor.state.busy,
               onRun: () => unawaited(_savePgn()),
             ),
-          if (!solitaire && !_onReferenceTab)
+          if (!solitaire)
             AppMenuEntry(
               icon: Icons.edit_outlined,
               label: _editMode ? 'Finish editing' : 'Edit',
@@ -199,7 +209,8 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
             onRun: () {},
             children: [
               AppMenuEntry(
-                heading: '${_controller.filteredGames.length} games in view',
+                heading:
+                    '${_document.collection.visibleGames.length} games in view',
                 label: 'Export as PGN…',
                 icon: Icons.description_outlined,
                 onRun: _exportSlice,
@@ -211,12 +222,8 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
               ),
               AppMenuEntry(
                 icon: Icons.library_add_outlined,
-                label: _viewingStudy && !_onReferenceTab
-                    ? 'Edit study'
-                    : 'Add to Study',
-                onRun: _viewingStudy && !_onReferenceTab
-                    ? _editInStudy
-                    : _addCurrentGameToStudy,
+                label: _viewingStudy ? 'Edit study' : 'Add to Study',
+                onRun: _viewingStudy ? _editInStudy : _addCurrentGameToStudy,
               ),
             ],
           ),
@@ -232,7 +239,7 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
   }
 
   Widget _buildDatabaseTools() => PgnCollectionPanel(
-    games: _controller.filteredGames,
+    games: _document.collection.visibleGames,
     onSaveStudy: (games) async {
       if (!mounted) return;
       await addGamesToStudy(
@@ -250,20 +257,19 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
 
   Widget _gameViewSettings() => GameViewSettingsDialog(
     preferences: _viewPreferences,
-    perspective: _controller.perspective,
+    perspective: _document.presentation.perspective,
     onChanged: _setViewPreferences,
-    onFlip: _controller.toggleBoardFlipped,
-    onPerspective: _controller.setPerspective,
-    player: _controller.detectProtagonist(),
+    onFlip: _document.presentation.toggleBoardFlipped,
+    onPerspective: _document.setPerspective,
+    player: _document.collection.detectProtagonist(),
     readingAnchor: (_onLineTab ? _lineWidgetController : _pgnWidgetController)
         .readingAnchor,
-    onReadingOptionChanged: _controller.filteredGames.isEmpty
+    onReadingOptionChanged: _document.collection.visibleGames.isEmpty
         ? null
         : (_onLineTab ? _lineWidgetController : _pgnWidgetController)
               .applyReadingOption,
-    onFullscreen:
-        _controller.filteredGames.isNotEmpty && !_onLineTab && !_onReferenceTab
-        ? _controller.toggleFullScreen
+    onFullscreen: _document.collection.visibleGames.isNotEmpty && !_onLineTab
+        ? _document.presentation.toggleFullScreen
         : null,
     embedded: true,
   );
@@ -273,7 +279,7 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
   /// is loaded — the way back out to the start screen.
   Widget _buildOpenPgnMenuButton(String fileName) {
     final hasCollection =
-        _controller.allGames.isNotEmpty || _controller.filePath != null;
+        _document.collection.games.isNotEmpty || _document.filePath != null;
     return PopupMenuButton<String>(
       tooltip: 'Open games — recent files, browse, or paste',
       onSelected: (value) {
@@ -290,16 +296,16 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
       },
       onCanceled: _reclaimFocus,
       itemBuilder: (_) => [
-        for (final path in _controller.recentFiles)
+        for (final path in _document.libraryState.recentFiles)
           PopupMenuItem(
             value: 'recent:$path',
-            enabled: path != _controller.filePath,
+            enabled: path != _document.filePath,
             child: Tooltip(
               message: path,
               waitDuration: const Duration(milliseconds: 600),
               child: ListTile(
                 leading: Icon(
-                  path == _controller.filePath
+                  path == _document.filePath
                       ? Icons.check
                       : Icons.description_outlined,
                   size: 20,
@@ -310,7 +316,8 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
               ),
             ),
           ),
-        if (_controller.recentFiles.isNotEmpty) const PopupMenuDivider(),
+        if (_document.libraryState.recentFiles.isNotEmpty)
+          const PopupMenuDivider(),
         const PopupMenuItem(
           value: 'browse',
           child: ListTile(

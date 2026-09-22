@@ -1,3 +1,5 @@
+import 'package:chess_auto_prep/chess_core/pgn/pgn_game_view.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
 import 'package:chess_auto_prep/widgets/common/horizontal_wheel_scroll.dart';
 import 'dart:async';
 
@@ -5,7 +7,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:dartchess/dartchess.dart';
-import 'package:chess_auto_prep/services/stored_game_lookup.dart';
+import '../features/documents/controllers/viewer_game_load_controller.dart';
+import '../features/documents/models/viewer_game_load_state.dart';
+import '../features/documents/repositories/stored_game_repository.dart';
+import 'package:provider/provider.dart';
 import 'package:chess_auto_prep/utils/app_messages.dart';
 import 'package:chess_auto_prep/utils/pgn_date_utils.dart';
 import 'package:chess_auto_prep/utils/chess_utils.dart'
@@ -15,9 +20,9 @@ import 'package:chess_auto_prep/utils/chess_utils.dart'
         playSanOrNullMove,
         plyBeforeMove,
         recentMoveTrailSquares;
-import 'package:chess_auto_prep/models/move_tree.dart';
+import 'package:chess_auto_prep/chess_core/moves/move_tree_view.dart';
 import 'package:chess_auto_prep/theme/app_colors.dart';
-import 'package:chess_auto_prep/theme/pgn_text_styles.dart';
+import 'package:chess_auto_prep/widgets/pgn/pgn_text_styles.dart';
 import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
     show commentProse, joinComments, mergeCommentProse;
 import 'package:chess_auto_prep/widgets/info_hint.dart';
@@ -27,11 +32,11 @@ import 'package:chess_auto_prep/widgets/pgn/pgn_movetext_view.dart';
 import 'pgn/pgn_reading_pane.dart';
 import '../utils/app_shortcuts.dart';
 import 'shortcut_tooltip.dart';
-import 'package:chess_auto_prep/core/pgn/pgn_viewer_handle.dart';
-import 'package:chess_auto_prep/core/pgn/solitaire_reveal.dart';
-import 'package:chess_auto_prep/core/pgn/solitaire_script.dart'
+import 'package:chess_auto_prep/features/documents/repositories/pgn_viewer_handle.dart';
+import 'package:chess_auto_prep/features/documents/models/solitaire_reveal.dart';
+import 'package:chess_auto_prep/features/documents/models/solitaire_script.dart'
     as solitaire_script;
-import 'package:chess_auto_prep/core/pgn/viewer_game_model.dart';
+import 'package:chess_auto_prep/features/documents/controllers/viewer_game_controller.dart';
 
 part 'pgn/pgn_viewer_widget_navigation.dart';
 part 'pgn/pgn_viewer_widget_move_edits.dart';
@@ -92,7 +97,7 @@ class PgnViewerWidgetController implements PgnViewerHandle {
   }
 
   @override
-  void goToVariationNode(MoveNode node, int branchPly) {
+  void goToVariationNode(MoveNodeView node, int branchPly) {
     _state?._goToAnalysisNode(node, branchPly);
   }
 
@@ -259,6 +264,9 @@ class PgnViewerWidgetController implements PgnViewerHandle {
 
 class PgnViewerWidget extends StatefulWidget {
   final String? gameId;
+
+  /// Optional explicit archive; otherwise supplied by the app scope.
+  final StoredGameRepository? storedGames;
   final String? pgnText;
   final int? moveNumber;
   final bool? isWhiteToPlay;
@@ -294,6 +302,7 @@ class PgnViewerWidget extends StatefulWidget {
   const PgnViewerWidget({
     super.key,
     this.gameId,
+    this.storedGames,
     this.pgnText,
     this.moveNumber,
     this.isWhiteToPlay,
@@ -334,16 +343,16 @@ abstract class _PgnViewerWidgetStateBase extends State<PgnViewerWidget> {
   /// forwarding getters below (so the renderer call sites and the mixins'
   /// read-only logic stay unchanged) and mutates it only inside the thin
   /// setState wrappers in the part-file mixins.
-  final ViewerGameModel _m = ViewerGameModel();
+  final ViewerGameController _m = ViewerGameController();
 
-  PgnGame? get _game => _m.game;
-  List<PgnNodeData> get _moveHistory => _m.moveHistory;
+  PgnGameMetadata? get _game => _m.game;
+  List<PgnMoveSnapshot> get _moveHistory => _m.moveHistory;
   int get _mainLineIndex => _m.mainLineIndex;
   Position get _currentPosition => _m.currentPosition;
   Position get _startPosition => _m.startPosition;
-  Map<int, List<MoveNode>> get _variationsByPly => _m.variationsByPly;
+  Map<int, List<MoveNodeView>> get _variationsByPly => _m.variationsByPly;
   int get _activeBranchPly => _m.activeBranchPly;
-  List<MoveNode> get _analysisPath => _m.analysisPath;
+  List<MoveNodeView> get _analysisPath => _m.analysisPath;
 
   // Inline-comment line preview: steps the board through a clickable analysis
   // line embedded in a comment WITHOUT injecting it into the move tree, so the
@@ -372,6 +381,7 @@ abstract class _PgnViewerWidgetStateBase extends State<PgnViewerWidget> {
   void _setInlineCursor(int cursor); // navigation
   void _startEditingComment(int moveIndex); // annotations
   void _notifyCommentsChanged(); // line actions
+  bool get _gameReady;
 }
 
 class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
@@ -388,8 +398,19 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
   String _gameInfoNoResult = '';
 
   String get _headerText => widget.hideResult ? _gameInfoNoResult : _gameInfo;
-  bool _isLoading = true;
-  String? _error;
+  ViewerGameLoadController? _loader;
+  StoredGameRepository? _scopedGames;
+  bool get _isLoading => _loader?.isLoading ?? true;
+  @override
+  bool get _gameReady => _loader?.state is ViewerGameLoaded;
+  String? get _error => switch (_loader?.failure) {
+    null => null,
+    ViewerGameLoadFailure.noInput => 'No game ID or PGN text provided',
+    ViewerGameLoadFailure.notFound => 'Game not found in PGN files',
+    ViewerGameLoadFailure.archiveUnavailable =>
+      'Unable to read the game archive',
+    ViewerGameLoadFailure.invalidPgn => 'Error loading PGN',
+  };
 
   @override
   bool get wantKeepAlive => true;
@@ -398,11 +419,28 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
   void initState() {
     super.initState();
     widget.controller?._attach(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadGame());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _scopedGames = context.watch<StoredGameRepository?>();
+    if (_bindLoader()) unawaited(_loadGame());
+  }
+
+  bool _bindLoader() {
+    final repository = widget.storedGames ?? _scopedGames;
+    if (_loader != null && identical(_loader!.storedGames, repository)) {
+      return false;
+    }
+    _loader?.dispose();
+    _loader = ViewerGameLoadController(game: _m, storedGames: repository);
+    return true;
   }
 
   @override
   void dispose() {
+    _loader?.dispose();
     widget.controller?._detach(this);
     super.dispose();
   }
@@ -410,6 +448,11 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
   @override
   void didUpdateWidget(PgnViewerWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.controller, widget.controller)) {
+      oldWidget.controller?._detach(this);
+      widget.controller?._attach(this);
+    }
+    final repositoryChanged = _bindLoader();
     final gameIdChanged = widget.gameId != oldWidget.gameId;
     final pgnChanged = widget.pgnText != oldWidget.pgnText;
 
@@ -419,23 +462,32 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
     final incomingMovetext = _normalizeMovetext(
       _stripHeaders(widget.pgnText ?? ''),
     );
+    final headersChanged =
+        _headerLineRe
+            .allMatches(widget.pgnText ?? '')
+            .map((m) => m.group(0))
+            .join('\n') !=
+        _headerLineRe
+            .allMatches(oldWidget.pgnText ?? '')
+            .map((m) => m.group(0))
+            .join('\n');
     final isOwnEdit =
+        !headersChanged &&
         _lastEmittedMovetext != null &&
         incomingMovetext == _lastEmittedMovetext;
 
-    if (gameIdChanged ||
-        (pgnChanged &&
-            !isOwnEdit &&
-            _stripHeaders(widget.pgnText ?? '') !=
-                _stripHeaders(oldWidget.pgnText ?? ''))) {
+    if (repositoryChanged || gameIdChanged || (pgnChanged && !isOwnEdit)) {
       // The same game with new annotations on it (an engine pass writing
       // its scores and lines back) is adopted where the reader is; anything
       // else is a different game and starts over.
-      if (gameIdChanged || !_adoptAnnotations(widget.pgnText)) {
+      if (repositoryChanged ||
+          gameIdChanged ||
+          !_adoptAnnotations(widget.pgnText)) {
         unawaited(_loadGame());
       }
-    } else if (widget.moveNumber != oldWidget.moveNumber ||
-        widget.isWhiteToPlay != oldWidget.isWhiteToPlay) {
+    } else if (_gameReady &&
+        (widget.moveNumber != oldWidget.moveNumber ||
+            widget.isWhiteToPlay != oldWidget.isWhiteToPlay)) {
       _clearAnalysis();
       if (widget.moveNumber != null && widget.isWhiteToPlay != null) {
         _jumpToMove(widget.moveNumber!, widget.isWhiteToPlay!);
@@ -444,13 +496,16 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
   }
 
   /// Try to take [pgnText]'s annotations onto the loaded game in place.
-  /// See [ViewerGameModel.adoptAnnotations].
+  /// See [ViewerGameController.adoptAnnotations].
   bool _adoptAnnotations(String? pgnText) {
     if (pgnText == null || _isLoading || _m.game == null) return false;
     try {
-      final adopted = _m.adoptAnnotations(PgnGame.parsePgn(pgnText));
+      final adopted = _m.adoptAnnotations(parsePgnGame(pgnText));
       if (adopted) {
-        setState(() {});
+        setState(() {
+          _gameInfo = _buildGameInfo(_m.game!);
+          _gameInfoNoResult = _buildGameInfo(_m.game!, includeResult: false);
+        });
         _persistMigratedAnalysis();
       }
       return adopted;
@@ -463,90 +518,54 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
   /// Defer during widget updates and bind the callback to this exact game.
   void _persistMigratedAnalysis() {
     if (!_m.didMaterializeAnalysis || !widget.persistMoves) return;
-    final game = _m.game;
+    final session = _m.session;
+    final loader = _loader!;
+    final revision = loader.revision;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !identical(_m.game, game)) return;
+      if (!mounted ||
+          !loader.isCurrent(revision) ||
+          !identical(_m.session, session)) {
+        return;
+      }
       _notifyCommentsChanged();
     });
   }
 
   Future<void> _loadGame() async {
-    if (widget.pgnText == null && widget.gameId == null) {
-      setState(() {
-        _error = 'No game ID or PGN text provided';
-        _isLoading = false;
-      });
-      return;
-    }
-
+    final loader = _loader!;
+    final pending = loader.load(gameId: widget.gameId, pgnText: widget.pgnText);
+    final revision = loader.revision;
+    setState(() {});
+    final loaded = await pending;
+    if (!mounted || !loader.isCurrent(revision)) return;
     setState(() {
-      _isLoading = true;
-      _error = null;
+      if (loaded) {
+        _editingCommentIndex = null;
+        _clearInlineLine();
+        _lastEmittedMovetext = null;
+        _gameInfo = _buildGameInfo(_m.game!);
+        _gameInfoNoResult = _buildGameInfo(_m.game!, includeResult: false);
+      }
     });
-
-    try {
-      String pgnText = '';
-
-      // Prefer the full source game (looked up by id) so the viewer shows the
-      // whole game; fall back to any explicit pgnText — e.g. a tactic's
-      // solution-only PGN — when the source game isn't in storage (external
-      // sets, custom puzzles, pruned games).
-      if (widget.gameId != null && widget.gameId!.isNotEmpty) {
-        pgnText = await _findGamePgn(widget.gameId!);
-        if (!mounted) return;
+    if (!loaded) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !loader.isCurrent(revision)) return;
+      widget.onPositionChanged?.call(_currentPosition);
+      // A host callback can synchronously replace/dispose this reader.
+      if (!mounted || !loader.isCurrent(revision)) return;
+      if (widget.moveNumber != null && widget.isWhiteToPlay != null) {
+        _jumpToMove(widget.moveNumber!, widget.isWhiteToPlay!);
+      } else if (widget.initialFen != null) {
+        _jumpToFen(widget.initialFen!);
+      } else if (widget.initialMainLineIndex > 0) {
+        _goToMainLineMove(widget.initialMainLineIndex);
       }
-      if (pgnText.isEmpty && widget.pgnText != null) {
-        pgnText = widget.pgnText!;
-      }
-      if (pgnText.isEmpty) {
-        setState(() {
-          _error = widget.gameId != null
-              ? 'Game not found in PGN files'
-              : 'No game ID or PGN text provided';
-          _isLoading = false;
-        });
-        return;
-      }
-
-      final game = PgnGame.parsePgn(pgnText);
-      if (!mounted) return;
-
-      setState(() {
-        _m.load(game);
-        _gameInfo = _buildGameInfo(game);
-        _gameInfoNoResult = _buildGameInfo(game, includeResult: false);
-        _isLoading = false;
-      });
-
-      // Defer the position notification so it doesn't fire during
-      // didUpdateWidget's build phase (which would cause setState-during-build).
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        widget.onPositionChanged?.call(_currentPosition);
-        if (widget.moveNumber != null && widget.isWhiteToPlay != null) {
-          _jumpToMove(widget.moveNumber!, widget.isWhiteToPlay!);
-        } else if (widget.initialFen != null) {
-          _jumpToFen(widget.initialFen!);
-        } else if (widget.initialMainLineIndex > 0) {
-          _goToMainLineMove(widget.initialMainLineIndex);
-        }
-        widget.onGameLoaded?.call();
-      });
-      _persistMigratedAnalysis();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = 'Error loading PGN: $e';
-        _isLoading = false;
-      });
-    }
+      if (mounted && loader.isCurrent(revision)) widget.onGameLoaded?.call();
+    });
+    _persistMigratedAnalysis();
   }
 
-  // ── Game search ──
-
-  Future<String> _findGamePgn(String gameId) => findStoredGamePgn(gameId);
-
-  String _buildGameInfo(PgnGame game, {bool includeResult = true}) {
+  String _buildGameInfo(PgnGameMetadata game, {bool includeResult = true}) {
     final white = (game.headers['White'] ?? '?').trim();
     final black = (game.headers['Black'] ?? '?').trim();
     final event = game.headers['Event'] ?? '';
@@ -662,49 +681,48 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
     GlobalKey currentMoveKey,
     PgnReadingBranch? scope,
     bool expandAll,
-  ) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      if (scope == null && _headerText.isNotEmpty)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 24),
-          child: _buildGameHeader(context),
-        ),
-      PgnMovetextView(
-        readingScope: scope,
-        expandAll: expandAll,
-        game: _game,
-        moveHistory: _moveHistory,
-        variationsByPly: _variationsByPly,
-        mainLineIndex: _mainLineIndex,
-        currentMoveKey: currentMoveKey,
-        analysisPath: _analysisPath,
-        editingCommentIndex: _editingCommentIndex,
-        canEditComments: widget.onCommentsChanged != null,
-        editMode: widget.editMode,
-        bookFormatting: widget.bookFormatting,
-        startingMoveNumber: _startPosition.fullmoves,
-        startingWhiteTurn: _startPosition.turn == Side.white,
-        startPosition: _startPosition,
-        onMainLineMoveClicked: _onMainLineMoveClicked,
-        onShowMoveContextMenu: _showMoveContextMenu,
-        onSaveComment: _saveComment,
-        onCancelEditingComment: _cancelEditingComment,
-        onGoToAnalysisNode: _goToAnalysisNode,
-        onShowVariationContextMenu: _showVariationContextMenu,
-        reveal: _m.reveal,
-        onPlayInlineLine: _playInlineLine,
-        activeInlineLine: _inlineActive
-            ? (
-                firstMoveNumber: _inlineFirstMoveNumber,
-                firstIsWhite: _inlineFirstIsWhite,
-                sans: _inlineSans,
-                cursor: _inlineCursor,
-                anchorFen: _inlineAnchorFen,
-              )
-            : null,
-      ),
-    ],
+    PgnReadingViewport viewport,
+  ) => PgnMovetextView(
+    viewport: viewport,
+    header: scope == null && _headerText.isNotEmpty
+        ? Padding(
+            padding: const EdgeInsets.only(bottom: 24),
+            child: _buildGameHeader(context),
+          )
+        : null,
+    readingScope: scope,
+    expandAll: expandAll,
+    game: _game,
+    moveHistory: _moveHistory,
+    mainlinePositions: _m.mainline,
+    variationsByPly: _variationsByPly,
+    mainLineIndex: _mainLineIndex,
+    currentMoveKey: currentMoveKey,
+    analysisPath: _analysisPath,
+    editingCommentIndex: _editingCommentIndex,
+    canEditComments: widget.onCommentsChanged != null,
+    editMode: widget.editMode,
+    bookFormatting: widget.bookFormatting,
+    startingMoveNumber: _startPosition.fullmoves,
+    startingWhiteTurn: _startPosition.turn == Side.white,
+    startPosition: _startPosition,
+    onMainLineMoveClicked: _onMainLineMoveClicked,
+    onShowMoveContextMenu: _showMoveContextMenu,
+    onSaveComment: _saveComment,
+    onCancelEditingComment: _cancelEditingComment,
+    onGoToAnalysisNode: _goToAnalysisNode,
+    onShowVariationContextMenu: _showVariationContextMenu,
+    reveal: _m.reveal,
+    onPlayInlineLine: _playInlineLine,
+    activeInlineLine: _inlineActive
+        ? (
+            firstMoveNumber: _inlineFirstMoveNumber,
+            firstIsWhite: _inlineFirstIsWhite,
+            sans: _inlineSans,
+            cursor: _inlineCursor,
+            anchorFen: _inlineAnchorFen,
+          )
+        : null,
   );
 
   @override
@@ -761,6 +779,7 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
               _inlineAnchorFen,
             ),
             analysisPath: _analysisPath,
+            variationsByPly: _variationsByPly,
             branchPly: _activeBranchPly,
             startingMoveNumber: _startPosition.fullmoves,
             startingWhiteTurn: _startPosition.turn == Side.white,

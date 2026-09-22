@@ -11,7 +11,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
   GameAnalysisController get _analysisController;
   PgnWorkspace get _tabController;
   void _closePanel(int id);
-  Widget _buildExtraPanel(int id);
+  Widget _buildFilterWorkspace();
   void _handleBoardMove(String san);
   Future<void> _leaveSolitaire();
   void _analyseSolitaireGame();
@@ -24,6 +24,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
   bool get _lineTabVisited;
   void _showLinePosition(Position position);
   void _onGamePosition(Position position);
+  Position? get _gamePanePosition;
   LiveExplorerService get _explorer;
   ExplorerMove? get _explorerHoverMove;
   void _setExplorerHover(ExplorerMove? move);
@@ -32,54 +33,59 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
   List<String> _currentGameSans(PgnGameEntry entry);
 
   Set<String> get _boardRecentMoveSquares {
-    if (_controller.showOpeningTree) return _controller.treeRecentMoveSquares;
+    if (_document.reading.tree.showOpeningTree)
+      return _document.reading.tree.recentMoveSquares;
     final reader = _activeMovetextController;
     // A filter position or a newly opened pane may not belong to this reader.
     // Never carry the hidden reader's last move onto a different board.
-    if (reader.currentFen != _controller.currentPosition.fen) return const {};
+    if (reader.currentFen != _document.reading.currentPosition.fen)
+      return const {};
     return reader.recentMoveSquares;
   }
 
   Widget _buildFullScreenView(ThemeData theme) {
+    final coversReference =
+        _onLineTab || _tabController.index == PgnWorkspace.filters;
     return FullscreenGameView(
-      position: _controller.currentPosition,
-      boardFlipped: _controller.boardFlipped,
-      recentMoveSquares: _boardRecentMoveSquares,
-      gameLabel: _controller.filteredGames.isNotEmpty
-          ? _controller.filteredGames[_controller.currentGameIndex].label
+      position: coversReference
+          ? _gamePanePosition ?? _document.reading.currentPosition
+          : _document.reading.currentPosition,
+      boardFlipped: _document.presentation.boardFlipped,
+      recentMoveSquares: coversReference
+          ? _pgnWidgetController.recentMoveSquares
+          : _boardRecentMoveSquares,
+      gameLabel: _document.collection.visibleGames.isNotEmpty
+          ? _document
+                .collection
+                .visibleGames[_document.collection.selectedIndex]
+                .label
           : '',
-      currentIndex: _controller.currentGameIndex,
-      totalGames: _controller.filteredGames.length,
-      isAutoPlaying: _controller.isAutoPlaying,
-      autoPlayDelaySec: _controller.autoPlayDelaySec,
-      autoNextGame: _controller.autoNextGame,
-      onBoardMove: (san) {
-        _controller.stopAutoPlay();
-        _pgnWidgetController.addEphemeralMove(san);
-      },
-      onPrev: _controller.prevGame,
-      onNext: _controller.nextGame,
-      onGoBack: () {
-        _controller.stopAutoPlay();
-        _pgnWidgetController.goBack();
-      },
-      onGoForward: () {
-        _controller.stopAutoPlay();
-        _pgnWidgetController.goForward();
-      },
-      onToggleAutoPlay: _controller.toggleAutoPlay,
-      onExit: _controller.exitFullScreen,
-      onSetSpeed: _controller.setAutoPlaySpeed,
-      onSetAutoNext: _controller.setAutoNextGame,
+      currentIndex: _document.collection.selectedIndex,
+      totalGames: _document.collection.visibleGames.length,
+      isAutoPlaying: _document.reading.playback.isPlaying,
+      autoPlayDelaySec: _document.reading.playback.delaySec,
+      autoNextGame: _document.reading.playback.autoNextGame,
+      onBoardMove: (san) =>
+          _document.reading.onBoardMove(san, reader: _pgnWidgetController),
+      onPrev: _document.reading.prevGame,
+      onNext: _document.reading.nextGame,
+      onGoBack: () =>
+          _document.reading.navigateBack(reader: _pgnWidgetController),
+      onGoForward: () =>
+          _document.reading.navigateForward(reader: _pgnWidgetController),
+      onToggleAutoPlay: _document.reading.toggleAutoPlay,
+      onExit: _document.presentation.exitFullScreen,
+      onSetSpeed: _document.reading.playback.setSpeed,
+      onSetAutoNext: _document.reading.playback.setAutoNextGame,
     );
   }
 
   Widget _buildBoardPane() {
-    final solitaire = _controller.solitaire;
+    final solitaire = _document.reading.solitaire.controller;
     // Only a wrong guess gets an overlay; a correct one just plays out on the
     // board, which says it better than a popup could.
     final showWrongGuess =
-        _controller.isSolitaireMode &&
+        _document.reading.solitaire.isActive &&
         solitaire.feedback == SolitaireFeedback.incorrect;
 
     return Column(
@@ -93,8 +99,8 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
                 child: Stack(
                   children: [
                     ChessBoardWidget(
-                      position: _controller.currentPosition,
-                      flipped: _controller.boardFlipped,
+                      position: _document.reading.currentPosition,
+                      flipped: _document.presentation.boardFlipped,
                       recentMoveSquares: _boardRecentMoveSquares,
                       // A solitaire hint rings the piece that moves. A square tint
                       // would be the same mark the board puts under a piece you
@@ -103,36 +109,36 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
                       annotations: [
                         if (_engineThreat case final threat?
                             when _viewPreferences.engine &&
-                                !_controller.isSolitaireMode &&
+                                !_document.reading.solitaire.isActive &&
                                 _tabController.index == PgnWorkspace.game &&
-                                threat.fen == _controller.currentPosition.fen &&
+                                threat.fen ==
+                                    _document.reading.currentPosition.fen &&
                                 (threat.uci?.length ?? 0) >= 4)
                           BoardAnnotation(
                             orig: threat.uci!.substring(0, 2),
                             dest: threat.uci!.substring(2, 4),
                             brush: AnnotationBrush.red,
                           ),
-                        if (_controller.isSolitaireMode &&
+                        if (_document.reading.solitaire.isActive &&
                             solitaire.hintSquare != null)
                           BoardAnnotation(
                             orig: solitaire.hintSquare!,
                             brush: AnnotationBrush.yellow,
                           ),
-                        // The explorer row under the pointer, drawn where it goes.
-                        if (_explorerHoverMove case final hover?
-                            when hover.uci.length >= 4)
-                          BoardAnnotation(
-                            orig: hover.uci.substring(0, 2),
-                            dest: hover.uci.substring(2, 4),
-                            brush: AnnotationBrush.green,
-                          ),
                       ],
+                      // The explorer row under the pointer, tinted on the
+                      // squares it would use — the same mark a played move
+                      // leaves, so hovering reads as a rehearsal of it.
+                      highlightedSquares: switch (_explorerHoverMove) {
+                        final hover? => uciHighlightSquares(hover.uci),
+                        null => const {},
+                      },
                       onMove: (move) => _handleBoardMove(move.san),
                       // In solitaire, moves are allowed while guessing and again
                       // once the game completes (free exploration of the annotated
                       // game); only opponent auto-play locks the board.
                       enableUserMoves:
-                          !_controller.isSolitaireMode ||
+                          !_document.reading.solitaire.isActive ||
                           solitaire.waitingForUser ||
                           solitaire.isComplete,
                     ),
@@ -170,15 +176,14 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
             ),
           ),
         ),
-        if (_controller.filteredGames.isNotEmpty && !_onReferenceTab)
+        if (_document.collection.visibleGames.isNotEmpty)
           _buildCollectionNavigation(),
-        if (_onReferenceTab) const SizedBox(height: 48),
       ],
     );
   }
 
   Widget _buildSidePanel() {
-    final showTabs = !_controller.isSolitaireMode;
+    final showTabs = !_document.reading.solitaire.isActive;
     final tabs = showTabs ? _tabController.openTabs : [0];
     return Column(
       children: [
@@ -212,17 +217,22 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
                         3 => GameAnalysisTab(
                           analysisController: _analysisController,
                           pgnController: _pgnWidgetController,
-                          currentPly: _controller.currentPly,
+                          currentPly: _document.reading.handle.mainLineIndex,
                           variationDepth: _pgnWidgetController.variationDepth,
-                          gamePgnText: _controller.filteredGames.isNotEmpty
-                              ? _controller
-                                    .filteredGames[_controller.currentGameIndex]
+                          gamePgnText:
+                              _document.collection.visibleGames.isNotEmpty
+                              ? _document
+                                    .collection
+                                    .visibleGames[_document
+                                        .collection
+                                        .selectedIndex]
                                     .pgnText
                               : null,
-                          onAnnotatedMovetext: _controller.persistMoveComments,
+                          onAnnotatedMovetext:
+                              _document.editor.persistMoveComments,
                           onUserNavigation: () {
                             if (!mounted) return;
-                            _controller.stopAutoPlay();
+                            _document.reading.playback.stop();
                             _reclaimFocus();
                           },
                           onAnalysisComplete: _detectTrophies,
@@ -230,7 +240,8 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
                         ),
                         4 => _buildTreeTab(),
                         5 => _buildDatabaseTools(),
-                        _ => _buildExtraPanel(id),
+                        PgnWorkspace.filters => _buildFilterWorkspace(),
+                        _ => const SizedBox.shrink(),
                       },
                     ),
                   ),
@@ -245,7 +256,12 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
   Widget _buildTreeTab() => Column(
     children: [
       PgnTreeToolbar(
-        controller: _controller,
+        config: _document.filters.selection.config,
+        player: _document.collection.collectionPlayer,
+        loading: _document.isLoading,
+        hasActiveFilters: _document.filters.selection.active,
+        onApplyPreset: _document.applySlicePreset,
+        onApplyConfig: _document.recomputeAndApplyConfig,
         database: _tabController.databaseTree,
         onSourceChanged: (database) {
           if (!mounted) return;
@@ -256,34 +272,67 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
       Expanded(
         child: _tabController.databaseTree
             ? _buildExplorerTab()
-            : PgnOpeningTreePanel(controller: _controller),
+            : PgnOpeningTreePanel(
+                tree: _document.reading.tree.openingTree,
+                gameCount: _document.collection.visibleGames.length,
+                includeVariations: _document.reading.tree.includeVariations,
+                building: _document.reading.tree.buildingTree,
+                processed: _document.reading.tree.treeBuildProcessed,
+                total: _document.reading.tree.treeBuildTotal,
+                currentMoveSequence:
+                    _document.reading.tree.treeCurrentMoveSequence,
+                wdlPerspective: _document.collection.wdlPerspective(
+                  _document.filters.selection.config,
+                ),
+                matchingGames: [
+                  for (final i in _document.reading.tree.gamesAtTreePosition())
+                    _document.collection.visibleGames[i],
+                ],
+                currentMatchingIndex: _document.reading.tree
+                    .gamesAtTreePosition()
+                    .indexOf(_document.collection.selectedIndex),
+                onIncludeVariationsChanged:
+                    _document.reading.tree.setIncludeVariations,
+                onMoveSelected: _document.reading.tree.onMoveSelected,
+                onGoBack: _document.reading.tree.goBack,
+                onGoForward: _document.reading.tree.goForward,
+                onGameSelected: (game) {
+                  if (!mounted) return;
+                  final index = _document.collection.visibleGames.indexOf(game);
+                  if (index >= 0) _document.reading.loadGameFromTree(index);
+                },
+              ),
       ),
     ],
   );
 
   Widget _buildCollectionNavigation() => GameNavBar(
     games: GameNavItem.fromEntries(
-      _controller.allGames,
-      visibleGames: _controller.filteredGames,
+      _document.collection.games,
+      visibleGames: _document.collection.visibleGames,
     ),
-    currentIndex: _controller.currentGameIndex,
-    sortMode: _controller.sortMode,
-    isAutoPlaying: !_onLineTab && _controller.isAutoPlaying,
+    currentIndex: _document.collection.selectedIndex,
+    sortMode: _document.collection.sortMode,
+    isAutoPlaying: !_onLineTab && _document.reading.playback.isPlaying,
     showPlayback: _viewPreferences.playback,
-    onPrev: () => unawaited(_guardingSolitaireProgress(_controller.prevGame)),
-    onNext: () => unawaited(_guardingSolitaireProgress(_controller.nextGame)),
+    onPrev: () =>
+        unawaited(_guardingSolitaireProgress(_document.reading.prevGame)),
+    onNext: () =>
+        unawaited(_guardingSolitaireProgress(_document.reading.nextGame)),
     onGoToGame: (index) {
-      unawaited(_guardingSolitaireProgress(() => _controller.goToGame(index)));
+      unawaited(
+        _guardingSolitaireProgress(() => _document.reading.goToGame(index)),
+      );
       _reclaimFocus();
     },
-    onToggleAutoPlay: _onLineTab ? null : _controller.toggleAutoPlay,
-    isSolitaireMode: _controller.isSolitaireMode,
+    onToggleAutoPlay: _onLineTab ? null : _document.reading.toggleAutoPlay,
+    isSolitaireMode: _document.reading.solitaire.isActive,
   );
 
   /// The Line tab: what my books say about the game on screen, and the prepared
   /// line itself on the same board.
   Widget _buildLineTab() {
-    final games = _controller.filteredGames;
+    final games = _document.collection.visibleGames;
     if (!_lineTabVisited) {
       // Built but never looked at (see [_lineTabVisited]) — nothing to do yet.
       return const SizedBox.shrink();
@@ -303,11 +352,11 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
         ),
       );
     }
-    final entry = games[_controller.currentGameIndex];
+    final entry = games[_document.collection.selectedIndex];
     return RepertoireLinePanel(
       // Keyed by game identity: a new game is a new question, and the panel's
       // colour guess and loaded line must not carry over.
-      key: ValueKey('line_${_controller.filePath}_${entry.label}'),
+      key: ValueKey('line_${_document.filePath}_${entry.label}'),
       gameLabel: entry.label,
       sans: _currentGameSans(entry),
       initialMeWhite: _myColorIn(entry.headers),
@@ -323,10 +372,10 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
   /// [_openExplorerGame].
   Widget _buildExplorerTab() {
     final sans = _pgnWidgetController.mainLineMoves;
-    final ply = _controller.currentPly.clamp(0, sans.length);
+    final ply = _document.reading.handle.mainLineIndex.clamp(0, sans.length);
     return OpeningExplorerPanel(
       service: _explorer,
-      fen: _controller.currentPosition.fen,
+      fen: _document.reading.currentPosition.fen,
       movePath: sans.sublist(0, ply),
       onPlayMove: _handleBoardMove,
       onHoverMove: _setExplorerHover,
@@ -335,9 +384,9 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
   }
 
   Widget _buildGameTab() {
-    if (_controller.filteredGames.isEmpty &&
-        _controller.allGames.isNotEmpty &&
-        _controller.hasActiveFilters) {
+    if (_document.collection.visibleGames.isEmpty &&
+        _document.collection.games.isNotEmpty &&
+        _document.filters.selection.active) {
       // A file is loaded but the active slice matches nothing — without an
       // escape hatch here the chip bar is gone and the filter is unremovable.
       return Center(
@@ -356,7 +405,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
             ),
             const SizedBox(height: 12),
             FilledButton.icon(
-              onPressed: _controller.resetFilters,
+              onPressed: _document.resetFilters,
               icon: const Icon(Icons.filter_alt_off),
               label: const Text('Show All Games'),
             ),
@@ -364,7 +413,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
         ),
       );
     }
-    if (_controller.filteredGames.isEmpty) {
+    if (_document.collection.visibleGames.isEmpty) {
       return Center(
         child: SingleChildScrollView(
           child: Column(
@@ -377,12 +426,12 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
               ),
               const SizedBox(height: 16),
               const Text('No PGN loaded', style: AppTextStyles.emptyStateTitle),
-              if (_controller.errorMessage != null) ...[
+              if (_viewerError != null) ...[
                 const SizedBox(height: 12),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Text(
-                    _controller.errorMessage!,
+                    _viewerError!,
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: Theme.of(context).colorScheme.error,
@@ -397,7 +446,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
                 icon: const Icon(Icons.folder_open),
                 label: const Text('Open PGN File'),
               ),
-              if (_controller.recentFiles.isNotEmpty) ...[
+              if (_document.libraryState.recentFiles.isNotEmpty) ...[
                 const SizedBox(height: 24),
                 // One column, one width: file names differ wildly in length,
                 // and centring each row on its own made the list read as a
@@ -414,7 +463,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      for (final path in _controller.recentFiles)
+                      for (final path in _document.libraryState.recentFiles)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 4),
                           child: Tooltip(
@@ -464,32 +513,58 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
         ),
       );
     }
-    if (_controller.isRestoringSession) return const SizedBox.shrink();
-    final game = _controller.filteredGames[_controller.currentGameIndex];
+    if (_document.reading.restoringSession) return const SizedBox.shrink();
+    final game =
+        _document.collection.visibleGames[_document.collection.selectedIndex];
     return Column(
       children: [
         if (_viewPreferences.engine &&
-            !_controller.isSolitaireMode &&
-            !_controller.isSolitaireSetup)
+            !_document.reading.solitaire.isActive &&
+            !_document.reading.solitaire.isConfiguring)
           InlineEngineBar(
             onThreatChanged: _setEngineThreat,
             isActive: _tabController.index == PgnWorkspace.game,
-            fen: _controller.currentPosition.fen,
-            previewFlipped: _controller.boardFlipped,
-            onLineMoveTapped: _controller.onEngineLineMoveTapped,
+            fen: _document.reading.currentPosition.fen,
+            previewFlipped: _document.presentation.boardFlipped,
+            onLineMoveTapped: _document.reading.onEngineLineMoveTapped,
           ),
         // One solitaire strip at a time: the choices, then the session, then
         // what to do with the finished game.
-        if (_controller.isSolitaireSetup)
-          SolitaireSetupStrip(controller: _controller),
-        if (_controller.isSolitaireMode && !_controller.solitaire.isComplete)
+        if (_document.reading.solitaire.setup case final setup?)
+          SolitaireSetupStrip(
+            userIsWhite: setup.userIsWhite,
+            fromCurrentMove: setup.fromCurrentMove,
+            includeVariations: setup.includeVariations,
+            canStartHere: setup.canStartHere,
+            hasSidelines: setup.hasSidelines,
+            startHereLabel: setup.startHereLabel,
+            userMovesToGuess: setup.userMovesToGuess,
+            revealDelaySeconds:
+                _document.reading.solitaire.controller.revealDelaySec,
+            onUserSideChanged: (value) =>
+                _document.reading.solitaire.updateSetup(userIsWhite: value),
+            onFromCurrentMoveChanged: (value) =>
+                _document.reading.solitaire.updateSetup(fromCurrentMove: value),
+            onIncludeVariationsChanged: (value) => _document.reading.solitaire
+                .updateSetup(includeVariations: value),
+            onRevealDelayChanged: (value) =>
+                unawaited(_document.reading.setSolitaireRevealDelay(value)),
+            onCancel: _document.reading.solitaire.cancelSetup,
+            onBegin: _document.reading.solitaire.begin,
+          ),
+        if (_document.reading.solitaire.isActive &&
+            !_document.reading.solitaire.controller.isComplete)
           SolitaireStatusBar(
-            controller: _controller,
+            controller: _document.reading.solitaire.controller,
+            onHint: _document.reading.solitaire.hintCurrentMove,
+            onReveal: _document.reading.solitaire.revealCurrentMove,
             onExit: () => unawaited(_leaveSolitaire()),
           ),
-        if (_controller.isSolitaireMode && _controller.solitaire.isComplete)
+        if (_document.reading.solitaire.isActive &&
+            _document.reading.solitaire.controller.isComplete)
           SolitaireCompleteBanner(
-            controller: _controller,
+            controller: _document.reading.solitaire.controller,
+            onNextGame: _document.reading.nextGame,
             onCopyPgn: _copyCurrentGamePgn,
             onAddToStudy: _addCurrentGameToStudy,
             onAnalyse: _analyseSolitaireGame,
@@ -497,25 +572,27 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
           ),
         if (_viewPreferences.showOpening)
           PgnOpeningLabel(headers: game.headers),
-        if (!_controller.isSolitaireMode &&
-            (_editMode || _showSaveAction || _controller.errorMessage != null))
+        if (!_document.reading.solitaire.isActive &&
+            (_editMode || _showSaveAction || _viewerError != null))
           _buildEditModeBar(),
         Expanded(
           child: PgnViewerWidget(
             showStartEndButtons: true,
             showReadingOptions: false,
-            key: ValueKey('game_${_controller.currentGameIndex}'),
+            key: ValueKey('game_${_document.collection.selectedIndex}'),
             pgnText: game.pgnText,
             controller: _pgnWidgetController,
-            initialFen: _controller.pgnInitialFen,
+            initialFen: _document.reading.pgnInitialFen,
             // Through the screen, not straight to the controller: it remembers
             // where the game's cursor is so leaving the Line tab can put the
             // board back (see [_onGamePosition]).
             onPositionChanged: (position) {
               if (!mounted ||
-                  _controller.filteredGames.isEmpty ||
+                  _document.collection.visibleGames.isEmpty ||
                   !identical(
-                    _controller.filteredGames[_controller.currentGameIndex],
+                    _document.collection.visibleGames[_document
+                        .collection
+                        .selectedIndex],
                     game,
                   )) {
                 return;
@@ -524,7 +601,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
             },
             // Bound to this game object: the annotation panel debounces its
             // saves, which may flush after the user switches games.
-            onCommentsChanged: (movetext) => _controller.persistMoveCommentsFor(
+            onCommentsChanged: (movetext) => _document.persistMoveCommentsFor(
               game,
               movetext,
               // A finished solitaire game annotates itself — every guess
@@ -532,20 +609,20 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
               // to the session: it shows in the movetext and rides along
               // with Copy PGN and Add to study, but it does not go back
               // into the file the reader opened.
-              writeToFile: !_controller.isSolitaireMode,
+              writeToFile: !_document.reading.solitaire.isActive,
             ),
             editMode: _editMode,
-            persistMoves: !_controller.isSolitaireMode,
+            persistMoves: !_document.reading.solitaire.isActive,
             bookFormatting: game.isCourseStyle,
-            initialMainLineIndex: _controller.resumePlyFor(game),
+            initialMainLineIndex: _document.reading.resumePlyFor(game),
             // The result is the answer to "how did this go?" — the one header
             // field a guesser must not see before the last move. Only once
             // the session is running, though: the setup strip still has the
             // whole game on screen behind it, so hiding the result there
             // would guard a door that is standing open.
-            hideResult: _controller.isSolitaireMode,
+            hideResult: _document.reading.solitaire.isActive,
             // Solitaire restarts on the new game once its moves are in.
-            onGameLoaded: _controller.onViewerGameLoaded,
+            onGameLoaded: _document.reading.onViewerGameLoaded,
           ),
         ),
       ],
@@ -564,18 +641,19 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
       runSpacing: 6,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        if (_controller.errorMessage != null)
+        if (_viewerError != null)
           Text(
-            _controller.errorMessage!,
+            _viewerError!,
             style: AppTextStyles.muted.copyWith(color: AppColors.ink),
           ),
         if (_showSaveAction)
           FilledButton.tonalIcon(
-            onPressed: _controller.isSaving
+            onPressed: _document.editor.state.busy
                 ? null
                 : () => unawaited(_savePgn()),
             icon: const Icon(Icons.save_outlined, size: 18),
-            label: Text(_controller.filePath == null ? 'Save as…' : 'Save'),
+            key: const ValueKey('pgn-save-recovery'),
+            label: Text(AppLocalizations.of(context).documentSaveRecovery),
           ),
         if (_editMode)
           TextButton.icon(

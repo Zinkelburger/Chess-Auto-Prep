@@ -11,6 +11,9 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../utils/app_messages.dart';
 import 'package:flutter/services.dart';
 
 import '../services/eval/cdb_snapshot_catalog.dart';
@@ -33,7 +36,6 @@ class ChessDbDumpCard extends StatefulWidget {
     required this.canDownload,
     required this.configured,
     this.cannotDownloadReason,
-    this.controller,
   });
 
   /// Whether a transfer may be started — false when the native reader that
@@ -50,43 +52,48 @@ class ChessDbDumpCard extends StatefulWidget {
   /// on the idle card.
   final bool configured;
 
-  final CdbSnapshotDownloadController? controller;
-
   @override
   State<ChessDbDumpCard> createState() => _ChessDbDumpCardState();
 }
 
 class _ChessDbDumpCardState extends State<ChessDbDumpCard> {
   CdbSnapshotDownloadController get _download =>
-      widget.controller ?? CdbSnapshotDownloadController.instance;
+      context.read<CdbSnapshotDownloadController>();
+  CdbSnapshotDownloadController? _restoredOwner;
 
   @override
-  void initState() {
-    super.initState();
-    _download.addListener(_onChanged);
-    // Re-attach to a transfer parked by an earlier run. Reads disk only —
-    // nothing starts downloading behind the user's back.
-    unawaited(_download.loadSaved());
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final owner = context.watch<CdbSnapshotDownloadController>();
+    if (identical(owner, _restoredOwner)) return;
+    _restoredOwner = owner;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && identical(owner, _download)) {
+        unawaited(_run(owner.loadSaved));
+      }
+    });
   }
 
-  @override
-  void dispose() {
-    _download.removeListener(_onChanged);
-    super.dispose();
-  }
-
-  void _onChanged() {
-    if (mounted) setState(() {});
+  Future<void> _run(Future<void> Function() operation) async {
+    if (!mounted) return;
+    try {
+      await operation();
+    } catch (error) {
+      if (mounted) {
+        showAppSnackBar(context, '$error', isError: true);
+      }
+    }
   }
 
   Future<void> _startDownload() async {
+    final owner = _download;
     final request = await showCdbDownloadDialog(context);
-    if (request == null) return;
-    await _download.prepare(
+    if (!mounted || !identical(owner, _download) || request == null) return;
+    await owner.prepare(
       snapshot: request.snapshot,
       parentDir: request.parentDir,
     );
-    await _download.start();
+    if (mounted && identical(owner, _download)) await owner.start();
   }
 
   Future<void> _reveal(String path) async {
@@ -96,14 +103,16 @@ class _ChessDbDumpCardState extends State<ChessDbDumpCard> {
   }
 
   Future<void> _confirmDelete() async {
-    final snapshot = _download.snapshot;
+    final owner = _download;
+    final snapshot = owner.snapshot;
+    final parent = owner.parentDir;
     if (snapshot == null) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete downloaded files?'),
         content: Text(
-          'Removes ${formatBytes(_download.bytesDone)} already fetched for '
+          'Removes ${formatBytes(owner.bytesDone)} already fetched for '
           '${snapshot.id}. Downloading again starts from nothing.',
         ),
         actions: [
@@ -118,35 +127,38 @@ class _ChessDbDumpCardState extends State<ChessDbDumpCard> {
         ],
       ),
     );
-    if (confirmed != true) return;
-    await _download.deleteFiles();
+    if (!mounted ||
+        !identical(owner, _download) ||
+        confirmed != true ||
+        owner.snapshot != snapshot ||
+        owner.parentDir != parent) {
+      return;
+    }
+    await owner.deleteFiles();
   }
 
   @override
-  Widget build(BuildContext context) {
-    final snapshot = _download.snapshot;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainer,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.divider),
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: AppColors.surfaceContainer,
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: AppColors.divider),
+    ),
+    child: switch (_download.phase) {
+      CdbDownloadPhase.idle => _idleCard(),
+      CdbDownloadPhase.preparing => const Text(
+        'Checking what is already on disk…',
+        style: AppTextStyles.muted,
       ),
-      child: switch (_download.phase) {
-        CdbDownloadPhase.idle => _idleCard(),
-        CdbDownloadPhase.preparing => const Text(
-          'Checking what is already on disk…',
-          style: AppTextStyles.muted,
-        ),
-        CdbDownloadPhase.downloading ||
-        CdbDownloadPhase.paused ||
-        CdbDownloadPhase.failed ||
-        CdbDownloadPhase.checking => _progressCard(snapshot),
-        CdbDownloadPhase.complete => _completeCard(snapshot),
-      },
-    );
-  }
+      CdbDownloadPhase.downloading ||
+      CdbDownloadPhase.paused ||
+      CdbDownloadPhase.failed ||
+      CdbDownloadPhase.checking => _progressCard(_download.snapshot),
+      CdbDownloadPhase.complete => _completeCard(_download.snapshot),
+    },
+  );
 
   Widget _idleCard() {
     return Column(
@@ -175,7 +187,9 @@ class _ChessDbDumpCardState extends State<ChessDbDumpCard> {
   /// a wrapper that is still hit-testable.
   Widget _downloadButton() {
     final button = FilledButton.icon(
-      onPressed: widget.canDownload ? () => unawaited(_startDownload()) : null,
+      onPressed: widget.canDownload && !_download.isRunning
+          ? () => unawaited(_run(_startDownload))
+          : null,
       icon: const Icon(Icons.download_outlined, size: 18),
       label: Text(
         widget.configured ? 'Download a newer snapshot…' : 'Download database…',
@@ -250,20 +264,31 @@ class _ChessDbDumpCardState extends State<ChessDbDumpCard> {
           runSpacing: 4,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
+            if (phase == CdbDownloadPhase.failed)
+              TextButton(
+                onPressed: _download.isRunning
+                    ? null
+                    : () => unawaited(_run(_download.loadSaved)),
+                child: const Text('Reload saved download'),
+              ),
             if (running)
               OutlinedButton.icon(
-                onPressed: () => unawaited(_download.pause()),
+                onPressed: () => unawaited(_run(_download.pause)),
                 icon: const Icon(Icons.pause, size: 16),
                 label: const Text('Pause'),
               )
-            else
+            else if (_download.snapshot != null && _download.parentDir != null)
               FilledButton.icon(
-                onPressed: () => unawaited(_download.start()),
+                onPressed: _download.isRunning
+                    ? null
+                    : () => unawaited(_run(_download.start)),
                 icon: const Icon(Icons.play_arrow, size: 16),
                 label: const Text('Resume'),
               ),
             TextButton(
-              onPressed: running ? null : () => unawaited(_download.check()),
+              onPressed: _download.isRunning
+                  ? null
+                  : () => unawaited(_run(_download.check)),
               child: const Text('Check files'),
             ),
             if (_download.parentDir != null)
@@ -273,7 +298,9 @@ class _ChessDbDumpCardState extends State<ChessDbDumpCard> {
                 label: const Text('Open folder'),
               ),
             TextButton(
-              onPressed: running ? null : () => unawaited(_confirmDelete()),
+              onPressed: _download.isRunning
+                  ? null
+                  : () => unawaited(_run(_confirmDelete)),
               child: const Text('Delete files'),
             ),
           ],
@@ -308,11 +335,15 @@ class _ChessDbDumpCardState extends State<ChessDbDumpCard> {
                 label: const Text('Open folder'),
               ),
             TextButton(
-              onPressed: () => unawaited(_download.check()),
+              onPressed: _download.isRunning
+                  ? null
+                  : () => unawaited(_run(_download.check)),
               child: const Text('Check files'),
             ),
             TextButton(
-              onPressed: () => unawaited(_confirmDelete()),
+              onPressed: _download.isRunning
+                  ? null
+                  : () => unawaited(_run(_confirmDelete)),
               child: const Text('Delete files'),
             ),
           ],

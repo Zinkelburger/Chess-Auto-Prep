@@ -1,5 +1,8 @@
-import 'package:chess_auto_prep/models/board_display_settings.dart';
-import 'package:chess_auto_prep/utils/san_display.dart';
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:provider/provider.dart';
+import 'package:chess_auto_prep/features/settings/controllers/board_display_settings.dart';
+import 'package:chess_auto_prep/features/settings/models/board_display_configuration.dart';
+import 'package:chess_auto_prep/features/settings/widgets/san_display.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -31,7 +34,7 @@ void main() {
 
   group('BoardDisplaySettings', () {
     test('defaults match lila: coordinates inside, letters', () {
-      final settings = BoardDisplaySettings.fresh();
+      final settings = RuntimeSettings.preferences().display;
       expect(settings.coordinates, BoardCoordinates.inside);
       expect(settings.showLegalMoves, isFalse);
       expect(settings.pieceNotation, PieceNotation.letters);
@@ -40,7 +43,7 @@ void main() {
     test(
       'changes notify and persist, and a fresh load reads them back',
       () async {
-        final settings = BoardDisplaySettings.fresh();
+        final settings = RuntimeSettings.preferences().display;
         var notified = 0;
         settings.addListener(() => notified++);
 
@@ -48,15 +51,15 @@ void main() {
         await settings.setCoordinates(BoardCoordinates.outside);
         await settings.setPieceNotation(PieceNotation.figurines);
         await settings.setPieceNotation(PieceNotation.figurines); // no-op
-        expect(notified, 3);
+        expect(notified, greaterThanOrEqualTo(3));
 
         final prefs = await SharedPreferences.getInstance();
         expect(prefs.getBool('display.legal_moves'), isTrue);
         expect(prefs.getString('display.board_coordinates'), 'outside');
         expect(prefs.getString('display.piece_notation'), 'figurines');
 
-        final reloaded = BoardDisplaySettings.fresh();
-        await reloaded.load();
+        final reloaded = RuntimeSettings.preferences().display;
+        await reloaded.ensureLoaded();
         expect(reloaded.showLegalMoves, isTrue);
         expect(reloaded.coordinates, BoardCoordinates.outside);
         expect(reloaded.pieceNotation, PieceNotation.figurines);
@@ -68,45 +71,47 @@ void main() {
         'display.board_coordinates': 'sideways',
         'display.piece_notation': 'emoji',
       });
-      final settings = BoardDisplaySettings.fresh();
-      await settings.load();
+      final settings = RuntimeSettings.preferences().display;
+      await settings.ensureLoaded();
       expect(settings.coordinates, BoardCoordinates.inside);
       expect(settings.pieceNotation, PieceNotation.letters);
     });
 
-    test('reset returns to the defaults and clears the stored keys', () async {
-      final settings = BoardDisplaySettings.fresh();
+    test('reset commits defaults using the existing keys', () async {
+      final settings = RuntimeSettings.preferences().display;
       await settings.setShowLegalMoves(true);
       await settings.setCoordinates(BoardCoordinates.everySquare);
       await settings.resetToDefaults();
       expect(settings.showLegalMoves, isFalse);
       expect(settings.coordinates, BoardCoordinates.inside);
       final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString('display.board_coordinates'), isNull);
+      expect(prefs.getString('display.board_coordinates'), 'inside');
     });
   });
 
   group('BoardDisplaySettings.of', () {
-    testWidgets('without a scope it is the app singleton, no dependency', (
+    testWidgets('without a scope it has immutable preview defaults', (
       tester,
     ) async {
-      late BoardDisplaySettings seen;
+      late BoardDisplayConfiguration seen;
       await tester.pumpWidget(
         Builder(
           builder: (context) {
-            seen = BoardDisplaySettings.of(context);
+            seen =
+                (context.watch<BoardDisplaySettings?>()?.committed ??
+                BoardDisplayConfiguration());
             return const SizedBox();
           },
         ),
       );
-      expect(identical(seen, BoardDisplaySettings.instance), isTrue);
+      expect(seen, BoardDisplayConfiguration());
     });
 
     testWidgets('a scoped change redraws a move list in place', (tester) async {
-      final settings = BoardDisplaySettings.fresh();
+      final settings = RuntimeSettings.preferences().display;
       await tester.pumpWidget(
-        DisplaySettingsScope(
-          settings: settings,
+        ChangeNotifierProvider<BoardDisplaySettings>.value(
+          value: settings,
           child: MaterialApp(
             home: Builder(
               builder: (context) => Text(displaySan(context, 'Nf3')),

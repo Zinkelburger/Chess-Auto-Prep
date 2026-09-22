@@ -1,115 +1,65 @@
+import '../../features/training/controllers/training_session_controller.dart';
 import '../../utils/app_shortcuts.dart';
 import '../shortcut_tooltip.dart';
 import 'package:flutter/material.dart';
 
-import '../../models/repertoire_line.dart';
 import '../../models/repertoire_review_entry.dart';
-import '../../models/training_settings.dart';
-import '../../services/repertoire_review_service.dart';
-import '../../services/training/training_phase.dart';
+import '../../features/training/models/training_settings.dart';
+import '../../features/training/models/training_phase.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/time_format.dart';
 import 'training_progress_panel.dart';
 
-/// Line completion UI: self-rating, all-caught-up, and auto-rate placeholder.
-/// In linear repetition there is no rating — the panel shows the result and
-/// a Next button (or auto-advances).
-class TrainingResultsPanel extends StatefulWidget {
-  final TrainingPhase phase;
-  final RepertoireLine? currentLine;
-  final List<RepertoireLine> dueQueue;
-  final Map<String, RepertoireReviewEntry> reviewMap;
-  final String repertoireId;
-  final bool lineHadMistake;
-  final bool hadLearnPhaseThisSession;
-  final RepetitionMode repetitionMode;
-  final TrainingMode trainingMode;
-  final TrainingSettings settings;
-  final int sessionCorrect;
-  final int sessionIncorrect;
-  final int sessionStreak;
-  final RepertoireReviewService reviewService;
-  final void Function(ReviewRating rating) onRateLine;
-  final VoidCallback onNextLine;
+/// Presentation of the session-owned completion, rating and next commands.
+/// Mounting or rebuilding this panel never starts persistence or advancement.
+class TrainingResultsPanel extends StatelessWidget {
+  const TrainingResultsPanel({super.key, required this.session});
+  final TrainingSessionController session;
 
-  const TrainingResultsPanel({
-    super.key,
-    required this.phase,
-    this.currentLine,
-    required this.dueQueue,
-    required this.reviewMap,
-    required this.repertoireId,
-    required this.lineHadMistake,
-    required this.hadLearnPhaseThisSession,
-    this.repetitionMode = RepetitionMode.spaced,
-    this.trainingMode = TrainingMode.repertoire,
-    required this.settings,
-    required this.sessionCorrect,
-    required this.sessionIncorrect,
-    required this.sessionStreak,
-    required this.reviewService,
-    required this.onRateLine,
-    required this.onNextLine,
-  });
+  bool get _isLinear => session.repetitionMode == RepetitionMode.linear;
 
-  @override
-  State<TrainingResultsPanel> createState() => _TrainingResultsPanelState();
-}
-
-class _TrainingResultsPanelState extends State<TrainingResultsPanel> {
-  bool _autoRateScheduled = false;
-  bool _linearNextScheduled = false;
-
-  bool get _isLinear => widget.repetitionMode == RepetitionMode.linear;
-
-  bool get _shouldAutoRate =>
-      !widget.settings.showRatingButtons || widget.hadLearnPhaseThisSession;
-
-  /// A slip counts after the learn walkthrough too: Again schedules the
-  /// line due now, so a capped Learn sitting brings it back before it ends
-  /// instead of filing a line you fumbled as learned.
-  ReviewRating get _autoRating =>
-      widget.lineHadMistake ? ReviewRating.again : ReviewRating.good;
-
-  @override
-  void didUpdateWidget(TrainingResultsPanel oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.phase != widget.phase ||
-        oldWidget.currentLine?.id != widget.currentLine?.id ||
-        oldWidget.lineHadMistake != widget.lineHadMistake) {
-      _autoRateScheduled = false;
-      _linearNextScheduled = false;
-    }
-  }
-
-  void _scheduleAutoRate() {
-    if (!_shouldAutoRate || _autoRateScheduled) return;
-    _autoRateScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || widget.phase != TrainingPhase.finished) return;
-      widget.onRateLine(_autoRating);
-    });
-  }
-
-  void _scheduleLinearNext() {
-    if (_linearNextScheduled) return;
-    _linearNextScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || widget.phase != TrainingPhase.finished) return;
-      widget.onNextLine();
-    });
-  }
+  Widget _ratingButtons() => LayoutBuilder(
+    builder: (context, constraints) => Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final (rating, label, color) in [
+          (ReviewRating.again, 'Again', AppColors.srsAgain),
+          (ReviewRating.hard, 'Hard', AppColors.srsHard),
+          (ReviewRating.good, 'Good', AppColors.srsGood),
+          (ReviewRating.easy, 'Easy', AppColors.srsEasy),
+        ])
+          SizedBox(
+            width: (constraints.maxWidth - 8) / 2,
+            child: ShortcutTooltip(
+              description: label,
+              shortcut: switch (rating) {
+                ReviewRating.again => AppShortcut.rateAgain,
+                ReviewRating.hard => AppShortcut.rateHard,
+                ReviewRating.good => AppShortcut.rateGood,
+                ReviewRating.easy => AppShortcut.rateEasy,
+              },
+              child: _RatingButton(
+                label: label,
+                color: color,
+                interval: session.previewRatingInterval(rating),
+                onRate: () => session.rateLine(rating),
+              ),
+            ),
+          ),
+      ],
+    ),
+  );
 
   Widget _buildLinearResult(ThemeData theme) {
-    final isTactics = widget.trainingMode == TrainingMode.tactics;
-    final clean = !widget.lineHadMistake;
+    final isTactics = session.trainingMode == TrainingMode.tactics;
+    final clean = !session.lineHadMistake;
     final message = isTactics
         ? (clean ? 'Puzzle solved!' : 'Solved — with mistakes.')
         : (clean ? 'Line complete!' : 'Line complete — with mistakes.');
-    final remaining = widget.dueQueue.length;
+    final remaining = session.dueQueue.length;
 
-    if (widget.settings.autoNext) {
-      _scheduleLinearNext();
+    if (session.settings.autoNext) {
       return Center(child: Text(message, style: theme.textTheme.bodyMedium));
     }
 
@@ -138,7 +88,7 @@ class _TrainingResultsPanelState extends State<TrainingResultsPanel> {
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
-              onPressed: widget.onNextLine,
+              onPressed: session.canAdvance ? session.nextLine : null,
               icon: const Icon(Icons.skip_next),
               label: Text(isTactics ? 'Next puzzle' : 'Next line'),
             ),
@@ -150,56 +100,32 @@ class _TrainingResultsPanelState extends State<TrainingResultsPanel> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.phase != TrainingPhase.finished) {
+    // The screen renders the existing failure/Retry surface for this owner.
+    if (session.phase != TrainingPhase.finished || session.error != null) {
       return const SizedBox.shrink();
     }
 
     final theme = Theme.of(context);
 
-    if (widget.currentLine == null || widget.dueQueue.isEmpty) {
-      return AllCaughtUpPanel(
-        title: _isLinear ? 'Set complete!' : 'All caught up!',
-        reviewMap: widget.reviewMap,
-        sessionCorrect: widget.sessionCorrect,
-        sessionIncorrect: widget.sessionIncorrect,
-        sessionStreak: widget.sessionStreak,
-      );
+    if (session.completionBusy) {
+      return const Center(child: Text('Saving result…'));
     }
+    if (_isLinear) return _buildLinearResult(theme);
 
-    if (_isLinear) {
-      return _buildLinearResult(theme);
-    }
-
-    if (_shouldAutoRate) {
-      _scheduleAutoRate();
-      final message = widget.hadLearnPhaseThisSession
-          ? (widget.lineHadMistake
-                ? 'Learned with mistakes — you will see it again.'
-                : 'Line learned — continuing...')
-          : widget.lineHadMistake
-          ? 'Scheduling for review...'
-          : 'Line complete!';
-      return Center(child: Text(message, style: theme.textTheme.bodyMedium));
-    }
-
-    final entry = widget.reviewMap[widget.currentLine?.id];
+    final entry = session.reviewMap[session.currentLine?.id];
 
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'How well did you know this?',
+            session.completionCommitted
+                ? 'Line complete!'
+                : 'How well did you know this?',
             style: theme.textTheme.titleSmall,
           ),
           const SizedBox(height: 12),
-          TrainingRatingButtons(
-            currentLine: widget.currentLine,
-            repertoireId: widget.repertoireId,
-            reviewMap: widget.reviewMap,
-            reviewService: widget.reviewService,
-            onRateLine: widget.onRateLine,
-          ),
+          if (session.canRate) _ratingButtons(),
           const SizedBox(height: 16),
           if (entry != null && entry.lastReviewedUtc != null) ...[
             Text(
@@ -213,12 +139,12 @@ class _TrainingResultsPanelState extends State<TrainingResultsPanel> {
               'Pass: ${entry.passCount} / Fail: ${entry.failCount}',
               style: theme.textTheme.bodySmall,
             ),
-          if (!widget.settings.autoNext) ...[
+          if (!session.settings.autoNext) ...[
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                onPressed: widget.onNextLine,
+                onPressed: session.canAdvance ? session.nextLine : null,
                 icon: const Icon(Icons.skip_next),
                 label: const Text('Next Line'),
               ),
@@ -337,163 +263,29 @@ class TrainingRunCompletePanel extends StatelessWidget {
   }
 }
 
-class AllCaughtUpPanel extends StatelessWidget {
-  final String title;
-  final Map<String, RepertoireReviewEntry> reviewMap;
-  final int sessionCorrect;
-  final int sessionIncorrect;
-  final int sessionStreak;
-
-  const AllCaughtUpPanel({
-    super.key,
-    this.title = 'All caught up!',
-    required this.reviewMap,
-    required this.sessionCorrect,
-    required this.sessionIncorrect,
-    required this.sessionStreak,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    DateTime? nextDue;
-    for (final entry in reviewMap.values) {
-      if (entry.dueDateUtc != null) {
-        if (nextDue == null || entry.dueDateUtc!.isBefore(nextDue)) {
-          nextDue = entry.dueDateUtc;
-        }
-      }
-    }
-
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(
-            Icons.check_circle_outline,
-            size: 56,
-            color: AppColors.onSurfaceSoft,
-          ),
-          const SizedBox(height: 16),
-          Text(title, style: theme.textTheme.titleMedium),
-          const SizedBox(height: 8),
-          if (nextDue != null)
-            Text(
-              'Next review: ${formatTimeUntil(nextDue)}',
-              style: theme.textTheme.bodySmall,
-            ),
-          if (sessionCorrect + sessionIncorrect > 0) ...[
-            const SizedBox(height: 16),
-            SessionStatsBar(
-              sessionCorrect: sessionCorrect,
-              sessionIncorrect: sessionIncorrect,
-              sessionStreak: sessionStreak,
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class TrainingRatingButtons extends StatelessWidget {
-  final RepertoireLine? currentLine;
-  final String repertoireId;
-  final Map<String, RepertoireReviewEntry> reviewMap;
-  final RepertoireReviewService reviewService;
-  final void Function(ReviewRating rating) onRateLine;
-
-  const TrainingRatingButtons({
-    super.key,
-    this.currentLine,
-    required this.repertoireId,
-    required this.reviewMap,
-    required this.reviewService,
-    required this.onRateLine,
-  });
-
-  static const _ratings = [
-    (ReviewRating.again, 'Again', AppColors.srsAgain),
-    (ReviewRating.hard, 'Hard', AppColors.srsHard),
-    (ReviewRating.good, 'Good', AppColors.srsGood),
-    (ReviewRating.easy, 'Easy', AppColors.srsEasy),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    final entry = currentLine != null ? reviewMap[currentLine!.id] : null;
-    final previewEntry =
-        entry ??
-        RepertoireReviewEntry(
-          repertoireId: repertoireId,
-          lineId: currentLine?.id ?? '',
-          lineName: currentLine?.name ?? '',
-        );
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        const spacing = 8.0;
-        final tileWidth = (constraints.maxWidth - spacing) / 2;
-        return Wrap(
-          spacing: spacing,
-          runSpacing: spacing,
-          children: [
-            for (final (rating, label, color) in _ratings)
-              SizedBox(
-                width: tileWidth,
-                child: ShortcutTooltip(
-                  description: label,
-                  shortcut: switch (rating) {
-                    ReviewRating.again => AppShortcut.rateAgain,
-                    ReviewRating.hard => AppShortcut.rateHard,
-                    ReviewRating.good => AppShortcut.rateGood,
-                    ReviewRating.easy => AppShortcut.rateEasy,
-                  },
-                  child: _RatingButton(
-                    rating: rating,
-                    label: label,
-                    color: color,
-                    previewEntry: previewEntry,
-                    reviewService: reviewService,
-                    onRateLine: onRateLine,
-                  ),
-                ),
-              ),
-          ],
-        );
-      },
-    );
-  }
-}
-
 class _RatingButton extends StatelessWidget {
-  final ReviewRating rating;
   final String label;
   final Color color;
-  final RepertoireReviewEntry previewEntry;
-  final RepertoireReviewService reviewService;
-  final void Function(ReviewRating rating) onRateLine;
+  final double interval;
+  final VoidCallback onRate;
 
   const _RatingButton({
-    required this.rating,
     required this.label,
     required this.color,
-    required this.previewEntry,
-    required this.reviewService,
-    required this.onRateLine,
+    required this.interval,
+    required this.onRate,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final interval = reviewService.previewInterval(previewEntry, rating);
-    final intervalLabel = RepertoireReviewService.formatInterval(interval);
+    final intervalLabel = formatReviewInterval(interval);
 
     return Material(
       color: color.withValues(alpha: 0.12),
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
-        onTap: () => onRateLine(rating),
+        onTap: onRate,
         borderRadius: BorderRadius.circular(12),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),

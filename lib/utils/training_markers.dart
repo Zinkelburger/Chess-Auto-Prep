@@ -11,7 +11,8 @@
 /// them from displayed prose.
 library;
 
-import '../models/move_tree.dart';
+import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
+import '../chess_core/moves/move_tree_view.dart';
 
 final _startRe = RegExp(r'\[%tstart\s*\]');
 final _endRe = RegExp(r'\[%tend\s*\]');
@@ -56,7 +57,7 @@ String? writePuzzleMarker(
 /// Returns true when the marker is set on [target] afterwards, false when
 /// the call cleared it.
 bool togglePuzzleMarker(
-  MoveTree tree,
+  MoveTreeView tree,
   TreePath target, {
   required bool start,
   required void Function(TreePath path, String? comment) setComment,
@@ -68,7 +69,7 @@ bool togglePuzzleMarker(
 
   // Collect first, then apply: setComment mutates the tree being walked.
   final changes = <(TreePath, String?)>[];
-  void walk(List<MoveNode> siblings, TreePath parent) {
+  void walk(List<MoveNodeView> siblings, TreePath parent) {
     for (var i = 0; i < siblings.length; i++) {
       final path = parent.child(i);
       final n = siblings[i];

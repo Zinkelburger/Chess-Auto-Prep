@@ -23,8 +23,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import '../../../models/bulk_analysis_settings.dart';
-import '../../../models/engine_settings.dart';
+import '../../settings/controllers/bulk_analysis_settings.dart';
+import '../../settings/controllers/engine_settings.dart';
 import '../../../services/games_library/games_library_service.dart'
     show GamesLibraryService, GamesPlatform;
 import '../../../utils/log.dart';
@@ -72,12 +72,12 @@ class HomeReviewRunner extends ChangeNotifier with SafeChangeNotifier {
     required this._lichessUsername,
     required this._chesscomUsername,
     GamesWindowSettings? windowSettings,
-    BulkAnalysisSettings? bulkSettings,
-    EngineSettings? engine,
+    required BulkAnalysisSettings bulkSettings,
+    required EngineSettings engine,
   }) : _import = importCoordinator,
        _windowSettings = windowSettings ?? GamesWindowSettings.instance,
-       _bulk = bulkSettings ?? BulkAnalysisSettings.instance,
-       _engine = engine ?? EngineSettings.instance {
+       _bulk = bulkSettings,
+       _engine = engine {
     // The home block states cores and depth beside its gear; turning either
     // down on the Settings screen has to move that read-out too.
     _engine.addListener(notifyListeners);
@@ -139,8 +139,10 @@ class HomeReviewRunner extends ChangeNotifier with SafeChangeNotifier {
 
   /// How much of the machine this review is allowed to use, for the block
   /// that says so out loud.
-  int get cores => _engine.cores;
-  int get depth => _bulk.depth;
+  int? _activeCores;
+  int? _activeDepth;
+  int get cores => isRunning ? (_activeCores ?? _engine.cores) : _engine.cores;
+  int get depth => isRunning ? (_activeDepth ?? _bulk.depth) : _bulk.depth;
 
   @override
   void dispose() {
@@ -322,6 +324,9 @@ class HomeReviewRunner extends ChangeNotifier with SafeChangeNotifier {
   Future<void> _review() async {
     await _windowSettings.ensureLoaded();
     await _bulk.ensureLoaded();
+    await _engine.ensureLoaded();
+    final capturedDepth = _activeDepth = _bulk.depth;
+    final capturedCores = _activeCores = _engine.cores;
     final window = _windowSettings.window;
     for (final (source, username) in _sources()) {
       if (_paused) return;
@@ -348,8 +353,8 @@ class HomeReviewRunner extends ChangeNotifier with SafeChangeNotifier {
               : TacticsImportMode.sinceDate,
           maxGames: window.gameLimit,
           since: window.cutoffFrom(DateTime.now()),
-          depth: _bulk.depth,
-          cores: _engine.cores,
+          depth: capturedDepth,
+          cores: capturedCores,
         ),
       );
       // Written whether or not the pass finished: every game it did get to

@@ -1,3 +1,6 @@
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../../support/runtime_settings.dart';
 import 'dart:io';
 
 import 'package:chess_auto_prep/features/engine_tournament/models/engine_spec.dart';
@@ -5,7 +8,14 @@ import 'package:chess_auto_prep/features/engine_tournament/services/engine_regis
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   late Directory temp;
   late EngineRegistry registry;
 

@@ -9,9 +9,9 @@
 /// — so that is the one parameter the walk takes.
 library;
 
+import 'package:chess_auto_prep/chess_core/moves/opening_graph.dart';
 import 'dart:collection';
 
-import '../../../models/opening_tree.dart';
 import '../../../services/run_control.dart';
 import '../../../utils/fen_utils.dart';
 
@@ -24,7 +24,7 @@ class RepertoireWalkEntry {
     required this.cumulativeProbability,
   });
 
-  final OpeningTreeNode node;
+  final OpeningNodeView node;
 
   /// SAN moves from the tree root to [node].
   final List<String> movePath;
@@ -73,7 +73,7 @@ class RepertoireWalkEntry {
 /// [totalNodes] ends at 100%.
 class RepertoireWalk {
   RepertoireWalk({
-    required OpeningTreeNode start,
+    required OpeningNodeView start,
     required this.maxPly,
     required this.attenuatingSideIsWhite,
     required this._control,
@@ -83,7 +83,7 @@ class RepertoireWalk {
   /// Progress is reported after every this many positions, and at the last.
   static const int progressInterval = 5;
 
-  final OpeningTreeNode _start;
+  final OpeningNodeView _start;
   final RunControl _control;
   final int maxPly;
 

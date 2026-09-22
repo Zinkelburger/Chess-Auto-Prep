@@ -9,7 +9,7 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:chess_auto_prep/models/build_tree_node.dart';
+import 'package:chess_auto_prep/chess_core/generation/build_tree_node.dart';
 import 'package:chess_auto_prep/services/generation/eca_calculator.dart';
 import 'package:chess_auto_prep/services/generation/fen_map.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';
@@ -18,7 +18,7 @@ import 'package:chess_auto_prep/services/generation/line_pruner.dart';
 import 'package:chess_auto_prep/services/generation/repertoire_selector.dart';
 import 'package:chess_auto_prep/services/generation/tree_ease.dart';
 import 'package:chess_auto_prep/services/generation/tree_my_ease.dart';
-import 'package:chess_auto_prep/services/generation/tree_serialization.dart';
+import 'package:chess_auto_prep/chess_core/generation/tree_serialization.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const _treePath = String.fromEnvironment('TREE');

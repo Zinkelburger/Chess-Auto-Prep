@@ -9,27 +9,48 @@ final RegExp _windowsDeviceName = RegExp(
   caseSensitive: false,
 );
 
-/// Returns a user-facing problem for [name], or `null` when it is a safe
-/// single path component on Linux, macOS, and Windows.
-String? validateSafeFileName(String name, {int maxLength = 120}) {
+enum FileNameProblem {
+  empty,
+  trailingDotOrSpace,
+  reserved,
+  illegalCharacters,
+  systemReserved,
+  tooLong,
+}
+
+/// Locale-independent validation; presentation chooses the message.
+FileNameProblem? fileNameProblem(String name, {int maxLength = 120}) {
   final trimmed = name.trim();
-  if (trimmed.isEmpty) return 'Please enter a name.';
-  if (name.endsWith(' ')) return 'Names cannot end with a dot or space.';
-  if (trimmed == '.' || trimmed == '..') return 'That name is reserved.';
+  if (trimmed.isEmpty) return FileNameProblem.empty;
+  if (name.endsWith(' ')) return FileNameProblem.trailingDotOrSpace;
+  if (trimmed == '.' || trimmed == '..') return FileNameProblem.reserved;
   if (_illegalFileNameCharacters.hasMatch(trimmed)) {
-    return r'Names cannot contain < > : " / \ | ? * or control characters.';
+    return FileNameProblem.illegalCharacters;
   }
-  if (trimmed.endsWith('.')) {
-    return 'Names cannot end with a dot or space.';
-  }
+  if (trimmed.endsWith('.')) return FileNameProblem.trailingDotOrSpace;
   if (_windowsDeviceName.hasMatch(trimmed)) {
-    return 'That name is reserved by the operating system.';
+    return FileNameProblem.systemReserved;
   }
-  if (trimmed.length > maxLength) {
-    return 'Names must be $maxLength characters or fewer.';
-  }
+  if (trimmed.length > maxLength) return FileNameProblem.tooLong;
   return null;
 }
+
+/// English adapter for legacy callers. Migrated UI resolves [fileNameProblem]
+/// through its localized messages; storage depends only on validation.
+String? validateSafeFileName(
+  String name, {
+  int maxLength = 120,
+}) => switch (fileNameProblem(name, maxLength: maxLength)) {
+  null => null,
+  FileNameProblem.empty => 'Please enter a name.',
+  FileNameProblem.trailingDotOrSpace => 'Names cannot end with a dot or space.',
+  FileNameProblem.reserved => 'That name is reserved.',
+  FileNameProblem.illegalCharacters =>
+    r'Names cannot contain < > : " / \ | ? * or control characters.',
+  FileNameProblem.systemReserved =>
+    'That name is reserved by the operating system.',
+  FileNameProblem.tooLong => 'Names must be $maxLength characters or fewer.',
+};
 
 /// Returns [name] trimmed, or throws when it is not a safe path component.
 String requireSafeFileName(String name, {int maxLength = 120}) {

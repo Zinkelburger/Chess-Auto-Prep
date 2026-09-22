@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../../theme/app_text_styles.dart';
-import '../../../utils/san_display.dart';
+import 'package:chess_auto_prep/features/settings/widgets/san_display.dart';
 import '../models/tactics_position.dart';
 import '../../../theme/app_colors.dart';
-import '../../../widgets/common/list_search_field.dart';
-import '../../../widgets/common/item_title.dart';
+import '../../../design_system/components/list_search_field.dart';
+import '../../../design_system/components/item_title.dart';
 import '../../../widgets/common/searchable_picker_dialog.dart';
 import '../../../widgets/common/static_board_thumbnail.dart';
 import 'puzzle_stats_display.dart';

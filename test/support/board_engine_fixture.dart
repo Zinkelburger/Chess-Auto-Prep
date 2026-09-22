@@ -1,4 +1,3 @@
-import 'package:chess_auto_prep/services/engine/board_engine.dart';
 import 'package:chess_auto_prep/services/engine/stockfish_connection_factory.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -11,7 +10,6 @@ void useScriptedBoardEngine() {
   final previous = StockfishConnectionFactory.createForTest;
   StockfishConnectionFactory.createForTest = () async => ScriptedEngine();
   addTearDown(() {
-    BoardEngine.instance.dispose();
     StockfishConnectionFactory.createForTest = previous;
   });
 }

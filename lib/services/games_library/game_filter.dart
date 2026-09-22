@@ -9,8 +9,9 @@
 /// Pure / synchronous — fully unit-testable.
 library;
 
-import '../game_identity.dart';
-import '../pgn_parsing_service.dart' show splitPgnIntoGames, extractHeaders;
+import 'package:chess_auto_prep/chess_core/pgn/game_identity.dart';
+import '../../chess_core/pgn/pgn_text.dart'
+    show splitPgnIntoGames, extractHeaders;
 
 /// Lichess-style speed bucket, derived from the TimeControl header.
 enum GameSpeed {

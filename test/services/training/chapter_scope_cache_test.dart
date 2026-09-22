@@ -5,9 +5,9 @@ library;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/models/repertoire_line.dart';
-import 'package:chess_auto_prep/models/training_settings.dart';
+import 'package:chess_auto_prep/features/training/models/training_settings.dart';
 import 'package:chess_auto_prep/services/asked_questions_store.dart';
-import 'package:chess_auto_prep/services/training/chapter_scope.dart';
+import 'package:chess_auto_prep/features/training/controllers/chapter_scope.dart';
 import 'package:dartchess/dartchess.dart';
 
 RepertoireLine _line(String id, String name, {bool model = false}) =>
@@ -33,6 +33,9 @@ void main() {
       ..chapterGrouping = ChapterGroupingMode.namePrefix
       ..chapterDelimiter = ':';
     final scope = ChapterScope(
+      saveSettings: (before, after) async {
+        settings.chapterGrouping = after.chapterGrouping;
+      },
       askedQuestions: AskedQuestionsStore(),
       settings: () => settings,
       lines: () => lines,

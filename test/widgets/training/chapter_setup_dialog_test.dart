@@ -1,5 +1,5 @@
-import 'package:chess_auto_prep/models/training_settings.dart';
-import 'package:chess_auto_prep/services/training/chapter_layout.dart';
+import 'package:chess_auto_prep/features/training/models/training_settings.dart';
+import 'package:chess_auto_prep/features/training/models/chapter_layout.dart';
 import 'package:chess_auto_prep/widgets/training/chapter_setup_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';

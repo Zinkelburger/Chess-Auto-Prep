@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:chess_auto_prep/services/move_eval.dart'
+import 'package:chess_auto_prep/chess_core/analysis/move_eval.dart'
     show cpToWinningChance;
 import 'package:chess_auto_prep/utils/chess_utils.dart' show formatPackedEval;
 import 'package:chess_auto_prep/utils/ease_utils.dart';

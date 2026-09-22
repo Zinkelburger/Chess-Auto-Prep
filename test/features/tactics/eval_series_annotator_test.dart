@@ -4,7 +4,7 @@
 library;
 
 import 'package:chess_auto_prep/features/tactics/services/eval_series_annotator.dart';
-import 'package:chess_auto_prep/services/game_eval_annotations.dart';
+import 'package:chess_auto_prep/chess_core/analysis/game_eval_annotations.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 

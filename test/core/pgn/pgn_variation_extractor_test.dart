@@ -1,4 +1,4 @@
-import 'package:chess_auto_prep/core/pgn/pgn_variation_extractor.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_variation_extractor.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -28,7 +28,8 @@ void main() {
 
     test('keeps a sideline\'s starting comment instead of dropping it', () {
       final vars = _extract('1. e4 e5 ({The other move:} 1... c5) *');
-      expect(vars[1]!.single.comment, 'The other move:');
+      expect(vars[1]!.single.startingComment, 'The other move:');
+      expect(vars[1]!.single.comment, isNull);
     });
 
     test('carries every NAG through to the node', () {

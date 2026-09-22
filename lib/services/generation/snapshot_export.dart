@@ -11,7 +11,7 @@
 /// and finishes with [extractSnapshotLines].
 library;
 
-import '../../models/build_tree_node.dart';
+import '../../chess_core/generation/build_tree_node.dart';
 import '../../utils/findability.dart';
 import 'course/master_improvements.dart';
 import 'eca_calculator.dart';
@@ -25,7 +25,7 @@ import 'repertoire_selector.dart';
 import 'trap_extractor.dart';
 import 'tree_ease.dart';
 import 'tree_my_ease.dart';
-import 'tree_serialization.dart';
+import '../../chess_core/generation/tree_serialization.dart';
 
 class SnapshotExportRequest {
   /// The live build's tree as a v4 JSON document ([serializeTreeJson]),

@@ -30,6 +30,22 @@ decided things on the user's behalf:
    sits between the user and the thing they opened the app to do. The Review
    column, likewise, said "2 blunders" and hid the inaccuracies entirely.
 
+## Offline
+
+Nothing on this page needs the network to be usable. Games are cached per
+(platform, username) by `GamesLibraryService`; a download that does not happen
+is answered from that cache, and the header says
+"Could not reach Lichess — showing saved games" beside a list that still has
+the games in it. `RecentGamesController` never replaces a loaded list with an
+empty one because a refresh failed — including the forced "check for new
+games" the run starts with, which prefers the network but does not discard
+what is on disk. Only an account with nothing cached shows the empty-state
+card, and then it names the site and the connection rather than the exception.
+
+The tactics review's own download path (`TacticsGameFetcher`) falls back to
+the same cache, so "analyse my games" offline reviews the games already here
+instead of failing the run.
+
 ## The shared window
 
 `lib/features/games/services/games_window.dart` — one setting, read by every

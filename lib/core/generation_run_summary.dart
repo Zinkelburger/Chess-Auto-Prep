@@ -5,7 +5,7 @@
 /// the wording can be read and tested without an engine.
 library;
 
-import '../models/build_tree_node.dart';
+import '../chess_core/generation/build_tree_node.dart';
 import '../services/generation/course/chapter_titles.dart';
 import '../services/generation/course/course_composer.dart';
 import '../services/generation/generation_config.dart';

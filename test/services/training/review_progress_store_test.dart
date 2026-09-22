@@ -2,11 +2,11 @@ import 'package:chess_auto_prep/models/repertoire_line.dart';
 import 'package:chess_auto_prep/models/repertoire_move_progress.dart';
 import 'package:chess_auto_prep/models/repertoire_review_entry.dart';
 import 'package:chess_auto_prep/models/repertoire_review_history_entry.dart';
-import 'package:chess_auto_prep/models/training_settings.dart';
+import 'package:chess_auto_prep/features/training/models/training_settings.dart';
 import 'package:chess_auto_prep/services/repertoire_review_service.dart';
 import 'package:chess_auto_prep/services/repertoire_file_editor.dart';
 import 'package:chess_auto_prep/services/repertoire_service.dart';
-import 'package:chess_auto_prep/services/training/review_progress_store.dart';
+import 'package:chess_auto_prep/features/training/controllers/review_progress_store.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -80,7 +80,7 @@ void main() {
     repertoireId = '/rep.pgn';
     store = ReviewProgressStore(
       reviewService: review,
-      repertoireService: repertoire,
+      headers: repertoire.files,
       settings: () => settings,
       repertoireId: () => repertoireId,
     );
@@ -94,7 +94,12 @@ void main() {
       final scoped = line('same').inSource('/course/one.pgn', 'One');
       repertoireId = '/course';
       store.recordMove(scoped, 0, wasCorrect: false);
-      await store.recordRating(scoped, ReviewRating.again, hadMistake: true);
+      await store.recordRating(
+        scoped,
+        ReviewRating.again,
+        attempt: Object(),
+        hadMistake: true,
+      );
       await store.flushHeaders();
       expect(store.byLine.keys, [scoped.id]);
       expect(review.saved.single.repertoireId, '/course/one.pgn');
@@ -156,38 +161,73 @@ void main() {
 
   group('recordRating', () {
     test('creates an entry for a line seen for the first time', () async {
-      await store.recordRating(line('A'), ReviewRating.good, hadMistake: false);
+      await store.recordRating(
+        line('A'),
+        ReviewRating.good,
+        attempt: Object(),
+        hadMistake: false,
+      );
       expect(store.byLine['A'], isNotNull);
       expect(store.byLine['A']!.lineName, 'Line A');
     });
 
     test('a clean pass increments passCount only', () async {
-      await store.recordRating(line('A'), ReviewRating.good, hadMistake: false);
+      await store.recordRating(
+        line('A'),
+        ReviewRating.good,
+        attempt: Object(),
+        hadMistake: false,
+      );
       expect(store.byLine['A']!.passCount, 1);
       expect(store.byLine['A']!.failCount, 0);
     });
 
     test('a line with a mistake increments failCount only', () async {
-      await store.recordRating(line('A'), ReviewRating.again, hadMistake: true);
+      await store.recordRating(
+        line('A'),
+        ReviewRating.again,
+        attempt: Object(),
+        hadMistake: true,
+      );
       expect(store.byLine['A']!.passCount, 0);
       expect(store.byLine['A']!.failCount, 1);
     });
 
     test('schedules the line — it is no longer new', () async {
-      await store.recordRating(line('A'), ReviewRating.good, hadMistake: false);
+      await store.recordRating(
+        line('A'),
+        ReviewRating.good,
+        attempt: Object(),
+        hadMistake: false,
+      );
       expect(store.byLine['A']!.isNew, isFalse);
     });
 
     test('writes a history row naming the rating', () async {
-      await store.recordRating(line('A'), ReviewRating.hard, hadMistake: false);
+      await store.recordRating(
+        line('A'),
+        ReviewRating.hard,
+        attempt: Object(),
+        hadMistake: false,
+      );
       expect(review.history, hasLength(1));
       expect(review.history.single.rating, 'hard');
       expect(review.history.single.sessionType, 'trainer');
     });
 
     test('pushes the schedule into the PGN headers, batched', () async {
-      await store.recordRating(line('A'), ReviewRating.good, hadMistake: false);
-      await store.recordRating(line('B'), ReviewRating.good, hadMistake: false);
+      await store.recordRating(
+        line('A'),
+        ReviewRating.good,
+        attempt: Object(),
+        hadMistake: false,
+      );
+      await store.recordRating(
+        line('B'),
+        ReviewRating.good,
+        attempt: Object(),
+        hadMistake: false,
+      );
       expect(
         repertoire.headerUpdates,
         isEmpty,
@@ -206,7 +246,12 @@ void main() {
     });
 
     test('a source switch flushes what the old file was owed', () async {
-      await store.recordRating(line('A'), ReviewRating.good, hadMistake: false);
+      await store.recordRating(
+        line('A'),
+        ReviewRating.good,
+        attempt: Object(),
+        hadMistake: false,
+      );
       final oldPath = repertoireId;
       repertoireId = '/other.pgn';
       store.adopt(byLine: {}, moveProgress: {}, otherRepertoires: []);
@@ -229,6 +274,7 @@ void main() {
         await store.recordRating(
           line('A'),
           ReviewRating.good,
+          attempt: Object(),
           hadMistake: false,
         );
         expect(
@@ -243,7 +289,11 @@ void main() {
 
   group('recordCompletion (linear mode)', () {
     test('bumps the tallies but leaves the line unscheduled', () async {
-      await store.recordCompletion(line('A'), hadMistake: false);
+      await store.recordCompletion(
+        line('A'),
+        attempt: Object(),
+        hadMistake: false,
+      );
       expect(store.byLine['A']!.passCount, 1);
       expect(
         store.byLine['A']!.isNew,
@@ -253,14 +303,22 @@ void main() {
     });
 
     test('writes a history row with no rating', () async {
-      await store.recordCompletion(line('A'), hadMistake: true);
+      await store.recordCompletion(
+        line('A'),
+        attempt: Object(),
+        hadMistake: true,
+      );
       expect(review.history.single.rating, '');
       expect(review.history.single.sessionType, 'linear');
       expect(review.history.single.hadMistake, isTrue);
     });
 
     test('never touches the PGN headers', () async {
-      await store.recordCompletion(line('A'), hadMistake: false);
+      await store.recordCompletion(
+        line('A'),
+        attempt: Object(),
+        hadMistake: false,
+      );
       expect(repertoire.headerUpdates, isEmpty);
     });
   });
@@ -298,8 +356,18 @@ void main() {
     });
 
     test('keeps pass/fail history across a reset to new', () async {
-      await store.recordRating(line('A'), ReviewRating.good, hadMistake: false);
-      await store.recordRating(line('A'), ReviewRating.again, hadMistake: true);
+      await store.recordRating(
+        line('A'),
+        ReviewRating.good,
+        attempt: Object(),
+        hadMistake: false,
+      );
+      await store.recordRating(
+        line('A'),
+        ReviewRating.again,
+        attempt: Object(),
+        hadMistake: true,
+      );
       expect(store.byLine['A']!.passCount, 1);
       expect(store.byLine['A']!.failCount, 1);
 
@@ -340,14 +408,13 @@ void main() {
       expect(repertoire.headerUpdates, isEmpty);
     });
 
-    test('repaints before writing to disk', () async {
-      final order = <String>[];
+    test('publishes learned state after acknowledged persistence', () async {
       review.saved = [];
-      await store.applyLearnedSelection(lines, {
-        'A',
-      }, onApplied: () => order.add('repaint'));
-      order.add('written');
-      expect(order, ['repaint', 'written']);
+      final saving = store.applyLearnedSelection(lines, {'A'});
+      expect(store.byLine['A']?.isNew ?? true, isTrue);
+      await saving;
+      expect(store.byLine['A']!.isNew, isFalse);
+      expect(review.saved, isNotEmpty);
     });
   });
 
@@ -403,15 +470,25 @@ void main() {
     var id = '/first.pgn';
     final s = ReviewProgressStore(
       reviewService: review,
-      repertoireService: repertoire,
+      headers: repertoire.files,
       settings: () => settings,
       repertoireId: () => id,
     );
-    await s.recordRating(line('A'), ReviewRating.good, hadMistake: false);
+    await s.recordRating(
+      line('A'),
+      ReviewRating.good,
+      attempt: Object(),
+      hadMistake: false,
+    );
     expect(s.byLine['A']!.repertoireId, '/first.pgn');
 
     id = '/second.pgn';
-    await s.recordRating(line('B'), ReviewRating.good, hadMistake: false);
+    await s.recordRating(
+      line('B'),
+      ReviewRating.good,
+      attempt: Object(),
+      hadMistake: false,
+    );
     expect(s.byLine['B']!.repertoireId, '/second.pgn');
   });
 }

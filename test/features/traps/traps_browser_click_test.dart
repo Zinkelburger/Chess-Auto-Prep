@@ -1,13 +1,13 @@
+import '../../support/repertoire_dependencies.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
-import 'package:chess_auto_prep/core/repertoire_controller.dart';
-import 'package:chess_auto_prep/models/trap_line_info.dart';
-import 'package:chess_auto_prep/models/trap_reply.dart';
+import 'package:chess_auto_prep/chess_core/generation/trap_line_info.dart';
+import 'package:chess_auto_prep/chess_core/generation/trap_reply.dart';
 import 'package:chess_auto_prep/features/traps/services/trap_line_builder.dart';
 import 'package:chess_auto_prep/features/traps/widgets/traps_browser.dart';
-import 'package:chess_auto_prep/models/move_tree.dart';
+import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 
 TrapLineInfo _scandiTrap() {
   return const TrapLineInfo(
@@ -152,7 +152,7 @@ void main() {
   testWidgets('tapping a trap row loads the annotated line onto the board', (
     tester,
   ) async {
-    final controller = RepertoireController();
+    final controller = testBuilderWorkspace();
     final trap = _scandiTrap();
 
     await tester.pumpWidget(
@@ -163,7 +163,7 @@ void main() {
             boardPreview: BoardPreviewController(),
             onTrapSelected: (t) {
               final built = TrapLineBuilder.build(t)!;
-              controller.loadAnnotatedTree(built.tree, cursor: built.cursor);
+              controller.inspectAnnotatedTree(built.tree, cursor: built.cursor);
             },
           ),
         ),
@@ -175,11 +175,13 @@ void main() {
     await tester.tap(find.text('#1'));
     await tester.pumpAndSettle();
 
-    expect(controller.moveHistory, trap.movesSan);
-    expect(controller.fen, trap.fen);
+    expect(controller.board.moveHistory, trap.movesSan);
+    expect(controller.board.fen, trap.fen);
     // The opponent's blunder is explorable one ply forward.
     expect(
-      controller.tree.nodeAt(TreePath(controller.path.toList()))!.children,
+      controller.board.tree
+          .nodeAt(TreePath(controller.board.path.toList()))!
+          .children,
       isNotEmpty,
     );
   });

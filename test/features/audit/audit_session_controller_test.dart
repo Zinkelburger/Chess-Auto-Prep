@@ -4,6 +4,11 @@
 /// run end to end with every engine source off.
 library;
 
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../../support/runtime_settings.dart';
+
+import 'package:chess_auto_prep/chess_core/moves/opening_graph.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -14,7 +19,6 @@ import 'package:chess_auto_prep/features/audit/services/audit_config.dart';
 import 'package:chess_auto_prep/features/audit/services/audit_persistence.dart';
 import 'package:chess_auto_prep/features/audit/services/repertoire_audit_service.dart';
 import 'package:chess_auto_prep/models/opening_tree.dart';
-import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
 import 'package:chess_auto_prep/services/jobs/repertoire_job.dart';
 import 'package:chess_auto_prep/services/opening_tree_builder.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
@@ -56,11 +60,12 @@ class _MemoryStorage implements StorageService {
 }
 
 class _GatedAudit extends RepertoireAuditService {
+  _GatedAudit() : super(pool: engines.pool);
   final completions = <Completer<AuditResult>>[];
   final starts = <String?>[];
   @override
   Future<AuditResult> audit({
-    required OpeningTree tree,
+    required OpeningGraph tree,
     required bool isWhiteRepertoire,
     required AuditConfig config,
     String? startFen,
@@ -113,7 +118,14 @@ AuditResult _result(List<AuditFinding> findings, {int nodes = 3}) =>
 /// Let unawaited persistence writes land.
 Future<void> settle() => Future<void>.delayed(Duration.zero);
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late _MemoryStorage storage;
@@ -122,10 +134,14 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
-    EngineLifecycle.testMode = true;
+
     storage = _MemoryStorage();
     StorageFactory.instanceForTest = storage;
-    controller = AuditSessionController();
+    controller = AuditSessionController(
+      service: RepertoireAuditService(pool: engines.pool),
+      prepareEngine: () => engines.lifecycle.enterGeneration(1),
+      releaseEngine: engines.lifecycle.exitGeneration,
+    );
   });
 
   tearDown(() {
@@ -134,7 +150,6 @@ void main() {
       jobs.removeJob(job);
     }
     StorageFactory.instanceForTest = null;
-    EngineLifecycle.testMode = false;
   });
 
   AuditSnapshot snapshotAt(String path) => AuditSnapshot.fromJson(
@@ -227,7 +242,7 @@ void main() {
       expect(controller.isPaused, isFalse);
       controller.resume();
       expect(controller.isPaused, isFalse);
-      controller.cancel(_a);
+      controller.cancel();
       expect(storage.files, isEmpty);
     });
 
@@ -250,12 +265,13 @@ void main() {
     test(
       'cancel saves an interrupted snapshot with the live findings',
       () async {
+        await controller.tryRestore(_a);
         startAudit();
         controller.onLiveFinding(_finding('Nf6'));
         controller.onProgress(2, 8);
         final job = controller.currentJob!;
 
-        controller.cancel(_a);
+        controller.cancel();
         await settle();
 
         expect(controller.isAuditing, isFalse);
@@ -276,7 +292,7 @@ void main() {
     test('cancelling a paused run clears the pause', () {
       startAudit();
       controller.pause();
-      controller.cancel(_a);
+      controller.cancel();
       expect(controller.isPaused, isFalse);
       expect(controller.isAuditing, isFalse);
     });
@@ -284,7 +300,7 @@ void main() {
     test('progress is not saved when no config was ever given', () async {
       controller.onAuditingChanged(true, jobs, 'A');
       controller.onLiveFinding(_finding('Nf6'));
-      controller.cancel(_a);
+      controller.cancel();
       await settle();
       expect(storage.files, isEmpty);
     });
@@ -517,14 +533,77 @@ void main() {
         );
 
     test(
+      'canceling a queued run saves its own source before it starts',
+      () async {
+        final service = _GatedAudit();
+        controller.dispose();
+        controller = AuditSessionController(
+          service: service,
+          prepareEngine: () async {},
+          releaseEngine: () async {},
+        );
+        final first = launch(_a);
+        await settle();
+        controller.cancel();
+        await settle();
+        final savedA = storage.files[_aJson];
+        final second = launch(_b);
+        expect(controller.activeRepertoireId, _b);
+        controller.cancel();
+        await settle();
+        expect(storage.files[_aJson], savedA);
+        expect(snapshotAt(_bJson).isComplete, isFalse);
+        expect(snapshotAt(_bJson).result.findings, isEmpty);
+        service.completions.single.complete(_result([]));
+        await first;
+        await second;
+        expect(service.starts, hasLength(1));
+        expect(controller.isAuditing, isFalse);
+      },
+    );
+
+    test(
+      'fileless run cancellation retains progress without inventing a path',
+      () async {
+        final service = _GatedAudit();
+        controller.dispose();
+        controller = AuditSessionController(
+          service: service,
+          prepareEngine: () async {},
+          releaseEngine: () async {},
+        );
+        final run = controller.launch(
+          config: _quiet,
+          tree: tree,
+          isWhiteRepertoire: true,
+          jobManager: jobs,
+          repertoireLabel: 'Unsaved',
+          repertoireFilePath: null,
+        );
+        await settle();
+        controller.cancel();
+        await settle();
+        expect(controller.activeRepertoireId, isNull);
+        expect(controller.interruptedSnapshot!.result.findings, hasLength(1));
+        expect(storage.files, isEmpty);
+        service.completions.single.complete(_result([]));
+        await run;
+      },
+    );
+
+    test(
       'cancelled completion cannot mark the saved partial report complete',
       () async {
         final service = _GatedAudit();
         controller.dispose();
-        controller = AuditSessionController(service: service);
+        controller = AuditSessionController(
+          prepareEngine: () => engines.lifecycle.enterGeneration(1),
+          releaseEngine: engines.lifecycle.exitGeneration,
+          service: service,
+        );
         final run = launch(_a);
         await settle();
-        controller.cancel(_a);
+        controller.cancel();
         await settle();
         expect(controller.interruptedSnapshot, isNotNull);
         service.completions.single.complete(_result([_finding('d5')]));
@@ -541,7 +620,11 @@ void main() {
       () async {
         final service = _GatedAudit();
         controller.dispose();
-        controller = AuditSessionController(service: service);
+        controller = AuditSessionController(
+          prepareEngine: () => engines.lifecycle.enterGeneration(1),
+          releaseEngine: engines.lifecycle.exitGeneration,
+          service: service,
+        );
         final first = launch(_a);
         await settle();
         controller.onRepertoireSwitching(_a);
@@ -568,6 +651,7 @@ void main() {
         var releases = 0;
         controller.dispose();
         controller = AuditSessionController(
+          service: RepertoireAuditService(pool: engines.pool),
           prepareEngine: () async => throw StateError('Engine unavailable'),
           releaseEngine: () async {
             releases++;
@@ -588,7 +672,11 @@ void main() {
     test('resume retains its original subtree', () async {
       final service = _GatedAudit();
       controller.dispose();
-      controller = AuditSessionController(service: service);
+      controller = AuditSessionController(
+        prepareEngine: () => engines.lifecycle.enterGeneration(1),
+        releaseEngine: engines.lifecycle.exitGeneration,
+        service: service,
+      );
       final snapshot = AuditSnapshot(
         result: _result([]),
         config: _quiet,

@@ -3,19 +3,21 @@
 ///
 /// Headless by construction: no eval provider is enabled, Maia is a fake
 /// with an empty policy (so no Dirichlet smoothing), the coverage sweep is
-/// off, and [EngineLifecycle] is parked in `generating` under `testMode` so
-/// the build does not try to spawn engine workers (under `flutter test` the
-/// default target platform is Android, and the FFI Stockfish package it would
-/// pick dies asynchronously into whichever test is running). What remains is
+/// off, and the injected engine factory returns no connection, so the real
+/// lifecycle and pool exercise the unavailable-engine path. What remains is
 /// exactly the frequency-map expansion, the eval enrichment from the cache,
 /// and the run's lifecycle.
 library;
 
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../support/runtime_settings.dart';
+import '../support/eval_cache_fixture.dart';
+
 import 'dart:io';
 
 import 'package:chess_auto_prep/constants/chess_constants.dart';
-import 'package:chess_auto_prep/models/build_tree_node.dart';
-import 'package:chess_auto_prep/services/eval/eval_canonicalize.dart';
+import 'package:chess_auto_prep/chess_core/generation/build_tree_node.dart';
+import 'package:chess_auto_prep/chess_core/position/eval_canonicalize.dart';
 import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
 import 'package:chess_auto_prep/services/eval_cache.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';
@@ -83,17 +85,25 @@ List<BuildTreeNode> _nodesAtPly(BuildTreeNode node, int ply) => [
 ];
 
 void main() {
+  useIsolatedEvalCache();
+  late EngineRuntime engines;
+  setUp(() {
+    final settings = testRuntimeSettings();
+    addTearDown(settings.dispose);
+    engines = EngineRuntime(
+      settings: settings.engine,
+      createConnection: () async => null,
+    );
+    addTearDown(engines.dispose);
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
   late Directory tmp;
   late String pgnPath;
 
   setUp(() async {
-    // resetForTest clears testMode, so it must come first: with testMode
-    // off, enterGeneration would spawn the real pool.
-    EngineLifecycle.instance.resetForTest();
-    EngineLifecycle.testMode = true;
-    await EngineLifecycle.instance.enterGeneration(1);
-    expect(EngineLifecycle.instance.state, EngineState.generating);
+    await engines.lifecycle.enterGeneration(1);
+    expect(engines.lifecycle.state, EngineState.generating);
+    expect(engines.pool.workerCount, 0);
     tmp = Directory.systemTemp.createTempSync('db_explorer_test');
     pgnPath = p.join(tmp.path, 'games.pgn');
     File(pgnPath).writeAsStringSync(_standardPgn());
@@ -104,8 +114,7 @@ void main() {
 
   tearDown(() {
     MaiaFactory.testOverride = null;
-    EngineLifecycle.instance.resetForTest();
-    EngineLifecycle.testMode = false;
+
     tmp.deleteSync(recursive: true);
   });
 
@@ -115,16 +124,25 @@ void main() {
     bool Function()? finishNow,
     void Function(String, GenerationPhase)? onStatusChanged,
     TreeBuildService? service,
-  }) => (service ?? TreeBuildService()).buildFromPgnFreqMap(
-    config: config,
-    isCancelled: isCancelled ?? () => false,
-    onProgress: (_) {},
-    finishNow: finishNow,
-    onStatusChanged: onStatusChanged,
-  );
+  }) =>
+      (service ??
+              TreeBuildService(
+                pool: engines.pool,
+                lifecycle: engines.lifecycle,
+              ))
+          .buildFromPgnFreqMap(
+            config: config,
+            isCancelled: isCancelled ?? () => false,
+            onProgress: (_) {},
+            finishNow: finishNow,
+            onStatusChanged: onStatusChanged,
+          );
 
   test('our moves are choices, opponent replies are chances', () async {
-    final service = TreeBuildService();
+    final service = TreeBuildService(
+      pool: engines.pool,
+      lifecycle: engines.lifecycle,
+    );
     final tree = await build(_config(pgnPath), service: service);
     final root = tree.root;
 
@@ -290,7 +308,10 @@ void main() {
   test(
     'a hard cancel during parsing throws and releases the service',
     () async {
-      final service = TreeBuildService();
+      final service = TreeBuildService(
+        pool: engines.pool,
+        lifecycle: engines.lifecycle,
+      );
 
       await expectLater(
         build(_config(pgnPath), isCancelled: () => true, service: service),
@@ -301,7 +322,10 @@ void main() {
   );
 
   test('no PGN file is a configuration error, before any run state', () async {
-    final service = TreeBuildService();
+    final service = TreeBuildService(
+      pool: engines.pool,
+      lifecycle: engines.lifecycle,
+    );
 
     await expectLater(
       build(
@@ -315,7 +339,10 @@ void main() {
 
   test('a file with no games fails with a diagnosis', () async {
     File(pgnPath).writeAsStringSync('');
-    final service = TreeBuildService();
+    final service = TreeBuildService(
+      pool: engines.pool,
+      lifecycle: engines.lifecycle,
+    );
 
     await expectLater(
       build(_config(pgnPath), service: service),

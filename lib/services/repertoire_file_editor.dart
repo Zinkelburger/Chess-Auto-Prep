@@ -9,19 +9,19 @@
 /// or by line id, resolved with the same rule the trainer assigns ids by.
 library;
 
-import 'dart:io' as io;
+import '../features/training/repositories/training_review_repository.dart';
 
-import 'package:flutter/foundation.dart' show listEquals;
+import 'dart:io' as io;
+import '../chess_core/pgn/repertoire_document_mutation.dart';
+
 import 'package:path/path.dart' as p;
 
 import '../models/repertoire_line.dart';
 import '../models/repertoire_review_entry.dart' show RepertoireReviewEntry;
 import '../utils/atomic_file.dart';
 import '../utils/file_text_reader.dart';
-import 'pgn_mainline_lexer.dart' as pgn;
-import 'pgn_parsing_service.dart' as pgn;
-import 'repertoire_line_ids.dart';
-import 'repertoire_pgn_text.dart';
+import '../chess_core/pgn/pgn_text.dart' as pgn;
+import '../chess_core/pgn/repertoire_pgn_text.dart';
 
 /// A chapter file cut into its `//` preamble and its games as raw text,
 /// indexed the way [RepertoireLine.gameIndex] is, with the content it was
@@ -31,95 +31,6 @@ typedef RepertoirePgnDocument = ({
   List<String> games,
   String originalContent,
 });
-
-/// The result of appending moves to a chapter: the document as written, and
-/// how it stood after each ply (the last snapshot is [updatedContent]).
-typedef AppendMovesResult = ({
-  bool success,
-  String updatedContent,
-  List<String> snapshots,
-});
-
-/// Splits a PGN document into its `//` preamble and its games, exactly as
-/// [pgn.splitPgnIntoGames] indexes them.
-///
-/// The trailing space in `'[Event '` is load-bearing and the reason this
-/// agrees with the parser at all: a bare `[Event` prefix also matches
-/// `[EventDate "…"]`, which every Chessable export carries, and cutting
-/// there split each game in two. Every index-addressed edit then landed on
-/// the wrong half of the wrong game.
-({String preamble, List<String> games}) splitRepertoireDocument(
-  String content,
-) {
-  content = pgn.stripBom(content);
-  final preambleLines = <String>[];
-  final games = <String>[];
-  var gameStart = -1;
-
-  // One pass over line starts; a game is a substring between two `[Event `
-  // lines, right-trimmed as the line-joining version produced it.
-  var lineStart = 0;
-  while (lineStart <= content.length) {
-    var lineEnd = content.indexOf('\n', lineStart);
-    if (lineEnd < 0) lineEnd = content.length;
-
-    if (_startsWithEventTag(content, lineStart, lineEnd)) {
-      if (gameStart >= 0) {
-        final text = content.substring(gameStart, lineStart).trimRight();
-        if (text.isNotEmpty) games.add(text);
-      }
-      gameStart = lineStart;
-    } else if (gameStart < 0) {
-      final line = content.substring(lineStart, lineEnd);
-      if (line.trim().isNotEmpty) preambleLines.add(line);
-    }
-    lineStart = lineEnd + 1;
-  }
-  if (gameStart >= 0) {
-    final text = content.substring(gameStart).trimRight();
-    if (text.isNotEmpty) games.add(text);
-  }
-
-  return (preamble: preambleLines.join('\n').trimRight(), games: games);
-}
-
-/// Whether the line `[start, end)` is `[Event ` after optional blanks.
-bool _startsWithEventTag(String content, int start, int end) {
-  var i = start;
-  while (i < end) {
-    final c = content.codeUnitAt(i);
-    if (c != 0x20 && c != 0x09 && c != 0x0D) break;
-    i++;
-  }
-  return content.startsWith('[Event ', i);
-}
-
-/// The id each game in [games] resolves to — null for games that do not
-/// parse or have no moves — using exactly the rule of
-/// `RepertoireService.parseRepertoirePgn`, including collision resolution.
-/// This is what file edits must use to find a line by id.
-///
-/// Reads the header block and lexes the mainline ([pgn.mainlineSansOf])
-/// instead of building each game's move tree with dartchess: an id needs
-/// the header id or the mainline SAN list, nothing more, and this runs over
-/// every game in the file on every rename, autosave and review rating.
-List<String?> lineIdsForGames(List<String> games) {
-  final ids = List<String?>.filled(games.length, null);
-  final seen = <String>{};
-  for (var i = 0; i < games.length; i++) {
-    final moves = pgn.mainlineSansOf(games[i]);
-    if (moves.isEmpty) continue;
-    final id = repertoireLineIds.fromHeaders(
-      pgn.extractHeaderBlock(games[i]),
-      moves,
-      i,
-    );
-    ids[i] = seen.add(id)
-        ? id
-        : repertoireLineIds.resolveCollision(moves, i, seen);
-  }
-  return ids;
-}
 
 /// The ids of one file's games, valid while the file's stat is unchanged.
 class _CachedLineIds {
@@ -138,7 +49,7 @@ class _CachedLineIds {
 
 /// Reads and rewrites the games of repertoire chapter files. Stateless
 /// apart from the process-wide line-id memo; construct freely.
-class RepertoireFileEditor {
+class RepertoireFileEditor implements TrainingHeaderRepository {
   const RepertoireFileEditor();
 
   /// One entry per edited file; bounded by the handful of chapters a
@@ -346,6 +257,7 @@ class RepertoireFileEditor {
   /// headers of every line in [entriesByLineId] with a single read and one
   /// atomic write. A per-line loop over [updateLineReviewHeaders] would
   /// reread and rewrite the whole file once per line.
+  @override
   Future<bool> updateManyLineReviewHeaders(
     String filePath,
     Map<String, RepertoireReviewEntry> entriesByLineId,
@@ -624,96 +536,5 @@ class RepertoireFileEditor {
   static List<int> _block(int start, int count, int length) {
     final from = start.clamp(0, length);
     return [for (var k = 0; k < count; k++) from + k];
-  }
-
-  // ── Building lines by playing ───────────────────────────────────────────
-
-  /// Appends [san] after [pathFromRoot] in the best-matching game, or adds a
-  /// new game when no exact prefix match exists.
-  Future<({bool success, String updatedContent})> appendMoveAtPath(
-    String filePath,
-    List<String> pathFromRoot,
-    String san, {
-    String? startingFen,
-    bool isWhiteRepertoire = true,
-  }) async {
-    final result = await appendMovesAtPath(
-      filePath,
-      pathFromRoot,
-      [san],
-      startingFen: startingFen,
-      isWhiteRepertoire: isWhiteRepertoire,
-    );
-    return (success: result.success, updatedContent: result.updatedContent);
-  }
-
-  /// Appends [newSans] after [pathFromRoot]: onto the game whose mainline is
-  /// exactly [pathFromRoot] when there is one, else as a new game holding
-  /// the whole line.  One read, one lexing pass, one atomic write for
-  /// however many plies — a build-by-playing commit used to do all three
-  /// once per ply.
-  ///
-  /// Equivalent to calling [appendMoveAtPath] once per ply: after the first
-  /// append the game's mainline is the extended prefix, so every later ply
-  /// lands on the same game.  [AppendMovesResult.snapshots] holds the
-  /// document as it would have stood after each ply, so a caller keeping
-  /// per-ply undo history has the same states the per-ply writes produced —
-  /// assembled in memory, never written.
-  Future<AppendMovesResult> appendMovesAtPath(
-    String filePath,
-    List<String> pathFromRoot,
-    List<String> newSans, {
-    String? startingFen,
-    bool isWhiteRepertoire = true,
-  }) async {
-    final file = io.File(filePath);
-    if (!await file.exists()) {
-      return (success: false, updatedContent: '', snapshots: const <String>[]);
-    }
-
-    final content = await readTextFile(file);
-    if (newSans.isEmpty) {
-      return (
-        success: true,
-        updatedContent: content,
-        snapshots: const <String>[],
-      );
-    }
-    final document = splitRepertoireDocument(content);
-    final games = List<String>.from(document.games);
-
-    // The mainline is all that decides a match, and lexing it is a fraction
-    // of building each game's move tree.
-    final exactMatchIndex = games.indexWhere(
-      (game) => listEquals(pgn.mainlineSansOf(game), pathFromRoot),
-    );
-
-    final snapshots = <String>[];
-    var prefix = pathFromRoot;
-    for (final san in newSans) {
-      if (exactMatchIndex >= 0) {
-        games[exactMatchIndex] = appendSanToGamePgn(
-          games[exactMatchIndex],
-          prefix,
-          san,
-        );
-      } else if (prefix.length == pathFromRoot.length) {
-        games.add(
-          buildMinimalGamePgn(
-            [...pathFromRoot, san],
-            startingFen: startingFen,
-            isWhiteRepertoire: isWhiteRepertoire,
-          ),
-        );
-      } else {
-        games[games.length - 1] = appendSanToGamePgn(games.last, prefix, san);
-      }
-      prefix = [...prefix, san];
-      snapshots.add(reassemblePgnDocument(document.preamble, games));
-    }
-
-    final updated = snapshots.last;
-    await writeTextFileAtomically(file, updated, expectedContent: content);
-    return (success: true, updatedContent: updated, snapshots: snapshots);
   }
 }

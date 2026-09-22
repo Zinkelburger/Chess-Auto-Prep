@@ -15,11 +15,15 @@
 ///     --dart-define=START_MOVES="d4 Nf6 c4 c5 d5 b5 cxb5 a6 bxa6 e6"
 library;
 
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../support/runtime_settings.dart';
+
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:chess_auto_prep/constants/chess_constants.dart';
-import 'package:chess_auto_prep/models/build_tree_node.dart';
+import 'package:chess_auto_prep/chess_core/generation/build_tree_node.dart';
 import 'package:chess_auto_prep/services/generation/eca_calculator.dart';
 import 'package:chess_auto_prep/services/generation/fen_map.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';
@@ -30,9 +34,8 @@ import 'package:chess_auto_prep/services/generation/snapshot_export.dart';
 import 'package:chess_auto_prep/services/generation/tree_ease.dart';
 import 'package:chess_auto_prep/services/generation/tree_prune.dart';
 import 'package:chess_auto_prep/services/generation/tree_my_ease.dart';
-import 'package:chess_auto_prep/services/generation/tree_serialization.dart';
+import 'package:chess_auto_prep/chess_core/generation/tree_serialization.dart';
 import 'package:chess_auto_prep/services/maia/maia_factory.dart';
-import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
 import 'package:chess_auto_prep/services/master_games/master_games_db.dart';
 import 'package:chess_auto_prep/services/master_games/master_model_games.dart';
 import 'package:chess_auto_prep/services/tree_build_service.dart';
@@ -85,7 +88,14 @@ void _say(String s) {
   stdout.writeln('[mgb] ${DateTime.now().toIso8601String()} $s');
 }
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   // Without the binding, rootBundle has no ServicesBinding and the Maia
   // model asset fails to load — inside MaiaService's catch, so the build
   // only dies later with "Maia not initialized".
@@ -168,7 +178,10 @@ void main() {
     if (probe.policy.isEmpty) fail('Maia returned an empty policy');
     _say('maia ready, ${probe.policy.length} policy entries at root');
 
-    final service = TreeBuildService();
+    final service = TreeBuildService(
+      pool: engines.pool,
+      lifecycle: engines.lifecycle,
+    );
     var lastReport = 0;
     final wall = Stopwatch()..start();
     final tree = await service.build(
@@ -268,6 +281,7 @@ void main() {
     // decide which games get the reserved model-game slots, and the notes
     // they carry belong in the written lines.
     final prober = MasterImprovementProber(
+      pool: engines.pool,
       config: config,
       book: book.bookMoves,
       gameById: book.game,
@@ -276,10 +290,8 @@ void main() {
     _say('improvement sites: ${sites.length}');
     var improvements = <String, MasterImprovement>{};
     if (sites.isNotEmpty) {
-      if (StockfishPool.instance.workerCount == 0) {
-        await StockfishPool.instance.prepareForTreeBuild(
-          config.resolvedEngineThreads,
-        );
+      if (engines.pool.workerCount == 0) {
+        await engines.pool.prepareForTreeBuild(config.resolvedEngineThreads);
       }
       improvements = Map.of(await prober.probe(exported));
       _say('improvements found: ${improvements.length}');

@@ -10,7 +10,7 @@ import '../services/tactics_engine.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../utils/chess_utils.dart' show fenAfterMoves, sanToUci;
-import '../../../utils/san_display.dart';
+import 'package:chess_auto_prep/features/settings/widgets/san_display.dart';
 import '../../../widgets/clickable_move_line.dart';
 import '../../../widgets/engine/floating_board_preview.dart';
 import '../../../widgets/labeled_toggle.dart';

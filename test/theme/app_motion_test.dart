@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:chess_auto_prep/theme/app_motion.dart';
+import 'package:chess_auto_prep/design_system/theme/app_motion.dart';
 
 /// A home page with one button that pushes a second page, under a theme that
 /// uses the app's page transitions and reports itself as [platform].

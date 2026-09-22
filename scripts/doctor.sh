@@ -296,7 +296,8 @@ grep -q 'scripts/hooks/flutter_gate.sh' .claude/settings.json 2>/dev/null \
 # `driver.py start --worktree` builds HEAD, so the wiring must exist in HEAD —
 # not just in somebody's working tree — or the driver hangs waiting for
 # extensions that were never registered.
-if ! git show HEAD:lib/main.dart 2>/dev/null | grep -q installAgentDriver; then
+# Drain git's output: grep -q can cause SIGPIPE and a false failure with pipefail.
+if ! git show HEAD:lib/main.dart 2>/dev/null | grep installAgentDriver >/dev/null; then
   bad "HEAD's lib/main.dart does not call installAgentDriver() — \`driver.py start --worktree\` will build an app the driver cannot talk to"
 fi
 

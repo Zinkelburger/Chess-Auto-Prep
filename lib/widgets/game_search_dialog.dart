@@ -9,7 +9,7 @@ import 'package:flutter/services.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/app_shortcuts.dart';
-import 'common/list_search_field.dart';
+import '../design_system/components/list_search_field.dart';
 import 'game_nav_item.dart';
 import 'game_chapter_dialog.dart';
 import 'game_number_field.dart';

@@ -1,11 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/widgets/pgn_import_dialog.dart';
+import 'package:chess_auto_prep/utils/atomic_file.dart';
 
 const _pgn = '[Event "Advance"]\n[Result "*"]\n\n1. e4 c6 2. d4 d5 3. e5 *';
 
-Future<PgnImportResult?> _open(WidgetTester tester) async {
+Future<PgnImportResult?> _open(
+  WidgetTester tester, {
+  Future<void> Function(PgnImportResult)? onConfirm,
+}) async {
   PgnImportResult? captured;
   await tester.pumpWidget(
     MaterialApp(
@@ -13,8 +19,10 @@ Future<PgnImportResult?> _open(WidgetTester tester) async {
         builder: (context) => Scaffold(
           body: Center(
             child: ElevatedButton(
-              onPressed: () async =>
-                  captured = await showPgnImportDialog(context),
+              onPressed: () async => captured = await showPgnImportDialog(
+                context,
+                onConfirm: onConfirm,
+              ),
               child: const Text('go'),
             ),
           ),
@@ -29,6 +37,71 @@ Future<PgnImportResult?> _open(WidgetTester tester) async {
 
 void main() {
   group('PGN import dialog', () {
+    testWidgets('DATA-01: a failed commit keeps the PGN draft for retry', (
+      tester,
+    ) async {
+      var attempts = 0;
+      await _open(
+        tester,
+        onConfirm: (result) async {
+          expect(result.pgnContent, _pgn);
+          if (++attempts == 1) throw const AtomicWriteConflict('chapter.pgn');
+        },
+      );
+      await tester.enterText(find.byType(TextField), _pgn);
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Import'));
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(
+        find.text('Chapter changed. PGN kept; retry to add to latest.'),
+        findsOneWidget,
+      );
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        _pgn,
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Import'));
+      await tester.pumpAndSettle();
+      expect(attempts, 2);
+      expect(find.byType(AlertDialog), findsNothing);
+    });
+
+    testWidgets(
+      'STATE-01: an in-flight import cannot duplicate or dismiss its commit',
+      (tester) async {
+        final done = Completer<void>();
+        var attempts = 0;
+        await _open(
+          tester,
+          onConfirm: (_) {
+            attempts++;
+            return done.future;
+          },
+        );
+        await tester.enterText(find.byType(TextField), _pgn);
+        await tester.pump();
+        await tester.tap(find.widgetWithText(FilledButton, 'Import'));
+        await tester.pump();
+        expect(find.text('Saving…'), findsOneWidget);
+        expect(
+          tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+          isNull,
+        );
+        expect(
+          tester.widget<TextField>(find.byType(TextField)).enabled,
+          isFalse,
+        );
+        await tester.tap(find.text('Cancel'));
+        await tester.pump();
+        expect(find.byType(AlertDialog), findsOneWidget);
+        expect(attempts, 1);
+        done.complete();
+        await tester.pumpAndSettle();
+        expect(find.byType(AlertDialog), findsNothing);
+      },
+    );
+
     testWidgets('offers the file and the paste box in the same window', (
       tester,
     ) async {

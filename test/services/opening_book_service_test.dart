@@ -1,6 +1,7 @@
+import 'package:chess_auto_prep/chess_core/pgn/opening_book.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chess_auto_prep/services/opening_book_service.dart';
-import 'package:chess_auto_prep/services/pgn_position_replay.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_position_replay.dart';
 
 const _tsv = '''
 eco	name	pgn

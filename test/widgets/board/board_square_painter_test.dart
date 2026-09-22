@@ -70,39 +70,38 @@ void main() {
             }
           }
           expect(changes, greaterThan(0));
-          // A legal target retains its background except for its central dot.
+          // A legal target is tinted edge to edge — corner and centre alike,
+          // and to one flat colour, not a marker over a background.
           for (final cell in cells.skip(1)) {
             final corner = cell.topLeft + Offset(side * .15, side * .15);
             final center = cell.center;
             final cornerIndex = corner.dy.floor() * pixels + corner.dx.floor();
             final centerIndex = center.dy.floor() * pixels + center.dx.floor();
-            expect(selected[cornerIndex], plain[cornerIndex]);
-            expect(selected[centerIndex], isNot(plain[centerIndex]));
+            expect(selected[cornerIndex], isNot(plain[cornerIndex]));
+            expect(selected[centerIndex], selected[cornerIndex]);
           }
         },
       );
     }
   }
 
-  test(
-    'capture rings preserve the center and do not draw square borders',
-    () async {
-      final plain = await raster(BoardSquarePainter(outlineWidth: 0), 320);
-      final capture = await raster(
-        BoardSquarePainter(
-          legalMoveSquares: {'d5'},
-          occupiedSquares: {'d5'},
-          outlineWidth: 0,
-        ),
-        320,
-      );
-      int at(List<int> image, int x, int y) => image[y * 320 + x];
-      expect(at(capture, 140, 140), at(plain, 140, 140));
-      expect(at(capture, 140, 123), isNot(at(plain, 140, 123)));
-      expect(at(capture, 120, 120), at(plain, 120, 120));
-      expect(at(capture, 140, 120), at(plain, 140, 120));
-    },
-  );
+  test('a legal destination tints its own square and no other', () async {
+    final plain = await raster(BoardSquarePainter(outlineWidth: 0), 320);
+    final target = await raster(
+      BoardSquarePainter(legalMoveSquares: {'d5'}, outlineWidth: 0),
+      320,
+    );
+    int at(List<int> image, int x, int y) => image[y * 320 + x];
+    // d5 spans x 120..160, y 120..160 unflipped.
+    for (final (x, y) in [(123, 123), (140, 140), (157, 157)]) {
+      expect(at(target, x, y), isNot(at(plain, x, y)));
+      expect(at(target, x, y), at(target, 140, 140));
+    }
+    // Its neighbours are untouched: no border, no bleed.
+    for (final (x, y) in [(118, 140), (162, 140), (140, 118), (140, 162)]) {
+      expect(at(target, x, y), at(plain, x, y));
+    }
+  });
 
   test(
     'fractional squares have no transparent seams or blended tile edges',
@@ -146,6 +145,30 @@ void main() {
       320,
     );
     expect(recentHint, hint);
+    // A hint keeps its colour when the square is also a legal destination,
+    // and a destination keeps its colour over the recent-move trail.
+    expect(
+      await raster(
+        BoardSquarePainter(
+          highlightedSquares: {'d7'},
+          legalMoveSquares: {'d7'},
+        ),
+        320,
+      ),
+      hint,
+    );
+    final target = await raster(
+      BoardSquarePainter(legalMoveSquares: {'d7'}),
+      320,
+    );
+    expect(
+      await raster(
+        BoardSquarePainter(legalMoveSquares: {'d7'}, recentMoveSquares: {'d7'}),
+        320,
+      ),
+      target,
+    );
+    expect(target, isNot(hint));
   });
 
   test('paint state snapshots mutable inputs and compares contents', () {
@@ -164,7 +187,7 @@ void main() {
     expect(
       BoardSquarePainter(
         legalMoveSquares: {'d6'},
-        occupiedSquares: {'d6'},
+        recentMoveSquares: {'d6'},
       ).shouldRepaint(old),
       isTrue,
     );

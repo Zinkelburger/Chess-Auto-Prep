@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/chess_core/pgn/quality_nags.dart';
 import 'package:chess_auto_prep/utils/pgn_nags.dart';
 import 'package:flutter_test/flutter_test.dart';
 

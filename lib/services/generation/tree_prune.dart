@@ -5,7 +5,7 @@
 /// with unit tests that construct trees directly.
 library;
 
-import '../../models/build_tree_node.dart';
+import '../../chess_core/generation/build_tree_node.dart';
 import 'fen_map.dart';
 import 'frontier_queue.dart';
 

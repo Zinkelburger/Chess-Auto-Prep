@@ -14,75 +14,58 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
-import '../models/eval_database_settings.dart';
+import '../features/settings/controllers/eval_database_settings.dart';
 import '../services/eval/lichess_eval_controller.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/open_in_file_manager.dart';
 import 'labeled_toggle.dart';
 
-class LichessEvalSettingsPanel extends StatefulWidget {
+class LichessEvalSettingsPanel extends StatelessWidget {
   const LichessEvalSettingsPanel({super.key});
 
   @override
-  State<LichessEvalSettingsPanel> createState() =>
-      _LichessEvalSettingsPanelState();
-}
-
-class _LichessEvalSettingsPanelState extends State<LichessEvalSettingsPanel> {
-  final EvalDatabaseSettings _settings = EvalDatabaseSettings.instance;
-  final LichessEvalController _controller = LichessEvalController.instance;
-
-  @override
-  void initState() {
-    super.initState();
-    _settings.addListener(_onChanged);
-    _controller.addListener(_onChanged);
-  }
-
-  @override
-  void dispose() {
-    _settings.removeListener(_onChanged);
-    _controller.removeListener(_onChanged);
-    super.dispose();
-  }
-
-  void _onChanged() {
-    if (mounted) setState(() {});
-  }
-
-  @override
   Widget build(BuildContext context) {
+    final settings = context.watch<EvalDatabaseSettings>();
+    final controller = context.watch<LichessEvalController>();
+    if (settings.state.committed == null) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         AppSwitch(
           label: 'Use saved Lichess evaluations',
-          value: _settings.enableLichessEvals,
-          onChanged: (v) => unawaited(_settings.setEnableLichessEvals(v)),
-          enabled: _controller.isReady,
+          value: settings.editing.enableLichessEvals,
+          onChanged: (v) {
+            if (!context.mounted) return;
+            unawaited(
+              settings.setEnableLichessEvals(v).catchError((Object _) {}),
+            );
+          },
+          enabled:
+              controller.isReady && !settings.state.busy && !controller.isBusy,
           tooltip:
               'Consult the local Lichess store after the ChessDB dump and '
               'before the engine.',
           disabledReason: 'No built store on this machine yet.',
         ),
-        if (_settings.lichessEvalsPath.isNotEmpty) ...[
+        if (settings.editing.lichessEvalsPath.isNotEmpty) ...[
           const SizedBox(height: 8),
-          _pathLine(),
+          _pathLine(context, settings),
         ],
       ],
     );
   }
 
-  Widget _pathLine() {
+  Widget _pathLine(BuildContext context, EvalDatabaseSettings settings) {
     return Row(
       children: [
         const Icon(Icons.folder_outlined, size: 14, color: AppColors.outline),
         const SizedBox(width: 6),
         Expanded(
           child: Text(
-            _settings.lichessEvalsPath,
+            settings.editing.lichessEvalsPath,
             style: AppTextStyles.caption,
             overflow: TextOverflow.ellipsis,
           ),
@@ -92,7 +75,7 @@ class _LichessEvalSettingsPanelState extends State<LichessEvalSettingsPanel> {
           iconSize: 16,
           visualDensity: VisualDensity.compact,
           onPressed: () =>
-              unawaited(openInFileManager(_settings.lichessEvalsPath)),
+              unawaited(openInFileManager(settings.editing.lichessEvalsPath)),
           icon: const Icon(Icons.open_in_new),
         ),
       ],

@@ -116,23 +116,6 @@ void main() {
     });
   });
 
-  group('rebuild coalescing', () {
-    test('coalesces while generating', () {
-      final a = router.onNotified(isGenerating: true, generatedTree: null);
-      expect(a.shouldCoalesceRebuild, isTrue);
-    });
-
-    test('paints immediately once the run ends', () {
-      router.onNotified(isGenerating: true, generatedTree: null);
-      final done = router.onNotified(isGenerating: false, generatedTree: null);
-      expect(
-        done.shouldCoalesceRebuild,
-        isFalse,
-        reason: 'the final state must not wait out a throttle timer',
-      );
-    });
-  });
-
   test('a second run after the first behaves like a fresh one', () {
     final first = _Tree('first');
     router.onNotified(isGenerating: true, generatedTree: first);
@@ -142,7 +125,6 @@ void main() {
     final start = router.onNotified(isGenerating: true, generatedTree: second);
     expect(start.justFinished, isFalse);
     expect(start.shouldRunCoherence, isTrue);
-    expect(start.shouldCoalesceRebuild, isTrue);
 
     final end = router.onNotified(isGenerating: false, generatedTree: second);
     expect(end.justFinished, isTrue);

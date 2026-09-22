@@ -11,7 +11,8 @@ library;
 import 'package:dartchess/dartchess.dart' show Chess;
 
 import '../../../core/app_state.dart' show PgnViewerTab;
-import '../../../services/move_eval.dart' show MoveClassification;
+import 'package:chess_auto_prep/chess_core/analysis/move_eval.dart'
+    show MoveClassification;
 import '../../../utils/chess_utils.dart'
     show fenAfterMoves, formatEvalDisplay, sanToUci;
 import '../../../utils/movetext_builder.dart' show formatMoveAtPly;

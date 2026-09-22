@@ -5,13 +5,11 @@
 /// of partial and complete audit results.
 library;
 
+import 'package:chess_auto_prep/chess_core/moves/opening_graph.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import '../../../models/opening_tree.dart';
-import '../../../services/engine/engine_lifecycle.dart';
-import '../../../services/engine/stockfish_pool.dart';
 import '../../../services/jobs/notify_throttle.dart';
 import '../../../services/jobs/repertoire_job.dart';
 import '../../../utils/safe_change_notifier.dart';
@@ -23,18 +21,12 @@ import '../services/repertoire_audit_service.dart';
 
 class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
   AuditSessionController({
-    RepertoireAuditService? service,
-    Future<void> Function()? prepareEngine,
-    Future<void> Function()? releaseEngine,
-  }) : _service = service ?? RepertoireAuditService(),
-       _prepareEngine = prepareEngine ?? _prepareStockfish,
-       _releaseEngine =
-           releaseEngine ?? EngineLifecycle.instance.exitGeneration;
-
-  static Future<void> _prepareStockfish() async {
-    await EngineLifecycle.instance.enterGeneration(1);
-    await StockfishPool.instance.ensureWorkers(1);
-  }
+    required RepertoireAuditService service,
+    required Future<void> Function() prepareEngine,
+    required Future<void> Function() releaseEngine,
+  }) : _service = service,
+       _prepareEngine = prepareEngine,
+       _releaseEngine = releaseEngine;
 
   final Future<void> Function() _prepareEngine;
   final Future<void> Function() _releaseEngine;
@@ -150,10 +142,10 @@ class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
   }
 
-  void cancel(String? repertoireFilePath) {
+  void cancel() {
     if (!_isAuditing) return;
     _service.cancel();
-    saveProgress(repertoireFilePath);
+    saveProgress(_activeRepertoireId);
     _runVersion++;
     currentJob?.updateStatus(JobStatus.cancelled);
     currentJob = null;
@@ -343,7 +335,7 @@ class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
   /// audit resets the shared service or acquires the engine pool.
   Future<void> launch({
     required AuditConfig config,
-    required OpeningTree tree,
+    required OpeningGraph tree,
     required bool isWhiteRepertoire,
     required JobManager jobManager,
     required String? repertoireLabel,
@@ -385,7 +377,7 @@ class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
     required int version,
     required RepertoireJob job,
     required AuditConfig config,
-    required OpeningTree tree,
+    required OpeningGraph tree,
     required bool isWhiteRepertoire,
     required String? repertoireFilePath,
     required String? startFen,
@@ -444,7 +436,7 @@ class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
 
   Future<void> launchResume({
     required AuditSnapshot snapshot,
-    required OpeningTree tree,
+    required OpeningGraph tree,
     required bool isWhiteRepertoire,
     required JobManager jobManager,
     required String? repertoireLabel,

@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import '../services/opening_catalog.dart';
 import '../theme/app_text_styles.dart';
 import 'chess_board_widget.dart';
-import 'common/list_search_field.dart';
+import '../design_system/components/list_search_field.dart';
 
 class OpeningSelection {
   const OpeningSelection({this.lines = const [], this.positionLine});

@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/chess_core/pgn/opening_book.dart';
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/services/generation/course/chapter_planner.dart';
 import 'package:chess_auto_prep/services/generation/course/chapter_titles.dart';

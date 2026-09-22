@@ -32,7 +32,7 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
     widget.onPositionChanged?.call(_currentPosition);
   }
 
-  void _goToAnalysisNode(MoveNode targetNode, int branchPly) {
+  void _goToAnalysisNode(MoveNodeView targetNode, int branchPly) {
     if (!_m.goToAnalysisNode(targetNode, branchPly)) return;
     setState(_clearInlineLine);
     widget.onPositionChanged?.call(_currentPosition);
@@ -88,7 +88,7 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
         ));
       }
       for (final root in _playableNodes(
-        _variationsByPly[ply] ?? const <MoveNode>[],
+        _variationsByPly[ply] ?? const <MoveNodeView>[],
       )) {
         if (!_m.isNodeVisible(root, ply)) continue;
         candidates.add((
@@ -119,7 +119,7 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
 
   /// Null-move nodes aren't playable chips; walk through them to the first
   /// real SAN so a ChessBase `Z0` pass still offers `Nf3`.
-  Iterable<MoveNode> _playableNodes(Iterable<MoveNode> nodes) sync* {
+  Iterable<MoveNodeView> _playableNodes(Iterable<MoveNodeView> nodes) sync* {
     for (final n in nodes) {
       if (isNullMoveSan(n.san)) {
         yield* _playableNodes(n.children);
@@ -176,7 +176,7 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
           children: [
             Text(
               san,
-              style: PgnTextStyles.branchChip.copyWith(
+              style: PgnTextStyles.branchChip(context).copyWith(
                 color: color,
                 fontWeight: emphasized ? FontWeight.w600 : FontWeight.w500,
               ),
@@ -221,7 +221,7 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
   }
 
   /// The sideline's own next move, unless solitaire has not revealed it yet.
-  MoveNode? _visibleContinuation(MoveNode node) {
+  MoveNodeView? _visibleContinuation(MoveNodeView node) {
     if (node.children.isEmpty) return null;
     final next = node.children.first;
     return _m.isNodeVisible(next, _activeBranchPly) ? next : null;
@@ -233,7 +233,7 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
       return;
     }
     if (_analysisPath.isNotEmpty) {
-      MoveNode current = _analysisPath.last;
+      MoveNodeView current = _analysisPath.last;
       for (
         var next = _visibleContinuation(current);
         next != null;
@@ -343,7 +343,7 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
   /// highlight.
   ///
   /// Read on every build, so it replays one move from a memoised board
-  /// ([ViewerGameModel.mainline], [MoveNode.position]) rather than the whole
+  /// ([ViewerGameController.mainline], [MoveNodeView.position]) rather than the whole
   /// game from its start.
   Set<String> _recentMoveSquares() {
     try {

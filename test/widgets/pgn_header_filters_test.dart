@@ -1,6 +1,7 @@
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/core/slice_filter_controller.dart';
 import 'package:chess_auto_prep/models/pgn_filter_models.dart';
-import 'package:chess_auto_prep/services/pgn_slice_filter.dart'
+import 'package:chess_auto_prep/chess_core/pgn/pgn_slice_filter.dart'
     show playerFieldMatches;
 import 'package:chess_auto_prep/widgets/slice/header_filters.dart';
 import 'package:flutter/material.dart';
@@ -50,6 +51,8 @@ Future<void> _show(
 }) async {
   await tester.pumpWidget(
     MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       theme: ThemeData(visualDensity: density),
       builder: (context, child) => MediaQuery(
         data: MediaQuery.of(

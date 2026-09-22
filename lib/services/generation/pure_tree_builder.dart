@@ -6,7 +6,7 @@ import 'dart:collection';
 
 import 'package:dartchess/dartchess.dart' show Position;
 
-import '../../models/build_tree_node.dart';
+import '../../chess_core/generation/build_tree_node.dart';
 import '../../utils/eval_constants.dart';
 import '../maia/maia_factory.dart';
 import 'build_run.dart';

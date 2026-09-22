@@ -129,12 +129,16 @@ mixin _TacticsPlayback on _TacticsControlPanelStateBase {
     final suggested = tactic.gameWhite.isEmpty && tactic.gameBlack.isEmpty
         ? 'Tactic game'
         : '${tactic.gameWhite} vs ${tactic.gameBlack}';
+    final storedGames = context.read<StoredGameRepository>();
     await runAddToStudyFlow(
       context,
       suggestedChapterName: suggested,
       pickerTitle: 'Add game to study',
-      buildPgn: (_) =>
-          sourceGamePgn(tactic, _session.engine.solutionLineToSan(tactic)),
+      buildPgn: (_) => sourceGamePgn(
+        tactic,
+        _session.engine.solutionLineToSan(tactic),
+        storedGames: storedGames,
+      ),
     );
   }
 
@@ -146,6 +150,7 @@ mixin _TacticsPlayback on _TacticsControlPanelStateBase {
       final pgn = await sourceGamePgn(
         tactic,
         _session.engine.solutionLineToSan(tactic),
+        storedGames: context.read<StoredGameRepository>(),
       );
       await Clipboard.setData(ClipboardData(text: pgn));
       if (mounted) showAppSnackBar(context, 'Game PGN copied.');

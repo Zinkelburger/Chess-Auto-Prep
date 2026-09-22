@@ -3,8 +3,8 @@ library;
 
 import 'package:flutter/material.dart';
 
-import 'package:chess_auto_prep/models/trap_line_info.dart';
-import 'package:chess_auto_prep/models/trap_reply.dart';
+import 'package:chess_auto_prep/chess_core/generation/trap_line_info.dart';
+import 'package:chess_auto_prep/chess_core/generation/trap_reply.dart';
 import '../../../constants/chess_constants.dart';
 import '../../../theme/app_colors.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
@@ -101,8 +101,12 @@ class TrapDetailCard extends StatelessWidget {
       onMoveTapped:
           onMoveTapped ?? (onShowPath != null ? (_) => onShowPath!() : null),
       onMoveHovered: (idx, _) {
+        final before = fenAfterMoves(kStandardStartFen, trap.movesSan, idx - 1);
         final fen = fenAfterMoves(kStandardStartFen, trap.movesSan, idx);
-        boardPreview.setPreview(fen);
+        boardPreview.setPreview(
+          fen,
+          lastMoveUci: sanToUci(before, trap.movesSan[idx]),
+        );
       },
       onHoverExit: () => boardPreview.clearPreview(),
     );
@@ -291,7 +295,10 @@ class TrapDetailCard extends StatelessWidget {
           onEnter: (_) {
             if (trap.fen != null) {
               final fen = fenAfterMoves(trap.fen!, [reply.san], 0);
-              boardPreview.setPreview(fen);
+              boardPreview.setPreview(
+                fen,
+                lastMoveUci: sanToUci(trap.fen!, reply.san),
+              );
             }
           },
           onExit: (_) => boardPreview.clearPreview(),

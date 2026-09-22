@@ -1,11 +1,11 @@
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:chess_auto_prep/core/pgn/solitaire_script.dart';
-import 'package:chess_auto_prep/core/pgn/viewer_game_model.dart';
+import 'package:chess_auto_prep/features/documents/models/solitaire_script.dart';
+import 'package:chess_auto_prep/features/documents/controllers/viewer_game_controller.dart';
 
-ViewerGameModel _load(String movetext) {
-  final m = ViewerGameModel();
+ViewerGameController _load(String movetext) {
+  final m = ViewerGameController();
   m.load(PgnGame.parsePgn('[Event "?"]\n\n$movetext'));
   return m;
 }

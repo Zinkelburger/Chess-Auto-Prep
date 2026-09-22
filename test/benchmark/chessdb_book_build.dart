@@ -16,11 +16,15 @@
 ///     --dart-define=PLAY_WHITE=false
 library;
 
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../support/runtime_settings.dart';
+
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:chess_auto_prep/constants/chess_constants.dart';
-import 'package:chess_auto_prep/models/build_tree_node.dart';
+import 'package:chess_auto_prep/chess_core/generation/build_tree_node.dart';
 import 'package:chess_auto_prep/services/generation/course/chapter_titles.dart';
 import 'package:chess_auto_prep/services/generation/course/course_composer.dart';
 import 'package:chess_auto_prep/services/generation/course/opening_namer.dart';
@@ -33,7 +37,7 @@ import 'package:chess_auto_prep/services/generation/line_pruner.dart';
 import 'package:chess_auto_prep/services/generation/repertoire_selector.dart';
 import 'package:chess_auto_prep/services/generation/tree_ease.dart';
 import 'package:chess_auto_prep/services/generation/tree_my_ease.dart';
-import 'package:chess_auto_prep/services/generation/tree_serialization.dart';
+import 'package:chess_auto_prep/chess_core/generation/tree_serialization.dart';
 import 'package:chess_auto_prep/services/master_games/master_games_db.dart';
 import 'package:chess_auto_prep/services/master_games/master_model_games.dart';
 import 'package:chess_auto_prep/services/opening_book_service.dart';
@@ -116,7 +120,14 @@ void _say(String s) {
   stdout.writeln('[cdb] ${DateTime.now().toIso8601String()} $s');
 }
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUpAll(() {
@@ -334,7 +345,10 @@ void main() {
 
 /// The Phase 1 build, factored out so [_reexportTree] can skip it entirely.
 Future<BuildTree> _buildTree(TreeBuildConfig config, MasterGamesDb book) async {
-  final service = TreeBuildService();
+  final service = TreeBuildService(
+    pool: engines.pool,
+    lifecycle: engines.lifecycle,
+  );
   var lastReport = 0;
   final wall = Stopwatch()..start();
   final tree = await service.build(

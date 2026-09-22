@@ -10,7 +10,7 @@ import 'analysis/player_corpus_store.dart';
 import 'chess_api_urls.dart';
 import 'games_library/game_filter.dart';
 import 'lichess_api_client.dart';
-import 'pgn_parsing_service.dart';
+import '../chess_core/pgn/pgn_text.dart';
 import 'storage/app_paths.dart';
 import 'storage/storage_factory.dart';
 

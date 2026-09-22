@@ -12,7 +12,7 @@ library;
 
 import '../../../models/repertoire_move_progress.dart';
 import '../../../models/repertoire_review_entry.dart';
-import '../../../services/repertoire_line_ids.dart';
+import '../../../chess_core/pgn/repertoire_line_ids.dart';
 import '../../../services/repertoire_review_service.dart';
 import 'pgn_game_headers.dart';
 

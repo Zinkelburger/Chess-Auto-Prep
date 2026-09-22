@@ -1,14 +1,15 @@
 import 'dart:math';
+import '../features/training/repositories/training_review_repository.dart';
 
 import '../models/repertoire_line.dart';
 import '../models/repertoire_move_progress.dart';
 import '../models/repertoire_review_entry.dart';
 import '../models/repertoire_review_history_entry.dart';
-import '../models/training_settings.dart';
+import '../features/training/models/training_settings.dart';
 import '../utils/training_csv.dart';
 import 'storage/storage_factory.dart';
 import 'storage/storage_service.dart';
-import 'training/move_attempt_store.dart';
+import '../infrastructure/training/move_attempt_store.dart';
 
 /// Spaced-repetition scheduling for repertoire lines, and the CSV files
 /// that keep line ratings, review history and per-move progress.
@@ -16,7 +17,7 @@ import 'training/move_attempt_store.dart';
 /// Saves are optimistic: the rows seen at the last load are remembered, and
 /// a save that would overwrite a row another session changed since throws
 /// instead of clobbering it.
-class RepertoireReviewService {
+class RepertoireReviewService implements TrainingReviewRepository {
   static const _header =
       'repertoire_id,line_id,line_name,difficulty,interval_days,due_utc,last_rating,last_reviewed_utc,pass_count,fail_count,excluded';
   static const _historyHeader =
@@ -61,6 +62,7 @@ class RepertoireReviewService {
   /// in one weekend does not come back as one 900-line day. Injectable so
   /// tests can pin it.
   final Random _fuzz;
+  final DateTime Function() _now;
 
   /// Rows as of the last [loadAll] / [loadMoveProgress], keyed like the
   /// merge, so a save can tell its own edits from another session's.
@@ -70,9 +72,13 @@ class RepertoireReviewService {
   /// [storage] is injectable only so tests can hold the review CSVs in
   /// memory instead of writing to the user's real `~/Documents`; every
   /// caller outside a test passes nothing.
-  RepertoireReviewService({Random? fuzz, StorageService? storage})
-    : _fuzz = fuzz ?? Random(),
-      _storage = storage ?? StorageFactory.instance;
+  RepertoireReviewService({
+    Random? fuzz,
+    StorageService? storage,
+    DateTime Function()? now,
+  }) : _now = now ?? DateTime.now,
+       _fuzz = fuzz ?? Random(),
+       _storage = storage ?? StorageFactory.instance;
 
   static String _reviewKey(RepertoireReviewEntry e) =>
       '${e.repertoireId.length}:${e.repertoireId}${e.lineId}';
@@ -83,6 +89,7 @@ class RepertoireReviewService {
 
   /// Append each answer immediately, independently of line ratings. A later
   /// correct replay must never erase what the user originally played.
+  @override
   Future<void> recordAttempt({
     required String repertoireId,
     required String lineId,
@@ -103,6 +110,7 @@ class RepertoireReviewService {
     phase: phase,
   );
 
+  @override
   Future<List<Map<String, dynamic>>> loadAttempts({String? repertoireId}) =>
       MoveAttemptStore(_storage).load(repertoireId: repertoireId);
 
@@ -115,6 +123,7 @@ class RepertoireReviewService {
 
   // ── Line ratings ──────────────────────────────────────────────────────
 
+  @override
   Future<List<RepertoireReviewEntry>> loadAll() async {
     final entries = trainingRows(
       await _storage.readRepertoireReviewsCsv(),
@@ -130,6 +139,7 @@ class RepertoireReviewService {
   /// Save [entries] — all of them, or only those of [repertoireId] — merging
   /// into whatever the file holds now. Lines of the saved repertoire(s) that
   /// were loaded but are not in [entries] are removed.
+  @override
   Future<void> saveAll(
     List<RepertoireReviewEntry> entries, {
     String? repertoireId,
@@ -170,11 +180,13 @@ class RepertoireReviewService {
 
   // ── Review history ────────────────────────────────────────────────────
 
+  @override
   Future<List<RepertoireReviewHistoryEntry>> loadHistory() async =>
       trainingRows(
         await _storage.readRepertoireReviewHistoryCsv(),
       ).map(RepertoireReviewHistoryEntry.fromCsvRow).toList();
 
+  @override
   Future<void> appendHistory(List<RepertoireReviewHistoryEntry> entries) async {
     await _preserveBeforeMigration(_historyFile);
     final additions = [for (final e in entries) e.toCsvRow()];
@@ -188,6 +200,7 @@ class RepertoireReviewService {
 
   // ── Move progress ─────────────────────────────────────────────────────
 
+  @override
   Future<List<RepertoireMoveProgress>> loadMoveProgress() async {
     final entries = trainingRows(
       await _storage.readRepertoireMoveProgressCsv(),
@@ -201,6 +214,7 @@ class RepertoireReviewService {
   }
 
   /// The move-progress counterpart of [saveAll].
+  @override
   Future<void> saveMoveProgress(
     List<RepertoireMoveProgress> entries, {
     String? repertoireId,
@@ -354,6 +368,7 @@ class RepertoireReviewService {
   ///
   /// [dueOnly] is the spaced-repetition filter; pass `false` (linear mode)
   /// to include every line regardless of its due date.
+  @override
   List<RepertoireLine> orderLinesForReview(
     List<RepertoireLine> lines,
     Map<String, RepertoireReviewEntry> reviewMap,
@@ -385,7 +400,7 @@ class RepertoireReviewService {
           });
         }
       case ReviewOrder.random:
-        due.shuffle(Random());
+        due.shuffle(_fuzz);
       case ReviewOrder.weakestFirst:
         due.sort((a, b) {
           final ea = reviewMap[a.id];
@@ -425,11 +440,12 @@ class RepertoireReviewService {
 
   // ── Scheduling ────────────────────────────────────────────────────────
 
+  @override
   RepertoireReviewEntry applyRating(
     RepertoireReviewEntry entry,
     ReviewRating rating,
   ) {
-    final now = DateTime.now().toUtc();
+    final now = _now().toUtc();
     final ease = _easeAfter(_clampedEase(entry), rating);
     final interval = _fuzzed(_nextInterval(entry.intervalDays, rating, ease));
 
@@ -497,19 +513,7 @@ class RepertoireReviewService {
   /// Dry-run of [applyRating] that returns the predicted interval without
   /// persisting anything or fuzzing it.  Used to show "Again (5m)" /
   /// "Good (4d)" previews, which should read as round numbers.
+  @override
   double previewInterval(RepertoireReviewEntry entry, ReviewRating rating) =>
       _nextInterval(entry.intervalDays, rating, _clampedEase(entry));
-
-  /// Human-readable label for a review interval in days.
-  static String formatInterval(double intervalDays) {
-    // "Again" schedules zero days on purpose — the line comes back inside the
-    // session you are in — and "<1m" reads as a rounding artefact rather than
-    // as the promise it is.
-    if (intervalDays <= 0) return 'now';
-    if (intervalDays < 1 / 24) return '<1m';
-    if (intervalDays < 1) return '${(intervalDays * 24).round()}h';
-    if (intervalDays < 30) return '${intervalDays.round()}d';
-    if (intervalDays < 365) return '${(intervalDays / 30).round()}mo';
-    return '${(intervalDays / 365).round()}y';
-  }
 }

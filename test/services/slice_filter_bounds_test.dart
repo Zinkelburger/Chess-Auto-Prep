@@ -1,7 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:chess_auto_prep/services/pgn_parsing_service.dart';
-import 'package:chess_auto_prep/services/pgn_slice_filter.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_text.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_slice_filter.dart';
+import 'package:chess_auto_prep/infrastructure/documents/isolate_pgn_collection_filter.dart';
 import 'package:chess_auto_prep/core/slice_filter_controller.dart';
 
 /// Robustness coverage for the slice/sequence/header matching *functions* and

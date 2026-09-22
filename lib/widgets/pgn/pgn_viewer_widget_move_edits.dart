@@ -1,7 +1,7 @@
 // Adding user moves to the PGN viewer — saved edits for editable readers,
 // temporary scratch moves for other hosts — plus clearing / deleting analysis
 // nodes. Part of pgn_viewer_widget.dart; mixed into _PgnViewerWidgetState.
-// Thin setState/notify wrappers around [ViewerGameModel], which owns the
+// Thin setState/notify wrappers around [ViewerGameController], which owns the
 // actual mutations.
 part of '../pgn_viewer_widget.dart';
 

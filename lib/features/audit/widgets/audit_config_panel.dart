@@ -2,12 +2,14 @@
 /// Delegates execution to the session controller through onStart.
 library;
 
+import 'package:provider/provider.dart';
+
+import 'package:chess_auto_prep/chess_core/moves/opening_graph.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import '../../../models/bulk_analysis_settings.dart';
+import '../../settings/controllers/bulk_analysis_settings.dart';
 import 'package:path/path.dart' as p;
 
-import '../../../models/opening_tree.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../widgets/engine/engine_gate.dart';
@@ -17,7 +19,7 @@ import '../../../utils/movetext_builder.dart';
 import 'hunt_controls.dart';
 
 class AuditConfigPanel extends StatefulWidget {
-  final OpeningTree? openingTree;
+  final OpeningGraph? openingTree;
   final bool isWhiteRepertoire;
   final String currentFen;
   final List<String> currentMoveSequence;
@@ -95,7 +97,7 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
       inaccuracyThresholdCp: int.tryParse(_inaccuracyCtrl.text) ?? 40,
       minGames: int.tryParse(_minGamesCtrl.text) ?? 50,
       minMaiaProb: double.tryParse(_minMaiaProbCtrl.text) ?? 0.10,
-      evalDepth: BulkAnalysisSettings.instance.depth,
+      evalDepth: context.read<BulkAnalysisSettings>().depth,
       maxPly: int.tryParse(_maxPlyCtrl.text) ?? 30,
       maiaElo: int.tryParse(_maiaEloCtrl.text) ?? 2200,
       useStockfish: true,

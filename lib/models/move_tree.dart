@@ -11,90 +11,11 @@ import 'package:dartchess/dartchess.dart';
 import '../constants/chess_constants.dart';
 import '../utils/chess_utils.dart' show playSanOrNullMove, tryParseFen;
 import '../utils/fen_utils.dart';
-import '../utils/pgn_nags.dart';
-import 'move_tree_node_view.dart';
+import '../chess_core/pgn/pgn_parser.dart';
+import '../chess_core/pgn/quality_nags.dart';
+import '../chess_core/moves/move_tree_view.dart';
+import '../chess_core/moves/tree_path.dart';
 import 'move_tree_pgn.dart';
-
-// ---------------------------------------------------------------------------
-// TreePath
-// ---------------------------------------------------------------------------
-
-/// A cursor into a [MoveTree].
-///
-/// Each element is a child index at successive depths.
-/// `[]` = starting position (before any move).
-/// `[0]` = first root child (mainline first move).
-/// `[0, 1]` = mainline first move → second child (first variation).
-///
-/// Wraps a `List<int>` with value semantics for equality/hashCode.
-class TreePath {
-  final List<int> _indices;
-
-  const TreePath(List<int> indices) : _indices = indices;
-
-  /// Empty path — starting position.
-  static const TreePath empty = TreePath([]);
-
-  /// Copy from an existing iterable.
-  factory TreePath.from(Iterable<int> source) =>
-      TreePath(List<int>.unmodifiable(source));
-
-  /// Number of plies deep.
-  int get length => _indices.length;
-  bool get isEmpty => _indices.isEmpty;
-  bool get isNotEmpty => _indices.isNotEmpty;
-
-  /// Access a child index at depth [i].
-  int operator [](int i) => _indices[i];
-
-  /// Parent path (one ply back).  Returns [empty] when already at root.
-  TreePath get parent =>
-      _indices.isEmpty ? empty : TreePath(_indices.sublist(0, length - 1));
-
-  /// Extend this path with a child index.
-  TreePath child(int index) => TreePath([..._indices, index]);
-
-  /// Path truncated to [n] elements.
-  TreePath take(int n) => n >= length ? this : TreePath(_indices.sublist(0, n));
-
-  /// Last element.
-  int get last => _indices.last;
-
-  /// Whether every element is 0 (mainline).
-  bool get isMainline => _indices.every((i) => i == 0);
-
-  /// Whether [other] is a descendant of (or equal to) this path.
-  bool isAncestorOf(TreePath other) {
-    if (other.length < length) return false;
-    for (int i = 0; i < length; i++) {
-      if (_indices[i] != other[i]) return false;
-    }
-    return true;
-  }
-
-  /// Iterate over indices.
-  Iterable<int> get indices => _indices;
-
-  /// Convert to a plain list (e.g. for serialization).
-  List<int> toList() => List<int>.from(_indices);
-
-  @override
-  bool operator ==(Object other) {
-    if (identical(this, other)) return true;
-    if (other is! TreePath) return false;
-    if (length != other.length) return false;
-    for (int i = 0; i < length; i++) {
-      if (_indices[i] != other._indices[i]) return false;
-    }
-    return true;
-  }
-
-  @override
-  int get hashCode => Object.hashAll(_indices);
-
-  @override
-  String toString() => 'TreePath(${_indices.join(', ')})';
-}
 
 // ---------------------------------------------------------------------------
 // MoveNode
@@ -104,11 +25,12 @@ class TreePath {
 ///
 /// [children] order matters: index 0 is always the mainline continuation,
 /// index 1+ are variations (same convention as dartchess and Lichess).
-class MoveNode implements MoveTreeNodeView {
+class MoveNode implements MoveNodeView {
   @override
   final String san;
 
   /// Board FEN *after* this move was played.
+  @override
   final String fen;
 
   /// The position [fen] describes, parsed at most once.
@@ -124,12 +46,15 @@ class MoveNode implements MoveTreeNodeView {
   /// playing a further move, deriving a child FEN — must use
   /// [positionOrNull] instead and refuse, or a corrupt FEN silently produces
   /// moves belonging to a completely different position.
+  @override
   Position get position => positionOrNull ?? Chess.initial;
 
   /// [position] without the substitution: null when [fen] does not parse.
+  @override
   Position? get positionOrNull => _position ??= tryParseFen(fen);
   Position? _position;
 
+  @override
   String? comment;
 
   /// Comment written *before* this move rather than after it — PGN's
@@ -139,21 +64,26 @@ class MoveNode implements MoveTreeNodeView {
   /// and folding one into the other moves the reader's note onto the wrong
   /// side of the move. Dropping it — which this model used to do — deleted
   /// that note from the file on the next autosave.
+  @override
   String? startingComment;
 
+  @override
   List<int>? nags;
 
   /// Stable identity for this node within a session. Used by the analysis
   /// viewer to locate / delete a specific node without keeping a pointer.
+  @override
   final int id;
 
   /// `true` = user-added (ephemeral) analysis move; `false` = from PGN/repertoire.
   /// Mutable: amend mode promotes a scratch line to saved when the user
   /// extends or annotates it (a saved edit under an ephemeral ancestor would
   /// otherwise be silently dropped by the serializer).
+  @override
   bool isEphemeral;
 
   /// Ordered children.  `[0]` = mainline, `[1..]` = variations.
+  @override
   final List<MoveNode> children;
 
   static int _nextId = 0;
@@ -201,7 +131,7 @@ class MoveNode implements MoveTreeNodeView {
   @override
   String get fenAfter => fen;
   @override
-  List<MoveTreeNodeView> get orderedChildren => children;
+  List<MoveNodeView> get orderedChildren => children;
 
   @override
   String toString() => 'MoveNode($san, children=${children.length})';
@@ -214,8 +144,9 @@ class MoveNode implements MoveTreeNodeView {
 /// An editable tree of chess moves with PGN round-trip.
 ///
 /// Owns the data; navigation state (the cursor) lives in the controller.
-class MoveTree {
+class MoveTree extends MoveTreeView {
   /// FEN of the position *before* any root move.
+  @override
   String get startingFen => _startingFen;
   set startingFen(String value) {
     if (value == _startingFen) return;
@@ -229,20 +160,24 @@ class MoveTree {
 
   /// The position *before* any root move, parsed at most once per
   /// [startingFen].
+  @override
   Position get startingPosition => startingPositionOrNull ?? Chess.initial;
 
   /// [startingPosition] without the fallback: null when [startingFen] does
   /// not parse.
+  @override
   Position? get startingPositionOrNull =>
       _startingPosition ??= tryParseFen(_startingFen);
 
   /// Root-level siblings (typically one first move, but PGN allows multiple).
+  @override
   final List<MoveNode> roots;
 
   /// Comment on the starting position — the `{…}` block a PGN carries before
   /// its first move.  Lichess writes a chapter's introduction (and any shapes
   /// drawn on the start position) here, so dropping it loses the one comment
   /// a study chapter is most likely to have.  Empty is stored as null.
+  @override
   String? get rootComment => _rootComment;
   set rootComment(String? value) {
     final normalized = (value == null || value.trim().isEmpty) ? null : value;
@@ -258,6 +193,7 @@ class MoveTree {
   /// rendered movetext, a flattened outline) key that cache on the version
   /// rather than rebuilding whenever the cursor moves.  Mutating [roots] or
   /// a node's `children` directly bypasses it — call [markMutated] after.
+  @override
   int get version => _version;
   int _version = 0;
 
@@ -278,22 +214,27 @@ class MoveTree {
   /// A tree received from another isolate (e.g. parsed via `compute`) holds
   /// ids minted by that isolate's own counter, which can collide with ids
   /// of nodes created here; adopt such a tree only through this copy.
-  MoveTree copyWithFreshIds() => MoveTree(
-    startingFen: startingFen,
-    roots: roots.map(_copyNodeWithFreshId).toList(),
-    rootComment: rootComment,
-  );
-
-  static MoveNode _copyNodeWithFreshId(MoveNode node) => MoveNode(
-    san: node.san,
-    fen: node.fen,
-    position: node._position,
-    comment: node.comment,
-    startingComment: node.startingComment,
-    nags: node.nags,
-    isEphemeral: node.isEphemeral,
-    children: node.children.map(_copyNodeWithFreshId).toList(),
-  );
+  MoveTree copyWithFreshIds() {
+    final copy = MoveTree(startingFen: startingFen, rootComment: rootComment);
+    final pending = [for (final node in roots.reversed) (node, copy.roots)];
+    while (pending.isNotEmpty) {
+      final (node, output) = pending.removeLast();
+      final next = MoveNode(
+        san: node.san,
+        fen: node.fen,
+        position: node._position,
+        comment: node.comment,
+        startingComment: node.startingComment,
+        nags: node.nags == null ? null : List.of(node.nags!),
+        isEphemeral: node.isEphemeral,
+      );
+      output.add(next);
+      for (final child in node.children.reversed) {
+        pending.add((child, next.children));
+      }
+    }
+    return copy;
+  }
 
   // ── Lookup ──────────────────────────────────────────────────────────
 
@@ -312,6 +253,7 @@ class MoveTree {
   }
 
   /// Node at [path], or `null` if the path is empty or out of range.
+  @override
   MoveNode? nodeAt(TreePath path) {
     final siblings = _siblingsAt(path);
     if (siblings == null) return null;
@@ -319,6 +261,7 @@ class MoveTree {
   }
 
   /// Ordered list of nodes from root to [path] (inclusive).
+  @override
   List<MoveNode> nodeListAt(TreePath path) {
     final result = <MoveNode>[];
     var siblings = roots;
@@ -328,58 +271,6 @@ class MoveTree {
       siblings = siblings[idx].children;
     }
     return result;
-  }
-
-  /// FEN at [path].  Empty path → [startingFen].
-  String fenAt(TreePath path) {
-    if (path.isEmpty) return startingFen;
-    final node = nodeAt(path);
-    return node?.fen ?? startingFen;
-  }
-
-  /// Position at [path].  Empty or invalid path → [startingPosition].
-  /// O(depth) pointer walk; never parses a FEN the tree already parsed.
-  Position positionAt(TreePath path) {
-    if (path.isEmpty) return startingPosition;
-    return nodeAt(path)?.position ?? startingPosition;
-  }
-
-  /// [positionAt] that refuses instead of substituting the start: null when
-  /// [path] is unknown or the FEN there does not parse.  Callers that go on
-  /// to *derive* a position from the result want this one.
-  Position? positionOrNullAt(TreePath path) {
-    if (path.isEmpty) return startingPositionOrNull;
-    return nodeAt(path)?.positionOrNull;
-  }
-
-  /// SAN sequence from root to [path].
-  List<String> sanSequenceAt(TreePath path) =>
-      nodeListAt(path).map((n) => n.san).toList();
-
-  /// Walk mainline (`children[0]`) to the leaf, starting from [path].
-  TreePath mainlineEndFrom(TreePath path) {
-    var current = path;
-    var siblings = path.isEmpty ? roots : (nodeAt(path)?.children ?? []);
-    if (path.isEmpty && roots.isEmpty) return TreePath.empty;
-    if (path.isEmpty) {
-      current = const TreePath([0]);
-      siblings = roots[0].children;
-    }
-    while (siblings.isNotEmpty) {
-      current = current.child(0);
-      siblings = siblings[0].children;
-    }
-    return current;
-  }
-
-  /// Whether the tree has any moves.
-  bool get isEmpty => roots.isEmpty;
-  bool get isNotEmpty => roots.isNotEmpty;
-
-  /// Whether [path] points to a valid node.
-  bool isValidPath(TreePath path) {
-    if (path.isEmpty) return true;
-    return nodeAt(path) != null;
   }
 
   // ── Mutation ────────────────────────────────────────────────────────
@@ -456,10 +347,6 @@ class MoveTree {
     }
   }
 
-  /// Comment at [path]: [rootComment] for the empty path, else the node's.
-  String? commentAt(TreePath path) =>
-      path.isEmpty ? rootComment : nodeAt(path)?.comment;
-
   /// Drop every comment (shapes and markers live in comments, so they go
   /// too) and every glyph, keeping the moves — Lichess's "Clear all comments,
   /// glyphs and drawn shapes".
@@ -511,7 +398,7 @@ class MoveTree {
     }
 
     try {
-      final game = PgnGame.parsePgn(pgn);
+      final game = parsePgnGame(pgn);
       final effectiveFen =
           startingFen ?? game.headers['FEN'] ?? kStandardStartFen;
       final rootPos = tryParseFen(effectiveFen) ?? Chess.initial;
@@ -547,36 +434,6 @@ class MoveTree {
       siblings = node.children;
     }
     return tree;
-  }
-
-  /// Serialize this tree to PGN move text (no headers).
-  String toPgnMoveText() {
-    final (startMoveNumber, startIsWhite) = moveNumberFromFen(startingFen);
-    return MoveTreePgnCodec.moveText(
-      roots: roots,
-      startMoveNumber: startMoveNumber,
-      startIsWhite: startIsWhite,
-      rootComment: _rootComment,
-    );
-  }
-
-  /// Serialize to full PGN including headers.
-  String toPgn({String? event, String? white, String? black, String? result}) {
-    final headers = <String>[];
-    headers.add('[Event "${event ?? "?"}"]');
-    headers.add(
-      '[Date "${DateTime.now().toIso8601String().split('T').first}"]',
-    );
-    headers.add('[White "${white ?? "?"}"]');
-    headers.add('[Black "${black ?? "?"}"]');
-    headers.add('[Result "${result ?? "*"}"]');
-    if (startingFen != kStandardStartFen) {
-      headers.add('[FEN "$startingFen"]');
-      headers.add('[SetUp "1"]');
-    }
-
-    final moveText = toPgnMoveText();
-    return [...headers, '', moveText].join('\n');
   }
 
   /// Extract move number and side-to-move from a FEN string.

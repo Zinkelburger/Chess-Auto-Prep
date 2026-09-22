@@ -18,7 +18,7 @@ import '../../../core/generation_session_controller.dart';
 import '../../../core/generation_session_types.dart';
 import '../../../services/generation/generation_config.dart';
 import '../../../utils/safe_change_notifier.dart';
-import '../../repertoire/services/chapter_splitter.dart';
+import '../../repertoire/services/course_chapter_partition.dart';
 import '../../repertoire/services/repertoire_outline_service.dart';
 import '../models/plan_models.dart';
 import '../services/san_paths.dart';
@@ -50,8 +50,7 @@ class PlanChapterProgress {
 }
 
 class PlanRunner extends ChangeNotifier with SafeChangeNotifier {
-  PlanRunner({required this.generation, RepertoireOutlineService? outline})
-    : _outline = outline ?? RepertoireOutlineService();
+  PlanRunner({required this.generation, required this._outline});
 
   final GenerationSessionController generation;
   final RepertoireOutlineService _outline;
@@ -194,7 +193,7 @@ class PlanRunner extends ChangeNotifier with SafeChangeNotifier {
     PlanChapter chapter,
     bool isWhite,
   ) async {
-    final base = ChapterSplitter.fileNameFor(chapter.name);
+    final base = CourseChapterPartition.fileNameFor(chapter.name);
     var name = base;
     var attempt = 1;
     while (true) {
@@ -227,6 +226,7 @@ class PlanRunner extends ChangeNotifier with SafeChangeNotifier {
         throw StateError('Path is not playable: ${point.moves}');
       }
       final request = GenerationRequest(
+        jobLabel: item.chapter.name,
         config: config.copyWith(
           startFen: fen,
           playAsWhite: isWhite,
@@ -236,7 +236,7 @@ class PlanRunner extends ChangeNotifier with SafeChangeNotifier {
         buildRootFen: fen,
         lineMovePrefix: List.unmodifiable(point.moves),
         repertoireStartFen: kStandardStartFen,
-        onLinesSaved: (_) {},
+        onPublished: (_) {},
       );
       if (generation.isGenerating) {
         throw StateError('Another build is already running.');

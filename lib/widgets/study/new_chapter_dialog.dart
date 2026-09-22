@@ -5,9 +5,10 @@ library;
 
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
+import '../../l10n/generated/app_localizations.dart';
 
 import '../../constants/chess_constants.dart';
-import '../../theme/app_text_styles.dart';
+import '../../design_system/theme/app_typography.dart';
 import '../../utils/chess_utils.dart' show tryParseFen;
 import '../board_editor/board_editor_dialog.dart';
 
@@ -101,7 +102,7 @@ class _NewChapterDialogState extends State<_NewChapterDialog> {
       initialFen: tryParseFen(_fen.text.trim()) == null
           ? kStandardStartFen
           : _fen.text.trim(),
-      actionLabel: 'Use this position',
+      actionLabel: AppLocalizations.of(context).studyUsePosition,
     );
     if (position == null || !mounted) return;
     setState(() {
@@ -120,7 +121,7 @@ class _NewChapterDialogState extends State<_NewChapterDialog> {
       case _Source.fen:
         final fen = _fen.text.trim();
         if (tryParseFen(fen) == null) {
-          setState(() => _error = 'That is not a valid FEN.');
+          setState(() => _error = AppLocalizations.of(context).studyInvalidFen);
           return;
         }
         Navigator.of(context).pop(
@@ -129,7 +130,9 @@ class _NewChapterDialogState extends State<_NewChapterDialog> {
       case _Source.pgn:
         final pgn = _pgn.text.trim();
         if (pgn.isEmpty) {
-          setState(() => _error = 'Paste at least one game.');
+          setState(
+            () => _error = AppLocalizations.of(context).studyPasteGameRequired,
+          );
           return;
         }
         Navigator.of(context).pop(
@@ -140,8 +143,10 @@ class _NewChapterDialogState extends State<_NewChapterDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return AlertDialog(
-      title: const Text('New chapter'),
+      scrollable: true,
+      title: Text(l10n.studyNewChapter),
       content: SizedBox(
         width: 480,
         child: Column(
@@ -152,9 +157,9 @@ class _NewChapterDialogState extends State<_NewChapterDialog> {
               controller: _name,
               autofocus: true,
               decoration: InputDecoration(
-                labelText: 'Name',
+                labelText: l10n.studyName,
                 hintText: _source == _Source.pgn
-                    ? 'From the PGN when left blank'
+                    ? l10n.studyChapterNameFromPgn
                     : widget.defaultName,
                 isDense: true,
                 border: const OutlineInputBorder(),
@@ -162,17 +167,23 @@ class _NewChapterDialogState extends State<_NewChapterDialog> {
               onSubmitted: (_) => _submit(),
             ),
             const SizedBox(height: 16),
-            const Text('Start from', style: AppTextStyles.caption),
+            Text(
+              l10n.studyChapterStartFrom,
+              style: AppTypography.caption(context),
+            ),
             const SizedBox(height: 6),
             SegmentedButton<_Source>(
               showSelectedIcon: false,
-              segments: const [
+              segments: [
                 ButtonSegment(
                   value: _Source.initial,
-                  label: Text('Initial position'),
+                  label: Text(l10n.studyInitialPosition),
                 ),
-                ButtonSegment(value: _Source.fen, label: Text('Position')),
-                ButtonSegment(value: _Source.pgn, label: Text('PGN')),
+                ButtonSegment(
+                  value: _Source.fen,
+                  label: Text(l10n.studyPosition),
+                ),
+                ButtonSegment(value: _Source.pgn, label: Text(l10n.studyPgn)),
               ],
               selected: {_source},
               onSelectionChanged: (s) => setState(() {
@@ -189,14 +200,11 @@ class _NewChapterDialogState extends State<_NewChapterDialog> {
                   Expanded(
                     child: TextField(
                       controller: _fen,
-                      style: const TextStyle(
-                        fontFamily: AppTextStyles.monoFamily,
-                        fontSize: 12,
-                      ),
-                      decoration: const InputDecoration(
-                        labelText: 'FEN',
+                      style: AppTypography.mono(context),
+                      decoration: InputDecoration(
+                        labelText: l10n.studyFen,
                         isDense: true,
-                        border: OutlineInputBorder(),
+                        border: const OutlineInputBorder(),
                       ),
                       onChanged: (_) => setState(() => _error = null),
                     ),
@@ -204,7 +212,7 @@ class _NewChapterDialogState extends State<_NewChapterDialog> {
                   const SizedBox(width: 8),
                   OutlinedButton(
                     onPressed: _setUpBoard,
-                    child: const Text('Set up board…'),
+                    child: Text(l10n.studySetupBoard),
                   ),
                 ],
               ),
@@ -212,27 +220,27 @@ class _NewChapterDialogState extends State<_NewChapterDialog> {
                 controller: _pgn,
                 minLines: 5,
                 maxLines: 10,
-                style: const TextStyle(
-                  fontFamily: AppTextStyles.monoFamily,
-                  fontSize: 12,
-                ),
-                decoration: const InputDecoration(
-                  hintText: 'Paste PGN. Each game becomes a chapter.',
+                style: AppTypography.mono(context),
+                decoration: InputDecoration(
+                  hintText: l10n.studyPasteChaptersHint,
                   isDense: true,
-                  border: OutlineInputBorder(),
+                  border: const OutlineInputBorder(),
                 ),
                 onChanged: (_) => setState(() => _error = null),
               ),
             },
             const SizedBox(height: 16),
-            const Text('Orientation', style: AppTextStyles.caption),
+            Text(l10n.studyOrientation, style: AppTypography.caption(context)),
             const SizedBox(height: 6),
             SegmentedButton<Side?>(
               showSelectedIcon: false,
-              segments: const [
-                ButtonSegment(value: null, label: Text('Automatic')),
-                ButtonSegment(value: Side.white, label: Text('White')),
-                ButtonSegment(value: Side.black, label: Text('Black')),
+              segments: [
+                ButtonSegment(
+                  value: null,
+                  label: Text(l10n.studyAutomaticOrientation),
+                ),
+                ButtonSegment(value: Side.white, label: Text(l10n.white)),
+                ButtonSegment(value: Side.black, label: Text(l10n.black)),
               ],
               selected: {_orientation},
               onSelectionChanged: (s) =>
@@ -242,10 +250,9 @@ class _NewChapterDialogState extends State<_NewChapterDialog> {
               const SizedBox(height: 12),
               Text(
                 _error!,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(context).colorScheme.error,
-                ),
+                style: AppTypography.caption(
+                  context,
+                ).copyWith(color: Theme.of(context).colorScheme.error),
               ),
             ],
           ],
@@ -254,9 +261,9 @@ class _NewChapterDialogState extends State<_NewChapterDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(l10n.cancel),
         ),
-        ElevatedButton(onPressed: _submit, child: const Text('Create')),
+        ElevatedButton(onPressed: _submit, child: Text(l10n.studyCreate)),
       ],
     );
   }

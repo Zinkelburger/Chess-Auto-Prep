@@ -350,17 +350,6 @@ class AppState extends ChangeNotifier with SafeChangeNotifier {
     historyLabel: historyLabel,
   );
 
-  /// Switch to builder and auto-open the generation tab in DB Explorer mode
-  /// with the given PGN files pre-loaded.
-  void switchToBuilderWithGeneration({
-    required String repertoirePath,
-    required List<String> pgnPaths,
-    String? historyLabel,
-  }) => handOff(
-    OpenBuilder(repertoirePath: repertoirePath, generationPgnPaths: pgnPaths),
-    historyLabel: historyLabel,
-  );
-
   void setLichessUsername(String? username) {
     // A different account has a different download history; keeping the old
     // date would date the new name's games to a fetch that never happened.

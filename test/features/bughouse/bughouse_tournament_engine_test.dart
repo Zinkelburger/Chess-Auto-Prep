@@ -80,8 +80,8 @@ void main() {
         startDualFen: opening.dualFen,
         openingLabel: 'Board 1: d4 d5 Bf4',
         participants: const [
-          BughouseParticipant(name: 'A + C', budget: BughouseBudget.nodes(100)),
-          BughouseParticipant(name: 'B + D', budget: BughouseBudget.nodes(100)),
+          BughouseParticipant(name: 'A + B', budget: BughouseBudget.nodes(100)),
+          BughouseParticipant(name: 'C + D', budget: BughouseBudget.nodes(100)),
         ],
         games: 2,
         // Short: this is about the plumbing, not about the opening.
@@ -117,8 +117,8 @@ void main() {
         expect(replayed.length, game.moves.length);
       }
       // Seats swapped for the second game, as configured.
-      expect(games[0].whiteName, 'A + C');
-      expect(games[1].whiteName, 'B + D');
+      expect(games[0].whiteName, 'A + B');
+      expect(games[1].whiteName, 'C + D');
     }, timeout: const Timeout(Duration(minutes: 5)));
   }, skip: available ? null : 'set HIVEMIND_BIN and HIVEMIND_MODEL');
 }

@@ -13,25 +13,29 @@
 /// scoped to that chapter ([ChapterPick.courseChapter]).
 library;
 
-import 'common/name_entry_dialog.dart';
+import '../design_system/components/name_entry_dialog.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'common/item_title.dart';
+import '../design_system/components/item_title.dart';
 
-import '../models/repertoire_metadata.dart';
-import '../services/pgn_parsing_service.dart' as pgn;
-import '../services/repertoire_service.dart';
+import '../features/repertoires/models/repertoire_metadata.dart';
+import 'package:provider/provider.dart';
+import 'package:path/path.dart' as p;
+import '../features/documents/models/pgn_document.dart';
+import '../features/repertoires/widgets/repertoire_messages.dart';
+import '../l10n/generated/app_localizations.dart';
+import '../features/repertoires/repositories/repertoire_catalog_repository.dart';
 import '../services/storage/storage_factory.dart';
-import '../services/training/chapter_layout.dart' show ChapterSummary;
-import '../theme/app_colors.dart';
-import '../theme/app_text_styles.dart';
+import '../features/training/models/chapter_layout.dart' show ChapterSummary;
+import '../design_system/theme/workspace_theme.dart';
+import '../design_system/theme/app_typography.dart';
 import '../utils/app_messages.dart';
 import '../utils/safe_file_name.dart';
-import 'common/confirm_dialog.dart';
-import 'common/list_search_field.dart';
-import 'layout/empty_state_placeholder.dart';
+import '../design_system/components/confirm_dialog.dart';
+import '../design_system/components/list_search_field.dart';
+import '../design_system/components/empty_state_placeholder.dart';
 
 /// What the picker hands back: a chapter file, and — when the user tapped
 /// one of the course chapters listed under it — that chapter's title.
@@ -63,6 +67,10 @@ class ChapterListBody extends StatefulWidget {
 }
 
 class _ChapterListBodyState extends State<ChapterListBody> {
+  late final _catalog = context.read<RepertoireCatalogRepository>();
+  Object? _readRequest;
+  bool _creating = false;
+  bool _deleting = false;
   List<RepertoireMetadata> _chapters = [];
 
   /// Course chapters found inside each chapter file, by file path. Absent
@@ -94,23 +102,33 @@ class _ChapterListBodyState extends State<ChapterListBody> {
     unawaited(_loadChapters());
   }
 
+  @override
+  void didUpdateWidget(covariant ChapterListBody oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.repertoire.filePath != _dirPath) unawaited(_loadChapters());
+  }
+
   Future<void> _loadChapters() async {
+    if (!mounted) return;
+    final request = _readRequest = Object();
     setState(() {
+      _courseChapters.clear();
+      _expandedCourses.clear();
       _isLoading = true;
       _loadError = null;
     });
 
     try {
-      final chapters = await StorageFactory.instance.listChapters(_dirPath);
-      if (!mounted) return;
+      final chapters = await _catalog.listChapters(_dirPath);
+      if (!mounted || !identical(request, _readRequest)) return;
       setState(() {
         _chapters = chapters;
         _isLoading = false;
       });
-      unawaited(_loadCourseChapters(chapters));
+      unawaited(_loadCourseChapters(chapters, request));
     } catch (e) {
       debugPrint('Load chapters failed: $e');
-      if (!mounted) return;
+      if (!mounted || !identical(request, _readRequest)) return;
       setState(() {
         _chapters = [];
         _isLoading = false;
@@ -122,33 +140,21 @@ class _ChapterListBodyState extends State<ChapterListBody> {
   /// Reads each file's course chapters after the list is up, so the files
   /// show at once and a course's chapters fill in under it. A file that
   /// cannot be read simply lists no chapters; the file itself still opens.
-  Future<void> _loadCourseChapters(List<RepertoireMetadata> chapters) async {
-    final service = RepertoireService();
+  Future<void> _loadCourseChapters(
+    List<RepertoireMetadata> chapters,
+    Object request,
+  ) async {
     for (final chapter in chapters) {
       List<ChapterSummary> sections;
       try {
-        sections = await service.courseChaptersInFile(chapter.filePath);
+        sections = await _catalog.chapterSections(chapter.filePath);
       } catch (e) {
         debugPrint('Course chapters of ${chapter.filePath} failed: $e');
         sections = const [];
       }
-      if (!mounted) return;
+      if (!mounted || !identical(request, _readRequest)) return;
       setState(() => _courseChapters[chapter.filePath] = sections);
     }
-  }
-
-  /// The repertoire's color, read from any existing chapter's `// Color:`
-  /// comment so new chapters inherit it. Defaults to White.
-  Future<String> _repertoireColor() async {
-    for (final chapter in _chapters) {
-      final content = await StorageFactory.instance.readFile(chapter.filePath);
-      if (content == null) continue;
-      final color = pgn.extractRepertoireColor(content);
-      if (color != null && color.isNotEmpty) {
-        return color.toLowerCase() == 'black' ? 'Black' : 'White';
-      }
-    }
-    return 'White';
   }
 
   @override
@@ -172,7 +178,11 @@ class _ChapterListBodyState extends State<ChapterListBody> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.error_outline, size: 64, color: Colors.red),
+              Icon(
+                Icons.error_outline,
+                size: 64,
+                color: Theme.of(context).colorScheme.error,
+              ),
               const SizedBox(height: 16),
               Text(_loadError!, textAlign: TextAlign.center),
               const SizedBox(height: 16),
@@ -213,7 +223,7 @@ class _ChapterListBodyState extends State<ChapterListBody> {
               ? Center(
                   child: Text(
                     'No chapter matches "$_search".',
-                    style: const TextStyle(color: AppColors.onSurfaceMuted),
+                    style: AppTypography.secondary(context),
                   ),
                 )
               : ListView.builder(
@@ -243,7 +253,7 @@ class _ChapterListBodyState extends State<ChapterListBody> {
           ),
           const SizedBox(width: 12),
           FilledButton.icon(
-            onPressed: _showCreateDialog,
+            onPressed: _creating ? null : _showCreateDialog,
             icon: const Icon(Icons.add, size: 18),
             label: const Text('Add chapter'),
           ),
@@ -284,12 +294,12 @@ class _ChapterListBodyState extends State<ChapterListBody> {
                   Container(
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
-                      color: AppColors.surfaceInset,
+                      color: WorkspaceTheme.of(context).inset,
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.menu_book,
-                      color: AppColors.onSurfaceSoft,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                       size: 20,
                     ),
                   ),
@@ -301,19 +311,10 @@ class _ChapterListBodyState extends State<ChapterListBody> {
                         ItemTitle(
                           chapter.name,
                           maxLines: 2,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: AppTypography.bodyStrong(context),
                         ),
                         const SizedBox(height: 4),
-                        Text(
-                          summary,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: AppColors.ink,
-                          ),
-                        ),
+                        Text(summary, style: AppTypography.secondary(context)),
                       ],
                     ),
                   ),
@@ -381,16 +382,18 @@ class _ChapterListBodyState extends State<ChapterListBody> {
               child: ItemTitle(
                 section.name,
                 maxLines: 2,
-                style: TextStyle(
+                style: AppTypography.body(context).copyWith(
                   fontWeight: matches ? FontWeight.w500 : FontWeight.normal,
-                  color: matches ? AppColors.ink : AppColors.onSurfaceMuted,
+                  color: matches
+                      ? Theme.of(context).colorScheme.onSurface
+                      : Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
             ),
             const SizedBox(width: 12),
             Text(
               '${section.lineCount} line${section.lineCount == 1 ? '' : 's'}',
-              style: AppTextStyles.muted.copyWith(color: AppColors.ink),
+              style: AppTypography.secondary(context),
             ),
           ],
         ),
@@ -407,6 +410,9 @@ class _ChapterListBodyState extends State<ChapterListBody> {
   );
 
   Future<void> _showCreateDialog() async {
+    if (_creating) return;
+    final request = _readRequest;
+    final folder = _dirPath;
     final name = await showNameEntryDialog(
       context,
       title: 'Add Chapter',
@@ -418,40 +424,39 @@ class _ChapterListBodyState extends State<ChapterListBody> {
           validateSafeFileName(value) ??
           (_nameTaken(value) ? 'A chapter named "$value" exists' : null),
     );
-    if (name == null) return;
-
+    if (name == null || !mounted || !identical(request, _readRequest)) return;
+    setState(() => _creating = true);
     try {
-      final storage = StorageFactory.instance;
-      final color = await _repertoireColor();
-      final path = storage.chapterFilePath(_dirPath, name);
-      if (await storage.fileExists(path)) {
-        if (mounted) {
-          showAppSnackBar(
-            context,
-            'That chapter already exists.',
-            requiresAttention: true,
-          );
-        }
-        return;
-      }
-      final header =
-          '// $name\n'
-          '// Color: $color\n'
-          '// Created on ${DateTime.now().toString().split('.')[0]}\n\n';
-      await storage.writeFile(path, header);
-
-      final created = RepertoireMetadata(
-        filePath: path,
+      final result = await _catalog.createChapter(
+        folderPath: folder,
         name: name,
-        gameCount: 0,
-        lastModified: DateTime.now(),
       );
-      if (mounted) widget.onSelected(ChapterPick(created));
-    } catch (e) {
-      debugPrint('Create chapter failed: $e');
-      if (mounted) {
+      if (!mounted || !identical(request, _readRequest)) return;
+      if (result case PgnSaved(:final after)) {
+        widget.onSelected(
+          ChapterPick(
+            RepertoireMetadata(
+              filePath: after.path,
+              name: name,
+              lastModified: DateTime.now(),
+            ),
+          ),
+        );
+      } else {
+        showAppSnackBar(context, switch (result) {
+          PgnNameCollision() => 'That chapter already exists.',
+          PgnWriteUncertain(:final recoveryPath) =>
+            'Chapter creation needs verification: ${p.join(folder, "$name.pgn")}.'
+                '${recoveryPath == null ? "" : " Recovery: $recoveryPath."} Do not retry.',
+          _ => 'Could not create chapter.',
+        }, isError: true);
+      }
+    } catch (error) {
+      if (mounted && identical(request, _readRequest)) {
         showAppSnackBar(context, 'Could not create chapter.', isError: true);
       }
+    } finally {
+      if (mounted) setState(() => _creating = false);
     }
   }
 
@@ -484,27 +489,49 @@ class _ChapterListBodyState extends State<ChapterListBody> {
   }
 
   Future<void> _deleteChapter(RepertoireMetadata chapter) async {
-    final confirmed = await confirmAction(
-      context,
-      title: 'Delete chapter "${chapter.name}"?',
-      message: 'Its file will be moved to Chess Auto Prep recovery trash.',
-      confirmLabel: 'Delete',
-    );
-
-    if (!confirmed) return;
-
+    if (_deleting) return;
+    _deleting = true;
+    final request = _readRequest;
+    bool isCurrent() => mounted && identical(request, _readRequest);
     try {
-      await StorageFactory.instance.deleteFile(chapter.filePath);
-      await _loadChapters();
-    } catch (e) {
-      debugPrint('Delete chapter failed: $e');
-      if (mounted) {
+      final captured = await _catalog.prepareChapterDeletion(chapter.filePath);
+      if (!mounted || !isCurrent()) return;
+      if (captured is! PgnOpened) {
+        await showChapterDeletionResult(
+          context,
+          captured,
+          chapterPath: chapter.filePath,
+        );
+        return;
+      }
+      final confirmed = await confirmAction(
+        context,
+        title: AppLocalizations.of(context).chapterDeleteTitle(chapter.name),
+        message: AppLocalizations.of(context).chapterDeleteConfirm,
+        confirmLabel: AppLocalizations.of(context).delete,
+      );
+      if (!confirmed || !mounted || !isCurrent()) return;
+      final result = await _catalog.deleteChapter(captured.snapshot);
+      if (!mounted) return;
+      if (isCurrent() &&
+          (result is PgnQuarantined || result is PgnQuarantineUncertain)) {
+        unawaited(_loadChapters());
+      }
+      await showChapterDeletionResult(
+        context,
+        result,
+        chapterPath: chapter.filePath,
+      );
+    } catch (_) {
+      if (mounted && isCurrent()) {
         showAppSnackBar(
           context,
-          AppMessages.deleteRepertoireFailed,
+          AppLocalizations.of(context).chapterDeleteFailed,
           isError: true,
         );
       }
+    } finally {
+      _deleting = false;
     }
   }
 }

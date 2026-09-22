@@ -22,7 +22,7 @@ library;
 
 import 'dart:collection' show Queue;
 
-import '../../models/build_tree_node.dart';
+import '../../chess_core/generation/build_tree_node.dart';
 
 /// Priority used for frontier ordering.  Nodes from legacy trees (or created
 /// before priorities existed) carry `searchPriority == -1`; fall back to the

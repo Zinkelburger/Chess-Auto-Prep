@@ -10,7 +10,7 @@
 ///   pruned_too_low.json — lines flagged eval-too-low and deleted post-build
 ///                         (these never appear in the tree itself)
 ///   tree.json           — final serialized tree (v4 format, same as the
-///                         `{repertoire}_tree.json` artifact)
+///                         selected generation’s tree artifact)
 ///
 /// Only the newest [keepRuns] folders are kept; older ones are deleted.
 library;

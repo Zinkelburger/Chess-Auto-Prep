@@ -18,8 +18,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/models/repertoire_line.dart';
 import 'package:chess_auto_prep/models/repertoire_review_entry.dart';
-import 'package:chess_auto_prep/models/training_settings.dart';
-import 'package:chess_auto_prep/services/training/training_run.dart';
+import 'package:chess_auto_prep/features/training/models/training_settings.dart';
+import 'package:chess_auto_prep/features/training/controllers/training_run.dart';
 
 RepertoireLine _line(String id) => RepertoireLine(
   id: id,

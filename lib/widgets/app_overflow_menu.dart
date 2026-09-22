@@ -6,9 +6,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
-import '../theme/app_motion.dart';
-import '../theme/app_text_styles.dart';
+import '../design_system/theme/app_motion.dart';
+import '../design_system/theme/app_typography.dart';
 import 'info_hint.dart';
 
 /// One row of an [AppOverflowMenu] (or of any other app menu that wants the
@@ -162,6 +161,7 @@ class _AppOverflowMenuState extends State<AppOverflowMenu> {
           if (identical(_activeMenu, _controller)) _activeMenu = null;
         },
         menuChildren: _nestedRows(
+          context,
           rows,
           firstItemFocus: _firstItemFocus,
           wrap: _hoverRegion,
@@ -197,10 +197,10 @@ class _AppOverflowMenuState extends State<AppOverflowMenu> {
                       children: [
                         Text(
                           label ?? tooltip,
-                          style: AppTextStyles.bodyStrong.copyWith(
+                          style: AppTypography.bodyStrong(context).copyWith(
                             color: enabled
-                                ? AppColors.ink
-                                : AppColors.onSurfaceDisabled,
+                                ? Theme.of(context).colorScheme.onSurface
+                                : Theme.of(context).disabledColor,
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -245,12 +245,12 @@ class _AppOverflowMenuState extends State<AppOverflowMenu> {
                       label,
                       style:
                           (isActionsMenu
-                                  ? AppTextStyles.bodyStrong
+                                  ? AppTypography.bodyStrong(context)
                                   : Theme.of(context).textTheme.titleMedium!)
                               .copyWith(
                                 color: enabled
-                                    ? AppColors.ink
-                                    : AppColors.onSurfaceDisabled,
+                                    ? Theme.of(context).colorScheme.onSurface
+                                    : Theme.of(context).disabledColor,
                               ),
                     ),
                     SizedBox(width: isActionsMenu ? 8 : 2),
@@ -258,16 +258,16 @@ class _AppOverflowMenuState extends State<AppOverflowMenu> {
                       Icons.arrow_drop_down,
                       size: 20,
                       color: enabled
-                          ? AppColors.ink
-                          : AppColors.onSurfaceDisabled,
+                          ? Theme.of(context).colorScheme.onSurface
+                          : Theme.of(context).disabledColor,
                     ),
                   ],
                 ),
               ));
     return Theme(
       data: Theme.of(context).copyWith(
-        dividerTheme: const DividerThemeData(
-          color: AppColors.divider,
+        dividerTheme: DividerThemeData(
+          color: Theme.of(context).colorScheme.outlineVariant,
           thickness: 1,
           indent: 16,
           endIndent: 16,
@@ -307,6 +307,7 @@ const _menuItemStyle = ButtonStyle(
 );
 
 List<Widget> _nestedRows(
+  BuildContext context,
   List<AppMenuEntry> entries, {
   FocusNode? firstItemFocus,
   Widget Function(Widget)? wrap,
@@ -318,12 +319,17 @@ List<Widget> _nestedRows(
         thickness: 1,
         indent: 16,
         endIndent: 16,
-        color: AppColors.divider,
+        color: Theme.of(context).colorScheme.outlineVariant,
       ),
     if (entries[i].heading case final heading?)
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 6, 16, 2),
-        child: Text(heading.toUpperCase(), style: AppTextStyles.eyebrow),
+        child: Text(
+          heading.toUpperCase(),
+          style: AppTypography.caption(
+            context,
+          ).copyWith(fontWeight: FontWeight.w600),
+        ),
       ),
     if (entries[i].children.isNotEmpty)
       SubmenuButton(
@@ -333,9 +339,9 @@ List<Widget> _nestedRows(
             ? firstItemFocus
             : null,
         menuChildren: entries[i].enabled
-            ? _nestedRows(entries[i].children, wrap: wrap)
+            ? _nestedRows(context, entries[i].children, wrap: wrap)
             : const [],
-        child: _nestedLabel(entries[i]),
+        child: _nestedLabel(context, entries[i]),
       )
     else
       MenuItemButton(
@@ -344,14 +350,14 @@ List<Widget> _nestedRows(
             ? firstItemFocus
             : null,
         onPressed: entries[i].enabled ? entries[i].onRun : null,
-        child: _nestedLabel(entries[i]),
+        child: _nestedLabel(context, entries[i]),
       ),
   ],
 ].map(wrap ?? _identity).toList();
 
 Widget _identity(Widget child) => child;
 
-Widget _nestedLabel(AppMenuEntry entry) => Row(
+Widget _nestedLabel(BuildContext context, AppMenuEntry entry) => Row(
   mainAxisSize: MainAxisSize.min,
   children: [
     if (entry.leading != null || entry.icon != null) ...[
@@ -360,14 +366,16 @@ Widget _nestedLabel(AppMenuEntry entry) => Row(
     ],
     Text(
       entry.label,
-      style: AppTextStyles.muted.copyWith(
+      style: AppTypography.secondary(context).copyWith(
         fontWeight: FontWeight.w400,
-        color: entry.enabled ? AppColors.ink : AppColors.onSurfaceDisabled,
+        color: entry.enabled
+            ? Theme.of(context).colorScheme.onSurface
+            : Theme.of(context).disabledColor,
       ),
     ),
     if (entry.checked == true) ...[
       const SizedBox(width: 12),
-      const Icon(Icons.check, size: 16, color: AppColors.success),
+      Icon(Icons.check, size: 16, color: Theme.of(context).colorScheme.primary),
     ],
     if (entry.hint != null) ...[
       const SizedBox(width: 12),
@@ -375,7 +383,7 @@ Widget _nestedLabel(AppMenuEntry entry) => Row(
     ],
     if (entry.shortcut != null) ...[
       const SizedBox(width: 16),
-      Text(entry.shortcut!, style: AppTextStyles.caption),
+      Text(entry.shortcut!, style: AppTypography.caption(context)),
     ],
   ],
 );
@@ -388,7 +396,14 @@ PopupMenuItem<T> appMenuHeadingItem<T>(String heading) {
     enabled: false,
     height: 28,
     padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
-    child: Text(heading.toUpperCase(), style: AppTextStyles.eyebrow),
+    child: Builder(
+      builder: (context) => Text(
+        heading.toUpperCase(),
+        style: AppTypography.caption(
+          context,
+        ).copyWith(fontWeight: FontWeight.w600),
+      ),
+    ),
   );
 }
 
@@ -409,7 +424,7 @@ class AppMenuEntryRow extends StatelessWidget {
             : Icon(
                 entry.icon,
                 size: 18,
-                color: muted ? AppColors.onSurfaceDisabled : null,
+                color: muted ? Theme.of(context).disabledColor : null,
               ));
     return Row(
       children: [
@@ -420,10 +435,9 @@ class AppMenuEntryRow extends StatelessWidget {
         Expanded(
           child: Text(
             entry.label,
-            style: TextStyle(
-              fontSize: 13,
-              color: muted ? AppColors.onSurfaceDisabled : null,
-            ),
+            style: AppTypography.secondary(
+              context,
+            ).copyWith(color: muted ? Theme.of(context).disabledColor : null),
           ),
         ),
         if (entry.hint != null) ...[
@@ -432,11 +446,15 @@ class AppMenuEntryRow extends StatelessWidget {
         ],
         if (entry.shortcut != null) ...[
           const SizedBox(width: 16),
-          Text(entry.shortcut!, style: AppTextStyles.caption),
+          Text(entry.shortcut!, style: AppTypography.caption(context)),
         ],
         if (entry.checked == true) ...[
           const SizedBox(width: 12),
-          const Icon(Icons.check, size: 16, color: AppColors.success),
+          Icon(
+            Icons.check,
+            size: 16,
+            color: Theme.of(context).colorScheme.primary,
+          ),
         ],
       ],
     );

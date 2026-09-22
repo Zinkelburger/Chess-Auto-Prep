@@ -2,7 +2,7 @@ part of 'pgn_movetext_view.dart';
 
 /// The move's comment as the inline editor should show it: every block joined,
 /// so editing it edits all of it (see `_writeWholeComment`).
-String _rawComment(PgnNodeData moveData) => joinComments(moveData.comments);
+String _rawComment(PgnMoveSnapshot moveData) => joinComments(moveData.comments);
 
 /// The generated `[%...]` metrics of a move as one quiet run — "eval +0.31 ·
 /// only move · 42% likely".
@@ -11,14 +11,21 @@ String _rawComment(PgnNodeData moveData) => joinComments(moveData.comments);
 /// call on all of them: the tokens only exist in generated repertoires, and
 /// [filterDisplayComment] strips them out of the prose beside it, so the two
 /// renderers never show the same thing twice.
-List<InlineSpan> _metricsSpans(String raw, {int depth = 0}) {
+List<InlineSpan> _metricsSpans(
+  BuildContext context,
+  String raw, {
+  int depth = 0,
+}) {
   final summary = MoveMetrics.parse(raw).summary;
   if (summary.isEmpty) return const [];
-  return [TextSpan(text: '$summary ', style: PgnTextStyles.metricsAt(depth))];
+  return [
+    TextSpan(text: '$summary ', style: PgnTextStyles.metricsAt(context, depth)),
+  ];
 }
 
 /// Ordinary prose, including course exports without double-space markup.
 ({Widget? block, List<InlineSpan> spans}) _renderProseComment(
+  BuildContext context,
   PgnMovetextView view,
   String raw, {
   Position? anchorPos,
@@ -26,7 +33,10 @@ List<InlineSpan> _metricsSpans(String raw, {int depth = 0}) {
 }) {
   final anchor = anchorPos ?? view.startPosition;
   if (anchor == null) {
-    return (block: null, spans: _emphasisSpans(filterDisplayComment(raw)));
+    return (
+      block: null,
+      spans: _emphasisSpans(context, filterDisplayComment(raw)),
+    );
   }
   final paragraphs = parseProseComment(
     stripEngineTokens(raw).replaceAll(RegExp(r'[ \t]+'), ' '),
@@ -40,9 +50,10 @@ List<InlineSpan> _metricsSpans(String raw, {int depth = 0}) {
   List<InlineSpan> spansFor(List<CommentToken> paragraph) => [
     for (final token in paragraph)
       if (token is CommentProse)
-        ..._emphasisSpans(token.text)
+        ..._emphasisSpans(context, token.text)
       else if (token is CommentMove)
         _buildCommentMoveSpan(
+          context,
           view,
           token,
           runs[token.runId]!,
@@ -70,8 +81,8 @@ List<InlineSpan> _metricsSpans(String raw, {int depth = 0}) {
   );
 }
 
-List<InlineSpan> _emphasisSpans(String text) {
-  final style = PgnTextStyles.commentAt(0);
+List<InlineSpan> _emphasisSpans(BuildContext context, String text) {
+  final style = PgnTextStyles.commentAt(context, 0);
   final spans = <InlineSpan>[];
   var offset = 0;
   for (final match in RegExp(r'\*\*([^*]+)\*\*').allMatches(text)) {
@@ -99,6 +110,7 @@ List<InlineSpan> _emphasisSpans(String text) {
 /// embedded moves, Chessable markers, or multiple paragraphs. Recognizable
 /// book formatting is automatic; short ordinary comments stay plain prose.
 ({Widget? block, List<InlineSpan> spans}) _renderComment(
+  BuildContext context,
   PgnMovetextView view,
   String raw, {
   Position? anchorPos,
@@ -113,6 +125,7 @@ List<InlineSpan> _emphasisSpans(String text) {
   final richFormatting = hasChessableFormatting(raw);
   if (!view.bookFormatting && !richFormatting) {
     return _renderProseComment(
+      context,
       view,
       raw,
       anchorPos: anchorPos,
@@ -131,6 +144,7 @@ List<InlineSpan> _emphasisSpans(String text) {
     if (segments.isNotEmpty) {
       return (
         block: _buildRichCommentBlock(
+          context,
           view,
           segments,
           anchorPos: anchorPos,
@@ -150,6 +164,7 @@ List<InlineSpan> _emphasisSpans(String text) {
     return (
       block: null,
       spans: _buildCommentTokenSpans(
+        context,
         view,
         tokens,
         anchorPos: anchorPos,
@@ -161,6 +176,7 @@ List<InlineSpan> _emphasisSpans(String text) {
   return (
     block: _proseContainer(
       _buildTokenParagraphs(
+        context,
         view,
         tokens,
         anchorPos: anchorPos,
@@ -207,6 +223,7 @@ List<List<CommentToken>> _splitParagraphs(List<CommentToken> tokens) {
 
 /// Render token paragraphs as a column of flowing rich text.
 Widget _buildTokenParagraphs(
+  BuildContext context,
   PgnMovetextView view,
   List<CommentToken> tokens, {
   Position? anchorPos,
@@ -227,6 +244,7 @@ Widget _buildTokenParagraphs(
         Text.rich(
           TextSpan(
             children: _buildCommentTokenSpans(
+              context,
               view,
               List.of(pending),
               anchorPos: anchorPos,
@@ -264,6 +282,7 @@ Widget _buildTokenParagraphs(
 /// Build inline spans for a list of comment tokens: prose as flowing text,
 /// moves as clickable chips that replay their run on the board.
 List<InlineSpan> _buildCommentTokenSpans(
+  BuildContext context,
   PgnMovetextView view,
   List<CommentToken> tokens, {
   Position? anchorPos,
@@ -279,7 +298,7 @@ List<InlineSpan> _buildCommentTokenSpans(
     }
   }
 
-  final proseStyle = PgnTextStyles.commentAt(0);
+  final proseStyle = PgnTextStyles.commentAt(context, 0);
 
   final spans = <InlineSpan>[];
   for (final t in tokens) {
@@ -288,7 +307,14 @@ List<InlineSpan> _buildCommentTokenSpans(
       // prose (e.g. "…Ndf6") are detected and made clickable if legal.
       if (interactive && anchorPos != null && view.onPlayInlineLine != null) {
         spans.addAll(
-          _buildProseSpans(view, t.text, anchorPos, anchorPly, proseStyle),
+          _buildProseSpans(
+            context,
+            view,
+            t.text,
+            anchorPos,
+            anchorPly,
+            proseStyle,
+          ),
         );
       } else {
         spans.add(TextSpan(text: '${t.text} ', style: proseStyle));
@@ -296,6 +322,7 @@ List<InlineSpan> _buildCommentTokenSpans(
     } else if (t is CommentMove) {
       spans.add(
         _buildCommentMoveSpan(
+          context,
           view,
           t,
           runMoves[t.runId]!,
@@ -311,6 +338,7 @@ List<InlineSpan> _buildCommentTokenSpans(
 /// parses as a *legal* SAN move from [anchorPos]. The legality check filters
 /// out ordinary words that merely look move-ish.
 List<InlineSpan> _buildProseSpans(
+  BuildContext context,
   PgnMovetextView view,
   String text,
   Position anchorPos,
@@ -341,7 +369,7 @@ List<InlineSpan> _buildProseSpans(
     }
     buffer.write(hit.prefix);
     flushProse();
-    spans.add(_buildProseMoveSpan(view, hit.san, anchorPly));
+    spans.add(_buildProseMoveSpan(context, view, hit.san, anchorPly));
     buffer.write(hit.suffix);
   }
   buffer.write(' ');
@@ -352,6 +380,7 @@ List<InlineSpan> _buildProseSpans(
 /// A clickable chip for a single move detected inside prose. Plays the move
 /// (a one-move inline line) from its anchor ply via [onPlayInlineLine].
 WidgetSpan _buildProseMoveSpan(
+  BuildContext context,
   PgnMovetextView view,
   String san,
   int anchorPly,
@@ -368,8 +397,9 @@ WidgetSpan _buildProseMoveSpan(
       active.sans.first == san;
 
   return _commentMoveChip(
+    context: context,
     san: san,
-    baseStyle: PgnTextStyles.move,
+    baseStyle: PgnTextStyles.move(context),
     active: isActive,
     onTap: () =>
         view.onPlayInlineLine!(coords.moveNumber, coords.isWhite, [san], 0),
@@ -379,6 +409,7 @@ WidgetSpan _buildProseMoveSpan(
 /// Keep preview selection on the notation, using the mainline's borderless
 /// pill. Preserve the comment's type weight so navigation cannot reflow prose.
 WidgetSpan _commentMoveChip({
+  required BuildContext context,
   required String san,
   required TextStyle baseStyle,
   required bool active,
@@ -387,13 +418,17 @@ WidgetSpan _commentMoveChip({
   final style = baseStyle.copyWith(
     fontSize: 16,
     height: 1.72,
-    color: active ? AppColors.pgnMoveCurrentFg : baseStyle.color,
+    color: active
+        ? Theme.of(context).colorScheme.onPrimaryContainer
+        : baseStyle.color,
     decoration: onTap != null && !active ? TextDecoration.underline : null,
-    decorationColor: AppColors.onSurfaceMuted.withValues(alpha: 0.5),
+    decorationColor: Theme.of(
+      context,
+    ).colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
     decorationStyle: TextDecorationStyle.dotted,
   );
   final currentDecoration = BoxDecoration(
-    color: AppColors.pgnMoveCurrentBg,
+    color: Theme.of(context).colorScheme.primaryContainer,
     borderRadius: BorderRadius.circular(3),
     border: Border.all(color: Colors.transparent, width: 1),
   );
@@ -408,7 +443,9 @@ WidgetSpan _commentMoveChip({
         sanStyle: style,
         nagStyle: style,
         decoration: active ? currentDecoration : _kReservedBorder,
-        hoverDecoration: active ? currentDecoration : _kHoverDecoration,
+        hoverDecoration: active
+            ? currentDecoration
+            : PgnMoveDecorations.resolve(context, hovered: true),
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
       ),
@@ -418,6 +455,7 @@ WidgetSpan _commentMoveChip({
 
 /// A single clickable move chip inside a comment.
 InlineSpan _buildCommentMoveSpan(
+  BuildContext context,
   PgnMovetextView view,
   CommentMove move,
   List<CommentMove> run, {
@@ -441,7 +479,7 @@ InlineSpan _buildCommentMoveSpan(
       idxInRun == active.cursor - 1 &&
       listEquals(active.sans, run.map((m) => m.san).toList());
 
-  final baseMoveStyle = moveStyle ?? PgnTextStyles.move;
+  final baseMoveStyle = moveStyle ?? PgnTextStyles.move(context);
   // Display includes the author's move number and annotations. Leave the
   // number outside the chip; keep check/mate and quality glyphs with the SAN.
   final prefix = RegExp(
@@ -452,8 +490,9 @@ InlineSpan _buildCommentMoveSpan(
   return TextSpan(
     children: [
       if (number.isNotEmpty)
-        TextSpan(text: number, style: PgnTextStyles.moveNumberAt(0)),
+        TextSpan(text: number, style: PgnTextStyles.moveNumberAt(context, 0)),
       _commentMoveChip(
+        context: context,
         san: notation,
         baseStyle: baseMoveStyle,
         active: isActiveMove,
@@ -474,6 +513,7 @@ InlineSpan _buildCommentMoveSpan(
 
 /// Build a rich comment block from Chessable-formatted content.
 Widget _buildRichCommentBlock(
+  BuildContext context,
   PgnMovetextView view,
   List<RichSegment> segments, {
   Position? anchorPos,
@@ -486,6 +526,7 @@ Widget _buildRichCommentBlock(
     if (text.isEmpty) return;
     children.add(
       _buildTokenParagraphs(
+        context,
         view,
         parseCommentTokens(text.toString()),
         anchorPos: anchorPos,
@@ -506,6 +547,7 @@ Widget _buildRichCommentBlock(
       flush();
       children.add(
         _buildRichSegmentWidget(
+          context,
           view,
           segment,
           anchorPos: anchorPos,
@@ -530,6 +572,7 @@ Widget _buildRichCommentBlock(
 }
 
 Widget _buildRichSegmentWidget(
+  BuildContext context,
   PgnMovetextView view,
   RichSegment segment, {
   Position? anchorPos,
@@ -540,7 +583,10 @@ Widget _buildRichSegmentWidget(
     case RichSegmentType.header:
       return Padding(
         padding: const EdgeInsets.only(bottom: 4),
-        child: Text(segment.content, style: PgnTextStyles.commentHeader),
+        child: Text(
+          segment.content,
+          style: PgnTextStyles.commentHeader(context),
+        ),
       );
 
     case RichSegmentType.blockQuote:
@@ -549,29 +595,40 @@ Widget _buildRichSegmentWidget(
         margin: const EdgeInsets.symmetric(vertical: 4),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: AppColors.pgnComment.withValues(alpha: 0.04),
+          color: Theme.of(
+            context,
+          ).colorScheme.onSurface.withValues(alpha: 0.04),
           borderRadius: BorderRadius.circular(4),
           border: Border(
             left: BorderSide(
-              color: AppColors.pgnComment.withValues(alpha: 0.5),
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.5),
               width: 2,
             ),
           ),
         ),
-        child: Text(segment.content, style: PgnTextStyles.commentQuote),
+        child: Text(
+          segment.content,
+          style: PgnTextStyles.commentQuote(context),
+        ),
       );
 
     case RichSegmentType.bracket:
-      return Text('[${segment.content}]', style: PgnTextStyles.commentBracket);
+      return Text(
+        '[${segment.content}]',
+        style: PgnTextStyles.commentBracket(context),
+      );
 
     case RichSegmentType.fen:
       return CommentDiagramBoard(fen: segment.content);
 
     case RichSegmentType.link:
-      return Text(segment.content, style: PgnTextStyles.commentLink);
+      return Text(segment.content, style: PgnTextStyles.commentLink(context));
 
     case RichSegmentType.text:
       return _buildTokenParagraphs(
+        context,
         view,
         parseCommentTokens(segment.content),
         anchorPos: anchorPos,

@@ -12,9 +12,9 @@ library;
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
+import '../../l10n/generated/app_localizations.dart';
 
 import '../../core/board_editor_controller.dart';
-import '../../theme/app_colors.dart';
 import '../common/piece_image.dart';
 
 /// Both strips stacked, for editors that keep their palette beside the
@@ -74,6 +74,7 @@ class SparePieceRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return LayoutBuilder(
       builder: (context, constraints) {
         final height = heightFor(constraints.maxWidth);
@@ -82,8 +83,8 @@ class SparePieceRow extends StatelessWidget {
           height: height,
           decoration: BoxDecoration(
             color: Theme.of(context).brightness == Brightness.light
-                ? Theme.of(context).colorScheme.surfaceContainer
-                : AppColors.surfaceInset,
+                ? colors.surfaceContainer
+                : colors.surfaceContainerHigh,
             borderRadius: BorderRadius.circular(6),
           ),
           clipBehavior: Clip.antiAlias,
@@ -91,13 +92,13 @@ class SparePieceRow extends StatelessWidget {
             children: [
               Expanded(
                 child: _SpareSlot(
-                  tooltip: 'Move pieces',
+                  tooltip: AppLocalizations.of(context).boardMovePieces,
                   selected: tool is PointerTool,
                   onTap: () => onSelect(const PointerTool()),
                   child: Icon(
                     Icons.pan_tool_alt_outlined,
                     size: height * 0.5,
-                    color: Theme.of(context).colorScheme.onSurface,
+                    color: colors.onSurface,
                   ),
                 ),
               ),
@@ -112,14 +113,14 @@ class SparePieceRow extends StatelessWidget {
                 ),
               Expanded(
                 child: _SpareSlot(
-                  tooltip: 'Erase pieces',
+                  tooltip: AppLocalizations.of(context).boardErasePieces,
                   selected: tool is EraserTool,
                   danger: true,
                   onTap: () => onSelect(const EraserTool()),
                   child: Icon(
                     Icons.delete_outline,
                     size: height * 0.5,
-                    color: Theme.of(context).colorScheme.onSurface,
+                    color: colors.onSurface,
                   ),
                 ),
               ),
@@ -146,12 +147,22 @@ class _SparePiece extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final brush = PieceBrush(piece);
     final selected = tool == brush;
-    final name =
-        '${piece.color == Side.white ? 'White' : 'Black'} ${piece.role.name}';
+    final name = l10n.boardPieceName(
+      piece.color == Side.white ? l10n.white : l10n.black,
+      {
+        Role.pawn: l10n.boardPiecePawn,
+        Role.knight: l10n.boardPieceKnight,
+        Role.bishop: l10n.boardPieceBishop,
+        Role.rook: l10n.boardPieceRook,
+        Role.queen: l10n.boardPieceQueen,
+        Role.king: l10n.boardPieceKing,
+      }[piece.role]!,
+    );
     return _SpareSlot(
-      tooltip: '$name: drag onto the board, or click to paint with it',
+      tooltip: l10n.boardSpareHelp(name),
       selected: selected,
       // Click: take the piece in hand, or put it down again.
       onTap: () => onSelect(selected ? const PointerTool() : brush),
@@ -198,7 +209,7 @@ class _SpareSlot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final primary = Theme.of(context).colorScheme.primary;
-    final tint = danger ? AppColors.danger : primary;
+    final tint = danger ? Theme.of(context).colorScheme.error : primary;
     return Semantics(
       button: true,
       selected: selected,

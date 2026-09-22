@@ -6,6 +6,26 @@ import 'package:flutter_test/flutter_test.dart';
 /// a handoff is delivered to exactly one screen, exactly once, and related
 /// values travel together instead of being cleared field by field.
 void main() {
+  test('captured content is delivered once without a file identity', () {
+    final app = AppState();
+    addTearDown(app.dispose);
+    const request = OpenPgnViewer.content(
+      content: '[Event "Reading"]\n\n1. e4 *',
+      title: 'Browser practice',
+      gameIndex: 1,
+      ply: 3,
+    );
+    app.handOff(request);
+    expect(app.currentMode, AppMode.pgnViewer);
+    final delivered = app.takeHandoff<OpenPgnViewer>()!;
+    expect(delivered, same(request));
+    expect(delivered.pgnPath, isNull);
+    expect(delivered.defaultHistoryLabel, 'PGN: Browser practice');
+    expect(delivered.gameIndex, 1);
+    expect(delivered.ply, 3);
+    expect(app.takeHandoff<OpenPgnViewer>(), isNull);
+  });
+
   group('routing', () {
     test('each handoff switches to the screen that can deliver it', () {
       final cases = <PendingHandoff, AppMode>{
@@ -110,23 +130,6 @@ void main() {
       expect(handoff.repertoirePath, '/r.pgn');
       expect(handoff.lineId, 'L1');
       expect(handoff.moveSequence, ['e4', 'e5']);
-      expect(handoff.generationPgnPaths, isNull);
-    });
-
-    test('switchToBuilderWithGeneration carries the PGN paths and no line', () {
-      final state = AppState()
-        ..switchToBuilderWithGeneration(
-          repertoirePath: '/r.pgn',
-          pgnPaths: const ['/a.pgn', '/b.pgn'],
-        );
-      final handoff = state.takeHandoff<OpenBuilder>()!;
-      expect(handoff.generationPgnPaths, ['/a.pgn', '/b.pgn']);
-      expect(
-        handoff.lineId,
-        isNull,
-        reason: 'the old API had to null this field by hand',
-      );
-      expect(handoff.moveSequence, isNull);
     });
 
     test('switchToPgnViewer carries the optional slice FEN', () {

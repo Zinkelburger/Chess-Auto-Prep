@@ -1,9 +1,15 @@
+import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
+import '../features/settings/controllers/engine_settings.dart';
+import '../features/settings/controllers/bulk_analysis_settings.dart';
+import '../app/pgn_viewer_lifetime.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../constants/ui_breakpoints.dart';
+import '../app/legacy_theme_boundary.dart';
+import '../design_system/layout/workspace_branch.dart';
 import '../core/app_state.dart';
 import '../services/games_library/games_library_service.dart'
     show GamesPlatform;
@@ -49,6 +55,7 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
+  late final _engineLifecycle = context.read<EngineLifecycle>();
   static const List<AppMode> _supportedModes = [
     AppMode.tactics,
     AppMode.positionAnalysis,
@@ -169,9 +176,9 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     final wasHeavy = previous?.usesInteractiveEngine ?? false;
     final isHeavy = current.usesInteractiveEngine;
     if (wasHeavy && !isHeavy) {
-      unawaited(EngineLifecycle.instance.suspend());
+      unawaited(_engineLifecycle.suspend());
     } else if (!wasHeavy && isHeavy) {
-      unawaited(EngineLifecycle.instance.resume());
+      unawaited(_engineLifecycle.resume());
     }
   }
 
@@ -199,7 +206,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         // user left the app.
         if (_appBackgrounded) return;
         setState(() => _appBackgrounded = true);
-        unawaited(EngineLifecycle.instance.suspend());
+        unawaited(_engineLifecycle.suspend());
       case AppLifecycleState.resumed:
         if (!_appBackgrounded) return;
         setState(() => _appBackgrounded = false);
@@ -209,7 +216,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         unawaited(_tournamentOpenWatcher?.check());
         final mode = _lastMode;
         if (mode != null && mode.usesInteractiveEngine) {
-          unawaited(EngineLifecycle.instance.resume());
+          unawaited(_engineLifecycle.resume());
         }
       case AppLifecycleState.inactive:
         break;
@@ -245,13 +252,16 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         index: _supportedModes.indexOf(activeMode),
         children: [
           for (final mode in _supportedModes)
-            TickerMode(
-              enabled: mode == activeMode && !_appBackgrounded,
-              child:
-                  _modeViews[mode] ??
-                  (mode == activeMode
-                      ? const _ModeLoadingView()
-                      : const SizedBox.shrink()),
+            WorkspaceBranch(
+              active: mode == activeMode,
+              child: TickerMode(
+                enabled: mode == activeMode && !_appBackgrounded,
+                child:
+                    _modeViews[mode] ??
+                    (mode == activeMode
+                        ? const _ModeLoadingView()
+                        : const SizedBox.shrink()),
+              ),
             ),
         ],
       ),
@@ -261,27 +271,29 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   Widget _createModeView(AppMode mode) {
     switch (mode) {
       case AppMode.tactics:
-        return const _TacticsModeView();
+        return const LegacyThemeBoundary(child: _TacticsModeView());
       case AppMode.positionAnalysis:
-        return const AnalysisScreen();
+        return const LegacyThemeBoundary(child: AnalysisScreen());
       case AppMode.repertoire:
         return const RepertoireScreen();
       case AppMode.repertoireTrainer:
         return const RepertoireTrainingScreen();
       case AppMode.pgnViewer:
-        return const PgnViewerScreen();
+        return LegacyThemeBoundary(
+          child: PgnViewerScreen(lifetime: context.read<PgnViewerLifetime>()),
+        );
       case AppMode.study:
         return const StudyScreen();
       case AppMode.engineTournament:
-        return const EngineTournamentScreen();
+        return const LegacyThemeBoundary(child: EngineTournamentScreen());
       case AppMode.bughouse:
-        return const BughouseScreen();
+        return const LegacyThemeBoundary(child: BughouseScreen());
       case AppMode.playersPrep:
-        return const PlayersPrepScreen();
+        return const LegacyThemeBoundary(child: PlayersPrepScreen());
       case AppMode.repertoireLibrary:
         return const RepertoireLibraryScreen();
       case AppMode.databases:
-        return const DatabasesScreen();
+        return const LegacyThemeBoundary(child: DatabasesScreen());
     }
   }
 }
@@ -314,16 +326,30 @@ class _TacticsModeView extends StatelessWidget {
           create: (_) => TacticsDatabase(),
         ),
         ChangeNotifierProvider<TacticsSessionController>(
-          create: (ctx) => TacticsSessionController(
-            database: ctx.read<TacticsDatabase>(),
-            // "Accept other winning moves" asks Stockfish about a move
-            // that is not the stored answer; the session option gates it.
-            alternativeJudge: EngineAlternativeJudge().judge,
-          ),
+          create: (ctx) {
+            final pool = ctx.read<StockfishPool>();
+            final lifecycle = ctx.read<EngineLifecycle>();
+            return TacticsSessionController(
+              database: ctx.read<TacticsDatabase>(),
+              // "Accept other winning moves" asks Stockfish about a move
+              // that is not the stored answer; the session option gates it.
+              alternativeJudge: EngineAlternativeJudge(
+                evaluate: pool.evaluateFen,
+                engineReady: () async {
+                  if (lifecycle.state == EngineState.generating) return false;
+                  await pool.ensureWorkers(1);
+                  return pool.workerCount > 0;
+                },
+              ).judge,
+            );
+          },
         ),
         ChangeNotifierProvider<TacticsImportCoordinator>(
-          create: (ctx) =>
-              TacticsImportCoordinator(database: ctx.read<TacticsDatabase>()),
+          create: (ctx) => TacticsImportCoordinator(
+            database: ctx.read<TacticsDatabase>(),
+            pool: ctx.read<StockfishPool>(),
+            lifecycle: ctx.read<EngineLifecycle>(),
+          ),
         ),
         ChangeNotifierProvider<RecentGamesController>(
           create: (ctx) {
@@ -347,6 +373,8 @@ class _TacticsModeView extends StatelessWidget {
           create: (ctx) {
             final appState = ctx.read<AppState>();
             return HomeReviewRunner(
+              bulkSettings: ctx.read<BulkAnalysisSettings>(),
+              engine: ctx.read<EngineSettings>(),
               games: ctx.read<RecentGamesController>(),
               importCoordinator: ctx.read<TacticsImportCoordinator>(),
               lichessUsername: () => appState.lichessUsername,

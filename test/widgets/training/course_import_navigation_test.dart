@@ -1,11 +1,13 @@
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
+import 'package:chess_auto_prep/app/app_dependencies.dart';
 import 'dart:io';
 
-import 'package:chess_auto_prep/models/repertoire_metadata.dart';
-import 'package:chess_auto_prep/screens/repertoire_chapters_screen.dart';
+import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
+import 'package:chess_auto_prep/features/repertoires/widgets/repertoire_chapters_screen.dart';
 import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/widgets/pgn_import_dialog.dart';
-import 'package:chess_auto_prep/widgets/repertoire_list_body.dart';
+import 'package:chess_auto_prep/features/repertoires/widgets/repertoire_list_body.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -32,8 +34,11 @@ void main() {
         '${game('Quickstarter', 'Classical', '1. d4 Nf6 2. c4 g6')}'
         '${game('Quickstarter', 'Fianchetto', '1. d4 Nf6 2. Nf3 g6')}';
     RepertoireMetadata? selected;
-    await tester.pumpWidget(
+    await pumpCatalogWidget(
+      tester,
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: RepertoireListBody(
             onSelected: (value) => selected = value,
@@ -63,7 +68,19 @@ void main() {
     }
 
     await until(() => find.text('Open PGN file…').evaluate().isNotEmpty);
-    await tester.tap(find.text('Open PGN file…'));
+    await tester.runAsync(() async {
+      await tester.tap(find.text('Open PGN file…'));
+      for (
+        var i = 0;
+        i < 200 &&
+            !File(
+              '${root.path}/repertoires/Course/Quickstarter.pgn',
+            ).existsSync();
+        i++
+      ) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    });
     await until(() => find.text('Quickstarter').evaluate().isNotEmpty);
     expect(find.byType(RepertoireChaptersScreen), findsOneWidget);
     expect(find.text('Introduction'), findsOneWidget);
@@ -80,6 +97,9 @@ void main() {
     expect(selected?.filePath, endsWith('Quickstarter.pgn'));
     expect(selected?.name, 'Quickstarter');
     expect(tester.takeException(), isNull);
-    await tester.pumpWidget(const SizedBox.shrink());
+    await pumpCatalogWidget(tester, const SizedBox.shrink());
   });
 }
+
+Future<void> pumpCatalogWidget(WidgetTester tester, Widget child) =>
+    tester.pumpWidget(AppDependencies(child: child));

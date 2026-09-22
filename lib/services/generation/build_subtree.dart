@@ -8,7 +8,7 @@
 /// cloning with rebased bookkeeping, not re-parenting.
 library;
 
-import '../../models/build_tree_node.dart';
+import '../../chess_core/generation/build_tree_node.dart';
 
 /// Clone the subtree under [source] as a standalone [BuildTree] whose root
 /// is [source]'s position at ply 0.

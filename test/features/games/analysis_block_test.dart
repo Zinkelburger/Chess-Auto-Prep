@@ -4,6 +4,13 @@
 /// blocks — those are behind the gear.
 library;
 
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+
+import '../../support/runtime_settings.dart';
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+
+import 'package:chess_auto_prep/core/app_state.dart';
+import 'package:chess_auto_prep/screens/settings_screen.dart';
 import 'package:chess_auto_prep/features/games/controllers/recent_games_controller.dart';
 import 'package:chess_auto_prep/features/games/services/games_window.dart';
 import 'package:chess_auto_prep/features/games/models/recent_game.dart';
@@ -13,13 +20,13 @@ import 'package:chess_auto_prep/features/games/services/opening_review.dart';
 import 'package:chess_auto_prep/features/games/widgets/analysis_block.dart';
 import 'package:chess_auto_prep/services/games_library/game_filter.dart';
 import 'package:chess_auto_prep/services/games_library/games_library_service.dart';
-import 'package:chess_auto_prep/models/bulk_analysis_settings.dart';
-import 'package:chess_auto_prep/models/engine_settings.dart';
 import 'package:chess_auto_prep/widgets/analysis/stockfish_settings_dialog.dart';
 import 'package:chess_auto_prep/features/tactics/services/tactics_import_coordinator.dart';
 import 'package:flutter/material.dart';
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:provider/provider.dart';
 
 class _IdleLibrary extends GamesLibraryService {
   @override
@@ -31,6 +38,7 @@ class _IdleLibrary extends GamesLibraryService {
     bool forceRefresh = false,
     void Function(String message)? onProgress,
     void Function(DateTime fetchedAt)? onFetched,
+    void Function(Object? error)? onStaleCache,
   }) async => const [];
 
   @override
@@ -39,6 +47,7 @@ class _IdleLibrary extends GamesLibraryService {
 }
 
 class _StubCoordinator extends TacticsImportCoordinator {
+  _StubCoordinator() : super(pool: engines.pool, lifecycle: engines.lifecycle);
   bool pauseRequested = false;
 
   @override
@@ -65,7 +74,8 @@ class _PausedRunner extends HomeReviewRunner {
     required super.lichessUsername,
     required super.chesscomUsername,
     super.windowSettings,
-    super.bulkSettings,
+    required super.bulkSettings,
+    required super.engine,
   });
 
   @override
@@ -75,7 +85,15 @@ class _PausedRunner extends HomeReviewRunner {
   bool get canResume => true;
 }
 
+RuntimeSettings? _runtimeSettings;
+RuntimeSettings get runtimeSettings =>
+    _runtimeSettings ??= testRuntimeSettings();
+EngineRuntime get engines => testEngines(runtimeSettings);
 void main() {
+  setUp(() {
+    _runtimeSettings = null;
+    addTearDown(() => _runtimeSettings?.dispose());
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
 
   ({HomeReviewRunner runner, RecentGamesController games, _StubCoordinator co})
@@ -89,12 +107,13 @@ void main() {
     final co = _StubCoordinator();
     return (
       runner: HomeReviewRunner(
+        engine: runtimeSettings.engine,
         games: games,
         importCoordinator: co,
         lichessUsername: () => lichess,
         chesscomUsername: () => null,
         windowSettings: GamesWindowSettings.forTest(),
-        bulkSettings: BulkAnalysisSettings.forTest(),
+        bulkSettings: runtimeSettings.bulk,
       ),
       games: games,
       co: co,
@@ -108,38 +127,44 @@ void main() {
     VoidCallback? onStart,
     VoidCallback? onPause,
     VoidCallback? onOpeningReview,
-    VoidCallback? onMasterPractice,
     List<OpeningReviewEntry> repeated = const [],
     void Function(OpeningReviewEntry)? onFixEntry,
     int masterGameCount = 0,
     int unreviewed = 3,
     int openingIssues = 4,
-  }) => tester.pumpWidget(
-    MaterialApp(
-      home: Scaffold(
-        body: SizedBox(
-          width: 380,
-          child: Column(
-            children: [
-              AnalysisBlock(
-                runner: runner,
-                coordinator: coordinator,
-                isLoadingGames: false,
-                gamesInWindow: 20,
-                unreviewedCount: unreviewed,
-                windowLabel: 'last 20 games',
-                onStart: onStart ?? () {},
-                onPause: onPause ?? () {},
-              ),
-              OpeningsBlock(
-                openingIssueCount: openingIssues,
-                gamesInWindow: 20,
-                windowLabel: 'last 20 games',
-                onOpeningReview: onOpeningReview ?? () {},
-                repeated: repeated,
-                onFixEntry: onFixEntry,
-              ),
-            ],
+  }) => pumpRuntimeWidget(
+    tester,
+    runtimeSettings,
+    ChangeNotifierProvider(
+      create: (_) => AppState(),
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: SizedBox(
+            width: 380,
+            child: Column(
+              children: [
+                AnalysisBlock(
+                  runner: runner,
+                  coordinator: coordinator,
+                  isLoadingGames: false,
+                  gamesInWindow: 20,
+                  unreviewedCount: unreviewed,
+                  windowLabel: 'last 20 games',
+                  onStart: onStart ?? () {},
+                  onPause: onPause ?? () {},
+                ),
+                OpeningsBlock(
+                  openingIssueCount: openingIssues,
+                  gamesInWindow: 20,
+                  windowLabel: 'last 20 games',
+                  onOpeningReview: onOpeningReview ?? () {},
+                  repeated: repeated,
+                  onFixEntry: onFixEntry,
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -239,7 +264,7 @@ void main() {
     final h = build();
     addTearDown(h.games.dispose);
     addTearDown(h.runner.dispose);
-    final engine = EngineSettings.instance;
+    final engine = runtimeSettings.engine;
     final before = engine.cores;
     addTearDown(() => engine.cores = before);
     engine.cores = 1;
@@ -252,7 +277,7 @@ void main() {
     expect(find.text('2 cores'), findsOneWidget);
   });
 
-  testWidgets('the gear opens the shared engine popup', (tester) async {
+  testWidgets('the gear opens the shared analysis settings', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final h = build();
     addTearDown(h.games.dispose);
@@ -260,6 +285,7 @@ void main() {
     await pump(tester, runner: h.runner, coordinator: h.co);
     await tester.tap(find.byTooltip('Engine settings'));
     await tester.pumpAndSettle();
+    expect(find.byType(SettingsScreen), findsOneWidget);
     expect(find.byType(StockfishSettingsBody), findsOneWidget);
     expect(find.byKey(const Key('engine-cores')), findsOneWidget);
   });
@@ -339,12 +365,13 @@ void main() {
     );
     final co = _StubCoordinator();
     final runner = _PausedRunner(
+      engine: runtimeSettings.engine,
       games: games,
       importCoordinator: co,
       lichessUsername: () => 'me',
       chesscomUsername: () => null,
       windowSettings: GamesWindowSettings.forTest(),
-      bulkSettings: BulkAnalysisSettings.forTest(),
+      bulkSettings: runtimeSettings.bulk,
     );
     addTearDown(games.dispose);
     addTearDown(runner.dispose);

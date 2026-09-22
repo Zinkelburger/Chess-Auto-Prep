@@ -329,7 +329,7 @@ void main() {
         BughouseHalfMove.move('d2d4'),
         BughouseHalfMove.pass(),
       );
-      expect(controller.describeJoint(move), 'A d4   ·   C sit');
+      expect(controller.describeJoint(move), 'A d4   ·   B sit');
       controller.dispose();
     });
 
@@ -343,11 +343,11 @@ void main() {
       );
       expect(
         controller.describeSeats(move, team: Side.white).map((r) => r.who),
-        ['A', 'C'],
+        ['A', 'B'],
       );
       expect(
         controller.describeSeats(move, team: Side.black).map((r) => r.who),
-        ['B', 'D'],
+        ['C', 'D'],
       );
       expect(controller.describeMoves(move, team: Side.white), 'd4  ·  c4');
       controller.dispose();

@@ -11,7 +11,7 @@
 library;
 
 import '../../../constants/chess_constants.dart';
-import '../../../models/build_tree_node.dart';
+import '../../../chess_core/generation/build_tree_node.dart';
 import '../../../utils/chess_utils.dart' show plyReachingFen;
 import '../fen_map.dart';
 import '../pgn_freq_map.dart';

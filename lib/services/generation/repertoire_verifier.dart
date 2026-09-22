@@ -1,7 +1,7 @@
 /// Re-evaluation for legacy saved trees; Pure uses uniform-depth construction.
 library;
 
-import '../../models/build_tree_node.dart';
+import '../../chess_core/generation/build_tree_node.dart';
 import '../engine/stockfish_pool.dart';
 import 'eca_calculator.dart';
 import 'fen_map.dart';
@@ -74,8 +74,8 @@ class VerificationReport {
 class RepertoireVerifier {
   final TreeBuildConfig config;
   final StockfishPool pool;
-  RepertoireVerifier({required this.config, StockfishPool? pool})
-    : pool = pool ?? StockfishPool.instance;
+  RepertoireVerifier({required this.config, required StockfishPool pool})
+    : pool = pool;
 
   Future<VerificationReport> verify(
     BuildTree tree, {

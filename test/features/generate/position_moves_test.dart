@@ -1,6 +1,6 @@
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/features/generate/services/position_moves.dart';
-import 'package:chess_auto_prep/models/build_tree_node.dart';
+import 'package:chess_auto_prep/chess_core/generation/build_tree_node.dart';
 import 'package:chess_auto_prep/services/generation/fen_map.dart';
 import 'package:chess_auto_prep/utils/chess_utils.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -65,6 +65,31 @@ void main() {
       ).firstWhere((r) => r.san == 'e4').expectedCp,
       lessThan(0),
     );
+  });
+  test('orders by the expectimax value, not the engine eval', () {
+    BuildTreeNode child(String uci, {required int cp, required double value}) =>
+        BuildTreeNode(
+            fen: playUciMove(kStandardStartFen, uci)!,
+            moveSan: '',
+            moveUci: '',
+            ply: 0,
+            isWhiteToMove: false,
+            nodeId: 1,
+          )
+          ..engineEvalCp = cp
+          ..expectimaxValue = value
+          ..hasExpectimax = true;
+    // The engine likes e4 more, but the opponent's likely replies score
+    // better for Black there, so d4 is the move White should see first.
+    final map = FenMap()
+      ..populate(child('e2e4', cp: -100, value: 0.3))
+      ..populate(child('d2d4', cp: -10, value: 0.7));
+    final rows = positionMoves(kStandardStartFen, database: map);
+    expect(rows.first.san, 'd4');
+    expect(rows.first.evalCp, 10);
+    expect(rows[1].san, 'e4');
+    expect(rows[1].evalCp, 100);
+    expect(rows[1].expectedCp, lessThan(0));
   });
   test('includes underpromotions and standard castling UCI', () {
     final promotions = positionMoves('7k/P7/8/8/8/8/8/7K w - - 0 1');

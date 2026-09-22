@@ -11,7 +11,7 @@ import 'dart:isolate';
 
 import '../../utils/atomic_file.dart' show readTextFileSafely;
 import '../../utils/lru_map.dart';
-import '../pgn_parsing_service.dart' show countPgnGamesFast;
+import '../../chess_core/pgn/pgn_text.dart' show countPgnGamesFast;
 
 class PgnGameCountCache {
   PgnGameCountCache({

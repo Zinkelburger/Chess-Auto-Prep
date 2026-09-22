@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../l10n/generated/app_localizations.dart';
 import '../analysis/stockfish_settings_dialog.dart';
 
 /// Contextual shortcut to the shared analysis preferences.
@@ -7,7 +8,7 @@ class InlineEngineSettings extends StatelessWidget {
   @override
   Widget build(BuildContext context) => IconButton(
     icon: const Icon(Icons.tune, size: 20),
-    tooltip: 'Engine settings',
+    tooltip: AppLocalizations.of(context).engineAppearanceSettings,
     onPressed: () => showStockfishSettingsDialog(context),
   );
 }

@@ -5,8 +5,8 @@
 /// and circular equivalence ring with Dart's standard [HashMap].
 library;
 
-import '../../models/build_tree_node.dart';
-import '../eval/eval_canonicalize.dart';
+import '../../chess_core/generation/build_tree_node.dart';
+import '../../chess_core/position/eval_canonicalize.dart';
 
 /// Strip halfmove/fullmove counters; keep piece placement, side to move,
 /// castling rights, and en passant square (matches C `fen_map_canonicalize_key`).

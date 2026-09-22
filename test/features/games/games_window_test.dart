@@ -22,6 +22,7 @@ class _RecordingLibrary extends GamesLibraryService {
     bool forceRefresh = false,
     void Function(String message)? onProgress,
     void Function(DateTime fetchedAt)? onFetched,
+    void Function(Object? error)? onStaleCache,
   }) async {
     calls.add(selection);
     return const [];

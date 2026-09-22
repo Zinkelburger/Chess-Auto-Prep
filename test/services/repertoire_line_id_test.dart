@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:chess_auto_prep/services/repertoire_line_ids.dart';
+import 'package:chess_auto_prep/chess_core/pgn/repertoire_line_ids.dart';
 import 'package:chess_auto_prep/services/repertoire_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 

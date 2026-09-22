@@ -4,6 +4,7 @@
 /// move must keep its `N...` prefix (same as start-from-Black games).
 library;
 
+import 'package:chess_auto_prep/chess_core/pgn/pgn_game_view.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -34,22 +35,20 @@ void main() {
     return tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: SingleChildScrollView(
-            child: PgnMovetextView(
-              game: null,
-              moveHistory: moveHistory,
-              variationsByPly: variationsByPly,
-              mainLineIndex: 0,
-              analysisPath: const [],
-              editingCommentIndex: null,
-              canEditComments: false,
-              editMode: editMode,
-              onMainLineMoveClicked: (_) {},
-              onShowMoveContextMenu: (_, _) {},
-              onSaveComment: (_, _) {},
-              onCancelEditingComment: () {},
-              onGoToAnalysisNode: (_, _) {},
-            ),
+          body: PgnMovetextView(
+            game: null,
+            moveHistory: moveHistory.map(PgnMoveSnapshot.capture).toList(),
+            variationsByPly: variationsByPly,
+            mainLineIndex: 0,
+            analysisPath: const [],
+            editingCommentIndex: null,
+            canEditComments: false,
+            editMode: editMode,
+            onMainLineMoveClicked: (_) {},
+            onShowMoveContextMenu: (_, _) {},
+            onSaveComment: (_, _) {},
+            onCancelEditingComment: () {},
+            onGoToAnalysisNode: (_, _) {},
           ),
         ),
       ),

@@ -7,11 +7,11 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../l10n/generated/app_localizations.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_state.dart';
-import '../../core/study_controller.dart';
-import '../../services/storage/storage_factory.dart';
+import '../../features/studies/controllers/study_controller.dart';
 import '../../utils/app_messages.dart';
 import '../pgn/add_to_study_dialog.dart';
 
@@ -25,7 +25,7 @@ Future<void> runAddToStudyFlow(
   BuildContext context, {
   required String suggestedChapterName,
   required FutureOr<String?> Function(String chapterName) buildPgn,
-  String pickerTitle = 'Add line to study',
+  String? pickerTitle,
   bool openAfterAdding = false,
   List<String>? viewSanLine,
   Future<String?> Function()? preferredStudy,
@@ -37,6 +37,7 @@ Future<void> runAddToStudyFlow(
   final result = await showDialog<AddToStudyResult>(
     context: context,
     builder: (_) => AddToStudyDialog(
+      loadStudies: context.read<StudyController>().listStudies,
       initialChapterName: suggestedChapterName,
       title: pickerTitle,
       preferredPath: preferredPath,
@@ -51,8 +52,13 @@ Future<void> runAddToStudyFlow(
     if (pgn == null || !context.mounted) return;
     final path =
         result.existingPath ??
-        await StorageFactory.instance.studyFilePath(result.newStudyName!);
-    await study.addChapterToStudyFile(path, result.chapterName, pgn);
+        await study.copyDestination(result.newStudyName!);
+    await study.addChapterToStudyFile(
+      path,
+      result.chapterName,
+      pgn,
+      createOnly: result.newStudyName != null,
+    );
     if (!context.mounted) return;
     if (openAfterAdding) {
       appState.handOff(
@@ -61,13 +67,19 @@ Future<void> runAddToStudyFlow(
           chapterName: result.chapterName,
           initialSanLine: viewSanLine,
         ),
-        historyLabel: 'Study: ${result.studyName}',
+        historyLabel: AppLocalizations.of(
+          context,
+        ).studyHistoryTitle(result.studyName),
       );
     }
   } catch (e) {
     debugPrint('Add to study failed: $e');
     if (context.mounted) {
-      showAppSnackBar(context, 'Failed to add to study.', isError: true);
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context).studyAddFailed,
+        isError: true,
+      );
     }
   }
 }

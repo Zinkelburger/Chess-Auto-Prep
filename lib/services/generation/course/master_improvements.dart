@@ -16,7 +16,7 @@ import 'package:dartchess/dartchess.dart';
 import '../../../utils/chess_utils.dart';
 import '../../../utils/fen_utils.dart';
 import '../../engine/stockfish_pool.dart';
-import '../../eval/eval_canonicalize.dart';
+import '../../../chess_core/position/eval_canonicalize.dart';
 import '../../master_games/master_games_db.dart';
 import '../export/move_annotation.dart';
 import '../generation_config.dart';
@@ -86,8 +86,8 @@ class MasterImprovementProber {
     required this.config,
     required this.book,
     required this.gameById,
-    StockfishPool? pool,
-  }) : pool = pool ?? StockfishPool.instance;
+    required StockfishPool pool,
+  }) : pool = pool;
 
   final TreeBuildConfig config;
   final BookLookup book;

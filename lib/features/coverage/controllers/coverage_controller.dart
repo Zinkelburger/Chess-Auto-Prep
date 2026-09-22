@@ -4,9 +4,9 @@
 /// The screen initiates analysis via [calculate] and listens for updates.
 library;
 
+import 'package:chess_auto_prep/chess_core/moves/opening_graph.dart';
 import 'package:flutter/foundation.dart';
 
-import '../../../models/opening_tree.dart';
 import '../../../services/jobs/notify_throttle.dart';
 import '../../../services/jobs/repertoire_job.dart';
 import '../../../services/master_games/master_games_service.dart';
@@ -62,7 +62,7 @@ class CoverageController extends ChangeNotifier with SafeChangeNotifier {
   /// the caller can surface it.
   Future<CoverageResult?> runAsJob({
     required CoverageConfig config,
-    required OpeningTree tree,
+    required OpeningGraph tree,
     required bool isWhiteRepertoire,
     required JobManager jobManager,
     required String label,
@@ -98,7 +98,7 @@ class CoverageController extends ChangeNotifier with SafeChangeNotifier {
   /// when provided, [onProgress] (used to drive the jobs-pane card).
   Future<CoverageResult?> calculate({
     required CoverageConfig config,
-    required OpeningTree tree,
+    required OpeningGraph tree,
     required bool isWhiteRepertoire,
     void Function(String message, double? progress)? onProgress,
   }) async {

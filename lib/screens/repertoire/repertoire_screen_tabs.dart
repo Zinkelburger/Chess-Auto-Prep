@@ -64,14 +64,14 @@ mixin _RepertoireTabContent
   }
 
   Widget _buildOutlinePanel() {
-    final selected = _controller.selectedPgnLine;
-    final chapterPath = _controller.currentRepertoire?.filePath;
+    final selected = _controller.document.selectedPgnLine;
+    final chapterPath = _controller.document.currentRepertoire?.filePath;
     return Column(
       children: [
         Expanded(
           child: RepertoireOutlinePanel(
             controller: _outline,
-            currentMoves: _controller.currentMoveSequence,
+            currentMoves: _controller.board.currentMoveSequence,
             selectedLine: selected == null || chapterPath == null
                 ? null
                 : (chapterPath: chapterPath, gameIndex: selected.gameIndex),
@@ -101,11 +101,11 @@ mixin _RepertoireTabContent
       sourceControl: sourceControl,
       chessDbSource: chessDbSource,
       onShowGenerated: () {
-        if (mounted) setState(() => _databaseSource = 3);
+        if (mounted) unawaited(_layout.setDatabaseSource(3));
       },
-      fen: _controller.fen,
+      fen: _controller.board.fen,
       databaseName:
-          '${p.basename(p.dirname(_controller.currentRepertoire!.filePath))} / ${_controller.currentRepertoire!.name}',
+          '${p.basename(p.dirname(_controller.document.currentRepertoire!.filePath))} / ${_controller.document.currentRepertoire!.name}',
       generation: _generationController,
       onGenerate:
           ({
@@ -119,11 +119,14 @@ mixin _RepertoireTabContent
               ? _generationController.computeExpectimax
               : _generationController.computeMovePv)(
                 ExpectimaxProbeTarget(
-                  repertoireFilePath: _controller.currentRepertoire!.filePath,
+                  repertoireFilePath:
+                      _controller.document.currentRepertoire!.filePath,
                   repertoireStartFen:
-                      _controller.startingFen ?? kStandardStartFen,
-                  movesFromStart: List.of(_controller.currentMoveSequence),
-                  playAsWhite: _controller.isRepertoireWhite,
+                      _controller.board.startingFen ?? kStandardStartFen,
+                  movesFromStart: List.of(
+                    _controller.board.currentMoveSequence,
+                  ),
+                  playAsWhite: _controller.document.isRepertoireWhite,
                   moveSan: moveSan,
                   plies: plies,
                   engineThreads: cores,
@@ -131,14 +134,12 @@ mixin _RepertoireTabContent
                   maiaCoverage: maiaCoverage,
                 ),
               ),
-      onPlayMove: _controller.playMove,
-      onHoverMove: (uci) => _boardPreview.setHoverArrow(
-        uci == null ? null : BoardAnnotation.arrowFromUci(uci),
-      ),
+      onPlayMove: _controller.board.playMove,
+      onHoverMove: _boardPreview.setHoverMove,
       onBuildChessDb: () => unawaited(
         _openLineBuildDialog(
           initialConfig: chessDbRepertoirePreset(
-            playAsWhite: _controller.isRepertoireWhite,
+            playAsWhite: _controller.document.isRepertoireWhite,
           ),
         ),
       ),
@@ -150,7 +151,7 @@ mixin _RepertoireTabContent
   /// Live engine analysis; saved/generated evaluations are a database source.
   Widget _buildEngineTabContent() => SingleChildScrollView(
     child: InlineEngineBar(
-      fen: _controller.fen,
+      fen: _controller.board.fen,
       isActive: true,
       previewFlipped: _boardFlipped,
       compactChrome: true,
@@ -162,32 +163,31 @@ mixin _RepertoireTabContent
     return RepertoireDatabasePane(
       source: _databaseSource,
       onSourceChanged: (source) {
-        if (mounted) setState(() => _databaseSource = source);
+        if (mounted) unawaited(_layout.setDatabaseSource(source));
       },
       evaluationsBuilder: (menu, chessDb) =>
           _buildGenerateTabContent(sourceControl: menu, chessDbSource: chessDb),
-      tree: _controller.openingTree,
-      repertoireLines: _controller.repertoireLines,
+      tree: _controller.document.openingGraph,
+      repertoireLines: _controller.document.repertoireLines,
       onHoverTreeMove: _onTreeMoveHover,
-      onGoBack: _controller.goBack,
-      onGoForward: _controller.goForward,
-      fen: _controller.fen,
-      currentMoveSequence: _controller.currentMoveSequence,
+      onGoBack: _controller.board.goBack,
+      onGoForward: _controller.board.goForward,
+      fen: _controller.board.fen,
+      currentMoveSequence: _controller.board.currentMoveSequence,
       repertoireMovesAtPosition: _repertoireMovesAtCurrentPosition,
-      onPlayMove: _controller.playMove,
+      onPlayMove: _controller.board.playMove,
       onAddMove: _onExplorerAddMove,
       onHoverMove: _onExplorerMoveHover,
     );
   }
 
   Widget _buildJobsContent() {
-    return JobsTabContent(
-      controller: _controller,
+    return JobsPanel(
       generationController: _generationController,
       auditController: _auditController,
       jobManager: _jobManager,
       onOpenGenerationDialog: () => unawaited(_openGenerateTab()),
-      onOpenAuditConfig: () => _openAuditDialog(forceConfig: true),
+      onOpenAuditDialog: () => _openAuditDialog(forceConfig: true),
       // Coverage is a fraction of master-game counts, so without the local
       // master book the run traverses the whole tree and reports "0.0%
       // covered" for a repertoire of any size. Null hides the button until
@@ -209,7 +209,7 @@ mixin _RepertoireTabContent
       auditNodesChecked: ac.nodesChecked,
       auditTotalNodes: ac.totalNodes,
       errorText: ac.error,
-      chapterName: _controller.currentRepertoire?.name,
+      chapterName: _controller.document.currentRepertoire?.name,
       config: ac.lastConfig,
       onFindingSelected: _onFindingSelected,
       onResultChanged: (updatedResult) {
@@ -229,9 +229,9 @@ mixin _RepertoireTabContent
 
   Widget _buildLinesContent() {
     return RepertoireLinesBrowser(
-      lines: _controller.repertoireLines,
-      currentMoveSequence: _controller.currentMoveSequence,
-      isWhiteRepertoire: _controller.isRepertoireWhite,
+      lines: _controller.document.repertoireLines,
+      currentMoveSequence: _controller.board.currentMoveSequence,
+      isWhiteRepertoire: _controller.document.isRepertoireWhite,
       coverageResult: _coverageController.result,
       isCoverageRunning: _coverageController.isRunning,
       coverageProgress: _coverageController.progress,
@@ -250,7 +250,7 @@ mixin _RepertoireTabContent
           ? _showCoverageCalculator
           : null,
       onNavigateToPosition: (moves) {
-        _controller.loadMoveSequence(moves);
+        _controller.composeMoves(moves);
       },
     );
   }
@@ -272,38 +272,23 @@ mixin _RepertoireTabContent
     );
   }
 
-  Widget _buildPgnTab() {
-    final saveLine = _controller.selectedLineSaver;
-    return PgnWithAnalysisPane(
-      controller: _controller,
-      tree: _controller.tree,
-      currentPath: _controller.path,
-      onJump: (path) => _controller.jump(path),
-      onCommentChanged: (path, comment) =>
-          _controller.setCommentAtPath(path, comment),
-      onDelete: (path) => _controller.deleteAtPath(path),
-      onPromote: (path) => _controller.promoteVariation(path),
-      onMakeMainLine: (path) => _controller.makeMainLine(path),
-      repertoireColor: _controller.isRepertoireWhite ? 'White' : 'Black',
-      isEditingExistingLine: _controller.selectedPgnLine != null,
-      onLineEdited: saveLine == null
-          ? null
-          : (updatedPgn) => unawaited(saveLine(updatedPgn)),
-      onImportPgn: _importPgn,
-      onViewInLines: _showLinesSurface,
-      onReload: _reloadRepertoire,
-      generatedTree: _generationController.generatedTree,
-      treeConfig: _generationController.generatedTreeConfig,
-      fenMap: _generationController.generatedTreeFenMap,
-      generation: _generationController,
-      boardPreview: _boardPreview,
-      coherenceResult: _generationController.coherenceService.result,
-      isAnalysisActive: true,
-      embedAnalysisDock: false,
-      showToolbar: false,
-      ephemeralTitle: _controller.annotatedLineLabel,
-    );
-  }
+  Widget _buildPgnTab() => InteractivePgnEditor(
+    tree: _controller.board.tree,
+    currentPath: _controller.board.path,
+    lineTitle: _controller.title,
+    onJump: _controller.board.jump,
+    onCommentChanged: _controller.board.setCommentAtPath,
+    onToggleNag: _controller.board.toggleNagAtPath,
+    onDelete: _controller.deleteDraftBranch,
+    onPromote: _controller.board.promoteVariation,
+    onMakeMainLine: _controller.board.makeMainLine,
+    isEditingExistingLine: _controller.document.selectedPgnLine != null,
+    onTitleChanged: _controller.setTitle,
+    onCopyToClipboard: (text, message) =>
+        copyToClipboard(context, text, successMessage: message),
+    onViewInLines: _showLinesSurface,
+    ephemeralTitle: _controller.annotatedLineLabel,
+  );
 
   Widget _buildLinesTabContent() {
     return Stack(
@@ -322,7 +307,7 @@ mixin _RepertoireTabContent
                           ButtonSegment<bool>(
                             value: false,
                             label: Text(
-                              'Lines (${_controller.repertoireLines.length})',
+                              'Lines (${_controller.document.repertoireLines.length})',
                               style: const TextStyle(fontSize: 12),
                             ),
                             icon: const Icon(Icons.list, size: 14),
@@ -372,65 +357,59 @@ mixin _RepertoireTabContent
   }
 
   Widget _buildTrapsContent() {
-    return TrapsTabContent(
+    return TrapsBrowser(
       traps: _trapSession.traps,
-      trapIndex: _trapSession.index,
-      currentMoveSequence: _controller.currentMoveSequence,
-      repertoireLineMoves: _controller.repertoireLines
+      metrics: _trapSession.index?.metrics,
+      currentMoveSequence: _controller.board.currentMoveSequence,
+      repertoireLineMoves: _controller.document.repertoireLines
           .map((l) => l.moves)
           .toList(),
       boardPreview: _boardPreview,
-      hasRepertoire: _repertoireFilePath != null,
       onTrapSelected: _showTrapLine,
       onTrapMoveSelected: (trap, ply) => _showTrapLine(trap, ply: ply),
       onStartTour: ({TrapLineInfo? startTrap}) =>
           _trapSession.openTour(startTrap: startTrap),
-      onDiscoverTraps: _discoverTrapsFromRepertoire,
-      onOpenGeneration: _openGenerateTab,
     );
   }
 
   /// SANs already present in the repertoire tree at the current cursor.
   Set<String> _repertoireMovesAtCurrentPosition() {
-    final tree = _controller.tree;
-    final path = _controller.path;
+    final tree = _controller.board.tree;
+    final path = _controller.board.path;
     final children = path.isEmpty ? tree.roots : tree.nodeAt(path)?.children;
-    final saved = _controller.openingTree;
+    final saved = _controller.document.openingGraph;
     return {
       if (children != null)
         for (final child in children) child.san,
       if (saved != null)
-        for (final group in saved.continuationsAt(_controller.fen))
+        for (final group in saved.continuationsAt(_controller.board.fen))
           if (!group.viaTransposition) group.move,
     };
   }
 
-  /// Echo the hovered explorer row on the board, the way Lichess arrows a
-  /// hovered explorer move. The API's UCI is standard (`e1g1` castling).
+  /// Tint the hovered explorer row's from/to squares on the board. The
+  /// API's UCI is standard (`e1g1` castling).
   void _onExplorerMoveHover(ExplorerMove? move) {
-    _boardPreview.setHoverArrow(
-      move == null ? null : BoardAnnotation.arrowFromUci(move.uci),
-    );
+    _boardPreview.setHoverMove(move?.uci);
   }
 
   /// Same for the repertoire tree, whose rows only know their SAN: resolve
   /// it against the board position (a tree row that is not legal there —
-  /// the tree can sit one transposition off — simply draws nothing).
+  /// the tree can sit one transposition off — simply tints nothing).
   void _onTreeMoveHover(String? san) {
-    final uci = san == null ? null : sanToUci(_controller.fen, san);
-    _boardPreview.setHoverArrow(
-      uci == null ? null : BoardAnnotation.arrowFromUci(uci),
+    _boardPreview.setHoverMove(
+      san == null ? null : sanToUci(_controller.board.fen, san),
     );
   }
 
   Future<void> _onExplorerAddMove(ExplorerMove move) async {
     try {
       await _controller.writer.addMoveAtPosition(
-        fen: _controller.fen,
+        fen: _controller.board.fen,
         san: move.san,
-        pathFromRoot: _controller.currentMoveSequence,
+        pathFromRoot: _controller.board.currentMoveSequence,
       );
-      _controller.playMove(move.san);
+      _controller.board.playMove(move.san);
       if (mounted) showAppSnackBar(context, 'Added ${move.san} to repertoire');
     } catch (e) {
       if (mounted) {

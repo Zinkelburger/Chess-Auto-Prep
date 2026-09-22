@@ -2,7 +2,7 @@ import 'package:chess_auto_prep/services/eval_cache.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'eval_test_helpers.dart';
+import '../../support/eval_cache_fixture.dart';
 
 /// The eval cache keys on the canonical 4-field FEN, remembers misses, and
 /// coalesces writes into batches.  These pin the contract the build pipeline
@@ -14,14 +14,10 @@ void main() {
       'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 5 12';
   const afterD4 = 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1';
 
-  setUpAll(() async {
-    await initEvalTestSqlite();
-  });
+  useIsolatedEvalCache();
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
-    await EvalCache.instance.init();
-    await EvalCache.instance.clear();
   });
 
   test('a transposition with different clocks is the same entry', () async {

@@ -274,16 +274,17 @@ void main() {
 
     test('the four players are lettered, and the boards numbered', () {
       // One alphabet per thing being named: boards are 1 and 2, players are
-      // A and B facing each other on board 1, C and D on board 2.
+      // A and C facing each other on board 1, D and B on board 2, so that a
+      // team's two letters run together.
       final state = BughouseState.initial();
       expect(BughouseBoard.a.label, 'Board 1');
       expect(BughouseBoard.b.label, 'Board 2');
       expect(state.seatLetter(BughouseBoard.a, Side.white), 'A');
-      expect(state.seatLetter(BughouseBoard.a, Side.black), 'B');
-      expect(state.seatLetter(BughouseBoard.b, Side.black), 'C');
+      expect(state.seatLetter(BughouseBoard.a, Side.black), 'C');
+      expect(state.seatLetter(BughouseBoard.b, Side.black), 'B');
       expect(state.seatLetter(BughouseBoard.b, Side.white), 'D');
-      expect(state.teamLetters(Side.white), 'A + C');
-      expect(state.teamLetters(Side.black), 'B + D');
+      expect(state.teamLetters(Side.white), 'A + B');
+      expect(state.teamLetters(Side.black), 'C + D');
       expect(
         state.seatDescription(BughouseBoard.b, Side.white),
         'D — your partner\'s opponent, white on board 2',
@@ -293,7 +294,7 @@ void main() {
       // seats at the table rather than colours.
       final flipped = state.copyWith(team: Side.black);
       expect(flipped.seatLetter(BughouseBoard.a, Side.black), 'A');
-      expect(flipped.seatLetter(BughouseBoard.b, Side.white), 'C');
+      expect(flipped.seatLetter(BughouseBoard.b, Side.white), 'B');
     });
 
     test('only "ahead" unlocks sitting for the engine', () {

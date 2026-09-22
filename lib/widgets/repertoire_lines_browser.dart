@@ -9,9 +9,9 @@ import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
-import '../models/build_tree_node.dart';
+import '../chess_core/generation/build_tree_node.dart';
 import '../models/repertoire_line.dart';
-import 'package:chess_auto_prep/models/trap_line_info.dart';
+import 'package:chess_auto_prep/chess_core/generation/trap_line_info.dart';
 import '../services/coherence_service.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import '../services/generation/fen_map.dart';
@@ -23,7 +23,8 @@ import '../utils/lines_filter_helpers.dart';
 import 'lines/line_filter_controls.dart';
 import 'lines/line_metrics_panel.dart';
 import 'lines/line_table_layout.dart';
-import 'lines/lines_list_panel.dart';
+import '../design_system/components/empty_state_placeholder.dart';
+import 'lines/line_item_row.dart';
 
 export '../utils/lines_filter_helpers.dart' show CoverageFilter;
 
@@ -252,6 +253,127 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
     _applyFilters();
   }
 
+  /// Renders the current filtered result using the browser's own indexes.
+  Widget _buildList(LineTableLayout layout, {required bool needsCoverageRun}) {
+    final lines = _filteredLines;
+    final inputs = widget;
+    final coverage = _lineCoverage;
+    final metrics = _lineMetrics;
+    final display = _displayIndex;
+    if (needsCoverageRun) {
+      return _CoverageRunPrompt(
+        isCoverageRunning: widget.isCoverageRunning,
+        onRunCoverage: widget.onCoveragePressed,
+        onResetFilters: _resetAllFilters,
+      );
+    }
+
+    if (lines.isEmpty) {
+      return EmptyStatePlaceholder(
+        icon: Icons.search_off,
+        iconSize: 48,
+        title: _hasActiveFilters
+            ? 'No lines match the current filters'
+            : 'No lines in repertoire',
+        trailing: _hasActiveFilters
+            ? TextButton(
+                onPressed: _resetAllFilters,
+                child: const Text('Show all lines'),
+              )
+            : null,
+      );
+    }
+
+    return Column(
+      children: [
+        _buildTableHeader(layout),
+        Expanded(
+          child: ListView.builder(
+            controller: _scrollController,
+            itemCount: lines.length,
+            itemBuilder: (context, index) {
+              final line = lines[index];
+              return LineItemRow(
+                line: line,
+                index: index,
+                layout: layout,
+                currentMoveSequence: inputs.currentMoveSequence,
+                showCoverage: inputs.coverageResult != null,
+                coverageInfo: coverage[line.id],
+                metrics: metrics[line.id],
+                displayTitle: display[line.id]?.title,
+                onLineSelected: inputs.onLineSelected,
+                onLineRenamed: inputs.onLineRenamed,
+                onLineDeleted: inputs.onLineDeleted,
+                onNavigateToPosition: inputs.onNavigateToPosition,
+                navigationStack: inputs.navigationStack,
+                boardPreview: inputs.boardPreview,
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Column headers; click to sort, click again to reverse.
+  Widget _buildTableHeader(LineTableLayout layout) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: const BoxDecoration(
+        color: AppColors.surfaceInset,
+        border: Border(bottom: BorderSide(color: AppColors.outline, width: 1)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _HeaderCell(
+                label: 'Line',
+                sort: LineSortBy.name,
+                active: _sortBy == LineSortBy.name,
+                ascending: _sortAscending,
+                onTap: _onSortChanged,
+              ),
+            ),
+          ),
+          if (layout.showMovesColumn)
+            _fixedCell(LineTableLayout.movesWidth, 'Moves', LineSortBy.moves),
+          _fixedCell(LineTableLayout.easeWidth, 'Ease', LineSortBy.ease),
+          _fixedCell(
+            LineTableLayout.coherenceWidth,
+            'Coherence',
+            LineSortBy.coherence,
+          ),
+          if (layout.showTrapsColumn)
+            _fixedCell(LineTableLayout.trapsWidth, 'Traps', LineSortBy.traps),
+          if (layout.showCoverageColumn)
+            _fixedCell(
+              LineTableLayout.coverageWidth,
+              'Coverage',
+              LineSortBy.coverage,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _fixedCell(double width, String label, LineSortBy sort) {
+    return SizedBox(
+      width: width,
+      child: Center(
+        child: _HeaderCell(
+          label: label,
+          sort: sort,
+          active: _sortBy == sort,
+          ascending: _sortAscending,
+          onTap: _onSortChanged,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
@@ -316,30 +438,7 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
               ),
             ),
             Expanded(
-              child: LinesListPanel(
-                scrollController: _scrollController,
-                filteredLines: _filteredLines,
-                layout: layout,
-                sortBy: _sortBy,
-                sortAscending: _sortAscending,
-                onSortChanged: _onSortChanged,
-                currentMoveSequence: widget.currentMoveSequence,
-                showCoverage: widget.coverageResult != null,
-                lineCoverage: _lineCoverage,
-                lineMetrics: _lineMetrics,
-                displayIndex: _displayIndex,
-                onLineSelected: widget.onLineSelected,
-                onLineRenamed: widget.onLineRenamed,
-                onLineDeleted: widget.onLineDeleted,
-                onNavigateToPosition: widget.onNavigateToPosition,
-                navigationStack: widget.navigationStack,
-                boardPreview: widget.boardPreview,
-                hasActiveFilters: _hasActiveFilters,
-                onResetFilters: _resetAllFilters,
-                needsCoverageRun: needsCoverageRun,
-                isCoverageRunning: widget.isCoverageRunning,
-                onRunCoverage: widget.onCoveragePressed,
-              ),
+              child: _buildList(layout, needsCoverageRun: needsCoverageRun),
             ),
           ],
         );
@@ -414,6 +513,117 @@ class RepertoireLinesBrowserDialog extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _HeaderCell extends StatelessWidget {
+  final String label;
+  final LineSortBy sort;
+  final bool active;
+  final bool ascending;
+  final ValueChanged<LineSortBy> onTap;
+
+  const _HeaderCell({
+    required this.label,
+    required this.sort,
+    required this.active,
+    required this.ascending,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () => onTap(sort),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: active ? FontWeight.w700 : FontWeight.w600,
+                  color: active ? AppColors.ink : AppColors.onSurfaceSoft,
+                ),
+              ),
+            ),
+            if (active)
+              Icon(
+                ascending ? Icons.arrow_drop_up : Icons.arrow_drop_down,
+                size: 16,
+                color: AppColors.ink,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Shown when a coverage status filter is active but coverage was never run.
+class _CoverageRunPrompt extends StatelessWidget {
+  final bool isCoverageRunning;
+  final VoidCallback? onRunCoverage;
+  final VoidCallback onResetFilters;
+
+  const _CoverageRunPrompt({
+    required this.isCoverageRunning,
+    required this.onRunCoverage,
+    required this.onResetFilters,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.analytics_outlined,
+            size: 48,
+            color: AppColors.onSurfaceDim,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            isCoverageRunning
+                ? 'Coverage analysis is running…'
+                : 'Coverage has not been analyzed yet',
+            style: const TextStyle(
+              color: AppColors.onSurfaceSoft,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            isCoverageRunning
+                ? 'Results will appear here when the run finishes.'
+                : 'Run a coverage analysis to see which lines are covered.',
+            style: const TextStyle(
+              color: AppColors.onSurfaceMuted,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (!isCoverageRunning && onRunCoverage != null)
+            FilledButton.icon(
+              onPressed: onRunCoverage,
+              icon: const Icon(Icons.play_arrow, size: 16),
+              label: const Text('Run coverage analysis'),
+            ),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: onResetFilters,
+            child: const Text('Show all lines'),
+          ),
+        ],
       ),
     );
   }

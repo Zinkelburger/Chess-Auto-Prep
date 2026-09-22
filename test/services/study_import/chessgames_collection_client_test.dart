@@ -1,4 +1,5 @@
-import 'package:chess_auto_prep/services/study_import/chessgames_collection_client.dart';
+import 'package:chess_auto_prep/features/studies/models/import_source.dart';
+import 'package:chess_auto_prep/infrastructure/studies/chessgames_collection_client.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Shaped like the real collection page: each game linked twice (thumbnail +

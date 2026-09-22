@@ -8,7 +8,7 @@
 /// multiply, which is exactly FNV's arithmetic.
 library;
 
-import '../eval/eval_canonicalize.dart';
+import '../../chess_core/position/eval_canonicalize.dart';
 
 const int _fnvOffset = -3750763034362895579; // 0xcbf29ce484222325 as signed
 const int _fnvPrime = 1099511628211;

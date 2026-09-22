@@ -25,7 +25,7 @@ Companion docs: [`GAMES_DRIVEN_REPERTOIRE.md`](GAMES_DRIVEN_REPERTOIRE.md)
 
 | Need | Status today |
 |---|---|
-| Download + cache my games (both platforms) | **Exists.** `GamesLibraryService` (`lib/services/games_library/`) — per-(platform, username) PGN cache, 12 h TTL, verified chess.com + Lichess fetchers, `GameSelection` filters. Only consumer so far is the draft flow. |
+| Download + cache my games (both platforms) | **Exists.** `GamesLibraryService` (`lib/services/games_library/`) — per-(platform, username) PGN cache, 12 h TTL, verified chess.com + Lichess fetchers, `GameSelection` filters. A fetch that fails (offline, 429, outage) is answered from that cache however stale, including under `forceRefresh`; `onStaleCache` reports it and only a player with no cache at all propagates the error. |
 | Per-game metadata (players, ratings, result, date, speed) | **Exists** via `GameRecord` (`game_filter.dart`) + PGN headers. Missing: move count (trivial to compute), accuracy (not fetched anywhere). |
 | Full game review (blunders, eval graph, ACPL) | **Exists.** `GameAnalysisController.analyzeGame()` — batch engine pass, Lichess-style win%-swing classification (0.30/0.20/0.10), Maia "interesting" moves, `[%eval]` persistence + zero-engine cached restore on every game switch. |
 | 0–100 accuracy score | **Missing.** Only ACPL + classification counts exist. All ingredients (per-move win chances) already computed. |
@@ -33,7 +33,7 @@ Companion docs: [`GAMES_DRIVEN_REPERTOIRE.md`](GAMES_DRIVEN_REPERTOIRE.md)
 | Game-vs-repertoire deviation | **Partial.** `RepertoireDiff` (`lib/services/games_repertoire/repertoire_diff.dart`) classifies my-deviation / opponent-deviation / beyond-book — but only on an *aggregate* `OpeningTree`; per-game attribution ("you left book at move 12 of THIS game") does not exist. Strict SAN-prefix matching, no transpositions. |
 | Deep link into the repertoire at a line | **Exists.** `AppState.switchToBuilder(repertoirePath, lineId, moveSequence)` → `OpenBuilder` handoff → `navigateToLineMove` (same mechanism audit findings use). |
 | "My White repertoire / my Black repertoire" designation | **Missing.** Files carry `// Color:` but nothing says "this is *mine*". No repertoire path is persisted anywhere. |
-| App navigation history | **Missing.** Six `AppMode`s in an `IndexedStack`, switched via `AppState.setMode`/`handOff` (take-once `PendingHandoff`), 12 existing cross-screen handoffs, zero history. Note: `lib/core/navigation_stack.dart` + `lib/widgets/navigation_trail.dart` are an existing (currently dead/board-position-scoped) stack + chip-trail pair — right *shape*, wrong *scope*. |
+| App navigation history | **Missing.** Six `AppMode`s in an `IndexedStack`, switched via `AppState.setMode`/`handOff` (take-once `PendingHandoff`), 12 existing cross-screen handoffs, zero history. Note: `lib/core/navigation_stack.dart` tracks board positions rather than app destinations. Its unused chip-trail widget has been retired. |
 
 The project is therefore mostly **wiring existing engines to a new front
 door**, not building new infrastructure.

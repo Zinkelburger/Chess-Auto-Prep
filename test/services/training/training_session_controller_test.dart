@@ -1,12 +1,15 @@
+import '../../support/generation_artifacts_fixture.dart';
+import 'package:chess_auto_prep/app/training_dependencies.dart';
+import 'package:chess_auto_prep/features/repertoires/controllers/repertoire_board_controller.dart';
 import 'dart:io';
 
 import 'package:chess_auto_prep/models/repertoire_line.dart';
-import 'package:chess_auto_prep/models/repertoire_metadata.dart';
+import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
 import 'package:chess_auto_prep/models/repertoire_move_progress.dart';
 import 'package:chess_auto_prep/models/repertoire_review_entry.dart';
-import 'package:chess_auto_prep/models/training_settings.dart';
-import 'package:chess_auto_prep/services/training/training_phase.dart';
-import 'package:chess_auto_prep/services/training/training_session_controller.dart';
+import 'package:chess_auto_prep/features/training/models/training_settings.dart';
+import 'package:chess_auto_prep/features/training/models/training_phase.dart';
+import 'package:chess_auto_prep/features/training/controllers/training_session_controller.dart';
 import 'package:dartchess/dartchess.dart' hide File;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
@@ -34,10 +37,15 @@ void main() {
   });
 
   TrainingSessionController buildController() {
-    return TrainingSessionController(
-      repertoireService: repService,
-      reviewService: reviewService,
-    )..settings = fastSettings();
+    return createTrainingSession(
+        artifacts: generationArtifactsFixture().repository,
+        configuration: createTrainingSettings(),
+        session: RepertoireBoardController(),
+        repertoireService: repService,
+        reviewService: reviewService,
+      )
+      ..settings = fastSettings()
+      ..isLoading = false;
   }
 
   String repPath() => '${tempDir.path}/rep.pgn';
@@ -221,7 +229,7 @@ void main() {
     });
 
     test('no repertoire set is a no-op', () async {
-      final controller = buildController();
+      final controller = buildController()..isLoading = true;
       await controller.loadRepertoire();
       expect(controller.isLoading, isTrue, reason: 'untouched initial state');
       controller.dispose();
@@ -340,13 +348,15 @@ void main() {
         'line names', () async {
       final controller = await loadedController();
 
-      controller.settings.chapterGrouping = ChapterGroupingMode.off;
+      controller.settings = controller.settings
+        ..chapterGrouping = ChapterGroupingMode.off;
       expect(controller.chapters, isEmpty);
       expect(controller.chapterOf(controller.lines.first), isNull);
 
       // Names are 'Line A' / 'Line B' / 'Line C' — prefix before 'A' etc.
-      controller.settings.chapterGrouping = ChapterGroupingMode.namePrefix;
-      controller.settings.chapterDelimiter = 'A';
+      controller.settings = controller.settings
+        ..chapterGrouping = ChapterGroupingMode.namePrefix;
+      controller.settings = controller.settings..chapterDelimiter = 'A';
       expect(controller.chapterOf(controller.lines.first), 'Line');
       controller.dispose();
     });
@@ -395,6 +405,7 @@ void main() {
       final controller = buildController()..setRepertoire(meta());
       final line = fakeLine('D', ['e4', 'e5', 'Nf3', 'Nc6']);
       controller.lines = [line];
+      controller.isLoading = false;
       // reviewed → drilling
       controller.reviewMap['D'] = fakeEntry(repPath(), 'D');
 
@@ -459,6 +470,7 @@ void main() {
         final controller = buildController();
         final line = fakeLine('O', ['e4', 'e5']);
         controller.lines = [line];
+        controller.isLoading = false;
         controller.reviewMap['O'] = fakeEntry('', 'O');
 
         controller.startLine(line);
@@ -487,6 +499,7 @@ void main() {
         final controller = buildController();
         final line = fakeLine('L', ['e4', 'e5']);
         controller.lines = [line];
+        controller.isLoading = false;
         // No review entry → the line is new → learning phase.
 
         controller.startLine(line);
@@ -527,6 +540,7 @@ void main() {
       final controller = buildController();
       final line = fakeLine('M', ['e4', 'e5'], comments: {'1': 'Classic'});
       controller.lines = [line];
+      controller.isLoading = false;
 
       controller.startLine(line);
       await waitFor(() => controller.learnWaitingForAck);
@@ -553,6 +567,7 @@ void main() {
       final controller = buildController();
       final line = fakeLine('N', ['e4', 'e5', 'Nf3']);
       controller.lines = [line];
+      controller.isLoading = false;
 
       controller.startLine(line);
       await waitFor(() => controller.learnWaitingForAck);
@@ -583,6 +598,7 @@ void main() {
         comments: {'1': 'Classic'},
       );
       controller.lines = [line];
+      controller.isLoading = false;
 
       controller.startLine(line);
       await waitFor(() => controller.learnWaitingForAck);
@@ -607,6 +623,7 @@ void main() {
         ..learnDelaySec = 1;
       final line = fakeLine('R', ['e4', 'e5']);
       controller.lines = [line];
+      controller.isLoading = false;
 
       controller.startLine(line);
       // No Next gate in auto mode: the move shows, then the quiz follows on
@@ -640,6 +657,7 @@ void main() {
       // … and then an ordinary line from move one.
       final line = fakeLine('Q', ['d4', 'd5']);
       controller.lines = [puzzle, line];
+      controller.isLoading = false;
 
       controller.startLine(puzzle);
       await waitFor(() => controller.learnWaitingForAck);
@@ -665,25 +683,34 @@ void main() {
       final controller = buildController();
       final line = fakeLine('S', ['e4']);
       controller.lines = [line];
+      controller.isLoading = false;
       controller.reviewMap['S'] = fakeEntry('', 'S');
       controller.startLine(line);
       await waitFor(() => controller.waitingForUser);
 
+      controller.startLine(line);
       controller.lineHadMistake = false;
+      controller.phase = TrainingPhase.finished;
       await controller.rateLine(ReviewRating.good);
+      controller.startLine(line);
       controller.lineHadMistake = false;
+      controller.phase = TrainingPhase.finished;
       await controller.rateLine(ReviewRating.good);
       expect(controller.sessionCorrect, 2);
       expect(controller.sessionStreak, 2);
       expect(controller.sessionBestStreak, 2);
 
+      controller.startLine(line);
       controller.lineHadMistake = true;
+      controller.phase = TrainingPhase.finished;
       await controller.rateLine(ReviewRating.good);
       expect(controller.sessionIncorrect, 1);
       expect(controller.sessionStreak, 0, reason: 'mistake resets the streak');
       expect(controller.sessionBestStreak, 2, reason: 'best streak survives');
 
+      controller.startLine(line);
       controller.lineHadMistake = false;
+      controller.phase = TrainingPhase.finished;
       await controller.rateLine(ReviewRating.good);
       expect(controller.sessionCorrect, 3);
       expect(controller.sessionStreak, 1);
@@ -697,6 +724,7 @@ void main() {
       final controller = buildController()
         ..settings = fastSettings(correctStreakThreshold: 2);
       final line = fakeLine('X', ['e4']);
+      controller.lines = [line];
 
       controller.updateMoveProgress(line, 0, wasCorrect: true);
       expect(controller.moveProgressMap['X:0']!.correctStreak, 1);
@@ -719,6 +747,7 @@ void main() {
       final controller = buildController();
       final line = fakeLine('T', ['e4', 'e5']);
       controller.lines = [line];
+      controller.isLoading = false;
       // No review entry → the line is "new", but tactics mode must not
       // reveal the solution via the learn walkthrough.
       controller.trainingMode = TrainingMode.tactics;
@@ -733,14 +762,14 @@ void main() {
 
     test('tactics mode never auto-plays intro moves', () async {
       final controller = buildController()
-        ..settings = fastSettings()
-        ..settings.skipToFirstComment = true;
+        ..settings = (fastSettings()..skipToFirstComment = true);
       final line = fakeLine(
         'T2',
         ['e4', 'e5', 'Nf3'],
         comments: {'2': 'The point.'},
       );
       controller.lines = [line];
+      controller.isLoading = false;
       controller.reviewMap['T2'] = fakeEntry('', 'T2');
 
       // Repertoire mode skips ahead to the first commented move…
@@ -765,6 +794,7 @@ void main() {
         comments: {'2': 'Find it. [%tstart]'},
       );
       controller.lines = [line];
+      controller.isLoading = false;
       controller.reviewMap['M1'] = fakeEntry('', 'M1');
       controller.trainingMode = TrainingMode.tactics;
 
@@ -785,6 +815,7 @@ void main() {
         comments: {'1': '[%tend]'},
       );
       controller.lines = [line];
+      controller.isLoading = false;
       controller.reviewMap['M2'] = fakeEntry('', 'M2');
 
       controller.startLine(line);
@@ -794,13 +825,14 @@ void main() {
 
     test('a marker past the training-depth clamp is ignored', () {
       final controller = buildController()..settings = fastSettings();
-      controller.settings.trainingDepth = 2;
+      controller.settings = controller.settings..trainingDepth = 2;
       final line = fakeLine(
         'M3',
         ['e4', 'e5', 'Nf3', 'Nc6'],
         comments: {'3': '[%tstart]'},
       );
       controller.lines = [line];
+      controller.isLoading = false;
       controller.reviewMap['M3'] = fakeEntry('', 'M3');
 
       controller.startLine(line);
@@ -849,7 +881,7 @@ void main() {
       await waitFor(() => controller.waitingForUser);
 
       await controller.handleUserMove(fakeMove(uci: 'e2e4', san: 'e4'));
-      await waitFor(() => controller.phase == TrainingPhase.finished);
+      await waitFor(() => controller.completionCommitted);
       expect(controller.feedback, 'Puzzle solved!');
 
       // The finished line left the queue; stats recorded, no scheduling.
@@ -880,7 +912,7 @@ void main() {
       await waitFor(() => controller.waitingForUser);
       expect(controller.currentLine!.id, 'B');
       await controller.handleUserMove(fakeMove(uci: 'd2d4', san: 'd4'));
-      await waitFor(() => controller.phase == TrainingPhase.finished);
+      await waitFor(() => controller.completionCommitted);
       expect(controller.dueQueue, isEmpty);
 
       controller.nextLine();
@@ -900,7 +932,7 @@ void main() {
       await waitFor(() => controller.waitingForUser);
 
       await controller.handleUserMove(fakeMove(uci: 'd2d4', san: 'd4'));
-      await waitFor(() => controller.phase == TrainingPhase.finished);
+      await waitFor(() => controller.completionCommitted);
       expect(controller.feedback, 'Solved — with mistakes.');
       await waitFor(() => reviewService.history.length == 1);
       expect(controller.reviewMap['A']!.failCount, 1);
@@ -921,7 +953,7 @@ void main() {
       await waitFor(() => controller.waitingForUser);
 
       await controller.handleUserMove(fakeMove(uci: 'e2e4', san: 'e4'));
-      await waitFor(() => controller.phase == TrainingPhase.finished);
+      await waitFor(() => controller.completionCommitted);
 
       await controller.rateLine(ReviewRating.good);
       expect(controller.currentLine!.id, 'B');
@@ -1146,6 +1178,7 @@ void main() {
 
         // "Again" leaves A due now — it is no longer *untrained*, so the strict
         // intent match would have dropped it from the run.
+        controller.phase = TrainingPhase.finished;
         await controller.rateLine(ReviewRating.again);
         controller.rebuildQueueAndAdvance();
         expect(controller.currentLine!.id, 'B');
@@ -1299,6 +1332,7 @@ void main() {
       final controller = buildController();
       final line = fakeLine('D', ['e4', 'e5', 'Nf3']);
       controller.lines = [line];
+      controller.isLoading = false;
       controller.reviewMap['D'] = fakeEntry('', 'D');
 
       controller.startLine(line);

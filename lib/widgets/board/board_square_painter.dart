@@ -7,9 +7,11 @@ import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 
 /// Board squares are painted once, with any tint composited into their colour.
-/// Selection wins over explicit highlights, which win over recent-move tints.
-/// Legal destinations are independent dots (empty) or inset rings (occupied).
-/// No highlight changes layout, draws a square border, or blends with siblings.
+/// Selection wins over explicit highlights, which win over legal destinations,
+/// which win over recent-move tints. Every kind of square feedback is a tint:
+/// nothing is drawn on top of the board, so no marker can hide a piece or
+/// compete with it for attention. No highlight changes layout, draws a square
+/// border, or blends with siblings.
 class BoardSquarePainter extends CustomPainter {
   BoardSquarePainter({
     this.flipped = false,
@@ -17,19 +19,16 @@ class BoardSquarePainter extends CustomPainter {
     Set<String> highlightedSquares = const {},
     Set<String> recentMoveSquares = const {},
     Set<String> legalMoveSquares = const {},
-    Set<String> occupiedSquares = const {},
     this.outlineWidth = 2,
   }) : highlightedSquares = Set.unmodifiable(highlightedSquares),
        recentMoveSquares = Set.unmodifiable(recentMoveSquares),
-       legalMoveSquares = Set.unmodifiable(legalMoveSquares),
-       occupiedSquares = Set.unmodifiable(occupiedSquares);
+       legalMoveSquares = Set.unmodifiable(legalMoveSquares);
 
   final bool flipped;
   final String? selectedSquare;
   final Set<String> highlightedSquares;
   final Set<String> recentMoveSquares;
   final Set<String> legalMoveSquares;
-  final Set<String> occupiedSquares;
 
   /// The board's permanent outer frame, independent of square feedback.
   final double outlineWidth;
@@ -46,7 +45,6 @@ class BoardSquarePainter extends CustomPainter {
     // Adjacent rectangles must own the same raster boundary at fractional
     // sizes. Antialiasing individual tiles produces hairline seams.
     final tilePaint = Paint()..isAntiAlias = false;
-    final markerPaint = Paint()..color = AppColors.boardLegalMove;
     for (var file = 0; file < 8; file++) {
       for (var rank = 0; rank < 8; rank++) {
         final square = '${String.fromCharCode(97 + file)}${rank + 1}';
@@ -66,6 +64,8 @@ class BoardSquarePainter extends CustomPainter {
           tint = AppColors.boardSelected;
         } else if (highlightedSquares.contains(square)) {
           tint = AppColors.boardHighlight;
+        } else if (legalMoveSquares.contains(square)) {
+          tint = AppColors.boardLegalMove;
         } else if (recentMoveSquares.contains(square)) {
           tint = AppColors.boardRecentMove;
         } else {
@@ -73,18 +73,6 @@ class BoardSquarePainter extends CustomPainter {
         }
         tilePaint.color = tint == null ? base : Color.alphaBlend(tint, base);
         canvas.drawRect(rect, tilePaint);
-
-        if (square != selectedSquare && legalMoveSquares.contains(square)) {
-          final occupied = occupiedSquares.contains(square);
-          markerPaint
-            ..style = occupied ? PaintingStyle.stroke : PaintingStyle.fill
-            ..strokeWidth = side * 0.065;
-          canvas.drawCircle(
-            rect.center,
-            side * (occupied ? 0.43 : 0.14),
-            markerPaint,
-          );
-        }
       }
     }
     if (outlineWidth > 0) {
@@ -105,6 +93,5 @@ class BoardSquarePainter extends CustomPainter {
       outlineWidth != old.outlineWidth ||
       !setEquals(highlightedSquares, old.highlightedSquares) ||
       !setEquals(recentMoveSquares, old.recentMoveSquares) ||
-      !setEquals(legalMoveSquares, old.legalMoveSquares) ||
-      !setEquals(occupiedSquares, old.occupiedSquares);
+      !setEquals(legalMoveSquares, old.legalMoveSquares);
 }

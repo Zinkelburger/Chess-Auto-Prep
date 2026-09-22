@@ -2,8 +2,8 @@
 library;
 
 import 'package:flutter/material.dart';
-import '../../theme/app_colors.dart';
-import '../../theme/app_text_styles.dart';
+import '../../l10n/generated/app_localizations.dart';
+import '../../design_system/theme/app_typography.dart';
 
 class PgnSaveStatus extends StatelessWidget {
   const PgnSaveStatus({
@@ -23,26 +23,27 @@ class PgnSaveStatus extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final failed = error != null && dirty;
     final String label;
     final String explanation;
     if (failed) {
-      label = 'Not saved';
+      label = l10n.generationRecoveryNotSaved;
       explanation = error!;
     } else if (filePath == null) {
-      label = 'Not saved to a file';
-      explanation = 'Use Save as… to choose a PGN file.';
+      label = l10n.pgnNotSavedFile;
+      explanation = l10n.pgnChooseSaveFile;
     } else if (saving || (autoSave && dirty)) {
-      label = 'Saving…';
-      explanation = 'Saving changes to $filePath';
+      label = l10n.documentSaving;
+      explanation = l10n.pgnSavingPath(filePath!);
     } else if (dirty) {
-      label = 'Unsaved changes';
-      explanation = 'Autosave is off. Use Save to write changes to $filePath';
+      label = l10n.documentDirty;
+      explanation = l10n.pgnManualSavePath(filePath!);
     } else {
-      label = autoSave ? 'Autosave on · Saved' : 'Autosave off · Saved';
+      label = autoSave ? l10n.pgnAutoSaved : l10n.pgnManualSaved;
       explanation = autoSave
-          ? 'Changes save automatically to $filePath'
-          : 'Changes need a manual save to $filePath';
+          ? l10n.pgnAutoSavePath(filePath!)
+          : l10n.pgnNeedsManualSavePath(filePath!);
     }
     return SizedBox(
       width: 150,
@@ -52,8 +53,10 @@ class PgnSaveStatus extends StatelessWidget {
           label,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: AppTextStyles.caption.copyWith(
-            color: failed ? AppColors.danger : AppColors.onSurfaceMuted,
+          style: AppTypography.caption(context).copyWith(
+            color: failed
+                ? Theme.of(context).colorScheme.error
+                : Theme.of(context).colorScheme.onSurfaceVariant,
           ),
         ),
       ),

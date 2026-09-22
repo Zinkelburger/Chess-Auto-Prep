@@ -1,7 +1,10 @@
+import 'dart:async';
+import 'package:chess_auto_prep/features/settings/controllers/eval_database_settings.dart';
+import 'package:chess_auto_prep/features/settings/models/eval_database_configuration.dart';
+import '../../support/runtime_settings.dart';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:chess_auto_prep/models/eval_database_settings.dart';
 import 'package:chess_auto_prep/services/eval/lichess_eval_controller.dart';
 import 'package:chess_auto_prep/services/eval/lichess_eval_source.dart';
 import 'package:chess_auto_prep/services/eval/lichess_eval_store.dart';
@@ -49,6 +52,8 @@ void main() {
   // The test binding otherwise answers every socket with an empty 400.
   setUpAll(() => HttpOverrides.global = null);
 
+  late MemorySettingsSection<EvalDatabaseConfiguration> settingsStorage;
+  late EvalDatabaseSettings settings;
   late Directory tmp;
   late _FakeLichess server;
   late Uint8List archive;
@@ -61,6 +66,9 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    settingsStorage = MemorySettingsSection(EvalDatabaseConfiguration());
+    settings = EvalDatabaseSettings(settingsStorage);
+    await settings.ensureLoaded();
     tmp = await Directory.systemTemp.createTemp('lichess_ctrl');
     final jsonl = [
       for (var i = 0; i < fens.length; i++)
@@ -72,11 +80,13 @@ void main() {
   });
 
   tearDown(() async {
+    settings.dispose();
     await server.stop();
     if (await tmp.exists()) await tmp.delete(recursive: true);
   });
 
   LichessEvalController controller() => LichessEvalController(
+    settings: settings,
     source: LichessEvalSource(
       client: MockClient((request) async {
         if (request.method == 'HEAD') {
@@ -122,10 +132,36 @@ void main() {
     await store.close();
 
     // And the setting now points at it, switched on.
-    expect(EvalDatabaseSettings.instance.lichessEvalsPath, c.storeDirectory);
-    expect(EvalDatabaseSettings.instance.enableLichessEvals, isTrue);
+    expect(settings.committed.lichessEvalsPath, c.storeDirectory);
+    expect(settings.committed.enableLichessEvals, isTrue);
     c.dispose();
   });
+
+  test(
+    'activation failure retains imported store and retries only settings',
+    () async {
+      final c = controller();
+      final info = await c.refreshSource();
+      await c.prepare(info: info, parentDir: tmp.path);
+      settingsStorage.failure = StateError('settings unavailable');
+
+      await c.start();
+
+      expect(c.phase, LichessEvalPhase.complete);
+      expect(c.isReady, isTrue);
+      expect(c.error, isNull);
+      expect(settings.state.error, isNotNull);
+      expect(settings.committed.enableLichessEvals, isFalse);
+      expect(server.ranges, [null]);
+      settingsStorage.failure = null;
+      await settings.retry();
+      expect(settings.committed.enableLichessEvals, isTrue);
+      expect(settings.committed.lichessEvalsPath, c.storeDirectory);
+      expect(server.ranges, [null]);
+      await c.close();
+      c.dispose();
+    },
+  );
 
   test('a half-finished download resumes rather than restarting', () async {
     final c = controller();
@@ -191,10 +227,67 @@ void main() {
     expect(await Directory(directory).exists(), isFalse);
     expect(c.phase, LichessEvalPhase.idle);
     expect(c.isReady, isFalse);
-    expect(EvalDatabaseSettings.instance.enableLichessEvals, isFalse);
-    expect(EvalDatabaseSettings.instance.lichessEvalsPath, '');
+    expect(settings.committed.enableLichessEvals, isFalse);
+    expect(settings.committed.lichessEvalsPath, '');
     c.dispose();
   });
+
+  test('close drains a delayed probe without publishing its result', () async {
+    final requested = Completer<void>();
+    final release = Completer<void>();
+    final c = LichessEvalController(
+      settings: settings,
+      source: LichessEvalSource(
+        client: MockClient((request) async {
+          if (request.method == 'HEAD') {
+            requested.complete();
+            await release.future;
+            return http.Response('', 200, headers: {'content-length': '100'});
+          }
+          return http.Response('', 200);
+        }),
+      ),
+    );
+    final probing = c.refreshSource();
+    await requested.future;
+    final closing = c.close();
+    c.dispose();
+    release.complete();
+    await probing;
+    await closing;
+    expect(c.info, isNull);
+    expect(settingsStorage.writes, isEmpty);
+    expect(c.phase, LichessEvalPhase.idle);
+  });
+
+  test(
+    'failed deletion retains store and later deletion preserves selection B',
+    () async {
+      final c = controller();
+      final info = await c.refreshSource();
+      await c.prepare(info: info, parentDir: tmp.path);
+      await c.start();
+      final directory = c.storeDirectory!;
+      settingsStorage.failure = StateError('preferences unavailable');
+
+      await expectLater(c.deleteEverything(), throwsStateError);
+      expect(await Directory(directory).exists(), isTrue);
+      expect(c.isReady, isTrue);
+      expect(c.error, contains('preferences unavailable'));
+      expect(settings.committed.lichessEvalsPath, directory);
+
+      settingsStorage.failure = null;
+      await settings.configureLichessDirectory('/selected/B');
+      await c.deleteEverything();
+      expect(await Directory(directory).exists(), isFalse);
+      expect(settings.committed.lichessEvalsPath, '/selected/B');
+      expect(settings.committed.enableLichessEvals, isTrue);
+      await settings.retry();
+      expect(settings.committed.lichessEvalsPath, '/selected/B');
+      await c.close();
+      c.dispose();
+    },
+  );
 
   test('the quoted cost is the peak, not the download size', () async {
     final c = controller();

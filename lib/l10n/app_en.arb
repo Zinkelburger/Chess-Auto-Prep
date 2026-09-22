@@ -1,0 +1,2645 @@
+{
+  "trainingReloadProgress": "Reload saved progress",
+  "@trainingReloadProgress": {
+    "description": "Recovery action after a possibly partial training progress write."
+  },
+  "@trainingProgressPartial": {
+    "description": "Explains partial progress persistence without promising replay or rollback."
+  },
+  "trainingProgressPartial": "Training progress may be partly saved. Reload saved progress before training again. History and PGN updates may be incomplete. Reloading does not retry the changes.",
+  "@@locale": "en",
+  "cancel": "Cancel",
+  "@cancel": {
+    "description": "Study and PGN control: cancel"
+  },
+  "retry": "Retry",
+  "@retry": {
+    "description": "Repertoire catalog: retry"
+  },
+  "refresh": "Refresh",
+  "@refresh": {
+    "description": "Repertoire catalog: refresh"
+  },
+  "restore": "Restore",
+  "@restore": {
+    "description": "Repertoire catalog: restore"
+  },
+  "delete": "Delete",
+  "@delete": {
+    "description": "Study and PGN control: delete"
+  },
+  "rename": "Rename",
+  "@rename": {
+    "description": "Repertoire catalog: rename"
+  },
+  "importPgn": "Import PGN",
+  "@importPgn": {
+    "description": "Repertoire catalog: importPgn"
+  },
+  "importAction": "Import",
+  "@importAction": {
+    "description": "Study and PGN control: importAction"
+  },
+  "importing": "Importing…",
+  "@importing": {
+    "description": "Repertoire catalog: importing"
+  },
+  "working": "Working…",
+  "@working": {
+    "description": "Repertoire catalog: working"
+  },
+  "white": "White",
+  "@white": {
+    "description": "Visible label for the White side; stored PGN values remain canonical."
+  },
+  "black": "Black",
+  "@black": {
+    "description": "Visible label for the Black side; stored PGN values remain canonical."
+  },
+  "openPgnFile": "Open PGN file…",
+  "@openPgnFile": {
+    "description": "Repertoire catalog: openPgnFile"
+  },
+  "pastePgn": "Paste PGN",
+  "@pastePgn": {
+    "description": "Repertoire catalog: pastePgn"
+  },
+  "clearSearch": "Clear search",
+  "@clearSearch": {
+    "description": "Repertoire catalog: clearSearch"
+  },
+  "createRepertoire": "Create repertoire",
+  "@createRepertoire": {
+    "description": "Repertoire catalog: createRepertoire"
+  },
+  "createNewRepertoire": "Create new repertoire",
+  "@createNewRepertoire": {
+    "description": "Repertoire catalog: createNewRepertoire"
+  },
+  "creationHeading": "Bring your lines. Start training.",
+  "@creationHeading": {
+    "description": "Repertoire catalog: creationHeading"
+  },
+  "repertoireName": "Repertoire name",
+  "@repertoireName": {
+    "description": "Repertoire catalog: repertoireName"
+  },
+  "repertoireNameHint": "My Sicilian",
+  "@repertoireNameHint": {
+    "description": "Repertoire catalog: repertoireNameHint"
+  },
+  "playingSide": "Playing side",
+  "@playingSide": {
+    "description": "Repertoire catalog: playingSide"
+  },
+  "emptyRepertoire": "Empty repertoire",
+  "@emptyRepertoire": {
+    "description": "Repertoire catalog: emptyRepertoire"
+  },
+  "emptyRepertoireHelp": "Create a place for chapters and lines. Add moves before training.",
+  "@emptyRepertoireHelp": {
+    "description": "Repertoire catalog: emptyRepertoireHelp"
+  },
+  "pgnMoves": "PGN moves",
+  "@pgnMoves": {
+    "description": "Repertoire catalog: pgnMoves"
+  },
+  "pgnPasteHint": "Paste your PGN here",
+  "@pgnPasteHint": {
+    "description": "Repertoire catalog: pgnPasteHint"
+  },
+  "pgnExample": "1. e4 e5 2. Nf3 Nc6…",
+  "@pgnExample": {
+    "description": "PGN example; preserve canonical SAN notation and moves."
+  },
+  "pasteHelp": "Add your moves now. You can rename the repertoire later.",
+  "@pasteHelp": {
+    "description": "Repertoire catalog: pasteHelp"
+  },
+  "fileReadFailed": "Could not read that file.",
+  "@fileReadFailed": {
+    "description": "Repertoire catalog: fileReadFailed"
+  },
+  "fileOpenFailed": "Could not open that file. Try again.",
+  "@fileOpenFailed": {
+    "description": "Repertoire catalog: fileOpenFailed"
+  },
+  "creationNeedsMoves": "Open or paste a PGN with moves to train.",
+  "@creationNeedsMoves": {
+    "description": "Repertoire catalog: creationNeedsMoves"
+  },
+  "importNeedsMoves": "That PGN has no moves to train.",
+  "@importNeedsMoves": {
+    "description": "Repertoire catalog: importNeedsMoves"
+  },
+  "pasteNeedsMoves": "Paste PGN with moves to train.",
+  "@pasteNeedsMoves": {
+    "description": "Repertoire catalog: pasteNeedsMoves"
+  },
+  "creationFailed": "Could not create the repertoire. Your input is still here; try again.",
+  "@creationFailed": {
+    "description": "Repertoire catalog: creationFailed"
+  },
+  "importFailed": "Could not import the repertoire. Please try again.",
+  "@importFailed": {
+    "description": "Repertoire catalog: importFailed"
+  },
+  "pasteFailed": "Could not import. Your PGN is still here; try again.",
+  "@pasteFailed": {
+    "description": "Repertoire catalog: pasteFailed"
+  },
+  "repertoireExists": "A repertoire named \"{name}\" already exists.",
+  "@repertoireExists": {
+    "description": "Repertoire catalog: repertoireExists",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "creationUncertain": "The file may already be saved. Keep this draft and reload the library before retrying.",
+  "@creationUncertain": {
+    "description": "Repertoire catalog: creationUncertain"
+  },
+  "preparationFailed": "Import preparation failed. No repertoire was published. Keep this draft and retry.",
+  "@preparationFailed": {
+    "description": "Repertoire catalog: preparationFailed"
+  },
+  "recoveryRequired": "The folder may have moved, but its references could not be confirmed. Reload the library to recover this operation before making another change.",
+  "@recoveryRequired": {
+    "description": "Repertoire catalog: recoveryRequired"
+  },
+  "catalogLoadFailed": "Could not load repertoires. Please try again.",
+  "@catalogLoadFailed": {
+    "description": "Repertoire catalog: catalogLoadFailed"
+  },
+  "recoverLibrary": "Recover library",
+  "@recoverLibrary": {
+    "description": "Repertoire catalog: recoverLibrary"
+  },
+  "restoreFailed": "Restore failed. Your recovery files are retained. Refresh the list or choose another name.",
+  "@restoreFailed": {
+    "description": "Repertoire catalog: restoreFailed"
+  },
+  "recoveryEmpty": "Recovery is empty",
+  "@recoveryEmpty": {
+    "description": "Repertoire catalog: recoveryEmpty"
+  },
+  "recoveryEmptyHelp": "Deleted repertoires will appear here.",
+  "@recoveryEmptyHelp": {
+    "description": "Repertoire catalog: recoveryEmptyHelp"
+  },
+  "recoveryFilesChanged": "Recovery files are missing or changed",
+  "@recoveryFilesChanged": {
+    "description": "Repertoire catalog: recoveryFilesChanged"
+  },
+  "deletedAt": "Deleted {time}",
+  "@deletedAt": {
+    "description": "Repertoire catalog: deletedAt",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "catalogEmpty": "No repertoires yet",
+  "@catalogEmpty": {
+    "description": "Repertoire catalog: catalogEmpty"
+  },
+  "catalogEmptyHelp": "Open a PGN file or create a repertoire to get started.",
+  "@catalogEmptyHelp": {
+    "description": "Repertoire catalog: catalogEmptyHelp"
+  },
+  "nothingMatches": "Nothing matches \"{query}\".",
+  "@nothingMatches": {
+    "description": "Repertoire catalog: nothingMatches",
+    "placeholders": {
+      "query": {
+        "type": "String"
+      }
+    }
+  },
+  "repertoires": "Repertoires",
+  "@repertoires": {
+    "description": "Repertoire catalog: repertoires"
+  },
+  "studiesTactics": "Studies — custom tactics",
+  "@studiesTactics": {
+    "description": "Repertoire catalog: studiesTactics"
+  },
+  "repertoireRecovery": "Repertoire recovery",
+  "@repertoireRecovery": {
+    "description": "Repertoire catalog: repertoireRecovery"
+  },
+  "yourRepertoires": "Your repertoires",
+  "@yourRepertoires": {
+    "description": "Repertoire catalog: yourRepertoires"
+  },
+  "backToLibrary": "Back to library",
+  "@backToLibrary": {
+    "description": "Repertoire catalog: backToLibrary"
+  },
+  "recovery": "Recovery",
+  "@recovery": {
+    "description": "Repertoire catalog: recovery"
+  },
+  "searchRepertoires": "Search repertoires",
+  "@searchRepertoires": {
+    "description": "Repertoire catalog: searchRepertoires"
+  },
+  "chapterCount": "{count, plural, =1{1 chapter} other{{count} chapters}}",
+  "@chapterCount": {
+    "description": "Repertoire catalog: chapterCount",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "repertoireDetails": "{chapters} · Modified {time}",
+  "@repertoireDetails": {
+    "description": "Repertoire catalog: repertoireDetails",
+    "placeholders": {
+      "chapters": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "browseChapters": "Browse chapters",
+  "@browseChapters": {
+    "description": "Repertoire catalog: browseChapters"
+  },
+  "renameRepertoire": "Rename repertoire",
+  "@renameRepertoire": {
+    "description": "Repertoire catalog: renameRepertoire"
+  },
+  "deleteRepertoire": "Delete repertoire",
+  "@deleteRepertoire": {
+    "description": "Repertoire catalog: deleteRepertoire"
+  },
+  "createdRepertoire": "Created “{name}”. Add moves before training.",
+  "@createdRepertoire": {
+    "description": "Repertoire catalog: createdRepertoire",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "importedRepertoire": "Imported “{name}”. Rename it from your repertoire list.",
+  "@importedRepertoire": {
+    "description": "Repertoire catalog: importedRepertoire",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "restoreRepertoire": "Restore repertoire",
+  "@restoreRepertoire": {
+    "description": "Repertoire catalog: restoreRepertoire"
+  },
+  "restoreNamePrompt": "Choose a name for the restored repertoire:",
+  "@restoreNamePrompt": {
+    "description": "Repertoire catalog: restoreNamePrompt"
+  },
+  "duplicateRepertoireName": "A repertoire with this name already exists.",
+  "@duplicateRepertoireName": {
+    "description": "Repertoire catalog: duplicateRepertoireName"
+  },
+  "deleteRepertoirePrompt": "Delete repertoire \"{name}\"?",
+  "@deleteRepertoirePrompt": {
+    "description": "Repertoire catalog: deleteRepertoirePrompt",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteRepertoireHelp": "Its files and training history will be kept. Restore it from Recovery in the library.",
+  "@deleteRepertoireHelp": {
+    "description": "Repertoire catalog: deleteRepertoireHelp"
+  },
+  "deleteLegacyRepertoireHelp": "Its files will be moved to Chess Auto Prep recovery trash.",
+  "@deleteLegacyRepertoireHelp": {
+    "description": "Repertoire catalog: deleteLegacyRepertoireHelp"
+  },
+  "deleteRepertoireFailed": "Could not delete repertoire.",
+  "@deleteRepertoireFailed": {
+    "description": "Repertoire catalog: deleteRepertoireFailed"
+  },
+  "renameRepertoirePrompt": "Enter new name for the repertoire:",
+  "@renameRepertoirePrompt": {
+    "description": "Repertoire catalog: renameRepertoirePrompt"
+  },
+  "renameRepertoireFailed": "Could not rename repertoire.",
+  "@renameRepertoireFailed": {
+    "description": "Repertoire catalog: renameRepertoireFailed"
+  },
+  "nameRequired": "Please enter a name.",
+  "@nameRequired": {
+    "description": "Repertoire catalog: nameRequired"
+  },
+  "nameTrailingDotOrSpace": "Names cannot end with a dot or space.",
+  "@nameTrailingDotOrSpace": {
+    "description": "Repertoire catalog: nameTrailingDotOrSpace"
+  },
+  "nameReserved": "That name is reserved.",
+  "@nameReserved": {
+    "description": "Repertoire catalog: nameReserved"
+  },
+  "nameIllegalCharacters": "Names cannot contain < > : \" / \\ | ? * or control characters.",
+  "@nameIllegalCharacters": {
+    "description": "Repertoire catalog: nameIllegalCharacters"
+  },
+  "nameSystemReserved": "That name is reserved by the operating system.",
+  "@nameSystemReserved": {
+    "description": "Repertoire catalog: nameSystemReserved"
+  },
+  "nameTooLong": "Names must be {maxLength} characters or fewer.",
+  "@nameTooLong": {
+    "description": "Repertoire catalog: nameTooLong",
+    "placeholders": {
+      "maxLength": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "justNow": "just now",
+  "@justNow": {
+    "description": "Repertoire catalog: justNow"
+  },
+  "minutesAgo": "{count}m ago",
+  "@minutesAgo": {
+    "description": "Repertoire catalog: minutesAgo",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "hoursAgo": "{count}h ago",
+  "@hoursAgo": {
+    "description": "Repertoire catalog: hoursAgo",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "daysAgo": "{count}d ago",
+  "@daysAgo": {
+    "description": "Repertoire catalog: daysAgo",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "saveChanges": "Save",
+  "@saveChanges": {
+    "description": "Shared document save interaction: saveChanges"
+  },
+  "saveCopy": "Save a copy…",
+  "@saveCopy": {
+    "description": "Shared document save interaction: saveCopy"
+  },
+  "keepEditing": "Keep editing",
+  "@keepEditing": {
+    "description": "Shared document save interaction: keepEditing"
+  },
+  "inspectCurrentDocument": "Inspect current file",
+  "@inspectCurrentDocument": {
+    "description": "Shared document save interaction: inspectCurrentDocument"
+  },
+  "reloadPreservingDraft": "Reload and keep draft",
+  "@reloadPreservingDraft": {
+    "description": "Shared document save interaction: reloadPreservingDraft"
+  },
+  "restoreRetainedDraft": "Restore retained draft",
+  "@restoreRetainedDraft": {
+    "description": "Shared document save interaction: restoreRetainedDraft"
+  },
+  "documentClean": "No unsaved changes",
+  "@documentClean": {
+    "description": "Shared document save interaction: documentClean"
+  },
+  "documentDirty": "Unsaved changes",
+  "@documentDirty": {
+    "description": "Study and PGN control: documentDirty"
+  },
+  "documentSaving": "Saving…",
+  "@documentSaving": {
+    "description": "Study and PGN control: documentSaving"
+  },
+  "documentSaved": "Saved",
+  "@documentSaved": {
+    "description": "Shared document save interaction: documentSaved"
+  },
+  "documentReloading": "Reading current file…",
+  "@documentReloading": {
+    "description": "Shared document save interaction: documentReloading"
+  },
+  "documentConflict": "The file changed or was removed. Your draft is unchanged. Inspect the current file or save a copy.",
+  "@documentConflict": {
+    "description": "Shared document save interaction: documentConflict"
+  },
+  "documentCollision": "That destination already exists. Nothing was replaced. Choose another name for your copy.",
+  "@documentCollision": {
+    "description": "Shared document save interaction: documentCollision"
+  },
+  "documentSaveFailed": "Could not save. Your draft is unchanged. You can retry or save a copy.",
+  "@documentSaveFailed": {
+    "description": "Shared document save interaction: documentSaveFailed"
+  },
+  "documentSaveUncertain": "The file may have been saved. Your draft is retained. Inspect and reload before saving again, or save a copy.",
+  "@documentSaveUncertain": {
+    "description": "Shared document save interaction: documentSaveUncertain"
+  },
+  "documentReadFailed": "Could not read the current file. Your draft and loaded revision are unchanged.",
+  "@documentReadFailed": {
+    "description": "Shared document save interaction: documentReadFailed"
+  },
+  "documentMissing": "The file no longer exists. Your draft is unchanged.",
+  "@documentMissing": {
+    "description": "Shared document save interaction: documentMissing"
+  },
+  "documentDraftRetained": "Your previous draft is kept in this session. Restore it or save it before closing the document.",
+  "@documentDraftRetained": {
+    "description": "Shared document save interaction: documentDraftRetained"
+  },
+  "chooseAnotherName": "Choose another name",
+  "@chooseAnotherName": {
+    "description": "Shared document save interaction: chooseAnotherName"
+  },
+  "closeDocumentInspection": "Close",
+  "@closeDocumentInspection": {
+    "description": "Shared document save interaction: closeDocumentInspection"
+  },
+  "copyDestination": "Copy destination",
+  "@copyDestination": {
+    "description": "Shared document save interaction: copyDestination"
+  },
+  "restoreRetainedDraftNumber": "Restore draft {number}",
+  "@restoreRetainedDraftNumber": {
+    "description": "Restore one of the drafts retained by this document session",
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
+  "backToPreviousView": "Back to previous view",
+  "@backToPreviousView": {
+    "description": "Workspace navigation: backToPreviousView"
+  },
+  "selectRepertoire": "Select repertoire",
+  "@selectRepertoire": {
+    "description": "Workspace navigation: selectRepertoire"
+  },
+  "back": "Back",
+  "@back": {
+    "description": "Workspace navigation: back"
+  },
+  "appearance": "Appearance",
+  "@appearance": {
+    "description": "Appearance settings: appearance"
+  },
+  "appearanceDark": "Dark",
+  "@appearanceDark": {
+    "description": "Appearance settings: appearanceDark"
+  },
+  "appearanceLight": "Light",
+  "@appearanceLight": {
+    "description": "Appearance settings: appearanceLight"
+  },
+  "appearanceSystem": "System",
+  "@appearanceSystem": {
+    "description": "Appearance settings: appearanceSystem"
+  },
+  "appearanceLoading": "Loading appearance…",
+  "@appearanceLoading": {
+    "description": "Appearance settings: appearanceLoading"
+  },
+  "appearanceSaving": "Saving appearance…",
+  "@appearanceSaving": {
+    "description": "Appearance settings: appearanceSaving"
+  },
+  "appearanceFailed": "Could not confirm the appearance setting. Your last confirmed appearance is still applied.",
+  "@appearanceFailed": {
+    "description": "Appearance settings: appearanceFailed"
+  },
+  "appearanceReload": "Reload saved choice",
+  "@appearanceReload": {
+    "description": "Appearance settings: appearanceReload"
+  },
+  "appearanceSystemHelp": "System follows your desktop’s light or dark appearance.",
+  "@appearanceSystemHelp": {
+    "description": "Appearance settings: appearanceSystemHelp"
+  },
+  "studySaveRecovery": "Save and recovery…",
+  "studyCopyName": "Copy name",
+  "studyCopyPrompt": "The copy will open as your current study. The original file is kept.",
+  "studyCopyInitial": "{name} copy",
+  "@studyCopyInitial": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "studySaveDialogTitle": "Save {name}",
+  "@studySaveDialogTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "studyExportTitle": "Export study PGN",
+  "studyExportDirectory": "Choose export folder",
+  "studyExportName": "File name",
+  "studyInvalidName": "Enter a file name without path separators or reserved characters.",
+  "@studySaveRecovery": {
+    "description": "Study save and recovery interaction: studySaveRecovery"
+  },
+  "@studyCopyName": {
+    "description": "Study save and recovery interaction: studyCopyName"
+  },
+  "@studyCopyPrompt": {
+    "description": "Study save and recovery interaction: studyCopyPrompt"
+  },
+  "@studyExportTitle": {
+    "description": "Study save and recovery interaction: studyExportTitle"
+  },
+  "@studyExportDirectory": {
+    "description": "Study save and recovery interaction: studyExportDirectory"
+  },
+  "@studyExportName": {
+    "description": "Study save and recovery interaction: studyExportName"
+  },
+  "@studyInvalidName": {
+    "description": "Study save and recovery interaction: studyInvalidName"
+  },
+  "closeApplicationTitle": "Close application?",
+  "@closeApplicationTitle": {
+    "description": "Application document close interaction: closeApplicationTitle"
+  },
+  "keepApplicationOpen": "Keep app open",
+  "@keepApplicationOpen": {
+    "description": "Application document close interaction: keepApplicationOpen"
+  },
+  "documentChangedWhileClosing": "A document changed while closing. The app has stayed open so you can review the latest changes.",
+  "@documentChangedWhileClosing": {
+    "description": "Application document close interaction: documentChangedWhileClosing"
+  },
+  "documentCloseFailed": "The close request could not finish. The app has stayed open. Review any save or recovery errors, then try again.",
+  "@documentCloseFailed": {
+    "description": "Application document close interaction: documentCloseFailed"
+  },
+  "windowCloseUnavailable": "Close protection could not start. Save your changes before closing the window.",
+  "@windowCloseUnavailable": {
+    "description": "Native close interception failed to initialize"
+  },
+  "studyCloseUnsaved": "This study has unsaved changes or retained drafts. Save the work you want to keep before closing.",
+  "@studyCloseUnsaved": {
+    "description": "Application document close interaction: studyCloseUnsaved"
+  },
+  "studyCloseReady": "Your study is saved. You can close the app.",
+  "@studyCloseReady": {
+    "description": "Study close confirmation after all changes and drafts are resolved"
+  },
+  "closeWithoutSaving": "Close without saving",
+  "@closeWithoutSaving": {
+    "description": "Application document close interaction: closeWithoutSaving"
+  },
+  "closeApplication": "Close application",
+  "@closeApplication": {
+    "description": "Application document close interaction: closeApplication"
+  },
+  "documentCopyPrompt": "Choose a new PGN filename. Existing files are kept.",
+  "documentCopyName": "File name",
+  "documentCopyFolder": "Folder",
+  "documentBrowseFolder": "Browse folders",
+  "documentCopyInvalidName": "Enter a file name without folders.",
+  "documentCopyInvalidFolder": "Enter an absolute folder path.",
+  "documentFolderPickerFailed": "The folder picker could not open. You can enter the folder path.",
+  "documentSaveRecovery": "Save and recovery…",
+  "documentCollectionSaveTitle": "Save PGN collection",
+  "documentExportTitle": "Export PGN collection",
+  "@documentCopyPrompt": {
+    "description": "PGN document save and recovery control."
+  },
+  "@documentCopyName": {
+    "description": "PGN document save and recovery control."
+  },
+  "@documentCopyFolder": {
+    "description": "PGN document save and recovery control."
+  },
+  "@documentBrowseFolder": {
+    "description": "PGN document save and recovery control."
+  },
+  "@documentCopyInvalidName": {
+    "description": "PGN document save and recovery control."
+  },
+  "@documentCopyInvalidFolder": {
+    "description": "PGN document save and recovery control."
+  },
+  "@documentFolderPickerFailed": {
+    "description": "PGN document save and recovery control."
+  },
+  "@documentSaveRecovery": {
+    "description": "PGN document save and recovery control."
+  },
+  "@documentCollectionSaveTitle": {
+    "description": "PGN document save and recovery control."
+  },
+  "@documentExportTitle": {
+    "description": "PGN document save and recovery control."
+  },
+  "documentOpenExport": "Open",
+  "@documentOpenExport": {
+    "description": "Open a newly exported PGN collection."
+  },
+  "documentExported": "Exported {name}",
+  "@documentExported": {
+    "description": "PGN export confirmation.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "workspaceRecoveryTitle": "Recover {workspace} work",
+  "@workspaceRecoveryTitle": {
+    "description": "Recovery status for the named workspace",
+    "placeholders": {
+      "workspace": {
+        "type": "String"
+      }
+    }
+  },
+  "workspaceRecoveryExplanation": "These checkpoints contain work from previous sessions. Restoring opens the captured draft without writing to its original file. Save or make a copy after reviewing it.",
+  "@workspaceRecoveryExplanation": {
+    "description": "Study workspace restart recovery: studyRecoveryExplanation"
+  },
+  "workspaceRecoveryActionFailed": "Recovery could not finish. Your checkpoint is still preserved. Retry or save the current draft as a copy.",
+  "@workspaceRecoveryActionFailed": {
+    "description": "Study workspace restart recovery: studyRecoveryActionFailed"
+  },
+  "restoreWorkspaceRecovery": "Restore draft",
+  "@restoreWorkspaceRecovery": {
+    "description": "Study workspace restart recovery: restoreStudyRecovery"
+  },
+  "dismissWorkspaceRecovery": "Dismiss recovery",
+  "@dismissWorkspaceRecovery": {
+    "description": "Study workspace restart recovery: dismissStudyRecovery"
+  },
+  "dismissWorkspaceRecoveryQuestion": "Remove this checkpoint from the recovery list? Its archived bytes remain on disk, but the app will no longer offer to restore it.",
+  "@dismissWorkspaceRecoveryQuestion": {
+    "description": "Study workspace restart recovery: dismissStudyRecoveryQuestion"
+  },
+  "workspaceRecoveryUnavailable": "{workspace} recovery is unavailable. Save your work explicitly; recent edits may not survive a restart.",
+  "@workspaceRecoveryUnavailable": {
+    "description": "Recovery status for the named workspace",
+    "placeholders": {
+      "workspace": {
+        "type": "String"
+      }
+    }
+  },
+  "workspaceRecoveryUnreadable": "Some {workspace} recovery files could not be read. Their files have been preserved.",
+  "@workspaceRecoveryUnreadable": {
+    "description": "Recovery status for the named workspace",
+    "placeholders": {
+      "workspace": {
+        "type": "String"
+      }
+    }
+  },
+  "workspaceRecoveryAvailable": "{count, plural, =1{{workspace} work from a previous session is available.} other{{workspace} work from {count} previous sessions is available.}}",
+  "@workspaceRecoveryAvailable": {
+    "description": "Recovery status for the named workspace",
+    "placeholders": {
+      "workspace": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewWorkspaceRecovery": "Review recovery",
+  "@reviewWorkspaceRecovery": {
+    "description": "Study workspace restart recovery: reviewStudyRecovery"
+  },
+  "retryWorkspaceRecovery": "Retry recovery",
+  "@retryWorkspaceRecovery": {
+    "description": "Study workspace restart recovery: retryStudyRecovery"
+  },
+  "workspaceRecoveryTimestamp": "{date} · {time}",
+  "@workspaceRecoveryTimestamp": {
+    "description": "Local date and time of the saved Study checkpoint",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "studyWorkspaceName": "Study",
+  "@studyWorkspaceName": {
+    "description": "Study and PGN control: studyWorkspaceName"
+  },
+  "pgnWorkspaceName": "PGN Viewer",
+  "@pgnWorkspaceName": {
+    "description": "Workspace recovery display name"
+  },
+  "untitledPgnWorkspace": "Untitled PGN",
+  "@untitledPgnWorkspace": {
+    "description": "Workspace recovery display name"
+  },
+  "generationRecoveryTitle": "Recover generated outputs",
+  "@generationRecoveryTitle": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoveryAction": "Recover generated outputs…",
+  "@generationRecoveryAction": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoveryProvenance": "These older files have no recorded source revision. Inspect or export them here; they do not replace the current chapter or its verified analysis. Original files stay unchanged.",
+  "@generationRecoveryProvenance": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "generationRecoveryTree": "Saved tree",
+  "@generationRecoveryTree": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "generationRecoveryProbes": "Saved probes",
+  "@generationRecoveryProbes": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "generationRecoveryTraps": "Saved traps",
+  "@generationRecoveryTraps": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "generationRecoveryPartial": "Unfinished build",
+  "@generationRecoveryPartial": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "generationRecoveryExport": "Export original file…",
+  "@generationRecoveryExport": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "generationRecoveryExportDirectory": "Choose a folder for the recovered file",
+  "@generationRecoveryExportDirectory": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "generationRecoveryEmpty": "No saved files were found in this output. Choose another retained output or refresh.",
+  "@generationRecoveryEmpty": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoverySelect": "Select a saved artifact to inspect its contents.",
+  "@generationRecoverySelect": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "generationRecoveryNoEntries": "No saved entries",
+  "@generationRecoveryNoEntries": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "generationRecoveryUnreadable": "Could not read this entry",
+  "@generationRecoveryUnreadable": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "generationRecoveryResumeUnavailable": "Automatic resume is unavailable: this unfinished build has no verifiable source revision. You can inspect its explored positions, export the original file, or start a fresh build from the chapter.",
+  "@generationRecoveryResumeUnavailable": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "generationRecoveryConfig": "Saved configuration",
+  "@generationRecoveryConfig": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "generationRecoveryParent": "Previous position",
+  "@generationRecoveryParent": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "generationRecoveryExported": "Original file exported to {path}",
+  "@generationRecoveryExported": {
+    "description": "Legacy generation artifact recovery",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "generationRecoveryEntry": "Entry {number}",
+  "@generationRecoveryEntry": {
+    "description": "Legacy generation artifact recovery",
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
+  "generationRecoveryNodes": "{nodes} saved nodes · depth {depth}",
+  "@generationRecoveryNodes": {
+    "description": "Legacy generation artifact recovery",
+    "placeholders": {
+      "nodes": {
+        "type": "int"
+      },
+      "depth": {
+        "type": "int"
+      }
+    }
+  },
+  "generationRecoveryDiagnostics": "Technical details",
+  "@generationRecoveryDiagnostics": {
+    "description": "Legacy analysis recovery failure"
+  },
+  "generationRecoveryLoadFailed": "Saved outputs could not be loaded. Try refreshing.",
+  "@generationRecoveryLoadFailed": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoveryReadFailed": "This file could not be read safely. Other saved files remain available.",
+  "@generationRecoveryReadFailed": {
+    "description": "Legacy analysis recovery failure"
+  },
+  "generationRecoveryDecodeFailed": "This entry could not be decoded. You can still export its original file.",
+  "@generationRecoveryDecodeFailed": {
+    "description": "Legacy analysis recovery failure"
+  },
+  "generationRecoveryCollision": "A file already exists at that destination. Choose a different location; nothing was replaced.",
+  "@generationRecoveryCollision": {
+    "description": "Legacy analysis recovery failure"
+  },
+  "generationRecoveryExportFailed": "The original file could not be exported. Choose another location or try again.",
+  "@generationRecoveryExportFailed": {
+    "description": "Legacy analysis recovery failure"
+  },
+  "generationRecoveryExportUncertain": "The export may have been saved, but completion could not be confirmed. Inspect the destination below before trying again.",
+  "@generationRecoveryExportUncertain": {
+    "description": "Legacy analysis recovery failure"
+  },
+  "generationRecoveryDestination": "Destination: {path}",
+  "@generationRecoveryDestination": {
+    "description": "Legacy analysis inspection",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "generationRecoveryPopularMove": "Popular reply",
+  "@generationRecoveryPopularMove": {
+    "description": "Legacy analysis inspection"
+  },
+  "generationRecoveryBestMove": "Best reply",
+  "@generationRecoveryBestMove": {
+    "description": "Legacy analysis inspection"
+  },
+  "generationRecoveryProbability": "Move probability",
+  "@generationRecoveryProbability": {
+    "description": "Legacy analysis inspection"
+  },
+  "generationRecoveryGain": "Evaluation gain",
+  "@generationRecoveryGain": {
+    "description": "Legacy analysis inspection"
+  },
+  "generationRecoveryEvaluation": "Evaluation (side to move)",
+  "@generationRecoveryEvaluation": {
+    "description": "Legacy analysis inspection"
+  },
+  "generationRecoveryExpectedScore": "Expected score",
+  "@generationRecoveryExpectedScore": {
+    "description": "Legacy analysis inspection"
+  },
+  "generationRecoveryPv": "Engine principal variation (UCI)",
+  "@generationRecoveryPv": {
+    "description": "Legacy analysis inspection"
+  },
+  "generationRecoveryNotSaved": "Not saved",
+  "@generationRecoveryNotSaved": {
+    "description": "Study and PGN control: generationRecoveryNotSaved"
+  },
+  "generationRecoveryReadOnly": "Inspect or export saved outputs. Recovery does not change the chapter, select analysis or resume a build. Original files stay unchanged.",
+  "@generationRecoveryReadOnly": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoveryChooseOutput": "Choose saved output",
+  "@generationRecoveryChooseOutput": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoveryLegacyFiles": "Older files beside this chapter",
+  "@generationRecoveryLegacyFiles": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoveryCourse": "Generated PGN proposal",
+  "@generationRecoveryCourse": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoveryModelGames": "Model games",
+  "@generationRecoveryModelGames": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoveryManifest": "Run record",
+  "@generationRecoveryManifest": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoveryReceipt": "Publication receipt",
+  "@generationRecoveryReceipt": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoveryRun": "Recorded run",
+  "@generationRecoveryRun": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoverySource": "Recorded source",
+  "@generationRecoverySource": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoverySourceUnknown": "The source revision was not recorded or could not be decoded.",
+  "@generationRecoverySourceUnknown": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoverySourceMatches": "The recorded source revision matches the chapter observed now. This alone does not verify the saved analysis.",
+  "@generationRecoverySourceMatches": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoverySourceChanged": "The recorded source differs from the chapter observed now.",
+  "@generationRecoverySourceChanged": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoverySourceUnavailable": "The current chapter could not be read, so its source revision could not be compared.",
+  "@generationRecoverySourceUnavailable": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoverySelectionNames": "The current selection record names this output. Recovery does not certify it as current analysis.",
+  "@generationRecoverySelectionNames": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoverySelectionUnknown": "No current selection evidence was found for this output. It may have been selected previously.",
+  "@generationRecoverySelectionUnknown": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoveryReceiptAbsent": "No publication receipt was found. The PGN write may still have succeeded; inspect the chapter before generating again.",
+  "@generationRecoveryReceiptAbsent": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoveryReceiptPresent": "A publication receipt was recorded. It does not prove that this output is the current chapter.",
+  "@generationRecoveryReceiptPresent": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoveryReceiptUnreadable": "A publication receipt exists but could not be verified. The PGN write may have succeeded.",
+  "@generationRecoveryReceiptUnreadable": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoveryResumeRetained": "Recovery does not resume retained builds. Use the normal generation flow only when its current source and saved configuration are validated.",
+  "@generationRecoveryResumeRetained": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoveryIntegrityChanged": "This file differs from its recorded checksum. Inspect or export it as edited data.",
+  "@generationRecoveryIntegrityChanged": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoveryIntegrityMatches": "This file matches the checksum in its run record; that record is not proof of publication.",
+  "@generationRecoveryIntegrityMatches": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoveryListFailed": "This folder could not be inspected. Available outputs remain accessible. Try refreshing.",
+  "@generationRecoveryListFailed": {
+    "description": "Recovery namespace enumeration failed; explicit refresh remains available."
+  },
+  "generationRecoveryAllSources": "All retained chapter outputs",
+  "@generationRecoveryAllSources": {
+    "description": "Generation recovery source selection."
+  },
+  "generationRecoveryNoSources": "No retained chapter namespaces were found in the repertoire library.",
+  "@generationRecoveryNoSources": {
+    "description": "Generation recovery source selection."
+  },
+  "generationRecoveryDeletedRepertoire": "Deleted chapter files can be recovered here. If the entire repertoire was deleted, restore its folder from library recovery first.",
+  "@generationRecoveryDeletedRepertoire": {
+    "description": "Generation recovery source selection."
+  },
+  "studyImportJob": "Import: {name}",
+  "@studyImportJob": {
+    "description": "Study import progress, results and recovery",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "studyImportStarting": "Starting…",
+  "@studyImportStarting": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportCancelling": "Cancelling…",
+  "@studyImportCancelling": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportFetching": "Fetching game {game}/{total}",
+  "@studyImportFetching": {
+    "description": "Study import progress, results and recovery",
+    "placeholders": {
+      "game": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "studyImportWaiting": "Game {game}/{total} · next in {seconds}s",
+  "@studyImportWaiting": {
+    "description": "Study import progress, results and recovery",
+    "placeholders": {
+      "game": {
+        "type": "int"
+      },
+      "seconds": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "studyImportRetrying": "Rate-limited — retrying game {game}/{total} in {seconds}s",
+  "@studyImportRetrying": {
+    "description": "Study import progress, results and recovery",
+    "placeholders": {
+      "game": {
+        "type": "int"
+      },
+      "seconds": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "studyImportDownloaded": "Downloaded {count}",
+  "@studyImportDownloaded": {
+    "description": "Study import progress, results and recovery",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "studyImportSkipped": "Skipped game {id}",
+  "@studyImportSkipped": {
+    "description": "Study import progress, results and recovery",
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "studyImportChapters": "{count, plural, =1{1 chapter} other{{count} chapters}}",
+  "@studyImportChapters": {
+    "description": "Study import progress, results and recovery",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "studyImportClosed": "The study importer is closed.",
+  "@studyImportClosed": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportAlreadyRunning": "A collection download is already running.",
+  "@studyImportAlreadyRunning": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportEmpty": "No games found in that collection.",
+  "@studyImportEmpty": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportInvalidIds": "Collection game IDs must be numeric.",
+  "@studyImportInvalidIds": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportStartupFailed": "Could not start the collection download. Try again.",
+  "@studyImportStartupFailed": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportDownloadFailed": "Collection download stopped. Downloaded games remain cached.",
+  "@studyImportDownloadFailed": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportThrottled": "chessgames.com is refusing requests. Downloaded games are cached — start the same collection again later to resume.",
+  "@studyImportThrottled": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportPublicationFailed": "Downloaded games could not be saved. Review the downloaded content or try again later.",
+  "@studyImportPublicationFailed": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportPublicationUncertain": "The study save could not be confirmed. Review the destination before retrying.",
+  "@studyImportPublicationUncertain": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportNameCollisions": "No free study name was found after 100 attempts. Choose another destination for the downloaded games.",
+  "@studyImportNameCollisions": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportProgress": "Importing {done}/{total}",
+  "@studyImportProgress": {
+    "description": "Study import progress, results and recovery",
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "studyImportStop": "Stop the download (keeps what has arrived)",
+  "@studyImportStop": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportReview": "Review downloaded study",
+  "@studyImportReview": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportBackground": "Downloading {count} games (~{minutes} min). chessgames.com is slow on purpose — keep working, it runs in the background.",
+  "@studyImportBackground": {
+    "description": "Study import progress, results and recovery",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "studyImportComplete": "Imported {count} games into “{name}” ({failed} unavailable).",
+  "@studyImportComplete": {
+    "description": "Study import progress, results and recovery",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "failed": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "studyImportStopped": "Stopped the download. Saved {count} chapters into “{name}”.",
+  "@studyImportStopped": {
+    "description": "Study import progress, results and recovery",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "studyImportNoContent": "No study was saved ({failed} games unavailable).",
+  "@studyImportNoContent": {
+    "description": "Study import progress, results and recovery",
+    "placeholders": {
+      "failed": {
+        "type": "int"
+      }
+    }
+  },
+  "studyImportOpen": "Open",
+  "@studyImportOpen": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportLichessOffline": "Lichess did not respond (rate-limited or offline). Try again shortly.",
+  "@studyImportLichessOffline": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportLichessLogin": "Study not found. If it is private or unlisted, log into Lichess first (Settings → Accounts), then try again.",
+  "@studyImportLichessLogin": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportLichessScope": "Study not found. If it is private, log out and back in to grant study access.",
+  "@studyImportLichessScope": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportLichessRejected": "Lichess rejected the request. Log out and back in under Settings → Accounts, then try again.",
+  "@studyImportLichessRejected": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportLichessUserMissing": "No public studies found for “{name}”.",
+  "@studyImportLichessUserMissing": {
+    "description": "Study import progress, results and recovery",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "studyImportLichessHttp": "Lichess returned HTTP {status}.",
+  "@studyImportLichessHttp": {
+    "description": "Study import progress, results and recovery",
+    "placeholders": {
+      "status": {
+        "type": "int"
+      }
+    }
+  },
+  "studyImportLichessEmpty": "That study is empty — nothing to import.",
+  "@studyImportLichessEmpty": {
+    "description": "Study import progress, results and recovery"
+  },
+  "studyImportUnresolved": "Review the previous downloaded study before starting another import.",
+  "@studyImportUnresolved": {
+    "description": "Pending failed publication must be resolved before another collection starts"
+  },
+  "studyOpenFailed": "Could not open that study. Your current study is unchanged.",
+  "@studyOpenFailed": {
+    "description": "Study handoff read failed"
+  },
+  "studyImportReviewAction": "Review",
+  "@studyImportReviewAction": {
+    "description": "Compact snackbar action that opens imported document recovery"
+  },
+  "studyImportPgnFailed": "Could not import that PGN. Your study is unchanged.",
+  "@studyImportPgnFailed": {
+    "description": "Study source PGN read failure"
+  },
+  "studyListRetry": "Could not load studies. Retry",
+  "@studyListRetry": {
+    "description": "Retry a failed study library read"
+  },
+  "studyImportAdded": "Added {count} chapters.",
+  "@studyImportAdded": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "studyImportApplyFailed": "Could not finish the import. Your existing work is preserved.",
+  "@studyImportApplyFailed": {
+    "description": "Study import or adoption failure; existing edits remain available."
+  },
+  "studyImportNotAccepted": "The import was not accepted. Resolve the active import or study change, then retry. Your download is kept in this dialog.",
+  "@studyImportNotAccepted": {
+    "description": "An admission rejection keeps downloaded input in its dialog for retry."
+  },
+  "builderCopyNeedsVerification": "Copy needs verification: {destination}. The draft is retained; this append will not be repeated.",
+  "@builderCopyNeedsVerification": {
+    "description": "Builder durable workspace recovery",
+    "placeholders": {
+      "destination": {
+        "type": "String"
+      }
+    }
+  },
+  "builderInspectCopy": "Inspect copy",
+  "@builderInspectCopy": {
+    "description": "Builder durable workspace recovery"
+  },
+  "builderLineSaveFailed": "Line edits are retained. Saving failed.",
+  "@builderLineSaveFailed": {
+    "description": "Builder durable workspace recovery"
+  },
+  "builderSourceChanged": "The source changed or is missing. Restored edits are a scratch line; save them to an explicit destination.",
+  "@builderSourceChanged": {
+    "description": "Builder durable workspace recovery"
+  },
+  "builderSaveDraftCopy": "Save draft as a new line…",
+  "@builderSaveDraftCopy": {
+    "description": "Builder durable workspace recovery"
+  },
+  "builderRetainedDraftsTooltip": "Retained Builder drafts",
+  "@builderRetainedDraftsTooltip": {
+    "description": "Builder durable workspace recovery"
+  },
+  "builderScratch": "Scratch",
+  "@builderScratch": {
+    "description": "Builder durable workspace recovery"
+  },
+  "builderDraftRetained": "The draft is retained. Choose a destination and try saving it again.",
+  "@builderDraftRetained": {
+    "description": "Builder durable workspace recovery"
+  },
+  "builderRetainedDraftCount": "Retained drafts ({count})",
+  "@builderRetainedDraftCount": {
+    "description": "Builder durable workspace recovery",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "builderCopyInspectionFailed": "Destination could not be inspected. The copy intent and draft are retained.",
+  "@builderCopyInspectionFailed": {
+    "description": "Builder durable workspace recovery"
+  },
+  "builderVerifyCopy": "Verify the saved copy",
+  "@builderVerifyCopy": {
+    "description": "Builder durable workspace recovery"
+  },
+  "builderVerifyCopyExplanation": "Confirm only if the intended line is present in this observed file. Keeping the draft does not repeat the append.",
+  "@builderVerifyCopyExplanation": {
+    "description": "Builder durable workspace recovery"
+  },
+  "builderKeepDraft": "Keep draft",
+  "@builderKeepDraft": {
+    "description": "Builder durable workspace recovery"
+  },
+  "builderCopyPresent": "Copy is present",
+  "@builderCopyPresent": {
+    "description": "Builder durable workspace recovery"
+  },
+  "builderCopyRetained": "The copy and draft are retained. Inspect the destination before trying again.",
+  "@builderCopyRetained": {
+    "description": "Builder durable workspace recovery"
+  },
+  "createdChapterPaths": "Saved chapters:\n{paths}",
+  "@createdChapterPaths": {
+    "description": "Confirmed chapter files retained after a partial import",
+    "placeholders": {
+      "paths": {
+        "type": "String"
+      }
+    }
+  },
+  "chapterPathsToInspect": "Paths to inspect (writes may be unconfirmed):\n{paths}",
+  "@chapterPathsToInspect": {
+    "description": "Candidate and recovery paths after an interrupted chapter operation",
+    "placeholders": {
+      "paths": {
+        "type": "String"
+      }
+    }
+  },
+  "@chapterDeleteConfirm": {
+    "description": "Manual chapter deletion recovery confirmation"
+  },
+  "chapterDeleteConfirm": "The chapter will be removed from this folder and kept in recovery storage.",
+  "chapterDeleteUnsupported": "Verified chapter deletion is unavailable on this device.",
+  "@chapterDeleteUnsupported": {
+    "description": "Verified manual chapter deletion: chapterDeleteUnsupported"
+  },
+  "chapterDeleteReadFailed": "Could not verify this chapter for deletion. Only files in managed app folders can be removed.",
+  "@chapterDeleteReadFailed": {
+    "description": "Verified manual chapter deletion: chapterDeleteReadFailed"
+  },
+  "chapterDeleteMissing": "This chapter is no longer available. Nothing was removed.",
+  "@chapterDeleteMissing": {
+    "description": "Verified manual chapter deletion: chapterDeleteMissing"
+  },
+  "chapterDeleteConflict": "The chapter changed since deletion was requested. Nothing was removed. Reload it before trying again.",
+  "@chapterDeleteConflict": {
+    "description": "Verified manual chapter deletion: chapterDeleteConflict"
+  },
+  "chapterDeleteFailed": "The chapter could not be moved to recovery.",
+  "@chapterDeleteFailed": {
+    "description": "Verified manual chapter deletion: chapterDeleteFailed"
+  },
+  "chapterDeleteSaved": "Chapter moved to recovery:\n{path}",
+  "@chapterDeleteSaved": {
+    "description": "Verified manual chapter deletion: chapterDeleteSaved",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "chapterDeleteUncertain": "Deletion could not be confirmed. Check these locations before taking another action; do not retry automatically:\n{paths}",
+  "@chapterDeleteUncertain": {
+    "description": "Verified manual chapter deletion: chapterDeleteUncertain",
+    "placeholders": {
+      "paths": {
+        "type": "String"
+      }
+    }
+  },
+  "chapterDeleteReview": "Review chapter deletion",
+  "@chapterDeleteReview": {
+    "description": "Title for uncertain manual chapter deletion inspection"
+  },
+  "chapterDeleteTitle": "Delete chapter \"{name}\"?",
+  "@chapterDeleteTitle": {
+    "description": "Confirmation title for removing a chapter",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "chapterDeleteContext": "{path}\n{message}",
+  "@chapterDeleteContext": {
+    "description": "Deletion result identifies the originally requested chapter even after navigation",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      },
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "studyChapterListTitle": "Chapters ({count})",
+  "@studyChapterListTitle": {
+    "description": "Study chapter list control: studyChapterListTitle",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "studyNewChapter": "New chapter",
+  "@studyNewChapter": {
+    "description": "Study workflow control: studyNewChapter"
+  },
+  "studySearchChapters": "Search chapters",
+  "@studySearchChapters": {
+    "description": "Study and PGN control: studySearchChapters"
+  },
+  "studyFilteredReorder": "Reordering is off while searching",
+  "@studyFilteredReorder": {
+    "description": "Study chapter list control: studyFilteredReorder"
+  },
+  "studyDragReorder": "Drag to reorder",
+  "@studyDragReorder": {
+    "description": "Study chapter list control: studyDragReorder"
+  },
+  "studyNoMatchingChapters": "No matching chapters",
+  "@studyNoMatchingChapters": {
+    "description": "Study chapter list control: studyNoMatchingChapters"
+  },
+  "studyChapterOpenNow": "Open now",
+  "@studyChapterOpenNow": {
+    "description": "Study chapter list control: studyChapterOpenNow"
+  },
+  "studyEditChapter": "Edit chapter",
+  "@studyEditChapter": {
+    "description": "Study chapter list control: studyEditChapter"
+  },
+  "studyDeleteChapter": "Delete chapter",
+  "@studyDeleteChapter": {
+    "description": "Study chapter list control: studyDeleteChapter"
+  },
+  "studyKeepOneChapter": "A study needs at least one chapter",
+  "@studyKeepOneChapter": {
+    "description": "Study chapter list control: studyKeepOneChapter"
+  },
+  "studyChapterActions": "Chapter actions",
+  "@studyChapterActions": {
+    "description": "Study workflow control: studyChapterActions"
+  },
+  "studyChaptersDone": "Done",
+  "@studyChaptersDone": {
+    "description": "Study chapter list control: studyChaptersDone"
+  },
+  "studyUsePosition": "Use this position",
+  "studyInvalidFen": "That is not a valid FEN.",
+  "studyPasteGameRequired": "Paste at least one game.",
+  "studyName": "Name",
+  "studyChapterNameFromPgn": "From the PGN when left blank",
+  "studyChapterStartFrom": "Start from",
+  "studyInitialPosition": "Initial position",
+  "studyPosition": "Position",
+  "studyPgn": "PGN",
+  "studyFen": "FEN",
+  "studySetupBoard": "Set up board…",
+  "studyPasteChaptersHint": "Paste PGN. Each game becomes a chapter.",
+  "studyOrientation": "Orientation",
+  "studyAutomaticOrientation": "Automatic",
+  "studyCreate": "Create",
+  "studyChapterNameRequired": "A chapter needs a name.",
+  "studyPgnTags": "PGN tags",
+  "studyTag": "Tag",
+  "studyTagValue": "Value",
+  "studyRemoveTag": "Remove tag",
+  "studyAddTag": "Add tag",
+  "studyInvalidTagName": "Tag names are letters and digits: \"{tag}\".",
+  "@studyInvalidTagName": {
+    "placeholders": {
+      "tag": {
+        "type": "String"
+      }
+    }
+  },
+  "studyOwnedTag": "{tag} is written by the study; edit it above.",
+  "@studyOwnedTag": {
+    "placeholders": {
+      "tag": {
+        "type": "String"
+      }
+    }
+  },
+  "@studyUsePosition": {
+    "description": "Study chapter dialog label: Use this position"
+  },
+  "@studyInvalidFen": {
+    "description": "Study chapter dialog label: That is not a valid FEN."
+  },
+  "@studyPasteGameRequired": {
+    "description": "Study chapter dialog label: Paste at least one game."
+  },
+  "@studyName": {
+    "description": "Study and PGN control: studyName"
+  },
+  "@studyChapterNameFromPgn": {
+    "description": "Study chapter dialog label: From the PGN when left blank"
+  },
+  "@studyChapterStartFrom": {
+    "description": "Study chapter dialog label: Start from"
+  },
+  "@studyInitialPosition": {
+    "description": "Study chapter dialog label: Initial position"
+  },
+  "@studyPosition": {
+    "description": "Study chapter dialog label: Position"
+  },
+  "@studyPgn": {
+    "description": "Study chapter dialog label: PGN"
+  },
+  "@studyFen": {
+    "description": "Study chapter dialog label: FEN"
+  },
+  "@studySetupBoard": {
+    "description": "Study chapter dialog label: Set up board…"
+  },
+  "@studyPasteChaptersHint": {
+    "description": "Study chapter dialog label: Paste PGN. Each game becomes a chapter."
+  },
+  "@studyOrientation": {
+    "description": "Study chapter dialog label: Orientation"
+  },
+  "@studyAutomaticOrientation": {
+    "description": "Study chapter dialog label: Automatic"
+  },
+  "@studyCreate": {
+    "description": "Study chapter dialog label: Create"
+  },
+  "@studyChapterNameRequired": {
+    "description": "Study chapter dialog label: A chapter needs a name."
+  },
+  "@studyPgnTags": {
+    "description": "Study chapter dialog label: PGN tags"
+  },
+  "@studyTag": {
+    "description": "Study chapter dialog label: Tag"
+  },
+  "@studyTagValue": {
+    "description": "Study chapter dialog label: Value"
+  },
+  "@studyRemoveTag": {
+    "description": "Study chapter dialog label: Remove tag"
+  },
+  "@studyAddTag": {
+    "description": "Study chapter dialog label: Add tag"
+  },
+  "studyImportGamesFound": "{count, plural, =1{1 game found.} other{{count} games found.}}",
+  "@studyImportGamesFound": {
+    "description": "Study workflow control: studyImportGamesFound",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "studyDownloadCount": "Download {count}",
+  "@studyDownloadCount": {
+    "description": "Study workflow control: studyDownloadCount",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "studyImportFromUrl": "Import from URL",
+  "@studyImportFromUrl": {
+    "description": "Study workflow control: studyImportFromUrl"
+  },
+  "studyUrl": "URL",
+  "@studyUrl": {
+    "description": "Study workflow control: studyUrl"
+  },
+  "studyImportSupportedUrls": "lichess.org/study/<id>  —  one study, all chapters\nlichess.org/study/by/<user>  —  every public study of theirs\nchessgames.com/perl/chesscollection?cid=<id>  —  a collection",
+  "@studyImportSupportedUrls": {
+    "description": "Study workflow control: studyImportSupportedUrls"
+  },
+  "studyImportAppend": "Add to the current study instead of creating a new one",
+  "@studyImportAppend": {
+    "description": "Study workflow control: studyImportAppend"
+  },
+  "studyImportCollectionSeparate": "A chessgames.com collection downloads in the background and always gets its own study.",
+  "@studyImportCollectionSeparate": {
+    "description": "Study workflow control: studyImportCollectionSeparate"
+  },
+  "studyImportNoOpenStudy": "No study is open.",
+  "@studyImportNoOpenStudy": {
+    "description": "Study workflow control: studyImportNoOpenStudy"
+  },
+  "studyImportDelay": "Seconds between requests (chessgames.com)",
+  "@studyImportDelay": {
+    "description": "Study workflow control: studyImportDelay"
+  },
+  "studyImportDelayHelp": "chessgames.com bans fast downloads: 2–3 s apart gets blocked after ~20 games, 22 s apart sustains 60. At 22 s a 60-game collection takes about 25 minutes, running in the background.",
+  "@studyImportDelayHelp": {
+    "description": "Study workflow control: studyImportDelayHelp"
+  },
+  "studyImportContacting": "Contacting the server…",
+  "@studyImportContacting": {
+    "description": "Study workflow control: studyImportContacting"
+  },
+  "studyImportLinkHint": "Paste a link to see what will be imported.",
+  "@studyImportLinkHint": {
+    "description": "Study workflow control: studyImportLinkHint"
+  },
+  "studyImportUnsupportedUrl": "Not a Lichess study or chessgames.com collection link.",
+  "@studyImportUnsupportedUrl": {
+    "description": "Study workflow control: studyImportUnsupportedUrl"
+  },
+  "studyImportCollectionBlocked": "Collection page blocked",
+  "@studyImportCollectionBlocked": {
+    "description": "Study workflow control: studyImportCollectionBlocked"
+  },
+  "studyImportPasteIdsHelp": "chessgames.com served a bot check instead of the collection. Downloading the games still works — it just needs the list.\n\nOpen the collection in a browser, select all (Ctrl+A) and copy, or save the page source, then paste it below.",
+  "@studyImportPasteIdsHelp": {
+    "description": "Study workflow control: studyImportPasteIdsHelp"
+  },
+  "studyImportOpenCollection": "Open the collection page",
+  "@studyImportOpenCollection": {
+    "description": "Study workflow control: studyImportOpenCollection"
+  },
+  "studyImportPasteIdsHint": "Paste the page, game links, or game ids…",
+  "@studyImportPasteIdsHint": {
+    "description": "Study workflow control: studyImportPasteIdsHint"
+  },
+  "studyImportNoIds": "No game ids found yet.",
+  "@studyImportNoIds": {
+    "description": "Study workflow control: studyImportNoIds"
+  },
+  "studyDownload": "Download",
+  "@studyDownload": {
+    "description": "Study workflow control: studyDownload"
+  },
+  "studyNumberedNew": "New study ({count})",
+  "@studyNumberedNew": {
+    "description": "Study workflow control: studyNumberedNew",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "studyChapterCount": "{count, plural, =1{1 chapter} other{{count} chapters}}",
+  "@studyChapterCount": {
+    "description": "Study workflow control: studyChapterCount",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "studyPreferredChapterCount": "Prep file · {count, plural, =1{1 chapter} other{{count} chapters}}",
+  "@studyPreferredChapterCount": {
+    "description": "Study workflow control: studyPreferredChapterCount",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "studyAddLine": "Add line to study",
+  "@studyAddLine": {
+    "description": "Study workflow control: studyAddLine"
+  },
+  "studyNewStudy": "New study",
+  "@studyNewStudy": {
+    "description": "Study and PGN control: studyNewStudy"
+  },
+  "studyAddNewStudy": "Add new study",
+  "@studyAddNewStudy": {
+    "description": "Study and PGN control: studyAddNewStudy"
+  },
+  "studyStudyName": "Study name",
+  "@studyStudyName": {
+    "description": "Study and PGN control: studyStudyName"
+  },
+  "studyCreateAndAdd": "Create and add",
+  "@studyCreateAndAdd": {
+    "description": "Study and PGN control: studyCreateAndAdd"
+  },
+  "studyNameRequired": "Please enter a study name.",
+  "@studyNameRequired": {
+    "description": "Study and PGN control: studyNameRequired"
+  },
+  "studyNameExists": "A study with this name already exists.",
+  "@studyNameExists": {
+    "description": "Study and PGN control: studyNameExists"
+  },
+  "studyChapterName": "Chapter name",
+  "@studyChapterName": {
+    "description": "Study and PGN control: studyChapterName"
+  },
+  "studySearchExisting": "Search existing studies",
+  "@studySearchExisting": {
+    "description": "Study and PGN control: studySearchExisting"
+  },
+  "studyNoStudiesToAdd": "No studies yet. Use Add new study to create one.",
+  "@studyNoStudiesToAdd": {
+    "description": "Study and PGN control: studyNoStudiesToAdd"
+  },
+  "studyNoStudiesMatch": "No studies match your search.",
+  "@studyNoStudiesMatch": {
+    "description": "Study and PGN control: studyNoStudiesMatch"
+  },
+  "studyEditChapterMenu": "Edit chapter…",
+  "@studyEditChapterMenu": {
+    "description": "Study workflow control: studyEditChapterMenu"
+  },
+  "studySetStartMenu": "Set starting position…",
+  "@studySetStartMenu": {
+    "description": "Study workflow control: studySetStartMenu"
+  },
+  "studyCopyChapter": "Copy chapter PGN",
+  "@studyCopyChapter": {
+    "description": "Study workflow control: studyCopyChapter"
+  },
+  "studyClearAnnotationsMenu": "Clear comments, glyphs and shapes…",
+  "@studyClearAnnotationsMenu": {
+    "description": "Study workflow control: studyClearAnnotationsMenu"
+  },
+  "studyClearVariationsMenu": "Clear variations…",
+  "@studyClearVariationsMenu": {
+    "description": "Study workflow control: studyClearVariationsMenu"
+  },
+  "studyDeleteChapterMenu": "Delete chapter…",
+  "@studyDeleteChapterMenu": {
+    "description": "Study workflow control: studyDeleteChapterMenu"
+  },
+  "studyNoChapters": "No chapters",
+  "@studyNoChapters": {
+    "description": "Study workflow control: studyNoChapters"
+  },
+  "studyManageChapters": "Manage & reorder chapters…",
+  "@studyManageChapters": {
+    "description": "Study workflow control: studyManageChapters"
+  },
+  "studyChapter": "Chapter",
+  "@studyChapter": {
+    "description": "Study workflow control: studyChapter"
+  },
+  "studyRename": "Rename study",
+  "@studyRename": {
+    "description": "Study workflow control: studyRename"
+  },
+  "studySwitch": "Switch study",
+  "@studySwitch": {
+    "description": "Study and PGN control: studySwitch"
+  },
+  "studyNameConfirm": "OK",
+  "@studyNameConfirm": {
+    "description": "Study and PGN control: studyNameConfirm"
+  },
+  "studyNameUnusable": "That name has no characters a file can use.",
+  "@studyNameUnusable": {
+    "description": "Study and PGN control: studyNameUnusable"
+  },
+  "studyAddFailed": "Failed to add to study.",
+  "@studyAddFailed": {
+    "description": "Study and PGN control: studyAddFailed"
+  },
+  "studyHistoryTitle": "Study: {name}",
+  "@studyHistoryTitle": {
+    "description": "Study and PGN control: studyHistoryTitle",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "pgnDeleteOneComment": "Delete 1 comment?",
+  "@pgnDeleteOneComment": {
+    "description": "Study and PGN control: pgnDeleteOneComment"
+  },
+  "pgnSaveComment": "Save comment",
+  "@pgnSaveComment": {
+    "description": "Study and PGN control: pgnSaveComment"
+  },
+  "pgnComment": "Comment",
+  "@pgnComment": {
+    "description": "Study and PGN control: pgnComment"
+  },
+  "pgnCollapseComment": "Collapse comment",
+  "@pgnCollapseComment": {
+    "description": "Study and PGN control: pgnCollapseComment"
+  },
+  "pgnEditComment": "Edit comment",
+  "@pgnEditComment": {
+    "description": "Study and PGN control: pgnEditComment"
+  },
+  "pgnCommentKept": "Comment kept until deleted",
+  "@pgnCommentKept": {
+    "description": "Study and PGN control: pgnCommentKept"
+  },
+  "pgnCommentLabel": "Comment:",
+  "@pgnCommentLabel": {
+    "description": "Study and PGN control: pgnCommentLabel"
+  },
+  "pgnDeleteComment": "Delete comment",
+  "@pgnDeleteComment": {
+    "description": "Study and PGN control: pgnDeleteComment"
+  },
+  "pgnSelectMoveNotes": "Select a move to add notes",
+  "@pgnSelectMoveNotes": {
+    "description": "Study and PGN control: pgnSelectMoveNotes"
+  },
+  "pgnRemoveCommentOn": "Remove the comment on {move}",
+  "@pgnRemoveCommentOn": {
+    "description": "Study and PGN control: pgnRemoveCommentOn",
+    "placeholders": {
+      "move": {
+        "type": "String"
+      }
+    }
+  },
+  "pgnLineCopied": "Line copied to clipboard",
+  "@pgnLineCopied": {
+    "description": "Study and PGN control: pgnLineCopied"
+  },
+  "pgnMove": "Move",
+  "@pgnMove": {
+    "description": "Study and PGN control: pgnMove"
+  },
+  "pgnEditCommentMenu": "Edit Comment",
+  "@pgnEditCommentMenu": {
+    "description": "Study and PGN control: pgnEditCommentMenu"
+  },
+  "pgnAddCommentMenu": "Add Comment",
+  "@pgnAddCommentMenu": {
+    "description": "Study and PGN control: pgnAddCommentMenu"
+  },
+  "pgnUnmarkQuizStart": "Unmark Quiz Start",
+  "@pgnUnmarkQuizStart": {
+    "description": "Study and PGN control: pgnUnmarkQuizStart"
+  },
+  "pgnMarkQuizStart": "Start Quiz From This Move",
+  "@pgnMarkQuizStart": {
+    "description": "Study and PGN control: pgnMarkQuizStart"
+  },
+  "pgnUnmarkQuizEnd": "Unmark Quiz End",
+  "@pgnUnmarkQuizEnd": {
+    "description": "Study and PGN control: pgnUnmarkQuizEnd"
+  },
+  "pgnMarkQuizEnd": "End Quiz After This Move",
+  "@pgnMarkQuizEnd": {
+    "description": "Study and PGN control: pgnMarkQuizEnd"
+  },
+  "pgnPromoteVariation": "Promote Variation",
+  "@pgnPromoteVariation": {
+    "description": "Study and PGN control: pgnPromoteVariation"
+  },
+  "pgnMakeMainLine": "Make Main Line",
+  "@pgnMakeMainLine": {
+    "description": "Study and PGN control: pgnMakeMainLine"
+  },
+  "pgnCopyWholeLine": "Copy Whole Line",
+  "@pgnCopyWholeLine": {
+    "description": "Study and PGN control: pgnCopyWholeLine"
+  },
+  "pgnCopyFromHere": "Copy PGN from Here",
+  "@pgnCopyFromHere": {
+    "description": "Study and PGN control: pgnCopyFromHere"
+  },
+  "pgnViewInLines": "View in Lines",
+  "@pgnViewInLines": {
+    "description": "Study and PGN control: pgnViewInLines"
+  },
+  "pgnDeleteFromHere": "Delete from Here",
+  "@pgnDeleteFromHere": {
+    "description": "Study and PGN control: pgnDeleteFromHere"
+  },
+  "pgnLineTitle": "Line title",
+  "@pgnLineTitle": {
+    "description": "Study and PGN control: pgnLineTitle"
+  },
+  "pgnStartPosition": "the start position",
+  "@pgnStartPosition": {
+    "description": "Study and PGN control: pgnStartPosition"
+  },
+  "pgnEmptyEditor": "Play a move or select a saved line.",
+  "@pgnEmptyEditor": {
+    "description": "Study and PGN control: pgnEmptyEditor"
+  },
+  "pgnQuizEndHelp": "Quiz ends here: training stops after this move",
+  "@pgnQuizEndHelp": {
+    "description": "Study and PGN control: pgnQuizEndHelp"
+  },
+  "pgnDeleteContinuations": "This removes the move and all continuations from here, including their annotations.",
+  "@pgnDeleteContinuations": {
+    "description": "Study and PGN control: pgnDeleteContinuations"
+  },
+  "pgnQuizStartHelp": "Quiz starts here: training auto-plays the moves before this one and asks for this one",
+  "@pgnQuizStartHelp": {
+    "description": "Study and PGN control: pgnQuizStartHelp"
+  },
+  "studyBackMove": "Back one move",
+  "@studyBackMove": {
+    "description": "Study and PGN control: studyBackMove"
+  },
+  "studyForwardMove": "Forward one move",
+  "@studyForwardMove": {
+    "description": "Study and PGN control: studyForwardMove"
+  },
+  "studyGoStart": "Go to start",
+  "@studyGoStart": {
+    "description": "Study and PGN control: studyGoStart"
+  },
+  "studyGoEnd": "Go to end",
+  "@studyGoEnd": {
+    "description": "Study and PGN control: studyGoEnd"
+  },
+  "studyToggleEngine": "Toggle engine",
+  "@studyToggleEngine": {
+    "description": "Study and PGN control: studyToggleEngine"
+  },
+  "studyFlipBoard": "Flip board",
+  "@studyFlipBoard": {
+    "description": "Study and PGN control: studyFlipBoard"
+  },
+  "studyBrowsePgn": "Browse in PGN viewer",
+  "@studyBrowsePgn": {
+    "description": "Study and PGN control: studyBrowsePgn"
+  },
+  "studyNextChapter": "Next chapter",
+  "@studyNextChapter": {
+    "description": "Study and PGN control: studyNextChapter"
+  },
+  "studyPreviousChapter": "Previous chapter",
+  "@studyPreviousChapter": {
+    "description": "Study and PGN control: studyPreviousChapter"
+  },
+  "studyFocusInput": "Focus move input",
+  "@studyFocusInput": {
+    "description": "Study and PGN control: studyFocusInput"
+  },
+  "studyCommentCurrent": "Comment current move",
+  "@studyCommentCurrent": {
+    "description": "Study and PGN control: studyCommentCurrent"
+  },
+  "studyImportPgnChapters": "Import PGN as chapters",
+  "@studyImportPgnChapters": {
+    "description": "Study and PGN control: studyImportPgnChapters"
+  },
+  "studyNoPgnGames": "No games found in that PGN.",
+  "@studyNoPgnGames": {
+    "description": "Study and PGN control: studyNoPgnGames"
+  },
+  "studyPgnCopied": "Study PGN copied to clipboard.",
+  "@studyPgnCopied": {
+    "description": "Study and PGN control: studyPgnCopied"
+  },
+  "studyReplacePosition": "Replace starting position?",
+  "@studyReplacePosition": {
+    "description": "Study and PGN control: studyReplacePosition"
+  },
+  "studyReplace": "Replace",
+  "@studyReplace": {
+    "description": "Study and PGN control: studyReplace"
+  },
+  "studySetPosition": "Set chapter position",
+  "@studySetPosition": {
+    "description": "Study and PGN control: studySetPosition"
+  },
+  "studySaveFirst": "Save the study first (create it by name).",
+  "@studySaveFirst": {
+    "description": "Study and PGN control: studySaveFirst"
+  },
+  "studyNoTrainingChapters": "No chapters with moves to train yet.",
+  "@studyNoTrainingChapters": {
+    "description": "Study and PGN control: studyNoTrainingChapters"
+  },
+  "studyNoTrainingMoves": "This chapter has no moves to train yet.",
+  "@studyNoTrainingMoves": {
+    "description": "Study and PGN control: studyNoTrainingMoves"
+  },
+  "studyChapterPgnCopied": "Chapter PGN copied to clipboard.",
+  "@studyChapterPgnCopied": {
+    "description": "Study and PGN control: studyChapterPgnCopied"
+  },
+  "studyClearAnnotations": "Clear all comments, glyphs and shapes?",
+  "@studyClearAnnotations": {
+    "description": "Study and PGN control: studyClearAnnotations"
+  },
+  "clear": "Clear",
+  "@clear": {
+    "description": "Study and PGN control: clear"
+  },
+  "studyClearVariations": "Clear variations?",
+  "@studyClearVariations": {
+    "description": "Study and PGN control: studyClearVariations"
+  },
+  "studyNeedsChapter": "A study needs at least one chapter.",
+  "@studyNeedsChapter": {
+    "description": "Study and PGN control: studyNeedsChapter"
+  },
+  "studyFromUrl": "From URL…",
+  "@studyFromUrl": {
+    "description": "Study and PGN control: studyFromUrl"
+  },
+  "studyPgnFileChapters": "PGN file as chapters…",
+  "@studyPgnFileChapters": {
+    "description": "Study and PGN control: studyPgnFileChapters"
+  },
+  "studyExportHeading": "Export",
+  "@studyExportHeading": {
+    "description": "Study and PGN control: studyExportHeading"
+  },
+  "studyCopyPgn": "Copy study PGN",
+  "@studyCopyPgn": {
+    "description": "Study and PGN control: studyCopyPgn"
+  },
+  "studySavePgnAs": "Save study PGN as…",
+  "@studySavePgnAs": {
+    "description": "Study and PGN control: studySavePgnAs"
+  },
+  "studyTrainHeading": "Train",
+  "@studyTrainHeading": {
+    "description": "Study and PGN control: studyTrainHeading"
+  },
+  "studyTrainChapter": "Train this chapter",
+  "@studyTrainChapter": {
+    "description": "Study and PGN control: studyTrainChapter"
+  },
+  "studyTrainAll": "Train whole study",
+  "@studyTrainAll": {
+    "description": "Study and PGN control: studyTrainAll"
+  },
+  "studyBoardHeading": "Board",
+  "@studyBoardHeading": {
+    "description": "Study and PGN control: studyBoardHeading"
+  },
+  "studyExploreHeading": "Explore",
+  "@studyExploreHeading": {
+    "description": "Study and PGN control: studyExploreHeading"
+  },
+  "studyManageHeading": "Manage",
+  "@studyManageHeading": {
+    "description": "Study and PGN control: studyManageHeading"
+  },
+  "studyDeleteMenu": "Delete study…",
+  "@studyDeleteMenu": {
+    "description": "Study and PGN control: studyDeleteMenu"
+  },
+  "studySearch": "Search studies",
+  "@studySearch": {
+    "description": "Study and PGN control: studySearch"
+  },
+  "studyNoStudies": "No studies yet — import or create one.",
+  "@studyNoStudies": {
+    "description": "Study and PGN control: studyNoStudies"
+  },
+  "studyGoChapter": "Go to chapter",
+  "@studyGoChapter": {
+    "description": "Study and PGN control: studyGoChapter"
+  },
+  "studyNoChaptersYet": "This study has no chapters yet.",
+  "@studyNoChaptersYet": {
+    "description": "Study and PGN control: studyNoChaptersYet"
+  },
+  "studyAddedChapters": "{count, plural, =1{Added 1 chapter.} other{Added {count} chapters.}}",
+  "@studyAddedChapters": {
+    "description": "Study and PGN control: studyAddedChapters",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "studyDeleteNamed": "Delete study \"{name}\"?",
+  "@studyDeleteNamed": {
+    "description": "Study and PGN control: studyDeleteNamed",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "studyDeleteChapterNamed": "Delete chapter \"{name}\"?",
+  "@studyDeleteChapterNamed": {
+    "description": "Study and PGN control: studyDeleteChapterNamed",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "studyChapterNumber": "Chapter {number}",
+  "@studyChapterNumber": {
+    "description": "Study and PGN control: studyChapterNumber",
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
+  "studyPgnHistory": "PGN: {name}",
+  "@studyPgnHistory": {
+    "description": "Study and PGN control: studyPgnHistory",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "boardInvalidFen": "Could not parse FEN. Check all fields.",
+  "@boardInvalidFen": {
+    "description": "Study and PGN control: boardInvalidFen"
+  },
+  "boardWhiteToMove": "White to move",
+  "@boardWhiteToMove": {
+    "description": "Study and PGN control: boardWhiteToMove"
+  },
+  "boardBlackToMove": "Black to move",
+  "@boardBlackToMove": {
+    "description": "Study and PGN control: boardBlackToMove"
+  },
+  "boardStartPosition": "Start position",
+  "@boardStartPosition": {
+    "description": "Study and PGN control: boardStartPosition"
+  },
+  "boardClear": "Clear board",
+  "@boardClear": {
+    "description": "Study and PGN control: boardClear"
+  },
+  "boardAdvanced": "Advanced position settings",
+  "@boardAdvanced": {
+    "description": "Study and PGN control: boardAdvanced"
+  },
+  "boardCastlingEnPassant": "Castling and en passant",
+  "@boardCastlingEnPassant": {
+    "description": "Study and PGN control: boardCastlingEnPassant"
+  },
+  "boardCastling": "Castling",
+  "@boardCastling": {
+    "description": "Study and PGN control: boardCastling"
+  },
+  "boardEnPassant": "En passant",
+  "@boardEnPassant": {
+    "description": "Study and PGN control: boardEnPassant"
+  },
+  "boardNoEnPassant": "none",
+  "@boardNoEnPassant": {
+    "description": "Study and PGN control: boardNoEnPassant"
+  },
+  "boardFenPending": "Apply or discard the FEN text before using this position.",
+  "@boardFenPending": {
+    "description": "Study and PGN control: boardFenPending"
+  },
+  "boardCopyFen": "Copy FEN",
+  "@boardCopyFen": {
+    "description": "Study and PGN control: boardCopyFen"
+  },
+  "boardFenCopied": "FEN copied.",
+  "@boardFenCopied": {
+    "description": "Study and PGN control: boardFenCopied"
+  },
+  "boardPasteFen": "Paste FEN",
+  "@boardPasteFen": {
+    "description": "Study and PGN control: boardPasteFen"
+  },
+  "boardApplyFen": "Apply FEN",
+  "@boardApplyFen": {
+    "description": "Study and PGN control: boardApplyFen"
+  },
+  "boardDiscardFen": "Discard FEN changes",
+  "@boardDiscardFen": {
+    "description": "Study and PGN control: boardDiscardFen"
+  },
+  "boardSetupHelp": "Drag pieces where you want them, or click a spare piece and paint it onto squares. Right-click clears a square; with a piece in hand it switches the colour.",
+  "@boardSetupHelp": {
+    "description": "Study and PGN control: boardSetupHelp"
+  },
+  "boardCastleSide": "{side} {castle}",
+  "@boardCastleSide": {
+    "description": "Study and PGN control: boardCastleSide",
+    "placeholders": {
+      "side": {
+        "type": "String"
+      },
+      "castle": {
+        "type": "String"
+      }
+    }
+  },
+  "boardMovePieces": "Move pieces",
+  "@boardMovePieces": {
+    "description": "Study and PGN control: boardMovePieces"
+  },
+  "boardErasePieces": "Erase pieces",
+  "@boardErasePieces": {
+    "description": "Study and PGN control: boardErasePieces"
+  },
+  "boardPiecePawn": "pawn",
+  "@boardPiecePawn": {
+    "description": "Study and PGN control: boardPiecePawn"
+  },
+  "boardPieceKnight": "knight",
+  "@boardPieceKnight": {
+    "description": "Study and PGN control: boardPieceKnight"
+  },
+  "boardPieceBishop": "bishop",
+  "@boardPieceBishop": {
+    "description": "Study and PGN control: boardPieceBishop"
+  },
+  "boardPieceRook": "rook",
+  "@boardPieceRook": {
+    "description": "Study and PGN control: boardPieceRook"
+  },
+  "boardPieceQueen": "queen",
+  "@boardPieceQueen": {
+    "description": "Study and PGN control: boardPieceQueen"
+  },
+  "boardPieceKing": "king",
+  "@boardPieceKing": {
+    "description": "Study and PGN control: boardPieceKing"
+  },
+  "boardPieceName": "{side} {piece}",
+  "@boardPieceName": {
+    "description": "Study and PGN control: boardPieceName",
+    "placeholders": {
+      "side": {
+        "type": "String"
+      },
+      "piece": {
+        "type": "String"
+      }
+    }
+  },
+  "boardSpareHelp": "{piece}: drag onto the board, or click to paint with it",
+  "@boardSpareHelp": {
+    "description": "Study and PGN control: boardSpareHelp",
+    "placeholders": {
+      "piece": {
+        "type": "String"
+      }
+    }
+  },
+  "copyDone": "Copied",
+  "@copyDone": {
+    "description": "Study and PGN control: copyDone"
+  },
+  "copyAction": "Copy",
+  "@copyAction": {
+    "description": "Study and PGN control: copyAction"
+  },
+  "choiceCloseList": "Close list",
+  "@choiceCloseList": {
+    "description": "Study and PGN control: choiceCloseList"
+  },
+  "choiceShowAll": "Show all",
+  "@choiceShowAll": {
+    "description": "Study and PGN control: choiceShowAll"
+  },
+  "choiceNothing": "Nothing to choose from",
+  "@choiceNothing": {
+    "description": "Study and PGN control: choiceNothing"
+  },
+  "choiceNoMatches": "No matches",
+  "@choiceNoMatches": {
+    "description": "Study and PGN control: choiceNoMatches"
+  },
+  "pgnNotSavedFile": "Not saved to a file",
+  "@pgnNotSavedFile": {
+    "description": "Study and PGN control: pgnNotSavedFile"
+  },
+  "pgnChooseSaveFile": "Use Save as… to choose a PGN file.",
+  "@pgnChooseSaveFile": {
+    "description": "Study and PGN control: pgnChooseSaveFile"
+  },
+  "pgnAutoSaved": "Autosave on · Saved",
+  "@pgnAutoSaved": {
+    "description": "Study and PGN control: pgnAutoSaved"
+  },
+  "pgnManualSaved": "Autosave off · Saved",
+  "@pgnManualSaved": {
+    "description": "Study and PGN control: pgnManualSaved"
+  },
+  "pgnSavingPath": "Saving changes to {path}",
+  "@pgnSavingPath": {
+    "description": "Study and PGN control: pgnSavingPath",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "pgnManualSavePath": "Autosave is off. Use Save to write changes to {path}",
+  "@pgnManualSavePath": {
+    "description": "Study and PGN control: pgnManualSavePath",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "pgnAutoSavePath": "Changes save automatically to {path}",
+  "@pgnAutoSavePath": {
+    "description": "Study and PGN control: pgnAutoSavePath",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "pgnNeedsManualSavePath": "Changes need a manual save to {path}",
+  "@pgnNeedsManualSavePath": {
+    "description": "Study and PGN control: pgnNeedsManualSavePath",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "pgnDeleteCounts": "Delete {moves, plural, =1{1 move} other{{moves} moves}} and {comments, plural, =1{1 comment} other{{comments} comments}}?",
+  "@pgnDeleteCounts": {
+    "description": "Study and PGN control: pgnDeleteCounts",
+    "placeholders": {
+      "moves": {
+        "type": "int"
+      },
+      "comments": {
+        "type": "int"
+      }
+    }
+  },
+  "studyDeleteContents": "{chapters, plural, =1{1 chapter} other{{chapters} chapters}} with {moves, plural, =1{1 move} other{{moves} moves}} and {comments, plural, =1{1 comment} other{{comments} comments}}. The PGN file will be moved to Chess Auto Prep recovery trash.",
+  "@studyDeleteContents": {
+    "description": "Study and PGN control: studyDeleteContents",
+    "placeholders": {
+      "chapters": {
+        "type": "int"
+      },
+      "moves": {
+        "type": "int"
+      },
+      "comments": {
+        "type": "int"
+      }
+    }
+  },
+  "studyReplacePositionContents": "Chapter \"{name}\" already has moves; setting a new starting position will clear them.",
+  "@studyReplacePositionContents": {
+    "description": "Study and PGN control: studyReplacePositionContents",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "studyClearAnnotationContents": "Remove {comments, plural, =1{1 comment} other{{comments} comments}} and all glyphs and shapes from \"{name}\". The moves stay.",
+  "@studyClearAnnotationContents": {
+    "description": "Study and PGN control: studyClearAnnotationContents",
+    "placeholders": {
+      "comments": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "studyClearVariationContents": "Remove {moves, plural, =1{1 move} other{{moves} moves}} and {comments, plural, =1{1 comment} other{{comments} comments}} from \"{name}\", including sideline annotations. The main line and its notes stay.",
+  "@studyClearVariationContents": {
+    "description": "Study and PGN control: studyClearVariationContents",
+    "placeholders": {
+      "moves": {
+        "type": "int"
+      },
+      "comments": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "studyRemoveCounts": "Remove {moves, plural, =1{1 move} other{{moves} moves}} and {comments, plural, =1{1 comment} other{{comments} comments}}, including all annotations.",
+  "@studyRemoveCounts": {
+    "description": "Study and PGN control: studyRemoveCounts",
+    "placeholders": {
+      "moves": {
+        "type": "int"
+      },
+      "comments": {
+        "type": "int"
+      }
+    }
+  },
+  "studyLichessSource": "Lichess study · {id}",
+  "@studyLichessSource": {
+    "description": "Study and PGN control: studyLichessSource",
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "studyLichessChapterSource": "Lichess study chapter · {study}/{chapter}",
+  "@studyLichessChapterSource": {
+    "description": "Study and PGN control: studyLichessChapterSource",
+    "placeholders": {
+      "study": {
+        "type": "String"
+      },
+      "chapter": {
+        "type": "String"
+      }
+    }
+  },
+  "studyLichessUserSource": "Lichess · all of {user}'s studies",
+  "@studyLichessUserSource": {
+    "description": "Study and PGN control: studyLichessUserSource",
+    "placeholders": {
+      "user": {
+        "type": "String"
+      }
+    }
+  },
+  "studyCollectionSource": "chessgames.com collection · cid {id}",
+  "@studyCollectionSource": {
+    "description": "Study and PGN control: studyCollectionSource",
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "engineAppearanceToggle": "Toggle engine",
+  "engineAppearanceEngine": "Engine",
+  "engineAppearanceBusy": "Engine busy",
+  "engineAppearanceHideThreat": "Hide threat",
+  "engineAppearanceShowThreat": "Show threat",
+  "engineAppearanceStopAnalysis": "Stop analysis",
+  "engineAppearanceStartAnalysis": "Start analysis",
+  "engineAppearanceStop": "Stop",
+  "engineAppearanceLocalEngine": "Local engine",
+  "engineAppearanceOptions": "Analysis options",
+  "engineAppearanceNoLegalMoves": "No legal moves.",
+  "engineAppearanceAnalyzing": "Analyzing...",
+  "engineAppearanceFailure": "Engine failed. Toggle it to retry.",
+  "engineAppearanceSettings": "Engine settings",
+  "engineAppearanceCollapseLine": "Collapse line",
+  "engineAppearanceShowFullLine": "Show full line",
+  "engineNoticeLocked": "Stockfish is busy building your repertoire. Pause the build or wait for it to finish before using engine analysis.",
+  "engineNoticeBusyCompact": "Engine busy — building your repertoire.",
+  "engineNoticeBusyTitle": "Engine Busy",
+  "engineNoticeBusyBody": "Stockfish is building your repertoire.\nPause the build or let it finish to analyze again.",
+  "engineAppearanceSearchStatus": "{mode, select, threat{Threat · } other{}}Depth {depth} • {nodes} nodes",
+  "@engineAppearanceSearchStatus": {
+    "placeholders": {
+      "mode": {
+        "type": "String"
+      },
+      "depth": {
+        "type": "int"
+      },
+      "nodes": {
+        "type": "String"
+      }
+    },
+    "description": "Engine analysis control or status: engineAppearanceSearchStatus"
+  },
+  "engineAppearanceLinesStatus": "{mode, select, threat{Threat · } other{}}{count, plural, =1{1 line} other{{count} lines}} • depth {depth}",
+  "@engineAppearanceLinesStatus": {
+    "placeholders": {
+      "mode": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      },
+      "depth": {
+        "type": "int"
+      }
+    },
+    "description": "Engine analysis control or status: engineAppearanceLinesStatus"
+  },
+  "engineAppearanceDepthStatus": "Depth {depth} · {nodes} nodes",
+  "@engineAppearanceDepthStatus": {
+    "placeholders": {
+      "depth": {
+        "type": "int"
+      },
+      "nodes": {
+        "type": "String"
+      }
+    },
+    "description": "Engine analysis control or status: engineAppearanceDepthStatus"
+  },
+  "@engineAppearanceToggle": {
+    "description": "Engine analysis control or status: engineAppearanceToggle"
+  },
+  "@engineAppearanceEngine": {
+    "description": "Engine analysis control or status: engineAppearanceEngine"
+  },
+  "@engineAppearanceBusy": {
+    "description": "Engine analysis control or status: engineAppearanceBusy"
+  },
+  "@engineAppearanceHideThreat": {
+    "description": "Engine analysis control or status: engineAppearanceHideThreat"
+  },
+  "@engineAppearanceShowThreat": {
+    "description": "Engine analysis control or status: engineAppearanceShowThreat"
+  },
+  "@engineAppearanceStopAnalysis": {
+    "description": "Engine analysis control or status: engineAppearanceStopAnalysis"
+  },
+  "@engineAppearanceStartAnalysis": {
+    "description": "Engine analysis control or status: engineAppearanceStartAnalysis"
+  },
+  "@engineAppearanceStop": {
+    "description": "Engine analysis control or status: engineAppearanceStop"
+  },
+  "@engineAppearanceLocalEngine": {
+    "description": "Engine analysis control or status: engineAppearanceLocalEngine"
+  },
+  "@engineAppearanceOptions": {
+    "description": "Engine analysis control or status: engineAppearanceOptions"
+  },
+  "@engineAppearanceNoLegalMoves": {
+    "description": "Engine analysis control or status: engineAppearanceNoLegalMoves"
+  },
+  "@engineAppearanceAnalyzing": {
+    "description": "Engine analysis control or status: engineAppearanceAnalyzing"
+  },
+  "@engineAppearanceFailure": {
+    "description": "Engine analysis control or status: engineAppearanceFailure"
+  },
+  "@engineAppearanceSettings": {
+    "description": "Engine analysis control or status: engineAppearanceSettings"
+  },
+  "@engineAppearanceCollapseLine": {
+    "description": "Engine analysis control or status: engineAppearanceCollapseLine"
+  },
+  "@engineAppearanceShowFullLine": {
+    "description": "Engine analysis control or status: engineAppearanceShowFullLine"
+  },
+  "@engineNoticeLocked": {
+    "description": "Engine analysis control or status: engineNoticeLocked"
+  },
+  "@engineNoticeBusyCompact": {
+    "description": "Engine analysis control or status: engineNoticeBusyCompact"
+  },
+  "@engineNoticeBusyTitle": {
+    "description": "Engine analysis control or status: engineNoticeBusyTitle"
+  },
+  "@engineNoticeBusyBody": {
+    "description": "Engine analysis control or status: engineNoticeBusyBody"
+  },
+  "boardSetupTitle": "Set up position",
+  "@boardSetupTitle": {
+    "description": "Study and PGN control: boardSetupTitle"
+  },
+  "boardUsePosition": "Use position",
+  "@boardUsePosition": {
+    "description": "Study and PGN control: boardUsePosition"
+  },
+  "generationSourceChanged": "The chapter changed. Close this configuration and open it again.",
+  "generationConfigurationRefreshRequired": "Reload the chapter and reopen this configuration before making further changes.",
+  "generationCutUnconfirmed": "The cut could not be confirmed. Reload the chapter before making further changes.",
+  "@generationSourceChanged": {
+    "description": "Builder generation configuration admission and cut recovery feedback."
+  },
+  "@generationConfigurationRefreshRequired": {
+    "description": "Builder generation configuration admission and cut recovery feedback."
+  },
+  "@generationCutUnconfirmed": {
+    "description": "Builder generation configuration admission and cut recovery feedback."
+  },
+  "generationCutRefreshRequired": "{count, plural, =0{The chapter could not be refreshed. Reload it and reopen this configuration before making further changes.} =1{Removed 1 line, but this configuration could not be refreshed. Reload the chapter before making further changes.} other{Removed {count} lines, but this configuration could not be refreshed. Reload the chapter before making further changes.}}",
+  "@generationCutRefreshRequired": {
+    "description": "Acknowledged cut count when the original chapter view cannot be refreshed.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
+}

@@ -13,7 +13,7 @@ library;
 import 'package:dartchess/dartchess.dart';
 
 import '../../../utils/pgn_comment_utils.dart';
-import '../../../services/game_eval_annotations.dart'
+import 'package:chess_auto_prep/chess_core/analysis/game_eval_annotations.dart'
     show annotateGameMoveQuality;
 
 /// One ply's engine score, normalized to White's perspective — the sign

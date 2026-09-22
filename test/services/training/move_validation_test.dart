@@ -2,7 +2,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/models/completed_move.dart';
-import 'package:chess_auto_prep/services/training/move_validation.dart';
+import 'package:chess_auto_prep/features/training/models/move_validation.dart';
 
 /// These cases previously ran through a fully-constructed
 /// `TrainingSessionController` because the logic lived in a private part-mixin.

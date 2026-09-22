@@ -13,7 +13,7 @@ import 'package:flutter/material.dart';
 
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
-import '../../../widgets/common/list_search_field.dart';
+import '../../../design_system/components/list_search_field.dart';
 import '../services/audit_config.dart';
 import '../../../utils/app_shortcuts.dart';
 import '../../../utils/keyboard_shortcut_utils.dart';

@@ -19,7 +19,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../utils/fen_utils.dart';
 import 'chessdb_score.dart';
 import 'db_move_list.dart';
-import 'eval_canonicalize.dart';
+import '../../chess_core/position/eval_canonicalize.dart';
 import 'external_eval_provider.dart';
 
 const _defaultBaseUrl = 'http://www.chessdb.cn/cdb.php';

@@ -15,10 +15,14 @@
 ///  * bulk        — every stored game
 library;
 
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../support/runtime_settings.dart';
+
 import 'dart:io';
 
 import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
-import 'package:chess_auto_prep/services/pgn_parsing_service.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_text.dart';
 import 'package:chess_auto_prep/features/tactics/services/tactics_database.dart';
 import 'package:chess_auto_prep/features/tactics/services/tactics_import_service.dart';
 import 'package:flutter/foundation.dart';
@@ -69,7 +73,7 @@ Future<({int games, int tactics, int searches, Duration wall})> _runScenario(
   ).writeAsStringSync(games.join('\n\n'));
 
   final database = TacticsDatabase();
-  final service = TacticsImportService(database: database);
+  final service = TacticsImportService(pool: engines.pool, database: database);
   await service.initialize();
 
   EvalWorker.searchCount = 0;
@@ -102,7 +106,14 @@ void _report(
   );
 }
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late List<String> allGames;
@@ -130,7 +141,7 @@ void main() {
   });
 
   tearDownAll(() {
-    StockfishPool.instance.dispose();
+    engines.pool.dispose();
     debugDefaultTargetPlatformOverride = null;
   });
 

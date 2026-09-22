@@ -9,7 +9,7 @@ import '../../utils/atomic_file.dart';
 import '../../utils/file_operation_lock.dart';
 import '../game_store/game_store.dart';
 import '../game_store/game_store_service.dart';
-import '../pgn_parsing_service.dart';
+import '../../chess_core/pgn/pgn_text.dart';
 import '../storage/app_paths.dart';
 
 /// One published generation of a player's downloaded games.

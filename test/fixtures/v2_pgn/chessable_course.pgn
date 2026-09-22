@@ -1,0 +1,29 @@
+// 21) Ruy Lopez 5.d4
+// Color: Black
+// Chapter: 21) Ruy Lopez 5.d4
+// Created on 2026-09-10 14:40:45
+
+[Event "Lifetime Repertoires: 1.e4 e5"]
+[LineID "line_LS18Mzk1"]
+[Site "?"]
+[White "?"]
+[Black "?"]
+[Result "*"]
+
+ {Introduction. A figurine  and a run-on — but12.Qd2?loses to12...e3!13.fxe3Ne4.} 1. -- *
+
+[Event "Lifetime Repertoires: 1.e4 e5"]
+[LineID "line_LS18Mzk2"]
+[Result "*"]
+
+1. e4
+1. e5
+2. Nf3
+2. Nc6
+3. Bb5 {The Ruy Lopez.}
+3. a6
+4. Ba4
+4. Nf6
+5. d4 {The primary advantage of this line…}
+5. exd4
+*

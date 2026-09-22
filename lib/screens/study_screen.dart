@@ -2,8 +2,12 @@
 /// chapter sidebar, and engine. Layout widgets live under `widgets/study/`.
 library;
 
+import '../features/studies/repositories/study_import_repository.dart';
+
+import '../l10n/study_import_labels.dart';
+import '../features/studies/models/study_import_state.dart';
+
 import 'dart:async';
-import 'dart:convert' show utf8;
 
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:file_picker/file_picker.dart';
@@ -14,14 +18,16 @@ import 'package:provider/provider.dart';
 
 import '../constants/ui_breakpoints.dart';
 import '../core/app_state.dart';
-import '../core/study_controller.dart';
-import '../models/move_tree.dart' show TreePath;
-import '../services/repertoire_line_ids.dart';
-import '../services/repertoire_service.dart';
-import '../services/storage/storage_factory.dart';
-import '../services/study_import/study_import_controller.dart';
-import '../services/study_import/study_import_exception.dart';
-import '../theme/app_colors.dart';
+import '../features/studies/controllers/study_controller.dart';
+import '../features/studies/widgets/study_save_button.dart';
+import '../features/studies/widgets/study_selector.dart';
+import '../features/documents/widgets/document_save_dialog.dart';
+import '../design_system/components/name_entry_dialog.dart';
+import '../l10n/generated/app_localizations.dart';
+import '../chess_core/moves/tree_path.dart';
+import '../chess_core/pgn/repertoire_line_ids.dart';
+import '../chess_core/pgn/mainline_lexer.dart' as pgn;
+import '../features/studies/controllers/study_import_controller.dart';
 import '../utils/app_messages.dart';
 import '../utils/app_shortcuts.dart';
 import '../utils/keyboard_shortcut_utils.dart';
@@ -30,13 +36,12 @@ import '../widgets/app_mode_switcher.dart';
 import '../widgets/app_overflow_menu.dart';
 import '../widgets/app_settings_button.dart';
 import '../widgets/board_editor/board_editor_dialog.dart';
-import '../widgets/common/confirm_dialog.dart';
+import '../design_system/components/confirm_dialog.dart';
 import '../models/pgn_deletion_summary.dart';
 import '../widgets/pgn/pgn_save_status.dart';
 import '../widgets/common/searchable_picker_dialog.dart';
 import '../widgets/engine/inline_engine_bar.dart';
 import '../widgets/pgn/pgn_annotation_panel.dart';
-import '../widgets/study/chapter_manager_dialog.dart';
 import '../widgets/study/edit_chapter_dialog.dart';
 import '../widgets/study/import_from_url_dialog.dart';
 import '../widgets/study/new_chapter_dialog.dart';
@@ -69,15 +74,14 @@ class _StudyScreenState extends State<StudyScreen> {
   /// Background collection downloads. App-wide, because a run outlives this
   /// screen — [_seenImportGeneration] is seeded so a run that finished before
   /// the screen existed is not re-announced.
-  final StudyImportController _import = StudyImportController.instance;
+  late final StudyImportController _import;
   late int _seenImportGeneration;
-  String? _reportedSaveError;
 
   @override
   void initState() {
     super.initState();
     _study = context.read<StudyController>();
-    _study.addListener(_onStudyChanged);
+    _import = context.read<StudyImportController>();
     unawaited(_study.refreshStudyList());
     _seenImportGeneration = _import.resultGeneration;
     _import.addListener(_onImportResult);
@@ -108,20 +112,34 @@ class _StudyScreenState extends State<StudyScreen> {
     unawaited(_openFromHandoff(handoff));
   }
 
+  int _handoffEpoch = 0;
   Future<void> _openFromHandoff(EditStudy handoff) async {
-    await _study.openStudy(handoff.studyPath);
-    if (!mounted) return;
+    final epoch = ++_handoffEpoch;
+    bool opened;
+    try {
+      opened = await _study.openStudy(handoff.studyPath);
+    } catch (_) {
+      if (mounted && epoch == _handoffEpoch) {
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context).studyOpenFailed,
+          isError: true,
+        );
+      }
+      return;
+    }
+    if (!mounted || epoch != _handoffEpoch || !opened) return;
     final chapterIndex = handoff.chapterIndex;
     final chapterName = handoff.chapterName;
-    if (chapterIndex != null && _study.doc.chapters.isNotEmpty) {
+    if (chapterIndex != null && _study.chapterList.chapters.isNotEmpty) {
       // Browse↔Edit toggle: the producer showed this same file, index is
       // exact.
       _study.selectChapter(
-        chapterIndex.clamp(0, _study.doc.chapters.length - 1),
+        chapterIndex.clamp(0, _study.chapterList.chapters.length - 1),
       );
     } else if (chapterName != null) {
       // Last match: add-to-study appends, and names aren't unique.
-      final index = _study.doc.chapters.lastIndexWhere(
+      final index = _study.chapterList.chapters.lastIndexWhere(
         (c) => c.name == chapterName,
       );
       if (index >= 0) _study.selectChapter(index);
@@ -136,23 +154,8 @@ class _StudyScreenState extends State<StudyScreen> {
   void dispose() {
     _appStateRef?.removeListener(_onAppStateChanged);
     _import.removeListener(_onImportResult);
-    _study.removeListener(_onStudyChanged);
     _focusNode.dispose();
     super.dispose();
-  }
-
-  void _onStudyChanged() {
-    if (!mounted) return;
-    setState(() {});
-    final error = _study.saveError;
-    if (error == null) {
-      _reportedSaveError = null;
-    } else if (error != _reportedSaveError) {
-      _reportedSaveError = error;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) showAppSnackBar(context, error, isError: true);
-      });
-    }
   }
 
   // ── Keyboard ─────────────────────────────────────────────────────────
@@ -162,13 +165,13 @@ class _StudyScreenState extends State<StudyScreen> {
   List<KeyBinding> get _keyBindings => [
     ...KeyBinding.forShortcut(
       AppShortcut.backOneMove,
-      'Back one move',
+      AppLocalizations.of(context).studyBackMove,
       _study.goBack,
       repeats: true,
     ),
     ...KeyBinding.forShortcut(
       AppShortcut.forwardOneMove,
-      'Forward one move',
+      AppLocalizations.of(context).studyForwardMove,
       _study.goForward,
       repeats: true,
     ),
@@ -176,46 +179,50 @@ class _StudyScreenState extends State<StudyScreen> {
     // step the queue in front of you, which here is the chapter list.
     ...KeyBinding.forShortcut(
       AppShortcut.goToStart,
-      'Go to start',
+      AppLocalizations.of(context).studyGoStart,
       _study.goToStart,
     ),
-    ...KeyBinding.forShortcut(AppShortcut.goToEnd, 'Go to end', _study.goToEnd),
+    ...KeyBinding.forShortcut(
+      AppShortcut.goToEnd,
+      AppLocalizations.of(context).studyGoEnd,
+      _study.goToEnd,
+    ),
     ...KeyBinding.forShortcut(
       AppShortcut.toggleEngine,
-      'Toggle engine',
-      InlineEngineBar.toggleEngine,
+      AppLocalizations.of(context).studyToggleEngine,
+      () => InlineEngineBar.toggleEngine(context),
     ),
     ...KeyBinding.forShortcut(
       AppShortcut.flipBoard,
-      'Flip board',
+      AppLocalizations.of(context).studyFlipBoard,
       _study.toggleFlipped,
     ),
     ...KeyBinding.forShortcut(
       AppShortcut.browseInViewer,
-      'Browse in PGN viewer',
+      AppLocalizations.of(context).studyBrowsePgn,
       _browseInViewer,
     ),
     ...KeyBinding.forShortcut(
       AppShortcut.nextItem,
-      'Next chapter',
+      AppLocalizations.of(context).studyNextChapter,
       () => _study.selectChapter(_study.chapterIndex + 1),
       repeats: true,
     ),
     ...KeyBinding.forShortcut(
       AppShortcut.previousItem,
-      'Previous chapter',
+      AppLocalizations.of(context).studyPreviousChapter,
       () => _study.selectChapter(_study.chapterIndex - 1),
       repeats: true,
     ),
     ...KeyBinding.forShortcut(
       AppShortcut.focusMoveInput,
-      'Focus move input',
+      AppLocalizations.of(context).studyFocusInput,
       () => _moveInputKey.currentState?.focus(),
     ),
     // Jump into the annotation panel's comment field for the current move.
     ...KeyBinding.forShortcutIf(
       AppShortcut.commentMove,
-      'Comment current move',
+      AppLocalizations.of(context).studyCommentCurrent,
       PgnAnnotationPanel.focusActive,
     ),
   ];
@@ -232,12 +239,20 @@ class _StudyScreenState extends State<StudyScreen> {
   // ── Study / chapter management ───────────────────────────────────────
 
   Future<void> _newStudy() async {
-    final name = await promptStudyName(context, title: 'New study');
+    final name = await promptStudyName(
+      context,
+      title: AppLocalizations.of(context).studyNewStudy,
+    );
     if (name == null) return;
     try {
       await _study.newStudy(name);
-    } on ArgumentError catch (e) {
-      if (mounted) showAppSnackBar(context, e.message as String, isError: true);
+    } on ArgumentError {
+      if (mounted)
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context).studyNameExists,
+          isError: true,
+        );
     }
   }
 
@@ -250,70 +265,114 @@ class _StudyScreenState extends State<StudyScreen> {
   /// download and is handed to [StudyImportController] to run in the
   /// background (results arrive via [_onImportResult]).
   Future<void> _importFromUrl() async {
-    final plan = await ImportFromUrlDialog.show(
+    final session = _study.title.session;
+    await ImportFromUrlDialog.show(
       context,
-      canAppend: _study.doc.filePath != null,
+      canAppend: _study.title.filePath != null,
+      repository: context.read<StudyImportRepository>(),
+      apply: (plan) async {
+        if (!mounted) return false;
+        if (plan is LichessStudyPlan) {
+          if (plan.appendToCurrent && session != _study.title.session) {
+            return false;
+          }
+          return _applyLichessPlan(plan);
+        }
+        return _startCollectionDownload(plan as CollectionPlan);
+      },
     );
-    if (plan == null || !mounted) return;
-
-    switch (plan) {
-      case LichessStudyPlan():
-        await _applyLichessPlan(plan);
-      case CollectionPlan():
-        _startCollectionDownload(plan);
-    }
   }
 
-  Future<void> _applyLichessPlan(LichessStudyPlan plan) async {
-    if (plan.appendToCurrent) {
-      final added = await _study.importChapters(plan.pgn);
-      if (!mounted) return;
+  Future<bool> _applyLichessPlan(LichessStudyPlan plan) async {
+    final session = _study.title.session;
+    final chapters = _study.chapterList.chapters.length;
+    var consumed = false;
+    try {
+      if (plan.appendToCurrent) {
+        final added = await _study.importChapters(plan.pgn);
+        if (!mounted || session != _study.title.session) return true;
+        final l10n = AppLocalizations.of(context);
+        showAppSnackBar(context, l10n.studyImportAdded(added));
+        return true;
+      }
+      final result = await _import.publishStudy(name: plan.name, pgn: plan.pgn);
+      consumed = true;
+      // The result listener reports the captured publication, not whichever
+      // study happens to be active when this asynchronous operation completes.
+      if (mounted &&
+          session == _study.title.session &&
+          result.studyPath != null) {
+        await _study.openStudy(result.studyPath!);
+      }
+      return true;
+    } catch (error) {
+      if (!mounted) return false;
+      final l10n = AppLocalizations.of(context);
       showAppSnackBar(
         context,
-        added == 0
-            ? 'Nothing to import from that study.'
-            : 'Added $added chapter${added == 1 ? '' : 's'} '
-                  'from "${plan.name}".',
-        isError: added == 0,
+        error is StudyImportRejected
+            ? studyImportFailureLabel(l10n, error.failure)
+            : l10n.studyImportApplyFailed,
+        isError: true,
       );
-      return;
+      // Appended chapters already belong to the editor even if autosave failed;
+      // resubmitting them would duplicate work. A rejected create stays in-dialog.
+      return consumed ||
+          (plan.appendToCurrent &&
+              session == _study.title.session &&
+              _study.chapterList.chapters.length > chapters);
     }
-
-    await _study.createStudyFromPgn(plan.name, plan.pgn);
-    if (!mounted) return;
-    final chapters = _study.doc.chapters.length;
-    showAppSnackBar(
-      context,
-      'Imported "${_study.doc.name}" — $chapters '
-      'chapter${chapters == 1 ? '' : 's'}.',
-    );
   }
 
-  void _startCollectionDownload(CollectionPlan plan) {
+  bool _startCollectionDownload(CollectionPlan plan) {
+    final rejection = _import.admissionFailure;
+    if (rejection != null) {
+      showAppSnackBar(
+        context,
+        studyImportFailureLabel(
+          AppLocalizations.of(context),
+          rejection.failure,
+        ),
+        isError: true,
+      );
+      return false;
+    }
     final minutes = (plan.gameIds.length * plan.delay.inSeconds / 60)
         .ceil()
         .clamp(1, 9999);
-    try {
-      // Deliberately not awaited: the run outlives this screen, and progress
-      // comes back through the status chip and [_onImportResult].
-      unawaited(
-        _import.startCollectionDownload(
-          gameIds: plan.gameIds,
-          studyName: plan.studyName,
-          delay: plan.delay,
-        ),
-      );
-    } on StudyImportException catch (e) {
-      showAppSnackBar(context, e.message, isError: true);
-      return;
-    }
+    // Deliberately not awaited: the application owns this background job.
+    unawaited(
+      _import
+          .startCollectionDownload(
+            gameIds: plan.gameIds,
+            studyName: plan.studyName,
+            delay: plan.delay,
+          )
+          .then<void>(
+            (_) {},
+            onError: (Object error, StackTrace stack) {
+              if (!mounted) return;
+              showAppSnackBar(
+                context,
+                studyImportFailureLabel(
+                  AppLocalizations.of(context),
+                  error is StudyImportRejected
+                      ? error.failure
+                      : StudyImportFailure.startup,
+                ),
+                isError: true,
+              );
+            },
+          ),
+    );
     showAppSnackBar(
       context,
-      'Downloading ${plan.gameIds.length} games (~$minutes min). '
-      'chessgames.com is slow on purpose — keep working, it runs in the '
-      'background.',
+      AppLocalizations.of(
+        context,
+      ).studyImportBackground(plan.gameIds.length, minutes),
       requiresAttention: true,
     );
+    return true;
   }
 
   /// One SnackBar per finished collection download, whenever Study mode is on
@@ -326,39 +385,82 @@ class _StudyScreenState extends State<StudyScreen> {
     }
     _seenImportGeneration = _import.resultGeneration;
 
-    final error = result.error;
-    final message =
-        error ??
-        (result.cancelled
-            ? 'Stopped after ${result.chapters} of '
-                  '${result.chapters + result.failed} games — saved as '
-                  '"${result.studyName}".'
-            : 'Imported ${result.chapters} games into "${result.studyName}"'
-                  '${result.failed > 0 ? ' (${result.failed} unavailable)' : ''}.');
-
-    final path = result.studyPath;
+    final l10n = AppLocalizations.of(context);
+    final failure = result.failure;
+    final message = failure != null
+        ? studyImportFailureLabel(l10n, failure)
+        : !result.wroteAnything
+        ? l10n.studyImportNoContent(result.failed)
+        : result.cancelled
+        ? l10n.studyImportStopped(result.chapters, result.studyName)
+        : l10n.studyImportComplete(
+            result.chapters,
+            result.failed,
+            result.studyName,
+          );
+    final publication = result.publication;
+    final review = publication != null && !result.wroteAnything;
     showAppSnackBar(
       context,
       message,
-      isError: error != null,
-      actionLabel: result.wroteAnything ? 'Open' : null,
-      onAction: result.wroteAnything ? () => _study.openStudy(path!) : null,
+      isError: failure != null,
+      requiresAttention: true,
+      actionLabel: review
+          ? l10n.studyImportReviewAction
+          : result.wroteAnything
+          ? l10n.studyImportOpen
+          : null,
+      onAction: review
+          ? _reviewImportedStudy
+          : result.wroteAnything
+          ? () => _study.openStudy(result.studyPath!)
+          : null,
     );
+  }
+
+  Future<void> _reviewImportedStudy() async {
+    final session = _import.publicationRecovery;
+    if (session == null) return;
+    await showDocumentSaveDialog(
+      context,
+      title: AppLocalizations.of(context).studyImportReview,
+      session: session,
+      chooseCopyDestination: _chooseExportDestination,
+    );
+    if (mounted && !session.state.dirty && !session.state.uncertain) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    }
   }
 
   /// Open a PGN file from disk: every game becomes a chapter appended to
   /// the study.  (Pasting PGN is the "New chapter" dialog's job.)
   Future<void> _importPgn() async {
+    final session = _study.title.session;
     final file = await FilePicker.pickFile(
-      dialogTitle: 'Import PGN as chapters',
+      dialogTitle: AppLocalizations.of(context).studyImportPgnChapters,
       type: FileType.custom,
       allowedExtensions: ['pgn', 'txt'],
     );
     final path = file?.path;
-    if (path == null) return;
-    final pgn = await StorageFactory.instance.readFile(path) ?? '';
+    if (path == null || !mounted || session != _study.title.session) return;
     if (!mounted) return;
-    await _addChaptersFromPgn(pgn);
+    try {
+      final added = await _study.importFile(path);
+      if (mounted && added > 0) {
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context).studyAddedChapters(added),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context).studyImportPgnFailed,
+          isError: true,
+        );
+      }
+    }
   }
 
   Future<void> _addChaptersFromPgn(
@@ -375,8 +477,8 @@ class _StudyScreenState extends State<StudyScreen> {
     showAppSnackBar(
       context,
       added == 0
-          ? 'No games found in that PGN.'
-          : 'Added $added chapter${added == 1 ? '' : 's'}.',
+          ? AppLocalizations.of(context).studyNoPgnGames
+          : AppLocalizations.of(context).studyAddedChapters(added),
       isError: added == 0,
     );
   }
@@ -385,22 +487,56 @@ class _StudyScreenState extends State<StudyScreen> {
   Future<void> _exportPgn() async {
     await _study.flushSave();
     await Clipboard.setData(ClipboardData(text: _study.doc.toPgn()));
-    if (mounted) showAppSnackBar(context, 'Study PGN copied to clipboard.');
+    if (mounted) {
+      showAppSnackBar(context, AppLocalizations.of(context).studyPgnCopied);
+    }
   }
 
-  /// Write the study out as a PGN file of the user's choosing — the Lichess
-  /// "Download" — leaving the study's own file where it is.
+  /// Export is an exclusive typed write; a picker never writes bytes itself.
+  /// Its independent save session leaves the source document and draft intact.
   Future<void> _saveStudyAs() async {
-    await _study.flushSave();
-    final outUri = await FilePicker.saveFile(
-      dialogTitle: 'Save study PGN',
-      fileName: '${_study.doc.name}.pgn',
-      type: FileType.custom,
-      allowedExtensions: ['pgn'],
-      bytes: utf8.encode(_study.doc.toPgn()),
+    final destination = await _chooseExportDestination(context);
+    if (!mounted || destination == null) return;
+    final session = _study.exportSession(destination);
+    unawaited(session.save());
+    try {
+      await showDocumentSaveDialog(
+        context,
+        title: AppLocalizations.of(context).studyExportTitle,
+        session: session,
+        chooseCopyDestination: _chooseExportDestination,
+      );
+    } finally {
+      await session.dispose();
+    }
+  }
+
+  Future<String?> _chooseExportDestination(BuildContext context) async {
+    final l10n = AppLocalizations.of(context);
+    final directory = await FilePicker.getDirectoryPath(
+      dialogTitle: l10n.studyExportDirectory,
     );
-    if (outUri == null || !mounted) return;
-    showAppSnackBar(context, 'Saved ${p.basename(outUri.toFilePath())}.');
+    if (directory == null || !context.mounted) return null;
+    final name = await showNameEntryDialog(
+      context,
+      title: l10n.studyExportTitle,
+      fieldLabel: l10n.studyExportName,
+      initialValue: '${_study.title.name}.pgn',
+      allowUnchanged: true,
+      confirmLabel: l10n.saveCopy,
+      cancelLabel: l10n.cancel,
+      validate: (value) =>
+          value == '.' ||
+              value == '..' ||
+              RegExp(r'[<>:"/\\|?*\x00-\x1f]').hasMatch(value)
+          ? l10n.studyInvalidName
+          : null,
+    );
+    if (name == null) return null;
+    return p.join(
+      directory,
+      name.toLowerCase().endsWith('.pgn') ? name : '$name.pgn',
+    );
   }
 
   Future<void> _deleteCurrentStudy() async {
@@ -408,7 +544,6 @@ class _StudyScreenState extends State<StudyScreen> {
     final path = doc.filePath;
     if (path == null) return;
     final chapters = List.of(doc.chapters);
-    final versions = [for (final c in chapters) c.tree.version];
     final summaries = [
       for (final c in chapters) PgnDeletionSummary.tree(c.tree),
     ];
@@ -416,23 +551,17 @@ class _StudyScreenState extends State<StudyScreen> {
     final comments = summaries.fold(0, (n, s) => n + s.comments);
     final confirmed = await confirmAction(
       context,
-      title: 'Delete study "${doc.name}"?',
-      message:
-          '${chapters.length} chapters with $moves moves and $comments comments. '
-          'The PGN file will be moved to Chess Auto Prep recovery trash.',
-      confirmLabel: 'Delete',
+      title: AppLocalizations.of(context).studyDeleteNamed(doc.name),
+      message: AppLocalizations.of(
+        context,
+      ).studyDeleteContents(chapters.length, moves, comments),
+      confirmLabel: AppLocalizations.of(context).delete,
     );
     if (!mounted ||
         !confirmed ||
         !identical(_study.doc, doc) ||
         doc.chapters.length != chapters.length) {
       return;
-    }
-    for (var i = 0; i < chapters.length; i++) {
-      if (!identical(doc.chapters[i], chapters[i]) ||
-          chapters[i].tree.version != versions[i]) {
-        return;
-      }
     }
     await _study.deleteStudy(path);
   }
@@ -467,14 +596,15 @@ class _StudyScreenState extends State<StudyScreen> {
   /// position. Existing moves are rooted in the old position, so replacing
   /// it clears them (after confirmation).
   Future<void> _editChapterPosition() async {
+    final chapter = _study.chapter;
     if (_study.chapterHasMoves) {
       final confirmed = await confirmAction(
         context,
-        title: 'Replace starting position?',
-        message:
-            'Chapter "${_study.chapter.name}" already has moves; setting a '
-            'new starting position will clear them.',
-        confirmLabel: 'Replace',
+        title: AppLocalizations.of(context).studyReplacePosition,
+        message: AppLocalizations.of(
+          context,
+        ).studyReplacePositionContents(_study.chapter.name),
+        confirmLabel: AppLocalizations.of(context).studyReplace,
         destructive: false,
       );
       if (!confirmed) return;
@@ -483,9 +613,9 @@ class _StudyScreenState extends State<StudyScreen> {
     final position = await BoardEditorDialog.show(
       context,
       initialFen: _study.currentPosition.fen,
-      actionLabel: 'Set chapter position',
+      actionLabel: AppLocalizations.of(context).studySetPosition,
     );
-    if (position == null) return;
+    if (!mounted || position == null || _study.chapter != chapter) return;
     _study.setChapterStartingPosition(position.fen);
   }
 
@@ -493,11 +623,11 @@ class _StudyScreenState extends State<StudyScreen> {
   /// Trainer's tactics mode: each chapter is one puzzle — starting FEN,
   /// solution mainline, comments shown as annotations.
   Future<void> _train({required bool wholeStudy}) async {
-    final path = _study.doc.filePath;
+    final path = _study.title.filePath;
     if (path == null) {
       showAppSnackBar(
         context,
-        'Save the study first (create it by name).',
+        AppLocalizations.of(context).studySaveFirst,
         isError: true,
       );
       return;
@@ -509,8 +639,8 @@ class _StudyScreenState extends State<StudyScreen> {
       showAppSnackBar(
         context,
         wholeStudy
-            ? 'No chapters with moves to train yet.'
-            : 'This chapter has no moves to train yet.',
+            ? AppLocalizations.of(context).studyNoTrainingChapters
+            : AppLocalizations.of(context).studyNoTrainingMoves,
         isError: true,
       );
       return;
@@ -522,12 +652,16 @@ class _StudyScreenState extends State<StudyScreen> {
     // LineID/Id/Guid header (Chessable/ChessBase exports).
     String? lineId;
     if (!wholeStudy) {
-      final service = RepertoireService();
+      final text = _study.chapterPgn(_study.chapterIndex);
+      final moves = pgn.mainlineSansOf(text);
       lineId =
-          service.lineIdForGamePgn(
-            _study.chapterPgn(_study.chapterIndex),
-            _study.chapterIndex,
-          ) ??
+          (moves.isEmpty
+              ? null
+              : repertoireLineIds.fromHeaders(
+                  pgn.extractHeaderBlock(text),
+                  moves,
+                  _study.chapterIndex,
+                )) ??
           repertoireLineIds.stable(
             _study.tree.sanSequenceAt(
               _study.tree.mainlineEndFrom(TreePath.empty),
@@ -535,61 +669,101 @@ class _StudyScreenState extends State<StudyScreen> {
             _study.chapterIndex,
           );
     }
-    await _study.flushSave();
-    if (!mounted) return;
+    final revision = _study.navigationRevision;
+    final chapter = _study.chapterIndex;
+    if (!await _study.flushSave() ||
+        !mounted ||
+        _study.title.filePath != path ||
+        _study.chapterIndex != chapter ||
+        _study.navigationRevision != revision) {
+      return;
+    }
     context.read<AppState>().switchToStudyTraining(path: path, lineId: lineId);
   }
 
-  /// The chapter-row menu, shared by the sidebar, the compact chapter bar
-  /// and the chapter manager.
-  StudyChapterActions get _chapterActions => StudyChapterActions(
-    onEdit: (i) => unawaited(_editChapterAt(i)),
-    onSetStartingPosition: (i) => unawaited(_setStartingPositionAt(i)),
-    onCopyPgn: (i) => unawaited(_copyChapterPgnAt(i)),
-    onClearAnnotations: (i) => unawaited(_clearAnnotationsAt(i)),
-    onClearVariations: (i) => unawaited(_clearVariationsAt(i)),
-    onDelete: (i) => unawaited(_deleteChapterAt(i)),
-  );
+  void _onChapterAction(ChapterAction action, int index) {
+    if (!mounted) return;
+    unawaited(switch (action) {
+      ChapterAction.edit => _editChapterAt(index),
+      ChapterAction.setStartingPosition => _setStartingPositionAt(index),
+      ChapterAction.copyPgn => _copyChapterPgnAt(index),
+      ChapterAction.clearAnnotations => _clearAnnotationsAt(index),
+      ChapterAction.clearVariations => _clearVariationsAt(index),
+      ChapterAction.delete => _deleteChapterAt(index),
+    });
+  }
 
   /// The Edit↔Browse toggle: reopen this study as a game collection in the
   /// PGN viewer, parked on the same chapter. The viewer's own toggle comes
   /// straight back here.
   Future<void> _browseInViewer() async {
-    final path = _study.doc.filePath;
+    final path = _study.title.filePath;
     if (path == null) {
       showAppSnackBar(
         context,
-        'Save the study first (create it by name).',
+        AppLocalizations.of(context).studySaveFirst,
         isError: true,
       );
       return;
     }
-    await _study.flushSave();
-    if (!mounted) return;
+    final chapter = _study.chapterIndex;
+    final revision = _study.navigationRevision;
+    if (!await _study.flushSave() ||
+        !mounted ||
+        _study.title.filePath != path ||
+        _study.chapterIndex != chapter ||
+        _study.navigationRevision != revision) {
+      return;
+    }
     context.read<AppState>().switchToPgnViewer(
       path: path,
       gameIndex: _study.chapterIndex,
-      historyLabel: 'PGN: ${_study.doc.name}',
+      historyLabel: AppLocalizations.of(
+        context,
+      ).studyPgnHistory(_study.title.name),
     );
   }
 
   Future<void> _manageChapters() async {
-    await showChapterManagerDialog(
-      context,
-      study: _study,
-      editChapter: _editChapterAt,
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        child: SizedBox(
+          width: 520,
+          height: 600,
+          child: Column(
+            children: [
+              Expanded(
+                child: StudyChapterSidebar(
+                  study: _study,
+                  inlineActions: true,
+                  onChapterAction: _onChapterAction,
+                ),
+              ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: Text(
+                    AppLocalizations.of(dialogContext).studyChaptersDone,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
-    if (mounted) setState(() {});
   }
 
   Future<void> _editChapterAt(int index) async {
-    final edit = await showEditChapterDialog(
-      context,
-      chapter: _study.doc.chapters[index],
-    );
-    if (edit == null) return;
+    final chapter = _study.chapterAt(index);
+    final edit = await showEditChapterDialog(context, chapter: chapter);
+    if (!mounted || edit == null) return;
+    final currentIndex = _study.indexOfChapter(chapter);
+    if (currentIndex < 0) return;
     _study.updateChapter(
-      index,
+      currentIndex,
       name: edit.name,
       orientation: edit.orientation,
       headers: edit.headers,
@@ -598,40 +772,45 @@ class _StudyScreenState extends State<StudyScreen> {
 
   Future<void> _copyChapterPgnAt(int index) async {
     await Clipboard.setData(ClipboardData(text: _study.chapterPgn(index)));
-    if (mounted) showAppSnackBar(context, 'Chapter PGN copied to clipboard.');
+    if (mounted) {
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context).studyChapterPgnCopied,
+      );
+    }
   }
 
   Future<void> _clearAnnotationsAt(int index) async {
-    final chapter = _study.doc.chapters[index];
-    final version = chapter.tree.version;
+    final chapter = _study.chapterAt(index);
     final summary = PgnDeletionSummary.tree(chapter.tree);
     final confirmed = await confirmAction(
       context,
-      title: 'Clear all comments, glyphs and shapes?',
-      message:
-          'Remove ${summary.comments} comments and all glyphs and shapes '
-          'from "${chapter.name}". The moves stay.',
-      confirmLabel: 'Clear',
+      title: AppLocalizations.of(context).studyClearAnnotations,
+      message: AppLocalizations.of(
+        context,
+      ).studyClearAnnotationContents(summary.comments, chapter.name),
+      confirmLabel: AppLocalizations.of(context).clear,
     );
-    if (!mounted || !confirmed || chapter.tree.version != version) return;
-    final currentIndex = _study.doc.chapters.indexOf(chapter);
+    if (!mounted || !confirmed) return;
+    final currentIndex = _study.indexOfChapter(chapter);
     if (currentIndex >= 0) _study.clearChapterAnnotations(currentIndex);
   }
 
   Future<void> _clearVariationsAt(int index) async {
-    final chapter = _study.doc.chapters[index];
-    final version = chapter.tree.version;
+    final chapter = _study.chapterAt(index);
     final summary = PgnDeletionSummary.variations(chapter.tree);
     final confirmed = await confirmAction(
       context,
-      title: 'Clear variations?',
-      message:
-          'Remove ${summary.description} from "${chapter.name}", '
-          'including sideline annotations. The main line and its notes stay.',
-      confirmLabel: 'Clear',
+      title: AppLocalizations.of(context).studyClearVariations,
+      message: AppLocalizations.of(context).studyClearVariationContents(
+        summary.moves,
+        summary.comments,
+        chapter.name,
+      ),
+      confirmLabel: AppLocalizations.of(context).clear,
     );
-    if (!mounted || !confirmed || chapter.tree.version != version) return;
-    final currentIndex = _study.doc.chapters.indexOf(chapter);
+    if (!mounted || !confirmed) return;
+    final currentIndex = _study.indexOfChapter(chapter);
     if (currentIndex >= 0) _study.clearChapterVariations(currentIndex);
   }
 
@@ -643,25 +822,26 @@ class _StudyScreenState extends State<StudyScreen> {
   }
 
   Future<void> _deleteChapterAt(int index) async {
-    if (_study.doc.chapters.length <= 1) {
+    if (_study.chapterList.chapters.length <= 1) {
       showAppSnackBar(
         context,
-        'A study needs at least one chapter.',
+        AppLocalizations.of(context).studyNeedsChapter,
         isError: true,
       );
       return;
     }
-    final chapter = _study.doc.chapters[index];
-    final version = chapter.tree.version;
+    final chapter = _study.chapterAt(index);
     final summary = PgnDeletionSummary.tree(chapter.tree);
     final confirmed = await confirmAction(
       context,
-      title: 'Delete chapter "${chapter.name}"?',
-      message: 'Remove ${summary.description}, including all annotations.',
-      confirmLabel: 'Delete',
+      title: AppLocalizations.of(context).studyDeleteChapterNamed(chapter.name),
+      message: AppLocalizations.of(
+        context,
+      ).studyRemoveCounts(summary.moves, summary.comments),
+      confirmLabel: AppLocalizations.of(context).delete,
     );
-    if (!mounted || !confirmed || chapter.tree.version != version) return;
-    final currentIndex = _study.doc.chapters.indexOf(chapter);
+    if (!mounted || !confirmed) return;
+    final currentIndex = _study.indexOfChapter(chapter);
     if (currentIndex >= 0) _study.deleteChapter(currentIndex);
   }
 
@@ -669,6 +849,7 @@ class _StudyScreenState extends State<StudyScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return BoardKeyboardScope(
       moveInputKey: _moveInputKey,
       bindings: () => _keyBindings,
@@ -687,86 +868,116 @@ class _StudyScreenState extends State<StudyScreen> {
                   ),
                 ),
               ),
-              if (_study.doc.filePath != null) ...[
-                const SizedBox(width: 12),
-                Flexible(
-                  child: PgnSaveStatus(
-                    filePath: _study.doc.filePath,
-                    autoSave: true,
-                    dirty: _study.dirty,
-                    error: _study.saveError,
-                  ),
-                ),
-              ],
+              Flexible(
+                child:
+                    StudySelector<
+                      ({
+                        String? path,
+                        bool autoSave,
+                        bool saving,
+                        bool dirty,
+                        String? error,
+                      })
+                    >(
+                      study: _study,
+                      select: (owner) => (
+                        path: owner.title.filePath,
+                        autoSave: owner.autoSaveEnabled,
+                        saving: owner.state.busy,
+                        dirty: owner.dirty,
+                        error: owner.saveError,
+                      ),
+                      builder: (context, view) => view.path == null
+                          ? const SizedBox.shrink()
+                          : Padding(
+                              padding: const EdgeInsets.only(left: 12),
+                              child: PgnSaveStatus(
+                                filePath: view.path,
+                                autoSave: view.autoSave,
+                                saving: view.saving,
+                                dirty: view.dirty,
+                                error: view.error,
+                              ),
+                            ),
+                    ),
+              ),
             ],
           ),
           actions: [
+            StudySaveButton(study: _study),
             // Only visible while a collection download is running.
-            const StudyImportStatusChip(),
-            AppOverflowMenu(
-              entries: [
-                AppMenuEntry(
-                  heading: 'Study',
-                  label: 'New study',
-                  icon: Icons.library_add_outlined,
-                  onRun: () => unawaited(_newStudy()),
-                ),
-                AppMenuEntry(
-                  heading: 'Import',
-                  label: 'From URL…',
-                  icon: Icons.link,
-                  onRun: () => unawaited(_importFromUrl()),
-                ),
-                AppMenuEntry(
-                  label: 'PGN file as chapters…',
-                  icon: Icons.description_outlined,
-                  onRun: () => unawaited(_importPgn()),
-                ),
-                if (_study.doc.filePath != null) ...[
+            StudyImportStatusChip(
+              controller: _import,
+              onReview: _reviewImportedStudy,
+            ),
+            StudySelector<bool>(
+              study: _study,
+              select: (owner) => owner.title.filePath != null,
+              builder: (context, hasFile) => AppOverflowMenu(
+                entries: [
                   AppMenuEntry(
-                    heading: 'Export',
-                    label: 'Copy study PGN',
-                    icon: Icons.copy,
-                    onRun: () => unawaited(_exportPgn()),
+                    heading: l10n.studyWorkspaceName,
+                    label: l10n.studyNewStudy,
+                    icon: Icons.library_add_outlined,
+                    onRun: () => unawaited(_newStudy()),
                   ),
                   AppMenuEntry(
-                    label: 'Save study PGN as…',
+                    heading: l10n.importAction,
+                    label: l10n.studyFromUrl,
+                    icon: Icons.link,
+                    onRun: () => unawaited(_importFromUrl()),
+                  ),
+                  AppMenuEntry(
+                    label: l10n.studyPgnFileChapters,
                     icon: Icons.description_outlined,
-                    onRun: () => unawaited(_saveStudyAs()),
+                    onRun: () => unawaited(_importPgn()),
                   ),
-                ],
-                AppMenuEntry(
-                  heading: 'Train',
-                  label: 'Train this chapter',
-                  icon: Icons.school_outlined,
-                  onRun: () => _train(wholeStudy: false),
-                ),
-                AppMenuEntry(
-                  label: 'Train whole study',
-                  icon: Icons.school_outlined,
-                  onRun: () => _train(wholeStudy: true),
-                ),
-                AppMenuEntry(
-                  heading: 'Board',
-                  label: 'Flip board',
-                  icon: Icons.swap_vert,
-                  onRun: _study.toggleFlipped,
-                ),
-                AppMenuEntry(
-                  heading: 'Explore',
-                  label: 'Browse in PGN viewer',
-                  icon: Icons.open_in_new,
-                  enabled: _study.doc.filePath != null,
-                  onRun: _browseInViewer,
-                ),
-                if (_study.doc.filePath != null)
+                  if (hasFile) ...[
+                    AppMenuEntry(
+                      heading: l10n.studyExportHeading,
+                      label: l10n.studyCopyPgn,
+                      icon: Icons.copy,
+                      onRun: () => unawaited(_exportPgn()),
+                    ),
+                    AppMenuEntry(
+                      label: l10n.studySavePgnAs,
+                      icon: Icons.description_outlined,
+                      onRun: () => unawaited(_saveStudyAs()),
+                    ),
+                  ],
                   AppMenuEntry(
-                    heading: 'Manage',
-                    label: 'Delete study…',
-                    icon: Icons.delete_outline,
-                    onRun: () => unawaited(_deleteCurrentStudy()),
+                    heading: l10n.studyTrainHeading,
+                    label: l10n.studyTrainChapter,
+                    icon: Icons.school_outlined,
+                    onRun: () => _train(wholeStudy: false),
                   ),
-              ],
+                  AppMenuEntry(
+                    label: l10n.studyTrainAll,
+                    icon: Icons.school_outlined,
+                    onRun: () => _train(wholeStudy: true),
+                  ),
+                  AppMenuEntry(
+                    heading: l10n.studyBoardHeading,
+                    label: l10n.studyFlipBoard,
+                    icon: Icons.swap_vert,
+                    onRun: _study.toggleFlipped,
+                  ),
+                  AppMenuEntry(
+                    heading: l10n.studyExploreHeading,
+                    label: l10n.studyBrowsePgn,
+                    icon: Icons.open_in_new,
+                    enabled: hasFile,
+                    onRun: _browseInViewer,
+                  ),
+                  if (hasFile)
+                    AppMenuEntry(
+                      heading: l10n.studyManageHeading,
+                      label: l10n.studyDeleteMenu,
+                      icon: Icons.delete_outline,
+                      onRun: () => unawaited(_deleteCurrentStudy()),
+                    ),
+                ],
+              ),
             ),
             const AppModeSwitcher(),
             const AppSettingsButton(mode: AppMode.study),
@@ -794,7 +1005,7 @@ class _StudyScreenState extends State<StudyScreen> {
               onAddChapter: () => unawaited(_newChapter()),
               onPickChapter: () => unawaited(_pickChapter()),
               onManageChapters: () => unawaited(_manageChapters()),
-              actions: _chapterActions,
+              onChapterAction: _onChapterAction,
             );
             // Wide: Lichess study layout — chapters | board | moves. Compact
             // keeps the stacked two-pane layout with the chapter bar in the
@@ -814,12 +1025,12 @@ class _StudyScreenState extends State<StudyScreen> {
                         child: StudyChapterSidebar(
                           study: _study,
                           onAddChapter: () => unawaited(_newChapter()),
-                          actions: _chapterActions,
+                          onChapterAction: _onChapterAction,
                         ),
                       ),
-                      Container(width: 1, color: AppColors.outline),
+                      const VerticalDivider(width: 1, thickness: 1),
                       Expanded(flex: 5, child: board),
-                      Container(width: 1, color: AppColors.outline),
+                      const VerticalDivider(width: 1, thickness: 1),
                       Expanded(flex: 4, child: side),
                     ],
                   );
@@ -834,47 +1045,57 @@ class _StudyScreenState extends State<StudyScreen> {
   /// `PopupMenuButton` can host a text field, and a course-sized study is a
   /// scroll hunt without one.
   Future<void> _pickStudy() async {
-    final current = _study.doc;
+    final current = _study.title;
     final picked = await showSearchablePicker<String>(
       context: context,
-      title: 'Switch study',
-      searchHint: 'Search studies',
+      title: AppLocalizations.of(context).studySwitch,
+      searchHint: AppLocalizations.of(context).studySearch,
       selected: current.filePath,
       items: [
         for (final study in _study.availableStudies)
           PickerItem(
             value: study.filePath,
             label: study.name,
-            subtitle:
-                '${study.gameCount} chapter'
-                '${study.gameCount == 1 ? '' : 's'}',
+            subtitle: AppLocalizations.of(
+              context,
+            ).studyChapterCount(study.gameCount),
             icon: Icons.menu_book_outlined,
           ),
       ],
-      emptyMessage: 'No studies yet — import or create one.',
+      emptyMessage: AppLocalizations.of(context).studyNoStudies,
     );
-    if (picked != null && picked != current.filePath) {
+    if (mounted &&
+        picked != null &&
+        picked != current.filePath &&
+        _study.title.session == current.session) {
       await _study.openStudy(picked);
     }
   }
 
   Future<void> _pickChapter() async {
-    final picked = await showSearchablePicker<int>(
+    final list = _study.chapterList;
+    final picked = await showSearchablePicker<Object>(
       context: context,
-      title: 'Go to chapter',
-      searchHint: 'Search chapters',
-      selected: _study.chapterIndex,
+      title: AppLocalizations.of(context).studyGoChapter,
+      searchHint: AppLocalizations.of(context).studySearchChapters,
+      selected: list.chapters[_study.chapterIndex].key,
       items: [
-        for (final (i, chapter) in _study.doc.chapters.indexed)
+        for (final (i, chapter) in list.chapters.indexed)
           PickerItem(
-            value: i,
+            value: chapter.key,
             label: chapter.name,
-            subtitle: 'Chapter ${i + 1}',
+            subtitle: AppLocalizations.of(context).studyChapterNumber(i + 1),
             icon: Icons.bookmark_outline,
           ),
       ],
-      emptyMessage: 'This study has no chapters yet.',
+      emptyMessage: AppLocalizations.of(context).studyNoChaptersYet,
     );
-    if (picked != null) _study.selectChapter(picked);
+    if (!mounted || picked == null || _study.title.session != list.session) {
+      return;
+    }
+    final index = _study.chapterList.chapters.indexWhere(
+      (chapter) => chapter.key == picked,
+    );
+    if (index >= 0) _study.selectChapter(index);
   }
 }

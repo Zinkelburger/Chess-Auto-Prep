@@ -3,6 +3,10 @@
 /// whether or not anyone plays it.
 library;
 
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../../support/runtime_settings.dart';
+
 import 'package:chess_auto_prep/features/audit/models/audit_finding.dart';
 import 'package:chess_auto_prep/features/audit/services/audit_config.dart';
 import 'package:chess_auto_prep/features/audit/services/repertoire_audit_service.dart';
@@ -61,7 +65,14 @@ const _config = AuditConfig(
   strongReplyWindowCp: 50,
 );
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   test(
     'an uncovered reply inside the window is a strong-reply finding',
     () async {
@@ -72,7 +83,10 @@ void main() {
           DbMove(uci: 'f3d4', san: 'Nxd4', stmCp: -80),
         ],
       });
-      final service = RepertoireAuditService(chessDbProvider: db);
+      final service = RepertoireAuditService(
+        pool: engines.pool,
+        chessDbProvider: db,
+      );
 
       final result = await service.audit(
         tree: await _tree(),
@@ -118,7 +132,10 @@ void main() {
           DbMove(uci: 'c1g5', san: 'Bg5', stmCp: -60),
         ],
       });
-      final service = RepertoireAuditService(chessDbProvider: db);
+      final service = RepertoireAuditService(
+        pool: engines.pool,
+        chessDbProvider: db,
+      );
 
       final result = await service.audit(
         tree: await _tree(),
@@ -139,7 +156,10 @@ void main() {
     final db = _Scripted({
       _afterD6: const [DbMove(uci: 'c1g5', san: 'Bg5', stmCp: 0)],
     });
-    final service = RepertoireAuditService(chessDbProvider: db);
+    final service = RepertoireAuditService(
+      pool: engines.pool,
+      chessDbProvider: db,
+    );
 
     await service.audit(
       tree: await _tree(),

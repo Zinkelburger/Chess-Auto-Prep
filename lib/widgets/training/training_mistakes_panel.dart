@@ -1,12 +1,12 @@
+import '../../features/training/repositories/training_review_repository.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/repertoire_line.dart';
-import '../../services/repertoire_review_service.dart';
 import '../../theme/app_text_styles.dart';
 import '../../utils/fen_utils.dart' show plyFromFen;
 import '../../utils/movetext_builder.dart';
 import '../../utils/time_format.dart';
-import '../common/list_search_field.dart';
+import '../../design_system/components/list_search_field.dart';
 
 /// Searchable attempt history inside the trainer's existing side pane.
 class TrainingMistakesPanel extends StatefulWidget {
@@ -18,7 +18,7 @@ class TrainingMistakesPanel extends StatefulWidget {
     required this.onClose,
     required this.onRead,
   });
-  final RepertoireReviewService service;
+  final TrainingReviewRepository service;
   final Set<String> sourcePaths;
   final List<RepertoireLine> lines;
   final VoidCallback onClose;

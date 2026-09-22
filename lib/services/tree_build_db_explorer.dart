@@ -6,7 +6,7 @@
 /// the service is not spread over two files.
 library;
 
-import '../models/build_tree_node.dart';
+import '../chess_core/generation/build_tree_node.dart';
 import 'generation/build_run.dart';
 import 'generation/fen_map.dart';
 import 'generation/frontier_queue.dart';

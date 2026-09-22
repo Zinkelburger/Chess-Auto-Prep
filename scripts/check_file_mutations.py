@@ -32,6 +32,10 @@ APPROVED: dict[str, tuple[int, str]] = {
     "lib/services/storage/sqlite_recovery.dart": (1, "SQLite recovery adapter"),
     "lib/services/game_store/game_store_service.dart": (1, "one-time database migration"),
     "lib/debug/agent_driver.dart": (1, "debug screenshot output"),
+    "lib/infrastructure/diagnostics/app_log_file.dart": (
+        3,
+        "append-only rotating diagnostic log; disposable and never user data",
+    ),
     "lib/features/bughouse/services/bughouse_bundle.dart": (
         13,
         "reproducible extracted engine bundle",
@@ -41,6 +45,18 @@ APPROVED: dict[str, tuple[int, str]] = {
         "disposable inter-process request file",
     ),
     "lib/services/engine/stockfish_bundle.dart": (7, "reproducible engine bundle"),
+    "lib/v2/storage/log_file.dart": (2, "append-only diagnostic log with one rotated generation; never user data"),
+    "lib/v2/engines/stockfish_install.dart": (
+        5,
+        "reproducible engine bundle, v2: support dir, stale stamp delete, "
+        ".part write, rename, stamp",
+    ),
+    "lib/v2/storage/atomic_write.dart": (4, "v2 atomic publication: staged temporary, rename into place, sweep of interrupted writes"),
+    "lib/v2/storage/document_relocation.dart": (1, "v2 rename, move and quarantine-delete: revision-checked and backed up; the one direct mutation takes back an empty folder a refused move created"),
+    "lib/v2/storage/pgn_file_store.dart": (2, "no filesystem mutation of its own: two calls into DocumentRelocation that the pattern above matches by method name"),
+    "lib/v2/storage/chapter_files.dart": (2, "v2 repertoire listing: one mutation takes away a repertoire folder whose chapters have all been deleted, and only when nothing is left in it; the other takes away an import's own dot-prefixed staging folder directly under the root, which the listing never shows, when the import could not finish"),
+    "lib/v2/storage/backups.dart": (2, "v2 kept versions under Support; creates folders, never removes; an unreadable index is renamed aside, not deleted"),
+    "lib/v2/storage/relocation_notes.dart": (1, "v2 notes under Support saying which moves still owe their training rows; the one mutation takes a note away once its rows no longer do"),
     "lib/services/eval/cdb_snapshot_download.dart": (4, "resumable downloaded snapshot"),
     "lib/services/eval/lichess_eval_controller.dart": (4, "resumable downloaded snapshot"),
     "lib/services/eval/lichess_eval_import.dart": (6, "rebuildable database staging"),

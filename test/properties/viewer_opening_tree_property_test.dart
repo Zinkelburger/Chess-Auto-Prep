@@ -1,3 +1,9 @@
+library;
+
+import 'package:chess_auto_prep/features/documents/controllers/viewer_collection_controller.dart';
+
+import 'package:chess_auto_prep/app/viewer_dependencies.dart';
+
 /// Invariant tests for the PGN viewer's opening-tree cursor.
 ///
 /// [ViewerOpeningTree] owns a cursor into a merged tree and drives the board
@@ -5,11 +11,10 @@
 /// shows the cursor's position, a step back undoes exactly one move, leaving
 /// and re-entering restores where you were — rather than about any particular
 /// tree. The tree is injected, so nothing here builds one in an isolate.
-library;
 
 import 'dart:math';
 
-import 'package:chess_auto_prep/core/pgn/viewer_opening_tree.dart';
+import 'package:chess_auto_prep/features/documents/controllers/viewer_opening_tree.dart';
 import 'package:chess_auto_prep/models/opening_tree.dart';
 import 'package:chess_auto_prep/utils/fen_utils.dart';
 import 'package:dartchess/dartchess.dart';
@@ -22,10 +27,10 @@ class _Board {
 }
 
 ViewerOpeningTree _viewer(_Board board) => ViewerOpeningTree(
+  repository: createViewerOpenings(),
   isActive: () => true,
   onChanged: () {},
-  filteredGames: () => const [],
-  allGames: () => const [],
+  collection: ViewerCollectionController(),
   fenIndex: () => null,
   currentFen: () => board.position.fen,
   applyPosition: (position) => board.position = position,

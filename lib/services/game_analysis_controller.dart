@@ -8,14 +8,16 @@
 /// the series is restored from those annotations without the engine.
 library;
 
+import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
 import 'dart:async';
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
+import '../features/documents/repositories/viewer_analysis_port.dart';
 import '../constants/chess_constants.dart';
-import '../core/pgn/pgn_dummy_mainline.dart';
-import '../models/bulk_analysis_settings.dart';
+import '../features/settings/models/bulk_analysis_configuration.dart';
+import '../chess_core/pgn/pgn_dummy_mainline.dart';
 import '../utils/chess_utils.dart'
     show uciPvToSan, uciToSan, toStandardUci, isNullMoveSan;
 import '../utils/fen_utils.dart';
@@ -24,19 +26,29 @@ import 'engine/engine_lifecycle.dart';
 import 'engine/eval_worker.dart';
 import 'engine/stockfish_pool.dart';
 import 'eval_cache.dart';
-import 'game_eval_annotations.dart';
+import 'package:chess_auto_prep/chess_core/analysis/game_eval_annotations.dart';
 import 'maia/maia_factory.dart';
-import 'move_eval.dart';
+import 'package:chess_auto_prep/chess_core/analysis/move_eval.dart';
 
 /// Elo assumed for a player whose header carries none, for Maia.
 const int _kDefaultElo = 2200;
 
-class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
+class GameAnalysisController extends ChangeNotifier
+    with SafeChangeNotifier
+    implements ViewerAnalysisPort {
   GameAnalysisController({
+    required this.pool,
+    required this.lifecycle,
     Future<CachedGameAnalysis?> Function(String pgnText)? cachedAnalysisLoader,
-  }) : _cachedAnalysisLoader =
+    int Function()? bulkDepth,
+  }) : _bulkDepth = bulkDepth ?? (() => BulkAnalysisConfiguration.defaultDepth),
+       _cachedAnalysisLoader =
            cachedAnalysisLoader ??
            ((pgnText) => compute(parseCachedEvals, pgnText));
+
+  final StockfishPool pool;
+  final EngineLifecycle lifecycle;
+  final int Function() _bulkDepth;
 
   final Future<CachedGameAnalysis?> Function(String pgnText)
   _cachedAnalysisLoader;
@@ -60,7 +72,7 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
   /// Stockfish "Depth" setting — full-game analysis has no depth knob of its
   /// own; it follows the one in the Stockfish settings dialog.
   int? _activeDepth;
-  int get depth => _activeDepth ?? BulkAnalysisSettings.instance.depth;
+  int get depth => _activeDepth ?? _bulkDepth();
 
   bool _isCancelled = false;
 
@@ -77,6 +89,7 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
 
   // ── Loading cached analysis from PGN ────────────────────────────────────
 
+  @override
   Future<bool> tryLoadFromPgn(String pgnText) async {
     final generation = ++_generation;
     _resetSeries();
@@ -120,6 +133,7 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
   /// Silent when there is nothing to fill, while a full analysis is running,
   /// while repertoire generation holds the engine, or when no engine can be
   /// started; a load of a different game in the meantime discards the result.
+  @override
   Future<void> fillMissingBestLines(
     String pgnText, {
     ValueChanged<String>? onAnnotatedMovetext,
@@ -127,12 +141,12 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
     if (_isAnalyzing) return;
     final missing = movesMissingBestLine;
     if (missing.isEmpty) return;
-    if (EngineLifecycle.instance.state == EngineState.generating) return;
+    if (lifecycle.state == EngineState.generating) return;
     final generation = _generation;
 
     // The depth the graph was drawn at, so the lines agree with the scores
     // beside them; the engine setting when the series does not say.
-    var depth = BulkAnalysisSettings.instance.depth;
+    var depth = _bulkDepth();
     for (final e in missing) {
       final d = e.depth;
       if (d != null && d < depth) depth = d;
@@ -140,7 +154,6 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
 
     final List<EvalResult> results;
     try {
-      final pool = StockfishPool.instance;
       await pool.ensureWorkers();
       if (pool.workerCount == 0) return;
       results = await pool.evaluateMany([
@@ -173,6 +186,7 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
     if (annotated != null) onAnnotatedMovetext(annotated);
   }
 
+  @override
   void clearEvals() {
     _generation++;
     _isAnalyzing = false;
@@ -199,20 +213,19 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
     _isCancelled = false;
     notifyListeners();
 
-    final depth = analysisDepth ?? BulkAnalysisSettings.instance.depth;
+    final depth = analysisDepth ?? _bulkDepth();
     _activeDepth = depth;
     bool runIsCurrent() =>
         !isDisposed && !_isCancelled && generation == _generation;
 
     try {
-      final parsed = PgnGame.parsePgn(pgnText);
+      final parsed = parsePgnGame(pgnText);
       promoteNullMoveDummyMainline(parsed.moves);
       final mainline = parsed.moves.mainline().toList();
       _totalMoves = mainline.where((move) => !isNullMoveSan(move.san)).length;
       notifyListeners();
       if (mainline.isEmpty) return;
 
-      final pool = StockfishPool.instance;
       await pool.ensureWorkers();
       if (!runIsCurrent()) return;
       final workerCount = pool.workerCount;
@@ -477,11 +490,12 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
     );
   }
 
+  @override
   void cancel() {
     _generation++;
     _isCancelled = true;
     _isAnalyzing = false;
-    StockfishPool.instance.stopAll();
+    pool.stopAll();
     notifyListeners();
   }
 

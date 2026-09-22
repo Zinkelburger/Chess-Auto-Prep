@@ -92,6 +92,11 @@ class JobTests(unittest.TestCase):
             self.assertTrue(Path(first['BUGHOUSE_DB_HOME']).is_relative_to(first['XDG_DATA_HOME']))
             self.assertEqual(first.get('HOME'), os.environ.get('HOME'))
             self.assertEqual(first['CHESS_AUTO_PREP_NEW_INSTANCE'], '1')
+            choice = Path(first['XDG_DATA_HOME']) / 'chess_auto_prep/desktop-integration-choice'
+            self.assertEqual(choice.read_text(), 'no')
+            choice.write_text('yes')
+            jobs.profile_env(Path(directory) / 'first')
+            self.assertEqual(choice.read_text(), 'yes')
             docs = subprocess.check_output(['xdg-user-dir', 'DOCUMENTS'], env=first, text=True).strip()
             self.assertTrue(docs.startswith(directory))
             self.assertTrue(Path(docs).is_dir())

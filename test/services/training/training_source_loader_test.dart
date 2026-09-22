@@ -1,9 +1,12 @@
+import '../../support/generation_artifacts_fixture.dart';
+import 'package:chess_auto_prep/features/training/repositories/training_source_repository.dart';
+import 'package:chess_auto_prep/features/training/repositories/training_answers.dart';
 import 'dart:io';
 
-import 'package:chess_auto_prep/models/repertoire_metadata.dart';
+import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
 import 'package:chess_auto_prep/models/repertoire_move_progress.dart';
 import 'package:chess_auto_prep/services/asked_questions_store.dart';
-import 'package:chess_auto_prep/services/training/training_source_loader.dart';
+import 'package:chess_auto_prep/infrastructure/training/training_source_loader.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
@@ -26,6 +29,7 @@ void main() {
     reviewService = FakeReviewService();
     askedQuestions = AskedQuestionsStore();
     loader = TrainingSourceLoader(
+      artifacts: generationArtifactsFixture().repository,
       repertoireService: repService,
       reviewService: reviewService,
       askedQuestions: askedQuestions,

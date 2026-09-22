@@ -1,8 +1,8 @@
-import 'package:chess_auto_prep/core/pgn/pgn_collection_helpers.dart';
+import 'package:chess_auto_prep/infrastructure/documents/isolate_pgn_collection_filter.dart';
 import 'package:chess_auto_prep/core/slice_filter_controller.dart';
-import 'package:chess_auto_prep/services/pgn_parsing_service.dart';
-import 'package:chess_auto_prep/services/pgn_position_replay.dart';
-import 'package:chess_auto_prep/services/pgn_slice_filter.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_text.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_position_replay.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_slice_filter.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const games = <GameRecord>[
@@ -21,7 +21,11 @@ void main() {
       () async {
         final index = indexed ? buildFenIndex(games) : null;
         Future<List<int>> run(SliceConfig config) =>
-            applySliceConfig(config, games, fenIndex: index);
+            const IsolatePgnCollectionFilter().match(
+              config,
+              games,
+              fenIndex: index,
+            );
         expect(
           await run(
             const SliceConfig(

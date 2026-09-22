@@ -1,12 +1,5 @@
-/// Persisted shape of the repertoire builder's wide layout: how much width
-/// the board takes, how wide the Lines and outline side panels are and
-/// whether each is collapsed to a strip, and how tall the database pane is.
-///
-/// These are the layout the user arranges and expects to find again after a
-/// restart, so they are worth owning in one place — previously they were
-/// loose fields, preference keys and `SharedPreferences` round-trips
-/// scattered through the screen's state class, with the sizing arithmetic
-/// inlined in a `LayoutBuilder` where it could not be checked.
+/// Persisted Builder layout: board size, outline width/collapse, and analysis
+/// dock height/collapse. The outline is the only horizontally resizable panel.
 library;
 
 import 'dart:math' as math;
@@ -19,26 +12,30 @@ import '../../../utils/log.dart';
 import '../../../utils/safe_change_notifier.dart';
 
 class RepertoireLayoutPrefs extends ChangeNotifier with SafeChangeNotifier {
-  static const String collapsedKey = 'repertoire.lines_panel_collapsed';
-  static const String widthKey = 'repertoire.lines_panel_width';
+  // Preserve the existing preference key when naming the active dock.
+  static const String analysisCollapsedKey = 'repertoire.lines_panel_collapsed';
   static const String boardSizeKey = 'repertoire.board_size';
   static const String outlineCollapsedKey =
       'repertoire.outline_panel_collapsed';
   static const String outlineWidthKey = 'repertoire.outline_panel_width';
   static const String databaseHeightKey = 'repertoire.database_height';
 
-  /// Narrowest the Lines side panel may be dragged before it is worth
+  /// Shared with the planner's own copy of the Database pane, which has
+  /// always written this key.
+  static const String databaseSourceKey = 'repertoire.reference_source';
+
+  /// Which source the Database pane shows: 0 Repertoire, 1 Opening explorer,
+  /// 2 Local PGN, 3 Engine evals, 4 ChessDB.
+  static const int defaultDatabaseSource = 3;
+  static const int maxDatabaseSource = 4;
+
+  /// Narrowest the outline panel may be dragged before it is worth
   /// collapsing instead.
   static const double minPanelWidth = 220.0;
 
   /// A side panel may take at most this share of the body's width, so the
   /// PGN editor beside it stays usable.
   static const double _maxPanelShare = 0.45;
-
-  /// Proportional default for the Lines panel, and its bounds.
-  static const double _defaultLinesPanelShare = 0.24;
-  static const double _minDefaultLinesPanelWidth = 260.0;
-  static const double _maxDefaultLinesPanelWidth = 400.0;
 
   /// Proportional default for the outline column, and its bounds.
   static const double _defaultOutlinePanelShare = 0.18;
@@ -56,18 +53,18 @@ class RepertoireLayoutPrefs extends ChangeNotifier with SafeChangeNotifier {
 
   static const String _logName = 'RepertoireLayout';
 
-  bool _linesPanelCollapsed = false;
-  double? _linesPanelWidth;
+  bool _analysisCollapsed = false;
   BoardSize _boardSize = BoardSize.large;
   bool _outlinePanelCollapsed = false;
   double? _outlinePanelWidth;
   double? _databaseHeight;
+  int _databaseSource = defaultDatabaseSource;
 
-  bool get linesPanelCollapsed => _linesPanelCollapsed;
+  /// Which source the Database pane opens on. Restored at startup: picking a
+  /// source is a choice about how you work, not a per-session accident.
+  int get databaseSource => _databaseSource;
 
-  /// User-dragged panel width, or null while it still follows the
-  /// proportional default. See [resolveLinesPanelWidth].
-  double? get linesPanelWidth => _linesPanelWidth;
+  bool get analysisCollapsed => _analysisCollapsed;
 
   BoardSize get boardSize => _boardSize;
 
@@ -82,43 +79,29 @@ class RepertoireLayoutPrefs extends ChangeNotifier with SafeChangeNotifier {
   Future<void> load() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      _linesPanelCollapsed = prefs.getBool(collapsedKey) ?? false;
-      _linesPanelWidth = prefs.getDouble(widthKey);
+      _analysisCollapsed = prefs.getBool(analysisCollapsedKey) ?? false;
       _boardSize = BoardSize.fromName(prefs.getString(boardSizeKey));
       _outlinePanelCollapsed = prefs.getBool(outlineCollapsedKey) ?? false;
       _outlinePanelWidth = prefs.getDouble(outlineWidthKey);
       _databaseHeight = prefs.getDouble(databaseHeightKey);
+      _databaseSource = _clampDatabaseSource(prefs.getInt(databaseSourceKey));
       notifyListeners();
     } catch (e) {
       log.w('Failed to load layout prefs', name: _logName, error: e);
     }
   }
 
-  // ── Lines panel ──────────────────────────────────────────────────────────
+  // ── Analysis dock ──────────────────────────────────────────────────────────
 
-  Future<void> setLinesPanelCollapsed(bool collapsed) async {
-    if (_linesPanelCollapsed == collapsed) return;
-    _linesPanelCollapsed = collapsed;
+  Future<void> setAnalysisCollapsed(bool collapsed) async {
+    if (_analysisCollapsed == collapsed) return;
+    _analysisCollapsed = collapsed;
     notifyListeners();
-    await _write((prefs) => prefs.setBool(collapsedKey, collapsed));
+    await _write((prefs) => prefs.setBool(analysisCollapsedKey, collapsed));
   }
 
-  Future<void> toggleLinesPanelCollapsed() =>
-      setLinesPanelCollapsed(!_linesPanelCollapsed);
-
-  /// Width update from an in-flight drag: repaints, but does not touch disk.
-  /// Call [saveLinesPanelWidth] when the drag ends.
-  void dragLinesPanelWidth(double width) {
-    if (_linesPanelWidth == width) return;
-    _linesPanelWidth = width;
-    notifyListeners();
-  }
-
-  Future<void> saveLinesPanelWidth() async {
-    final width = _linesPanelWidth;
-    if (width == null) return;
-    await _write((prefs) => prefs.setDouble(widthKey, width));
-  }
+  Future<void> toggleAnalysisCollapsed() =>
+      setAnalysisCollapsed(!_analysisCollapsed);
 
   // ── Outline panel ────────────────────────────────────────────────────────
 
@@ -171,6 +154,21 @@ class RepertoireLayoutPrefs extends ChangeNotifier with SafeChangeNotifier {
     await _write((prefs) => prefs.setDouble(databaseHeightKey, height));
   }
 
+  Future<void> setDatabaseSource(int source) async {
+    final next = _clampDatabaseSource(source);
+    if (_databaseSource == next) return;
+    _databaseSource = next;
+    notifyListeners();
+    await _write((prefs) => prefs.setInt(databaseSourceKey, next));
+  }
+
+  /// An unset, corrupt or out-of-range key falls back to the default rather
+  /// than indexing the source list out of bounds.
+  static int _clampDatabaseSource(int? source) =>
+      source == null || source < 0 || source > maxDatabaseSource
+      ? defaultDatabaseSource
+      : source;
+
   static double _clampDatabaseHeight(double height, double availableHeight) =>
       height.clamp(
         _minDatabaseHeight,
@@ -179,24 +177,13 @@ class RepertoireLayoutPrefs extends ChangeNotifier with SafeChangeNotifier {
 
   // ── Layout arithmetic ────────────────────────────────────────────────────
 
-  /// Widest the Lines panel may be for a body [availableWidth] — a little
+  /// Widest the outline panel may be for a body [availableWidth] — a little
   /// under half, so the PGN editor beside it stays usable.
-  static double maxLinesPanelWidth(double availableWidth) =>
+  static double maxOutlinePanelWidth(double availableWidth) =>
       math.max(minPanelWidth, availableWidth * _maxPanelShare);
 
-  /// The panel's width: the user's dragged width when they have set one, a
-  /// proportional default otherwise, always inside
-  /// [minPanelWidth]..[maxLinesPanelWidth].
-  double resolveLinesPanelWidth(double availableWidth) {
-    final defaultWidth = (availableWidth * _defaultLinesPanelShare).clamp(
-      _minDefaultLinesPanelWidth,
-      _maxDefaultLinesPanelWidth,
-    );
-    return _clampPanelWidth(_linesPanelWidth ?? defaultWidth, availableWidth);
-  }
-
   /// The outline column's width: dragged width if set, else a proportional
-  /// default, inside [minPanelWidth]..[maxLinesPanelWidth].
+  /// default, inside [minPanelWidth]..[maxOutlinePanelWidth].
   double resolveOutlinePanelWidth(double availableWidth) {
     final defaultWidth = (availableWidth * _defaultOutlinePanelShare).clamp(
       _minDefaultOutlinePanelWidth,
@@ -205,8 +192,9 @@ class RepertoireLayoutPrefs extends ChangeNotifier with SafeChangeNotifier {
     return _clampPanelWidth(_outlinePanelWidth ?? defaultWidth, availableWidth);
   }
 
-  static double _clampPanelWidth(double width, double availableWidth) =>
-      width.clamp(minPanelWidth, maxLinesPanelWidth(availableWidth)).toDouble();
+  static double _clampPanelWidth(double width, double availableWidth) => width
+      .clamp(minPanelWidth, maxOutlinePanelWidth(availableWidth))
+      .toDouble();
 
   /// Width of the board column.
   ///

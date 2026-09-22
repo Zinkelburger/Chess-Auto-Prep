@@ -1,6 +1,10 @@
+import 'package:chess_auto_prep/features/settings/models/engine_configuration.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../../support/runtime_settings.dart';
+import 'package:chess_auto_prep/app/runtime_settings.dart';
 import 'dart:async';
 
-import 'package:chess_auto_prep/models/engine_settings.dart';
+import 'package:chess_auto_prep/features/settings/controllers/engine_settings.dart';
 import 'package:chess_auto_prep/services/engine/board_engine.dart';
 import 'package:chess_auto_prep/services/engine/engine_connection.dart';
 import 'package:chess_auto_prep/services/engine/engine_search_budget.dart';
@@ -54,19 +58,30 @@ Future<void> flush() async {
   }
 }
 
+late RuntimeSettings runtimeSettings;
+EngineRuntime get engines => testEngines(runtimeSettings);
 void main() {
+  setUp(() async {
+    runtimeSettings = testRuntimeSettings();
+    await runtimeSettings.load();
+    addTearDown(runtimeSettings.dispose);
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
   late BoardEngine board;
   late List<_Engine> engines;
   late BoardEngineSession a;
   late BoardEngineSession b;
 
-  setUp(() {
+  setUp(() async {
     SharedPreferences.setMockInitialValues({});
-    EngineSettings.instance.cores = 4.clamp(1, EngineSettings.systemCores);
-    EngineSettings.instance.hashMb = 128;
+    await runtimeSettings.engine.edit({
+      'engine_settings.cores': 4.clamp(1, EngineSettings.systemCores),
+    });
+    await runtimeSettings.engine.edit({'engine_settings.hash_mb': 128});
     engines = [];
     board = BoardEngine(
+      budget: testEngines(runtimeSettings).budget,
+      settings: () => runtimeSettings.engine.committed,
       createConnection: () async {
         final engine = _Engine();
         engines.add(engine);
@@ -111,6 +126,8 @@ void main() {
   test('stop timeout replaces process for the next search', () async {
     board.dispose();
     board = BoardEngine(
+      budget: testEngines(runtimeSettings).budget,
+      settings: () => runtimeSettings.engine.committed,
       protocolTimeout: const Duration(milliseconds: 100),
       createConnection: () async {
         final engine = _Engine()..acknowledgeStop = false;
@@ -139,6 +156,7 @@ void main() {
       board.dispose();
       final budget = EngineSearchBudget(capacity: () => 2);
       board = BoardEngine(
+        settings: () => runtimeSettings.engine.committed,
         budget: budget,
         createConnection: () async {
           final engine = _Engine()..acknowledgeStop = false;
@@ -151,7 +169,10 @@ void main() {
       final bulkConnection = _Engine();
       final bulkWorker = EvalWorker(bulkConnection, budget: budget);
       await bulkWorker.init();
-      final pool = StockfishPool.fresh()..addWorkerForTest(bulkWorker);
+      final pool = StockfishPool(
+        settings: EngineConfiguration.new,
+        budget: testEngines(runtimeSettings).budget,
+      )..addWorkerForTest(bulkWorker);
       addTearDown(pool.dispose);
       final active = search(a);
       await flush();
@@ -182,11 +203,58 @@ void main() {
     },
   );
 
+  test(
+    'queued discovery and later evaluation retain captured resources after settings edit',
+    () async {
+      await a.prepare();
+      final engine = engines.single..acknowledgeStop = false;
+      final first = search(a);
+      await flush();
+      final queued = search(a, fen: '8/8/8/8/8/8/8/K6k w - - 0 1');
+      await runtimeSettings.engine.edit({'engine_settings.hash_mb': 64});
+      engine.finish();
+      expect(await first, isNull);
+      await flush();
+      expect(engine.commands, isNot(contains('setoption name Hash value 64')));
+      engine.progress();
+      engine.finish();
+      expect(await queued, isNotNull);
+      final evaluation = a.evaluate(_fen, 15);
+      await flush();
+      expect(board.effectiveSettings.hashMb, 128);
+      engine.finish();
+      await evaluation;
+      final next = search(a);
+      await flush();
+      expect(board.effectiveSettings.hashMb, 64);
+      engine.finish();
+      await next;
+    },
+  );
+
+  test('failed process retries with original captured resources', () async {
+    await a.prepare();
+    final active = search(a);
+    await flush();
+    await runtimeSettings.engine.edit({'engine_settings.hash_mb': 64});
+    engines.first.dispose();
+    await flush();
+    expect(engines, hasLength(2));
+    expect(engines.last.commands, contains('setoption name Hash value 128'));
+    expect(
+      engines.last.commands,
+      isNot(contains('setoption name Hash value 64')),
+    );
+    engines.last.progress();
+    engines.last.finish();
+    expect(await active, isNotNull);
+  });
+
   test('settings resize the warm worker between searches', () async {
     await a.prepare();
     final active = search(a);
     await flush();
-    EngineSettings.instance.hashMb = 64;
+    await runtimeSettings.engine.edit({'engine_settings.hash_mb': 64});
     final prepared = a.prepare();
     await flush();
     expect(
@@ -214,7 +282,7 @@ void main() {
       expect(
         engines.single.commands,
         contains(
-          'setoption name Threads value ${EngineSettings.instance.cores}',
+          'setoption name Threads value ${runtimeSettings.engine.cores}',
         ),
       );
       expect(
@@ -340,7 +408,11 @@ void main() {
     () async {
       board.dispose();
       final created = Completer<EngineConnection?>();
-      board = BoardEngine(createConnection: () => created.future);
+      board = BoardEngine(
+        budget: testEngines(runtimeSettings).budget,
+        settings: () => runtimeSettings.engine.committed,
+        createConnection: () => created.future,
+      );
       a = board.createSession();
       final preparing = a.prepare();
       await flush();

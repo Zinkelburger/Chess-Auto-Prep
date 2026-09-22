@@ -1,6 +1,6 @@
-import 'package:chess_auto_prep/services/study_import/chapter_naming.dart';
-import 'package:chess_auto_prep/services/study_import/lichess_study_client.dart';
-import 'package:chess_auto_prep/services/pgn_parsing_service.dart'
+import 'package:chess_auto_prep/features/studies/models/chapter_naming.dart';
+import 'package:chess_auto_prep/infrastructure/studies/lichess_study_client.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_text.dart'
     show extractHeaders, splitPgnIntoGames;
 import 'package:flutter_test/flutter_test.dart';
 

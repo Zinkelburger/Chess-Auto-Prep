@@ -21,28 +21,39 @@ Reserve native engine startup for explicit engine and desktop integration tests.
 
 ## Type, colour and controls
 
-Use `AppTextStyles` from `lib/theme/app_text_styles.dart`: title 18, body 14,
-secondary 13, small 12, mono 13. The readable type floor is 12px (board
-coordinates excepted); `scripts/ci.sh lint` checks it. Use weight and
-`AppColors.ink` / `AppColors.onSurfaceMuted` for hierarchy.
+Migrated UI uses `lib/design_system/`: resolve typography through
+`AppTypography`, standard colors through `Theme.of(context).colorScheme`, and
+workspace surfaces through `WorkspaceTheme.of(context)`. Use `AppSpacing` for
+shared spacing/widths. The canonical `AppTheme` supplies production and fixture
+light/dark themes. `ThemedApplication` applies the committed Dark/Light/System
+preference (default Dark). Migrated widgets read the resolved theme; do not
+subscribe to platform brightness individually. `app/legacy_theme_boundary.dart`
+keeps fixed-color legacy interiors dark until their owning workflow migrates;
+remove the matching boundary and theme ledger entry when completing migration. Never add fixed colors or font sizes to a
+migrated feature or design-system component.
 
-Inter is set by the theme. Use `AppTextStyles.monoFamily` for moves/FEN/evals
-and `AppTextStyles.caption` for captions; never use OS-dependent `'monospace'`.
+Legacy `AppTextStyles`/`AppColors` remain for unmigrated owners only; the explicit
+`scripts/legacy_theme_consumers.json` ledger must shrink as they migrate and
+lint rejects new consumers. Type sizes remain title 18, body 14, secondary 13,
+small 12 and mono 13; Inter/Source Code Pro and the figurine fallback are bundled.
+The readable type floor is 12px (board coordinates excepted).
 
 Reuse these widgets (paths relative to `lib/`):
 
 | Need | Use |
 |---|---|
-| Search a list or catalog | `ListSearchField` in `widgets/common/list_search_field.dart` |
+| Retain a workspace toolbar while navigating | `WorkspaceShell` and `WorkspaceNavigationController` in `design_system/layout/`; host supplies root and destination toolbars |
+| Park a mode and restore keyboard focus | `WorkspaceBranch` in `design_system/layout/workspace_branch.dart` |
+| Search a list or catalog | `ListSearchField` in `design_system/components/list_search_field.dart` |
 | Labelled number | `InlineStat` / `StackedStat` in `widgets/common/stat_display.dart` |
-| Confirmation | `confirmAction` in `widgets/common/confirm_dialog.dart` |
-| Name with validation | `showNameEntryDialog` in `widgets/common/name_entry_dialog.dart` |
+| Confirmation | `confirmAction` in `design_system/components/confirm_dialog.dart` |
+| Name with validation | `showNameEntryDialog` in `design_system/components/name_entry_dialog.dart` |
 | Pick from a list | `ChoiceField` in `widgets/common/choice_field.dart`; outside conditional editors, two or three fixed options use `SegmentedButton`, never `DropdownButton` |
 | Set a whole number | `NumberStepper` in `widgets/common/number_stepper.dart`, never a fixed numeric menu |
 | Findings report | `HolesReportPanel` in `features/holes/widgets/holes_report_panel.dart` |
 | Threshold, disclosure, visible cap | `features/audit/widgets/hunt_controls.dart` |
 
-Before creating a control, check this table and `lib/widgets/common/`. Extend
+Before creating a control, check this table, `lib/design_system/components/` and `lib/widgets/common/`. Extend
 an existing control when the behavior is shared. Search stays a visible input
 with a magnifier and clear action. Conditional filters use compact Field / Rule /
 Value rows with searchable choices and cached source-value suggestions. Show the
@@ -54,6 +65,32 @@ Use muted labels/rules, inset value inputs and whitespace; avoid explanatory
 headings or sentences when a concise label or operator (`≥`, `≤`) suffices.
 Collapse optional controls and reuse the Tree game list for PGN filter results.
 Reserve the strongest filled action for applying or completing the task.
+
+## Localized copy in migrated UI
+
+Catalog copy lives in `lib/l10n/app_en.arb`; use generated `AppLocalizations`
+accessors in migrated widgets. Resolve typed failures and validation at the UI
+boundary. Keep localization out of domain models/controllers/infrastructure and
+pass resolved labels to shared controls. English is the initial locale; other
+languages are not implicitly in scope. Keep PGN/FEN, IDs and stored side values
+canonical. Use typed placeholders/plurals and locale-aware numbers/dates rather
+than assembling English fragments.
+
+Edit ARB source, never generated accessors. The bounded check runner regenerates
+messages before analyze/test/integration; for generation alone use
+`scripts/ci.sh with -- flutter gen-l10n` and commit the generated Dart output.
+Standalone widget hosts need `AppLocalizations.localizationsDelegates` and
+`supportedLocales`, as the main app does. Use the expanded-label/text fixtures
+in `test/l10n/` when changing catalog layouts.
+
+## Component catalog
+
+`widgetbook/main.dart` runs the first-slice production widgets with in-memory
+repositories and scripted failures; no real library or engine is initialized.
+Use `python3 scripts/app_driver.py start --target widgetbook/main.dart` for a
+headless preview, then the normal dump/tap/screenshot/stop commands. Theme and
+text-scale addons cover light/dark and 100/150/200%; keep fixtures using actual
+production components, never copied UI. Tests live in `test/design_system/`.
 
 ## Keyboard shortcuts
 

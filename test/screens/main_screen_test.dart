@@ -1,4 +1,20 @@
+import 'package:chess_auto_prep/features/repertoire/services/repertoire_outline_service.dart';
+import '../support/repertoire_dependencies.dart';
+import 'package:chess_auto_prep/app/builder_lifetime.dart';
+import 'package:chess_auto_prep/app/generation_dependencies.dart';
+import 'package:chess_auto_prep/features/generation/services/generation_artifacts.dart';
+import 'package:chess_auto_prep/app/repertoire_dependencies.dart';
+import 'package:chess_auto_prep/features/repertoires/repositories/repertoire_document_repository.dart';
+import 'package:chess_auto_prep/features/repertoires/repositories/repertoire_decoder.dart';
+import 'package:chess_auto_prep/features/training/controllers/training_settings_controller.dart';
+import '../support/scripted_document_store.dart';
+import '../support/training_settings.dart';
+import '../support/board_engine_fixture.dart';
 import 'package:flutter/material.dart';
+import 'package:chess_auto_prep/app/app_dependencies.dart';
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
+import '../../widgetbook/repertoire_cases.dart'
+    show FixtureRepertoireRepository, CatalogScenario;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -14,12 +30,19 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    useScriptedBoardEngine();
   });
 
   testWidgets(
     'analysis screen is created lazily and kept alive across mode switches',
     (tester) async {
       final appState = AppState();
+      final documents = Store();
+      final trainingSettings = TrainingSettingsController(
+        MemoryTrainingSettings(),
+      );
+      await trainingSettings.ensureLoaded();
+      addTearDown(trainingSettings.dispose);
 
       Future<void> pumpNavigation() async {
         // First visit shows a one-frame loading placeholder, then constructs
@@ -41,13 +64,46 @@ void main() {
       await tester.pumpWidget(
         MultiProvider(
           providers: [
+            Provider<GenerationArtifacts>(
+              create: (_) => createGenerationArtifacts(documents: documents),
+            ),
+            Provider<RepertoireOutlineService>(
+              create: (_) => createRepertoireOutline(
+                documents: documents,
+                catalog: FixtureRepertoireRepository(CatalogScenario.populated),
+              ),
+            ),
+            Provider<RepertoireDocumentRepository>(
+              create: (_) => createRepertoireDocuments(documents: documents),
+            ),
+            Provider<RepertoireDecoder>(
+              create: (_) => createRepertoireDecoder(),
+            ),
+            Provider<BuilderLifetime>(
+              create: (ctx) => testBuilderLifetime(
+                documents: ctx.read<RepertoireDocumentRepository>(),
+                decoder: ctx.read<RepertoireDecoder>(),
+              ),
+              dispose: (_, lifetime) => lifetime.dispose(),
+            ),
             ChangeNotifierProvider<AppState>.value(value: appState),
             ChangeNotifierProvider<AppHistory>(
               lazy: false,
               create: (_) => AppHistory(appState),
             ),
           ],
-          child: const MaterialApp(home: MainScreen()),
+          child: AppDependencies(
+            documentStore: documents,
+            trainingSettings: trainingSettings,
+            repertoireCatalog: FixtureRepertoireRepository(
+              CatalogScenario.empty,
+            ),
+            child: const MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: MainScreen(),
+            ),
+          ),
         ),
       );
       await pumpNavigation();

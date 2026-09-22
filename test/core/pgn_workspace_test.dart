@@ -1,4 +1,4 @@
-import 'package:chess_auto_prep/core/pgn/pgn_workspace.dart';
+import 'package:chess_auto_prep/features/documents/controllers/pgn_workspace.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -54,21 +54,20 @@ void main() {
     expect(tabs.index, 0);
     expect(treeVisible, isFalse);
   });
-  test(
-    'closing background and reordered reference tabs preserves selection',
-    () {
-      final tabs = PgnWorkspace();
-      final a = tabs.add('A');
-      final b = tabs.add('B');
-      tabs.index = a;
-      tabs.index = b;
-      tabs.move(b, a);
-      expect(tabs.openTabs, [0, b, a]);
-      tabs.close(a);
-      expect(tabs.index, b);
-      tabs.close(b);
-      expect(tabs.index, 0);
-      expect(tabs.titles.containsKey(b), isFalse);
-    },
-  );
+  test('closing background and reordered fixed tabs preserves selection', () {
+    final tabs = PgnWorkspace();
+    const a = PgnWorkspace.books;
+    const b = PgnWorkspace.analysis;
+    tabs.index = a;
+    tabs.index = b;
+    tabs.move(b, a);
+    expect(tabs.openTabs, [0, b, a]);
+    tabs.close(a);
+    expect(tabs.index, b);
+    tabs.close(b);
+    expect(tabs.index, 0);
+    expect(tabs.titles[b], 'Evaluation graph');
+    tabs.index = b;
+    expect(tabs.openTabs, [PgnWorkspace.game, b]);
+  });
 }

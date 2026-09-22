@@ -1,0 +1,325 @@
+/// JSON serialization / deserialization for [BuildTree].
+///
+/// Wire format matches the C tree builder's v4 JSON format so that
+/// trees are interchangeable between the Dart and C implementations.
+library;
+
+import 'dart:convert';
+
+import 'build_tree_node.dart';
+import '../../utils/fen_utils.dart' as fen_utils;
+
+// ── Serialization ────────────────────────────────────────────────────────
+
+/// Encode a [BuildTree] as a JSON string matching the C v4 format.
+///
+/// [indent] pretty-prints; the complete tree artifact keeps it,
+/// while partial saves and failure dumps pass false — on a 30k-node tree the
+/// indented encode is several times the cost of the compact one.
+String serializeTree(BuildTree tree, {bool indent = true}) =>
+    encodeTreeJson(serializeTreeJson(tree), indent: indent);
+
+/// The v4 JSON document for [tree] as plain maps and lists.
+///
+/// Built iteratively (an explicit stack, no recursion) and cheaply enough to
+/// run on the UI isolate: this is the consistent point-in-time snapshot a
+/// pause or cancel takes of a live tree, after which the expensive part —
+/// turning it into text — can be scheduled by the artifact application service.
+Map<String, dynamic> serializeTreeJson(BuildTree tree) => <String, dynamic>{
+  'format': 'opening_tree',
+  'version': 4,
+  'total_nodes': tree.totalNodes,
+  'max_depth': tree.maxPlyReached,
+  'build_complete': tree.buildComplete,
+  'config': tree.configSnapshot,
+  if (tree.startMoves.isNotEmpty) 'start_moves': tree.startMoves,
+  'tree': _subtreeToJson(tree.root),
+};
+
+/// JSON text for a document from [serializeTreeJson].
+String encodeTreeJson(Map<String, dynamic> json, {bool indent = true}) => indent
+    ? const JsonEncoder.withIndent('  ').convert(json)
+    : jsonEncode(json);
+
+/// [root] and its whole subtree as nested maps, depth-first with an
+/// explicit stack.
+Map<String, dynamic> _subtreeToJson(BuildTreeNode root) {
+  final rootJson = _nodeToJson(root);
+  final pending = <(BuildTreeNode, Map<String, dynamic>)>[(root, rootJson)];
+  while (pending.isNotEmpty) {
+    final (node, json) = pending.removeLast();
+    if (node.children.isEmpty) continue;
+    final children = <Map<String, dynamic>>[];
+    json['children'] = children;
+    for (final child in node.children) {
+      final childJson = _nodeToJson(child);
+      children.add(childJson);
+      pending.add((child, childJson));
+    }
+  }
+  return rootJson;
+}
+
+/// One node's own fields (no children).
+Map<String, dynamic> _nodeToJson(BuildTreeNode node) {
+  final obj = <String, dynamic>{'id': node.nodeId, 'depth': node.ply};
+
+  if (node.moveSan.isNotEmpty) obj['move_san'] = node.moveSan;
+  if (node.moveUci.isNotEmpty) obj['move_uci'] = node.moveUci;
+
+  if (node.historyAware) obj['history_aware'] = true;
+  if (node.committedMoveUci.isNotEmpty) {
+    obj['committed_move_uci'] = node.committedMoveUci;
+    obj['decision_horizon'] = node.decisionHorizon;
+    obj['decision_value'] = node.decisionValue;
+  }
+  if (node.terminalValue != null) obj['terminal_value'] = node.terminalValue;
+  obj['value_lower'] = node.valueLower;
+  obj['value_upper'] = node.valueUpper;
+  obj['move_probability'] = node.moveProbability;
+  obj['cumulative_probability'] = node.cumulativeProbability;
+  if (node.searchPriority >= 0.0) {
+    obj['search_priority'] = node.searchPriority;
+  }
+
+  if (node.fen.isNotEmpty) obj['fen'] = node.fen;
+
+  if (node.enginePv.isNotEmpty) obj['engine_pv'] = node.enginePv;
+
+  if (node.hasEngineEval) {
+    obj['engine_eval_cp'] = node.engineEvalCp!;
+  }
+
+  if (node.ease != null) {
+    obj['ease'] = node.ease;
+  }
+
+  if (node.hasExpectimax) {
+    obj['local_cpl'] = node.localCpl;
+    obj['expectimax_value'] = node.expectimaxValue;
+    obj['subtree_depth'] = node.subtreePly;
+    obj['subtree_opp_plies'] = node.subtreeOppPlies;
+  }
+
+  if (node.trapScore >= 0.0) {
+    obj['trap_score'] = node.trapScore;
+  }
+
+  if (node.maiaFrequency >= 0.0) {
+    obj['maia_frequency'] = node.maiaFrequency;
+  }
+
+  if (node.myEase >= 0.0) {
+    obj['my_ease'] = node.myEase;
+  }
+
+  if (node.pvContinuationMove case final pv? when pv.isNotEmpty) {
+    obj['pv_continuation_move'] = pv;
+  }
+  if (node.engineInjected) {
+    obj['engine_injected'] = true;
+  }
+
+  if (node.totalGames > 0) {
+    obj['white_wins'] = node.whiteWins;
+    obj['black_wins'] = node.blackWins;
+    obj['draws'] = node.draws;
+    obj['total_games'] = node.totalGames;
+  }
+
+  obj['is_white_to_move'] = node.isWhiteToMove;
+
+  if (node.explored) obj['explored'] = true;
+
+  if (node.pruneReason != PruneReason.none) {
+    obj['prune_reason'] = node.pruneReason.wireName;
+    if (node.pruneEvalCp != null) obj['prune_eval_cp'] = node.pruneEvalCp;
+  }
+
+  if (node.isRepertoireMove) obj['is_repertoire_move'] = true;
+  if (node.repertoireScore != 0.0) {
+    obj['repertoire_score'] = node.repertoireScore;
+  }
+
+  return obj;
+}
+
+/// The v4 spelling of a prune reason.  [PruneReason.none] is never written.
+extension _PruneReasonWire on PruneReason {
+  String get wireName => switch (this) {
+    PruneReason.evalTooHigh => 'eval_too_high',
+    PruneReason.evalTooLow || PruneReason.none => 'eval_too_low',
+  };
+
+  /// Anything but `eval_too_high` reads as too low, as it always has.
+  static PruneReason parse(String wireName) => wireName == 'eval_too_high'
+      ? PruneReason.evalTooHigh
+      : PruneReason.evalTooLow;
+}
+
+// ── Deserialization ──────────────────────────────────────────────────────
+
+/// Decode a JSON string into a [BuildTree].
+BuildTree deserializeTree(String jsonStr) =>
+    deserializeTreeJson(jsonDecode(jsonStr) as Map<String, dynamic>);
+
+/// Decode an already-parsed v4 document (see [serializeTreeJson]).
+BuildTree deserializeTreeJson(Map<String, dynamic> data) {
+  final configData = data['config'] as Map<String, dynamic>? ?? const {};
+  final treeData = data['tree'] as Map<String, dynamic>;
+
+  final idToNode = <int, BuildTreeNode>{};
+  final root = _nodeFromJson(treeData, null, idToNode);
+
+  final totalNodes =
+      (data['total_nodes'] as num?)?.toInt() ?? root.countSubtree();
+
+  final tree = BuildTree(
+    root: root,
+    totalNodes: totalNodes,
+    maxPlyReached: (data['max_depth'] as num?)?.toInt() ?? 0,
+    buildComplete: data['build_complete'] as bool? ?? true,
+    startMoves: data['start_moves'] as String? ?? '',
+    configSnapshot: configData,
+  );
+
+  // Populate the flat index from the map we already built during parsing,
+  // then compute subtreeSize and sort children in a single pass.
+  tree.nodeIndex.addAll(idToNode);
+  tree.computeMetadata();
+  tree.sortAllChildren();
+  return tree;
+}
+
+BuildTreeNode _nodeFromJson(
+  Map<String, dynamic> obj,
+  BuildTreeNode? parent,
+  Map<int, BuildTreeNode> idToNode,
+) {
+  final nodeId = (obj['id'] as num?)?.toInt() ?? 0;
+  final fen = obj['fen'] as String? ?? '';
+  final isWhiteToMove =
+      obj['is_white_to_move'] as bool? ??
+      (fen.isNotEmpty ? fen_utils.isWhiteToMove(fen) : true);
+
+  final node = BuildTreeNode(
+    fen: fen,
+    moveSan: obj['move_san'] as String? ?? '',
+    moveUci: obj['move_uci'] as String? ?? '',
+    ply:
+        (obj['depth'] as num?)?.toInt() ??
+        (parent != null ? parent.ply + 1 : 0),
+    isWhiteToMove: isWhiteToMove,
+    nodeId: nodeId,
+    parent: parent,
+    moveProbability: (obj['move_probability'] as num?)?.toDouble() ?? 1.0,
+    cumulativeProbability:
+        (obj['cumulative_probability'] as num?)?.toDouble() ?? 1.0,
+  );
+
+  if (obj.containsKey('search_priority')) {
+    node.searchPriority = (obj['search_priority'] as num).toDouble();
+  }
+
+  node.historyAware = obj['history_aware'] == true;
+  node.committedMoveUci = obj['committed_move_uci'] as String? ?? '';
+  node.decisionHorizon = (obj['decision_horizon'] as num?)?.toInt() ?? 0;
+  node.decisionValue = (obj['decision_value'] as num?)?.toDouble();
+  node.terminalValue = (obj['terminal_value'] as num?)?.toDouble();
+  node.valueLower = (obj['value_lower'] as num?)?.toDouble() ?? 0;
+  node.valueUpper = (obj['value_upper'] as num?)?.toDouble() ?? 1;
+  node.enginePv =
+      (obj['engine_pv'] as List?)?.whereType<String>().toList() ?? const [];
+  if (obj.containsKey('engine_eval_cp')) {
+    node.engineEvalCp = (obj['engine_eval_cp'] as num).toInt();
+  }
+
+  if (obj.containsKey('ease')) {
+    node.ease = (obj['ease'] as num).toDouble();
+  }
+
+  if (obj.containsKey('local_cpl') && obj.containsKey('expectimax_value')) {
+    node.localCpl = (obj['local_cpl'] as num).toDouble();
+    node.expectimaxValue = (obj['expectimax_value'] as num).toDouble();
+    node.hasExpectimax = true;
+    // 'cpl_value' was written by builds that had an opponent-mistake
+    // weight. The weight is gone (expectimax already counts opponent
+    // mistakes), so the key is read past rather than restored.
+  } else if (obj.containsKey('local_cpl') &&
+      obj.containsKey('accumulated_eca')) {
+    node.localCpl = (obj['local_cpl'] as num).toDouble();
+  }
+
+  if (obj.containsKey('subtree_depth')) {
+    node.subtreePly = (obj['subtree_depth'] as num).toInt();
+  }
+  if (obj.containsKey('subtree_opp_plies')) {
+    node.subtreeOppPlies = (obj['subtree_opp_plies'] as num).toInt();
+  }
+
+  if (obj.containsKey('trap_score')) {
+    node.trapScore = (obj['trap_score'] as num).toDouble();
+  }
+
+  if (obj.containsKey('maia_frequency')) {
+    node.maiaFrequency = (obj['maia_frequency'] as num).toDouble();
+  }
+
+  if (obj.containsKey('my_ease')) {
+    node.myEase = (obj['my_ease'] as num).toDouble();
+  }
+
+  final pvCont = obj['pv_continuation_move'] as String?;
+  if (pvCont != null && pvCont.isNotEmpty) {
+    node.pvContinuationMove = pvCont;
+  }
+  node.engineInjected = obj['engine_injected'] as bool? ?? false;
+
+  if (obj.containsKey('white_wins') &&
+      obj.containsKey('black_wins') &&
+      obj.containsKey('draws')) {
+    node.setLichessStats(
+      (obj['white_wins'] as num).toInt(),
+      (obj['black_wins'] as num).toInt(),
+      (obj['draws'] as num).toInt(),
+    );
+  }
+
+  final exploredExplicit = obj.containsKey('explored');
+  node.explored = exploredExplicit ? (obj['explored'] as bool) : false;
+
+  if (obj.containsKey('prune_reason')) {
+    node.pruneReason = _PruneReasonWire.parse(obj['prune_reason'] as String);
+    if (obj.containsKey('prune_eval_cp')) {
+      node.pruneEvalCp = (obj['prune_eval_cp'] as num).toInt();
+    }
+  }
+
+  node.isRepertoireMove = obj['is_repertoire_move'] as bool? ?? false;
+  if (obj.containsKey('repertoire_score')) {
+    node.repertoireScore = (obj['repertoire_score'] as num).toDouble();
+  } else if (node.isRepertoireMove && node.hasExpectimax) {
+    // v3 trees did not persist repertoire_score; fall back to the selected V.
+    node.repertoireScore = node.expectimaxValue;
+  }
+
+  idToNode[nodeId] = node;
+
+  final children = obj['children'] as List<dynamic>?;
+  if (children != null) {
+    for (final childData in children) {
+      final child = _nodeFromJson(
+        childData as Map<String, dynamic>,
+        node,
+        idToNode,
+      );
+      node.children.add(child);
+    }
+    // Backward compat: old trees without an explicit explored flag.
+    if (!exploredExplicit && node.children.isNotEmpty) {
+      node.explored = true;
+    }
+  }
+
+  return node;
+}

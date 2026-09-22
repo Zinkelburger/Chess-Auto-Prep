@@ -4,6 +4,9 @@
 /// usage, progress, and controls. Completed jobs use a simpler list tile.
 library;
 
+import 'package:provider/provider.dart';
+import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../features/audit/controllers/audit_session_controller.dart';
@@ -15,6 +18,8 @@ import '../../services/jobs/repertoire_job.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../utils/time_format.dart';
+import '../../utils/app_messages.dart';
+import '../generation/snapshot_export_dialog.dart';
 import '../generation/depth_progress_bars.dart';
 
 class JobsPanel extends StatelessWidget {
@@ -24,14 +29,6 @@ class JobsPanel extends StatelessWidget {
   final VoidCallback? onOpenGenerationDialog;
   final VoidCallback? onOpenAuditDialog;
   final VoidCallback? onOpenCoverageDialog;
-  final VoidCallback? onPauseGeneration;
-  final VoidCallback? onResumeGeneration;
-  final VoidCallback? onCancelGeneration;
-  final VoidCallback? onFinishNowGeneration;
-  final VoidCallback? onExportLinesGeneration;
-  final VoidCallback? onPauseAudit;
-  final VoidCallback? onResumeAudit;
-  final VoidCallback? onCancelAudit;
 
   const JobsPanel({
     super.key,
@@ -41,18 +38,19 @@ class JobsPanel extends StatelessWidget {
     this.onOpenGenerationDialog,
     this.onOpenAuditDialog,
     this.onOpenCoverageDialog,
-    this.onPauseGeneration,
-    this.onResumeGeneration,
-    this.onCancelGeneration,
-    this.onFinishNowGeneration,
-    this.onExportLinesGeneration,
-    this.onPauseAudit,
-    this.onResumeAudit,
-    this.onCancelAudit,
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: Listenable.merge([
+      jobManager,
+      generationController,
+      auditController,
+    ]),
+    builder: (context, _) => _buildJobs(context),
+  );
+
+  Widget _buildJobs(BuildContext context) {
     final jobs = jobManager.jobs;
     final active = jobManager.activeJobs;
     final completed = jobManager.completedJobs;
@@ -110,6 +108,27 @@ class JobsPanel extends StatelessWidget {
         ],
       ],
     );
+  }
+
+  /// Ask for a new repertoire name (+ verify choice) and export the lines
+  /// the build has found so far.  The run continues either way.
+  Future<void> _exportSnapshot(BuildContext context) async {
+    final gc = generationController;
+    final config = gc.activeConfig;
+    final choice = await showSnapshotExportDialog(
+      context,
+      suggestedName: gc.snapshotNameSuggestion(),
+      canVerify: config?.needsStockfish ?? false,
+      verifyDepth: config?.resolvedVerifyDepth,
+    );
+    if (choice == null || !context.mounted) return;
+    final (ok, message) = await gc.exportSnapshot(
+      repertoireName: choice.name,
+      verify: choice.verify,
+    );
+    if (context.mounted) {
+      showAppSnackBar(context, message, isError: !ok);
+    }
   }
 
   Widget _buildEmptyState(BuildContext context) {
@@ -206,7 +225,10 @@ class JobsPanel extends StatelessWidget {
     final elapsed = formatCompactDuration(
       Duration(milliseconds: gc.progress.elapsedMs),
     );
-    final resourceLabel = generationResourceLabel(config);
+    final resourceLabel = generationResourceLabel(
+      config,
+      hashPerWorkerMb: context.read<StockfishPool>().effectiveSettings.hashMb,
+    );
     final configSummary = config?.summaryLabel;
     final accent = Theme.of(context).colorScheme.primary;
 
@@ -233,42 +255,40 @@ class JobsPanel extends StatelessWidget {
       alwaysShowControls: true,
       // Pause only where the pipeline honors it; the remaining phases are
       // short synchronous passes that would ignore the request.
-      onPause: cancelling || !phase.isPausable ? null : onPauseGeneration,
-      onResume: onResumeGeneration,
-      onCancel: onCancelGeneration,
+      onPause: cancelling || !phase.isPausable ? null : gc.pauseBuild,
+      onResume: gc.resumeBuild,
+      onCancel: gc.cancelBuild,
       extraActions: [
-        if (onExportLinesGeneration != null)
-          Tooltip(
-            message: !extrasEnabled
-                ? extrasDisabledMessage
-                : gc.isSnapshotExporting
-                ? (gc.snapshotStatus ?? 'Exporting snapshot…')
-                : 'Save the lines found so far to a new repertoire — '
-                      'the run keeps going',
-            child: TextButton(
-              onPressed: extrasEnabled && !gc.isSnapshotExporting
-                  ? onExportLinesGeneration
-                  : null,
-              child: const Text(
-                'Export Lines',
-                style: TextStyle(fontSize: 12, color: AppColors.info),
-              ),
+        Tooltip(
+          message: !extrasEnabled
+              ? extrasDisabledMessage
+              : gc.isSnapshotExporting
+              ? (gc.snapshotStatus ?? 'Exporting snapshot…')
+              : 'Save the lines found so far to a new repertoire — '
+                    'the run keeps going',
+          child: TextButton(
+            onPressed: extrasEnabled && !gc.isSnapshotExporting
+                ? () => _exportSnapshot(context)
+                : null,
+            child: const Text(
+              'Export Lines',
+              style: TextStyle(fontSize: 12, color: AppColors.info),
             ),
           ),
-        if (onFinishNowGeneration != null)
-          Tooltip(
-            message: extrasEnabled
-                ? 'Stop exploring and build lines from '
-                      'what\'s been found so far'
-                : extrasDisabledMessage,
-            child: TextButton(
-              onPressed: extrasEnabled ? onFinishNowGeneration : null,
-              child: const Text(
-                'Finish Now',
-                style: TextStyle(fontSize: 12, color: AppColors.warning),
-              ),
+        ),
+        Tooltip(
+          message: extrasEnabled
+              ? 'Stop exploring and build lines from '
+                    'what\'s been found so far'
+              : extrasDisabledMessage,
+          child: TextButton(
+            onPressed: extrasEnabled ? gc.finishNow : null,
+            child: const Text(
+              'Finish Now',
+              style: TextStyle(fontSize: 12, color: AppColors.warning),
             ),
           ),
+        ),
       ],
     );
   }
@@ -297,9 +317,9 @@ class JobsPanel extends StatelessWidget {
       resourceLabel: null,
       progress: fraction,
       isPaused: ac.isPaused,
-      onPause: onPauseAudit,
-      onResume: onResumeAudit,
-      onCancel: onCancelAudit,
+      onPause: ac.pause,
+      onResume: ac.resume,
+      onCancel: ac.cancel,
     );
   }
 

@@ -16,15 +16,15 @@ void main() {
 
       await prefs.load();
 
-      expect(prefs.linesPanelCollapsed, isFalse);
-      expect(prefs.linesPanelWidth, isNull);
+      expect(prefs.analysisCollapsed, isFalse);
+      expect(prefs.outlinePanelWidth, isNull);
       expect(prefs.boardSize, BoardSize.large);
     });
 
     test('reads a saved layout back', () async {
       SharedPreferences.setMockInitialValues({
-        RepertoireLayoutPrefs.collapsedKey: true,
-        RepertoireLayoutPrefs.widthKey: 340.0,
+        RepertoireLayoutPrefs.analysisCollapsedKey: true,
+        RepertoireLayoutPrefs.outlineWidthKey: 340.0,
         RepertoireLayoutPrefs.boardSizeKey: 'small',
       });
       final prefs = RepertoireLayoutPrefs();
@@ -32,9 +32,62 @@ void main() {
 
       await prefs.load();
 
-      expect(prefs.linesPanelCollapsed, isTrue);
-      expect(prefs.linesPanelWidth, 340.0);
+      expect(prefs.analysisCollapsed, isTrue);
+      expect(prefs.outlinePanelWidth, 340.0);
       expect(prefs.boardSize, BoardSize.small);
+    });
+
+    test('opens the Database pane on the source you last picked', () async {
+      SharedPreferences.setMockInitialValues({
+        RepertoireLayoutPrefs.databaseSourceKey: 4,
+      });
+      final prefs = RepertoireLayoutPrefs();
+      addTearDown(prefs.dispose);
+
+      await prefs.load();
+
+      expect(prefs.databaseSource, 4);
+    });
+
+    test('defaults the Database pane to engine evals', () async {
+      final prefs = RepertoireLayoutPrefs();
+      addTearDown(prefs.dispose);
+
+      await prefs.load();
+
+      expect(prefs.databaseSource, RepertoireLayoutPrefs.defaultDatabaseSource);
+    });
+
+    test('a source outside the menu falls back to the default', () async {
+      for (final stored in [-1, 5, 99]) {
+        SharedPreferences.setMockInitialValues({
+          RepertoireLayoutPrefs.databaseSourceKey: stored,
+        });
+        final prefs = RepertoireLayoutPrefs();
+        addTearDown(prefs.dispose);
+
+        await prefs.load();
+
+        expect(
+          prefs.databaseSource,
+          RepertoireLayoutPrefs.defaultDatabaseSource,
+          reason: 'stored $stored must not index the source list out of range',
+        );
+      }
+    });
+
+    test('picking a source writes it back for the next launch', () async {
+      final prefs = RepertoireLayoutPrefs();
+      addTearDown(prefs.dispose);
+      await prefs.load();
+
+      await prefs.setDatabaseSource(1);
+      expect(prefs.databaseSource, 1);
+
+      final reopened = RepertoireLayoutPrefs();
+      addTearDown(reopened.dispose);
+      await reopened.load();
+      expect(reopened.databaseSource, 1);
     });
 
     test('an unknown board size falls back to the classic layout', () async {
@@ -54,11 +107,11 @@ void main() {
       addTearDown(prefs.dispose);
       await prefs.load();
 
-      await prefs.setLinesPanelCollapsed(true);
+      await prefs.setAnalysisCollapsed(true);
       await prefs.setBoardSize(BoardSize.medium);
 
       final store = await SharedPreferences.getInstance();
-      expect(store.getBool(RepertoireLayoutPrefs.collapsedKey), isTrue);
+      expect(store.getBool(RepertoireLayoutPrefs.analysisCollapsedKey), isTrue);
       expect(store.getString(RepertoireLayoutPrefs.boardSizeKey), 'medium');
     });
 
@@ -69,15 +122,15 @@ void main() {
       var notifications = 0;
       prefs.addListener(() => notifications++);
 
-      prefs.dragLinesPanelWidth(300);
-      prefs.dragLinesPanelWidth(320);
+      prefs.dragOutlinePanelWidth(300);
+      prefs.dragOutlinePanelWidth(320);
 
       expect(notifications, 2);
       final store = await SharedPreferences.getInstance();
-      expect(store.getDouble(RepertoireLayoutPrefs.widthKey), isNull);
+      expect(store.getDouble(RepertoireLayoutPrefs.outlineWidthKey), isNull);
 
-      await prefs.saveLinesPanelWidth();
-      expect(store.getDouble(RepertoireLayoutPrefs.widthKey), 320.0);
+      await prefs.saveOutlinePanelWidth();
+      expect(store.getDouble(RepertoireLayoutPrefs.outlineWidthKey), 320.0);
     });
 
     test('setting the value already held is not a change', () async {
@@ -87,10 +140,10 @@ void main() {
       var notifications = 0;
       prefs.addListener(() => notifications++);
 
-      await prefs.setLinesPanelCollapsed(false);
+      await prefs.setAnalysisCollapsed(false);
       await prefs.setBoardSize(BoardSize.large);
-      prefs.dragLinesPanelWidth(300);
-      prefs.dragLinesPanelWidth(300);
+      prefs.dragOutlinePanelWidth(300);
+      prefs.dragOutlinePanelWidth(300);
 
       expect(notifications, 1);
     });
@@ -100,10 +153,10 @@ void main() {
       addTearDown(prefs.dispose);
       await prefs.load();
 
-      await prefs.toggleLinesPanelCollapsed();
-      expect(prefs.linesPanelCollapsed, isTrue);
-      await prefs.toggleLinesPanelCollapsed();
-      expect(prefs.linesPanelCollapsed, isFalse);
+      await prefs.toggleAnalysisCollapsed();
+      expect(prefs.analysisCollapsed, isTrue);
+      await prefs.toggleAnalysisCollapsed();
+      expect(prefs.analysisCollapsed, isFalse);
     });
   });
 
@@ -125,10 +178,10 @@ void main() {
       addTearDown(prefs.dispose);
       await prefs.load();
 
-      // 24% of the body, bounded to a readable range.
-      expect(prefs.resolveLinesPanelWidth(1400), closeTo(336, 0.01));
-      expect(prefs.resolveLinesPanelWidth(1000), 260); // floor
-      expect(prefs.resolveLinesPanelWidth(3000), 400); // ceiling
+      // 18% of the body, bounded to a readable range.
+      expect(prefs.resolveOutlinePanelWidth(1400), closeTo(252, 0.01));
+      expect(prefs.resolveOutlinePanelWidth(1000), 220); // floor
+      expect(prefs.resolveOutlinePanelWidth(3000), 280); // ceiling
     });
 
     test('a dragged width wins, inside the allowed range', () async {
@@ -136,19 +189,19 @@ void main() {
       addTearDown(prefs.dispose);
       await prefs.load();
 
-      prefs.dragLinesPanelWidth(500);
-      expect(prefs.resolveLinesPanelWidth(1400), 500);
+      prefs.dragOutlinePanelWidth(500);
+      expect(prefs.resolveOutlinePanelWidth(1400), 500);
 
       // Never narrower than the minimum...
-      prefs.dragLinesPanelWidth(50);
+      prefs.dragOutlinePanelWidth(50);
       expect(
-        prefs.resolveLinesPanelWidth(1400),
+        prefs.resolveOutlinePanelWidth(1400),
         RepertoireLayoutPrefs.minPanelWidth,
       );
 
       // ...and never more than 45% of the body, so the PGN column survives.
-      prefs.dragLinesPanelWidth(5000);
-      expect(prefs.resolveLinesPanelWidth(1400), closeTo(630, 0.01));
+      prefs.dragOutlinePanelWidth(5000);
+      expect(prefs.resolveOutlinePanelWidth(1400), closeTo(630, 0.01));
     });
 
     test('the max width never inverts on an implausibly narrow body', () {
@@ -156,7 +209,7 @@ void main() {
       // layout only runs above the compact breakpoint, but the arithmetic
       // should not be the thing that decides that.
       expect(
-        RepertoireLayoutPrefs.maxLinesPanelWidth(100),
+        RepertoireLayoutPrefs.maxOutlinePanelWidth(100),
         greaterThanOrEqualTo(RepertoireLayoutPrefs.minPanelWidth),
       );
     });

@@ -3,7 +3,16 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import '../../models/repertoire_metadata.dart';
+import '../../features/repertoires/models/repertoire_metadata.dart';
+import '../../infrastructure/generation/storage_generation_draft_repository.dart';
+import '../../features/repertoires/models/repertoire_creation.dart';
+import '../../infrastructure/repertoires/native_repertoire_publication_store.dart';
+import '../../infrastructure/repertoires/repertoire_import_planner.dart';
+import '../../features/repertoires/models/repertoire_recovery_entry.dart';
+import '../../features/settings/repositories/app_settings_repository.dart';
+import '../../infrastructure/settings/shared_preferences_app_settings_repository.dart';
+import '../../infrastructure/repertoires/repertoire_directory_mutations.dart';
+import '../../infrastructure/repertoires/repertoire_reference_migration.dart';
 import '../../models/tactics_set_metadata.dart';
 import '../../utils/atomic_file.dart';
 import '../../utils/file_text_reader.dart';
@@ -11,22 +20,115 @@ import '../../utils/log.dart';
 import '../../utils/safe_file_name.dart';
 import '../game_store/game_store.dart';
 import '../game_store/game_store_service.dart';
-import '../training/move_attempt_store.dart';
+import '../../infrastructure/training/move_attempt_store.dart';
 import 'app_paths.dart';
 import 'file_mutation_service.dart';
 import 'pgn_game_count_cache.dart';
 import 'storage_service.dart';
 
-StorageService getStorageService() => IOStorageService();
+StorageService getStorageService() => IOStorageService(
+  repertoireBooks:
+      SharedPreferencesAppSettingsRepository.instance.repertoireBooks,
+);
 
 class IOStorageService implements StorageService {
   IOStorageService({
     Directory? documentsRoot,
     Directory? supportRoot,
     Directory? repertoiresRoot,
+    this.repertoireBooks,
+    this.repertoireMoveHook,
+    this.repertoirePublicationHook,
   }) : _documentsRootOverride = documentsRoot,
        _supportRootOverride = supportRoot,
        _repertoiresRootOverride = repertoiresRoot;
+
+  final Future<void> Function(RepertoirePublicationStep)?
+  repertoirePublicationHook;
+  Future<NativeRepertoirePublicationStore>? _publicationStore;
+  Future<NativeRepertoirePublicationStore> _publications() async {
+    final result = _publicationStore ??= _createPublications();
+    try {
+      return await result;
+    } catch (_) {
+      if (identical(result, _publicationStore)) _publicationStore = null;
+      rethrow;
+    }
+  }
+
+  Future<NativeRepertoirePublicationStore> _createPublications() async =>
+      NativeRepertoirePublicationStore(
+        root: await _repertoiresRoot(),
+        guardCommit: _guardLibrary,
+        testHook: repertoirePublicationHook,
+      );
+  Future<T> _guardLibrary<T>(Future<T> Function() action) async =>
+      (await _moves()).guard(action);
+
+  Future<RepertoireCreationResult> publishRepertoire(
+    CreateRepertoire request, {
+    DateTime? createdAt,
+    Future<void> Function(String path, String content)? createDocument,
+  }) async {
+    if (!Platform.isLinux) {
+      throw UnsupportedError(
+        'Native repertoire publication is not verified on this host',
+      );
+    }
+    final now = createdAt ?? DateTime.now();
+    final plan = await prepareRepertoireImport(request, now);
+    return (await _publications()).publish(
+      plan,
+      createDocument: createDocument,
+    );
+  }
+
+  final RepertoireBooksRepository? repertoireBooks;
+  final Future<void> Function(RepertoireMoveStep)? repertoireMoveHook;
+  Future<RepertoireDirectoryMutations>? _directoryMutations;
+
+  Future<RepertoireDirectoryMutations> _moves() async {
+    final result = _directoryMutations ??= _createMoves();
+    try {
+      return await result;
+    } catch (_) {
+      if (identical(_directoryMutations, result)) _directoryMutations = null;
+      rethrow;
+    }
+  }
+
+  Future<RepertoireDirectoryMutations> _createMoves() async =>
+      RepertoireDirectoryMutations(
+        root: await _repertoiresRoot(),
+        trash: await _trashDirectory('repertoires'),
+        trashAllowedRoot: await _documentsRoot(),
+        journals: Directory(
+          p.join((await _supportRoot()).path, 'repertoire-mutations'),
+        ),
+        repoint: RepertoireReferenceMigration(
+          await _documentsRoot(),
+          books: repertoireBooks,
+        ).repoint,
+        testHook: repertoireMoveHook,
+        recoverAdditional: () async => (await _publications()).recover(),
+      );
+
+  /// Shared by the native document store and transitional storage writers.
+  /// Only managed repertoire paths participate in the directory domain lock.
+  Future<T> guardDocumentOperation<T>(
+    String path,
+    Future<T> Function() action,
+  ) async {
+    if (Platform.isLinux) {
+      final root = await _repertoiresRoot(create: false);
+      if (_isInside(root, path) ||
+          (await root.exists() &&
+              _isInside(Directory(await root.resolveSymbolicLinks()), path))) {
+        return (await _moves()).guard(action);
+      }
+    }
+    return action();
+  }
 
   final Directory? _documentsRootOverride;
   final Directory? _supportRootOverride;
@@ -46,11 +148,19 @@ class IOStorageService implements StorageService {
       _documentsRootOverride ?? await AppPaths.documentsDirectory();
 
   Future<Directory> _supportRoot() async =>
-      _supportRootOverride ?? await AppPaths.supportDirectory();
+      _supportRootOverride ??
+      _documentsRootOverride ??
+      await AppPaths.supportDirectory();
 
-  Future<Directory> _repertoiresRoot() async =>
-      _repertoiresRootOverride ??
-      await AppPaths.repertoiresDirectory(create: true);
+  Future<Directory> _repertoiresRoot({bool create = true}) async {
+    final root =
+        _repertoiresRootOverride ??
+        (_documentsRootOverride == null
+            ? await AppPaths.repertoiresDirectory(create: create)
+            : Directory(p.join(_documentsRootOverride.path, 'repertoires')));
+    if (create && !await root.exists()) await root.create(recursive: true);
+    return root;
+  }
 
   Future<Directory> _documentsSubdirectory(String name) async {
     final directory = Directory(p.join((await _documentsRoot()).path, name));
@@ -145,14 +255,22 @@ class IOStorageService implements StorageService {
   // ── Generic file I/O ─────────────────────────────────────────────────────
 
   @override
-  Future<String?> readFile(String path) async =>
-      readTextFileSafely(await _resolveFile(path));
+  Future<String?> readFile(String path) async {
+    final file = await _resolveFile(path);
+    return guardDocumentOperation(file.path, () => readTextFileSafely(file));
+  }
 
   @override
   Future<String> updateFile(
     String path,
     FutureOr<String> Function(String?) update,
-  ) async => updateTextFileAtomically(await _resolveFile(path), update);
+  ) async {
+    final file = await _resolveFile(path);
+    return guardDocumentOperation(
+      file.path,
+      () => updateTextFileAtomically(file, update),
+    );
+  }
 
   @override
   Future<void> writeFile(
@@ -161,21 +279,57 @@ class IOStorageService implements StorageService {
     bool createOnly = false,
     String? expectedContent,
   }) async {
-    await writeTextFileAtomically(
-      await _resolveFile(path),
-      content,
-      createOnly: createOnly,
-      expectedContent: expectedContent,
+    final file = await _resolveFile(path);
+    await guardDocumentOperation(
+      file.path,
+      () => writeTextFileAtomically(
+        file,
+        content,
+        createOnly: createOnly,
+        expectedContent: expectedContent,
+      ),
     );
   }
 
   @override
-  Future<bool> fileExists(String path) async =>
-      textFileExistsSafely(await _resolveFile(path));
+  Future<bool> fileExists(String path) async {
+    final file = await _resolveFile(path);
+    return guardDocumentOperation(file.path, () => textFileExistsSafely(file));
+  }
 
   @override
   Future<void> deleteFile(String path) async {
     final file = await _resolveFile(path);
+    await guardDocumentOperation(file.path, () => _deleteResolvedFile(file));
+  }
+
+  /// The configured ownership root of a managed file, never a caller's folder.
+  /// Reject aliases before callers capture the document for a destructive action.
+  Future<({Directory root, String path})> managedFileLocation(
+    String path,
+  ) async {
+    final candidate = p.normalize(p.absolute(path));
+    for (final configured in [await _documentsRoot(), await _supportRoot()]) {
+      if (!await configured.exists()) continue;
+      final lexical = p.normalize(p.absolute(configured.path));
+      final canonical = p.normalize(await configured.resolveSymbolicLinks());
+      final spelling = p.isWithin(lexical, candidate) ? lexical : canonical;
+      if (!p.isWithin(spelling, candidate)) continue;
+      await _mutations.validateManagedFilePath(
+        File(candidate),
+        allowedRoot: Directory(spelling),
+      );
+      return (
+        root: Directory(canonical),
+        path: p.join(canonical, p.relative(candidate, from: spelling)),
+      );
+    }
+    throw UnsafeFileMutation(
+      'Refusing to remove $path: it is not managed app data.',
+    );
+  }
+
+  Future<void> _deleteResolvedFile(File file) async {
     if (!await file.exists()) return;
     final docs = await _documentsRoot();
     if (_isInside(docs, file.path)) {
@@ -264,11 +418,18 @@ class IOStorageService implements StorageService {
   @override
   Future<List<RepertoireMetadata>> listRepertoires() async {
     final dir = await _repertoiresRoot();
+    if (Platform.isLinux) await (await _moves()).recover();
     await _migrateFlatRepertoires(dir);
 
     final folders = <Directory>[
       await for (final entity in dir.list())
-        if (entity is Directory) entity,
+        if (entity is Directory &&
+            p.basename(entity.path) !=
+                RepertoireDirectoryMutations.stagingName &&
+            p.basename(entity.path) !=
+                StorageGenerationDraftRepository.directoryName &&
+            p.basename(entity.path) != '.cap-pgn-history')
+          entity,
     ];
 
     return Future.wait(
@@ -320,6 +481,10 @@ class IOStorageService implements StorageService {
     final root = await _repertoiresRoot();
     final parent = p.dirname(oldDirPath);
     final newPath = p.join(parent, safeName);
+    if (Platform.isLinux) {
+      await (await _moves()).move(oldDirPath, newPath);
+      return newPath;
+    }
     await _mutations.moveDirectoryNoReplace(
       Directory(oldDirPath),
       Directory(newPath),
@@ -329,15 +494,33 @@ class IOStorageService implements StorageService {
     return newPath;
   }
 
+  Future<List<RepertoireRecoveryEntry>> listRepertoireRecovery() async =>
+      Platform.isLinux ? (await _moves()).listRecovery() : [];
+
+  Future<void> restoreRepertoire(String id, {String? name}) async {
+    if (!Platform.isLinux) {
+      throw UnsupportedError('Restore is not available on this platform yet');
+    }
+    await (await _moves()).restore(id, name: name);
+  }
+
   @override
   Future<void> deleteRepertoireDirectory(String dirPath) async {
+    if (Platform.isLinux) {
+      await (await _moves()).delete(dirPath);
+      return;
+    }
     final root = await _repertoiresRoot();
     final documents = await _documentsRoot();
-    await _mutations.quarantineDirectory(
-      Directory(dirPath),
-      allowedRoot: root,
-      quarantineRoot: await _trashDirectory('repertoires'),
-      quarantineAllowedRoot: documents,
+    final trash = await _trashDirectory('repertoires');
+    await guardDocumentOperation(
+      dirPath,
+      () => _mutations.quarantineDirectory(
+        Directory(dirPath),
+        allowedRoot: root,
+        quarantineRoot: trash,
+        quarantineAllowedRoot: documents,
+      ),
     );
   }
 
@@ -347,7 +530,11 @@ class IOStorageService implements StorageService {
     if (!await dir.exists()) return [];
     final out = <String>[
       await for (final entity in dir.list())
-        if (entity is Directory) entity.path,
+        if (entity is Directory &&
+            p.basename(entity.path) !=
+                StorageGenerationDraftRepository.directoryName &&
+            p.basename(entity.path) != '.cap-pgn-history')
+          entity.path,
     ];
     out.sort(
       (a, b) =>
@@ -359,14 +546,21 @@ class IOStorageService implements StorageService {
   @override
   Future<void> createDirectory(String path) async {
     final root = await _repertoiresRoot();
-    await _mutations.createDirectoryNoReplace(
-      Directory(path),
-      allowedRoot: root,
+    await guardDocumentOperation(
+      path,
+      () => _mutations.createDirectoryNoReplace(
+        Directory(path),
+        allowedRoot: root,
+      ),
     );
   }
 
   @override
   Future<void> moveDirectory(String oldPath, String newPath) async {
+    if (Platform.isLinux) {
+      await (await _moves()).move(oldPath, newPath);
+      return;
+    }
     final root = await _repertoiresRoot();
     await _mutations.moveDirectoryNoReplace(
       Directory(oldPath),

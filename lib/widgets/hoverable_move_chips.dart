@@ -14,8 +14,8 @@ import 'package:flutter/material.dart';
 import '../core/board_preview_controller.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
-import '../utils/chess_utils.dart' show fenAfterMoves;
-import '../utils/san_display.dart';
+import '../utils/chess_utils.dart' show fenAfterMoves, sanToUci;
+import 'package:chess_auto_prep/features/settings/widgets/san_display.dart';
 
 /// Compact inline move text with optional hover board preview.
 class HoverableMoveChips extends StatefulWidget {
@@ -93,11 +93,16 @@ class _HoverableMoveChipsState extends State<HoverableMoveChips> {
   }
 
   void _onEnterMove(PointerEnterEvent event, int index) {
+    // The position the hovered move is played from, so the preview board can
+    // tint the two squares it uses. Without it the mini board shows a
+    // position and leaves you to find the move that produced it.
+    final before = fenAfterMoves(widget.startFen, widget.moves, index - 1);
     final fen = fenAfterMoves(widget.startFen, widget.moves, index);
     widget.boardPreview!.setPreview(
       fen,
       moves: widget.moves.sublist(0, index + 1),
       target: BoardPreviewTarget.floating,
+      lastMoveUci: sanToUci(before, widget.moves[index]),
       // Anchor at the pointer, just below the hovered move text.
       anchorGlobal: event.position + Offset(0, widget.fontSize),
       ownerTag: widget.ownerTag,

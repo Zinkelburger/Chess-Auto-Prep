@@ -1,14 +1,15 @@
 import 'package:chess_auto_prep/models/move_tree.dart';
-import 'package:chess_auto_prep/models/move_tree_pgn.dart';
+import 'package:chess_auto_prep/chess_core/pgn/move_text_writer.dart';
 import 'package:dartchess/dartchess.dart';
+import 'package:chess_auto_prep/models/move_tree_pgn.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  group('MoveTreePgnCodec.moveText', () {
+  group('writeMoveText', () {
     test('numbers White moves and only the first Black move', () {
       final tree = MoveTree.fromMoves(['e4', 'e5', 'Nf3']);
       expect(
-        MoveTreePgnCodec.moveText(
+        writeMoveText(
           roots: tree.roots,
           startMoveNumber: 1,
           startIsWhite: true,
@@ -42,7 +43,7 @@ void main() {
     });
 
     test('strips braces from comments so they cannot break the block', () {
-      expect(MoveTreePgnCodec.sanitizeComment('a {b} c'), 'a b c');
+      expect(sanitizePgnComment('a {b} c'), 'a b c');
     });
   });
 

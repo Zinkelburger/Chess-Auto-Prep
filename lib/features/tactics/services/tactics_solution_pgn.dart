@@ -3,7 +3,7 @@ library;
 
 import '../models/tactics_position.dart';
 import '../../../utils/pgn_utils.dart';
-import '../../../services/stored_game_lookup.dart';
+import '../../documents/repositories/stored_game_repository.dart';
 import 'tactics_pgn_codec.dart' show encodePuzzlePgn;
 
 /// PGN from the tactic FEN with [solutionSan] as the mainline, carrying the
@@ -50,11 +50,16 @@ String buildSourceGamePgn(TacticsPosition tactic) {
 /// solution-only PGN so the actions never come up empty-handed.
 Future<String> sourceGamePgn(
   TacticsPosition tactic,
-  List<String> solutionSan,
-) async {
+  List<String> solutionSan, {
+  required StoredGameRepository storedGames,
+}) async {
   if (tactic.gameId.isNotEmpty) {
-    final stored = await findStoredGamePgn(tactic.gameId);
-    if (stored.isNotEmpty) return stored;
+    try {
+      final stored = await storedGames.findById(tactic.gameId);
+      if (stored != null && stored.trim().isNotEmpty) return stored;
+    } catch (_) {
+      // Preserve the solution when the optional archive is unavailable.
+    }
   }
   return buildSolutionPgn(tactic, solutionSan);
 }

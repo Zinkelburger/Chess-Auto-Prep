@@ -12,7 +12,7 @@ import 'dart:async';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
-import '../services/move_eval.dart';
+import 'package:chess_auto_prep/chess_core/analysis/move_eval.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/movetext_builder.dart';

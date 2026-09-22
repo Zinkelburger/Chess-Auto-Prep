@@ -6,7 +6,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import '../../models/build_tree_node.dart';
+import '../../chess_core/generation/build_tree_node.dart';
 import '../../utils/fen_utils.dart';
 import '../engine/stockfish_pool.dart';
 import '../eval/cdbdirect_eval_provider.dart';

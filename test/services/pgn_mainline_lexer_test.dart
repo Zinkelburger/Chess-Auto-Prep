@@ -4,7 +4,7 @@ library;
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chess_auto_prep/services/pgn_mainline_lexer.dart';
+import 'package:chess_auto_prep/chess_core/pgn/mainline_lexer.dart';
 
 void main() {
   group('extractHeaderBlock', () {
@@ -63,7 +63,7 @@ void main() {
     });
 
     test('the header side rejoins new movetext into a readable game', () {
-      // What `PgnViewerController.persistMoveCommentsFor` does on every save.
+      // What `ViewerDocumentController.persistMoveCommentsFor` does on every save.
       const pgn = '[Event "G"]\n[Site "S"]\n\n1. d4 d5 *\n';
       final headerPart = pgn.substring(0, movetextStart(pgn)).trimRight();
       final rebuilt = '$headerPart\n\n1. d4 Nf6 *\n';

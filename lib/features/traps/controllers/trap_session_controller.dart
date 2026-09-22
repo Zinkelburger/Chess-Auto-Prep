@@ -11,21 +11,21 @@ library;
 
 import 'package:flutter/foundation.dart';
 
-import '../../../models/trap_line_info.dart';
-import '../../../services/generation/trap_extractor.dart';
+import '../../../chess_core/generation/trap_line_info.dart';
 import '../../../utils/safe_change_notifier.dart';
 import '../services/trap_index_service.dart';
 import '../services/trap_tour_order.dart';
 
-/// Reads a repertoire's trap sidecar file. Injectable so tests do not need
+/// Reads a repertoire’s verified trap artifacts. Injectable so tests do not need
 /// one on disk.
 typedef TrapFileLoader = Future<List<TrapLineInfo>?> Function(String filePath);
 
 class TrapSessionController extends ChangeNotifier with SafeChangeNotifier {
-  TrapSessionController({TrapFileLoader? loadFile})
-    : _loadFile = loadFile ?? TrapExtractor.loadFromFile;
+  TrapSessionController({required TrapFileLoader loadFile})
+    : _loadFile = loadFile;
 
   final TrapFileLoader _loadFile;
+  int _loadGeneration = 0;
 
   List<TrapLineInfo> _traps = const [];
   TrapIndexService? _index;
@@ -43,9 +43,11 @@ class TrapSessionController extends ChangeNotifier with SafeChangeNotifier {
   /// Trap the tour should open on, or null to start from the top.
   TrapLineInfo? get tourInitialTrap => _tourInitialTrap;
 
-  /// Reads the trap sidecar next to [filePath] and replaces the current set.
+  /// Reads the selected trap generation for [filePath] and replaces the current set.
   Future<void> loadFromFile(String filePath) async {
+    final generation = ++_loadGeneration;
     final traps = await _loadFile(filePath);
+    if (isDisposed || generation != _loadGeneration) return;
     _setTraps(traps ?? const []);
   }
 
@@ -53,12 +55,13 @@ class TrapSessionController extends ChangeNotifier with SafeChangeNotifier {
   ///
   /// A build's own bundle is consistent with the tree it just built, so it
   /// wins over the file. Repertoires loaded from disk have no bundle in
-  /// memory, so [fallbackFilePath] re-reads the sidecar instead.
+  /// memory, so [fallbackFilePath] re-reads the selected artifacts instead.
   Future<void> adoptFromBuild(
     TrapIndexService? bundleIndex, {
     String? fallbackFilePath,
   }) async {
     if (bundleIndex != null) {
+      _loadGeneration++;
       final traps = bundleIndex.allTraps;
       _traps = traps;
       _index = traps.isEmpty ? null : bundleIndex;
@@ -91,6 +94,9 @@ class TrapSessionController extends ChangeNotifier with SafeChangeNotifier {
   /// through the previous repertoire's traps means nothing here. The traps
   /// themselves are replaced by the load that follows.
   void endTourForRepertoireSwitch() {
+    _loadGeneration++;
+    _traps = const [];
+    _index = null;
     _tourVisible = false;
     _tourInitialTrap = null;
   }

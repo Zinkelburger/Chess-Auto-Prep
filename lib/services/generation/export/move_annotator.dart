@@ -10,7 +10,7 @@
 /// the extractor never reassigns them mid-run, so a snapshot cannot desync.
 library;
 
-import '../../../models/build_tree_node.dart';
+import '../../../chess_core/generation/build_tree_node.dart';
 import 'move_annotation.dart';
 
 /// Turns [BuildTreeNode]s into [MoveAnnotation]s.

@@ -20,7 +20,7 @@ import '../models/explorer_response.dart';
 import '../utils/atomic_file.dart';
 import '../utils/chess_utils.dart' show plyReachingFen;
 import 'lichess_api_client.dart';
-import 'pgn_mainline_lexer.dart' show mainlineSansOf;
+import '../chess_core/pgn/mainline_lexer.dart' show mainlineSansOf;
 import 'master_games/master_games_db.dart';
 import 'master_games/master_games_service.dart';
 import 'storage/app_paths.dart';

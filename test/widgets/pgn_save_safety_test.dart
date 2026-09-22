@@ -1,4 +1,6 @@
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/models/move_tree.dart';
+import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 import 'package:chess_auto_prep/models/pgn_deletion_summary.dart';
 import 'package:chess_auto_prep/widgets/interactive_pgn_editor.dart';
 import 'package:chess_auto_prep/widgets/pgn/comment_editor.dart';
@@ -32,6 +34,9 @@ void main() {
         var deletions = 0;
         await tester.pumpWidget(
           MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+
             home: Scaffold(
               body: InteractivePgnEditor(
                 tree: tree,
@@ -80,6 +85,9 @@ void main() {
     var deleted = false;
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+
         home: Scaffold(
           body: InteractivePgnEditor(
             tree: tree,
@@ -107,6 +115,9 @@ void main() {
         final edits = <String>[];
         await tester.pumpWidget(
           MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+
             home: Scaffold(
               body: StatefulBuilder(
                 builder: (context, setState) => PgnAnnotationPanel(
@@ -161,6 +172,9 @@ void main() {
     var saved = 'Original';
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+
         home: Scaffold(
           body: StatefulBuilder(
             builder: (context, setState) => PgnAnnotationPanel(
@@ -189,6 +203,9 @@ void main() {
     final edits = <String>[];
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+
         home: Scaffold(
           body: PgnAnnotationPanel(
             targetKey: 'e4',
@@ -210,6 +227,9 @@ void main() {
     String? saved;
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+
         home: Scaffold(
           body: PgnCommentEditor(
             initialText: 'Keep',
@@ -245,6 +265,9 @@ void main() {
     }) async {
       await tester.pumpWidget(
         MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+
           home: Scaffold(
             body: Center(
               child: PgnSaveStatus(

@@ -9,7 +9,7 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:chess_auto_prep/services/repertoire_pgn_text.dart';
+import 'package:chess_auto_prep/chess_core/pgn/repertoire_pgn_text.dart';
 
 void main() {
   group('reassemblePgnDocument', () {

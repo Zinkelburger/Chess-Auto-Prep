@@ -6,15 +6,17 @@
 @TestOn('vm')
 library;
 
+import 'package:http/http.dart' as http;
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:chess_auto_prep/services/pgn_parsing_service.dart'
+import 'package:chess_auto_prep/chess_core/pgn/pgn_text.dart'
     show extractHeaders, splitPgnIntoGames;
-import 'package:chess_auto_prep/services/study_import/import_source.dart';
-import 'package:chess_auto_prep/services/study_import/lichess_study_client.dart';
-import 'package:chess_auto_prep/services/study_import/study_import_exception.dart';
+import 'package:chess_auto_prep/features/studies/models/import_source.dart';
+import 'package:chess_auto_prep/infrastructure/studies/lichess_study_client.dart';
+import 'package:chess_auto_prep/features/studies/models/study_import_exception.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -149,9 +151,18 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
+  Future<FetchedStudy> fetch(ImportSource source) async {
+    final client = http.Client();
+    try {
+      return await fetchLichessStudy(source, loggedIn: false, get: client.get);
+    } finally {
+      client.close();
+    }
+  }
+
   Future<StudyImportException> failure(ImportSource source) async {
     try {
-      await fetchLichessStudy(source);
+      await fetch(source);
     } on StudyImportException catch (e) {
       return e;
     }
@@ -160,7 +171,7 @@ void main() {
 
   test('asks Lichess for the study with comments and variations on', () async {
     stub.routes[_studyUrl] = (status: 200, body: utf8.encode(_chapter('X')));
-    await fetchLichessStudy(_study);
+    await fetch(_study);
     final url = stub.requests.single;
     expect(url.path, '/api/study/WcJ8Iyaz.pgn');
     expect(url.queryParameters, {
@@ -174,7 +185,7 @@ void main() {
   test('a chapter URL fetches only that chapter', () async {
     const chapterUrl = 'https://lichess.org/api/study/WcJ8Iyaz/mVfBcMlS.pgn';
     stub.routes[chapterUrl] = (status: 200, body: utf8.encode(_chapter('X')));
-    await fetchLichessStudy(
+    await fetch(
       const LichessStudySource(studyId: 'WcJ8Iyaz', chapterId: 'mVfBcMlS'),
     );
     expect(stub.requests.single.path, '/api/study/WcJ8Iyaz/mVfBcMlS.pgn');
@@ -187,7 +198,7 @@ void main() {
         '${_chapter('My Study: Chapter 1')}\n${_chapter('My Study: Chapter 2')}',
       ),
     );
-    final fetched = await fetchLichessStudy(_study);
+    final fetched = await fetch(_study);
     expect(fetched.name, 'My Study');
     final events = splitPgnIntoGames(
       fetched.pgn,
@@ -200,7 +211,7 @@ void main() {
       status: 200,
       body: utf8.encode(_chapter('Just a chapter')),
     );
-    final fetched = await fetchLichessStudy(_study);
+    final fetched = await fetch(_study);
     expect(fetched.name, 'Lichess study WcJ8Iyaz');
     expect(fetched.pgn, _chapter('Just a chapter'));
   });
@@ -210,42 +221,42 @@ void main() {
       status: 200,
       body: utf8.encode(_chapter('Réti: Ideas')),
     );
-    final fetched = await fetchLichessStudy(_study);
+    final fetched = await fetch(_study);
     expect(fetched.name, 'Réti');
   });
 
   test('an empty study is reported, not imported', () async {
     stub.routes[_studyUrl] = (status: 200, body: utf8.encode('  \n'));
-    expect((await failure(_study)).message, contains('empty'));
+    expect((await failure(_study)).failure, StudySourceFailure.empty);
   });
 
   test('404 on a study explains how to reach a private one', () async {
     final e = await failure(_study);
-    expect(e.message, startsWith('Study not found.'));
-    expect(e.message, contains('log into Lichess'));
+    expect(e.failure, StudySourceFailure.loginRequired);
+    expect(e.failure, StudySourceFailure.loginRequired);
   });
 
   test('404 on a user names the user', () async {
     final e = await failure(const LichessUserStudiesSource('bob'));
-    expect(e.message, 'No public studies found for "bob".');
+    expect(e.failure, StudySourceFailure.userMissing);
     expect(stub.requests.single.toString(), startsWith(_userUrl));
   });
 
   test('401 and 403 both point at the account settings', () async {
     for (final status in [401, 403]) {
       stub.routes[_studyUrl] = (status: status, body: []);
-      expect((await failure(_study)).message, contains('Settings → Accounts'));
+      expect((await failure(_study)).failure, StudySourceFailure.rejected);
     }
   });
 
   test('any other status is reported with its code', () async {
     stub.routes[_studyUrl] = (status: 500, body: []);
-    expect((await failure(_study)).message, 'Lichess returned HTTP 500.');
+    expect((await failure(_study)).statusCode, 500);
   });
 
   test('a chessgames source is a programming error, not a message', () {
     expect(
-      () => fetchLichessStudy(const ChessgamesCollectionSource('1')),
+      () => fetch(const ChessgamesCollectionSource('1')),
       throwsArgumentError,
     );
   });

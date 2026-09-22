@@ -2,7 +2,7 @@ import '../utils/isolate_task.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
-import '../services/pgn_parsing_service.dart';
+import '../chess_core/pgn/pgn_text.dart';
 import '../services/pgn_tree_core.dart';
 import '../utils/file_text_reader.dart';
 import 'dart:io';

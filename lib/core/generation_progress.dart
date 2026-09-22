@@ -7,27 +7,24 @@ library;
 
 import 'dart:async';
 
-import '../models/build_tree_node.dart';
+import '../chess_core/generation/build_tree_node.dart';
 import '../services/jobs/generation_job_display.dart';
 import '../services/jobs/repertoire_job.dart';
+import '../services/jobs/notify_throttle.dart';
 
 class GenerationProgress {
-  GenerationProgress({
-    required this._notify,
-    required this._job,
-    required this._isRunning,
-    required this._isPaused,
-    required this._elapsed,
-  });
+  GenerationProgress({required this._notify});
 
-  static const Duration _notifyThrottle = Duration(milliseconds: 100);
-  static const Duration _elapsedTick = Duration(seconds: 1);
-
+  // One cadence for ordinary job stats and Builder updates. Lifecycle edges
+  // explicitly flush; phase/status bursts share the same four-updates/s budget.
   final void Function() _notify;
-  final RepertoireJob? Function() _job;
-  final bool Function() _isRunning;
-  final bool Function() _isPaused;
-  final Stopwatch Function() _elapsed;
+  final Stopwatch _elapsed = Stopwatch();
+  late final NotifyThrottle _throttle = NotifyThrottle(
+    _notify,
+    interval: const Duration(milliseconds: 250),
+  );
+  Duration get elapsed => _elapsed.elapsed;
+  bool _disposed = false;
 
   String status = '';
   GenerationPhase phase = GenerationPhase.idle;
@@ -48,8 +45,6 @@ class GenerationProgress {
   List<int> depthExplored = const [];
 
   Timer? _elapsedTicker;
-  Timer? _notifyTimer;
-  DateTime _lastNotify = DateTime.fromMillisecondsSinceEpoch(0);
 
   /// Copy live BFS stats from a build callback. Depth-layer ETA is overwritten
   /// even when null so a stale value from the previous layer cannot linger.
@@ -68,19 +63,19 @@ class GenerationProgress {
       unexploredAtDepth: p.unexploredAtDepth,
       totalAtDepth: p.totalAtDepth,
       nodesPerMinute: p.nodesPerMinute,
-      elapsedMs: _elapsed().elapsedMilliseconds,
+      elapsedMs: _elapsed.elapsedMilliseconds,
     );
   }
 
   void setStatus(String status, GenerationPhase phase) {
     this.status = status;
     this.phase = phase;
-    flushNotify();
+    if (!_disposed) _throttle();
   }
 
   /// Update observable fields. Listener notification is throttled: high-
   /// frequency build callbacks coalesce to at most one notify per
-  /// [_notifyThrottle].
+  /// the shared throttle.
   void update({
     int? nodes,
     int? depth,
@@ -99,29 +94,14 @@ class GenerationProgress {
     if (lines != null) this.lines = lines;
     if (nodesPerMinute != null) this.nodesPerMinute = nodesPerMinute;
     if (elapsedMs != null) this.elapsedMs = elapsedMs;
-    _notifyThrottled();
-  }
-
-  void _notifyThrottled() {
-    final since = DateTime.now().difference(_lastNotify);
-    if (since >= _notifyThrottle) {
-      flushNotify();
-    } else {
-      _notifyTimer ??= Timer(_notifyThrottle - since, flushNotify);
-    }
+    if (!_disposed) _throttle();
   }
 
   void flushNotify() {
-    _notifyTimer?.cancel();
-    _notifyTimer = null;
-    _lastNotify = DateTime.now();
-    _syncToJob();
-    _notify();
+    if (!_disposed) _throttle.flush();
   }
 
-  void _syncToJob() {
-    final job = _job();
-    if (job == null) return;
+  JobProgress get jobProgress {
     final statsLine = buildGenerationStatsLine(
       phase: phase,
       nodes: nodes,
@@ -136,36 +116,46 @@ class GenerationProgress {
       frontierSize: frontier,
       etaRunSec: runEtaSec,
     );
-    job.updateProgress(
-      JobProgress(
-        fraction:
-            generationProgressFraction(
-              phase: phase,
-              currentDepth: depth,
-              maxPlyConfig: maxPlyConfig,
-              unexploredAtDepth: unexploredAtDepth,
-              totalAtDepth: totalAtDepth,
-              bestFirst: bestFirst,
-              priorityProgress: priorityFraction,
-            ) ??
-            0,
-        message: statsLine,
-        nodesProcessed: nodes,
-      ),
+    return JobProgress(
+      fraction:
+          generationProgressFraction(
+            phase: phase,
+            currentDepth: depth,
+            maxPlyConfig: maxPlyConfig,
+            unexploredAtDepth: unexploredAtDepth,
+            totalAtDepth: totalAtDepth,
+            bestFirst: bestFirst,
+            priorityProgress: priorityFraction,
+          ) ??
+          0,
+      message: statsLine,
+      nodesProcessed: nodes,
     );
   }
 
-  void startElapsedTicker() {
+  void begin() {
+    if (_disposed) return;
+    reset();
+    _elapsed
+      ..reset()
+      ..start();
     _elapsedTicker?.cancel();
-    _elapsedTicker = Timer.periodic(_elapsedTick, (_) {
-      if (!_isRunning() || _isPaused()) return;
-      update(elapsedMs: _elapsed().elapsedMilliseconds);
+    _elapsedTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (_elapsed.isRunning) update(elapsedMs: _elapsed.elapsedMilliseconds);
     });
   }
 
-  void stopElapsedTicker() {
+  void pause() => _elapsed.stop();
+  void resume() {
+    if (!_disposed) _elapsed.start();
+  }
+
+  void finish() {
+    _elapsed.stop();
     _elapsedTicker?.cancel();
     _elapsedTicker = null;
+    _throttle.dispose();
+    reset();
   }
 
   void reset() {
@@ -189,8 +179,7 @@ class GenerationProgress {
   }
 
   void dispose() {
-    _notifyTimer?.cancel();
-    _notifyTimer = null;
-    stopElapsedTicker();
+    _disposed = true;
+    finish();
   }
 }

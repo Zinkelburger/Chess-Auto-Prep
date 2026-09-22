@@ -101,14 +101,15 @@ _legalSanCache = {};
 /// half-moves. Returns null when there is no start position, or when inline
 /// lines are disabled (nothing consumes the positions then).
 ///
-/// Served by [MainlinePositions], the memo the viewer model navigates from,
-/// keyed on the same `moveHistory` list — so the movetext view and the model
-/// never replay the same game separately, and an appended move extends the
-/// shared entry instead of rebuilding it.
+/// Uses the owner's [MainlinePositions] when supplied, so annotation snapshot
+/// changes do not replay moves and appends extend the same memo. Standalone
+/// hosts fall back to a memo keyed on their immutable move snapshots.
 List<Position>? _buildPrefixPositions(PgnMovetextView view) {
   final start = view.startPosition;
   if (start == null || view.onPlayInlineLine == null) return null;
-  return MainlinePositions.of(view.moveHistory, start).positions;
+  return (view.mainlinePositions ??
+          MainlinePositions.ofSnapshots(view.moveHistory, start))
+      .positions;
 }
 
 Position? _posAt(List<Position>? prefix, int ply) =>

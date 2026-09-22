@@ -20,7 +20,7 @@ import '../widgets/analysis/add_player_sources.dart';
 import '../widgets/analysis/player_downloads.dart';
 import '../widgets/analysis_download_dialog.dart';
 import '../widgets/analysis_import_dialog.dart';
-import '../widgets/common/list_search_field.dart';
+import '../design_system/components/list_search_field.dart';
 import '../features/opponents/widgets/opponent_actions.dart' show popToRoot;
 
 class PlayerSelectionScreen extends StatefulWidget {

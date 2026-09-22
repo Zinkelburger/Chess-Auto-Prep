@@ -1,10 +1,11 @@
-import '../common/name_entry_dialog.dart';
+import '../../design_system/components/name_entry_dialog.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../models/eval_database_settings.dart';
+import '../../features/settings/controllers/eval_database_settings.dart';
+import '../../features/settings/widgets/settings_section_status.dart';
 import '../../services/eval/cdbdirect_eval_provider.dart';
 import '../../services/generation/generation_config.dart';
 import '../../services/generation/generation_presets.dart';
@@ -19,8 +20,8 @@ import '../pgn_sources_controller.dart';
 import '../pgn_sources_panel.dart';
 import 'advanced_settings_dialog.dart';
 import '../app_settings_button.dart';
-import '../../models/engine_settings.dart';
-import '../../models/bulk_analysis_settings.dart';
+import '../../features/settings/controllers/engine_settings.dart';
+import '../../features/settings/controllers/bulk_analysis_settings.dart';
 import 'eval_sources_controller.dart';
 import 'eval_sources_section.dart';
 import 'skeleton_plan_card.dart';
@@ -37,8 +38,9 @@ part 'generation_config_form_advanced.dart';
 ///
 /// Layer 1 (always visible) is a three-section card — Opponent, What to
 /// build, Search (Fast/Pure plus four budgets) — plus saved presets and a
-/// live plain-language summary. Every other knob lives in the Advanced
-/// dialog; both layers edit the same controllers, so they cannot disagree.
+/// live plain-language summary. Additional editable knobs live in Advanced;
+/// both layers share their controls. Uneditable options remain in the seeded
+/// [TreeBuildConfig].
 ///
 /// The three sub-editors — eval sources, the skeleton plan, the PGN sources
 /// panel — are views over controllers this state owns, so what the user typed
@@ -66,10 +68,12 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
         _GenerationConfigIo,
         _GenerationConfigCard,
         _GenerationConfigAdvanced {
+  late final _bulkSettings = context.read<BulkAnalysisSettings>();
+
   @override
   void initState() {
     super.initState();
-    BulkAnalysisSettings.instance.addListener(_refreshEngineSettings);
+    _bulkSettings.addListener(_refreshEngineSettings);
     if (widget.initialConfig != null) {
       _applyInitialConfig(widget.initialConfig!);
     }
@@ -90,7 +94,7 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
 
   @override
   void dispose() {
-    BulkAnalysisSettings.instance.removeListener(_refreshEngineSettings);
+    _bulkSettings.removeListener(_refreshEngineSettings);
     super.dispose();
   }
 
@@ -108,6 +112,10 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        SettingsSectionStatus(
+          owner: context.watch<EvalDatabaseSettings>(),
+          policy: 'Builds use saved evaluation database preferences.',
+        ),
         // Source (What to build) sits above the search fields it gates;
         // the source picker leads so its dependent controls stay below it.
         _outputSection(),

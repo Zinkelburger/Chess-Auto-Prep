@@ -2,6 +2,7 @@
 /// Source files stay untouched; only one game at a time is parsed while indexing.
 library;
 
+import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
@@ -149,7 +150,7 @@ Future<ReferenceIndex> buildReferenceIndex(
           late PgnGame<PgnNodeData> game;
           late Position pos;
           try {
-            game = PgnGame.parsePgn(raw);
+            game = parsePgnGame(raw);
             pos = game.headers['FEN'] == null
                 ? Chess.initial
                 : Chess.fromSetup(Setup.parseFen(game.headers['FEN']!));

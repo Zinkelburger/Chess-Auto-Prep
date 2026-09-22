@@ -16,6 +16,9 @@ class _NumSpec {
   final num max;
 
   String get rangeText => '$min–$max';
+
+  String? rangeProblem(num value) =>
+      value < min || value > max ? 'Must be $rangeText' : null;
 }
 
 abstract class _GenerationConfigFormStateBase
@@ -73,40 +76,26 @@ abstract class _GenerationConfigFormStateBase
   /// Null until the form is seeded, which is the "brand new config" case.
   TreeBuildConfig? _seedConfig;
 
-  late final TextEditingController _cutoffCtrl = _ctrl('0.01');
+  TreeBuildConfig get _configSeed =>
+      _seedConfig ??
+      TreeBuildConfig.formDefaults(
+        startFen: '',
+        playAsWhite: widget.playAsWhite,
+      );
+
   late final TextEditingController _maxPlyCtrl = _ctrl('4');
   late final TextEditingController _evalGuardCtrl = _ctrl('30');
-  // Offsets from the root eval ([_relativeEval] is on by default), so the
-  // same numbers for both colours — see [TreeBuildConfig.formDefaults] for
-  // why a colour-split floor of 0 deleted normal White opening play.
-  late final TextEditingController _minEvalCtrl = _ctrl('-100');
-  late final TextEditingController _maxEvalCtrl = _ctrl('200');
   late final TextEditingController _maiaEloCtrl = _ctrl('2200');
-  late final TextEditingController _oppPolicyTempCtrl = _ctrl('1.0');
 
-  late final TextEditingController _multipvCtrl = _ctrl('4');
   late final TextEditingController _oppMaxChildrenCtrl = _ctrl('4');
   late final TextEditingController _oppMassTargetCtrl = _ctrl('0.80');
-  late final TextEditingController _leafConfidenceCtrl = _ctrl('1.0');
-  late final TextEditingController _ourAltDiscountCtrl = _ctrl('0.25');
-  late final TextEditingController _fastAltGapCtrl = _ctrl('30');
-  late final TextEditingController _maiaPriorGamesCtrl = _ctrl('30');
-  late final TextEditingController _coverMinProbCtrl = _ctrl('0.05');
-  late final TextEditingController _verifyDepthCtrl = _ctrl('0');
-  late final TextEditingController _setupMovesCtrl = _ctrl();
-  late final TextEditingController _setupToleranceCtrl = _ctrl('30');
-  late final TextEditingController _memorabilityToleranceCtrl = _ctrl('0');
   late final TextEditingController _timeBudgetCtrl = _ctrl('0');
-  bool _wideOpening = true;
   bool _verifyFinal = true;
   bool _trapsOnly = false;
 
   late final TextEditingController _dbMinGamesCtrl = _ctrl('5');
   late final TextEditingController _dbMinProbCtrl = _ctrl('0.05');
   late final TextEditingController _minEloCtrl = _ctrl('0');
-
-  bool _relativeEval = true;
-  bool _preferNovelties = false;
 
   late final TextEditingController _engineTailCtrl = _ctrl('6');
 
@@ -124,13 +113,9 @@ abstract class _GenerationConfigFormStateBase
   bool _alternativeLines = true;
   bool _useMasterGames = true;
   bool _downloadMasterGamesIfMissing = true;
-  late final TextEditingController _masterDepthBonusCtrl = _ctrl('10');
-  late final TextEditingController _masterPriorityWeightCtrl = _ctrl('0.35');
-  late final TextEditingController _offBookOppMaxChildrenCtrl = _ctrl('2');
 
   late final TextEditingController _bookTailMaxPlyCtrl = _ctrl('40');
   late final TextEditingController _bookTieBreakCtrl = _ctrl('0');
-  late final TextEditingController _replyWindowCtrl = _ctrl('0');
 
   SelectionMode _selectionMode = SelectionMode.expectimax;
   SearchAlgorithm _searchAlgorithm = SearchAlgorithm.pure;
@@ -166,12 +151,6 @@ abstract class _GenerationConfigFormStateBase
   /// length silently built to 20; now Start refuses and names the field, and
   /// the field itself shows the problem while it is being typed.
   late final Map<TextEditingController, _NumSpec> _numSpecs = {
-    _cutoffCtrl: const _NumSpec(
-      'Ignore lines rarer than',
-      isInt: false,
-      min: 0,
-      max: 100,
-    ),
     _maxPlyCtrl: const _NumSpec(
       'Max line length',
       isInt: true,
@@ -184,35 +163,11 @@ abstract class _GenerationConfigFormStateBase
       min: 0,
       max: 2000,
     ),
-    _minEvalCtrl: const _NumSpec(
-      'Eval floor',
-      isInt: true,
-      min: -10000,
-      max: 10000,
-    ),
-    _maxEvalCtrl: const _NumSpec(
-      'Eval ceiling',
-      isInt: true,
-      min: -10000,
-      max: 10000,
-    ),
     _maiaEloCtrl: const _NumSpec(
       'Opponent rating',
       isInt: true,
       min: 500,
       max: 3500,
-    ),
-    _oppPolicyTempCtrl: const _NumSpec(
-      'Opponent temperature',
-      isInt: false,
-      min: 0.1,
-      max: 10,
-    ),
-    _multipvCtrl: const _NumSpec(
-      'Your candidate moves per position',
-      isInt: true,
-      min: 1,
-      max: TreeBuildConfig.maxOurCandidates,
     ),
     _oppMaxChildrenCtrl: const _NumSpec(
       'Opponent replies per position',
@@ -225,54 +180,6 @@ abstract class _GenerationConfigFormStateBase
       isInt: false,
       min: 0,
       max: 1,
-    ),
-    _leafConfidenceCtrl: const _NumSpec(
-      'Leaf eval confidence',
-      isInt: false,
-      min: 0,
-      max: 1,
-    ),
-    _ourAltDiscountCtrl: const _NumSpec(
-      'Alternative budget share',
-      isInt: false,
-      min: 0,
-      max: 1,
-    ),
-    _fastAltGapCtrl: const _NumSpec(
-      'Skip alternatives behind by',
-      isInt: true,
-      min: 0,
-      max: 500,
-    ),
-    _maiaPriorGamesCtrl: const _NumSpec(
-      'Blend with Maia',
-      isInt: false,
-      min: 0,
-      max: 100000,
-    ),
-    _coverMinProbCtrl: const _NumSpec(
-      'Always answer replies above',
-      isInt: false,
-      min: 0,
-      max: 1,
-    ),
-    _verifyDepthCtrl: const _NumSpec(
-      'Verification depth',
-      isInt: true,
-      min: 0,
-      max: 40,
-    ),
-    _setupToleranceCtrl: const _NumSpec(
-      'Setup tolerance',
-      isInt: true,
-      min: 0,
-      max: 500,
-    ),
-    _memorabilityToleranceCtrl: const _NumSpec(
-      'Natural-move tolerance',
-      isInt: true,
-      min: 0,
-      max: 500,
     ),
     _timeBudgetCtrl: const _NumSpec(
       'Stop after',
@@ -328,24 +235,6 @@ abstract class _GenerationConfigFormStateBase
       min: 0,
       max: 4000,
     ),
-    _masterDepthBonusCtrl: const _NumSpec(
-      'Extra depth in master lines',
-      isInt: true,
-      min: 0,
-      max: 40,
-    ),
-    _masterPriorityWeightCtrl: const _NumSpec(
-      'Master search-order weight',
-      isInt: false,
-      min: 0,
-      max: 3,
-    ),
-    _offBookOppMaxChildrenCtrl: const _NumSpec(
-      'Opponent replies off-book',
-      isInt: true,
-      min: 0,
-      max: 20,
-    ),
     _bookTailMaxPlyCtrl: const _NumSpec(
       'Book tail depth',
       isInt: true,
@@ -358,12 +247,6 @@ abstract class _GenerationConfigFormStateBase
       min: 0,
       max: 200,
     ),
-    _replyWindowCtrl: const _NumSpec(
-      'Reply window',
-      isInt: true,
-      min: 0,
-      max: 200,
-    ),
   };
 
   /// Why [controller]'s text cannot be used, or null when it can.  Short
@@ -371,21 +254,8 @@ abstract class _GenerationConfigFormStateBase
   String? _numFieldProblem(TextEditingController controller) {
     if (_buildMode == BuildMode.stockfishExpectimax) {
       final retired = {
-        _cutoffCtrl,
-        _minEvalCtrl,
-        _maxEvalCtrl,
-        _oppPolicyTempCtrl,
-        _multipvCtrl,
         _oppMaxChildrenCtrl,
         _oppMassTargetCtrl,
-        _leafConfidenceCtrl,
-        _ourAltDiscountCtrl,
-        _fastAltGapCtrl,
-        _maiaPriorGamesCtrl,
-        _coverMinProbCtrl,
-        _verifyDepthCtrl,
-        _setupToleranceCtrl,
-        _memorabilityToleranceCtrl,
         _engineTailCtrl,
       };
       if (retired.contains(controller)) return null;
@@ -404,10 +274,79 @@ abstract class _GenerationConfigFormStateBase
           ? 'Whole number, ${spec.rangeText}'
           : 'Number, ${spec.rangeText}';
     }
-    if (value < spec.min || value > spec.max) {
-      return 'Must be ${spec.rangeText}';
-    }
-    return null;
+    return spec.rangeProblem(value);
+  }
+
+  /// These options have no editable controls. Validate their saved values
+  /// directly; Pure ignores the same retired tuning options as before.
+  Map<_NumSpec, num> get _inheritedNumValues {
+    final seed = _configSeed;
+    return {
+      if (_buildMode != BuildMode.stockfishExpectimax) ...{
+        const _NumSpec(
+          'Ignore lines rarer than',
+          isInt: false,
+          min: 0,
+          max: 100,
+        ): seed.minProbability * 100,
+        const _NumSpec('Eval floor', isInt: true, min: -10000, max: 10000):
+            seed.minEvalCp,
+        const _NumSpec('Eval ceiling', isInt: true, min: -10000, max: 10000):
+            seed.maxEvalCp,
+        const _NumSpec('Opponent temperature', isInt: false, min: 0.1, max: 10):
+            seed.oppPolicyTemperature,
+        const _NumSpec(
+          'Your candidate moves per position',
+          isInt: true,
+          min: 1,
+          max: TreeBuildConfig.maxOurCandidates,
+        ): seed.ourMultipv,
+        const _NumSpec('Leaf eval confidence', isInt: false, min: 0, max: 1):
+            seed.leafConfidence,
+        const _NumSpec(
+          'Alternative budget share',
+          isInt: false,
+          min: 0,
+          max: 1,
+        ): seed.ourAltDiscount,
+        const _NumSpec(
+          'Skip alternatives behind by',
+          isInt: true,
+          min: 0,
+          max: 500,
+        ): seed.fastAltGapCp,
+        const _NumSpec('Blend with Maia', isInt: false, min: 0, max: 100000):
+            seed.maiaPriorGames,
+        const _NumSpec(
+          'Always answer replies above',
+          isInt: false,
+          min: 0,
+          max: 1,
+        ): seed.coverMinProb,
+        const _NumSpec('Verification depth', isInt: true, min: 0, max: 40):
+            seed.verifyDepth,
+        const _NumSpec('Setup tolerance', isInt: true, min: 0, max: 500):
+            seed.setupToleranceCp,
+        const _NumSpec('Natural-move tolerance', isInt: true, min: 0, max: 500):
+            seed.memorabilityToleranceCp,
+      },
+      const _NumSpec(
+        'Extra depth in master lines',
+        isInt: true,
+        min: 0,
+        max: 40,
+      ): seed.masterDepthBonusPlies,
+      const _NumSpec(
+        'Master search-order weight',
+        isInt: false,
+        min: 0,
+        max: 3,
+      ): seed.masterPriorityWeight,
+      const _NumSpec('Opponent replies off-book', isInt: true, min: 0, max: 20):
+          seed.offBookOppMaxChildren,
+      const _NumSpec('Reply window', isInt: true, min: 0, max: 200):
+          seed.replyWindowCp,
+    };
   }
 
   /// The first numeric knob Start cannot use, as a message naming it.
@@ -416,6 +355,12 @@ abstract class _GenerationConfigFormStateBase
       final problem = _numFieldProblem(entry.key);
       if (problem != null) {
         return '${entry.value.label}: ${problem.toLowerCase()}.';
+      }
+    }
+    for (final entry in _inheritedNumValues.entries) {
+      final problem = entry.key.rangeProblem(entry.value);
+      if (problem != null) {
+        return '${entry.key.label}: ${problem.toLowerCase()}.';
       }
     }
     return null;

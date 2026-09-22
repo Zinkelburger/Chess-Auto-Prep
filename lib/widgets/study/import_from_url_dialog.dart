@@ -8,17 +8,19 @@
 /// download and goes to [StudyImportController].
 library;
 
+import '../../l10n/generated/app_localizations.dart';
+import '../../l10n/study_import_labels.dart';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/services.dart';
 
 import '../../services/lichess_auth_service.dart';
-import '../../services/study_import/chessgames_collection_client.dart';
-import '../../services/study_import/import_source.dart';
-import '../../services/study_import/lichess_study_client.dart';
-import '../../services/study_import/study_import_controller.dart';
-import '../../services/study_import/study_import_exception.dart';
-import '../../theme/app_colors.dart';
-import '../../theme/app_text_styles.dart';
+import '../../features/studies/repositories/study_import_repository.dart';
+import '../../features/studies/models/import_source.dart';
+import '../../features/studies/controllers/study_import_controller.dart';
+import '../../features/studies/models/study_import_exception.dart';
+import '../../design_system/theme/app_typography.dart';
 import '../labeled_toggle.dart';
 
 /// What the user asked for, resolved and ready to apply.
@@ -56,7 +58,18 @@ class CollectionPlan extends StudyImportPlan {
 }
 
 class ImportFromUrlDialog extends StatefulWidget {
-  const ImportFromUrlDialog({super.key, required this.canAppend});
+  const ImportFromUrlDialog({
+    super.key,
+    required this.canAppend,
+    required this.repository,
+    required this.apply,
+  });
+
+  final StudyImportRepository repository;
+
+  /// False keeps the resolved download here for retry; true means an app owner
+  /// has accepted its bytes, including an uncertain publication or dirty append.
+  final Future<bool> Function(StudyImportPlan) apply;
 
   /// Whether there is an open study to append to.
   final bool canAppend;
@@ -65,10 +78,16 @@ class ImportFromUrlDialog extends StatefulWidget {
   static Future<StudyImportPlan?> show(
     BuildContext context, {
     required bool canAppend,
+    required StudyImportRepository repository,
+    required Future<bool> Function(StudyImportPlan) apply,
   }) {
     return showDialog<StudyImportPlan>(
       context: context,
-      builder: (_) => ImportFromUrlDialog(canAppend: canAppend),
+      builder: (_) => ImportFromUrlDialog(
+        canAppend: canAppend,
+        repository: repository,
+        apply: apply,
+      ),
     );
   }
 
@@ -77,18 +96,21 @@ class ImportFromUrlDialog extends StatefulWidget {
 }
 
 class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
+  late final StudyImportSource _network = widget.repository.openSource();
   final TextEditingController _urlController = TextEditingController();
   final TextEditingController _delayController = TextEditingController(
     text: '${StudyImportController.defaultDelay.inSeconds}',
   );
 
   ImportSource? _source;
+  StudyImportPlan? _resolvedPlan;
   bool _appendToCurrent = false;
   bool _busy = false;
   String? _error;
 
   @override
   void dispose() {
+    _network.close();
     _urlController.dispose();
     _delayController.dispose();
     super.dispose();
@@ -104,6 +126,7 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
   void _onUrlChanged(String value) {
     setState(() {
       _source = parseImportSource(value);
+      _resolvedPlan = null;
       _error = null;
     });
   }
@@ -125,7 +148,7 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
     });
 
     try {
-      final plan = switch (source) {
+      final plan = _resolvedPlan ??= switch (source) {
         LichessStudySource() ||
         LichessUserStudiesSource() => await _resolveLichess(source),
         ChessgamesCollectionSource() => await _resolveCollection(source),
@@ -134,19 +157,45 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
         if (mounted) setState(() => _busy = false);
         return;
       }
-      Navigator.pop(context, plan);
+      final submitted = switch (plan) {
+        LichessStudyPlan() => LichessStudyPlan(
+          pgn: plan.pgn,
+          name: plan.name,
+          appendToCurrent: _canAppend && _appendToCurrent,
+        ),
+        CollectionPlan() => CollectionPlan(
+          gameIds: plan.gameIds,
+          studyName: plan.studyName,
+          delay: _delay,
+        ),
+      };
+      if (await widget.apply(submitted)) {
+        if (mounted) Navigator.pop(context, submitted);
+      } else if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = AppLocalizations.of(context).studyImportNotAccepted;
+        });
+      }
     } on StudyImportException catch (e) {
       if (mounted) {
         setState(() {
           _busy = false;
-          _error = e.message;
+          _error = studySourceFailureLabel(AppLocalizations.of(context), e);
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = AppLocalizations.of(context).studyImportDownloadFailed;
         });
       }
     }
   }
 
   Future<StudyImportPlan?> _resolveLichess(ImportSource source) async {
-    final study = await fetchLichessStudy(source);
+    final study = await _network.fetchLichess(source);
     return LichessStudyPlan(
       pgn: study.pgn,
       name: study.name,
@@ -157,11 +206,9 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
   Future<StudyImportPlan?> _resolveCollection(
     ChessgamesCollectionSource source,
   ) async {
-    final html = await fetchCollectionHtml(source.cid);
-    var ids = html == null ? <String>[] : extractCollectionGameIds(html);
-    var name =
-        (html == null ? null : extractCollectionTitle(html)) ??
-        'Collection ${source.cid}';
+    final collection = await _network.fetchCollection(source.cid);
+    var ids = collection.gameIds;
+    final name = collection.name;
 
     // No ids means the AWS WAF served a challenge page instead of the
     // collection. The PGN endpoint itself is usually still reachable, so ask
@@ -178,19 +225,19 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return AlertDialog(
-      title: const Text('Import from URL'),
+      scrollable: true,
+      title: Text(l10n.studyImportFromUrl),
       content: SizedBox(
         width: 520,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'lichess.org/study/<id>  —  one study, all chapters\n'
-              'lichess.org/study/by/<user>  —  every public study of theirs\n'
-              'chessgames.com/perl/chesscollection?cid=<id>  —  a collection',
-              style: AppTextStyles.caption,
+            Text(
+              l10n.studyImportSupportedUrls,
+              style: AppTypography.caption(context),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -199,9 +246,9 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
               enabled: !_busy,
               onChanged: _onUrlChanged,
               onSubmitted: (_) => _import(),
-              decoration: const InputDecoration(
-                labelText: 'URL',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: l10n.studyUrl,
+                border: const OutlineInputBorder(),
                 isDense: true,
               ),
             ),
@@ -209,22 +256,21 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
             _statusLine(),
             const Divider(height: 24),
             AppCheckbox(
-              label: 'Add to the current study instead of creating a new one',
+              label: l10n.studyImportAppend,
               value: _canAppend && _appendToCurrent,
               enabled: _canAppend && !_busy,
               disabledReason: widget.canAppend
-                  ? 'A chessgames.com collection downloads in the background '
-                        'and always gets its own study.'
-                  : 'No study is open.',
+                  ? l10n.studyImportCollectionSeparate
+                  : l10n.studyImportNoOpenStudy,
               onChanged: (v) => setState(() => _appendToCurrent = v),
             ),
             const SizedBox(height: 12),
             Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
-                    'Seconds between requests (chessgames.com)',
-                    style: AppTextStyles.body,
+                    l10n.studyImportDelay,
+                    style: AppTypography.body(context),
                   ),
                 ),
                 SizedBox(
@@ -244,11 +290,9 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
               ],
             ),
             const SizedBox(height: 6),
-            const Text(
-              'chessgames.com bans fast downloads: 2–3 s apart gets blocked '
-              'after ~20 games, 22 s apart sustains 60. At 22 s a 60-game '
-              'collection takes about 25 minutes, running in the background.',
-              style: AppTextStyles.caption,
+            Text(
+              l10n.studyImportDelayHelp,
+              style: AppTypography.caption(context),
             ),
           ],
         ),
@@ -256,7 +300,7 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
       actions: [
         TextButton(
           onPressed: _busy ? null : () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(l10n.cancel),
         ),
         FilledButton(
           onPressed: _source == null || _busy ? null : _import,
@@ -266,7 +310,7 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Import'),
+              : Text(l10n.importAction),
         ),
       ],
     );
@@ -278,32 +322,53 @@ class _ImportFromUrlDialogState extends State<ImportFromUrlDialog> {
     final Color color;
     final source = _source;
     if (_error != null) {
-      (text, color) = (_error!, AppColors.danger);
+      (text, color) = (_error!, Theme.of(context).colorScheme.error);
     } else if (_busy) {
-      (text, color) = ('Contacting the server…', AppColors.onSurfaceMuted);
+      (text, color) = (
+        AppLocalizations.of(context).studyImportContacting,
+        Theme.of(context).colorScheme.onSurfaceVariant,
+      );
     } else if (source != null) {
-      (text, color) = (source.label, AppColors.success);
+      (text, color) = (
+        switch (source) {
+          LichessStudySource(
+            :final studyId,
+            chapterId: final String chapterId,
+          ) =>
+            AppLocalizations.of(
+              context,
+            ).studyLichessChapterSource(studyId, chapterId),
+          LichessStudySource(:final studyId) => AppLocalizations.of(
+            context,
+          ).studyLichessSource(studyId),
+          LichessUserStudiesSource(:final username) => AppLocalizations.of(
+            context,
+          ).studyLichessUserSource(username),
+          ChessgamesCollectionSource(:final cid) => AppLocalizations.of(
+            context,
+          ).studyCollectionSource(cid),
+        },
+        Theme.of(context).colorScheme.tertiary,
+      );
     } else if (_urlController.text.trim().isEmpty) {
       (text, color) = (
-        'Paste a link to see what will be imported.',
-        AppColors.onSurfaceMuted,
+        AppLocalizations.of(context).studyImportLinkHint,
+        Theme.of(context).colorScheme.onSurfaceVariant,
       );
     } else {
       (text, color) = (
-        'Not a Lichess study or chessgames.com collection link.',
-        AppColors.warning,
+        AppLocalizations.of(context).studyImportUnsupportedUrl,
+        Theme.of(context).colorScheme.tertiary,
       );
     }
 
-    return SizedBox(
-      height: 34,
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 34),
       child: Align(
         alignment: Alignment.centerLeft,
         child: Text(
           text,
-          style: AppTextStyles.caption.copyWith(color: color),
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
+          style: AppTypography.caption(context).copyWith(color: color),
         ),
       ),
     );
@@ -348,26 +413,25 @@ class _PasteGameIdsDialogState extends State<_PasteGameIdsDialog> {
 
   void _onChanged(String value) {
     final ids = parsePastedGameIds(value);
-    if (ids.length == _ids.length) return;
+    if (listEquals(ids, _ids)) return;
     setState(() => _ids = ids);
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return AlertDialog(
-      title: const Text('Collection page blocked'),
+      scrollable: true,
+      title: Text(l10n.studyImportCollectionBlocked),
       content: SizedBox(
         width: 520,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'chessgames.com served a bot check instead of the collection. '
-              'Downloading the games still works — it just needs the list.\n\n'
-              'Open the collection in a browser, select all (Ctrl+A) and copy, '
-              'or save the page source, then paste it below.',
-              style: AppTextStyles.body,
+            Text(
+              l10n.studyImportPasteIdsHelp,
+              style: AppTypography.body(context),
             ),
             const SizedBox(height: 12),
             Align(
@@ -378,7 +442,7 @@ class _PasteGameIdsDialogState extends State<_PasteGameIdsDialog> {
                   '?cid=${widget.cid}',
                 ),
                 icon: const Icon(Icons.open_in_new, size: 16),
-                label: const Text('Open the collection page'),
+                label: Text(l10n.studyImportOpenCollection),
               ),
             ),
             const SizedBox(height: 12),
@@ -388,30 +452,26 @@ class _PasteGameIdsDialogState extends State<_PasteGameIdsDialog> {
               minLines: 5,
               maxLines: 10,
               onChanged: _onChanged,
-              style: const TextStyle(
-                fontFamily: AppTextStyles.monoFamily,
-                fontSize: 12,
-              ),
-              decoration: const InputDecoration(
-                hintText: 'Paste the page, game links, or game ids…',
-                border: OutlineInputBorder(),
+              style: AppTypography.mono(context),
+              decoration: InputDecoration(
+                hintText: l10n.studyImportPasteIdsHint,
+                border: const OutlineInputBorder(),
                 isDense: true,
               ),
             ),
             const SizedBox(height: 6),
-            SizedBox(
-              height: 20,
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 20),
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
                   _ids.isEmpty
-                      ? 'No game ids found yet.'
-                      : '${_ids.length} game${_ids.length == 1 ? '' : 's'} '
-                            'found.',
-                  style: AppTextStyles.caption.copyWith(
+                      ? l10n.studyImportNoIds
+                      : l10n.studyImportGamesFound(_ids.length),
+                  style: AppTypography.caption(context).copyWith(
                     color: _ids.isEmpty
-                        ? AppColors.onSurfaceMuted
-                        : AppColors.success,
+                        ? Theme.of(context).colorScheme.onSurfaceVariant
+                        : Theme.of(context).colorScheme.tertiary,
                   ),
                 ),
               ),
@@ -422,11 +482,15 @@ class _PasteGameIdsDialogState extends State<_PasteGameIdsDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(l10n.cancel),
         ),
         FilledButton(
           onPressed: _ids.isEmpty ? null : () => Navigator.pop(context, _ids),
-          child: Text(_ids.isEmpty ? 'Download' : 'Download ${_ids.length}'),
+          child: Text(
+            _ids.isEmpty
+                ? l10n.studyDownload
+                : l10n.studyDownloadCount(_ids.length),
+          ),
         ),
       ],
     );

@@ -5,6 +5,7 @@ import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../../../models/board_annotation.dart';
 import '../../../models/completed_move.dart';
 import '../../../theme/app_colors.dart';
+import '../../../utils/chess_utils.dart' show uciHighlightSquares;
 import '../../../widgets/chess_board_widget.dart' show ChessBoardWidget;
 
 /// Chess board with optional preview overlay.
@@ -20,6 +21,7 @@ class RepertoireBoardPane extends StatelessWidget {
     required this.boardFlipped,
     required this.onMove,
     this.annotations = const [],
+    this.recentMoveSquares = const {},
   });
 
   final BoardPreviewController boardPreview;
@@ -28,6 +30,10 @@ class RepertoireBoardPane extends StatelessWidget {
   final bool boardFlipped;
   final void Function(CompletedMove move) onMove;
   final List<BoardAnnotation> annotations;
+
+  /// From/to squares of the move that reached [fen], kept tinted so the board
+  /// says where you are the way every other board in the app does.
+  final Set<String> recentMoveSquares;
 
   @override
   Widget build(BuildContext context) {
@@ -39,12 +45,14 @@ class RepertoireBoardPane extends StatelessWidget {
             boardPreview.target == BoardPreviewTarget.mainBoard;
         final displayFen = isPreview ? boardPreview.previewFen! : fen;
         final position = positionFromFen(displayFen);
-        // The hovered-move arrow rides on top of the audit annotations; a
-        // preview shows a different position, so neither applies there.
-        final hoverArrow = boardPreview.hoverArrow;
+        // A preview shows a different position, so neither the audit
+        // annotations nor the hovered move from this position apply there.
         final shownAnnotations = isPreview
             ? const <BoardAnnotation>[]
-            : [...annotations, ?hoverArrow];
+            : annotations;
+        final hoverSquares = isPreview
+            ? const <String>{}
+            : boardPreview.hoverSquares;
 
         return Container(
           padding: const EdgeInsets.all(12),
@@ -62,6 +70,13 @@ class RepertoireBoardPane extends StatelessWidget {
                       position: position,
                       flipped: boardFlipped,
                       annotations: shownAnnotations,
+                      highlightedSquares: hoverSquares,
+                      // In a preview the cursor's trail belongs to another
+                      // position; mark the move that reached the previewed
+                      // one instead, when its source told us which it was.
+                      recentMoveSquares: isPreview
+                          ? uciHighlightSquares(boardPreview.lastMoveUci ?? '')
+                          : recentMoveSquares,
                       onPieceSelected: (square) {},
                       onMove: isPreview
                           ? null

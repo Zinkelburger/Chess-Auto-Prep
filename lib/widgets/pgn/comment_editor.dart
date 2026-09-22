@@ -7,20 +7,25 @@
 library;
 
 import 'package:flutter/material.dart';
+import '../../design_system/theme/app_typography.dart';
+import '../../l10n/generated/app_localizations.dart';
 
-import '../../theme/app_colors.dart';
-import '../common/confirm_dialog.dart';
+import '../../design_system/components/confirm_dialog.dart';
 
 class PgnCommentEditor extends StatefulWidget {
   final String initialText;
   final ValueChanged<String> onSave;
   final VoidCallback onCancel;
 
+  /// Optional draft owner for hosts that virtualize or re-anchor this row.
+  final ValueChanged<String>? onChanged;
+
   const PgnCommentEditor({
     super.key,
     required this.initialText,
     required this.onSave,
     required this.onCancel,
+    this.onChanged,
   });
 
   @override
@@ -51,8 +56,8 @@ class _PgnCommentEditorState extends State<PgnCommentEditor> {
       _confirming = true;
       final confirmed = await confirmAction(
         context,
-        title: 'Delete 1 comment?',
-        confirmLabel: 'Delete',
+        title: AppLocalizations.of(context).pgnDeleteOneComment,
+        confirmLabel: AppLocalizations.of(context).delete,
       );
       _confirming = false;
       if (!mounted || !confirmed || _controller.text != text) return;
@@ -63,11 +68,12 @@ class _PgnCommentEditorState extends State<PgnCommentEditor> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: AppColors.surfaceInset,
+        color: colors.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(6),
       ),
       child: Row(
@@ -77,7 +83,9 @@ class _PgnCommentEditorState extends State<PgnCommentEditor> {
               controller: _controller,
               autofocus: true,
               maxLines: null,
-              style: const TextStyle(fontSize: 13, color: AppColors.ink),
+              style: AppTypography.secondary(
+                context,
+              ).copyWith(color: colors.onSurface),
               decoration: const InputDecoration(
                 isDense: true,
                 contentPadding: EdgeInsets.symmetric(
@@ -86,30 +94,23 @@ class _PgnCommentEditorState extends State<PgnCommentEditor> {
                 ),
                 border: InputBorder.none,
               ),
+              onChanged: widget.onChanged,
               onSubmitted: (_) => _save(),
             ),
           ),
           IconButton(
             onPressed: _save,
-            icon: const Icon(
-              Icons.check,
-              size: 18,
-              color: AppColors.onSurfaceSoft,
-            ),
+            icon: Icon(Icons.check, size: 18, color: colors.onSurfaceVariant),
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
-            tooltip: 'Save comment',
+            tooltip: AppLocalizations.of(context).pgnSaveComment,
           ),
           IconButton(
             onPressed: widget.onCancel,
-            icon: const Icon(
-              Icons.close,
-              size: 18,
-              color: AppColors.onSurfaceMuted,
-            ),
+            icon: Icon(Icons.close, size: 18, color: colors.onSurfaceVariant),
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
-            tooltip: 'Cancel',
+            tooltip: AppLocalizations.of(context).cancel,
           ),
         ],
       ),

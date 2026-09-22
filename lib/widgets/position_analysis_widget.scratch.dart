@@ -68,6 +68,10 @@ mixin _ScratchAnalysisMixin on _PositionAnalysisWidgetStateBase {
                     onJump: _jumpScratch,
                     onCommentChanged: (path, comment) =>
                         setState(() => _scratchTree.setComment(path, comment)),
+                    onToggleNag: (path, nag) {
+                      if (!mounted) return;
+                      setState(() => _scratchTree.toggleNag(path, nag));
+                    },
                     onDelete: _deleteScratchAt,
                     onPromote: _promoteScratchAt,
                     onMakeMainLine: _makeScratchMainLine,

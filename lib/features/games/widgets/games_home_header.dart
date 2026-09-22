@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../../design_system/theme/app_typography.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
-import '../../../widgets/common/list_search_field.dart';
+import '../../../design_system/components/list_search_field.dart';
 import '../controllers/recent_games_controller.dart';
 import '../models/recent_game.dart';
 import '../services/rating_trend.dart';
@@ -70,6 +71,38 @@ class GamesHomeHeader extends StatelessWidget {
               ],
             ),
           ),
+          // Offline the list is still the list; this says only that it may be
+          // behind. Flexible and ellipsised, so a narrow pane never reflows
+          // the bar around it.
+          if (controller.staleNotice case final notice?) ...[
+            const SizedBox(width: 12),
+            Flexible(
+              child: Tooltip(
+                message:
+                    'These games are the copy saved on this computer. '
+                    'Anything played since the last download is not here yet.',
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.cloud_off,
+                      size: 14,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        notice,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTypography.secondary(context),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
           const SizedBox(width: 16),
           Text(capitalise(controller.window.label), style: AppTextStyles.muted),
           const SizedBox(width: 12),

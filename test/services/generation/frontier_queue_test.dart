@@ -2,7 +2,7 @@
 // tiebreaks, FIFO fallback, and the legacy priority fallback to
 // cumulativeProbability.
 
-import 'package:chess_auto_prep/models/build_tree_node.dart';
+import 'package:chess_auto_prep/chess_core/generation/build_tree_node.dart';
 import 'package:chess_auto_prep/services/generation/frontier_queue.dart';
 import 'package:flutter_test/flutter_test.dart';
 

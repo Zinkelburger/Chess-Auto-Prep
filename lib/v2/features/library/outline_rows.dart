@@ -1,0 +1,207 @@
+import 'package:flutter/material.dart';
+
+import '../../storage/chapter_files.dart';
+import '../../ui/row_actions.dart';
+import '../../ui/theme.dart';
+import 'chapter_outline.dart';
+import 'line_drag.dart';
+
+/// One chapter of the outline. The one on the board is bold and accented, as
+/// the old app's is, because it is where every other panel is pointing.
+///
+/// A chapter that starts after some moves prints them under its name, so a
+/// chapter set up for one opening says which. A draft — proposed lines
+/// nobody has accepted yet — is muted and says "Proposed".
+class ChapterRow extends StatelessWidget {
+  const ChapterRow({
+    super.key,
+    required this.chapter,
+    required this.onOpen,
+    this.onDrop,
+  });
+
+  final OutlineChapter chapter;
+  final ValueChanged<ChapterRef> onOpen;
+
+  /// Lines dropped on this chapter become lines of it. Null for a chapter
+  /// that cannot take them: the one they are being dragged out of.
+  final ValueChanged<LineDrag>? onDrop;
+
+  @override
+  Widget build(BuildContext context) {
+    final row = _row(context);
+    final drop = onDrop;
+    if (drop == null) return row;
+    return LineDropTarget(accepts: (_) => true, onDrop: drop, child: row);
+  }
+
+  Widget _row(BuildContext context) {
+    final theme = Theme.of(context);
+    final heading = chapter.ref.heading;
+    final rooted = !heading.startsAtTheStart;
+    return InkWell(
+      onTap: () => onOpen(chapter.ref),
+      child: SizedBox(
+        height: rooted
+            ? outlineRowHeight + outlineRootHeight
+            : outlineRowHeight,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: Space.m),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _nameRow(theme),
+              if (rooted)
+                Text(
+                  heading.rootText,
+                  overflow: TextOverflow.ellipsis,
+                  style: outlineRootText.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _nameRow(ThemeData theme) {
+    final draft = chapter.ref.heading.draft;
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            chapter.name,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontWeight: chapter.open ? FontWeight.w600 : null,
+              color: chapter.open
+                  ? theme.colorScheme.primary
+                  : draft
+                  ? theme.colorScheme.onSurfaceVariant
+                  : null,
+            ),
+          ),
+        ),
+        if (draft)
+          Padding(
+            padding: const EdgeInsets.only(left: Space.s),
+            child: Text('Proposed', style: theme.textTheme.labelSmall),
+          ),
+        if (chapter.lines case final lines?)
+          Padding(
+            padding: const EdgeInsets.only(left: Space.s),
+            child: Text(
+              lines == 1 ? '1 line' : '$lines lines',
+              style: theme.textTheme.labelSmall,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// One line of the open chapter: what it is called, where it starts, and the
+/// menu of what can be done to it. It can be picked up and dropped on a
+/// chapter or on another line, and other lines can be dropped on it.
+class LineRow extends StatelessWidget {
+  const LineRow({
+    super.key,
+    required this.line,
+    required this.current,
+    required this.selected,
+    required this.drag,
+    required this.onTap,
+    required this.onDrop,
+    required this.actions,
+  });
+
+  final OutlineLine line;
+
+  /// The cursor is on one of this line's moves.
+  final bool current;
+
+  /// Picked with Ctrl or Shift, so it moves with the others picked.
+  final bool selected;
+
+  /// What a drag starting on this row carries.
+  final LineDrag drag;
+
+  final VoidCallback onTap;
+
+  /// Lines dropped on this one fold into it as variations.
+  final ValueChanged<LineDrag> onDrop;
+
+  final List<Widget> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    return LineDropTarget(
+      accepts: (dropped) => !dropped.games.contains(line.game),
+      onDrop: onDrop,
+      child: Draggable<LineDrag>(
+        data: drag,
+        feedback: LineDragChip(label: drag.label),
+        childWhenDragging: Opacity(opacity: 0.4, child: _row(context)),
+        child: _row(context),
+      ),
+    );
+  }
+
+  Widget _row(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: selected
+          ? theme.colorScheme.primary.withValues(alpha: 0.2)
+          : current
+          ? theme.colorScheme.surfaceContainerHighest
+          : Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: SizedBox(
+          height: outlineRowHeight,
+          child: Padding(
+            padding: const EdgeInsets.only(left: Space.m + outlineIndent),
+            child: Row(
+              children: [
+                if (!line.shared) ...[
+                  Flexible(
+                    child: Text(line.name, overflow: TextOverflow.ellipsis),
+                  ),
+                  const SizedBox(width: Space.s),
+                ],
+                Expanded(
+                  child: Text(
+                    line.moves,
+                    overflow: TextOverflow.ellipsis,
+                    style: monoText.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                RowActions(children: actions),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A sentence where rows would be: nothing here yet, or nothing matching.
+class OutlineMessage extends StatelessWidget {
+  const OutlineMessage(this.text, {super.key});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(Space.m),
+      child: Text(text, style: Theme.of(context).textTheme.bodySmall),
+    );
+  }
+}

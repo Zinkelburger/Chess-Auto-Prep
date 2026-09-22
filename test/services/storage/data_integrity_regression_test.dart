@@ -1,7 +1,25 @@
+import 'package:chess_auto_prep/infrastructure/documents/legacy_pgn_document_store.dart';
+import 'package:chess_auto_prep/models/pgn_game_entry.dart';
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../../support/runtime_settings.dart';
+import 'package:chess_auto_prep/app/viewer_dependencies.dart';
+import 'package:chess_auto_prep/features/documents/models/viewer_collection_load.dart';
+import '../../support/fake_desktop_fullscreen_port.dart';
 import 'dart:io';
 import 'dart:async';
 import 'dart:isolate';
 import 'dart:convert';
+
+import 'package:chess_auto_prep/infrastructure/documents/isolate_pgn_collection_filter.dart';
+
+import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_library_repository.dart';
+import 'package:chess_auto_prep/infrastructure/documents/isolate_pgn_collection_decoder.dart';
+
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:chess_auto_prep/infrastructure/documents/shared_preferences_viewer_repository.dart';
+import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_collection_repository.dart';
+import '../../support/study_fixture.dart';
 import 'package:chess_auto_prep/services/analysis/player_corpus_store.dart';
 import 'package:chess_auto_prep/models/analysis_player_info.dart';
 import 'package:chess_auto_prep/models/repertoire_review_entry.dart';
@@ -17,7 +35,7 @@ import 'package:chess_auto_prep/services/analysis_games_service.dart';
 import 'package:chess_auto_prep/features/tactics/services/tactics_database.dart';
 import 'package:chess_auto_prep/features/tactics/models/tactics_position.dart';
 import 'package:chess_auto_prep/utils/atomic_file.dart';
-import 'package:chess_auto_prep/core/pgn_viewer_controller.dart';
+import 'package:chess_auto_prep/features/documents/controllers/viewer_document_controller.dart';
 import 'package:chess_auto_prep/services/game_analysis_controller.dart';
 import 'package:chess_auto_prep/widgets/pgn_viewer_widget.dart';
 import 'package:chess_auto_prep/models/repertoire_move_progress.dart';
@@ -25,7 +43,6 @@ import 'package:chess_auto_prep/models/repertoire_review_history_entry.dart';
 import 'package:chess_auto_prep/services/repertoire_review_service.dart';
 import 'package:chess_auto_prep/services/games_library/game_filter.dart';
 import 'package:chess_auto_prep/utils/safe_file_name.dart';
-import 'package:chess_auto_prep/core/study_controller.dart';
 import 'package:chess_auto_prep/features/tactics/services/tactics_import_service.dart';
 
 class Paths extends PathProviderPlatform with MockPlatformInterfaceMixin {
@@ -50,6 +67,7 @@ class FailingStorage extends IOStorageService {
 }
 
 class FakeAnalysis extends GameAnalysisController {
+  FakeAnalysis() : super(pool: engines.pool, lifecycle: engines.lifecycle);
   @override
   Future<bool> tryLoadFromPgn(String text) async => true;
   @override
@@ -101,7 +119,14 @@ Future<void> pausedWriter((String, SendPort) request) async {
   }
 }
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
   late Directory root;
   late PathProviderPlatform original;
@@ -314,7 +339,24 @@ void main() {
       final originalGame = game('1. e4 e5');
       await file.writeAsString(originalGame);
       final analysis = FakeAnalysis();
-      final c = PgnViewerController(
+      final c = ViewerDocumentController(
+        positionIndex: createViewerPositionIndex(),
+        openings: createViewerOpenings(),
+        solitaireRepository: createViewerSolitaire(),
+        window: FakeDesktopFullscreenPort(),
+        collectionDecoder: const IsolatePgnCollectionDecoder(),
+        collectionFilter: const IsolatePgnCollectionFilter(),
+        library: StoragePgnLibraryRepository(
+          StorageFactory.instance,
+          directory: () async => '/collections',
+        ),
+        preferences: SharedPreferencesViewerRepository(
+          SharedPreferences.getInstance,
+        ),
+        collectionRepository: StoragePgnCollectionRepository(
+          StorageFactory.instance,
+          documents: LegacyPgnDocumentStore(StorageFactory.instance),
+        ),
         pgnWidgetController: PgnViewerWidgetController(),
         analysisController: analysis,
       );
@@ -322,14 +364,13 @@ void main() {
         headers: {'Event': 'Audit', 'White': 'A', 'Black': 'B'},
         pgnText: originalGame,
       );
+      c.adoptDecodedCollection(DecodedPgnCollection([entry], ''));
       c.filePath = file.path;
-      c.allGames = [entry];
-      c.filteredGames = [entry];
       await file.writeAsString(
         '$originalGame\n\n${game('1. d4 d5', round: '2')}',
       );
-      c.setRating(5);
-      await c.doPersistMetadata();
+      c.editor.setRating(5);
+      await c.editor.doPersistMetadata();
       expect(await file.readAsString(), contains('1. d4 d5'));
       expect(await file.readAsString(), contains('[StudyRating'));
       c.filePath = null;
@@ -409,7 +450,7 @@ void main() {
   test(
     'Regression: study navigation stops when unsaved edits conflict',
     () async {
-      final c = StudyController();
+      final c = studyWithStorage(StorageFactory.instance);
       await c.newStudy('First');
       final first = File(c.doc.filePath!);
       c.addChapter('unsaved irreplaceable chapter');
@@ -444,7 +485,10 @@ void main() {
       StorageFactory.instanceForTest = UnreadableTactics();
       db.analyzedGameIds.add('game1');
       await expectLater(
-        TacticsImportService(database: db).pruneStoredPgns(),
+        TacticsImportService(
+          pool: engines.pool,
+          database: db,
+        ).pruneStoredPgns(),
         throwsStateError,
       );
       expect(store.count(GameCollections.tactics), 1);

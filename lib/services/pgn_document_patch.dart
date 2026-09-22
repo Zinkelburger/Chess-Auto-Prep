@@ -3,7 +3,7 @@ library;
 
 import 'dart:isolate';
 
-import 'pgn_parsing_service.dart';
+import '../chess_core/pgn/pgn_text.dart';
 
 /// Run document matching and reconstruction away from the UI isolate. Call
 /// inside the atomic update callback so the file lock covers the worker too.

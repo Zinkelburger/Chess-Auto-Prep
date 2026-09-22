@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/app_state.dart';
+import '../../documents/repositories/stored_game_repository.dart';
 import '../models/tactics_session_settings.dart';
 import '../../../services/maia/maia_factory.dart';
 import '../services/tactics_import_coordinator.dart';
@@ -19,7 +20,7 @@ import '../../../utils/app_messages.dart';
 import '../../../utils/fen_utils.dart';
 import '../../../utils/app_shortcuts.dart';
 import '../../../utils/keyboard_shortcut_utils.dart';
-import '../../../widgets/common/confirm_dialog.dart';
+import '../../../design_system/components/confirm_dialog.dart';
 import '../../../widgets/engine/inline_engine_bar.dart';
 import '../../../widgets/pgn_viewer_widget.dart';
 import '../../../widgets/pgn_with_engine.dart';

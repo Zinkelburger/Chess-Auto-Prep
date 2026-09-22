@@ -2,6 +2,11 @@
 /// the standard start, and participant settings in Engine controls.
 library;
 
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../../support/runtime_settings.dart';
+
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/features/engine_tournament/models/engine_spec.dart';
 import 'package:chess_auto_prep/features/engine_tournament/models/tournament_config.dart';
@@ -34,6 +39,8 @@ Future<void> _openDialog(
   });
   await tester.pumpWidget(
     MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Builder(
         builder: (context) => Scaffold(
           body: Center(
@@ -62,7 +69,14 @@ Future<void> _openDialog(
 String _fenText(WidgetTester tester) =>
     tester.widget<TextField>(_fenField).controller!.text;
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   testWidgets(
     'rerun preserves its snapshot and edits participant resources independently',
     (tester) async {

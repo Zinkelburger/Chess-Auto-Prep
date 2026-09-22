@@ -20,8 +20,7 @@ import 'package:path/path.dart' as p;
 
 import '../../../models/move_tree.dart';
 import '../../../models/opening_tree.dart';
-import '../../../services/pgn_parsing_service.dart'
-    show splitPgnIntoGames, stripBom;
+import '../../../chess_core/pgn/pgn_text.dart' show splitPgnIntoGames, stripBom;
 import '../../../services/storage/storage_factory.dart';
 import '../../../utils/movetext_builder.dart';
 import '../../games/services/my_repertoire_settings.dart';

@@ -1,7 +1,14 @@
+library;
+
+import 'package:chess_auto_prep/utils/atomic_file.dart';
+import 'package:chess_auto_prep/infrastructure/documents/legacy_pgn_document_store.dart';
+
+import 'package:chess_auto_prep/app/viewer_dependencies.dart';
+
 /// What the viewer is allowed to do to a PGN file the reader owns.
 ///
 /// A save patches the games it changed into the file as it currently stands
-/// (`doPersistMetadata` → `patchPgnDocument` under `updateFile`). It used to
+/// (`doPersistMetadata` → observed snapshot → patch → validated save). It used to
 /// rewrite the whole file from the collection held in memory, and then
 /// anything the load dropped, or any game a save re-serialized lossily, was
 /// deleted from the reader's own file — by a star, a comment edit, or an
@@ -19,18 +26,33 @@
 /// tested elsewhere; what is asserted here is the property that matters to
 /// the reader: **a save may add, and may change the game it was told to
 /// change, but nothing else in the file may disappear.**
-library;
+
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../../support/runtime_settings.dart';
+
+import '../../support/fake_desktop_fullscreen_port.dart';
 
 import 'dart:async';
+import 'package:chess_auto_prep/features/documents/models/viewer_perspective.dart';
+
+import 'package:chess_auto_prep/infrastructure/documents/isolate_pgn_collection_filter.dart';
+
+import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_library_repository.dart';
+import 'package:chess_auto_prep/infrastructure/documents/isolate_pgn_collection_decoder.dart';
+
+import 'package:chess_auto_prep/infrastructure/documents/shared_preferences_viewer_repository.dart';
+
+import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_collection_repository.dart';
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:chess_auto_prep/core/pgn_viewer_controller.dart';
+import 'package:chess_auto_prep/features/documents/controllers/viewer_document_controller.dart';
 import 'package:chess_auto_prep/services/game_analysis_controller.dart';
-import 'package:chess_auto_prep/services/game_eval_annotations.dart';
-import 'package:chess_auto_prep/services/pgn_parsing_service.dart';
+import 'package:chess_auto_prep/chess_core/analysis/game_eval_annotations.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_text.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/services/storage/storage_service.dart';
 import 'package:chess_auto_prep/widgets/pgn_viewer_widget.dart';
@@ -66,12 +88,15 @@ class _MemoryStorage implements StorageService {
     bool createOnly = false,
     String? expectedContent,
   }) async {
+    await writeGate?.future;
+    if ((createOnly && files.containsKey(path)) ||
+        (expectedContent != null && files[path] != expectedContent)) {
+      throw AtomicWriteConflict(path);
+    }
     writeBehindOurBack(path, content);
   }
 
-  /// Read-modify-write, as the real one does under a lock. The viewer's save
-  /// goes through here now: it patches the games it changed into whatever the
-  /// file currently holds rather than rewriting the file from memory.
+  /// Storage read-modify-write for callers outside the document store.
   @override
   Future<String> updateFile(
     String path,
@@ -97,6 +122,8 @@ class _MemoryStorage implements StorageService {
 
 /// No engine, no isolates: `loadCurrentGame` runs on every navigation.
 class _FakeAnalysisController extends GameAnalysisController {
+  _FakeAnalysisController()
+    : super(pool: engines.pool, lifecycle: engines.lifecycle);
   @override
   Future<bool> tryLoadFromPgn(String pgnText) async => true;
 
@@ -172,9 +199,26 @@ List<String> _allComments(PgnGame<PgnNodeData> game) {
   return out..sort();
 }
 
-Future<PgnViewerController> _openTheFile(_MemoryStorage storage) async {
+Future<ViewerDocumentController> _openTheFile(_MemoryStorage storage) async {
   storage.writeBehindOurBack(_path, _fileText());
-  final controller = PgnViewerController(
+  final controller = ViewerDocumentController(
+    positionIndex: createViewerPositionIndex(),
+    openings: createViewerOpenings(),
+    solitaireRepository: createViewerSolitaire(),
+    window: FakeDesktopFullscreenPort(),
+    collectionDecoder: const IsolatePgnCollectionDecoder(),
+    collectionFilter: const IsolatePgnCollectionFilter(),
+    library: StoragePgnLibraryRepository(
+      StorageFactory.instance,
+      directory: () async => '/collections',
+    ),
+    preferences: SharedPreferencesViewerRepository(
+      SharedPreferences.getInstance,
+    ),
+    collectionRepository: StoragePgnCollectionRepository(
+      StorageFactory.instance,
+      documents: LegacyPgnDocumentStore(StorageFactory.instance),
+    ),
     pgnWidgetController: PgnViewerWidgetController(),
     analysisController: _FakeAnalysisController(),
   );
@@ -182,7 +226,14 @@ Future<PgnViewerController> _openTheFile(_MemoryStorage storage) async {
   return controller;
 }
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late _MemoryStorage storage;
@@ -199,71 +250,130 @@ void main() {
 
   tearDown(() => StorageFactory.instanceForTest = null);
 
+  test('navigation keeps drill-only notes out of later file saves', () async {
+    final c = await _openTheFile(storage);
+    addTearDown(c.dispose);
+    final game = c.collection.games.first;
+    c.persistMoveCommentsFor(
+      game,
+      '1. e4 {drill-only} e5 *',
+      writeToFile: false,
+    );
+    final back = c.captureNavigationContext();
+    await c.loadPgnContent('[Event "Elsewhere"]\n\n1. d4 *');
+    expect(await back(), isTrue);
+    expect(game.pgnText, contains('drill-only'));
+    expect(c.editor.snapshotForSave()[game], isNot(contains('drill-only')));
+    c.setPerspective(const Perspective(mode: PerspectiveMode.black));
+    await c.editor.flushPendingMetadata();
+    expect(storage.files[_path], isNot(contains('drill-only')));
+    expect(storage.files[_path], contains('[StudyPerspective "black"]'));
+  });
+
+  test(
+    'navigation return retains an outgoing save conflict and original bytes',
+    () async {
+      final c = await _openTheFile(storage);
+      addTearDown(c.dispose);
+      final game = c.collection.games.first;
+      final original = game.pgnText;
+      final gate = Completer<void>();
+      storage.writeGate = gate;
+      c.persistMoveCommentsFor(game, '1. e4 {my draft} e5 *');
+      final saving = c.editor.doPersistMetadata();
+      final back = c.captureNavigationContext();
+      await c.loadPgnContent('[Event "Elsewhere"]\n\n1. d4 *');
+      expect(await back(), isTrue);
+      storage.writeBehindOurBack(
+        _path,
+        '[Event "External replacement"]\n\n1. c4 *',
+      );
+      gate.complete();
+      await saving;
+      await c.editor.flushPendingMetadata();
+      expect(c.editor.hasUnsavedChanges, isTrue);
+      expect(c.editor.needsSaveRecovery, isTrue);
+      expect(c.captureWorkspace().persistedGames.first, original);
+      expect(c.editor.canReplaceCollection(), isFalse);
+      expect(storage.files[_path], contains('External replacement'));
+      expect(game.pgnText, contains('my draft'));
+    },
+  );
+
   test('manual edits stay off disk across games and save explicitly', () async {
     final c = await _openTheFile(storage);
     addTearDown(c.dispose);
-    c.setAutoSave(false);
+    c.editor.setAutoSave(false);
     final original = storage.files[_path];
-    final untouched = c.allGames[1].pgnText;
+    final untouched = c.collection.games[1].pgnText;
     c.persistMoveCommentsFor(
-      c.allGames.first,
+      c.collection.games.first,
       '1. e4 { manual note } (1. d4 d5) e5 1-0',
     );
-    c.goToGame(1);
+    c.reading.goToGame(1);
     await Future<void>.delayed(const Duration(milliseconds: 400));
-    await c.flushPendingMetadata();
+    await c.editor.flushPendingMetadata();
     expect(storage.files[_path], original);
-    expect(c.hasUnsavedChanges, isTrue);
+    expect(c.editor.hasUnsavedChanges, isTrue);
     c.closeFile();
-    expect(c.allGames, hasLength(3));
+    expect(c.collection.games, hasLength(3));
     await c.loadPgnContent('[Result "*"]\n\n1. a3 *');
-    expect(c.allGames, hasLength(3));
-    expect(await c.saveChanges(), isTrue);
-    expect(c.hasUnsavedChanges, isFalse);
-    expect(c.isSaving, isFalse);
+    expect(c.collection.games, hasLength(3));
+    expect(await c.editor.saveChanges(), isTrue);
+    expect(c.editor.hasUnsavedChanges, isFalse);
+    expect(c.editor.state.busy, isFalse);
     expect(storage.files[_path], contains('manual note'));
     expect(storage.files[_path], contains(untouched.trim()));
     c.closeFile();
-    expect(c.allGames, isEmpty);
+    expect(c.collection.games, isEmpty);
   });
 
   test('enabling autosave saves pending manual edits', () async {
     final c = await _openTheFile(storage);
     addTearDown(c.dispose);
-    c.setAutoSave(false);
-    c.persistMoveCommentsFor(c.allGames.first, '1. e4 { pending } e5 1-0');
-    c.setAutoSave(true);
-    await c.flushPendingMetadata();
+    c.editor.setAutoSave(false);
+    c.persistMoveCommentsFor(
+      c.collection.games.first,
+      '1. e4 { pending } e5 1-0',
+    );
+    c.editor.setAutoSave(true);
+    await c.editor.flushPendingMetadata();
     expect(storage.files[_path], contains('pending'));
-    expect(c.hasUnsavedChanges, isFalse);
+    expect(c.editor.hasUnsavedChanges, isFalse);
   });
 
   test('discard restores the original PGN without writing it', () async {
     final c = await _openTheFile(storage);
     addTearDown(c.dispose);
-    c.setAutoSave(false);
-    final original = c.allGames.first.pgnText;
-    c.persistMoveCommentsFor(c.allGames.first, '1. a3 1-0');
-    c.discardChanges();
-    expect(c.hasUnsavedChanges, isFalse);
-    expect(c.allGames.first.pgnText, original);
+    c.editor.setAutoSave(false);
+    final original = c.collection.games.first.pgnText;
+    c.persistMoveCommentsFor(c.collection.games.first, '1. a3 1-0');
+    c.editor.discardChanges();
+    expect(c.editor.hasUnsavedChanges, isFalse);
+    expect(c.collection.games.first.pgnText, original);
   });
 
   test('edits made during a write stay unsaved until the next Save', () async {
     final c = await _openTheFile(storage);
     addTearDown(c.dispose);
-    c.setAutoSave(false);
-    c.persistMoveCommentsFor(c.allGames.first, '1. e4 { first edit } e5 1-0');
+    c.editor.setAutoSave(false);
+    c.persistMoveCommentsFor(
+      c.collection.games.first,
+      '1. e4 { first edit } e5 1-0',
+    );
     storage.writeGate = Completer<void>();
-    final saving = c.saveChanges();
-    expect(c.isSaving, isTrue);
-    c.persistMoveCommentsFor(c.allGames.first, '1. e4 { second edit } e5 1-0');
+    final saving = c.editor.saveChanges();
+    expect(c.editor.state.busy, isTrue);
+    c.persistMoveCommentsFor(
+      c.collection.games.first,
+      '1. e4 { second edit } e5 1-0',
+    );
     storage.writeGate!.complete();
     expect(await saving, isFalse);
-    expect(c.hasUnsavedChanges, isTrue);
+    expect(c.editor.hasUnsavedChanges, isTrue);
     expect(storage.files[_path], contains('first edit'));
     expect(storage.files[_path], isNot(contains('second edit')));
-    expect(await c.saveChanges(), isTrue);
+    expect(await c.editor.saveChanges(), isTrue);
     expect(storage.files[_path], contains('second edit'));
   });
 
@@ -274,20 +384,30 @@ void main() {
       addTearDown(c.dispose);
       c.closeFile();
       await c.loadPgnContent(_gameOne);
-      c.setAutoSave(false);
+      c.editor.setAutoSave(false);
       c.persistMoveCommentsFor(
-        c.allGames.first,
+        c.collection.games.first,
         '1. e4 { pasted note } e5 1-0',
       );
-      c.setRating(3);
-      final snapshot = c.snapshotForSave();
+      c.editor.setRating(3);
+      final snapshot = c.editor.snapshotForSave();
       expect(snapshot.values.single, contains('pasted note'));
       expect(snapshot.values.single, contains('[StudyRating "3"]'));
-      await storage.writeFile('/library/new.pgn', snapshot.values.single);
-      c.adoptSavedCopy('/library/new.pgn', snapshot);
-      expect(c.hasUnsavedChanges, isFalse);
-      c.persistMoveCommentsFor(c.allGames.first, '1. e4 { later edit } e5 1-0');
-      expect(await c.saveChanges(), isTrue);
+      await c.editor.saveCopy('/library/new.pgn');
+      expect(c.editor.hasUnsavedChanges, isFalse);
+      await c.reading.saveSession();
+      expect(
+        (await SharedPreferences.getInstance()).getString(
+          'pgn_viewer.last_file',
+        ),
+        '/library/new.pgn',
+      );
+      expect(c.loadedFileModified, isNull);
+      c.persistMoveCommentsFor(
+        c.collection.games.first,
+        '1. e4 { later edit } e5 1-0',
+      );
+      expect(await c.editor.saveChanges(), isTrue);
       expect(storage.files['/library/new.pgn'], contains('later edit'));
     },
   );
@@ -296,7 +416,7 @@ void main() {
     final c = await _openTheFile(storage);
     addTearDown(c.dispose);
 
-    expect(c.allGames.length, 3);
+    expect(c.collection.games.length, 3);
     expect(c.collectionPreamble, _bannerLine);
   });
 
@@ -304,17 +424,20 @@ void main() {
     final c = await _openTheFile(storage);
     addTearDown(c.dispose);
 
-    final untouched = [c.allGames[1].pgnText, c.allGames[2].pgnText];
+    final untouched = [
+      c.collection.games[1].pgnText,
+      c.collection.games[2].pgnText,
+    ];
 
     // What the viewer stores when a review — or merely opening a reviewed
     // game, which fills in the lines the pass did not write — produces engine
     // lines for the game on screen.
-    final annotated = injectBestLines(c.allGames.first.pgnText, {
+    final annotated = injectBestLines(c.collection.games.first.pgnText, {
       1: const ['e4', 'e5', 'Nf3'],
     });
     expect(annotated, isNotNull, reason: 'the writer had something to write');
-    c.persistMoveComments(annotated!);
-    await c.flushPendingMetadata();
+    c.editor.persistMoveComments(annotated!);
+    await c.editor.flushPendingMetadata();
 
     final written = storage.files[_path]!;
     final games = splitPgnIntoGames(written);
@@ -327,12 +450,12 @@ void main() {
     final c = await _openTheFile(storage);
     addTearDown(c.dispose);
 
-    final before = PgnGame.parsePgn(c.allGames.first.pgnText);
-    final annotated = injectBestLines(c.allGames.first.pgnText, {
+    final before = PgnGame.parsePgn(c.collection.games.first.pgnText);
+    final annotated = injectBestLines(c.collection.games.first.pgnText, {
       1: const ['e4', 'e5', 'Nf3'],
     })!;
-    c.persistMoveComments(annotated);
-    await c.flushPendingMetadata();
+    c.editor.persistMoveComments(annotated);
+    await c.editor.flushPendingMetadata();
 
     final after = PgnGame.parsePgn(splitPgnIntoGames(storage.files[_path]!)[0]);
 
@@ -373,8 +496,8 @@ void main() {
     final c = await _openTheFile(storage);
     addTearDown(c.dispose);
 
-    c.setRating(3);
-    await c.flushPendingMetadata();
+    c.editor.setRating(3);
+    await c.editor.flushPendingMetadata();
 
     final written = storage.files[_path]!;
     expect(written.trimLeft(), startsWith(_bannerLine));
@@ -386,36 +509,55 @@ void main() {
     final c = await _openTheFile(storage);
     addTearDown(c.dispose);
 
-    c.setRating(3);
-    await c.flushPendingMetadata();
+    c.editor.setRating(3);
+    await c.editor.flushPendingMetadata();
     final once = storage.files[_path]!;
 
-    c.setRating(3);
-    await c.flushPendingMetadata();
+    c.editor.setRating(3);
+    await c.editor.flushPendingMetadata();
     expect(storage.files[_path], once);
   });
 
   test('reopening the file gives back what was saved', () async {
     final c = await _openTheFile(storage);
     addTearDown(c.dispose);
-    c.persistMoveComments(
-      injectBestLines(c.allGames.first.pgnText, {
+    c.editor.persistMoveComments(
+      injectBestLines(c.collection.games.first.pgnText, {
         1: const ['e4', 'e5', 'Nf3'],
       })!,
     );
-    await c.flushPendingMetadata();
+    await c.editor.flushPendingMetadata();
 
-    final reopened = PgnViewerController(
+    final reopened = ViewerDocumentController(
+      positionIndex: createViewerPositionIndex(),
+      openings: createViewerOpenings(),
+      solitaireRepository: createViewerSolitaire(),
+      window: FakeDesktopFullscreenPort(),
+      collectionDecoder: const IsolatePgnCollectionDecoder(),
+      collectionFilter: const IsolatePgnCollectionFilter(),
+      library: StoragePgnLibraryRepository(
+        StorageFactory.instance,
+        directory: () async => '/collections',
+      ),
+      preferences: SharedPreferencesViewerRepository(
+        SharedPreferences.getInstance,
+      ),
+      collectionRepository: StoragePgnCollectionRepository(
+        StorageFactory.instance,
+        documents: LegacyPgnDocumentStore(StorageFactory.instance),
+      ),
       pgnWidgetController: PgnViewerWidgetController(),
       analysisController: _FakeAnalysisController(),
     );
     addTearDown(reopened.dispose);
     await reopened.loadFile(_path, restoreSavedSlice: false);
 
-    expect(reopened.allGames.length, 3);
+    expect(reopened.collection.games.length, 3);
     expect(reopened.collectionPreamble, _bannerLine);
     expect(
-      _nodeCount(PgnGame.parsePgn(reopened.allGames.first.pgnText).moves),
+      _nodeCount(
+        PgnGame.parsePgn(reopened.collection.games.first.pgnText).moves,
+      ),
       _nodeCount(PgnGame.parsePgn(_gameOne).moves),
     );
   });
@@ -438,8 +580,8 @@ void main() {
     storage.writeBehindOurBack(_path, patched);
 
     // Now the reader stars game one, which rewrites the whole file.
-    c.setRating(4);
-    await c.flushPendingMetadata();
+    c.editor.setRating(4);
+    await c.editor.flushPendingMetadata();
 
     final written = storage.files[_path]!;
     expect(
@@ -467,8 +609,8 @@ void main() {
       '${storage.files[_path]!.trimRight()}\n\n$extra',
     );
 
-    c.setRating(2);
-    await c.flushPendingMetadata();
+    c.editor.setRating(2);
+    await c.editor.flushPendingMetadata();
 
     final written = storage.files[_path]!;
     expect(
@@ -489,21 +631,21 @@ void main() {
     // and writing our copy over it would destroy it.
     storage.writeBehindOurBack(_path, '; someone emptied this file\n');
 
-    c.setRating(5);
-    await c.flushPendingMetadata();
+    c.editor.setRating(5);
+    await c.editor.flushPendingMetadata();
 
     expect(storage.files[_path], '; someone emptied this file\n');
-    expect(c.hasUnsavedChanges, isTrue);
-    expect(c.isSaving, isFalse);
-    expect(c.errorMessage, contains('recovery'));
+    expect(c.editor.hasUnsavedChanges, isTrue);
+    expect(c.editor.state.busy, isFalse);
+    expect(c.editor.errorMessage, contains('recovery'));
   });
 
   test('an unchanged file still gets the plain whole-file write', () async {
     final c = await _openTheFile(storage);
     addTearDown(c.dispose);
 
-    c.setRating(1);
-    await c.flushPendingMetadata();
+    c.editor.setRating(1);
+    await c.editor.flushPendingMetadata();
 
     final written = storage.files[_path]!;
     expect(splitPgnIntoGames(written).length, 3);

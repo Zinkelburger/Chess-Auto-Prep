@@ -6,17 +6,11 @@
 /// surplus descending.
 library;
 
-import 'dart:convert';
-import 'dart:io';
-
-import 'package:path/path.dart' as p;
-
-import '../../models/build_tree_node.dart';
-import '../../models/trap_line_info.dart';
-import '../../models/trap_reply.dart';
-import '../../utils/atomic_file.dart';
+import '../../chess_core/generation/build_tree_node.dart';
+import '../../chess_core/generation/trap_line_info.dart';
+import '../../chess_core/generation/trap_reply.dart';
 import '../../utils/ease_utils.dart' show winProbability;
-import '../eval/eval_canonicalize.dart';
+import '../../chess_core/position/eval_canonicalize.dart';
 import 'trap_score.dart';
 
 class TrapExtractor {
@@ -182,53 +176,6 @@ class TrapExtractor {
     }
     replies.sort((a, b) => b.probability.compareTo(a.probability));
     return replies;
-  }
-
-  /// `<repertoire>_traps.json` beside the repertoire's `.pgn`.
-  static String trapFilePath(String repertoireFilePath) {
-    final base = p.extension(repertoireFilePath) == '.pgn'
-        ? p.withoutExtension(repertoireFilePath)
-        : repertoireFilePath;
-    return '${base}_traps.json';
-  }
-
-  /// Save trap lines to a JSON file alongside the repertoire.
-  static Future<void> saveToFile(
-    List<TrapLineInfo> traps,
-    String repertoireFilePath,
-  ) async {
-    final data = {
-      'generated_at': DateTime.now().toIso8601String(),
-      'count': traps.length,
-      'traps': traps.map((t) => t.toJson()).toList(),
-    };
-
-    await writeTextFileAtomically(
-      File(trapFilePath(repertoireFilePath)),
-      const JsonEncoder.withIndent('  ').convert(data),
-    );
-  }
-
-  /// Load trap lines from the JSON file for a given repertoire.
-  /// Returns null if no file exists or parse fails.
-  static Future<List<TrapLineInfo>?> loadFromFile(
-    String repertoireFilePath,
-  ) async {
-    final file = File(trapFilePath(repertoireFilePath));
-    if (!await file.exists()) return null;
-
-    try {
-      final content = await file.readAsString();
-      final data = jsonDecode(content) as Map<String, dynamic>;
-      return [
-        for (final entry in data['traps'] as List)
-          TrapLineInfo.fromJson(entry as Map<String, dynamic>),
-      ];
-    } catch (_) {
-      // An unreadable or malformed file is treated as absent: the caller
-      // regenerates traps from the tree rather than trusting a partial list.
-      return null;
-    }
   }
 }
 

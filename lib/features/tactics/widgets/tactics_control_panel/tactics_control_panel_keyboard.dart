@@ -82,7 +82,7 @@ mixin _TacticsKeyboardActions
     ...KeyBinding.forShortcut(
       AppShortcut.toggleEngine,
       'Toggle engine',
-      InlineEngineBar.toggleEngine,
+      () => InlineEngineBar.toggleEngine(context),
     ),
     ...KeyBinding.forShortcut(AppShortcut.flipBoard, 'Flip board', () {
       final appState = context.read<AppState>();

@@ -69,28 +69,32 @@ void main() {
       tester,
       pgn: '1. e4 {$note} e5 {$note} 2. Nf3 {$note} Nc6 *',
     );
-    final scroll = tester
-        .widget<SingleChildScrollView>(_scrollView)
-        .controller!;
+    final scroll = tester.widget<CustomScrollView>(_scrollView).controller!;
     controller.goForward();
     await tester.pump();
-    final firstOffset = scroll.offset;
-
+    double activeTop() =>
+        tester
+            .getTopLeft(
+              find.byWidgetPredicate((w) => w is PgnReadingPassage && w.active),
+            )
+            .dy -
+        tester.getTopLeft(_scrollView).dy;
+    expect(activeTop(), closeTo(32, 1));
     controller.goForward();
     await tester.pump();
-    final secondOffset = scroll.offset;
-    expect(secondOffset, greaterThan(firstOffset + 500));
+    expect(activeTop(), closeTo(52, 1));
     expect(scroll.position.isScrollingNotifier.value, isFalse);
 
-    // Reversing before an animation could finish must follow the latest move.
+    // Offsets are relative to the current row anchor. Check the destination,
+    // including rapid reversal, rather than an eager document's global pixels.
     controller.goBack();
     await tester.pump();
-    expect(scroll.offset, closeTo(firstOffset, 1));
+    expect(activeTop(), closeTo(32, 1));
     controller.goForward();
     await tester.pump();
-    expect(scroll.offset, closeTo(secondOffset, 1));
+    expect(activeTop(), closeTo(52, 1));
     await tester.pump(const Duration(milliseconds: 500));
-    expect(scroll.offset, closeTo(secondOffset, 1));
+    expect(activeTop(), closeTo(52, 1));
     final active = find.byWidgetPredicate(
       (w) => w is PgnReadingPassage && w.active,
     );
@@ -195,9 +199,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 16));
     controller.goToMainLineIndex(2);
     await tester.pump();
-    final scroll = tester
-        .widget<SingleChildScrollView>(_scrollView)
-        .controller!;
+    final scroll = tester.widget<CustomScrollView>(_scrollView).controller!;
     final anchored = scroll.offset;
     await tester.pumpAndSettle();
     expect(scroll.offset, closeTo(anchored, 1));
@@ -313,9 +315,7 @@ void main() {
       );
       final title = find.text('A comfortable fit');
       final titleTop = tester.getTopLeft(title).dy;
-      final scroll = tester
-          .widget<SingleChildScrollView>(_scrollView)
-          .controller!;
+      final scroll = tester.widget<CustomScrollView>(_scrollView).controller!;
       for (final anchor in [
         'Anchor near top',
         'Anchor near middle',
@@ -349,11 +349,7 @@ void main() {
       final controller = await _pump(tester, pgn: '1. e4 {$note} e5 *');
       controller.goToMainLineIndex(2);
       await tester.pumpAndSettle();
-      final scroll = tester
-          .widget<SingleChildScrollView>(_scrollView)
-          .controller!;
-      expect(scroll.offset, greaterThan(0));
-      expect(scroll.offset, closeTo(scroll.position.maxScrollExtent, 1));
+
       final viewport = tester.getRect(_scrollView);
       final lastMove = tester.getRect(_move('e5'));
       expect(viewport.contains(lastMove.center), isTrue);
@@ -412,7 +408,7 @@ void main() {
       final sicilian = view.variationsByPly[1]!.single;
       final nested = sicilian.children.first.children[1];
       double offset() =>
-          tester.widget<SingleChildScrollView>(_scrollView).controller!.offset;
+          tester.widget<CustomScrollView>(_scrollView).controller!.offset;
 
       controller.goToVariationNode(sicilian, 1);
       await tester.pumpAndSettle();
@@ -531,7 +527,8 @@ void main() {
       find.textContaining('Deep branch explanation.', findRichText: true),
       findsOneWidget,
     );
-    expect(_move('e5'), findsNWidgets(2));
+    expect(_move('e5'), findsOneWidget);
+    expect(controller.currentFen, e5.fen);
     await tester.ensureVisible(
       find.widgetWithText(TextButton, 'Focus variation'),
     );
@@ -560,6 +557,14 @@ void main() {
     await tester.tap(find.widgetWithText(TextButton, 'Return to parent'));
     await tester.pumpAndSettle();
     expect(controller.currentFen, d4.fen);
+    expect(
+      tester.widget<PgnMovetextView>(find.byType(PgnMovetextView)).readingScope,
+      isNull,
+    );
+    // The parent's bookmark may be deep in the document. Returning to its
+    // first move mounts the opening explanation again.
+    controller.goToMainLineIndex(1);
+    await tester.pumpAndSettle();
     expect(
       find.textContaining('Mainline explanation.', findRichText: true),
       findsOneWidget,
@@ -628,8 +633,7 @@ void main() {
       expect(headingTop, closeTo(tester.getTopLeft(_scrollView).dy, 2));
       expect(
         find.byWidgetPredicate(
-          (w) =>
-              w is SingleChildScrollView && w.scrollDirection == Axis.vertical,
+          (w) => w is CustomScrollView && w.scrollDirection == Axis.vertical,
         ),
         findsOneWidget,
       );

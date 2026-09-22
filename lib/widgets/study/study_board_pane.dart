@@ -2,9 +2,12 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show listEquals;
+import 'package:dartchess/dartchess.dart' show Position;
+import '../../features/studies/widgets/study_selector.dart';
 import 'package:flutter/services.dart';
 
-import '../../core/study_controller.dart';
+import '../../features/studies/controllers/study_controller.dart';
 import '../../models/board_annotation.dart';
 import '../../utils/board_shape_comments.dart';
 import '../chess_board_widget.dart';
@@ -23,8 +26,17 @@ class StudyBoardPane extends StatelessWidget {
   final void Function(String orig, String? dest) onShapeDrawn;
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
+  Widget build(BuildContext context) => StudySelector<_BoardView>(
+    study: study,
+    select: (owner) {
+      final cursor = owner.cursor;
+      return _BoardView(
+        cursor.position,
+        cursor.flipped,
+        parseBoardShapes(cursor.comment),
+      );
+    },
+    builder: (context, view) => Padding(
       padding: const EdgeInsets.all(12),
       child: Column(
         children: [
@@ -32,12 +44,15 @@ class StudyBoardPane extends StatelessWidget {
             child: Center(
               child: AspectRatio(
                 aspectRatio: 1,
-                child: ChessBoardWidget(
-                  position: study.currentPosition,
-                  flipped: study.flipped,
-                  onMove: (move) => study.playSan(move.san),
-                  annotations: parseBoardShapes(study.cursorComment),
-                  onShapeDrawn: onShapeDrawn,
+                child: RepaintBoundary(
+                  key: const ValueKey('study-board-paint'),
+                  child: ChessBoardWidget(
+                    position: view.position,
+                    flipped: view.flipped,
+                    onMove: (move) => study.playSan(move.san),
+                    annotations: view.annotations,
+                    onShapeDrawn: onShapeDrawn,
+                  ),
                 ),
               ),
             ),
@@ -47,14 +62,32 @@ class StudyBoardPane extends StatelessWidget {
             constraints: const BoxConstraints(maxWidth: 320),
             child: MoveInputWidget(
               key: moveInputKey,
-              position: study.currentPosition,
+              position: view.position,
               onMove: (move) => study.playSan(move.san),
             ),
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
+
+/// Compare only values the board paints; prose, glyphs and save state do not
+/// rebuild it. Shape parsing is bounded to the current position's comment.
+class _BoardView {
+  const _BoardView(this.position, this.flipped, this.annotations);
+  final Position position;
+  final bool flipped;
+  final List<BoardAnnotation> annotations;
+  @override
+  bool operator ==(Object other) =>
+      other is _BoardView &&
+      position.fen == other.position.fen &&
+      flipped == other.flipped &&
+      listEquals(annotations, other.annotations);
+  @override
+  int get hashCode =>
+      Object.hash(position.fen, flipped, Object.hashAll(annotations));
 }
 
 /// Right-drag on the board: draw an arrow (or a circle) into the current

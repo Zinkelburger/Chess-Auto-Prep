@@ -31,8 +31,8 @@ BughouseGameRecord _game({
   number: number,
   whiteIndex: whiteIndex,
   blackIndex: blackIndex,
-  whiteName: whiteIndex == 0 ? 'A + C' : 'B + D',
-  blackName: whiteIndex == 0 ? 'B + D' : 'A + C',
+  whiteName: whiteIndex == 0 ? 'A + B' : 'C + D',
+  blackName: whiteIndex == 0 ? 'C + D' : 'A + B',
   result: result,
   termination: TerminationReason.checkmate,
   detail: 'board 1',
@@ -100,11 +100,11 @@ void main() {
           m.group(1)!: m.group(2)!,
       };
 
-      expect(tags['WhiteA'], 'A + C');
-      expect(tags['BlackA'], 'B + D');
+      expect(tags['WhiteA'], 'A + B');
+      expect(tags['BlackA'], 'C + D');
       // Partners sit on opposite colours: White on board 1 is Black on board 2.
-      expect(tags['WhiteB'], 'B + D');
-      expect(tags['BlackB'], 'A + C');
+      expect(tags['WhiteB'], 'C + D');
+      expect(tags['BlackB'], 'A + B');
       expect(tags['Result'], '0-1');
       expect(tags['Opening'], 'Board 1: 1. f3 e5');
       // From the standard opening, so there is nothing to set up.

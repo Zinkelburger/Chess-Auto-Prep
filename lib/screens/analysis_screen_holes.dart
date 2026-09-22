@@ -9,7 +9,7 @@ mixin _HoleHuntMixin on _AnalysisScreenStateBase {
     final player = _currentPlayer;
     if (player == null || _openingTree == null || _isHunting) return;
     if (!EngineGate.ensureAvailable(context)) return;
-    if (GenerationLease.isBusy) {
+    if (context.read<GenerationLease>().isBusy) {
       _showError(
         'Another engine job is running — '
         'wait for it to finish first.',
@@ -35,6 +35,7 @@ mixin _HoleHuntMixin on _AnalysisScreenStateBase {
     final tree = _openingTree;
     if (player == null || tree == null) return;
     final isWhite = _playerIsWhite;
+    final lease = context.read<GenerationLease>();
 
     setState(() {
       _isHunting = true;
@@ -60,7 +61,7 @@ mixin _HoleHuntMixin on _AnalysisScreenStateBase {
       final reportPath = corpus.cachePath(
         'holes_${isWhite ? 'white' : 'black'}.json',
       );
-      final result = await GenerationLease.run(() {
+      final result = await lease.run(() {
         return _holeService.hunt(
           tree: tree,
           isWhiteRepertoire: isWhite,

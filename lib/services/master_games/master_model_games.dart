@@ -8,7 +8,7 @@
 /// the repertoire, and nothing else.
 library;
 
-import '../../models/build_tree_node.dart';
+import '../../chess_core/generation/build_tree_node.dart';
 import '../generation/pgn_freq_map.dart';
 import 'book_replay.dart';
 import 'master_games_db.dart';
