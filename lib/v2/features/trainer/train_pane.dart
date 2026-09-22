@@ -10,9 +10,20 @@ import 'trainer_words.dart';
 /// repertoire, with where each stands and the two ways in — Review what is
 /// due, Learn what is new — or, while a sitting runs, the lesson.
 class TrainPane extends StatefulWidget {
-  const TrainPane({super.key, required this.trainer});
+  const TrainPane({
+    super.key,
+    required this.trainer,
+    required this.onRead,
+    this.offerBuilder = true,
+  });
 
   final Trainer trainer;
+
+  /// Sends a line to be read: to the board, the Moves tab or the builder.
+  final ValueChanged<LineToRead> onRead;
+
+  /// Whether a line offers `Open in Builder`.
+  final bool offerBuilder;
 
   @override
   State<TrainPane> createState() => _TrainPaneState();
@@ -45,7 +56,12 @@ class _TrainPaneState extends State<TrainPane> {
             ),
             onRetry: trainer.reload,
           ),
-          final TrainerReady ready => LineList(trainer: trainer, ready: ready),
+          final TrainerReady ready => LineList(
+            trainer: trainer,
+            ready: ready,
+            onRead: widget.onRead,
+            offerBuilder: widget.offerBuilder,
+          ),
         };
       },
     );

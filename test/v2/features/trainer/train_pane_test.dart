@@ -1,3 +1,6 @@
+import 'package:chess_auto_prep/v2/chess/fen.dart';
+import 'package:chess_auto_prep/v2/chess/training/line_order.dart';
+import 'package:chess_auto_prep/v2/chess/training/records.dart';
 import 'package:chess_auto_prep/v2/chess/training/schedule.dart';
 import 'package:chess_auto_prep/v2/features/trainer/scope_reader.dart';
 import 'package:chess_auto_prep/v2/features/trainer/train_pane.dart';
@@ -30,6 +33,7 @@ void main() {
   late ScriptedProgress files;
   late EngineAnalysis analysis;
   late Trainer trainer;
+  late List<LineToRead> reads;
 
   setUp(() async {
     fixture = await openSession(_chapter);
@@ -47,6 +51,7 @@ void main() {
   });
 
   Future<void> pump(WidgetTester tester) async {
+    reads = [];
     trainer = Trainer(
       session: fixture.session,
       chapters: ScopeReader(files: ScriptedFiles(), documents: fixture.store),
@@ -58,7 +63,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: darkTheme(),
-        home: Scaffold(body: TrainPane(trainer: trainer)),
+        home: Scaffold(
+          body: TrainPane(trainer: trainer, onRead: reads.add),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -162,5 +169,98 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Excluded'), findsOneWidget);
     expect(find.text('Learn 1'), findsOneWidget);
+  });
+
+  testWidgets('a move typed on the lesson goes to the box and is played', (
+    tester,
+  ) async {
+    await pump(tester);
+    await tester.tap(find.text('Learn 2'));
+    await tester.pumpAndSettle();
+    await key(tester, LogicalKeyboardKey.space);
+    expect(find.text('Your move'), findsOneWidget);
+    await key(tester, LogicalKeyboardKey.keyE);
+    final box = tester.widget<TextField>(find.byType(TextField));
+    expect(box.controller!.text, 'e');
+    expect(box.focusNode!.hasFocus, isTrue);
+    // The rest arrives as text, as the platform types it into the field.
+    await tester.enterText(find.byType(TextField), 'e4');
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+    expect(files.attempts.single.played, 'e4');
+    expect(files.attempts.single.correct, isTrue);
+    expect(box.focusNode!.hasFocus, isFalse, reason: 'the lesson has the keys');
+  });
+
+  testWidgets('a move written in the box is played without Enter', (
+    tester,
+  ) async {
+    await pump(tester);
+    await tester.tap(find.text('Learn 2'));
+    await tester.pumpAndSettle();
+    await key(tester, LogicalKeyboardKey.space);
+    await tester.enterText(find.byType(TextField), 'Qh5');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+    expect(find.text('Not a legal move here'), findsOneWidget);
+    expect(files.attempts, isEmpty);
+    await tester.enterText(find.byType(TextField), 'E4');
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+    expect(files.attempts.single.played, 'e4');
+  });
+
+  testWidgets('the lines in another order; likeliest only when told', (
+    tester,
+  ) async {
+    await pump(tester);
+    expect(find.text('Training order'), findsOneWidget);
+    expect(find.text('Most likely first'), findsNothing);
+    await tester.tap(find.text('Course order'));
+    await tester.pumpAndSettle();
+    expect(trainer.order, LineOrder.course);
+  });
+
+  testWidgets('a line is read from its menu, in the builder or here', (
+    tester,
+  ) async {
+    await pump(tester);
+    await tester.tap(find.byTooltip('Actions').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Read'));
+    await tester.pumpAndSettle();
+    expect(reads.single.place, ReadIn.moves);
+    expect(reads.single.ref, fixture.ref);
+    expect(reads.single.sans, ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4']);
+    await tester.tap(find.byTooltip('Actions').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Open in Builder'));
+    await tester.pumpAndSettle();
+    expect(reads.last.place, ReadIn.builder);
+  });
+
+  testWidgets('a mistake puts its position on the board', (tester) async {
+    files.attempts.add(
+      Attempt(
+        key: (source: fixture.ref.path, id: 'line_ZTQgZTUgTmYzIE5jNiBCYz'),
+        ply: 4,
+        fen: const Fen(
+          'r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3',
+        ),
+        played: 'd4',
+        expected: 'Bc4',
+        correct: false,
+        phase: AttemptPhase.drilling,
+        at: DateTime.now(),
+      ),
+    );
+    await pump(tester);
+    await tester.tap(find.text('Mistakes · 1'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Book: 3.Bc4  ·  You: 3.d4'));
+    await tester.pumpAndSettle();
+    expect(reads.single.place, ReadIn.board);
+    expect(reads.single.sans, ['e4', 'e5', 'Nf3', 'Nc6']);
+    expect(find.text('Book: 3.Bc4  ·  You: 3.d4'), findsOneWidget);
   });
 }

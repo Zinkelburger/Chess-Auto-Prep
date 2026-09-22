@@ -1,5 +1,6 @@
 import '../../chess/pgn/move_label.dart';
 import '../../chess/training/drill.dart';
+import '../../chess/training/line_order.dart';
 import '../../chess/training/schedule.dart';
 import '../../chess/training/sitting.dart';
 import '../../storage/training_store.dart';
@@ -42,6 +43,12 @@ String prompt(Lesson lesson) {
       clean ? 'Line complete!' : 'Line complete — with mistakes.',
   };
 }
+
+String orderName(LineOrder order) => switch (order) {
+  LineOrder.training => 'Training order',
+  LineOrder.course => 'Course order',
+  LineOrder.likely => 'Most likely first',
+};
 
 /// Why a sitting ended, in the old app's words.
 String sittingOver(SittingKind kind) => switch (kind) {

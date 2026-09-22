@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../chess/pgn/move_label.dart';
+import '../../chess/training/line_order.dart';
 import '../../chess/training/records.dart';
 import '../../chess/training/schedule.dart';
 import '../../chess/training/sitting.dart';
@@ -18,12 +19,24 @@ import 'trainer_words.dart';
 
 /// The trainer between sittings: the scope, where its lines stand, Review
 /// and Learn, and the lines themselves — or the wrong answers given in
-/// them — searchable.
+/// them — searchable. A line can be sent to be read ([onRead]); a mistake
+/// sends the board to the position it was made in.
 class LineList extends StatefulWidget {
-  const LineList({super.key, required this.trainer, required this.ready});
+  const LineList({
+    super.key,
+    required this.trainer,
+    required this.ready,
+    required this.onRead,
+    required this.offerBuilder,
+  });
 
   final Trainer trainer;
   final TrainerReady ready;
+  final ValueChanged<LineToRead> onRead;
+
+  /// Whether a row offers `Open in Builder`: not while the builder is the
+  /// mode, where reading the line is the same thing.
+  final bool offerBuilder;
 
   @override
   State<LineList> createState() => _LineListState();
@@ -91,6 +104,10 @@ class _LineListState extends State<LineList> {
               _Problem(problem),
             const SizedBox(height: Space.m),
             _toolbar(progress),
+            if (_showing == _Showing.lines && _orders.length > 1) ...[
+              const SizedBox(height: Space.s),
+              _orderPicker(),
+            ],
             const SizedBox(height: Space.s),
             Expanded(
               child: _showing == _Showing.lines
@@ -128,16 +145,52 @@ class _LineListState extends State<LineList> {
     ],
   );
 
+  /// The orders the lines can be put in: the likeliest first only when the
+  /// file says how likely they are.
+  List<LineOrder> get _orders => [
+    for (final order in LineOrder.values)
+      if (canOrder(widget.ready.lines, order)) order,
+  ];
+
+  Widget _orderPicker() => Align(
+    alignment: Alignment.centerLeft,
+    child: SegmentedButton<LineOrder>(
+      segments: [
+        for (final order in _orders)
+          ButtonSegment(value: order, label: Text(orderName(order))),
+      ],
+      selected: {
+        _orders.contains(widget.trainer.order)
+            ? widget.trainer.order
+            : LineOrder.training,
+      },
+      showSelectedIcon: false,
+      style: const ButtonStyle(visualDensity: VisualDensity.compact),
+      onSelectionChanged: (s) => widget.trainer.order = s.single,
+    ),
+  );
+
   Widget _lines(TrainingProgress progress) {
+    final order = canOrder(widget.ready.lines, widget.trainer.order)
+        ? widget.trainer.order
+        : LineOrder.training;
+    final all = ordered(
+      widget.ready.lines,
+      order,
+      reviews: progress.reviews,
+      now: progress.now,
+    );
     final lines = [
-      for (final line in widget.ready.lines)
+      for (final line in all)
         if (_query.isEmpty || _searchText(line).contains(_query)) line,
     ];
     if (lines.isEmpty) {
       return _Muted(_query.isEmpty ? 'No lines here yet.' : 'No line matches.');
     }
     final many = widget.ready.chapters.length > 1;
-    final departs = _departures(widget.ready.lines);
+    final departs = _departures(all);
+    void read(TrainingLine line, ReadIn place) =>
+        widget.onRead(widget.ready.toRead(line, place));
     return ListView.builder(
       itemCount: lines.length,
       itemBuilder: (context, index) => _LineRow(
@@ -145,18 +198,20 @@ class _LineListState extends State<LineList> {
         departs: departs[lines[index].key] ?? 0,
         progress: progress,
         showChapter: many,
+        offerBuilder: widget.offerBuilder,
         onTrain: () => widget.trainer.trainLine(lines[index]),
+        onRead: (place) => read(lines[index], place),
         onChange: (write, doing) => unawaited(_change(write, doing: doing)),
       ),
     );
   }
 
   Widget _mistakes(TrainingProgress progress) {
-    final names = {for (final l in widget.ready.lines) l.key: l.name};
+    final ready = widget.ready;
     final rows = [
       for (final m in progress.mistakes)
         if (_query.isEmpty ||
-            '${names[m.key] ?? ''} ${m.played} ${m.expected}'
+            '${ready.lineOf(m.key)?.name ?? ''} ${m.played} ${m.expected}'
                 .toLowerCase()
                 .contains(_query))
           m,
@@ -164,14 +219,28 @@ class _LineListState extends State<LineList> {
     if (rows.isEmpty) return const _Muted('No recorded mistakes.');
     return ListView.builder(
       itemCount: rows.length,
-      itemBuilder: (context, index) =>
-          _MistakeRow(mistake: rows[index], line: names[rows[index].key]),
+      itemBuilder: (context, index) {
+        final mistake = rows[index];
+        final line = ready.lineOf(mistake.key);
+        return _MistakeRow(
+          mistake: mistake,
+          line: line?.name,
+          // The position the move was asked in, on the board; the list
+          // stays, so the next mistake is one click away.
+          onShow: line == null || mistake.ply > line.moves.length
+              ? null
+              : () => widget.onRead(
+                  ready.toRead(line, ReadIn.board, ply: mistake.ply),
+                ),
+        );
+      },
     );
   }
 
   /// For each line, how many of its first moves the line above it in its
   /// chapter plays too: a row shows its line from where it leaves, since
-  /// lines of one chapter mostly share their opening.
+  /// lines of one chapter mostly share their opening. [lines] is the list
+  /// in the order it is shown.
   static Map<LineKey, int> _departures(List<TrainingLine> lines) {
     final shared = <LineKey, int>{};
     for (var i = 1; i < lines.length; i++) {
@@ -293,7 +362,9 @@ class _LineRow extends StatelessWidget {
     required this.departs,
     required this.progress,
     required this.showChapter,
+    required this.offerBuilder,
     required this.onTrain,
+    required this.onRead,
     required this.onChange,
   });
 
@@ -303,7 +374,9 @@ class _LineRow extends StatelessWidget {
   final int departs;
   final TrainingProgress progress;
   final bool showChapter;
+  final bool offerBuilder;
   final VoidCallback onTrain;
+  final ValueChanged<ReadIn> onRead;
   final void Function(Future<ProgressWrite> write, String doing) onChange;
 
   @override
@@ -315,7 +388,8 @@ class _LineRow extends StatelessWidget {
         ? numberedMoves(line.moves)
         : '…${numberedMoves(line.moves.skip(departs))}';
     return InkWell(
-      onTap: status == LineStatus.game ? null : onTrain,
+      // A game is there to be read; a line, to be trained.
+      onTap: status == LineStatus.game ? () => onRead(ReadIn.moves) : onTrain,
       child: SizedBox(
         height: trainRowHeight,
         child: Row(
@@ -344,7 +418,7 @@ class _LineRow extends StatelessWidget {
                     )
                   : text.bodySmall,
             ),
-            if (status != LineStatus.game) _menu(status),
+            _menu(status),
           ],
         ),
       ),
@@ -353,14 +427,22 @@ class _LineRow extends StatelessWidget {
 }
 
 extension on _LineRow {
-  /// What can be done to the line: train it alone, put it on the schedule or
-  /// take it off, leave it out of training or bring it back.
+  /// What can be done to the line: train it alone, read it, put it on the
+  /// schedule or take it off, leave it out of training or bring it back. A
+  /// game can only be read.
   Widget _menu(LineStatus status) {
     const doing = 'save training progress';
     final trained = status == LineStatus.due || status == LineStatus.learned;
+    final reads = [
+      rowAction('Read', () => onRead(ReadIn.moves), busy: false),
+      if (offerBuilder)
+        rowAction('Open in Builder', () => onRead(ReadIn.builder), busy: false),
+    ];
+    if (status == LineStatus.game) return RowActions(children: reads);
     return RowActions(
       children: [
         rowAction('Train this line', onTrain, busy: false),
+        ...reads,
         if (trained)
           rowAction(
             'Forget this line',
@@ -389,41 +471,52 @@ extension on _LineRow {
 }
 
 class _MistakeRow extends StatelessWidget {
-  const _MistakeRow({required this.mistake, required this.line});
+  const _MistakeRow({
+    required this.mistake,
+    required this.line,
+    required this.onShow,
+  });
 
   final Attempt mistake;
   final String? line;
+
+  /// Puts the position the mistake was made in on the board; null for a
+  /// line the scope no longer has.
+  final VoidCallback? onShow;
 
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final number = _number(mistake);
-    return SizedBox(
-      height: trainRowHeight,
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Book: $number${mistake.expected}  ·  '
-                  'You: $number${mistake.played}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  line ?? 'A line no longer in this scope',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: text.bodySmall,
-                ),
-              ],
+    return InkWell(
+      onTap: onShow,
+      child: SizedBox(
+        height: trainRowHeight,
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Book: $number${mistake.expected}  ·  '
+                    'You: $number${mistake.played}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    line ?? 'A line no longer in this scope',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: text.bodySmall,
+                  ),
+                ],
+              ),
             ),
-          ),
-          Text(relativeTime(mistake.at.toLocal()), style: text.bodySmall),
-        ],
+            Text(relativeTime(mistake.at.toLocal()), style: text.bodySmall),
+          ],
+        ),
       ),
     );
   }

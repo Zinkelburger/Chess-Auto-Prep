@@ -206,6 +206,16 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     );
   }
 
+  /// A line the Train tab sent to be read: its chapter on the board at the
+  /// position, the builder first when it asked for it, and the Moves tab up
+  /// unless only the board was to move.
+  Future<void> _readLine(LineToRead line) async {
+    if (line.place == ReadIn.builder) _requests.switchTo(Mode.repertoires);
+    final result = await _requests.openAt(line.ref, line.sans);
+    if (!mounted || result is! RequestDone) return;
+    if (line.place != ReadIn.board) _tabs.show(WorkspaceTab.moves);
+  }
+
   /// Space and ↓ are the puzzle's while one is on the board, and the
   /// document's otherwise.
   void _space() {
@@ -483,7 +493,11 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         ),
       ),
       boardClaim: widget.lineTrainer.board,
-      trainTab: (_) => TrainPane(trainer: widget.lineTrainer),
+      trainTab: (_) => TrainPane(
+        trainer: widget.lineTrainer,
+        onRead: (line) => unawaited(_readLine(line)),
+        offerBuilder: _requests.mode != Mode.repertoires,
+      ),
     ),
   };
 }
