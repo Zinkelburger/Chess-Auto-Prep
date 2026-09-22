@@ -216,6 +216,53 @@ void main() {
     );
   });
 
+  test('an 8-column review with commas in its path moves whole', () async {
+    // Written before the quoting migration: no counts, no exclusion, and
+    // a path whose commas spilled into the columns after it.
+    for (final folder in ['KID, Classical', 'KID, Classical, Mar del Plata']) {
+      final comma = fixture.ref('repertoires/$folder/Main.pgn');
+      final eight =
+          '${comma.path},line_8,Eight,2.5,6,2026-09-20T00:00:00Z,good,'
+          '2026-09-14T00:00:00Z';
+      write(_reviews, '$_reviewsHeader\n$eight\n${_review(benko.path)}\n');
+      final renamed = fixture.ref('repertoires/KID Classical/Main.pgn');
+      expect(
+        (await records.repoint(comma, renamed) as Repointed).rowsChanged,
+        1,
+        reason: folder,
+      );
+      expect(
+        read(_reviews),
+        '$_reviewsHeader\n${eight.replaceFirst(comma.path, renamed.path)}\n'
+        '${_review(benko.path)}\n',
+        reason: folder,
+      );
+    }
+  });
+
+  test('an 8-column review with no review time yet moves whole', () async {
+    final eight = '${kid.path},line_8,Eight,2.5,0,,,';
+    write(_reviews, '$_reviewsHeader\n$eight\n');
+    final renamed = fixture.ref('repertoires/KID/Classical.pgn');
+    expect((await records.repoint(kid, renamed) as Repointed).rowsChanged, 1);
+    expect(
+      read(_reviews),
+      '$_reviewsHeader\n${eight.replaceFirst(kid.path, renamed.path)}\n',
+    );
+  });
+
+  test('a review row that does not read as one is refused', () async {
+    final wrong = '${kid.path},line_1,Mainline,easy,6,,good,,3,1,false';
+    final before = '$_reviewsHeader\n$wrong\n';
+    write(_reviews, before);
+    final result = await records.repoint(
+      kid,
+      fixture.ref('repertoires/KID/Classical.pgn'),
+    );
+    expect(result, isA<Malformed>());
+    expect(read(_reviews), before);
+  });
+
   test('a quote inside an unquoted path is a character, not a field', () async {
     final quoted = fixture.ref('repertoires/KID/My "best line.pgn');
     write(

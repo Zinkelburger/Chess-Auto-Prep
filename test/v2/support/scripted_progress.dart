@@ -12,6 +12,9 @@ final class ScriptedProgress implements ProgressFiles {
   final Map<LineKey, Review> reviews;
   final streaks = <StreakKey, MoveStreak>{};
   final history = <HistoryRow>[];
+
+  /// Every review change a write landed, in order.
+  final reviewChanges = <Change<Review>>[];
   final attempts = <Attempt>[];
 
   /// What [read] answers instead of the rows, when set.
@@ -51,6 +54,7 @@ final class ScriptedProgress implements ProgressFiles {
     final scripted = nextWrite;
     nextWrite = null;
     if (scripted != null) return scripted;
+    reviewChanges.addAll(reviews);
     for (final change in reviews) {
       this.reviews[change.after.key] = change.after;
     }

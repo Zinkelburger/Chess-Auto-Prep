@@ -287,7 +287,8 @@ _Plan _planRecords(
     }
     final text = cells == null
         ? record.source
-        : _rewritten(record, cells, from, to);
+        : _rewritten(record, cells, name, width, from, to);
+    if (text == null) return _Refused(Malformed(name, record.line));
     if (text != record.source) rows++;
     out
       ..write(text)
@@ -302,15 +303,30 @@ _Plan _planRecords(
   );
 }
 
-String _rewritten(
+/// The record with its chapter moved, or null when the row written would
+/// not read back as the row meant — a row corrupted, so the move is refused
+/// before any file is replaced.
+String? _rewritten(
   CsvRecord record,
   List<String> cells,
+  String name,
+  int width,
   String from,
   String to,
 ) {
   final moved = _moved(cells.first, from, to);
   if (moved == null) return record.source;
-  return encodeCsvRecord([moved, ...cells.skip(1)]);
+  final meant = [moved, ...cells.skip(1)];
+  final text = encodeCsvRecord(meant);
+  if (readCsvRecords(text) case CsvParsed(records: [final written])) {
+    final read = dataCells(written, rowWidth(name, written, width));
+    if (read != null &&
+        read.length == meant.length &&
+        Iterable<int>.generate(read.length).every((i) => read[i] == meant[i])) {
+      return text;
+    }
+  }
+  return null;
 }
 
 /// The old app's matching rule, which this one must agree with exactly.

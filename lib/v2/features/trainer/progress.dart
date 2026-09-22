@@ -46,8 +46,10 @@ class TrainingProgress extends ChangeNotifier {
   final List<Attempt> _mistakes;
   Future<void> _writes = Future.value();
 
-  /// Line outcomes a write did not finish, for [retry].
-  final _unsaved = <LineKey, _Outcome>{};
+  /// Line outcomes a write did not finish, oldest first, for [retry]. A
+  /// line rated again while its last outcome is unsaved queues the new one
+  /// behind it rather than dropping either.
+  final _unsaved = <LineKey, List<_Outcome>>{};
   bool _stale = false;
   bool _disposed = false;
 
@@ -102,15 +104,20 @@ class TrainingProgress extends ChangeNotifier {
   /// Writes a finished line's rating, with the streaks its answers changed
   /// and a history row.
   ///
+  /// An earlier outcome of the line that did not land goes first. When it
+  /// fails again, this one is worked out on top of it and queued behind it,
+  /// so [retry] writes both and the newer rating is never dropped.
   Future<ProgressWrite> finished(
     TrainingLine line,
     Rating rating, {
     required bool clean,
-  }) => _serially(
-    () => _afterUnsaved([
-      line,
-    ], () => _land(_outcome(line, rating, clean: clean))),
-  );
+  }) => _serially(() async {
+    final earlier = await _landUnsaved(line);
+    final outcome = _outcome(line, rating, clean: clean);
+    if (earlier is ProgressWritten) return _land(outcome);
+    _unsaved[line.key]!.add(outcome);
+    return earlier;
+  });
 
   /// Runs [write] once every outcome of [lines] that did not all land —
   /// the line restarted, skipped or marked after a failed write — has
@@ -121,28 +128,50 @@ class TrainingProgress extends ChangeNotifier {
     Future<ProgressWrite> Function() write,
   ) async {
     for (final line in lines) {
-      final earlier = _unsaved[line.key];
-      if (earlier == null) continue;
-      final landed = await _land(earlier);
+      final landed = await _landUnsaved(line);
       if (landed is! ProgressWritten) return landed;
     }
     return write();
   }
 
-  /// Writes again, row for row, the outcome of [line] that did not all reach
-  /// the files. The files are replaced one at a time, so some of its rows may
-  /// be there already; working the outcome out afresh — a new time, a new
-  /// spread — would make those rows look like somebody else's.
-  Future<ProgressWrite> retry(TrainingLine line) => _serially(() {
-    final outcome = _unsaved[line.key];
-    if (outcome == null) return Future.value(const ProgressWritten());
-    return _land(outcome);
-  });
+  /// Writes again, row for row, the outcomes of [line] that did not all
+  /// reach the files. The files are replaced one at a time, so some of their
+  /// rows may be there already; working an outcome out afresh — a new time,
+  /// a new spread — would make those rows look like somebody else's.
+  Future<ProgressWrite> retry(TrainingLine line) =>
+      _serially(() => _landUnsaved(line));
 
+  /// Lands the unsaved outcomes of [line] in the order they were worked
+  /// out, each naming the rows the one before it leaves, and stops at the
+  /// first that fails.
+  Future<ProgressWrite> _landUnsaved(TrainingLine line) async {
+    final queue = _unsaved[line.key];
+    while (queue != null && queue.isNotEmpty) {
+      final result = await _writeOutcome(queue.first);
+      if (result is! ProgressWritten) return result;
+      queue.removeAt(0);
+    }
+    _unsaved.remove(line.key);
+    return const ProgressWritten();
+  }
+
+  /// The rows a rating of [line] writes, worked out on top of whatever of
+  /// the line is still waiting in [_unsaved].
   _Outcome _outcome(TrainingLine line, Rating rating, {required bool clean}) {
+    final pending = _unsaved[line.key] ?? const [];
+    final before = pending.isEmpty
+        ? _reviews[line.key]
+        : pending.last.review.after;
+    final streaksBefore = {
+      for (final MapEntry(:key, :value) in _saved.entries)
+        if (key.line == line.key) key: value,
+      for (final outcome in pending)
+        for (final change in outcome.streaks)
+          (line: line.key, ply: change.after.ply): change.after,
+    };
     final after = asWritten(
       rated(
-        reviewOf(line).copyWith(lineName: line.name),
+        (before ?? reviewOf(line)).copyWith(lineName: line.name),
         rating,
         now: now,
         clean: clean,
@@ -150,11 +179,11 @@ class TrainingProgress extends ChangeNotifier {
       ),
     );
     return (
-      review: (before: _reviews[line.key], after: after),
+      review: (before: before, after: after),
       streaks: [
         for (final MapEntry(:key, :value) in _streaks.entries)
-          if (key.line == line.key && _saved[key] != value)
-            (before: _saved[key], after: value),
+          if (key.line == line.key && streaksBefore[key] != value)
+            (before: streaksBefore[key], after: value),
       ],
       history: HistoryRow(
         key: line.key,
@@ -166,20 +195,20 @@ class TrainingProgress extends ChangeNotifier {
     );
   }
 
+  /// Writes [outcome], keeping it for [retry] when it does not land.
   Future<ProgressWrite> _land(_Outcome outcome) async {
-    final key = outcome.review.after.key;
-    final result = await _write(
-      reviews: [outcome.review],
-      streaks: outcome.streaks,
-      history: [outcome.history],
-    );
-    if (result is ProgressWritten) {
-      _unsaved.remove(key);
-    } else {
-      _unsaved[key] = outcome;
+    final result = await _writeOutcome(outcome);
+    if (result is! ProgressWritten) {
+      _unsaved[outcome.review.after.key] = [outcome];
     }
     return result;
   }
+
+  Future<ProgressWrite> _writeOutcome(_Outcome outcome) => _write(
+    reviews: [outcome.review],
+    streaks: outcome.streaks,
+    history: [outcome.history],
+  );
 
   /// Takes [line] out of every queue, or puts it back.
   Future<ProgressWrite> setExcluded(

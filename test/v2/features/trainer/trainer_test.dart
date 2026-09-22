@@ -533,6 +533,44 @@ void main() {
     });
   });
 
+  test('a rating given while the last one is still unsaved is kept', () {
+    fakeAsync((async) {
+      final ruy = (source: source(), id: 'line_ZTQgZTUgTmYzIE5jNiBCYj');
+      files.reviews[ruy] = Review(
+        key: ruy,
+        lineName: 'Ruy',
+        intervalDays: 4,
+        lastRating: 'good',
+        due: _now,
+      );
+      final trainer = ready(async);
+      trainer.review();
+      final lesson = trainer.lesson!;
+      for (final uci in ['e2e4', 'g1f3', 'f1b5']) {
+        play(async, lesson, uci);
+      }
+      files.nextWrite = const ProgressFailed('disk full');
+      lesson.rate(Rating.hard);
+      async.flushMicrotasks();
+      lesson.restart();
+      for (final uci in ['e2e4', 'g1f3', 'f1b5']) {
+        play(async, lesson, uci);
+      }
+      // The earlier rating fails again on the way to the new one.
+      files.nextWrite = const ProgressFailed('disk full');
+      lesson.rate(Rating.easy);
+      async.flushMicrotasks();
+      expect((lesson.state as LineNotSaved).rating, Rating.easy);
+      lesson.retry();
+      async.flushMicrotasks();
+      expect(files.history.map((h) => h.rating), ['hard', 'easy']);
+      expect(files.reviews[ruy]!.lastRating, 'easy');
+      final [first, second] = files.reviewChanges;
+      expect(second.before, first.after, reason: 'easy is rated on hard');
+      expect(readyState(trainer).progress.stale, isFalse);
+    });
+  });
+
   test('reading the progress again ends the sitting over the old copy', () {
     fakeAsync((async) {
       final trainer = ready(async)..learn();

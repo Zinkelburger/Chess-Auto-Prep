@@ -42,22 +42,26 @@ int? headerWidth(List<CsvRecord> records) {
 /// How many columns a data [record] of the CSV [file] should have, given
 /// the width its header declares.
 ///
-/// A review row says for itself: it ends in `true` or `false` when it has
-/// the exclusion column, which is how the old app tells an 11-column row
-/// from a 10-column one whatever the header says. Every other row has the
-/// header's width.
+/// A review row says for itself, whatever the header says — a file can hold
+/// rows of all three widths under one header. It ends in `true` or `false`
+/// when it has the exclusion column (11), in the fail count when it has the
+/// pass and fail counts (10), and otherwise in the time it was last reviewed,
+/// never a bare number (8). Every other row has the header's width.
 int? rowWidth(String file, CsvRecord record, int? header) {
   if (file != reviewsFile) return header;
   final last = record.fields.last;
-  return last == 'true' || last == 'false' ? 11 : 10;
+  if (last == 'true' || last == 'false') return 11;
+  return int.tryParse(last) != null ? 10 : 8;
 }
 
-/// Whether [cells] of the CSV [file] are a whole row: a review row may be
-/// any of its three widths.
-bool isWholeRow(String file, List<String> cells, int? header) =>
-    file == reviewsFile
-    ? const {8, 10, 11}.contains(cells.length)
-    : cells.length == header;
+/// Whether [cells] of the CSV [file] are a whole row this app can read: a
+/// review or streak row must decode, whatever its width, so a width guessed
+/// wrongly is refused rather than written back.
+bool isWholeRow(String file, List<String> cells, int? header) => switch (file) {
+  reviewsFile => decodeReview(cells) != null,
+  streaksFile => decodeStreak(cells) != null,
+  _ => cells.length == header,
+};
 
 /// The header the file [file] is written with.
 String headerOf(String file) => switch (file) {
