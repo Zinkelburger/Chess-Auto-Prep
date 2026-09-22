@@ -4,21 +4,22 @@ import 'package:flutter/material.dart';
 import 'listening_state.dart';
 import 'theme.dart';
 
-/// One thing a pane can show, by a name that never changes: what the tab
-/// is called and whether it can be put away.
+/// One thing a pane can show, by an identity that never changes — an enum
+/// value, so the pane's body can switch over every tab — what the tab is
+/// called and whether it can be put away.
 ///
 /// A pinned tab is the pane's first thing, always open and first in the
 /// row. The others open, close and change places like a browser's tabs.
 @immutable
-final class PaneTab {
+final class PaneTab<K extends Object> {
   const PaneTab(this.id, this.title, {this.pinned = false});
 
-  final String id;
+  final K id;
   final String title;
   final bool pinned;
 
   @override
-  bool operator ==(Object other) => other is PaneTab && other.id == id;
+  bool operator ==(Object other) => other is PaneTab<K> && other.id == id;
 
   @override
   int get hashCode => id.hashCode;
@@ -33,8 +34,8 @@ final class PaneTab {
 /// Closing the tab that is up brings its left neighbour forward, as the
 /// old viewer did; a pinned tab cannot be closed or moved, and nothing can
 /// be moved in front of it.
-class PaneTabs extends ChangeNotifier {
-  PaneTabs(this.tabs, {Iterable<String> open = const [], String? selected})
+class PaneTabs<K extends Object> extends ChangeNotifier {
+  PaneTabs(this.tabs, {Iterable<K> open = const [], K? selected})
     : assert(tabs.isNotEmpty, 'a pane with no tabs has nothing to show') {
     for (final tab in tabs) {
       if (tab.pinned) _open.add(tab.id);
@@ -49,34 +50,34 @@ class PaneTabs extends ChangeNotifier {
   }
 
   /// Every tab the pane can show, in the order they are offered.
-  final List<PaneTab> tabs;
+  final List<PaneTab<K>> tabs;
 
-  final List<String> _open = [];
-  late String _selected;
+  final List<K> _open = [];
+  late K _selected;
 
   /// The open tabs, left to right.
-  List<String> get open => List.unmodifiable(_open);
+  List<K> get open => List.unmodifiable(_open);
 
   /// The one that is up.
-  String get selected => _selected;
+  K get selected => _selected;
 
-  PaneTab get current => tabOf(_selected);
+  PaneTab<K> get current => tabOf(_selected);
 
   /// The tabs that are not open, in their offered order: what a menu can
   /// offer to show.
-  List<PaneTab> get closed => [
+  List<PaneTab<K>> get closed => [
     for (final tab in tabs)
       if (!_open.contains(tab.id)) tab,
   ];
 
-  PaneTab tabOf(String id) => tabs.firstWhere((tab) => tab.id == id);
+  PaneTab<K> tabOf(K id) => tabs.firstWhere((tab) => tab.id == id);
 
-  bool isOpen(String id) => _open.contains(id);
+  bool isOpen(K id) => _open.contains(id);
 
-  bool _known(String id) => tabs.any((tab) => tab.id == id);
+  bool _known(K id) => tabs.any((tab) => tab.id == id);
 
   /// Brings [id] up, opening it at the right end first if it was closed.
-  void show(String id) {
+  void show(K id) {
     if (!_known(id)) return;
     final wasOpen = _open.contains(id);
     if (!wasOpen) _open.add(id);
@@ -88,19 +89,20 @@ class PaneTabs extends ChangeNotifier {
   /// Opens [id] at the right end without bringing it up, for something
   /// that should be there when the user looks but must not take the
   /// screen from what they are reading.
-  void openInBackground(String id) {
+  void openInBackground(K id) {
     if (!_known(id) || _open.contains(id)) return;
     _open.add(id);
     notifyListeners();
   }
 
   /// Puts [id] away. When it was up, its left neighbour comes forward.
-  void close(String id) {
+  void close(K id) {
     final position = _open.indexOf(id);
     if (position < 0 || tabOf(id).pinned) return;
     _open.removeAt(position);
-    if (_selected == id)
+    if (_selected == id) {
       _selected = _open[(position - 1).clamp(0, _open.length - 1)];
+    }
     notifyListeners();
   }
 
@@ -121,7 +123,7 @@ class PaneTabs extends ChangeNotifier {
 
   /// Puts [id] in front of [before]. A pinned tab stays where it is, and
   /// nothing goes in front of it.
-  void move(String id, {required String before}) {
+  void move(K id, {required K before}) {
     if (id == before || !_open.contains(id) || !_open.contains(before)) return;
     if (tabOf(id).pinned || tabOf(before).pinned) return;
     _open.remove(id);
@@ -143,7 +145,7 @@ class PaneTabs extends ChangeNotifier {
 /// row is left out while only one tab is open: a row with one word in it
 /// says nothing the pane does not. [trailing] is for the one control that
 /// belongs to the chosen tab and nowhere else.
-class PaneTabStrip extends StatefulWidget {
+class PaneTabStrip<K extends Object> extends StatefulWidget {
   const PaneTabStrip({
     super.key,
     required this.tabs,
@@ -151,7 +153,7 @@ class PaneTabStrip extends StatefulWidget {
     this.closeShortcut,
   });
 
-  final PaneTabs tabs;
+  final PaneTabs<K> tabs;
   final Widget? trailing;
 
   /// The key the pane binds to closing the tab that is up, in a tooltip's
@@ -159,17 +161,17 @@ class PaneTabStrip extends StatefulWidget {
   final String? closeShortcut;
 
   @override
-  State<PaneTabStrip> createState() => _PaneTabStripState();
+  State<PaneTabStrip<K>> createState() => _PaneTabStripState<K>();
 }
 
-class _PaneTabStripState extends State<PaneTabStrip>
-    with ListeningState<PaneTabStrip> {
-  final _keys = <String, GlobalKey>{};
+class _PaneTabStripState<K extends Object> extends State<PaneTabStrip<K>>
+    with ListeningState<PaneTabStrip<K>> {
+  final _keys = <K, GlobalKey>{};
   final _scroll = ScrollController();
-  String? _shown;
+  K? _shown;
 
   @override
-  Listenable listenableOf(PaneTabStrip widget) => widget.tabs;
+  Listenable listenableOf(PaneTabStrip<K> widget) => widget.tabs;
 
   @override
   void changed() => setState(() {});
@@ -181,7 +183,7 @@ class _PaneTabStripState extends State<PaneTabStrip>
   }
 
   /// After the frame that drew the tab that came up, scroll it into view.
-  void _reveal(String id) {
+  void _reveal(K id) {
     if (_shown == id) return;
     _shown = id;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -232,7 +234,7 @@ class _PaneTabStripState extends State<PaneTabStrip>
                   child: Row(
                     children: [
                       for (final id in tabs.open)
-                        _TabSlot(
+                        _TabSlot<K>(
                           key: _keys.putIfAbsent(id, GlobalKey.new),
                           tabs: tabs,
                           tab: tabs.tabOf(id),
@@ -253,7 +255,7 @@ class _PaneTabStripState extends State<PaneTabStrip>
 
 /// One tab in the row, a drop target for another tab and the source of its
 /// own drag. Dropping on it puts the dragged tab in front of it.
-class _TabSlot extends StatelessWidget {
+class _TabSlot<K extends Object> extends StatelessWidget {
   const _TabSlot({
     super.key,
     required this.tabs,
@@ -261,18 +263,18 @@ class _TabSlot extends StatelessWidget {
     required this.closeShortcut,
   });
 
-  final PaneTabs tabs;
-  final PaneTab tab;
+  final PaneTabs<K> tabs;
+  final PaneTab<K> tab;
   final String? closeShortcut;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return DragTarget<String>(
+    return DragTarget<K>(
       onWillAcceptWithDetails: (details) =>
           !tab.pinned && details.data != tab.id,
       onAcceptWithDetails: (details) => tabs.move(details.data, before: tab.id),
-      builder: (context, candidates, _) => Draggable<String>(
+      builder: (context, candidates, _) => Draggable<K>(
         data: tab.id,
         maxSimultaneousDrags: tab.pinned ? 0 : 1,
         feedback: Material(
@@ -319,7 +321,7 @@ class _Tab extends StatefulWidget {
     required this.onClose,
   });
 
-  final PaneTab tab;
+  final PaneTab<Object> tab;
   final bool selected;
   final String? closeShortcut;
   final VoidCallback onTap;

@@ -31,7 +31,7 @@ class WorkspaceKeys extends StatelessWidget {
   final DocumentSession session;
   final EngineAnalysis analysis;
   final ValueNotifier<bool> editing;
-  final PaneTabs tabs;
+  final PaneTabs<Object> tabs;
 
   /// The window's own keys, which the shell binds: the list pane, the
   /// actions, opening a file.

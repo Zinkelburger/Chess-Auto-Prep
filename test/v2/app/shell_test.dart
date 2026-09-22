@@ -2,6 +2,8 @@ import 'package:chess_auto_prep/v2/app/exit_guard.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/diagnostics/log.dart';
 import 'package:chess_auto_prep/v2/app/shell.dart';
+import 'package:chess_auto_prep/v2/app/window_input.dart';
+import 'package:chess_auto_prep/v2/app/workspace_requests.dart';
 import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/v2/features/library/chapter_outline.dart';
 import 'package:chess_auto_prep/v2/net/lichess_studies.dart';
@@ -9,6 +11,7 @@ import 'package:chess_auto_prep/v2/features/library/library.dart';
 import 'package:chess_auto_prep/v2/features/library/library_panel.dart';
 import 'package:chess_auto_prep/v2/features/library/outline_panel.dart';
 import 'package:chess_auto_prep/v2/features/pgn_viewer/pgn_viewer.dart';
+import 'package:chess_auto_prep/v2/features/pgn_viewer/pgn_viewer_panel.dart';
 import 'package:chess_auto_prep/v2/features/study/studies.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/document_ref.dart';
@@ -57,6 +60,7 @@ void main() {
   late EngineAnalysis analysis;
   late Replies replies;
   late Explorer explorer;
+  late ScriptedExplorerApi lichess;
   late FillGaps fill;
   late ChapterOutline outline;
   late PgnViewer viewer;
@@ -149,21 +153,35 @@ void main() {
       ),
     );
     addTearDown(replies.dispose);
+    lichess = ScriptedExplorerApi();
     explorer = Explorer(
       session: session,
       settings: settings,
-      lichess: ScriptedExplorerApi(),
+      lichess: lichess,
       book: ScriptedBook(),
       documents: store,
       collections: explorerCollections,
       debounce: Duration.zero,
     );
     addTearDown(explorer.dispose);
+    final navigator = GlobalKey<NavigatorState>();
+    final requests = WorkspaceRequests(
+      session: session,
+      library: library,
+      studies: studies,
+      viewer: viewer,
+      explorer: explorer,
+      leaving: leaving,
+      input: DialogInput(navigator),
+    );
+    addTearDown(requests.dispose);
     await tester.binding.setSurfaceSize(const Size(1400, 800));
     await tester.pumpWidget(
       MaterialApp(
+        navigatorKey: navigator,
         theme: darkTheme(),
         home: Shell(
+          requests: requests,
           library: library,
           studies: studies,
           viewer: viewer,
@@ -177,7 +195,6 @@ void main() {
           replies: replies,
           explorer: explorer,
           fill: fill,
-          leaving: leaving,
         ),
       ),
     );
@@ -341,6 +358,48 @@ void main() {
     await tester.pumpAndSettle();
     expect(session.source, isNull);
     expect(find.text('Recent files'), findsOneWidget);
+  });
+
+  testWidgets('a game the explorer lists opens in the PGN Viewer at the '
+      'ply the explorer was showing', (tester) async {
+    await pump(tester);
+    await tester.tap(inLibrary(find.text('Main')).last); // KID
+    await tester.pumpAndSettle();
+    session.forward();
+    final ply = explorer.ply;
+    expect(ply, greaterThan(0));
+    await tester.tap(find.text('Explorer'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('Carlsen, M'));
+    await tester.pumpAndSettle();
+
+    final opened = session.source!;
+    expect(opened.path, startsWith('$explorerCollections/explorer games/'));
+    expect(opened.path, contains('abcd1234'));
+    expect(session.game, 0);
+    expect(
+      session.cursor,
+      NodePath.of(List.filled(ply, 0)),
+      reason: 'at the ply the explorer was showing',
+    );
+    expect(find.byType(PgnViewerPanel), findsOneWidget);
+    expect(find.byType(LibraryPanel), findsNothing);
+    expect(recent.saved.last.first, opened.path, reason: 'remembered');
+  });
+
+  testWidgets('an explorer game that cannot be fetched is said in the bar '
+      'and nothing moves', (tester) async {
+    await pump(tester);
+    await tester.tap(inLibrary(find.text('Main')).last); // KID
+    await tester.pumpAndSettle();
+    lichess.pgn = null;
+    await tester.tap(find.text('Explorer'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('Carlsen, M'));
+    await tester.pumpAndSettle();
+    expect(find.text('Could not fetch that game.'), findsOneWidget);
+    expect(session.source, kid);
+    expect(find.byType(LibraryPanel), findsOneWidget);
   });
 
   testWidgets('Ctrl+Z reaches the document from the outline column', (

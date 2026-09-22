@@ -4,7 +4,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'dart:ui' show AppExitResponse;
 import 'package:path/path.dart' as p;
 
 import '../chess/generation/tree_wire_v4.dart' show treeWireVersion;
@@ -42,11 +41,14 @@ import '../workspace/fill_gaps.dart';
 import '../workspace/fill_sources.dart';
 import '../workspace/repertoire_answers.dart';
 import '../workspace/replies.dart';
+import 'app_exit.dart';
 import 'engine_launch.dart';
 import 'maia_launch.dart';
 import 'exit_guard.dart';
 import 'open_folder.dart';
 import 'shell.dart';
+import 'window_input.dart';
+import 'workspace_requests.dart';
 
 /// Builds the owners and hands them to the shell. This is the only place
 /// that knows how the pieces fit together.
@@ -261,8 +263,21 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     return written is CopySaved ? written.name : null;
   }
 
-  /// The answer being worked out for a close that was asked for already.
-  Future<AppExitResponse>? _leaving;
+  late final _requests = WorkspaceRequests(
+    session: _session,
+    library: _library,
+    studies: _studies,
+    viewer: _viewer,
+    explorer: _explorer,
+    leaving: _exit,
+    input: DialogInput(_navigator),
+  );
+
+  late final _quit = AppExit(
+    guard: _exit,
+    stopEngines: _engines.dispose,
+    closeLog: widget.closeLog,
+  );
 
   late final AppLifecycleListener _lifecycle;
 
@@ -270,7 +285,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
   void initState() {
     super.initState();
     _lifecycle = AppLifecycleListener(
-      onExitRequested: _leave,
+      onExitRequested: _quit.leave,
       // Leaving the window is the moment a draft stops waiting for its
       // clock: whatever the user switches to might be the old app, opening
       // the same file.
@@ -280,6 +295,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     // A library change is a chapter file written, so what the other
     // chapters answer is read again the next time a chapter is walked.
     _library.addListener(_answers.forget);
+    _fill.addListener(_listTheDraft);
     unawaited(_library.refresh());
     unawaited(_startWithSettings());
   }
@@ -298,38 +314,11 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
 
   void _flushDraft() => unawaited(_saver.flush());
 
-  /// The window can be asked to close again while the first answer is still
-  /// being worked out: a second click on the close button, or one made while
-  /// the question about the unsaved words is up. Every request gets that one
-  /// answer, so the engines are never disposed under a dialog and the log is
-  /// never closed twice. A request that ended with the window staying open
-  /// is forgotten, so the next click asks again.
-  Future<AppExitResponse> _leave() => _leaving ??= _leaveOnce();
-
-  /// The way out: what the user typed reaches the disk — or they say to
-  /// close without it — then the engines are quit, the polite path where a
-  /// killed app relies on the pipes instead, and the log is closed last so
-  /// their final words are in it.
-  Future<AppExitResponse> _leaveOnce() async {
-    if (!await _draftIsSettled()) {
-      _leaving = null;
-      return AppExitResponse.cancel;
-    }
-    await _engines.dispose();
-    log.i('exit');
-    await widget.closeLog();
-    return AppExitResponse.exit;
-  }
-
-  /// Words in a field the user never left are committed the way clicking
-  /// elsewhere commits them, by taking the focus away; the focus change is
-  /// applied in a microtask, so the edit is only made a turn later. Then the
-  /// file is waited for, because the window closes next — but not for ever,
-  /// which is [ExitGuard]'s job.
-  Future<bool> _draftIsSettled() async {
-    FocusManager.instance.primaryFocus?.unfocus();
-    await Future<void>.delayed(Duration.zero);
-    return _exit.mayClose();
+  /// A finished fill wrote a chapter the library has not listed; reading
+  /// the folders again is what puts the draft in the outline. The fill
+  /// notifies only when its own state changes, not with the document.
+  void _listTheDraft() {
+    if (_fill.state is FillDone) unawaited(_library.refresh());
   }
 
   @override
@@ -337,6 +326,8 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     _lifecycle.dispose();
     _settings.removeListener(_engineSettings);
     _account.dispose();
+    _requests.dispose();
+    _fill.removeListener(_listTheDraft);
     _fill.dispose();
     _evalCache.close();
     _analysis.dispose();
@@ -365,7 +356,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
       theme: darkTheme(),
       debugShowCheckedModeBanner: false,
       home: Shell(
-        leaving: _exit,
+        requests: _requests,
         library: _library,
         studies: _studies,
         viewer: _viewer,
