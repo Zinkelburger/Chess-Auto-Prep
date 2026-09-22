@@ -122,6 +122,7 @@ it uses; nothing takes "the workspace".
 | `EngineAnalysis` | The running engine job for the cursor position and its latest snapshot | Anything about the document |
 | `Explorer` | The cached explorer query for the cursor position | Anything about the document |
 | `WorkspaceLayout` | Which panel is open and the split sizes | Data |
+| `WorkspaceRequests` (`app/workspace_requests.dart`) | The mode, the status line, and every cross-mode request that puts a document on the board or takes it off (a list's click, Open/Import/Paste, an explorer game, Close file), each answering a sealed `RequestResult`; the leave question goes through `ExitGuard`, the side question and the clipboard through `WindowInput` | The document, panel state, dialogs |
 | A panel's owner (`GenerationRun`, `TrainingSession`, `HoleHunt`, …) | That tool's state, keyed to a document revision | A second copy of the tree or cursor |
 
 An owner notifies only for what its listeners show. `DocumentSession`
@@ -174,7 +175,13 @@ Every folder except `chess/`, which stays pure, may also import
 `scripts/check_v2.py` enforces this table. The one exception is `lib/main_v2.dart` importing
 `lib/debug/agent_driver.dart`, the headless-test hook shared with the old app.
 Cross-mode jumps (open this line in the builder, train this chapter) are typed
-requests handled by `app/`.
+requests handled by `app/`: `WorkspaceRequests` owns them and `Shell` only
+draws its mode and status and maps the lists, the explorer and the keys to
+its commands. Questions it puts to the user come in through an interface
+(`ExitGuard`'s `DraftQuestion`, `WindowInput`), so the flows are tested
+without widgets. The way out of the window (`app/app_exit.dart`) waits for
+the draft, then stops the engines, then closes the log, once however often
+it is asked.
 
 ## Code rules
 
@@ -316,7 +323,7 @@ Copy the shape of these files; they are what the rules above look like:
 | `lib/v2/workspace/document_session.dart` | An owner: two fields, commands, derived getters, the document and the cursor notified apart |
 | `lib/v2/features/library/library.dart` | Sealed states and results, a stale check after `await` |
 | `lib/v2/workspace/move_tree_view.dart` | A widget built from an owner, private sub-widgets, no I/O; lines built once per tree, a cursor move redraws two moves |
-| `lib/v2/app/shell.dart` | Composition and the one cross-feature request |
+| `lib/v2/app/workspace_requests.dart` | Cross-mode requests as an owner: sealed results, questions behind an interface, a disposed check after every `await` |
 | `lib/v2/storage/chapter_files.dart` | An interface at a real boundary (the filesystem) with sealed results, and its one adapter |
 | `lib/v2/engines/uci_engine.dart` | A protocol over a pipe: serialised searches, each with its own stream, so stale output cannot land |
 | `lib/v2/workspace/engine_analysis.dart` | An owner over a background job: enable/disable, stale checks, a 200 ms snapshot buffer, `dispose` |
