@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import '../chess/pgn/games_written.dart';
 import '../chess/pgn/game_text.dart';
+import '../chess/tactics/analyzed_games.dart';
 
 /// What a save says it is about to change.
 ///
@@ -180,10 +181,11 @@ String? _arrangedHeading(
   return null;
 }
 
-/// An edit that declares the heading is the one that writes the playing
-/// side, and that is the one line of it it may write: everything else above
-/// the first game — the chapter's name, the date it was made, the root it
-/// was built from — has to come through as it was.
+/// An edit that declares the heading writes the playing side of a chapter
+/// or the analysed-games line of a tactics set, and those are the lines of
+/// it it may write: everything else above the first game — the chapter's
+/// name, the date it was made, the root it was built from — has to come
+/// through as it was.
 String? _headingBeyondTheSide(
   List<int> previous,
   List<int> next,
@@ -197,11 +199,13 @@ String? _headingBeyondTheSide(
       : 'the chapter heading would change beyond the playing side';
 }
 
-/// The heading without its `// Color:` line, which is the part an edit to
-/// the playing side may not touch.
+/// The heading without its `// Color:` line and a tactics set's
+/// analysed-games line, which is the part a heading edit may not touch.
 String _besideTheSide(List<int> bytes, int heading) => [
   for (final line in latin1.decode(bytes.sublist(0, heading)).split('\n'))
-    if (!line.trim().startsWith('// Color:')) line,
+    if (!line.trim().startsWith('// Color:') &&
+        !line.startsWith(analyzedGamesPrefix))
+      line,
 ].join('\n');
 
 String? _arrangedGames(

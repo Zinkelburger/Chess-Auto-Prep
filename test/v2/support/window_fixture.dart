@@ -11,6 +11,9 @@ import 'package:chess_auto_prep/v2/features/tactics/puzzle_trainer.dart';
 import 'package:chess_auto_prep/v2/features/tactics/tactics_set.dart';
 import 'package:chess_auto_prep/v2/net/lichess_studies.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
+import 'package:chess_auto_prep/v2/features/tactics/my_games.dart';
+import 'package:chess_auto_prep/v2/features/tactics/set_additions.dart';
+import 'package:chess_auto_prep/v2/storage/my_games_files.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/storage/settings_store.dart';
 import 'package:chess_auto_prep/v2/ui/theme.dart';
@@ -33,6 +36,7 @@ import 'scripted_explorer.dart';
 import 'scripted_progress.dart';
 import 'scripted_files.dart';
 import 'scripted_policy.dart';
+import 'my_games_fixture.dart';
 import 'scripted_store.dart';
 import 'study_fixture.dart';
 import 'tactics_fixture.dart';
@@ -101,6 +105,24 @@ final class WindowFixture {
       now: () => tacticsToday,
     );
   }
+
+  MyGames _myGamesOver() => MyGames(
+    accounts: accounts,
+    sites: const [],
+    cache: GamesCache(store, folder: '/games_library'),
+    set: SetAdditions(
+      documents: store,
+      session: session,
+      saver: saver,
+      set: tactics,
+      older: () async => {},
+    ),
+    engine: () async => throw StateError('no engine in the window tests'),
+  );
+
+  /// The usernames, in memory: none until a test sets them.
+  final accounts = MemoryAccounts();
+  late final MyGames myGames = _myGamesOver();
 
   final store = ScriptedDocumentStore()
     ..documents[kidMain] = Opened(blackChapter, scriptedRevision(blackChapter))
@@ -220,6 +242,7 @@ final class WindowFixture {
           tactics: tactics,
           trainer: trainer,
           lineTrainer: lineTrainer,
+          myGames: myGames,
         ),
       ),
     );
@@ -231,6 +254,7 @@ final class WindowFixture {
   }
 
   void dispose() {
+    myGames.dispose();
     lineTrainer.dispose();
     tactics.dispose();
     requests.dispose();

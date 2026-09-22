@@ -1,4 +1,7 @@
+import 'package:chess_auto_prep/v2/chess/tactics/game_ids.dart';
+import 'package:chess_auto_prep/v2/features/tactics/my_games.dart';
 import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -101,5 +104,23 @@ void main() {
     await tester.pumpAndSettle();
     expect(w.trainer.up?.puzzle.index, 1);
     expect(w.trainer.up?.finished, isFalse);
+  });
+
+  testWidgets('with no username the column asks for one; saving it offers '
+      'Get my games and downloads nothing', (tester) async {
+    await toTactics(tester);
+    expect(find.text('Get games'), findsNothing);
+    await tester.tap(find.text('Add accounts'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Lichess username'),
+      'Me',
+    );
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(w.accounts.accounts[GameSite.lichess]?.username, 'Me');
+    expect(find.text('Me'), findsOneWidget);
+    expect(find.text('Get games'), findsOneWidget);
+    expect(w.myGames.status, isA<MyGamesIdle>());
   });
 }

@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import '../../chess/tactics/puzzle.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
+import 'my_games.dart';
+import 'my_games_block.dart';
 import 'puzzle_filters.dart';
 import 'puzzle_trainer.dart';
 import 'tactics_set.dart';
@@ -21,12 +23,16 @@ class TacticsPanel extends StatefulWidget {
     super.key,
     required this.set,
     required this.trainer,
+    required this.myGames,
     required this.onPlay,
     this.trailing,
   });
 
   final TacticsSet set;
   final PuzzleTrainer trainer;
+
+  /// The usernames and the review of their games, at the top.
+  final MyGames myGames;
 
   /// Starts a sitting from [first], or from the top of the queue: the host
   /// also brings the Puzzle tab up.
@@ -72,12 +78,13 @@ class _TacticsPanelState extends State<TacticsPanel> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _Toolbar(trailing: widget.trailing),
+          MyGamesBlock(games: widget.myGames),
           Expanded(
             child: switch (widget.set.state) {
               SetLoading() => const SizedBox.shrink(),
               SetMissing() => const _Message(
-                'No puzzles yet. The old app\'s game review mines them into '
-                'tactics_sets/Default.pgn.',
+                'No puzzles yet. Get your games above: the mistakes you made '
+                'in them become puzzles here.',
               ),
               SetUnreadable(:final detail) => _Message(
                 'The puzzle set could not be read: $detail',
