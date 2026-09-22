@@ -90,9 +90,10 @@ final class ChapterOutline extends ChangeNotifier {
   ChapterOutline({
     required Library library,
     required DocumentSession session,
-    this.debounce = const Duration(milliseconds: 200),
+    Duration debounce = const Duration(milliseconds: 200),
   }) : _library = library,
        _session = session {
+    _search = _Search(debounce, _narrowed);
     _library.addListener(_reread);
     _session.addListener(_reread);
     _session.cursorListenable.addListener(_followTheCursor);
@@ -103,17 +104,10 @@ final class ChapterOutline extends ChangeNotifier {
   /// How many plies a line's row shows.
   static const shownPlies = 8;
 
-  /// How long the list waits after a keystroke before it narrows. Long
-  /// enough that typing a word does not rebuild the list once per letter,
-  /// short enough to feel like it answered.
-  final Duration debounce;
-
   final Library _library;
   final DocumentSession _session;
 
-  String _typed = '';
-  String _query = '';
-  Timer? _waiting;
+  late final _Search _search;
   Chapter? _chapter;
   ChapterRef? _source;
   List<RepertoireFolder>? _repertoires;
@@ -124,8 +118,8 @@ final class ChapterOutline extends ChangeNotifier {
   bool _disposed = false;
 
   /// What the user has typed, which the field shows at once even though the
-  /// list waits for [debounce].
-  String get query => _typed;
+  /// list waits a moment before it narrows.
+  String get query => _search.typed;
 
   /// The repertoire the open chapter belongs to, or null when nothing is
   /// open or the library has not listed it.
@@ -184,17 +178,11 @@ final class ChapterOutline extends ChangeNotifier {
 
   /// Takes what the user typed and narrows the list once they stop.
   void search(String text) {
-    if (text == _typed) return;
-    _typed = text;
-    _waiting?.cancel();
-    _waiting = Timer(debounce, () => _narrow(text));
-    notifyListeners();
+    if (_search.type(text)) notifyListeners();
   }
 
-  void _narrow(String text) {
-    if (_disposed || text == _query) return;
-    _query = text;
-    notifyListeners();
+  void _narrowed() {
+    if (!_disposed) notifyListeners();
   }
 
   /// Reads the lines again when the chapter on the board is another value,
@@ -262,8 +250,7 @@ final class ChapterOutline extends ChangeNotifier {
     return pathOfSans(tree, sans) != null;
   }
 
-  bool _matches(String lowercased) =>
-      _query.trim().isEmpty || lowercased.contains(_query.trim().toLowerCase());
+  bool _matches(String lowercased) => _search.matches(lowercased);
 
   /// Whether a chapter the search did not match by name has a line that
   /// matches. Only the open chapter has lines to look at, so a search shows
@@ -274,7 +261,7 @@ final class ChapterOutline extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
-    _waiting?.cancel();
+    _search.cancel();
     _library.removeListener(_reread);
     _session.removeListener(_reread);
     _session.cursorListenable.removeListener(_followTheCursor);
@@ -282,6 +269,46 @@ final class ChapterOutline extends ChangeNotifier {
     _current.dispose();
     super.dispose();
   }
+}
+
+/// The words in the search field and the wait after them: the field shows
+/// what was typed at once, the list narrows to it once typing stops.
+final class _Search {
+  _Search(this._debounce, this._narrowed);
+
+  /// How long the list waits after a keystroke before it narrows. Long
+  /// enough that typing a word does not rebuild the list once per letter,
+  /// short enough to feel like it answered.
+  final Duration _debounce;
+
+  /// Told when the list narrows to what was typed.
+  final void Function() _narrowed;
+
+  String _typed = '';
+  String _query = '';
+  Timer? _waiting;
+
+  String get typed => _typed;
+
+  /// Takes [text] and starts the wait; false when nothing changed.
+  bool type(String text) {
+    if (text == _typed) return false;
+    _typed = text;
+    _waiting?.cancel();
+    _waiting = Timer(_debounce, () => _narrow(text));
+    return true;
+  }
+
+  void _narrow(String text) {
+    if (text == _query) return;
+    _query = text;
+    _narrowed();
+  }
+
+  bool matches(String lowercased) =>
+      _query.trim().isEmpty || lowercased.contains(_query.trim().toLowerCase());
+
+  void cancel() => _waiting?.cancel();
 }
 
 /// Whether [path] goes through [from]: the same moves, then more.

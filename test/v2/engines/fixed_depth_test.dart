@@ -91,15 +91,8 @@ void main() {
   group('with the cache in front', () {
     test('a kept verdict is answered without the engine, from the side to '
         'move', () async {
-      final cache = EvalCache.inMemory();
-      addTearDown(cache.close);
+      final (:cache, :engine, :evaluator) = cachedAtDepth14();
       cache.write(Fen(afterE4.fen).position, cpWhite: 35, depth: 14);
-      final engine = ScriptedEngine();
-      final evaluator = CachedEvaluator(
-        FixedDepthEvaluator(engine, depth: 14),
-        cache,
-        depth: 14,
-      );
       final answer = await evaluator.evaluate(afterE4);
       expect(
         answer,
@@ -109,14 +102,7 @@ void main() {
     });
 
     test('the engine\'s verdict is written back from White\'s side', () async {
-      final cache = EvalCache.inMemory();
-      addTearDown(cache.close);
-      final engine = ScriptedEngine();
-      final evaluator = CachedEvaluator(
-        FixedDepthEvaluator(engine, depth: 14),
-        cache,
-        depth: 14,
-      );
+      final (:cache, :engine, :evaluator) = cachedAtDepth14();
       final asked = evaluator.evaluate(afterE4);
       await pumpEventQueue();
       engine.current
@@ -127,14 +113,7 @@ void main() {
     });
 
     test('a search cut short is not written to the cache', () async {
-      final cache = EvalCache.inMemory();
-      addTearDown(cache.close);
-      final engine = ScriptedEngine();
-      final evaluator = CachedEvaluator(
-        FixedDepthEvaluator(engine, depth: 14),
-        cache,
-        depth: 14,
-      );
+      final (:cache, :engine, :evaluator) = cachedAtDepth14();
       final asked = evaluator.evaluate(start);
       await pumpEventQueue();
       engine.current.emit(line(depth: 5, score: const Centipawns(80)));
@@ -144,15 +123,8 @@ void main() {
     });
 
     test('a verdict too shallow for this run is asked again', () async {
-      final cache = EvalCache.inMemory();
-      addTearDown(cache.close);
+      final (:cache, :engine, :evaluator) = cachedAtDepth14();
       cache.write(Fen(start.fen).position, cpWhite: 35, depth: 8);
-      final engine = ScriptedEngine();
-      final evaluator = CachedEvaluator(
-        FixedDepthEvaluator(engine, depth: 14),
-        cache,
-        depth: 14,
-      );
       final asked = evaluator.evaluate(start);
       await pumpEventQueue();
       expect(engine.searches, hasLength(1));
@@ -160,4 +132,22 @@ void main() {
       expect(await asked, isA<EvaluationUnavailable>());
     });
   });
+}
+
+/// A depth-14 engine behind an empty in-memory cache, closed when the test
+/// ends.
+({EvalCache cache, ScriptedEngine engine, CachedEvaluator evaluator})
+cachedAtDepth14() {
+  final cache = EvalCache.inMemory();
+  addTearDown(cache.close);
+  final engine = ScriptedEngine();
+  return (
+    cache: cache,
+    engine: engine,
+    evaluator: CachedEvaluator(
+      FixedDepthEvaluator(engine, depth: 14),
+      cache,
+      depth: 14,
+    ),
+  );
 }

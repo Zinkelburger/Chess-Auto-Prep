@@ -94,28 +94,24 @@ void main() {
         closeTo(1, 1e-9),
       );
     });
+  });
 
-    test(
-      'progress is told after every expansion, nodes and depth growing',
-      () async {
-        final progress = <SearchProgress>[];
-        await buildSearchTree(
-          root: positionOf(kingAndPawn),
-          config: const SearchConfig(side: Side.white, horizonPlies: 2),
-          evaluator: ScriptedEvaluator(),
-          policy: oneReply,
-          onProgress: progress.add,
-        );
-        expect(progress, isNotEmpty);
-        expect(progress.first.depth, 1);
-        expect(progress.last.depth, 2);
-        for (var i = 1; i < progress.length; i++) {
-          expect(
-            progress[i].nodes,
-            greaterThanOrEqualTo(progress[i - 1].nodes),
-          );
-        }
-      },
-    );
+  group('progress', () {
+    test('is told after every expansion, nodes and depth growing', () async {
+      final progress = <SearchProgress>[];
+      await buildSearchTree(
+        root: positionOf(kingAndPawn),
+        config: const SearchConfig(side: Side.white, horizonPlies: 2),
+        evaluator: ScriptedEvaluator(),
+        policy: oneReply,
+        onProgress: progress.add,
+      );
+      expect(progress, isNotEmpty);
+      expect(progress.first.depth, 1);
+      expect(progress.last.depth, 2);
+      for (var i = 1; i < progress.length; i++) {
+        expect(progress[i].nodes, greaterThanOrEqualTo(progress[i - 1].nodes));
+      }
+    });
   });
 }

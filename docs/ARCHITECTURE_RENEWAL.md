@@ -174,7 +174,9 @@ Allowed imports:
 | `app/` | Everything in `v2` |
 
 Every folder except `chess/`, which stays pure, may also import
-`diagnostics/`. Nothing in `v2` imports the old `lib/` folders;
+`diagnostics/`. `dart:io` is for `storage/`, `engines/`, `net/` (sockets:
+the Lichess login listens on a loopback port) and `app/`; files are written
+only in `storage/`. Nothing in `v2` imports the old `lib/` folders;
 `scripts/check_v2.py` enforces this table. The one exception is `lib/main_v2.dart` importing
 `lib/debug/agent_driver.dart`, the headless-test hook shared with the old app.
 Cross-mode jumps (open this line in the builder, train this chapter) are typed
@@ -333,18 +335,30 @@ Copy the shape of these files; they are what the rules above look like:
 | `test/v2/workspace/engine_analysis_test.dart` | Fake time, a scripted double, assertions on the owner and never on private state |
 
 `scripts/check_v2.py` enforces the numbers below and the import table; run
-it before saying a step is done.
+it before saying a step is done. `scripts/ci.sh lint` runs it and its tests
+(`scripts/test_check_v2.py`).
 
 ### Reviewer checklist
 
 The independent review of a finished step answers these, each with a location:
 
-1. Any file over 600 lines, function over 50, nesting over 3, class over 10
-   fields? (`scripts/check_v2.py` finds the first three.)
+1. Any file over 600 lines, function over 50, nesting over 3, owner over 10
+   fields? (`scripts/check_v2.py` finds all four. A `group(...)` or `test(...)`
+   body in a test file is a function too; `main()` is not. An owner is a class
+   that extends or mixes in `ChangeNotifier` or `ValueNotifier`, or extends
+   such a class; its fields are its instance fields, `late` ones included,
+   except `static` ones and `final` ones without an initializer — those the
+   constructor fills from its arguments are collaborators and settings handed
+   in, not state it keeps. `final _cache = {}` is state and counts.)
 2. Any owner holding data that belongs to another owner in the
-   [workspace table](#workspace-owners)?
+   [workspace table](#workspace-owners)? Any mode importing another mode's
+   folder? (`scripts/check_v2.py` finds the second: shared code moves to
+   `workspace/` or `ui/`.)
 3. Any `await` not followed by a stale check? Any subscription without a
-   `dispose`?
+   `dispose`? (`scripts/check_v2.py` finds one kind: a `State` whose
+   `initState` calls `widget.<owner>.addListener` must use `ListeningState`
+   (`ui/listening_state.dart`) or implement `didUpdateWidget`, so a widget
+   rebuilt with another owner stops hearing the old one.)
 4. Any exception used for an expected outcome? Any `catch` that swallows?
 5. Any pass-through class, unused option, abstract type with one
    implementation, or code for a later step?

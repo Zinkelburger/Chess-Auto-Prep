@@ -190,14 +190,8 @@ DraftPlan planDraft(List<DraftLine> lines, {Set<String> known = const {}}) {
       alreadyThere++;
       continue;
     }
-    final fresh = decisions.where((d) => !taught.contains(d)).length;
-    final tooClose =
-        decisions.isNotEmpty &&
-        (fresh / decisions.length < minNewShare ||
-            entries.any(
-              (kept) => _jaccard(decisions, kept.decisions) > maxOverlap,
-            ));
-    if (!tooClose && entries.length < DraftPlan.cap) {
+    if (!_tooClose(decisions, entries, taught) &&
+        entries.length < DraftPlan.cap) {
       entries.add(_Kept(line, decisions));
       taught.addAll(decisions);
       continue;
@@ -236,6 +230,15 @@ final class _Kept {
   final DraftLine line;
   final Set<String> decisions;
   final sidelines = <(int, DraftLine)>[];
+}
+
+/// Whether a line with [decisions] fails the bar: too little of it is new
+/// beside everything [taught], or it overlaps one [kept] line too much.
+bool _tooClose(Set<String> decisions, List<_Kept> kept, Set<String> taught) {
+  if (decisions.isEmpty) return false;
+  final fresh = decisions.where((d) => !taught.contains(d)).length;
+  return fresh / decisions.length < minNewShare ||
+      kept.any((line) => _jaccard(decisions, line.decisions) > maxOverlap);
 }
 
 double _jaccard(Set<String> a, Set<String> b) {

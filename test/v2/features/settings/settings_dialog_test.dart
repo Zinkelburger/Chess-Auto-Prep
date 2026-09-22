@@ -182,7 +182,7 @@ void main() {
     await accounts(tester);
     await tester.tap(find.text('Log in'));
     await tester.pumpAndSettle();
-    login.browserBack(LoggedIn(someone()));
+    login.browserBack(loggedIn());
     await tester.pumpAndSettle();
     expect(
       find.text('Logged in as DrNykterstein · until 2027-09-22'),
@@ -213,7 +213,7 @@ void main() {
   });
 
   testWidgets('a personal token typed into the row signs in', (tester) async {
-    login.tokenOutcome = LoggedIn(someone(name: 'Me', personal: true));
+    login.tokenOutcome = loggedIn(name: 'Me', personal: true);
     await accounts(tester);
     final field = find.byType(TextField).at(1);
     await tester.enterText(field, 'lip_mine');
