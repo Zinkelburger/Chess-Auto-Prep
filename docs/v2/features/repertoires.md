@@ -189,6 +189,12 @@ picker.
   import did. `Create new repertoire` is the one-field name dialog `New chapter` already uses.
 - **The Explorer tab** (`workspace.md`) is where the user looks up what masters and Lichess play
   before choosing their own move; Maia stays the only source of shares, gaps and coverage.
+- **The outline stays as it is** (owner, 2026-09-22: "I like whatever the current UI is"): the
+  collapsible repertoire list, the collapsible chapter column, a chapter's lines under it when
+  clicked. No folder creation, moving or folder rows in the app; folders already on disk are read
+  as they are today. The old `Organize your repertoire` view and its folder menus are dropped.
+- **Next: the Explorer tab, import with no form and `Fill gaps from here…`**, built together
+  (owner, 2026-09-22); the trainer waits.
 - **Expectimax is a column of the Replies tab at our move.** `Our candidates` shows, beside the
   share, the expectimax value a run stored for that move, read from the `[%expectimax]` and
   `[%score]` tokens in the move's comment; a move no run reached reads a muted `not in tree`. The

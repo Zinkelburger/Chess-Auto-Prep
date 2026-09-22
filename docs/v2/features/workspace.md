@@ -212,7 +212,10 @@ Quirks worth a verdict:
 - **No eval bar** (question 1; the viewer's decision of 2026-09-21). **One move list** for reading
   and editing, the reading card (question 2). **Esc cancels a promotion** (question 6).
 
+- **Explorer columns are move, games and the bar**, no average rating (owner, 2026-09-22).
+- **Transpositions are quiet**, as lila: a played move is added where the cursor is, with no
+  notice; the Replies row that names the chapter answering the position is the only pointer
+  (owner, 2026-09-22).
+
 ## Questions for the owner
-1. Should the workspace say so when a played move already exists or forks a line?
-2. Should `[%…]` tokens keep their place in a comment instead of being hoisted to the front?
-3. Should the explorer table carry lila's average-rating column beside the bar?
+1. Should `[%…]` tokens keep their place in a comment instead of being hoisted to the front?
