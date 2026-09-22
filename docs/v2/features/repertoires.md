@@ -175,7 +175,7 @@ picker.
   chapter they become lines of it, dragged onto a line they fold into it as variations; the line
   menu's `Move to chapter…` does the first by name. The target file is written first, against the
   revision it was read at, and the lines leave the open chapter only after that write landed.
-- `Fill gaps from here…` sits disabled in the Actions menu until generation exists (`generation.md`).
+- `Fill gaps from here…` is live (2026-09-22): see `generation.md`, "What was built".
 
 ## Decisions (owner, 2026-09-22)
 - **The mode is `Repertoire builder`.** The library and the builder are one mode, named for the

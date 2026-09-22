@@ -118,6 +118,37 @@ void main() {
     });
   });
 
+  test('paused, the engine stops looking and says why; resumed, it '
+      'searches the position the board is on now', () {
+    fakeAsync((async) {
+      running(async);
+      engine.current.emit(line());
+      async.elapse(tick);
+      analysis.pause('Paused while filling gaps');
+      async.flushMicrotasks();
+      expect(engine.current.stopped, isTrue);
+      expect(analysis.snapshot, isNull);
+      expect(
+        analysis.state,
+        isA<EnginePaused>().having(
+          (s) => s.reason,
+          'reason',
+          'Paused while filling gaps',
+        ),
+      );
+      expect(analysis.enabled, isTrue, reason: 'the switch stays on');
+      final searches = engine.searches.length;
+      session.forward();
+      async.flushMicrotasks();
+      expect(engine.searches, hasLength(searches), reason: 'not following');
+      analysis.resume();
+      async.flushMicrotasks();
+      expect(engine.searches, hasLength(searches + 1));
+      expect(engine.current.fen, session.fen);
+      expect(analysis.state, isA<EngineRunning>());
+    });
+  });
+
   test('disable quits the engine and clears the pane', () {
     fakeAsync((async) {
       running(async);

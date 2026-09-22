@@ -8,7 +8,11 @@ abstract interface class Engine {
 
   /// Starts analysing [fen]; the previous search stops first. Scores in
   /// the lines are from the side to move, as UCI gives them.
-  Search analyse(Fen fen, {required int multiPv});
+  ///
+  /// With [depth], the search runs to that depth and ends on its own, and
+  /// a search asked for after it waits for it rather than stopping it: a
+  /// fixed-depth verdict cut short is not the verdict that was asked for.
+  Search analyse(Fen fen, {required int multiPv, int? depth});
 
   /// Completes when the process has gone, after [quit] or on its own, with
   /// why it went.

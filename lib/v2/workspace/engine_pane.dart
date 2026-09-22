@@ -80,7 +80,8 @@ class _EnginePaneState extends State<EnginePane> {
             _Header(analysis: widget.analysis),
             // Off, the pane is its one row: the switch and the word. The
             // rows come with the engine and take the moves down with them.
-            if (widget.analysis.enabled)
+            // Paused, it is the one row too: the engine is not looking.
+            if (widget.analysis.enabled && !widget.analysis.paused)
               for (
                 var multiPv = 1;
                 multiPv <= widget.analysis.multiPv;
@@ -126,6 +127,7 @@ class _Header extends StatelessWidget {
       EngineOff() => ('Engine', null),
       EngineStarting() => ('Starting…', null),
       EngineFailed(:final reason) => (reason, scheme.error),
+      EnginePaused(:final reason) => (reason, scheme.onSurfaceVariant),
       EngineRunning(:final name) => (
         best == null ? name : 'Depth ${best.depth} · $name',
         null,

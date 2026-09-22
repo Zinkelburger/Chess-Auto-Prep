@@ -33,6 +33,14 @@ final class EngineFailed extends EngineState {
   final String reason;
 }
 
+/// The engine is up but not following the board: another job has the
+/// engines for now, and [reason] says which.
+final class EnginePaused extends EngineState {
+  const EnginePaused(this.reason);
+
+  final String reason;
+}
+
 /// What the engine thinks of one position: the lines it has said something
 /// about, in MultiPV order, scores from White's side.
 ///
@@ -93,6 +101,9 @@ final class EngineAnalysis extends ChangeNotifier {
 
   EngineState _state = const EngineOff();
   Engine? _engine;
+
+  /// Why the analysis is not following the board, while it is not.
+  String? _pausedFor;
   _Following? _following;
   AnalysisSnapshot? _snapshot;
 
@@ -110,12 +121,35 @@ final class EngineAnalysis extends ChangeNotifier {
   );
   bool _disposed = false;
 
-  EngineState get state => _state;
+  EngineState get state => switch (_pausedFor) {
+    final reason? when _state is EngineRunning => EnginePaused(reason),
+    _ => _state,
+  };
 
   /// Always for the position the session is on.
   AnalysisSnapshot? get snapshot => _snapshot;
 
   bool get enabled => _state is EngineStarting || _state is EngineRunning;
+
+  bool get paused => _pausedFor != null;
+
+  /// Stops following the board and says [reason] in the pane, keeping the
+  /// engine warm, until [resume]: a fill has the machine, and two searches
+  /// at once would each get half of it.
+  void pause(String reason) {
+    _pausedFor = reason;
+    _stopFollowing();
+    _clearSnapshot();
+    _notify();
+  }
+
+  /// Follows the board again, from the position it is on now.
+  void resume() {
+    if (_pausedFor == null) return;
+    _pausedFor = null;
+    _follow();
+    _notify();
+  }
 
   Future<void> enable() async {
     if (enabled) return;
@@ -162,7 +196,7 @@ final class EngineAnalysis extends ChangeNotifier {
   /// under it reads as an engine that does not work.
   void _follow() {
     final engine = _engine;
-    if (engine == null) {
+    if (engine == null || _pausedFor != null) {
       // Nothing is searching, so the last score is about a position the
       // cursor has left; the pane and the bar must not keep showing it.
       _clearSnapshot();

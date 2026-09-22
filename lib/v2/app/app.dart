@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -6,15 +7,19 @@ import 'package:http/http.dart' as http;
 import 'dart:ui' show AppExitResponse;
 import 'package:path/path.dart' as p;
 
+import '../chess/generation/tree_wire_v4.dart' show treeWireVersion;
 import '../diagnostics/log.dart';
 import '../engines/engine_supervisor.dart';
+import '../engines/fixed_depth.dart';
 import '../features/library/chapter_outline.dart';
 import '../features/library/library.dart';
 import '../features/pgn_viewer/pgn_viewer.dart';
 import '../features/settings/setting_rows.dart';
 import '../features/study/studies.dart';
 import '../net/lichess_studies.dart';
+import '../storage/atomic_write.dart';
 import '../storage/chapter_files.dart';
+import '../storage/eval_cache.dart';
 import '../storage/lichess_token.dart';
 import '../storage/pgn_file_import.dart';
 import '../storage/pgn_file_picker.dart';
@@ -28,6 +33,8 @@ import '../workspace/document_saver.dart';
 import '../workspace/document_session.dart';
 import '../workspace/session_results.dart';
 import '../workspace/engine_analysis.dart';
+import '../workspace/fill_gaps.dart';
+import '../workspace/fill_sources.dart';
 import '../workspace/repertoire_answers.dart';
 import '../workspace/replies.dart';
 import 'engine_launch.dart';
@@ -128,6 +135,57 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     settings: _settings,
     answers: _answers,
   );
+
+  /// The engine's verdicts, shared with the old app, opened the first time
+  /// a fill needs them.
+  late final _evalCache = EvalCache.open(widget.support);
+  late final _fill = FillGaps(
+    session: _session,
+    analysis: _analysis,
+    documents: _store,
+    tools: _fillTools,
+    keepTree: _keepTree,
+  );
+
+  /// A second Stockfish for the fill, with the pane's threads and table:
+  /// the pane's own engine is paused for the run, so the machine is not
+  /// shared, and quitting this one when the run ends costs nothing the pane
+  /// has to rebuild.
+  Future<FillToolsResult> _fillTools(FillRequest request) async {
+    final start = await launchStockfish(
+      support: widget.support,
+      engines: _engines,
+      cores: _settings.value.engineCores,
+      memoryMb: _settings.value.engineMemoryMb,
+    );
+    return switch (start) {
+      StartFailed(:final reason) => FillUnavailable(reason),
+      Started(:final engine) => FillReady(
+        evaluator: CachedEvaluator(
+          FixedDepthEvaluator(engine, depth: fillEvalDepth),
+          _evalCache,
+          depth: fillEvalDepth,
+        ),
+        policy: MaiaOpponent(_maia, elo: request.elo),
+        release: engine.quit,
+      ),
+    };
+  }
+
+  /// The tree beside its chapter, where the old app keeps its own:
+  /// `.cap-generation/<chapter>.pgn/<run>/tree.json`, create-only.
+  Future<void> _keepTree(ChapterRef chapter, String tree) async {
+    final stamp = DateTime.now().toIso8601String().replaceAll(':', '-');
+    final folder = p.join(
+      p.dirname(chapter.path),
+      '.cap-generation',
+      p.basename(chapter.path),
+      'v2-$stamp',
+    );
+    await Directory(folder).create(recursive: true);
+    await replaceFile(p.join(folder, 'tree.json'), utf8.encode(tree));
+    log.i('kept the v$treeWireVersion tree of ${chapter.path} in $folder');
+  }
 
   /// What the engine was last started with, so a settings change that
   /// touches neither its threads nor its table does not restart it.
@@ -255,6 +313,8 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
   void dispose() {
     _lifecycle.dispose();
     _settings.removeListener(_engineSettings);
+    _fill.dispose();
+    _evalCache.close();
     _analysis.dispose();
     _replies.dispose();
     _maia.dispose();
@@ -290,6 +350,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
         saver: _saver,
         analysis: _analysis,
         replies: _replies,
+        fill: _fill,
       ),
     );
   }

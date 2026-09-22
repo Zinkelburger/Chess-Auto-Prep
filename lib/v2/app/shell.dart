@@ -29,6 +29,8 @@ import '../workspace/document_session.dart';
 import '../workspace/session_results.dart';
 import '../workspace/side_dialog.dart';
 import '../workspace/engine_analysis.dart';
+import '../workspace/fill_dialog.dart';
+import '../workspace/fill_gaps.dart';
 import '../workspace/replies.dart';
 import '../workspace/workspace_keys.dart';
 import '../workspace/workspace_tabs.dart';
@@ -51,6 +53,7 @@ class Shell extends StatefulWidget {
     required this.saver,
     required this.analysis,
     required this.replies,
+    required this.fill,
     required this.settings,
     required this.settingRows,
     required this.leaving,
@@ -64,6 +67,7 @@ class Shell extends StatefulWidget {
   final DocumentSaver saver;
   final EngineAnalysis analysis;
   final Replies replies;
+  final FillGaps fill;
   final SettingsStore settings;
 
   /// The settings page's rows, as the app wires them.
@@ -122,10 +126,12 @@ class _ShellState extends State<Shell> {
     _outlineShown = _wantsOutline;
     _arrange();
     widget.session.addListener(_followTheChapter);
+    widget.fill.addListener(_followTheFill);
   }
 
   @override
   void dispose() {
+    widget.fill.removeListener(_followTheFill);
     widget.session.removeListener(_followTheChapter);
     _editing.dispose();
     _tabs.dispose();
@@ -154,6 +160,25 @@ class _ShellState extends State<Shell> {
     if (!mounted || _wantsOutline == _outlineShown) return;
     _outlineShown = _wantsOutline;
     _arrange();
+  }
+
+  /// A finished fill wrote a chapter the library has not listed; reading
+  /// the folders again is what puts the draft in the outline.
+  void _followTheFill() {
+    if (widget.fill.state is FillDone) unawaited(widget.library.refresh());
+  }
+
+  /// The three knobs, then the run; what refused it goes in the bar.
+  Future<void> _fill() async {
+    final s = widget.settings.value;
+    final request = await showFillDialog(
+      context,
+      elo: s.opponentElo,
+      onceIn: s.coverOnceIn,
+    );
+    if (request == null || !mounted) return;
+    final refusal = await widget.fill.start(request);
+    if (refusal != null && mounted) _said(refusal);
   }
 
   void _toggleList() {
@@ -305,9 +330,11 @@ class _ShellState extends State<Shell> {
         () => setSide(widget.session, chapter.side.opposite),
         group: 'Repertoire',
       ),
-    // Not built yet: the expectimax search that writes proposed lines into
-    // a draft chapter. The entry is here so the menu has its final shape.
-    const AppAction('Fill gaps from here…', null, group: 'Repertoire'),
+    AppAction(
+      'Fill gaps from here…',
+      widget.fill.canStart ? () => unawaited(_fill()) : null,
+      group: 'Repertoire',
+    ),
     ..._tabActions(),
   ];
 
@@ -418,6 +445,7 @@ class _ShellState extends State<Shell> {
               widget.saver,
               widget.analysis,
               widget.replies,
+              widget.fill,
               widget.viewer,
               _editing,
               _tabs,
@@ -471,6 +499,7 @@ class _ShellState extends State<Shell> {
       saver: widget.saver,
       analysis: widget.analysis,
       replies: widget.replies,
+      fill: widget.fill,
       tabs: _tabs,
       editing: _editing,
       settings: widget.settings,

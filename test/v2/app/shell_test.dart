@@ -20,6 +20,7 @@ import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
 import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
+import 'package:chess_auto_prep/v2/workspace/fill_gaps.dart';
 import 'package:chess_auto_prep/v2/workspace/repertoire_answers.dart';
 import 'package:chess_auto_prep/v2/workspace/replies.dart';
 import 'package:dartchess/dartchess.dart' show Side;
@@ -52,6 +53,7 @@ void main() {
   late DocumentSession session;
   late EngineAnalysis analysis;
   late Replies replies;
+  late FillGaps fill;
   late ChapterOutline outline;
   late PgnViewer viewer;
   // In memory only, so it can be made once and disposed with the rest.
@@ -99,6 +101,12 @@ void main() {
       session,
       () async => const StartFailed('no engine in this test'),
     );
+    fill = FillGaps(
+      session: session,
+      analysis: analysis,
+      documents: store,
+      tools: (_) async => const FillUnavailable('no engine in this test'),
+    );
     (question, settings) = (_Question(), SettingsStore());
     leaving = ExitGuard(
       saver: saver,
@@ -115,6 +123,7 @@ void main() {
     viewer.dispose();
     settings.dispose();
     outline.dispose();
+    fill.dispose();
     analysis.dispose();
     studies.dispose();
     library.dispose();
@@ -148,6 +157,7 @@ void main() {
           saver: saver,
           analysis: analysis,
           replies: replies,
+          fill: fill,
           leaving: leaving,
         ),
       ),
@@ -375,6 +385,32 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Replies'), findsOneWidget);
     expect(find.text('Next gap'), findsOneWidget, reason: 'brought up');
+  });
+
+  testWidgets('Fill gaps from here is off until a repertoire chapter is open, '
+      'then asks its three numbers', (tester) async {
+    await pump(tester);
+    await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
+    final off = tester.widget<MenuItemButton>(
+      find.widgetWithText(MenuItemButton, 'Fill gaps from here…'),
+    );
+    expect(off.onPressed, isNull);
+    await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(inLibrary(find.text('Main')).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Fill gaps from here…'));
+    await tester.pumpAndSettle();
+    expect(find.text('Fill gaps from here'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Opponent rating'), findsOneWidget);
+    await tester.tap(find.text('Fill'));
+    await tester.pumpAndSettle();
+    // No engine in this test: the card says so, and the pane is back.
+    expect(find.text('no engine in this test'), findsOneWidget);
+    expect(analysis.paused, isFalse);
   });
 
   testWidgets('Actions sits beside the mode menu, at the left', (tester) async {

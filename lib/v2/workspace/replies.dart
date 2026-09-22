@@ -4,6 +4,7 @@ import 'package:dartchess/dartchess.dart' show Move, Side;
 import 'package:flutter/foundation.dart';
 
 import '../chess/fen.dart';
+import '../chess/generation/draft_lines.dart' show expectimaxIn;
 import '../chess/pgn/move_label.dart';
 import '../chess/pgn/tree_edit.dart';
 import '../diagnostics/log.dart';
@@ -32,6 +33,7 @@ final class ReplyRow {
     required this.inRepertoire,
     required this.gap,
     this.elsewhere,
+    this.expectimax,
   });
 
   /// Standard UCI, as the model names it.
@@ -58,6 +60,11 @@ final class ReplyRow {
   /// The chapter of the repertoire that answers the position after it,
   /// when this chapter does not play it: the answer is on another page.
   final String? elsewhere;
+
+  /// What a fill said the position after this move of ours is worth, as
+  /// its `[%expectimax]` token wrote it (`+0.42`), or null when no run
+  /// reached it. Read from the document, never computed here.
+  final String? expectimax;
 }
 
 /// What the Replies table shows for the position on the board.
@@ -308,7 +315,8 @@ final class Replies extends ChangeNotifier {
     final floor = 1 / _settings.value.coverOnceIn;
     final rows = <ReplyRow>[];
     for (final MapEntry(key: uci, value: share) in shares.entries) {
-      final played = indexOfReply(fen, siblings, uci) >= 0;
+      final at = indexOfReply(fen, siblings, uci);
+      final played = at >= 0;
       if (share < shownFrom && !played) continue;
       final move = Move.parse(uci);
       final node = move == null ? null : moveNode(fen, move);
@@ -329,6 +337,9 @@ final class Replies extends ChangeNotifier {
               reach != null &&
               reach * share >= floor,
           elsewhere: ourMove ? null : elsewhere,
+          expectimax: ourMove && played
+              ? expectimaxIn(siblings[at].comment)
+              : null,
         ),
       );
     }

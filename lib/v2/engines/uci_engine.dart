@@ -63,15 +63,15 @@ final class UciEngine implements Engine {
   Future<EngineExit> get exited => _exited.future;
 
   @override
-  Search analyse(Fen fen, {required int multiPv}) {
-    final search = _UciSearch(_send);
+  Search analyse(Fen fen, {required int multiPv, int? depth}) {
+    final search = _UciSearch(_send, finite: depth != null);
     final previous = _latest;
     _latest = search;
     // One search that fails must not break the queue: without this, a
     // single error would leave every later `analyse` waiting on a rejected
     // future and no `go` would ever be sent again.
     _turn = _turn
-        .then((_) => _begin(search, previous, fen, multiPv))
+        .then((_) => _begin(search, previous, fen, multiPv, depth))
         .catchError((Object error) {
           log.w('start a search on $_name', error);
           search.finish();
@@ -84,6 +84,7 @@ final class UciEngine implements Engine {
     _UciSearch? previous,
     Fen fen,
     int multiPv,
+    int? depth,
   ) async {
     if (previous != null && !await _stopped(previous)) return search.finish();
     if (_exited.isCompleted) return search.finish();
@@ -91,7 +92,7 @@ final class UciEngine implements Engine {
     _current = search;
     _send('setoption name MultiPV value $multiPv');
     _send('position fen ${fen.value}');
-    _send('go infinite');
+    _send(depth == null ? 'go infinite' : 'go depth $depth');
     search.markRunning();
   }
 
@@ -103,9 +104,18 @@ final class UciEngine implements Engine {
   /// board has left. It is killed instead, and its exit says it was
   /// [EngineExit.unresponsive], which is what tells the workspace to start
   /// another engine rather than give up on the session.
+  ///
+  /// A fixed-depth search is waited for, not stopped: it ends on its own,
+  /// and its verdict is what its caller is holding out for. One that takes
+  /// longer than any depth an engine is asked for here should is killed on
+  /// the same terms.
   Future<bool> _stopped(_UciSearch previous) async {
     try {
-      await previous.stop().timeout(_stopPatience);
+      if (previous.finite && previous.isRunning) {
+        await previous.done.timeout(_finitePatience);
+      } else {
+        await previous.stop().timeout(_stopPatience);
+      }
       return true;
     } on TimeoutException {
       log.e(
@@ -171,12 +181,20 @@ final class UciEngine implements Engine {
 /// is not coming back.
 const _stopPatience = Duration(seconds: 5);
 
+/// How long a fixed-depth search may run before the engine is taken for
+/// wedged. The depths asked for here finish in well under a second; a
+/// minute of silence is a process that is not coming back.
+const _finitePatience = Duration(minutes: 1);
+
 /// A search as the engine sees it: queued, running, or finished once
 /// `bestmove` arrived.
 final class _UciSearch {
-  _UciSearch(this._send);
+  _UciSearch(this._send, {required this.finite});
 
   final void Function(String line) _send;
+
+  /// Ends on its own at a depth, rather than when it is stopped.
+  final bool finite;
   final _lines = StreamController<EngineLine>();
   final _done = Completer<void>();
   bool _running = false;
@@ -184,6 +202,10 @@ final class _UciSearch {
   late final public = Search(lines: _lines.stream, stop: stop);
 
   bool get isDone => _done.isCompleted;
+
+  bool get isRunning => _running && !isDone;
+
+  Future<void> get done => _done.future;
 
   void markRunning() => _running = true;
 

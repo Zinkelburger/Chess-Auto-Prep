@@ -11,7 +11,10 @@ import 'replies.dart';
 /// position on the board, how often, and whether the chapter answers it.
 ///
 /// One row per move, most likely first: the share in a gutter, the move,
-/// and a tick when the chapter already plays it. A reply the opponent plays
+/// and a tick when the chapter already plays it. At our own move a column
+/// after the move holds what a fill said the move is worth, read off the
+/// document's `[%expectimax]` tokens, or `not in tree` where no run
+/// reached it; nothing is worked out while browsing. A reply the opponent plays
 /// often enough and the chapter does not answer is a gap and its row says
 /// so; the gap Next took the user to is the tinted row. Clicking a row plays
 /// the move, which at the opponent's move adds their reply and puts the
@@ -226,12 +229,30 @@ class _ReplyRow extends StatelessWidget {
                     style: monoText.copyWith(color: scheme.onSurface),
                   ),
                 ),
+                if (ourMove) _expectimax(theme),
                 _mark(theme),
                 const SizedBox(width: Space.m),
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  /// What the fill made of the move, or that none reached it.
+  Widget _expectimax(ThemeData theme) {
+    final scheme = theme.colorScheme;
+    final value = row.expectimax;
+    return Padding(
+      padding: const EdgeInsets.only(right: Space.m),
+      child: Text(
+        value ?? 'not in tree',
+        style: value == null
+            ? theme.textTheme.labelSmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              )
+            : monoText.copyWith(color: scheme.onSurface),
       ),
     );
   }

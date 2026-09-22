@@ -12,6 +12,8 @@ import 'document_session.dart';
 import 'edit_strip.dart';
 import 'engine_analysis.dart';
 import 'engine_pane.dart';
+import 'fill_gaps.dart';
+import 'fill_line.dart';
 import 'game_counter.dart';
 import 'move_note.dart';
 import 'move_tree_view.dart';
@@ -23,9 +25,9 @@ import 'workspace_tabs.dart';
 
 /// The board with the game counter and the move's note under it on the
 /// left; on the right the reading card, top to bottom in a fixed order: the
-/// heading, the engine, the tab strip, the moves or the opponent's replies,
-/// the edit strip while there is editing or trouble, and the navigation
-/// row. The two halves start equal, as the old app's did. The keys that
+/// heading, the engine, the fill's line while there is a fill to speak of,
+/// the tab strip, the moves or the opponent's replies, the edit strip while
+/// there is editing or trouble, and the navigation row. The two halves start equal, as the old app's did. The keys that
 /// walk the line and take an edit back are [WorkspaceKeys], above every
 /// column that edits the document.
 class WorkspaceView extends StatelessWidget {
@@ -35,6 +37,7 @@ class WorkspaceView extends StatelessWidget {
     required this.saver,
     required this.analysis,
     required this.replies,
+    required this.fill,
     required this.tabs,
     required this.editing,
     required this.settings,
@@ -45,6 +48,9 @@ class WorkspaceView extends StatelessWidget {
   final DocumentSaver saver;
   final EngineAnalysis analysis;
   final Replies replies;
+
+  /// The run that writes proposed lines, for its one line on the card.
+  final FillGaps fill;
 
   /// Which of the card's tabs are open and which is up. The shell owns it,
   /// as it owns [editing]: the keys and the Actions menu turn it too.
@@ -101,6 +107,10 @@ class WorkspaceView extends StatelessWidget {
               horizontal: readingCardInset - Space.s,
             ),
             child: EnginePane(session: session, analysis: analysis),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: readingCardInset),
+            child: FillLine(fill: fill),
           ),
           Expanded(
             child: _Tabbed(

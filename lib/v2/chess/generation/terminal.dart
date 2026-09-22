@@ -58,6 +58,7 @@ final class SearchPath {
     required this.fen,
     required this.history,
     required this.ply,
+    required this.reach,
   });
 
   factory SearchPath.root(Position position) {
@@ -67,6 +68,7 @@ final class SearchPath {
       fen: fen,
       history: [repetitionKey(fen)],
       ply: 0,
+      reach: 1,
     );
   }
 
@@ -80,14 +82,21 @@ final class SearchPath {
   /// Half-moves from the search root.
   final int ply;
 
-  /// This path with [after] played at the end of it.
-  SearchPath next(Position after) {
+  /// How often a game that starts at the root comes this way: the product
+  /// of the opponent's shares along the path, our own moves counting as
+  /// certain. One at the root.
+  final double reach;
+
+  /// This path with [after] played at the end of it. [share] is the
+  /// opponent's share of the move that reached it, or one for one of ours.
+  SearchPath next(Position after, {double share = 1}) {
     final fen = Fen(after.fen);
     return SearchPath._(
       position: after,
       fen: fen,
       history: [...history, repetitionKey(fen)],
       ply: ply + 1,
+      reach: reach * share,
     );
   }
 }

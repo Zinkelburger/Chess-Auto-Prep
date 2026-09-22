@@ -17,8 +17,8 @@ final class ScriptedEngine implements Engine {
   ScriptedSearch get current => searches.last;
 
   @override
-  Search analyse(Fen fen, {required int multiPv}) {
-    final search = ScriptedSearch(fen: fen, multiPv: multiPv);
+  Search analyse(Fen fen, {required int multiPv, int? depth}) {
+    final search = ScriptedSearch(fen: fen, multiPv: multiPv, depth: depth);
     searches.add(search);
     return search.search;
   }
@@ -48,10 +48,13 @@ final class ScriptedEngine implements Engine {
 /// A search whose `stop` only marks it; the test ends it with [end], the
 /// way a real engine ends one with `bestmove`, so late lines can be sent.
 final class ScriptedSearch {
-  ScriptedSearch({required this.fen, required this.multiPv});
+  ScriptedSearch({required this.fen, required this.multiPv, this.depth});
 
   final Fen fen;
   final int multiPv;
+
+  /// The depth the search was asked to run to, or null for an open one.
+  final int? depth;
   final _lines = StreamController<EngineLine>();
   final _done = Completer<void>();
   bool stopped = false;

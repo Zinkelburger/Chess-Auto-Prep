@@ -6,6 +6,7 @@ import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
 import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
+import 'package:chess_auto_prep/v2/workspace/fill_gaps.dart';
 import 'package:chess_auto_prep/v2/workspace/move_tree_view.dart';
 import 'package:chess_auto_prep/v2/workspace/repertoire_answers.dart';
 import 'package:chess_auto_prep/v2/workspace/replies.dart';
@@ -30,6 +31,7 @@ void main() {
   late DocumentSaver saver;
   late EngineAnalysis analysis;
   late Replies replies;
+  late FillGaps fill;
   late ValueNotifier<bool> editing;
   late PaneTabs tabs;
   late SettingsStore settings;
@@ -50,6 +52,13 @@ void main() {
       ),
     );
     addTearDown(replies.dispose);
+    fill = FillGaps(
+      session: session,
+      analysis: analysis,
+      documents: ScriptedDocumentStore(),
+      tools: (_) async => const FillUnavailable('no engine in this test'),
+    );
+    addTearDown(fill.dispose);
   }
 
   Future<void> pump(WidgetTester tester) async {
@@ -70,6 +79,7 @@ void main() {
               saver: saver,
               analysis: analysis,
               replies: replies,
+              fill: fill,
               tabs: tabs,
               editing: editing,
               settings: settings,
