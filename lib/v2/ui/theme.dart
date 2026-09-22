@@ -352,6 +352,18 @@ const listRowHeight = 34.0;
 /// A row of the trainer's lists: a name over a line of moves.
 const trainRowHeight = 44.0;
 
+/// A row of the puzzle list: the move and its result on one line, the
+/// opponent and the date under it.
+const puzzleRowHeight = 44.0;
+
+/// The box the Tactics filters take a number of days in.
+const dayCountWidth = 44.0;
+
+/// The Puzzle tab's feedback lines and its star row keep these heights
+/// whether they hold anything or not, so the buttons under them never move.
+const feedbackLineHeight = 40.0;
+const starRowHeight = 36.0;
+
 /// How wide the number in front of a game in a list is: room for four
 /// digits, which a downloaded collection needs.
 const gameOrdinalWidth = 40.0;

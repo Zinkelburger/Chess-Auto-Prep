@@ -38,7 +38,11 @@ class _MoveNoteState extends State<MoveNote> with CommentPreviews<MoveNote> {
         if (tree == null) return const SizedBox.shrink();
         final path = session.cursor;
         final move = session.currentMove;
-        final notes = _notesAt(tree, path, move);
+        // A line still being found shows no notes: a note is often the
+        // answer, written down.
+        final notes = session.shownTo != null
+            ? const <(String, Fen, NodePath)>[]
+            : _notesAt(tree, path, move);
         if (move == null && notes.isEmpty) return const SizedBox.shrink();
         final scheme = Theme.of(context).colorScheme;
         return LinePreviewOverlay(

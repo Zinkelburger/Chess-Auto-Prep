@@ -55,6 +55,8 @@ class WorkspaceView extends StatelessWidget {
     this.onExplorerGame,
     this.boardClaim,
     this.trainTab,
+    this.onBoardMove,
+    this.puzzle,
   });
 
   final DocumentSession session;
@@ -94,6 +96,13 @@ class WorkspaceView extends StatelessWidget {
   /// The Train tab's body, which is a feature's: the shell hands it in.
   final WidgetBuilder? trainTab;
 
+  /// Where a move made on the board goes when not into the document: a
+  /// puzzle judges it. Null plays it into the document.
+  final ValueChanged<String>? onBoardMove;
+
+  /// What the Puzzle tab shows, which is the Tactics mode's.
+  final Widget? puzzle;
+
   /// The board and the card beside it, with a divider the user can drag
   /// between them. The card starts the wider of the two: training, the
   /// replies and the explorer have more to say than a board needs room for.
@@ -118,7 +127,11 @@ class WorkspaceView extends StatelessWidget {
     child: ValueListenableBuilder<BoardClaim?>(
       valueListenable: boardClaim ?? const _NoClaim(),
       builder: (context, claim, _) => claim == null
-          ? _BoardAndCounter(session: session, settings: settings)
+          ? _BoardAndCounter(
+              session: session,
+              settings: settings,
+              onMove: onBoardMove ?? session.playMove,
+            )
           : _ClaimedBoard(claim: claim, settings: settings),
     ),
   );
@@ -157,6 +170,7 @@ class WorkspaceView extends StatelessWidget {
               moveMenu: moveMenu,
               onExplorerGame: onExplorerGame,
               trainTab: trainTab,
+              puzzle: puzzle,
             ),
           ),
           EditStrip(session: session, saver: saver, editing: editing),
@@ -184,6 +198,7 @@ class _Tabbed extends StatelessWidget {
     required this.moveMenu,
     required this.onExplorerGame,
     required this.trainTab,
+    required this.puzzle,
   });
 
   final DocumentSession session;
@@ -195,6 +210,7 @@ class _Tabbed extends StatelessWidget {
   final MoveMenu? moveMenu;
   final ValueChanged<ExplorerGame>? onExplorerGame;
   final WidgetBuilder? trainTab;
+  final Widget? puzzle;
 
   Widget _body(BuildContext context, WorkspaceTab tab) => switch (tab) {
     WorkspaceTab.moves => MoveTreeView(session: session, moveMenu: moveMenu),
@@ -210,12 +226,14 @@ class _Tabbed extends StatelessWidget {
       games: games,
       onOpenGame: onExplorerGame,
     ),
+    WorkspaceTab.puzzle => puzzle ?? const SizedBox.shrink(),
   };
 
   Widget? _trailing(WorkspaceTab tab) => switch (tab) {
     WorkspaceTab.moves || WorkspaceTab.train => null,
     WorkspaceTab.replies => _NextGap(gaps: gaps),
     WorkspaceTab.explorer => ExplorerGear(explorer: explorer),
+    WorkspaceTab.puzzle => null,
   };
 
   @override
@@ -269,10 +287,15 @@ class _NextGap extends StatelessWidget {
 /// the move's note in what the board leaves below, when that is enough to
 /// read a few lines in.
 class _BoardAndCounter extends StatelessWidget {
-  const _BoardAndCounter({required this.session, required this.settings});
+  const _BoardAndCounter({
+    required this.session,
+    required this.settings,
+    required this.onMove,
+  });
 
   final DocumentSession session;
   final SettingsStore settings;
+  final ValueChanged<String> onMove;
 
   @override
   Widget build(BuildContext context) {
@@ -295,7 +318,7 @@ class _BoardAndCounter extends StatelessWidget {
                     fen: session.fen,
                     orientation: session.orientation,
                     lastMove: session.currentMove?.uci,
-                    onMove: session.playMove,
+                    onMove: onMove,
                     coordinates: settings.value.boardCoordinates,
                   ),
                 ),

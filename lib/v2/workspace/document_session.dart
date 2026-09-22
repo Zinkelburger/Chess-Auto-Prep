@@ -46,10 +46,10 @@ final class DocumentSession extends ChangeNotifier {
   final DocumentSaver _saver;
   Chapter? _chapter;
   ChapterRef? _source;
-  int? _game;
   String? _readOnly;
   final _cursor = ValueNotifier<NodePath>(const NodePath.root());
   EditRefused? _refused;
+  NodePath? _shownTo;
   bool _flipped = false;
   int _opens = 0;
   bool _disposed = false;
@@ -97,6 +97,25 @@ final class DocumentSession extends ChangeNotifier {
 
   bool get flipped => _flipped;
 
+  /// While set, the game is shown only as far as this move: the moves after
+  /// it and every note are hidden, the cursor cannot pass it, and the board
+  /// plays nothing into the document. A puzzle asks the user to find what
+  /// comes next, so the answer must not be one arrow key or one glance at
+  /// the move list away. Null shows everything.
+  ///
+  /// Another document or another game of this one shows everything again;
+  /// whoever hid the rest hides it again for the game they put up.
+  NodePath? get shownTo => _shownTo;
+
+  /// Shows the game only as far as [path], or all of it when null. A cursor
+  /// past [path] is brought back to it.
+  void showOnlyTo(NodePath? path) {
+    if (path == _shownTo) return;
+    _shownTo = path;
+    notifyListeners();
+    if (path != null && !path.startsWith(cursor)) _cursor.value = path;
+  }
+
   void flip() {
     _flipped = !_flipped;
     notifyListeners();
@@ -134,7 +153,6 @@ final class DocumentSession extends ChangeNotifier {
   /// first, exactly as it does when another file is opened.
   Future<OpenResult> open(ChapterRef ref, {int? game}) async {
     final ticket = ++_opens;
-    _game = game;
     // A rename, move or delete of the document open now may still be running,
     // with a draft waiting behind it. That draft belongs to the file it was
     // typed into, so it goes out first — before this document takes the saver
@@ -171,7 +189,7 @@ final class DocumentSession extends ChangeNotifier {
   Future<OpenResult> reloadFromDisk() async {
     final ref = _source;
     if (ref == null) return const OpenOvertaken();
-    return open(ref, game: _game);
+    return open(ref, game: game);
   }
 
   /// The open document was renamed or moved: the same file with the same
@@ -192,8 +210,8 @@ final class DocumentSession extends ChangeNotifier {
     _opens++;
     _chapter = null;
     _source = null;
-    _game = null;
     _refused = null;
+    _shownTo = null;
     _saver.closed();
     _cursor.value = const NodePath.root();
     notifyListeners();
@@ -212,7 +230,7 @@ final class DocumentSession extends ChangeNotifier {
     if (index < 0 || index >= chapter.lines.length) return;
     if (index == chapter.game) return;
     _chapter = withLines(chapter, chapter.lines, game: index);
-    _game = index;
+    _shownTo = null;
     _clearRefusal();
     _cursor.value = const NodePath.root();
     notifyListeners();
@@ -223,6 +241,7 @@ final class DocumentSession extends ChangeNotifier {
     final tree = this.tree;
     if (tree == null || path == cursor) return;
     if (!path.isRoot && tree.nodeAt(path) == null) return;
+    if (_shownTo case final limit? when !limit.startsWith(path)) return;
     _cursor.value = path;
   }
 
@@ -243,7 +262,7 @@ final class DocumentSession extends ChangeNotifier {
   /// the chapter comes back without is logged rather than saved.
   void playMove(String uci) {
     final chapter = _chapter;
-    if (chapter == null) return;
+    if (chapter == null || _shownTo != null) return;
     // A move the chapter already holds writes nothing, so following it is
     // reading: a file this app may not write still shows its own lines.
     final here = edits.playedAlready(chapter, at: cursor, uci: uci);
@@ -365,12 +384,11 @@ final class DocumentSession extends ChangeNotifier {
     if (_disposed || ticket != _opens) return const UndoRefused();
     if (result case Restored(:final text)) {
       final showing = showingGameText(_chapter);
-      final read = await readChapter(name: ref.name, text: text, game: _game);
+      final read = await readChapter(name: ref.name, text: text, game: game);
       if (_disposed || ticket != _opens) return const UndoRefused();
       final restored = showingGame(read, showing);
       final before = _chapter?.tree;
       _chapter = restored;
-      _game = restored.game;
       _cursor.value = before == null
           ? const NodePath.root()
           : samePathIn(before, restored.tree, cursor);
@@ -393,7 +411,7 @@ final class DocumentSession extends ChangeNotifier {
     final frozen = _saver.state is SaveStopped || _readOnly != null;
     if (ref == null || !frozen) return written;
     final path = p.join(p.dirname(ref.path), written.name);
-    final opened = await open(ChapterRef.at(path), game: _game);
+    final opened = await open(ChapterRef.at(path), game: game);
     return CopySaved(written.name, nowEditing: opened is DocumentOpened);
   }
 
@@ -418,6 +436,7 @@ final class DocumentSession extends ChangeNotifier {
     _chapter = chapter;
     _source = ref;
     _flipped = false;
+    _shownTo = null;
     _readOnly = readOnly;
     _refused = readOnly == null ? null : NotEditable(readOnly);
     _saver.opened(ref, revision, readOnly: readOnly);
@@ -463,7 +482,6 @@ final class DocumentSession extends ChangeNotifier {
       case edits.ChapterEdited(chapter: final edited, :final games):
         _clearRefusal();
         _chapter = edited;
-        _game = edited.game;
         _saver.save(writeChapter(edited), GamesRearranged(games));
         _cursor.value = samePathIn(chapter.tree, edited.tree, cursor);
     }

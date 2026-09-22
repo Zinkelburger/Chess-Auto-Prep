@@ -19,6 +19,8 @@ import '../features/settings/lichess_account.dart';
 import '../features/study/studies.dart';
 import '../features/trainer/scope_reader.dart';
 import '../features/trainer/trainer.dart';
+import '../features/tactics/puzzle_trainer.dart';
+import '../features/tactics/tactics_set.dart';
 import '../net/lichess_explorer.dart';
 import '../net/lichess_login.dart';
 import '../net/lichess_studies.dart';
@@ -188,7 +190,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
   );
 
   final _dice = Random();
-  late final _trainer = Trainer(
+  late final _lineTrainer = Trainer(
     session: _session,
     chapters: ScopeReader(files: _chapterFiles, documents: _store),
     files: TrainingStore(widget.documents),
@@ -308,6 +310,25 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     input: DialogInput(_navigator),
   );
 
+  /// The old app's tactics set, one game per puzzle, read and written in
+  /// place so both apps keep one record of every attempt.
+  late final _tactics = TacticsSet(
+    documents: _store,
+    session: _session,
+    settings: _settings,
+    ref: ChapterRef.at(
+      p.join(widget.documents.path, 'tactics_sets', 'Default.pgn'),
+    ),
+  );
+  late final _trainer = PuzzleTrainer(
+    set: _tactics,
+    session: _session,
+    analysis: _analysis,
+    settings: _settings,
+    open: (set, game) async =>
+        await _requests.open(set, game: game) is RequestDone,
+  );
+
   late final _quit = AppExit(
     guard: _exit,
     stopEngines: _engines.dispose,
@@ -362,6 +383,8 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     _settings.removeListener(_engineSettings);
     _account.dispose();
     _requests.dispose();
+    _lineTrainer.dispose();
+    _tactics.dispose();
     _fill.removeListener(_listTheDraft);
     _fill.dispose();
     _trainer.dispose();
@@ -410,7 +433,9 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
         explorer: _explorer,
         games: _games,
         fill: _fill,
+        tactics: _tactics,
         trainer: _trainer,
+        lineTrainer: _lineTrainer,
       ),
     );
   }

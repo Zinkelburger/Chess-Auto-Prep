@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../chess/explorer_choice.dart';
+import '../chess/tactics/puzzle_queue.dart';
 
 /// What the user has chosen about the app as a whole: the few things two
 /// reasonable people want different values for and the app cannot tell.
@@ -18,6 +19,8 @@ final class Settings {
     this.opponentElo = 2200,
     this.coverOnceIn = 50,
     this.explorer = ExplorerChoice.defaults,
+    this.puzzles = PuzzleFilter.defaults,
+    this.autoAdvance = true,
   });
 
   /// Rank and file letters on the board.
@@ -50,6 +53,13 @@ final class Settings {
   /// and this is only where the choice is kept between launches.
   final ExplorerChoice explorer;
 
+  /// Which puzzles Tactics plays and in what order. Chosen on the Tactics
+  /// list, beside the count it changes; kept here between launches.
+  final PuzzleFilter puzzles;
+
+  /// Whether a solved puzzle gives way to the next one by itself.
+  final bool autoAdvance;
+
   static const defaults = Settings();
 
   /// The most the engine rows accept: a table bigger than this or more
@@ -74,6 +84,8 @@ final class Settings {
     int? opponentElo,
     int? coverOnceIn,
     ExplorerChoice? explorer,
+    PuzzleFilter? puzzles,
+    bool? autoAdvance,
   }) => Settings(
     boardCoordinates: boardCoordinates ?? this.boardCoordinates,
     engineCores: engineCores ?? this.engineCores,
@@ -84,6 +96,8 @@ final class Settings {
     opponentElo: opponentElo ?? this.opponentElo,
     coverOnceIn: coverOnceIn ?? this.coverOnceIn,
     explorer: explorer ?? this.explorer,
+    puzzles: puzzles ?? this.puzzles,
+    autoAdvance: autoAdvance ?? this.autoAdvance,
   );
 
   /// The file's text. One flat object with plain names, so a person can
@@ -97,6 +111,8 @@ final class Settings {
     'opponentElo': opponentElo,
     'coverOnceIn': coverOnceIn,
     'explorer': explorer.toJson(),
+    'puzzles': puzzles.toJson(),
+    'autoAdvance': autoAdvance,
   });
 
   /// Reads [text]; a field that is missing or of the wrong type keeps its
@@ -124,6 +140,8 @@ final class Settings {
       opponentElo: pick('opponentElo', defaults.opponentElo),
       coverOnceIn: pick('coverOnceIn', defaults.coverOnceIn),
       explorer: ExplorerChoice.fromJson(decoded['explorer']),
+      puzzles: PuzzleFilter.fromJson(decoded['puzzles']),
+      autoAdvance: pick('autoAdvance', defaults.autoAdvance),
     );
   }
 
@@ -137,7 +155,9 @@ final class Settings {
       other.copyFilesIntoDocuments == copyFilesIntoDocuments &&
       other.opponentElo == opponentElo &&
       other.coverOnceIn == coverOnceIn &&
-      other.explorer == explorer;
+      other.explorer == explorer &&
+      other.puzzles == puzzles &&
+      other.autoAdvance == autoAdvance;
 
   @override
   int get hashCode => Object.hash(
@@ -149,5 +169,7 @@ final class Settings {
     opponentElo,
     coverOnceIn,
     explorer,
+    puzzles,
+    autoAdvance,
   );
 }
