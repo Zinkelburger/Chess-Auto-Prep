@@ -19,6 +19,8 @@ import 'explorer_pane.dart';
 import 'fill_gaps.dart';
 import 'fill_line.dart';
 import 'game_counter.dart';
+import 'game_fetcher.dart';
+import 'gap_hunt.dart';
 import 'move_note.dart';
 import 'move_tree_view.dart';
 import 'nav_row.dart';
@@ -32,7 +34,7 @@ import 'workspace_tabs.dart';
 /// heading, the engine, the fill's line while there is a fill to speak of,
 /// the tab strip, the moves, the opponent's replies or the explorer, the
 /// edit strip while there is editing or trouble, and the navigation row.
-/// The two halves start equal, as the old app's did. The keys that
+/// The card starts wider than the board. The keys that
 /// walk the line and take an edit back are [WorkspaceKeys], above every
 /// column that edits the document.
 class WorkspaceView extends StatelessWidget {
@@ -42,7 +44,9 @@ class WorkspaceView extends StatelessWidget {
     required this.saver,
     required this.analysis,
     required this.replies,
+    required this.gaps,
     required this.explorer,
+    required this.games,
     required this.fill,
     required this.tabs,
     required this.editing,
@@ -50,14 +54,16 @@ class WorkspaceView extends StatelessWidget {
     this.moveMenu,
     this.onExplorerGame,
     this.boardClaim,
-    this.featureTabs = const {},
+    this.trainTab,
   });
 
   final DocumentSession session;
   final DocumentSaver saver;
   final EngineAnalysis analysis;
   final Replies replies;
+  final GapHunt gaps;
   final Explorer explorer;
+  final GameFetcher games;
 
   /// Asked to open a game the explorer lists, which is the shell's
   /// business: another mode shows it.
@@ -68,7 +74,7 @@ class WorkspaceView extends StatelessWidget {
 
   /// Which of the card's tabs are open and which is up. The shell owns it,
   /// as it owns [editing]: the keys and the Actions menu turn it too.
-  final PaneTabs tabs;
+  final PaneTabs<WorkspaceTab> tabs;
 
   /// For what the board draws: the coordinates, today.
   final SettingsStore settings;
@@ -85,8 +91,8 @@ class WorkspaceView extends StatelessWidget {
   /// document's, while it holds one: a lesson.
   final ValueListenable<BoardClaim?>? boardClaim;
 
-  /// The bodies of the tabs a feature fills, by tab id: the trainer's.
-  final Map<String, WidgetBuilder> featureTabs;
+  /// The Train tab's body, which is a feature's: the shell hands it in.
+  final WidgetBuilder? trainTab;
 
   /// The board and the card beside it, with a divider the user can drag
   /// between them. The card starts the wider of the two: training, the
@@ -144,11 +150,13 @@ class WorkspaceView extends StatelessWidget {
             child: _Tabbed(
               session: session,
               replies: replies,
+              gaps: gaps,
               explorer: explorer,
+              games: games,
               tabs: tabs,
               moveMenu: moveMenu,
               onExplorerGame: onExplorerGame,
-              featureTabs: featureTabs,
+              trainTab: trainTab,
             ),
           ),
           EditStrip(session: session, saver: saver, editing: editing),
@@ -169,44 +177,46 @@ class _Tabbed extends StatelessWidget {
   const _Tabbed({
     required this.session,
     required this.replies,
+    required this.gaps,
     required this.explorer,
+    required this.games,
     required this.tabs,
     required this.moveMenu,
     required this.onExplorerGame,
-    required this.featureTabs,
+    required this.trainTab,
   });
 
   final DocumentSession session;
   final Replies replies;
+  final GapHunt gaps;
   final Explorer explorer;
-  final PaneTabs tabs;
+  final GameFetcher games;
+  final PaneTabs<WorkspaceTab> tabs;
   final MoveMenu? moveMenu;
   final ValueChanged<ExplorerGame>? onExplorerGame;
-  final Map<String, WidgetBuilder> featureTabs;
+  final WidgetBuilder? trainTab;
 
-  Widget _body(BuildContext context, String id) {
-    if (id == WorkspaceTab.moves.id) {
-      return MoveTreeView(session: session, moveMenu: moveMenu);
-    }
-    if (id == WorkspaceTab.replies.id) {
-      return RepliesPane(session: session, replies: replies);
-    }
-    if (id == WorkspaceTab.explorer.id) {
-      return ExplorerPane(
-        session: session,
-        explorer: explorer,
-        onOpenGame: onExplorerGame,
-      );
-    }
-    if (featureTabs[id] case final body?) return body(context);
-    return const SizedBox.shrink();
-  }
+  Widget _body(BuildContext context, WorkspaceTab tab) => switch (tab) {
+    WorkspaceTab.moves => MoveTreeView(session: session, moveMenu: moveMenu),
+    WorkspaceTab.train => trainTab?.call(context) ?? const SizedBox.shrink(),
+    WorkspaceTab.replies => RepliesPane(
+      session: session,
+      replies: replies,
+      gaps: gaps,
+    ),
+    WorkspaceTab.explorer => ExplorerPane(
+      session: session,
+      explorer: explorer,
+      games: games,
+      onOpenGame: onExplorerGame,
+    ),
+  };
 
-  Widget? _trailing(String id) {
-    if (id == WorkspaceTab.replies.id) return _NextGap(replies: replies);
-    if (id == WorkspaceTab.explorer.id) return ExplorerGear(explorer: explorer);
-    return null;
-  }
+  Widget? _trailing(WorkspaceTab tab) => switch (tab) {
+    WorkspaceTab.moves || WorkspaceTab.train => null,
+    WorkspaceTab.replies => _NextGap(gaps: gaps),
+    WorkspaceTab.explorer => ExplorerGear(explorer: explorer),
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -235,18 +245,18 @@ class _Tabbed extends StatelessWidget {
 /// The one control the Replies tab owns: the way to the next unanswered
 /// position. Off while there is no gap to go to.
 class _NextGap extends StatelessWidget {
-  const _NextGap({required this.replies});
+  const _NextGap({required this.gaps});
 
-  final Replies replies;
+  final GapHunt gaps;
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: replies,
+      listenable: gaps,
       builder: (context, _) {
-        final gaps = replies.walk?.gaps ?? const [];
+        final found = gaps.walk?.gaps ?? const [];
         return TextButton.icon(
-          onPressed: gaps.isEmpty ? null : replies.nextGap,
+          onPressed: found.isEmpty ? null : gaps.nextGap,
           icon: const Icon(Icons.skip_next, size: IconSize.action),
           label: const Text('Next gap'),
         );

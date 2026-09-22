@@ -74,3 +74,16 @@ LichessAccount someone({
   until: personal ? null : DateTime(2027, 9, 22),
   personal: personal,
 );
+
+/// What the login answers for [someone].
+LoggedIn loggedIn({String name = 'DrNykterstein', bool personal = false}) {
+  final account = someone(name: name, personal: personal);
+  return LoggedIn(
+    LichessGrant(
+      token: account.token,
+      username: account.username,
+      until: account.until,
+      personal: account.personal,
+    ),
+  );
+}

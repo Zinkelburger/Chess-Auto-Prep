@@ -3,7 +3,9 @@
 
 Everything here is a number or a pattern, so it fails instead of being argued
 about: file and function length, nesting, `part`, `dynamic`, `late`, the
-import table, no old-app imports, and file writes only inside storage/.
+import table (one mode never imports another), no old-app imports, file
+writes only inside storage/, how many fields an owner keeps, and a state
+that listens to its widget's owner following the widget when it changes.
 
     python3 scripts/check_v2.py            # exit 1 on any finding
 """
@@ -20,6 +22,7 @@ TEST = REPO / "test" / "v2"
 MAX_FILE_LINES = 600
 MAX_FUNCTION_LINES = 50
 MAX_NESTING = 3
+MAX_OWNER_FIELDS = 10
 
 # What each top-level v2 folder may import from within v2.
 # `diagnostics/` is the log facade: everything but pure `chess/` reports
@@ -37,7 +40,9 @@ ALLOWED = {
 }
 # engines/ stays pure Dart so a test can run an engine outside Flutter.
 FLUTTER_FREE = {"chess", "engines", "diagnostics"}
-IO_ALLOWED = {"storage", "engines", "app"}
+# net/ holds sockets as well as HTTP clients: the Lichess login listens on
+# a loopback port for the browser. Files are still written only in storage/.
+IO_ALLOWED = {"storage", "engines", "net", "app"}
 # Writers outside storage/: only the engine installer, which writes a binary, not user data.
 WRITERS_ALLOWED = {"engines/stockfish_install.dart"}
 
@@ -51,6 +56,9 @@ IMPORT = re.compile(r"^import\s+'([^']+)'")
 LITERAL_STYLE = re.compile(r"Color\(0x|fontSize:|fontFamily:\s*'|Icon\([^)]*\bsize:\s*[\d.]")
 WIDGET_IMPORT = re.compile(r"^import 'package:flutter/(?:material|widgets|cupertino)\.dart'")
 WRITE_CALL = re.compile(r"\b(writeAsString|writeAsBytes|openWrite|\.create\(|\.delete\(|rename\()")
+# A file that builds a `File(` is one that could write outside the store; a
+# method that only has File in its name, such as `importFile(`, is not.
+FILE_CONSTRUCTOR = re.compile(r"\bFile\(")
 
 
 def relative_folder(path: Path) -> str:
@@ -119,7 +127,243 @@ def check_functions(path: Path, lines: list[str], findings: list[str]) -> None:
         i = end + 1
 
 
-def check_file(path: Path, findings: list[str]) -> None:
+# ---------------------------------------------------------------------------
+# Classes. A line-by-line look cannot tell a field from a method or a brace
+# in a string from a block, so the class checks read the file with comments
+# and string contents blanked, then split each class body into members.
+
+
+def blank_literals(src: str) -> str:
+    """[src] with comments and the insides of string literals turned to
+    spaces, newlines kept: braces in them no longer count and every offset
+    is still on its line. An interpolation `${...}` is skipped as code."""
+    out: list[str] = []
+    i = 0
+    while i < len(src):
+        end = _literal_end(src, i)
+        if end is None:
+            out.append(src[i])
+            i += 1
+            continue
+        out.append(re.sub(r"[^\n]", " ", src[i:end]))
+        i = end
+    return "".join(out)
+
+
+def _literal_end(src: str, i: int) -> int | None:
+    """Where the comment or string starting at [i] ends; None when none
+    starts there."""
+    if src.startswith("//", i):
+        end = src.find("\n", i)
+        return len(src) if end < 0 else end
+    if src.startswith("/*", i):
+        end = src.find("*/", i + 2)
+        return len(src) if end < 0 else end + 2
+    raw = src[i] in "rR" and src[i + 1 : i + 2] in ("'", '"')
+    if raw and i > 0 and (src[i - 1].isalnum() or src[i - 1] == "_"):
+        return None
+    if raw or src[i] in "'\"":
+        return _string_end(src, i + 1 if raw else i, raw)
+    return None
+
+
+def _string_end(src: str, i: int, raw: bool) -> int:
+    quote = src[i] * 3 if src.startswith(src[i] * 3, i) else src[i]
+    i += len(quote)
+    while i < len(src) and not src.startswith(quote, i):
+        if len(quote) == 1 and src[i] == "\n":
+            return i
+        if not raw and src[i] == "\\":
+            i += 2
+        elif not raw and src.startswith("${", i):
+            i = _interpolation_end(src, i + 2)
+        else:
+            i += 1
+    return min(len(src), i + len(quote))
+
+
+def _interpolation_end(src: str, i: int) -> int:
+    depth = 0
+    while i < len(src):
+        end = _literal_end(src, i)
+        if end is not None:
+            i = end
+            continue
+        if src[i] == "{":
+            depth += 1
+        elif src[i] == "}":
+            if depth == 0:
+                return i + 1
+            depth -= 1
+        i += 1
+    return i
+
+
+CLASS = re.compile(
+    r"^(?:(?:abstract|final|base|sealed|interface|mixin)\s+)*class\s+(\w+)([^{;]*)\{",
+    re.M,
+)
+ASSIGN = re.compile(r"(?<![=!<>])=(?![=>])")
+ANNOTATION = re.compile(r"@\w+(?:\.\w+)*(?:\([^)]*\))?\s*")
+OWNER_BASE = re.compile(r"\b(?:extends|with)\b.*\b(ChangeNotifier|ValueNotifier)\b")
+EXTENDS = re.compile(r"\bextends\s+(\w+)")
+
+
+def dart_classes(clean: str) -> list[tuple[str, str, str, int]]:
+    """(name, header, body, line) of each class in blanked source."""
+    found = []
+    for m in CLASS.finditer(clean):
+        depth, i = 1, m.end()
+        while i < len(clean) and depth:
+            depth += {"{": 1, "}": -1}.get(clean[i], 0)
+            i += 1
+        line = clean.count("\n", 0, m.start()) + 1
+        found.append((m.group(1), m.group(2), clean[m.end() : i - 1], line))
+    return found
+
+
+def flatten(text: str) -> str:
+    """[text] with what is inside (), [] and {} blanked, so a search finds
+    only its own level: the `=` of a default parameter is not a field's."""
+    out, depth = [], 0
+    for c in text:
+        if c in ")]}":
+            depth = max(depth - 1, 0)
+        out.append(c if depth == 0 else " ")
+        if c in "([{":
+            depth += 1
+    return "".join(out)
+
+
+def class_members(body: str) -> list[tuple[str, bool]]:
+    """Each member of a class body with whether it ends in a block: a
+    method, constructor or getter with a body. A member ending in `;` is a
+    field, or a method, getter or constructor without one."""
+    members: list[tuple[str, bool]] = []
+    current, braces, parens, block = "", 0, 0, False
+    for c in body:
+        current += c
+        if c in "([":
+            parens += 1
+        elif c in ")]":
+            parens -= 1
+        elif c == "{":
+            if braces == 0 and parens == 0:
+                block = not _starts_expression(current[:-1])
+            braces += 1
+        elif c == "}":
+            braces -= 1
+            if braces == 0 and parens == 0 and block:
+                members.append((current.strip(), True))
+                current, block = "", False
+        elif c == ";" and braces == 0 and parens == 0:
+            members.append((current.strip(), False))
+            current = ""
+    return members
+
+
+def _starts_expression(head: str) -> bool:
+    """Whether a `{` after [head] opens a value (a map, a set, a closure in
+    an initializer) rather than a body. A constructor's `: x = y {` is a
+    body: its `=` comes after the colon."""
+    head = flatten(head)
+    assign = ASSIGN.search(head)
+    colon = head.find(":")
+    return "=>" in head or (assign is not None and (colon < 0 or assign.start() < colon))
+
+
+def owned_fields(statement: str) -> list[str]:
+    """The fields a `;`-ended member declares that the class keeps as its
+    own state: every instance field except a `final` one without an
+    initializer, which the constructor fills from its arguments — a
+    collaborator or a setting handed in, not state this class changes.
+    `static` fields are the class's, not an instance's, and never count."""
+    text = flatten(ANNOTATION.sub("", statement.rstrip(";")).strip())
+    if re.match(r"(static|factory|external)\b", text):
+        return []
+    assign = ASSIGN.search(text)
+    arrow = text.find("=>")
+    if arrow >= 0 and (assign is None or arrow < assign.start()):
+        return []
+    head = (text[: assign.start()] if assign else text).strip()
+    if ":" in head or head.endswith(")") or re.search(r"\b(get|set|operator)\b", head):
+        return []
+    if re.match(r"final\b", head) and assign is None:
+        return []
+    names = [part.split()[-1] for part in _declarators(head) if part.split()]
+    if len(head.split()) < 2 or not all(re.fullmatch(r"\w+", n) for n in names):
+        return []
+    return names
+
+
+def _declarators(head: str) -> list[str]:
+    """`final int a, b` split at the commas outside type arguments."""
+    parts, current, angles = [], "", 0
+    for c in head:
+        angles += {"<": 1, ">": -1}.get(c, 0)
+        if c == "," and angles == 0:
+            parts.append(current)
+            current = ""
+        else:
+            current += c
+    return parts + [current]
+
+
+def owner_classes(sources: dict[str, str]) -> set[str]:
+    """Classes that extend or mix in ChangeNotifier or ValueNotifier, or
+    extend a class that does: the owners of mutable state."""
+    headers = {
+        name: header
+        for text in sources.values()
+        for name, header, _, _ in dart_classes(blank_literals(text))
+    }
+    owners = {name for name, header in headers.items() if OWNER_BASE.search(header)}
+    while True:
+        more = {
+            name
+            for name, header in headers.items()
+            if name not in owners and (m := EXTENDS.search(header)) and m.group(1) in owners
+        }
+        if not more:
+            return owners
+        owners |= more
+
+
+LISTENS_TO_WIDGET = re.compile(r"\bwidget\.[\w.?!]+\s*\.\.?\s*addListener\s*\(")
+
+
+def check_classes(where: str, source: str, owners: set[str], findings: list[str]) -> None:
+    for name, header, body, line in dart_classes(blank_literals(source)):
+        members = class_members(body)
+        if name in owners:
+            fields = [f for text, block in members if not block for f in owned_fields(text)]
+            if len(fields) > MAX_OWNER_FIELDS:
+                findings.append(
+                    f"{where}:{line}: owner {name} keeps {len(fields)} fields "
+                    f"(max {MAX_OWNER_FIELDS}): {', '.join(fields)}"
+                )
+        if re.search(r"\bextends\s+State<", header):
+            _check_listening(where, name, header, members, line, findings)
+
+
+def _check_listening(where, name, header, members, line, findings) -> None:
+    """A state that joins its widget's listenable in initState must leave
+    it for the new one when the widget is rebuilt with another, or it
+    listens to an owner nobody shows any more."""
+    init = [text for text, block in members if block and re.search(r"\binitState\s*\(", text)]
+    if not init or not LISTENS_TO_WIDGET.search(init[0]):
+        return
+    if "ListeningState" in header:
+        return
+    if any(re.search(r"\bdidUpdateWidget\s*\(", text) for text, _ in members):
+        return
+    findings.append(
+        f"{where}:{line}: {name} listens to widget.… in initState without "
+        "ListeningState or didUpdateWidget"
+    )
+
+
+def check_file(path: Path, findings: list[str], owners: set[str] = frozenset()) -> None:
     lines = path.read_text().splitlines()
     where = path.relative_to(REPO)
     if len(lines) > MAX_FILE_LINES:
@@ -137,18 +381,20 @@ def check_file(path: Path, findings: list[str]) -> None:
         if is_lib and re.search(r"\blate\b", code) and "late final" not in code:
             findings.append(f"{where}:{n}: `late` that is not `late final`")
         writer = is_lib and (folder == "storage" or str(path.relative_to(LIB)) in WRITERS_ALLOWED)
-        if is_lib and not writer and WRITE_CALL.search(code) and "File(" in "".join(lines):
+        if is_lib and not writer and WRITE_CALL.search(code) and FILE_CONSTRUCTOR.search("".join(lines)):
             findings.append(f"{where}:{n}: file write outside storage/")
     if is_lib:
         check_imports(path, lines, findings)
+        check_classes(str(where), "\n".join(lines), owners, findings)
     check_functions(path, lines, findings)
 
 
 def main() -> int:
     findings: list[str] = []
+    owners = owner_classes({str(p): p.read_text() for p in LIB.rglob("*.dart")})
     for root in (LIB, TEST):
         for path in sorted(root.rglob("*.dart")):
-            check_file(path, findings)
+            check_file(path, findings, owners)
     total = sum(1 for _ in LIB.rglob("*.dart"))
     lib_lines = sum(len(p.read_text().splitlines()) for p in LIB.rglob("*.dart"))
     print(f"lib/v2: {total} files, {lib_lines} lines")

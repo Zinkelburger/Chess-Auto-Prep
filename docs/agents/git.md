@@ -15,8 +15,12 @@ without publishing it. Do not open PRs unless requested.
    `python3 scripts/agent_worktree.py --verify .`.
 3. Run `python3 scripts/agent_integrate.py` from that task worktree. It finds
    the main checkout, serializes integrations, advances it with a fast-forward,
-   pushes `HEAD` to `origin/backup/local-main` and verifies that remote SHA.
-   This is authorized routine completion, not an approval handoff.
+   pushes `HEAD` to `origin/backup/local-main` and verifies that remote SHA,
+   then removes the task worktree and deletes its branch locally and on origin.
+   This is authorized routine completion, not an approval handoff. Pass
+   `--keep` to retain the worktree when you will keep working in it; a later
+   integration without `--keep` cleans it up. Cleanup never runs when landing
+   or the backup push fails, so the task stays recoverable.
 4. If main advanced, merge local `main` into the task branch, resolve conflicts
    there, rerun relevant checks and push before retrying. Do not reset main to
    the task or base new integration on `origin/main`.
@@ -67,9 +71,9 @@ Keep local main's useful history. To produce a compact published history:
    or absorbing later development into the already published batch.
 
 Do not squash/reset the shared local main while other tasks are based on it.
-Keep task branches until their commits are included in local main and its
-verified remote backup. Remove only clean, unused worktrees; use `git branch -d`
-and remove the remote task branch last. No cleanup is required to finish a task.
+Integration cleans up its own task. For leftovers, remove only clean, unused
+worktrees whose branch is already in local main and its verified backup; use
+`git branch -d` and remove the remote task branch last.
 
 This uses Git's documented [fast-forward merges and squash option](https://git-scm.com/docs/git-merge)
 and [explicit push refspecs](https://git-scm.com/docs/git-push). A squash creates

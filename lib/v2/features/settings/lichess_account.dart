@@ -74,7 +74,13 @@ final class LichessAccountState extends ChangeNotifier {
 
   Future<bool> _took(LoginOutcome outcome) async {
     switch (outcome) {
-      case LoggedIn(:final account):
+      case LoggedIn(account: final grant):
+        final account = LichessAccount(
+          token: grant.token,
+          username: grant.username,
+          until: grant.until,
+          personal: grant.personal,
+        );
         if (!await _write(account)) {
           _set(
             const SignedOut(),

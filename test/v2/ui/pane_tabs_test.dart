@@ -11,7 +11,7 @@ const graph = PaneTab('graph', 'Graph');
 const all = [moves, replies, explorer, graph];
 
 void main() {
-  group('PaneTabs', () {
+  group('PaneTabs opening and closing', () {
     test('starts with the pinned tab and whatever else was asked open', () {
       final tabs = PaneTabs(all, open: ['graph', 'replies', 'nonsense']);
       expect(tabs.open, ['moves', 'graph', 'replies']);
@@ -53,7 +53,9 @@ void main() {
       expect(tabs.open, ['moves', 'graph']);
       expect(tabs.selected, 'moves');
     });
+  });
 
+  group('PaneTabs order', () {
     test('next and previous wrap round the open tabs', () {
       final tabs = PaneTabs(all, open: ['replies', 'graph']);
       tabs.next();
@@ -82,34 +84,9 @@ void main() {
     });
   });
 
-  group('PaneTabStrip', () {
-    late PaneTabs tabs;
-
-    Future<void> pump(WidgetTester tester, {Widget? trailing}) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: darkTheme(),
-          home: Scaffold(
-            body: Column(
-              children: [
-                PaneTabStrip(
-                  tabs: tabs,
-                  trailing: trailing,
-                  closeShortcut: 'Ctrl+W',
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-      await tester.pump();
-    }
-
-    tearDown(() => tabs.dispose());
-
+  group('PaneTabStrip layout', () {
     testWidgets('is left out while one tab is open', (tester) async {
-      tabs = PaneTabs(all);
-      await pump(tester);
+      final tabs = await pumpStrip(tester);
       expect(find.text('Moves'), findsNothing);
       tabs.show('replies');
       await tester.pumpAndSettle();
@@ -117,11 +94,24 @@ void main() {
       expect(find.text('Replies'), findsOneWidget);
     });
 
+    testWidgets('the trailing control sits at the right edge', (tester) async {
+      await pumpStrip(
+        tester,
+        open: ['replies'],
+        trailing: const Text('Next gap'),
+      );
+      expect(
+        tester.getTopRight(find.text('Next gap')).dx,
+        greaterThan(tester.getTopRight(find.text('Replies')).dx),
+      );
+    });
+  });
+
+  group('PaneTabStrip closing', () {
     testWidgets('a click brings a tab up; its × and Ctrl+W close it', (
       tester,
     ) async {
-      tabs = PaneTabs(all, open: ['replies', 'explorer']);
-      await pump(tester);
+      final tabs = await pumpStrip(tester, open: ['replies', 'explorer']);
       await tester.tap(find.text('Explorer'));
       await tester.pumpAndSettle();
       expect(tabs.selected, 'explorer');
@@ -130,17 +120,7 @@ void main() {
       // × but holds the room for it, so nothing shifts under the pointer.
       expect(find.byTooltip('Close Moves'), findsNothing);
       expect(find.byTooltip('Close Replies'), findsOneWidget);
-      final repliesTab = find
-          .ancestor(of: find.text('Replies'), matching: find.byType(InkWell))
-          .first;
-      final away = tester.getSize(repliesTab).width;
-      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
-      await mouse.addPointer();
-      await mouse.moveTo(tester.getCenter(find.text('Replies')));
-      await tester.pumpAndSettle();
-      expect(tester.getSize(repliesTab).width, away);
-      await mouse.removePointer();
-      await tester.pumpAndSettle();
+      await expectSameWidthUnderPointer(tester, 'Replies');
       await tester.tap(find.byTooltip('Close Explorer (Ctrl+W)'));
       await tester.pumpAndSettle();
       expect(tabs.open, ['moves', 'replies']);
@@ -148,8 +128,7 @@ void main() {
     });
 
     testWidgets('a middle click closes a tab', (tester) async {
-      tabs = PaneTabs(all, open: ['replies']);
-      await pump(tester);
+      final tabs = await pumpStrip(tester, open: ['replies']);
       final gesture = await tester.createGesture(
         kind: PointerDeviceKind.mouse,
         buttons: kMiddleMouseButton,
@@ -159,12 +138,16 @@ void main() {
       await tester.pumpAndSettle();
       expect(tabs.open, ['moves']);
     });
+  });
 
+  group('PaneTabStrip dragging', () {
     testWidgets('a tab dragged onto another goes in front of it', (
       tester,
     ) async {
-      tabs = PaneTabs(all, open: ['replies', 'explorer', 'graph']);
-      await pump(tester);
+      final tabs = await pumpStrip(
+        tester,
+        open: ['replies', 'explorer', 'graph'],
+      );
       final from = tester.getCenter(find.text('Graph'));
       final to = tester.getCenter(find.text('Replies'));
       final gesture = await tester.startGesture(from);
@@ -175,14 +158,51 @@ void main() {
       await tester.pumpAndSettle();
       expect(tabs.open, ['moves', 'graph', 'replies', 'explorer']);
     });
-
-    testWidgets('the trailing control sits at the right edge', (tester) async {
-      tabs = PaneTabs(all, open: ['replies']);
-      await pump(tester, trailing: const Text('Next gap'));
-      expect(
-        tester.getTopRight(find.text('Next gap')).dx,
-        greaterThan(tester.getTopRight(find.text('Replies')).dx),
-      );
-    });
   });
+}
+
+/// A strip over tabs with [open] open, disposed when the test ends.
+Future<PaneTabs<String>> pumpStrip(
+  WidgetTester tester, {
+  List<String> open = const [],
+  Widget? trailing,
+}) async {
+  final tabs = PaneTabs(all, open: open);
+  addTearDown(tabs.dispose);
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: darkTheme(),
+      home: Scaffold(
+        body: Column(
+          children: [
+            PaneTabStrip(
+              tabs: tabs,
+              trailing: trailing,
+              closeShortcut: 'Ctrl+W',
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+  await tester.pump();
+  return tabs;
+}
+
+/// Hovering the tab labelled [label] leaves its width as it was.
+Future<void> expectSameWidthUnderPointer(
+  WidgetTester tester,
+  String label,
+) async {
+  final tab = find
+      .ancestor(of: find.text(label), matching: find.byType(InkWell))
+      .first;
+  final away = tester.getSize(tab).width;
+  final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+  await mouse.addPointer();
+  await mouse.moveTo(tester.getCenter(find.text(label)));
+  await tester.pumpAndSettle();
+  expect(tester.getSize(tab).width, away);
+  await mouse.removePointer();
+  await tester.pumpAndSettle();
 }

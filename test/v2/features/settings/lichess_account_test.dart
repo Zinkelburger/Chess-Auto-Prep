@@ -48,7 +48,7 @@ void main() {
     final connecting = state.status as Connecting;
     expect(connecting.page, isNotNull);
     expect(connecting.browserOpened, isTrue);
-    login.browserBack(LoggedIn(someone()));
+    login.browserBack(loggedIn());
     await done;
     expect((state.status as SignedIn).account.token, 'lip_secret');
     expect(saved?.username, 'DrNykterstein');
@@ -100,14 +100,14 @@ void main() {
     final state = owner();
     final done = state.logIn();
     await Future<void>.delayed(Duration.zero);
-    login.browserBack(LoggedIn(someone()));
+    login.browserBack(loggedIn());
     await done;
     expect(state.status, isA<SignedOut>());
     expect(state.problem, contains('could not be saved'));
   });
 
   test('a personal token is checked, kept, and marked as one', () async {
-    login.tokenOutcome = LoggedIn(someone(personal: true));
+    login.tokenOutcome = loggedIn(personal: true);
     final state = owner();
     expect(await state.useToken('lip_secret'), isTrue);
     expect(login.tokensTried, ['lip_secret']);
@@ -151,7 +151,7 @@ void main() {
     final done = state.logIn();
     await Future<void>.delayed(Duration.zero);
     expect(notified, 3, reason: 'connecting, then the page');
-    login.browserBack(LoggedIn(someone()));
+    login.browserBack(loggedIn());
     await done;
     expect(notified, 4);
   });

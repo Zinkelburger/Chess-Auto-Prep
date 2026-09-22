@@ -54,7 +54,7 @@ void main() {
     await question.first;
     final closing = guard.mayClose();
     question.answerNow(DraftChoice.closeAnyway);
-    expect(await leaving, isTrue);
+    expect(await leaving, isA<Go>());
     await question.first;
     question.answerNow(DraftChoice.keepWaiting);
     expect(await closing, isFalse, reason: 'the close asked its own question');
@@ -74,7 +74,7 @@ void main() {
       await question.first;
       final closing = guard.mayClose();
       question.answerNow(DraftChoice.keepWaiting);
-      expect(await leaving, isFalse);
+      expect(await leaving, isA<Stay>());
       await question.first;
       question.answerNow(DraftChoice.closeAnyway);
       expect(await closing, isTrue, reason: 'the close asked its own question');
@@ -169,6 +169,39 @@ void main() {
     fixture.store.releaseAll();
     expect(await closing, isTrue);
     expect(question.withdrawn, 1);
+  });
+
+  test('a copy saved on the way out is named in the answer, for every '
+      'caller asking at once', () async {
+    fixture.store.saves.add(const IoFailure('No space left on device'));
+    edit('one');
+    await pumpEventQueue();
+    final question = _Question(answer: DraftChoice.saveACopy);
+    final guard = ExitGuard(
+      saver: fixture.saver,
+      question: question,
+      saveCopy: () async => 'Main copy.pgn',
+      wait: moment,
+    );
+    final first = guard.mayLeaveDocument();
+    final second = guard.mayLeaveDocument();
+    expect((await first as Go).copy, 'Main copy.pgn');
+    expect((await second as Go).copy, 'Main copy.pgn');
+    expect(question.asked, hasLength(1));
+  });
+
+  test('a copy that was not written keeps the user where they are', () async {
+    fixture.store.saves.add(const IoFailure('No space left on device'));
+    edit('one');
+    await pumpEventQueue();
+    final guard = ExitGuard(
+      saver: fixture.saver,
+      question: _Question(answer: DraftChoice.saveACopy),
+      saveCopy: () async => null,
+      wait: moment,
+    );
+    expect(await guard.mayLeaveDocument(), isA<Stay>());
+    expect(await guard.mayClose(), isFalse);
   });
 
   testWidgets('the dialog says what is known and offers both ways', (

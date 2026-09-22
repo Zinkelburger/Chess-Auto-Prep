@@ -2,10 +2,12 @@ import 'package:chess_auto_prep/v2/chess/explorer_answer.dart';
 import 'package:chess_auto_prep/v2/chess/fen.dart';
 import 'package:chess_auto_prep/v2/net/lichess_explorer.dart';
 import 'package:chess_auto_prep/v2/storage/master_book.dart';
+import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/storage/settings_store.dart';
+import 'package:chess_auto_prep/v2/workspace/document_session.dart';
 import 'package:chess_auto_prep/v2/workspace/explorer.dart';
-
-import 'session_fixture.dart';
+import 'package:chess_auto_prep/v2/workspace/explorer_databases.dart';
+import 'package:chess_auto_prep/v2/workspace/game_fetcher.dart';
 
 /// What the masters database says at the start: two moves and one game.
 const startAnswer = ExplorerAnswer(
@@ -94,20 +96,35 @@ final class ScriptedBook implements MasterBook {
 /// Where fetched games are kept in these tests.
 const explorerCollections = '/Documents/pgn_collections';
 
-/// An explorer over [fixture] that answers as soon as the event queue
+/// An explorer over [session] that answers as soon as the event queue
 /// turns: no rest before asking, so a test pumps once and looks.
 Explorer explorerOver(
-  SessionFixture fixture, {
+  DocumentSession session, {
   required SettingsStore settings,
   ScriptedExplorerApi? lichess,
   ScriptedBook? book,
   Duration debounce = Duration.zero,
 }) => Explorer(
-  session: fixture.session,
+  session: session,
   settings: settings,
-  lichess: lichess ?? ScriptedExplorerApi(),
-  book: book ?? ScriptedBook(),
-  documents: fixture.store,
-  collections: explorerCollections,
+  databases: ExplorerDatabases(
+    lichess: lichess ?? ScriptedExplorerApi(),
+    book: book ?? ScriptedBook(),
+  ),
   debounce: debounce,
+);
+
+/// A game fetcher over [documents] that keeps games under
+/// [explorerCollections].
+GameFetcher gamesOver(
+  PgnDocumentStore documents, {
+  ScriptedExplorerApi? lichess,
+  ScriptedBook? book,
+}) => GameFetcher(
+  databases: ExplorerDatabases(
+    lichess: lichess ?? ScriptedExplorerApi(),
+    book: book ?? ScriptedBook(),
+  ),
+  documents: documents,
+  collections: explorerCollections,
 );

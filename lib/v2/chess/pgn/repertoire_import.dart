@@ -23,6 +23,7 @@ import 'chapter.dart';
 import 'game_text.dart';
 import 'game_tree.dart';
 import 'pgn_reader.dart';
+import 'repertoire_side.dart';
 
 /// What an import found: the chapters to write, or nothing worth writing.
 sealed class ImportRead {
@@ -82,7 +83,12 @@ ImportRead readImport(String text, {required DateTime created}) {
   final grouping = _grouping(games);
   final chapters = <ImportedChapter>[];
   var lines = 0;
-  final side = statedSide(document.preamble) ?? _inferredSide(games);
+  final side =
+      statedSide(document.preamble) ??
+      inferredRepertoireSide([
+        for (final game in games)
+          if (game.hasMoves && !game.isComplete) game.read.tree!,
+      ]);
   for (final group in grouping.groups) {
     final written = _Lines(grouping.titleKey);
     for (final game in group.games) {
@@ -521,77 +527,4 @@ final class _Lines {
         .trim();
     return '$title\u0000$moves';
   }
-}
-
-// ---------------------------------------------------------------------------
-// Which side the file is for
-// ---------------------------------------------------------------------------
-
-/// Fewer lines than this and the shape of the tree means nothing.
-const _minLinesForBranching = 8;
-const _minLinesForLastMove = 4;
-
-/// The side [games] appear to train, or null when they do not say clearly.
-///
-/// A repertoire answers each opponent move with one move of its own and
-/// covers many opponent replies, so the side that branches is the opponent.
-/// Failing that, a line normally ends on the move the reader is meant to
-/// know. Neither is trusted on a handful of lines or a thin margin: asking
-/// the user is better than a confident wrong answer.
-Side? _inferredSide(List<_Game> games) {
-  final trees = [
-    for (final game in games)
-      if (game.hasMoves && !game.isComplete) game.read.tree!,
-  ];
-  if (trees.length < _minLinesForLastMove) return null;
-  return _fromBranching(trees) ?? _fromLastMoves(trees);
-}
-
-Side? _fromBranching(List<GameTree> trees) {
-  if (trees.length < _minLinesForBranching) return null;
-  final nextMoves = <String, Set<String>>{};
-  final toMove = <String, bool>{};
-  for (final tree in trees) {
-    var fen = tree.rootFen;
-    var siblings = tree.children;
-    while (siblings.isNotEmpty) {
-      final node = siblings.first;
-      nextMoves.putIfAbsent(fen.position, () => {}).add(node.san);
-      toMove[fen.position] = fen.whiteToMove;
-      fen = node.fen;
-      siblings = node.children;
-    }
-  }
-  var white = 0;
-  var black = 0;
-  for (final MapEntry(key: position, value: moves) in nextMoves.entries) {
-    if (moves.length < 2) continue;
-    if (toMove[position]!) {
-      white++;
-    } else {
-      black++;
-    }
-  }
-  if (white + black < 4) return null;
-  if (white >= 3 * black) return Side.black;
-  if (black >= 3 * white) return Side.white;
-  return null;
-}
-
-Side? _fromLastMoves(List<GameTree> trees) {
-  var endsOnWhite = 0;
-  for (final tree in trees) {
-    var fen = tree.rootFen;
-    var siblings = tree.children;
-    while (siblings.isNotEmpty) {
-      fen = siblings.first.fen;
-      siblings = siblings.first.children;
-    }
-    // After White's move it is Black to move.
-    if (!fen.whiteToMove) endsOnWhite++;
-  }
-  final total = trees.length;
-  if (endsOnWhite * 4 >= total * 3) return Side.white;
-  if ((total - endsOnWhite) * 4 >= total * 3) return Side.black;
-  return null;
 }

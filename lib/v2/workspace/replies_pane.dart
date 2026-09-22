@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../ui/theme.dart';
 import 'document_session.dart';
+import 'gap_hunt.dart';
+import 'gap_walk.dart' show MissingReply;
 import 'line_preview.dart';
 import 'replies.dart';
 
@@ -21,10 +23,18 @@ import 'replies.dart';
 /// board on our answer to write. Resting the pointer on a row floats the
 /// position after it.
 class RepliesPane extends StatefulWidget {
-  const RepliesPane({super.key, required this.session, required this.replies});
+  const RepliesPane({
+    super.key,
+    required this.session,
+    required this.replies,
+    required this.gaps,
+  });
 
   final DocumentSession session;
   final Replies replies;
+
+  /// The walk the status line counts, and the gap whose row is tinted.
+  final GapHunt gaps;
 
   @override
   State<RepliesPane> createState() => _RepliesPaneState();
@@ -66,14 +76,18 @@ class _RepliesPaneState extends State<RepliesPane> {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: Listenable.merge([widget.replies, widget.session]),
+      listenable: Listenable.merge([
+        widget.replies,
+        widget.gaps,
+        widget.session,
+      ]),
       builder: (context, _) => LinePreviewOverlay(
         preview: _preview,
         orientation: widget.session.orientation,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _Status(replies: widget.replies),
+            _Status(replies: widget.replies, gaps: widget.gaps),
             Expanded(child: _body(context)),
           ],
         ),
@@ -99,7 +113,7 @@ class _RepliesPaneState extends State<RepliesPane> {
   }
 
   Widget _rows(List<ReplyRow> rows, {required bool ourMove}) {
-    final marked = switch (widget.replies.highlighted) {
+    final marked = switch (widget.gaps.highlighted) {
       MissingReply(:final uci) => uci,
       _ => null,
     };
@@ -124,9 +138,10 @@ class _RepliesPaneState extends State<RepliesPane> {
 /// One line above the rows: whose move, the rating, and how the chapter is
 /// doing — the gaps left and the share of games it answers.
 class _Status extends StatelessWidget {
-  const _Status({required this.replies});
+  const _Status({required this.replies, required this.gaps});
 
   final Replies replies;
+  final GapHunt gaps;
 
   String get _words {
     final table = replies.table;
@@ -135,12 +150,12 @@ class _Status extends StatelessWidget {
       _ => 'Their replies',
     };
     final rating = '$who · ${replies.elo}';
-    final walk = replies.walk;
-    if (replies.walking && walk == null) return '$rating · finding gaps…';
+    final walk = gaps.walk;
+    if (gaps.walking && walk == null) return '$rating · finding gaps…';
     if (walk == null) return rating;
-    final gaps = walk.gaps.length;
+    final found = walk.gaps.length;
     final covered = (walk.covered * 100).round();
-    final counted = gaps == 1 ? '1 gap' : '$gaps gaps';
+    final counted = found == 1 ? '1 gap' : '$found gaps';
     return '$rating · $counted · $covered% covered';
   }
 

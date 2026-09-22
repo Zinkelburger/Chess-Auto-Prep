@@ -38,16 +38,7 @@ class _MoveNoteState extends State<MoveNote> with CommentPreviews<MoveNote> {
         if (tree == null) return const SizedBox.shrink();
         final path = session.cursor;
         final move = session.currentMove;
-        // Each note with the position it is read from and the move a line
-        // written in it is played from.
-        final notes = <(String?, Fen, NodePath)>[
-          if (move == null)
-            (tree.rootComment, tree.rootFen, path)
-          else ...[
-            (move.startingComment, tree.fenAt(path.parent), path.parent),
-            (move.comment, move.fen, path),
-          ],
-        ].where((note) => displayComment(note.$1 ?? '').isNotEmpty).toList();
+        final notes = _notesAt(tree, path, move);
         if (move == null && notes.isEmpty) return const SizedBox.shrink();
         final scheme = Theme.of(context).colorScheme;
         return LinePreviewOverlay(
@@ -60,11 +51,9 @@ class _MoveNoteState extends State<MoveNote> with CommentPreviews<MoveNote> {
             child: SingleChildScrollView(
               // A new move starts its note at the top.
               key: ValueKey(path),
-              padding: const EdgeInsets.fromLTRB(
-                readingCardInset,
-                Space.m,
-                readingCardInset,
-                Space.m,
+              padding: const EdgeInsets.symmetric(
+                horizontal: readingCardInset,
+                vertical: Space.m,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -72,7 +61,7 @@ class _MoveNoteState extends State<MoveNote> with CommentPreviews<MoveNote> {
                   if (move != null) _MoveRow(move: move),
                   for (final (comment, at, from) in notes)
                     CommentBlocks(
-                      comment: comment!,
+                      comment: comment,
                       at: at,
                       orientation: session.orientation,
                       onHover: hoverMove,
@@ -88,6 +77,27 @@ class _MoveNoteState extends State<MoveNote> with CommentPreviews<MoveNote> {
     );
   }
 }
+
+/// The notes to show at [path], each with the position it is read from and
+/// the move a line written in it is played from: the game's introduction at
+/// the start, else the note before [move] and the one after it. Notes with
+/// nothing to read are left out.
+List<(String, Fen, NodePath)> _notesAt(
+  GameTree tree,
+  NodePath path,
+  MoveNode? move,
+) => [
+  for (final (comment, at, from) in [
+    if (move == null)
+      (tree.rootComment, tree.rootFen, path)
+    else ...[
+      (move.startingComment, tree.fenAt(path.parent), path.parent),
+      (move.comment, move.fen, path),
+    ],
+  ])
+    if (comment != null && displayComment(comment).isNotEmpty)
+      (comment, at, from),
+];
 
 /// `14. Nf5!` in the moves' face, and what the glyph means beside it.
 class _MoveRow extends StatelessWidget {
@@ -116,9 +126,8 @@ class _MoveRow extends StatelessWidget {
             if (meaning != null)
               TextSpan(
                 text: '   $meaning',
-                style: readingProseText.copyWith(
+                style: readingGlossText.copyWith(
                   color: scheme.onSurfaceVariant,
-                  fontSize: 14,
                 ),
               ),
           ],

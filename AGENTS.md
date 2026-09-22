@@ -11,6 +11,8 @@ repertoires, training, player analysis and studies.
 - Edit/test in an isolated task worktree, then automatically integrate into
   local `main` with `python3 scripts/agent_integrate.py` from the task worktree.
   A pushed task branch alone is not completion: report when it is visible on main.
+  Integration then deletes the task worktree and branch (local and origin);
+  pass `--keep` only when more work in that worktree is planned.
 - `origin/backup/local-main` is the automatic development backup.
   `origin/main` is the published version: update it only when the user asks to
   publish/release. Never use a plain `git push` from local main.

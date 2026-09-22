@@ -61,6 +61,10 @@ const readingMoveText = TextStyle(
   height: 1.7,
 );
 const readingProseText = TextStyle(fontSize: 16, height: 1.55);
+
+/// What a move's glyph means, beside the move under the board: the prose
+/// face a step down, so it reads as a gloss rather than a second move.
+const readingGlossText = TextStyle(fontSize: 14, height: 1.55);
 const proseMaxWidth = 640.0;
 
 /// The room around one move in the moves: enough that the eye parts the
