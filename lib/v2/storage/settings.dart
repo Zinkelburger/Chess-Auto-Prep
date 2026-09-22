@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import '../chess/explorer_choice.dart';
+
 /// What the user has chosen about the app as a whole: the few things two
 /// reasonable people want different values for and the app cannot tell.
 ///
@@ -15,6 +17,7 @@ final class Settings {
     this.copyFilesIntoDocuments = true,
     this.opponentElo = 2200,
     this.coverOnceIn = 50,
+    this.explorer = ExplorerChoice.defaults,
   });
 
   /// Rank and file letters on the board.
@@ -42,6 +45,11 @@ final class Settings {
   /// default and about four opponent moves deep in a main line.
   final int coverOnceIn;
 
+  /// Which database the Explorer tab asks and how it is narrowed. Not a
+  /// row of the settings page: the tab's own gear is where it is chosen,
+  /// and this is only where the choice is kept between launches.
+  final ExplorerChoice explorer;
+
   static const defaults = Settings();
 
   /// The most the engine rows accept: a table bigger than this or more
@@ -65,6 +73,7 @@ final class Settings {
     bool? copyFilesIntoDocuments,
     int? opponentElo,
     int? coverOnceIn,
+    ExplorerChoice? explorer,
   }) => Settings(
     boardCoordinates: boardCoordinates ?? this.boardCoordinates,
     engineCores: engineCores ?? this.engineCores,
@@ -74,6 +83,7 @@ final class Settings {
         copyFilesIntoDocuments ?? this.copyFilesIntoDocuments,
     opponentElo: opponentElo ?? this.opponentElo,
     coverOnceIn: coverOnceIn ?? this.coverOnceIn,
+    explorer: explorer ?? this.explorer,
   );
 
   /// The file's text. One flat object with plain names, so a person can
@@ -86,6 +96,7 @@ final class Settings {
     'copyFilesIntoDocuments': copyFilesIntoDocuments,
     'opponentElo': opponentElo,
     'coverOnceIn': coverOnceIn,
+    'explorer': explorer.toJson(),
   });
 
   /// Reads [text]; a field that is missing or of the wrong type keeps its
@@ -112,6 +123,7 @@ final class Settings {
       ),
       opponentElo: pick('opponentElo', defaults.opponentElo),
       coverOnceIn: pick('coverOnceIn', defaults.coverOnceIn),
+      explorer: ExplorerChoice.fromJson(decoded['explorer']),
     );
   }
 
@@ -124,7 +136,8 @@ final class Settings {
       other.engineLines == engineLines &&
       other.copyFilesIntoDocuments == copyFilesIntoDocuments &&
       other.opponentElo == opponentElo &&
-      other.coverOnceIn == coverOnceIn;
+      other.coverOnceIn == coverOnceIn &&
+      other.explorer == explorer;
 
   @override
   int get hashCode => Object.hash(
@@ -135,5 +148,6 @@ final class Settings {
     copyFilesIntoDocuments,
     opponentElo,
     coverOnceIn,
+    explorer,
   );
 }

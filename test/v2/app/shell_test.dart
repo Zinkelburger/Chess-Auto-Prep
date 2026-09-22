@@ -20,6 +20,7 @@ import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
 import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
+import 'package:chess_auto_prep/v2/workspace/explorer.dart';
 import 'package:chess_auto_prep/v2/workspace/repertoire_answers.dart';
 import 'package:chess_auto_prep/v2/workspace/replies.dart';
 import 'package:dartchess/dartchess.dart' show Side;
@@ -27,6 +28,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/scripted_explorer.dart';
 import '../support/scripted_policy.dart';
 import '../support/fixtures.dart';
 import '../support/scripted_files.dart';
@@ -52,6 +54,7 @@ void main() {
   late DocumentSession session;
   late EngineAnalysis analysis;
   late Replies replies;
+  late Explorer explorer;
   late ChapterOutline outline;
   late PgnViewer viewer;
   // In memory only, so it can be made once and disposed with the rest.
@@ -133,6 +136,16 @@ void main() {
       ),
     );
     addTearDown(replies.dispose);
+    explorer = Explorer(
+      session: session,
+      settings: settings,
+      lichess: ScriptedExplorerApi(),
+      book: ScriptedBook(),
+      documents: store,
+      collections: explorerCollections,
+      debounce: Duration.zero,
+    );
+    addTearDown(explorer.dispose);
     await tester.binding.setSurfaceSize(const Size(1400, 800));
     await tester.pumpWidget(
       MaterialApp(
@@ -148,6 +161,7 @@ void main() {
           saver: saver,
           analysis: analysis,
           replies: replies,
+          explorer: explorer,
           leaving: leaving,
         ),
       ),

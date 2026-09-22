@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:multi_split_view/multi_split_view.dart';
 
+import '../chess/pgn/game_tree.dart' show NodePath;
 import '../features/library/chapter_outline.dart';
 import '../features/library/library.dart';
 import '../features/library/library_panel.dart';
@@ -29,6 +30,7 @@ import '../workspace/document_session.dart';
 import '../workspace/session_results.dart';
 import '../workspace/side_dialog.dart';
 import '../workspace/engine_analysis.dart';
+import '../workspace/explorer.dart';
 import '../workspace/replies.dart';
 import '../workspace/workspace_keys.dart';
 import '../workspace/workspace_tabs.dart';
@@ -51,6 +53,7 @@ class Shell extends StatefulWidget {
     required this.saver,
     required this.analysis,
     required this.replies,
+    required this.explorer,
     required this.settings,
     required this.settingRows,
     required this.leaving,
@@ -64,6 +67,7 @@ class Shell extends StatefulWidget {
   final DocumentSaver saver;
   final EngineAnalysis analysis;
   final Replies replies;
+  final Explorer explorer;
   final SettingsStore settings;
 
   /// The settings page's rows, as the app wires them.
@@ -231,6 +235,23 @@ class _ShellState extends State<Shell> {
     if (ref == null || !mounted) return;
     _switchTo(Mode.pgnViewer);
     if (await _open(ref, game: 0)) unawaited(widget.viewer.opened(ref));
+  }
+
+  /// A game the explorer listed: kept as a file in the collections folder,
+  /// then opened in the viewer at the position the explorer was showing.
+  /// The one cross-mode request the explorer makes, handled here.
+  Future<void> _openExplorerGame(ExplorerGame game) async {
+    final kept = await widget.explorer.keepGame(game);
+    if (!mounted) return;
+    switch (kept) {
+      case GameNotKept(:final sentence):
+        _said(sentence);
+      case GameKept(:final ref, :final ply):
+        _switchTo(Mode.pgnViewer);
+        if (!await _open(ref, game: 0)) return;
+        unawaited(widget.viewer.opened(ref));
+        widget.session.goTo(NodePath.of(List.filled(ply, 0)));
+    }
   }
 
   /// Takes the document off the board, with the same question about a
@@ -471,12 +492,14 @@ class _ShellState extends State<Shell> {
       saver: widget.saver,
       analysis: widget.analysis,
       replies: widget.replies,
+      explorer: widget.explorer,
       tabs: _tabs,
       editing: _editing,
       settings: widget.settings,
       moveMenu: _mode == Mode.study
           ? (path) => quizMenuItems(widget.session, path)
           : null,
+      onExplorerGame: (game) => unawaited(_openExplorerGame(game)),
     ),
   };
 }

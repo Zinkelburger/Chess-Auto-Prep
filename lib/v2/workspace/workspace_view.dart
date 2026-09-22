@@ -12,6 +12,8 @@ import 'document_session.dart';
 import 'edit_strip.dart';
 import 'engine_analysis.dart';
 import 'engine_pane.dart';
+import 'explorer.dart';
+import 'explorer_pane.dart';
 import 'game_counter.dart';
 import 'move_note.dart';
 import 'move_tree_view.dart';
@@ -23,8 +25,8 @@ import 'workspace_tabs.dart';
 
 /// The board with the game counter and the move's note under it on the
 /// left; on the right the reading card, top to bottom in a fixed order: the
-/// heading, the engine, the tab strip, the moves or the opponent's replies,
-/// the edit strip while there is editing or trouble, and the navigation
+/// heading, the engine, the tab strip, the moves, the opponent's replies or
+/// the explorer, the edit strip while there is editing or trouble, and the navigation
 /// row. The two halves start equal, as the old app's did. The keys that
 /// walk the line and take an edit back are [WorkspaceKeys], above every
 /// column that edits the document.
@@ -35,16 +37,23 @@ class WorkspaceView extends StatelessWidget {
     required this.saver,
     required this.analysis,
     required this.replies,
+    required this.explorer,
     required this.tabs,
     required this.editing,
     required this.settings,
     this.moveMenu,
+    this.onExplorerGame,
   });
 
   final DocumentSession session;
   final DocumentSaver saver;
   final EngineAnalysis analysis;
   final Replies replies;
+  final Explorer explorer;
+
+  /// Asked to open a game the explorer lists, which is the shell's
+  /// business: another mode shows it.
+  final ValueChanged<ExplorerGame>? onExplorerGame;
 
   /// Which of the card's tabs are open and which is up. The shell owns it,
   /// as it owns [editing]: the keys and the Actions menu turn it too.
@@ -106,8 +115,10 @@ class WorkspaceView extends StatelessWidget {
             child: _Tabbed(
               session: session,
               replies: replies,
+              explorer: explorer,
               tabs: tabs,
               moveMenu: moveMenu,
+              onExplorerGame: onExplorerGame,
             ),
           ),
           EditStrip(session: session, saver: saver, editing: editing),
@@ -119,22 +130,27 @@ class WorkspaceView extends StatelessWidget {
   );
 }
 
-/// The moves, or the opponent's replies, under the strip that says which.
-/// The tabs are the window's: the shell owns them, the keys walk them and
-/// the Actions menu opens and closes them, so this only draws what is up.
-/// A new thing the card can show is one more arm of [_body].
+/// The moves, the opponent's replies or the explorer, under the strip that
+/// says which. The tabs are the window's: the shell owns them, the keys
+/// walk them and the Actions menu opens and closes them, so this only
+/// draws what is up. A new thing the card can show is one more arm of
+/// [_body], and one more of [_trailing] when it owns a control.
 class _Tabbed extends StatelessWidget {
   const _Tabbed({
     required this.session,
     required this.replies,
+    required this.explorer,
     required this.tabs,
     required this.moveMenu,
+    required this.onExplorerGame,
   });
 
   final DocumentSession session;
   final Replies replies;
+  final Explorer explorer;
   final PaneTabs tabs;
   final MoveMenu? moveMenu;
+  final ValueChanged<ExplorerGame>? onExplorerGame;
 
   Widget _body(String id) {
     if (id == WorkspaceTab.moves.id) {
@@ -143,11 +159,21 @@ class _Tabbed extends StatelessWidget {
     if (id == WorkspaceTab.replies.id) {
       return RepliesPane(session: session, replies: replies);
     }
+    if (id == WorkspaceTab.explorer.id) {
+      return ExplorerPane(
+        session: session,
+        explorer: explorer,
+        onOpenGame: onExplorerGame,
+      );
+    }
     throw StateError('no body for the $id tab');
   }
 
-  Widget? _trailing(String id) =>
-      id == WorkspaceTab.replies.id ? _NextGap(replies: replies) : null;
+  Widget? _trailing(String id) {
+    if (id == WorkspaceTab.replies.id) return _NextGap(replies: replies);
+    if (id == WorkspaceTab.explorer.id) return ExplorerGear(explorer: explorer);
+    return null;
+  }
 
   @override
   Widget build(BuildContext context) {

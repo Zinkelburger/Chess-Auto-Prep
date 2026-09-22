@@ -343,3 +343,22 @@ const gameOrdinalWidth = 40.0;
 
 /// How wide the typeable game number under the board is: four digits.
 const gameNumberWidth = 52.0;
+
+/// The Explorer tab's table: the move gutter, the games gutter, the header
+/// row over them and the menu the gear opens. The result bar takes what is
+/// left of the row.
+const explorerMoveWidth = 88.0;
+const explorerGamesWidth = 96.0;
+const explorerHeaderHeight = 22.0;
+const explorerMenuWidth = 300.0;
+
+/// The three parts of a result bar: White's wins are light, draws are the
+/// muted grey, Black's wins are the near-black of the reading card, so the
+/// bar reads like a chessboard's two colours with a grey between.
+const resultBarWhite = Color(0xFFE6E6E8);
+const resultBarDraw = Color(0xFF6E6E74);
+const resultBarBlack = Color(0xFF2A2A2E);
+
+/// A part of the bar narrower than this share of the row carries no
+/// number: the number would not fit.
+const resultBarLabelFrom = 0.14;

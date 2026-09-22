@@ -207,6 +207,16 @@ Quirks worth a verdict:
   position. Clicking a row plays the move; on a repertoire chapter playing saves, so there is no
   `Add to repertoire`. No sorting. The old viewer's `Tree` tab is the `This file` source, not a
   tab of its own. Offline the Lichess sources say so with `Try again`, as decided above.
+  Built 2026-09-22 (step 6b): the tab, the gear with its chips (the last chip of a row cannot be
+  turned off), the summary line, the table with lila's result bar, the games list, and the game
+  handoff: a click fetches the game's PGN, keeps it as its own file under
+  `pgn_collections/explorer games/` (a file already there is opened as it is) and opens it in the
+  PGN Viewer at the ply on the board. The choice is kept in `settings.json` with no dialog row.
+  The old policy is kept with one change: a 429 shuts the door for a minute, then two, then four,
+  and until it opens every position is answered `Lichess is rate-limiting requests.` at once, so
+  the tab never waits a minute inside one request. Lichess now answers 401 to the explorer without
+  a token; signed out the tab says so and names the Settings row. `This file` and `My games` wait
+  for step 6c.
 - **The settings gear sits at the right end of the top bar**, the old app's place, and is the one
   way in besides Ctrl+,; the mode menu lists modes only.
 - **No eval bar** (question 1; the viewer's decision of 2026-09-21). **One move list** for reading

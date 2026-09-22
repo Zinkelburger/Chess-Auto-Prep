@@ -6,6 +6,8 @@ import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
 import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
+import 'package:chess_auto_prep/v2/workspace/explorer.dart';
+import 'package:chess_auto_prep/v2/workspace/explorer_pane.dart';
 import 'package:chess_auto_prep/v2/workspace/move_tree_view.dart';
 import 'package:chess_auto_prep/v2/workspace/repertoire_answers.dart';
 import 'package:chess_auto_prep/v2/workspace/replies.dart';
@@ -19,6 +21,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../support/scripted_files.dart';
 import '../support/fixtures.dart';
+import '../support/scripted_explorer.dart';
 import '../support/scripted_store.dart';
 import '../support/scripted_policy.dart';
 import '../support/session_fixture.dart';
@@ -30,6 +33,7 @@ void main() {
   late DocumentSaver saver;
   late EngineAnalysis analysis;
   late Replies replies;
+  late Explorer explorer;
   late ValueNotifier<bool> editing;
   late PaneTabs tabs;
   late SettingsStore settings;
@@ -50,6 +54,16 @@ void main() {
       ),
     );
     addTearDown(replies.dispose);
+    explorer = Explorer(
+      session: session,
+      settings: settings,
+      lichess: ScriptedExplorerApi(),
+      book: ScriptedBook(),
+      documents: fixture.store,
+      collections: explorerCollections,
+      debounce: Duration.zero,
+    );
+    addTearDown(explorer.dispose);
   }
 
   Future<void> pump(WidgetTester tester) async {
@@ -70,6 +84,7 @@ void main() {
               saver: saver,
               analysis: analysis,
               replies: replies,
+              explorer: explorer,
               tabs: tabs,
               editing: editing,
               settings: settings,
@@ -263,12 +278,22 @@ void main() {
     expect(find.byType(RepliesPane), findsOneWidget);
     expect(find.text('Next gap'), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyW);
+    await tester.pumpAndSettle();
+    expect(tabs.open, [WorkspaceTab.moves.id, WorkspaceTab.explorer.id]);
+    expect(find.byType(MoveTreeView), findsOneWidget);
+    expect(find.text('Next gap'), findsNothing);
+    // The explorer is the third tab, with its gear at the strip's edge.
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pumpAndSettle();
+    expect(tabs.selected, WorkspaceTab.explorer.id);
+    expect(find.byType(ExplorerPane), findsOneWidget);
+    expect(find.byTooltip('Choose the database'), findsOneWidget);
+    expect(find.text('Masters'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyW);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pumpAndSettle();
     expect(tabs.open, [WorkspaceTab.moves.id]);
-    expect(find.byType(MoveTreeView), findsOneWidget);
     expect(find.text('Moves'), findsNothing, reason: 'one tab: no strip');
-    expect(find.text('Next gap'), findsNothing);
     tabs.show(WorkspaceTab.replies.id);
     await tester.pumpAndSettle();
     expect(find.byType(RepliesPane), findsOneWidget);

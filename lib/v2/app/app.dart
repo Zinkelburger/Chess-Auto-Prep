@@ -13,9 +13,11 @@ import '../features/library/library.dart';
 import '../features/pgn_viewer/pgn_viewer.dart';
 import '../features/settings/setting_rows.dart';
 import '../features/study/studies.dart';
+import '../net/lichess_explorer.dart';
 import '../net/lichess_studies.dart';
 import '../storage/chapter_files.dart';
 import '../storage/lichess_token.dart';
+import '../storage/master_book.dart';
 import '../storage/pgn_file_import.dart';
 import '../storage/pgn_file_picker.dart';
 import '../storage/pgn_file_store.dart';
@@ -28,6 +30,7 @@ import '../workspace/document_saver.dart';
 import '../workspace/document_session.dart';
 import '../workspace/session_results.dart';
 import '../workspace/engine_analysis.dart';
+import '../workspace/explorer.dart';
 import '../workspace/repertoire_answers.dart';
 import '../workspace/replies.dart';
 import 'engine_launch.dart';
@@ -127,6 +130,20 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     policy: _maia,
     settings: _settings,
     answers: _answers,
+  );
+
+  /// The old app's master database, in the same support folder, read as it
+  /// is: TWIC is listed when the file is there.
+  late final _book = SqliteMasterBook(
+    p.join(widget.support.path, 'master_games.db'),
+  );
+  late final _explorer = Explorer(
+    session: _session,
+    settings: _settings,
+    lichess: LichessExplorerApi(_lichess, token: readLichessToken),
+    book: _book,
+    documents: _store,
+    collections: _collections,
   );
 
   /// What the engine was last started with, so a settings change that
@@ -257,6 +274,8 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     _settings.removeListener(_engineSettings);
     _analysis.dispose();
     _replies.dispose();
+    _explorer.dispose();
+    _book.close();
     _maia.dispose();
     _settings.dispose();
     _outline.dispose();
@@ -290,6 +309,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
         saver: _saver,
         analysis: _analysis,
         replies: _replies,
+        explorer: _explorer,
       ),
     );
   }
