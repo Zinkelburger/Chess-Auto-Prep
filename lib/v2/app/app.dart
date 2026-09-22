@@ -80,6 +80,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     documents: _store,
     session: _session,
     saver: _saver,
+    picker: const NativePgnFilePicker(),
     root: _repertoires,
   );
   final _lichess = http.Client();

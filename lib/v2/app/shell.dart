@@ -7,6 +7,7 @@ import 'package:multi_split_view/multi_split_view.dart';
 
 import '../features/library/chapter_outline.dart';
 import '../features/library/library.dart';
+import '../features/library/library_messages.dart';
 import '../features/library/library_panel.dart';
 import '../features/library/outline_panel.dart';
 import '../features/pgn_viewer/pgn_viewer.dart';
@@ -233,6 +234,54 @@ class _ShellState extends State<Shell> {
     if (await _open(ref, game: 0)) unawaited(widget.viewer.opened(ref));
   }
 
+  /// Ctrl+O and `Open PGN file…` are one door whose other side depends on
+  /// the mode: in the builder a file becomes a repertoire, everywhere else
+  /// it is read in the viewer.
+  Future<void> _openPgnFile() =>
+      _mode == Mode.repertoires ? _importFile() : _browse();
+
+  /// The desktop's file dialog, then the file as a new repertoire named
+  /// after it, opened on its first chapter. No form: the name is changed
+  /// from the list, and the side is asked when the chapter opens if the
+  /// file did not say.
+  Future<void> _importFile() async {
+    final result = await widget.library.importFile();
+    if (result == null || !mounted) return;
+    await _imported(result, name: 'that file');
+  }
+
+  /// The clipboard as a new repertoire, the same way.
+  Future<void> _pasteRepertoire() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    if (!mounted) return;
+    final text = data?.text?.trim() ?? '';
+    if (text.isEmpty) {
+      _said('Nothing to paste: copy a PGN first.');
+      return;
+    }
+    await _imported(
+      await widget.library.importText(text, name: Library.pastedName),
+      name: Library.pastedName,
+    );
+  }
+
+  Future<void> _imported(LibraryResult result, {required String name}) async {
+    if (!mounted) return;
+    if (result is LibraryAdded) {
+      _switchTo(Mode.repertoires);
+      await _open(result.first);
+      return;
+    }
+    _said(
+      libraryMessage(
+        result,
+        thing: 'repertoire',
+        name: name,
+        failed: 'Could not import the repertoire.',
+      ),
+    );
+  }
+
   /// Takes the document off the board, with the same question about a
   /// draft the file never took as opening another one asks.
   Future<void> _closeFile() async {
@@ -280,11 +329,22 @@ class _ShellState extends State<Shell> {
   /// Everything the Actions menu offers now: the mode's own doors first,
   /// then what can be done to the document, whichever mode opened it.
   List<AppAction> _actions() => [
-    AppAction('Open PGN file…', () => unawaited(_browse()), shortcut: 'Ctrl+O'),
     AppAction(
-      'Close file',
-      widget.viewer.file == null ? null : () => unawaited(_closeFile()),
+      'Open PGN file…',
+      () => unawaited(_openPgnFile()),
+      shortcut: 'Ctrl+O',
     ),
+    if (_mode == Mode.repertoires)
+      AppAction(
+        'Paste PGN',
+        () => unawaited(_pasteRepertoire()),
+        shortcut: 'Ctrl+V',
+      )
+    else
+      AppAction(
+        'Close file',
+        widget.viewer.file == null ? null : () => unawaited(_closeFile()),
+      ),
     ...documentActions(
       session: widget.session,
       saver: widget.saver,
@@ -369,9 +429,15 @@ class _ShellState extends State<Shell> {
     const SingleActivator(LogicalKeyboardKey.keyB, control: true): _toggleList,
     const SingleActivator(LogicalKeyboardKey.keyB, meta: true): _toggleList,
     const SingleActivator(LogicalKeyboardKey.keyO, control: true): () =>
-        unawaited(_browse()),
+        unawaited(_openPgnFile()),
     const SingleActivator(LogicalKeyboardKey.keyO, meta: true): () =>
-        unawaited(_browse()),
+        unawaited(_openPgnFile()),
+    if (_mode == Mode.repertoires) ...{
+      const SingleActivator(LogicalKeyboardKey.keyV, control: true): () =>
+          unawaited(_pasteRepertoire()),
+      const SingleActivator(LogicalKeyboardKey.keyV, meta: true): () =>
+          unawaited(_pasteRepertoire()),
+    },
     const SingleActivator(LogicalKeyboardKey.keyK, control: true): () =>
         unawaited(_palette()),
     const SingleActivator(LogicalKeyboardKey.keyK, meta: true): () =>

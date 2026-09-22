@@ -11,6 +11,7 @@ import 'package:chess_auto_prep/v2/features/library/outline_panel.dart';
 import 'package:chess_auto_prep/v2/features/pgn_viewer/pgn_viewer.dart';
 import 'package:chess_auto_prep/v2/features/study/studies.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
+import 'package:chess_auto_prep/v2/storage/document_ref.dart';
 import 'package:chess_auto_prep/v2/storage/settings_store.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/storage/recent_pgn_files.dart';
@@ -57,6 +58,7 @@ void main() {
   // In memory only, so it can be made once and disposed with the rest.
   late SettingsStore settings;
   late ScriptedRecentFiles recent;
+  late ScriptedPicker picker;
   late _Question question;
   late ExitGuard leaving;
 
@@ -75,11 +77,13 @@ void main() {
       );
     saver = DocumentSaver(store, delay: Duration.zero);
     session = DocumentSession(store, saver);
+    picker = ScriptedPicker();
     library = Library(
       files: files,
       documents: store,
       session: session,
       saver: saver,
+      picker: picker,
       root: '/repertoires',
     );
     outline = ChapterOutline(library: library, session: session);
@@ -375,6 +379,124 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Replies'), findsOneWidget);
     expect(find.text('Next gap'), findsOneWidget, reason: 'brought up');
+  });
+
+  const pasted = '[Event "x"]\n[Result "*"]\n\n1. e4 e5 (1... c5) *\n';
+
+  /// What the clipboard answers when the shell asks for text.
+  void clipboardHolds(WidgetTester tester, String? text) {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async => switch (call.method) {
+        'Clipboard.getData' => text == null ? null : {'text': text},
+        'Clipboard.hasStrings' => {'value': text != null},
+        _ => null,
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+  }
+
+  Future<void> pressCtrl(WidgetTester tester, LogicalKeyboardKey key) async {
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(key);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('the builder offers Open PGN file and Paste PGN, the viewer '
+      'Open and Close file', (tester) async {
+    await pump(tester);
+    await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
+    expect(find.text('Open PGN file…'), findsOneWidget);
+    expect(find.text('Paste PGN'), findsOneWidget);
+    expect(find.text('Ctrl+V'), findsOneWidget);
+    expect(find.text('Close file'), findsNothing);
+    await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Repertoire builder'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('PGN Viewer'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
+    // The viewer's own empty list offers the file dialog too.
+    expect(find.text('Open PGN file…'), findsAtLeastNWidgets(1));
+    expect(find.text('Paste PGN'), findsNothing);
+    expect(find.text('Close file'), findsOneWidget);
+  });
+
+  testWidgets('Ctrl+V in the builder makes a repertoire of the clipboard and '
+      'opens it, asking which side it is for', (tester) async {
+    await pump(tester);
+    clipboardHolds(tester, pasted);
+    await pressCtrl(tester, LogicalKeyboardKey.keyV);
+    expect(session.source?.path, '/repertoires/Pasted repertoire/Main.pgn');
+    expect(session.chapter?.gameCount, 2, reason: 'the variation is a line');
+    expect(
+      store.documents.keys.map((ref) => ref.path),
+      contains('/repertoires/Pasted repertoire/Main.pgn'),
+    );
+    expect(find.text('Which side is Main for?'), findsOneWidget);
+  });
+
+  testWidgets('Paste PGN in the Actions menu does the same', (tester) async {
+    await pump(tester);
+    clipboardHolds(tester, pasted);
+    await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Paste PGN'));
+    await tester.pumpAndSettle();
+    expect(session.source?.path, '/repertoires/Pasted repertoire/Main.pgn');
+  });
+
+  testWidgets('an empty clipboard says so and writes nothing', (tester) async {
+    await pump(tester);
+    clipboardHolds(tester, null);
+    await pressCtrl(tester, LogicalKeyboardKey.keyV);
+    expect(find.text('Nothing to paste: copy a PGN first.'), findsOneWidget);
+    expect(session.source, isNull);
+  });
+
+  testWidgets('a clipboard with no moves is refused in plain English', (
+    tester,
+  ) async {
+    await pump(tester);
+    clipboardHolds(tester, 'just words');
+    await pressCtrl(tester, LogicalKeyboardKey.keyV);
+    expect(find.text('That PGN has no moves to train.'), findsOneWidget);
+    expect(
+      store.documents.keys.map((ref) => ref.path),
+      isNot(contains(contains('Pasted'))),
+    );
+  });
+
+  testWidgets('Ctrl+O in the builder imports the chosen file as a repertoire', (
+    tester,
+  ) async {
+    await pump(tester);
+    picker.answer = '/downloads/Italian.pgn';
+    store.documents[const DocumentRef('/downloads/Italian.pgn')] = Opened(
+      pasted,
+      scriptedRevision(pasted),
+      readOnly: 'outside Documents',
+    );
+    await pressCtrl(tester, LogicalKeyboardKey.keyO);
+    expect(session.source?.path, '/repertoires/Italian/Main.pgn');
+  });
+
+  testWidgets('a file that cannot be read is said in a sentence', (
+    tester,
+  ) async {
+    await pump(tester);
+    picker.answer = '/downloads/gone.pgn';
+    await pressCtrl(tester, LogicalKeyboardKey.keyO);
+    expect(find.text('Could not read that file.'), findsOneWidget);
   });
 
   testWidgets('Actions sits beside the mode menu, at the left', (tester) async {

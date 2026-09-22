@@ -50,6 +50,33 @@ final class LibraryDone extends LibraryResult {
   final records.RepointResult training;
 }
 
+/// A repertoire was made — created empty, or imported from a file or the
+/// clipboard — and this is its first chapter, which is what the host opens.
+final class LibraryAdded extends LibraryResult {
+  const LibraryAdded(this.first, {required this.chapters, required this.lines});
+
+  final ChapterRef first;
+
+  final int chapters;
+
+  /// Lines over every chapter, each variation counted as its own; zero for
+  /// a repertoire created empty.
+  final int lines;
+}
+
+/// The file or text had no game with a move in it. Nothing was written.
+final class LibraryNothingToImport extends LibraryResult {
+  const LibraryNothingToImport();
+}
+
+/// The file the user chose could not be read. Nothing was written.
+final class LibraryFileUnreadable extends LibraryResult {
+  const LibraryFileUnreadable(this.detail);
+
+  /// For the log; the widget writes the sentence.
+  final String detail;
+}
+
 /// Something of that name is already there. Nothing was written.
 final class LibraryNameTaken extends LibraryResult {
   const LibraryNameTaken();

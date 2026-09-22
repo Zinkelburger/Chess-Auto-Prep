@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:isolate';
 
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/foundation.dart';
@@ -9,12 +10,15 @@ import '../../chess/pgn/chapter_edit.dart';
 import '../../chess/pgn/chapter_line.dart';
 import '../../chess/pgn/games_written.dart';
 import '../../chess/pgn/line_moves.dart';
+import '../../chess/pgn/repertoire_import.dart';
 import '../../diagnostics/log.dart';
 import '../../storage/chapter_files.dart';
 import '../../storage/document_ref.dart';
 import '../../storage/edit_scope.dart';
 import '../../storage/pgn_document_store.dart' as store;
+import '../../storage/pgn_file_picker.dart';
 import '../../storage/training_records.dart' as records;
+import '../../ui/file_names.dart';
 import '../../workspace/document_saver.dart';
 import '../../workspace/document_session.dart';
 import 'library_report.dart';
@@ -41,11 +45,13 @@ final class Library extends ChangeNotifier {
     required store.PgnDocumentStore documents,
     required DocumentSession session,
     required DocumentSaver saver,
+    required PgnFilePicker picker,
     required String root,
   }) : _files = files,
        _store = documents,
        _session = session,
        _saver = saver,
+       _picker = picker,
        _root = root {
     _session.addListener(_followTheSession);
   }
@@ -53,10 +59,18 @@ final class Library extends ChangeNotifier {
   /// The name of the chapter a new repertoire starts with.
   static const firstChapter = 'Main';
 
+  /// What a repertoire imported from the clipboard is called.
+  static const pastedName = 'Pasted repertoire';
+
+  /// What a repertoire imported from a file whose name cannot be a folder's
+  /// is called.
+  static const importedFallback = 'Imported repertoire';
+
   final ChapterFiles _files;
   final store.PgnDocumentStore _store;
   final DocumentSession _session;
   final DocumentSaver _saver;
+  final PgnFilePicker _picker;
 
   /// The `repertoires` folder, absolute.
   final String _root;
@@ -126,13 +140,124 @@ final class Library extends ChangeNotifier {
   }
 
   /// A folder with one empty chapter in it, which is what the old app makes
-  /// and what every other mode can already open.
-  Future<LibraryResult> createRepertoire(String name, Side side) =>
+  /// and what every other mode can already open. With no [side] the chapter
+  /// does not say whose it is, and the workspace asks once when it opens.
+  Future<LibraryResult> createRepertoire(String name, [Side? side]) =>
       _run('create the repertoire $name', () async {
         if (_named(name) != null) return const LibraryNameTaken();
         final ref = DocumentRef(p.join(_root, name, '$firstChapter.pgn'));
-        return _created(ref, name, side);
+        final result = await _created(ref, name, side);
+        if (result is! LibraryDone) return result;
+        return LibraryAdded(ChapterRef.at(ref.path), chapters: 1, lines: 0);
       });
+
+  /// The desktop's file dialog, then [importText] on what the file holds,
+  /// named after the file. Null when the user closed the dialog without
+  /// choosing.
+  Future<LibraryResult?> importFile() async {
+    final path = await _picker.pickPgn();
+    if (path == null || _disposed) return null;
+    return _run('import $path', () async {
+      switch (await _store.open(DocumentRef(path))) {
+        case store.Opened(:final text):
+          return _imported(
+            text,
+            name: p.basenameWithoutExtension(path),
+            fallback: importedFallback,
+          );
+        case store.Absent():
+          return const LibraryFileUnreadable('the file is not there');
+        case store.Unreadable(:final detail):
+          return LibraryFileUnreadable(detail);
+      }
+    });
+  }
+
+  /// [text] as a new repertoire called [name], or [name] with ` (2)`,
+  /// ` (3)`… when that is taken: its variations become lines and its
+  /// chapters, when it has any, become chapter files.
+  ///
+  /// The files are written into a staging folder the list does not show and
+  /// the folder is then renamed into place, so a write that stops half way
+  /// never leaves a repertoire with some of its chapters in the list.
+  Future<LibraryResult> importText(String text, {required String name}) =>
+      _run('import $name', () => _imported(text, name: name, fallback: name));
+
+  Future<LibraryResult> _imported(
+    String text, {
+    required String name,
+    required String fallback,
+  }) async {
+    // A course of a thousand games is read where the screen does not wait
+    // for it; a pasted line is not worth the trip.
+    final created = DateTime.now();
+    final read = text.length < readOffThreadFrom
+        ? readImport(text, created: created)
+        : await Isolate.run(() => readImport(text, created: created));
+    if (read is! ImportedChapters) return const LibraryNothingToImport();
+    final folder = _freeName(importedName(name, fallback: fallback));
+    final staging = p.join(_root, '$stagingPrefix${_stagingId()}');
+    final names = _chapterFileNames(read.chapters);
+    for (final (index, chapter) in read.chapters.indexed) {
+      final ref = DocumentRef(p.join(staging, '${names[index]}.pgn'));
+      switch (await _store.create(ref, chapter.text)) {
+        case store.Created():
+          continue;
+        case store.Collision():
+          await _files.removeStaging(staging);
+          return LibraryFailure('${ref.path} was already there');
+        case store.IoFailure(:final detail):
+          await _files.removeStaging(staging);
+          return LibraryFailure(detail);
+      }
+    }
+    final destination = p.join(_root, folder);
+    switch (await _store.moveFolder(staging, destination)) {
+      case store.FolderMoved():
+        return LibraryAdded(
+          ChapterRef.at(p.join(destination, '${names.first}.pgn')),
+          chapters: read.chapters.length,
+          lines: read.lines,
+        );
+      case store.FolderNameTaken():
+        await _files.removeStaging(staging);
+        return const LibraryNameTaken();
+      case store.FolderMoveFailed(:final detail):
+        await _files.removeStaging(staging);
+        return LibraryFailure(detail);
+    }
+  }
+
+  /// [name], or the first of `name (2)`, `name (3)`… that no repertoire in
+  /// the list has, compared without case as [_named] compares.
+  String _freeName(String name) {
+    var candidate = name;
+    for (var n = 2; _named(candidate) != null; n++) {
+      candidate = '$name ($n)';
+    }
+    return candidate;
+  }
+
+  /// A file name for each chapter, from its title, no two alike.
+  List<String> _chapterFileNames(List<ImportedChapter> chapters) {
+    final taken = <String>{};
+    final names = <String>[];
+    for (final (index, chapter) in chapters.indexed) {
+      final base = importedName(
+        chapter.title,
+        fallback: 'Chapter ${index + 1}',
+      );
+      var candidate = base;
+      for (var n = 2; !taken.add(candidate.toLowerCase()); n++) {
+        candidate = '$base ($n)';
+      }
+      names.add(candidate);
+    }
+    return names;
+  }
+
+  String _stagingId() =>
+      DateTime.now().microsecondsSinceEpoch.toRadixString(36);
 
   /// A chapter takes the side of the repertoire it is added to, read from a
   /// chapter already in it, so a Black repertoire does not grow a White one.
@@ -325,7 +450,7 @@ final class Library extends ChangeNotifier {
   Future<LibraryResult> _created(
     DocumentRef ref,
     String name,
-    Side side, {
+    Side? side, {
     List<String> rootMoves = const [],
   }) async {
     final text = newChapterText(

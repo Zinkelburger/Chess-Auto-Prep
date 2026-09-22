@@ -124,21 +124,20 @@ void main() {
     );
   });
 
-  testWidgets('a new repertoire is named and sided in one dialog', (
+  testWidgets('a new repertoire asks for a name only, and opens', (
     tester,
   ) async {
     await show(tester, []);
     await tester.tap(find.byTooltip('New repertoire'));
     await tester.pumpAndSettle();
+    expect(find.text('Playing side'), findsNothing);
     await tester.enterText(find.byType(TextField).last, 'Benoni');
-    await tester.tap(find.text('Black'));
-    await tester.pumpAndSettle();
     await tester.tap(find.text('Create'));
     await tester.pumpAndSettle();
-    expect(
-      fixture.textAt('/repertoires/Benoni/Main.pgn'),
-      contains('// Color: Black'),
-    );
+    final text = fixture.textAt('/repertoires/Benoni/Main.pgn');
+    expect(text, startsWith('// Benoni\n'));
+    expect(text, isNot(contains('// Color:')), reason: 'asked on open');
+    expect(opened.single.path, '/repertoires/Benoni/Main.pgn');
   });
 
   testWidgets('a name the filesystem would refuse never leaves the dialog', (
