@@ -36,7 +36,7 @@ void main() {
       session = fixture.session;
       await session.open(fixture.ref, game: 0);
       var notified = 0;
-      session.addListener(() => notified++);
+      session.anyChange.addListener(() => notified++);
       session.showGame(2);
       session.showGame(-1);
       session.showGame(0);

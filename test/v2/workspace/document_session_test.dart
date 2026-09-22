@@ -16,7 +16,8 @@ void main() {
 
   Future<void> open(String text) async {
     fixture = await openSession(text);
-    session = fixture.session..addListener(() => notifications++);
+    session = fixture.session;
+    session.anyChange.addListener(() => notifications++);
     notifications = 0;
   }
 

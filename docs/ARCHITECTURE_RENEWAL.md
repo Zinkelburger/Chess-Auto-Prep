@@ -124,6 +124,18 @@ it uses; nothing takes "the workspace".
 | `WorkspaceLayout` | Which panel is open and the split sizes | Data |
 | A panel's owner (`GenerationRun`, `TrainingSession`, `HoleHunt`, …) | That tool's state, keyed to a document revision | A second copy of the tree or cursor |
 
+An owner notifies only for what its listeners show. `DocumentSession`
+notifies its own listeners when the document changes (another chapter or
+game, an edit, a refusal, a flip) and `cursorListenable` when the cursor
+moves; `anyChange` is both, for views of the position (board, engine,
+explorer, replies, move note, comment field). A derived owner such as
+`ChapterOutline` notifies when its output changes, not whenever its inputs
+do. A list highlights its current row through `ui/selection.dart`, so a
+cursor move redraws two rows, and builds its rows lazily
+(`ListView.builder`). A `State` that reacts to an owner with more than a
+rebuild uses `ui/listening_state.dart`, which follows the widget across
+`didUpdateWidget`.
+
 If an owner grows past about 300 lines or ten fields, it has two jobs; split
 it by job. The old `PgnViewerController` (1,341 lines) is what this table
 prevents.
@@ -301,9 +313,9 @@ Copy the shape of these files; they are what the rules above look like:
 | `lib/v2/chess/pgn/game_tree.dart` | Immutable values (`MoveNode`, `NodePath`, `GameTree`), doc comments that say why |
 | `lib/v2/chess/pgn/pgn_reader.dart` | A pure function over a package, typed issues instead of exceptions |
 | `lib/v2/chess/pgn/tree_merge.dart` | One algorithm, one paragraph explaining it |
-| `lib/v2/workspace/document_session.dart` | An owner: two fields, commands, derived getters, nothing else |
+| `lib/v2/workspace/document_session.dart` | An owner: two fields, commands, derived getters, the document and the cursor notified apart |
 | `lib/v2/features/library/library.dart` | Sealed states and results, a stale check after `await` |
-| `lib/v2/workspace/move_tree_view.dart` | A widget built from an owner, private sub-widgets, no I/O |
+| `lib/v2/workspace/move_tree_view.dart` | A widget built from an owner, private sub-widgets, no I/O; lines built once per tree, a cursor move redraws two moves |
 | `lib/v2/app/shell.dart` | Composition and the one cross-feature request |
 | `lib/v2/storage/chapter_files.dart` | An interface at a real boundary (the filesystem) with sealed results, and its one adapter |
 | `lib/v2/engines/uci_engine.dart` | A protocol over a pipe: serialised searches, each with its own stream, so stale output cannot land |
