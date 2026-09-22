@@ -240,24 +240,18 @@ class _Buttons extends StatelessWidget {
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         if (up.finished)
-          Tooltip(
-            message: 'Open the game with the engine on',
-            child: FilledButton.icon(
-              style: secondaryButtonStyle,
-              onPressed: onAnalyze,
-              icon: const Icon(Icons.insights, size: IconSize.action),
-              label: const Text('Analyze'),
-            ),
+          _button(
+            'Analyze',
+            Icons.insights,
+            onAnalyze,
+            tip: 'Open the game with the engine on',
           )
         else
-          Tooltip(
-            message: 'Show solution (Space)',
-            child: FilledButton.icon(
-              style: secondaryButtonStyle,
-              onPressed: trainer.showSolution,
-              icon: const Icon(Icons.lightbulb_outline, size: IconSize.action),
-              label: const Text('Show solution'),
-            ),
+          _button(
+            'Show solution',
+            Icons.lightbulb_outline,
+            trainer.showSolution,
+            tip: 'Show solution (Space)',
           ),
         IconButton(
           icon: const Icon(Icons.replay, size: IconSize.action),
@@ -265,29 +259,44 @@ class _Buttons extends StatelessWidget {
           onPressed: atStart ? null : trainer.reset,
         ),
         if (moved)
-          Tooltip(
-            message: 'Next puzzle (↓)',
-            child: FilledButton.icon(
-              onPressed: next,
-              icon: const Icon(Icons.arrow_forward, size: IconSize.action),
-              iconAlignment: IconAlignment.end,
-              label: const Text('Next'),
-            ),
+          _button(
+            'Next',
+            Icons.arrow_forward,
+            next,
+            tip: 'Next puzzle (↓)',
+            filled: true,
+            iconAfter: true,
           )
         else
-          Tooltip(
-            message: 'Skip this puzzle (↓)',
-            child: FilledButton.icon(
-              style: secondaryButtonStyle,
-              onPressed: next,
-              icon: const Icon(Icons.skip_next, size: IconSize.action),
-              iconAlignment: IconAlignment.end,
-              label: const Text('Skip'),
-            ),
+          _button(
+            'Skip',
+            Icons.skip_next,
+            next,
+            tip: 'Skip this puzzle (↓)',
+            iconAfter: true,
           ),
       ],
     );
   }
+
+  /// A labelled button with its icon; the secondary style unless [filled].
+  static Widget _button(
+    String label,
+    IconData icon,
+    VoidCallback? onPressed, {
+    required String tip,
+    bool filled = false,
+    bool iconAfter = false,
+  }) => Tooltip(
+    message: tip,
+    child: FilledButton.icon(
+      style: filled ? null : secondaryButtonStyle,
+      onPressed: onPressed,
+      icon: Icon(icon, size: IconSize.action),
+      iconAlignment: iconAfter ? IconAlignment.end : IconAlignment.start,
+      label: Text(label),
+    ),
+  );
 }
 
 /// Five stars; one hides the puzzle from training. The star the puzzle
