@@ -43,6 +43,12 @@ run_step() {
       if ! python3 scripts/check_architecture_boundaries.py; then
         bad=1
       fi
+      if ! python3 scripts/test_check_v2.py; then
+        bad=1
+      fi
+      if ! python3 scripts/check_v2.py; then
+        bad=1
+      fi
       if ! python3 scripts/check_file_mutations.py; then
         bad=1
       fi

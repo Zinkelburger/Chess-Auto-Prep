@@ -7,7 +7,6 @@ import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 
 import '../diagnostics/log.dart';
-import '../storage/lichess_token.dart';
 
 /// Logging into Lichess: the OAuth PKCE flow the old app used, and a typed
 /// personal access token as the way in when a browser is not to hand.
@@ -45,7 +44,32 @@ sealed class LoginOutcome {
 final class LoggedIn extends LoginOutcome {
   const LoggedIn(this.account);
 
-  final LichessAccount account;
+  final LichessGrant account;
+}
+
+/// The account a login reached and the token that reaches it, as Lichess
+/// answered. Keeping it is the caller's: this client never stores it.
+final class LichessGrant {
+  const LichessGrant({
+    required this.token,
+    required this.username,
+    this.until,
+    this.personal = false,
+  });
+
+  /// The bearer token. Never logged, never shown in full.
+  final String token;
+
+  /// The account's name as Lichess spells it; null when Lichess did not
+  /// say.
+  final String? username;
+
+  /// When an OAuth token stops working; null for a personal access token,
+  /// which lasts until revoked.
+  final DateTime? until;
+
+  /// Typed in as a personal access token rather than obtained by logging in.
+  final bool personal;
 }
 
 /// The user pressed Cancel in the app.
@@ -264,7 +288,7 @@ final class LichessLoginApi implements LichessLogin {
     return switch (named) {
       LoginFailed() => named,
       LoggedIn(:final account) => LoggedIn(
-        LichessAccount(
+        LichessGrant(
           token: token,
           username: account.username,
           until: DateTime.now().add(life),
@@ -281,7 +305,7 @@ final class LichessLoginApi implements LichessLogin {
     final named = await _account(trimmed);
     return switch (named) {
       LoggedIn(:final account) => LoggedIn(
-        LichessAccount(
+        LichessGrant(
           token: trimmed,
           username: account.username,
           personal: true,
@@ -325,7 +349,7 @@ final class LichessLoginApi implements LichessLogin {
     } on Object catch (error) {
       log.w('read the Lichess account answer', error);
     }
-    return LoggedIn(LichessAccount(token: token, username: name));
+    return LoggedIn(LichessGrant(token: token, username: name));
   }
 
   @override

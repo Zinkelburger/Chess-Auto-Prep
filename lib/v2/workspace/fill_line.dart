@@ -17,28 +17,7 @@ class FillLine extends StatelessWidget {
       listenable: fill,
       builder: (context, _) {
         final theme = Theme.of(context);
-        final scheme = theme.colorScheme;
-        final (String? words, Color? colour) = switch (fill.state) {
-          FillIdle() => (null, null),
-          FillRunning(
-            :final nodes,
-            :final depth,
-            :final of,
-            :final cancelling,
-          ) =>
-            (
-              cancelling
-                  ? 'Cancelling…'
-                  : 'Filling gaps · depth $depth/$of · $nodes positions',
-              null,
-            ),
-          FillDone(:final name, :final lines, :final folded) => (
-            'Proposed ${lines == 1 ? '1 line' : '$lines lines'} in $name'
-                '${folded == 0 ? '' : ' · $folded folded in'}',
-            null,
-          ),
-          FillFailed(:final reason) => (reason, scheme.error),
-        };
+        final (words, colour) = _describe(fill.state, theme.colorScheme);
         if (words == null) return const SizedBox.shrink();
         final running = fill.state is FillRunning;
         return SizedBox(
@@ -76,3 +55,22 @@ class FillLine extends StatelessWidget {
     );
   }
 }
+
+/// What the line says for [state], and its colour when it is not the usual
+/// one; no words while there is no fill.
+(String?, Color?) _describe(FillState state, ColorScheme scheme) =>
+    switch (state) {
+      FillIdle() => (null, null),
+      FillRunning(:final nodes, :final depth, :final of, :final cancelling) => (
+        cancelling
+            ? 'Cancelling…'
+            : 'Filling gaps · depth $depth/$of · $nodes positions',
+        null,
+      ),
+      FillDone(:final name, :final lines, :final folded) => (
+        'Proposed ${lines == 1 ? '1 line' : '$lines lines'} in $name'
+            '${folded == 0 ? '' : ' · $folded folded in'}',
+        null,
+      ),
+      FillFailed(:final reason) => (reason, scheme.error),
+    };
