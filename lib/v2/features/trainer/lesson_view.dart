@@ -163,7 +163,6 @@ class _MovesSoFar extends StatelessWidget {
     final moves = drill.line.moves;
     final note = drill.shown == 0 ? null : moves[drill.shown - 1].comment;
     return SingleChildScrollView(
-      reverse: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

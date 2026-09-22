@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../chess/pgn/move_label.dart';
 import '../../chess/training/records.dart';
+import '../../chess/training/schedule.dart';
 import '../../chess/training/sitting.dart';
 import '../../chess/training/training_line.dart';
 import '../../storage/training_store.dart';
@@ -136,10 +137,12 @@ class _LineListState extends State<LineList> {
       return _Muted(_query.isEmpty ? 'No lines here yet.' : 'No line matches.');
     }
     final many = widget.ready.chapters.length > 1;
+    final departs = _departures(widget.ready.lines);
     return ListView.builder(
       itemCount: lines.length,
       itemBuilder: (context, index) => _LineRow(
         line: lines[index],
+        departs: departs[lines[index].key] ?? 0,
         progress: progress,
         showChapter: many,
         onTrain: () => widget.trainer.trainLine(lines[index]),
@@ -164,6 +167,25 @@ class _LineListState extends State<LineList> {
       itemBuilder: (context, index) =>
           _MistakeRow(mistake: rows[index], line: names[rows[index].key]),
     );
+  }
+
+  /// For each line, how many of its first moves the line above it in its
+  /// chapter plays too: a row shows its line from where it leaves, since
+  /// lines of one chapter mostly share their opening.
+  static Map<LineKey, int> _departures(List<TrainingLine> lines) {
+    final shared = <LineKey, int>{};
+    for (var i = 1; i < lines.length; i++) {
+      final (above, line) = (lines[i - 1], lines[i]);
+      if (above.key.source != line.key.source) continue;
+      var n = 0;
+      while (n < above.moves.length &&
+          n < line.moves.length &&
+          above.moves[n].san == line.moves[n].san) {
+        n++;
+      }
+      shared[line.key] = n == line.moves.length ? 0 : n;
+    }
+    return shared;
   }
 
   static String _searchText(TrainingLine line) =>
@@ -268,6 +290,7 @@ class _Header extends StatelessWidget {
 class _LineRow extends StatelessWidget {
   const _LineRow({
     required this.line,
+    required this.departs,
     required this.progress,
     required this.showChapter,
     required this.onTrain,
@@ -275,6 +298,9 @@ class _LineRow extends StatelessWidget {
   });
 
   final TrainingLine line;
+
+  /// How many of the line's first moves the row leaves out.
+  final int departs;
   final TrainingProgress progress;
   final bool showChapter;
   final VoidCallback onTrain;
@@ -285,7 +311,9 @@ class _LineRow extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     final status = progress.status(line);
     final review = progress.reviews[line.key];
-    final moves = numberedMoves(line.moves);
+    final moves = departs == 0
+        ? numberedMoves(line.moves)
+        : '…${numberedMoves(line.moves.skip(departs))}';
     return InkWell(
       onTap: status == LineStatus.game ? null : onTrain,
       child: SizedBox(
