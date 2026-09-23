@@ -62,10 +62,21 @@ final benkoMain = ref('benko', 'Main');
 /// the app is put together, not a copy of it.
 final class WindowFixture {
   /// [input] is the window the requests read from; by default the real
-  /// dialogs over [navigator], for tests that pump [Shell].
-  WindowFixture({WindowInput? input}) : _input = input;
+  /// dialogs over [navigator], for tests that pump [Shell]. [settings] is a
+  /// store over a real folder, for a test of how they are read; by default
+  /// they are in memory. [launchEngine] starts the Stockfish the workspace
+  /// and the fill ask for; by default none starts.
+  WindowFixture({
+    WindowInput? input,
+    SettingsStore? settings,
+    EngineLauncher? launchEngine,
+  }) : _input = input,
+       _settings = settings,
+       _launchEngine = launchEngine;
 
   final WindowInput? _input;
+  final SettingsStore? _settings;
+  final EngineLauncher? _launchEngine;
   final navigator = GlobalKey<NavigatorState>();
 
   /// The question before a document is left, answering what the test sets
@@ -83,10 +94,8 @@ final class WindowFixture {
   );
 
   /// A copy on the way out is written beside the chapter as `Main copy`.
-  static Future<String?> _copyAside(DocumentSession session) async {
-    final written = await session.copyAside('Main copy');
-    return written is CopySaved ? written.name : null;
-  }
+  static Future<CopyResult?> _copyAside(DocumentSession session) =>
+      session.copyAside('Main copy');
 
   /// What the window was asked, in order: true for into full screen.
   final fullScreenAsked = <bool>[];
@@ -115,8 +124,8 @@ final class WindowFixture {
         tacticsSet: tacticsRef,
       ),
       store: store,
-      // In memory only, so it can be made once and disposed with the rest.
-      settings: SettingsStore(),
+      // In memory unless the test gave a folder; disposed with the rest.
+      settings: _settings ?? SettingsStore(),
       // The two repertoires the library lists, each of one chapter.
       chapterFiles: ScriptedFiles(
         listing: Repertoires([
@@ -144,8 +153,10 @@ final class WindowFixture {
       progressFiles: ScriptedProgress(),
       olderAnalyzed: () async => {},
       maia: const NoOpinion(),
-      launchEngine: ({required cores, required memoryMb}) async =>
-          const StartFailed('no engine in this test'),
+      launchEngine:
+          _launchEngine ??
+          ({required cores, required memoryMb}) async =>
+              const StartFailed('no engine in this test'),
       stopEngines: () async {},
       evalCache: () => throw StateError('no eval cache in this test'),
       keepTree: (_, _) async {},

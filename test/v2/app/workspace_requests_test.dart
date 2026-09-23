@@ -123,6 +123,20 @@ void main() {
         );
       },
     );
+
+    test('a copy on the way out that could not be written says why, and '
+        'the chapter stays', () async {
+      await freezeKid();
+      w.question.answer = DraftChoice.saveACopy;
+      w.store.creates.add(const IoFailure('disk full'));
+      expect(await w.requests.open(benko), isA<RequestDropped>());
+      expect(w.session.source, kid);
+      expect(w.requests.status, 'Could not save a copy: disk full');
+
+      w.store.creates.add(const Collision());
+      expect(await w.requests.open(benko), isA<RequestDropped>());
+      expect(w.requests.status, 'That name is taken. Nothing was replaced.');
+    });
   });
 
   group('the side question', () {
@@ -234,6 +248,8 @@ void main() {
         expect(w.session.source, games);
         expect(w.session.game, 0);
         expect(w.viewer.file, games);
+        // The list is read before it is written, a turn later.
+        await pumpEventQueue();
         expect(w.recent.saved.last, [games.path]);
       },
     );
@@ -324,6 +340,24 @@ void main() {
       w.question.answer = DraftChoice.keepWaiting;
       expect(await openListed(), isA<RequestDropped>());
       expect(w.session.source, kid);
+    });
+
+    test('that lands after the user opened another chapter is dropped, '
+        'not opened over it', () async {
+      await w.requests.open(kid);
+      w.store.hold = true;
+      final listed = openListed();
+      await pumpEventQueue();
+      final chosen = w.requests.open(benko);
+      await pumpEventQueue();
+      w.store.releaseLast(); // benko's read, asked for last
+      expect(await chosen, isA<RequestDone>());
+      w.store.hold = false;
+      w.store.releaseAll(); // the game's file is written
+      expect(await listed, isA<RequestDropped>());
+      expect(w.requests.mode, Mode.repertoires);
+      expect(w.session.source, benko);
+      expect(w.requests.status, isNull);
     });
 
     test('from This file is put on the board where its main line reaches '
@@ -452,14 +486,11 @@ void main() {
   });
 
   group('mode and status', () {
-    test('switching to the study list reads it again', () async {
-      final before = w.studyFiles.listings;
+    test('a switch of mode is said once; the same mode is not a change', () {
       var notified = 0;
       w.requests.addListener(() => notified++);
       w.requests.switchTo(Mode.study);
-      await pumpEventQueue();
       expect(w.requests.mode, Mode.study);
-      expect(w.studyFiles.listings, before + 1);
       w.requests.switchTo(Mode.study);
       expect(notified, 1, reason: 'the same mode is not a change');
     });

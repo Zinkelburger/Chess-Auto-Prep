@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:multi_split_view/multi_split_view.dart';
@@ -9,6 +8,7 @@ import '../features/library/outline_panel.dart';
 import '../features/settings/setting_rows.dart';
 import '../features/settings/settings_dialog.dart';
 import '../features/tactics/my_games_block.dart';
+import '../features/tactics/puzzle_trainer.dart';
 import '../features/trainer/train_pane.dart';
 import '../features/trainer/trainer.dart';
 import '../storage/settings_store.dart';
@@ -22,7 +22,6 @@ import '../workspace/board_claim.dart';
 import '../workspace/copy_name_dialog.dart';
 import '../workspace/fill_gaps.dart';
 import '../workspace/move_field.dart';
-import '../workspace/session_results.dart';
 import '../workspace/tree_pane.dart';
 import '../workspace/workspace.dart';
 import '../workspace/workspace_keys.dart';
@@ -93,8 +92,9 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
 
   ModeView get _view => _views[_requests.mode]!;
 
-  /// The mode on screen as last seen, so the one left can be told; the
-  /// mode changes through the requests, whoever asked.
+  /// The mode on screen as last seen, so the one left and the one come to
+  /// can be told: the mode changes through the requests, whoever asked —
+  /// the mode menu, or a list that opens its file in another mode.
   Mode? _shown;
 
   void _modeMayHaveChanged() {
@@ -102,6 +102,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     if (mode == _shown) return;
     if (_shown case final left?) _views[left]!.left();
     _shown = mode;
+    _views[mode]!.entered();
   }
 
   /// The reading card's tabs of the mode on screen.
@@ -111,6 +112,10 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     trainer: _train.lines,
     requests: _requests,
     trainTabOpen: () => _tabs.open.contains(WorkspaceTab.train),
+  );
+  late final _puzzle = PuzzleInView(
+    puzzles: _train.puzzles,
+    requests: _requests,
   );
 
   /// The columns and their widths. The user drags the dividers; the list
@@ -150,6 +155,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       view.tabs.addListener(_sitting.check);
     }
     _sitting.check();
+    _puzzle.check();
     _shown = _requests.mode;
     _requests.addListener(_modeMayHaveChanged);
   }
@@ -158,6 +164,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   void dispose() {
     _requests.removeListener(_modeMayHaveChanged);
     _sitting.dispose();
+    _puzzle.dispose();
     _editing.dispose();
     _moves.dispose();
     _claim.dispose();
@@ -200,11 +207,6 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     settings: _ws.settings,
     requests: _requests,
   );
-
-  void _switchTo(Mode mode) {
-    _requests.switchTo(mode);
-    _view.entered();
-  }
 
   /// A line the Train tab sent to be read: its chapter on the board at the
   /// position, the builder first when it asked for it, and the Moves tab up
@@ -286,11 +288,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     if (name == null || !mounted) return;
     final result = await _ws.session.saveCopy(name);
     if (!mounted) return;
-    _requests.say(switch (result) {
-      CopySaved(:final name) => 'Saved a copy as $name',
-      CopyNameTaken() => 'That name is taken. Nothing was replaced.',
-      CopyFailed(:final detail) => 'Could not save a copy: $detail',
-    });
+    _requests.say(copySaid(result));
   }
 
   /// Everything the Actions menu offers now, in the mode on screen.
@@ -412,7 +410,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     children: [
       TopBar(
         mode: _requests.mode,
-        onMode: _switchTo,
+        onMode: _requests.switchTo,
         offered: (mode) => mode != Mode.bughouse || widget.labs.offered.value,
         onSettings: () => unawaited(_settings()),
         // A mode with a screen of its own has no list to show or hide.
@@ -527,6 +525,41 @@ final class SittingInView {
     }
     final mode = _mode ??= _requests.mode;
     if (_requests.mode != mode || !_trainTabOpen()) _trainer.leave();
+  }
+
+  void dispose() {
+    for (final owner in _owners) {
+      owner.removeListener(check);
+    }
+  }
+}
+
+/// Keeps a puzzle on the board only while Tactics is on screen. Anywhere
+/// else the board would go on judging the moves made on it, Space would
+/// show its answer and the arrows walk the puzzles, with nothing on screen
+/// to say so; so it is put down, and the run is kept for Tactics.
+final class PuzzleInView {
+  PuzzleInView({
+    required PuzzleTrainer puzzles,
+    required WorkspaceRequests requests,
+  }) : _puzzles = puzzles,
+       _requests = requests {
+    for (final owner in _owners) {
+      owner.addListener(check);
+    }
+  }
+
+  final PuzzleTrainer _puzzles;
+  final WorkspaceRequests _requests;
+
+  List<Listenable> get _owners => [_puzzles, _requests];
+
+  /// Puts the puzzle down if it is up out of Tactics: the mode changed, or
+  /// a set game came up in another mode's document.
+  void check() {
+    if (_puzzles.up != null && _requests.mode != Mode.tactics) {
+      _puzzles.putDown();
+    }
   }
 
   void dispose() {

@@ -20,7 +20,7 @@ import 'move_field.dart';
 /// alone: a click on a row's `⋯` menu leaves the focus on that button, and
 /// a binding that lived inside the board's column would then never see
 /// Ctrl+Z — the one way back from an edit made in another column.
-class WorkspaceKeys extends StatelessWidget {
+class WorkspaceKeys extends StatefulWidget {
   const WorkspaceKeys({
     super.key,
     required this.session,
@@ -53,26 +53,60 @@ class WorkspaceKeys extends StatelessWidget {
 
   static bool _nothingToLeave() => false;
 
-  void _undo() => unawaited(session.undo());
+  @override
+  State<WorkspaceKeys> createState() => _WorkspaceKeysState();
+}
+
+class _WorkspaceKeysState extends State<WorkspaceKeys> {
+  /// A scope of the keys' own. A field under it that lets go of the focus
+  /// — Enter in the game box, a click outside the note — hands it to its
+  /// scope; were that the route's, which is above the keys, no key would
+  /// reach them until something under them took the focus again. Tab still
+  /// walks on out of the columns.
+  final _scope = FocusScopeNode(
+    debugLabel: 'workspace keys',
+    traversalEdgeBehavior: TraversalEdgeBehavior.parentScope,
+  );
+
+  DocumentSession get _session => widget.session;
+
+  @override
+  void dispose() {
+    _scope.dispose();
+    super.dispose();
+  }
+
+  void _undo() => unawaited(_session.undo());
 
   /// E turns the engine off at any time, and on only while the whole game
   /// is on view: it would read a hidden puzzle answer out.
   void _engine() {
+    final analysis = widget.analysis;
     if (analysis.enabled) return unawaited(analysis.disable());
-    if (session.shownTo == null) unawaited(analysis.enable());
+    if (_session.shownTo == null) unawaited(analysis.enable());
   }
 
-  void _edit() => editing.value = !editing.value;
+  /// Ctrl+E closes the edit strip at any time, and opens it only while the
+  /// whole game is on view: its note field would show what a hidden puzzle
+  /// answer's note says.
+  void _edit() {
+    final editing = widget.editing;
+    if (editing.value) {
+      editing.value = false;
+    } else if (_session.shownTo == null) {
+      editing.value = true;
+    }
+  }
 
   /// Esc leaves the innermost thing the user is in: the variation, then
   /// the edit strip, then whatever the window adds.
   bool _escape() {
-    if (session.leaveVariation()) return true;
-    if (editing.value) {
-      editing.value = false;
+    if (_session.leaveVariation()) return true;
+    if (widget.editing.value) {
+      widget.editing.value = false;
       return true;
     }
-    return leave();
+    return widget.leave();
   }
 
   /// Keys that only now and then have something to do. When they have
@@ -90,32 +124,35 @@ class WorkspaceKeys extends StatelessWidget {
     SingleActivator(LogicalKeyboardKey.numpadEnter),
   ];
 
-  Map<ShortcutActivator, VoidCallback> get _bindings => {
-    const SingleActivator(LogicalKeyboardKey.arrowLeft): session.back,
-    const SingleActivator(LogicalKeyboardKey.arrowRight): session.forward,
-    const SingleActivator(LogicalKeyboardKey.home): session.toStart,
-    const SingleActivator(LogicalKeyboardKey.end): session.toEnd,
-    const SingleActivator(LogicalKeyboardKey.pageUp): session.toStart,
-    const SingleActivator(LogicalKeyboardKey.pageDown): session.toEnd,
-    const SingleActivator(LogicalKeyboardKey.arrowUp): session.previousGame,
-    const SingleActivator(LogicalKeyboardKey.arrowDown): session.nextGame,
-    const SingleActivator(LogicalKeyboardKey.keyF): session.flip,
-    const SingleActivator(LogicalKeyboardKey.keyE): _engine,
-    const SingleActivator(LogicalKeyboardKey.keyE, control: true): _edit,
-    const SingleActivator(LogicalKeyboardKey.keyE, meta: true): _edit,
-    const SingleActivator(LogicalKeyboardKey.keyZ, control: true): _undo,
-    const SingleActivator(LogicalKeyboardKey.keyZ, meta: true): _undo,
-    const SingleActivator(LogicalKeyboardKey.tab, control: true): tabs.next,
-    const SingleActivator(LogicalKeyboardKey.tab, control: true, shift: true):
-        tabs.previous,
-    const SingleActivator(LogicalKeyboardKey.keyW, control: true):
-        tabs.closeCurrent,
-    const SingleActivator(LogicalKeyboardKey.keyW, meta: true):
-        tabs.closeCurrent,
-    // A character, not a key: `/` is Shift+7 on some keyboards.
-    const CharacterActivator('/'): moves.focus.requestFocus,
-    ...extra,
-  };
+  Map<ShortcutActivator, VoidCallback> get _bindings {
+    final tabs = widget.tabs;
+    return {
+      const SingleActivator(LogicalKeyboardKey.arrowLeft): _session.back,
+      const SingleActivator(LogicalKeyboardKey.arrowRight): _session.forward,
+      const SingleActivator(LogicalKeyboardKey.home): _session.toStart,
+      const SingleActivator(LogicalKeyboardKey.end): _session.toEnd,
+      const SingleActivator(LogicalKeyboardKey.pageUp): _session.toStart,
+      const SingleActivator(LogicalKeyboardKey.pageDown): _session.toEnd,
+      const SingleActivator(LogicalKeyboardKey.arrowUp): _session.previousGame,
+      const SingleActivator(LogicalKeyboardKey.arrowDown): _session.nextGame,
+      const SingleActivator(LogicalKeyboardKey.keyF): _session.flip,
+      const SingleActivator(LogicalKeyboardKey.keyE): _engine,
+      const SingleActivator(LogicalKeyboardKey.keyE, control: true): _edit,
+      const SingleActivator(LogicalKeyboardKey.keyE, meta: true): _edit,
+      const SingleActivator(LogicalKeyboardKey.keyZ, control: true): _undo,
+      const SingleActivator(LogicalKeyboardKey.keyZ, meta: true): _undo,
+      const SingleActivator(LogicalKeyboardKey.tab, control: true): tabs.next,
+      const SingleActivator(LogicalKeyboardKey.tab, control: true, shift: true):
+          tabs.previous,
+      const SingleActivator(LogicalKeyboardKey.keyW, control: true):
+          tabs.closeCurrent,
+      const SingleActivator(LogicalKeyboardKey.keyW, meta: true):
+          tabs.closeCurrent,
+      // A character, not a key: `/` is Shift+7 on some keyboards.
+      const CharacterActivator('/'): widget.moves.focus.requestFocus,
+      ...widget.extra,
+    };
+  }
 
   /// A key the workspace answers to, unless the user is typing: in a text
   /// field the arrows move the caret and Ctrl+Z takes back a word, and those
@@ -127,17 +164,17 @@ class WorkspaceKeys extends StatelessWidget {
     final keys = HardwareKeyboard.instance;
     if (_enter.any((enter) => enter.accepts(event, keys))) {
       final ours = FocusManager.instance.primaryFocus == node;
-      return ours && session.enterVariation()
+      return ours && _session.enterVariation()
           ? KeyEventResult.handled
           : KeyEventResult.ignored;
     }
     for (final MapEntry(key: activator, value: run) in _whenThere.entries) {
-      if (activator.accepts(event, HardwareKeyboard.instance)) {
+      if (activator.accepts(event, keys)) {
         return run() ? KeyEventResult.handled : KeyEventResult.ignored;
       }
     }
     for (final MapEntry(key: activator, value: run) in _bindings.entries) {
-      if (activator.accepts(event, HardwareKeyboard.instance)) {
+      if (activator.accepts(event, keys)) {
         run();
         return KeyEventResult.handled;
       }
@@ -152,6 +189,10 @@ class WorkspaceKeys extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) =>
-      Focus(autofocus: true, onKeyEvent: _onKey, child: child);
+  Widget build(BuildContext context) => FocusScope(
+    node: _scope,
+    autofocus: true,
+    onKeyEvent: _onKey,
+    child: widget.child,
+  );
 }

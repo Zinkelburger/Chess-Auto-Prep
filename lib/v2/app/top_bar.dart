@@ -171,7 +171,7 @@ class _ActionsMenuState extends State<_ActionsMenu> {
   }
 
   void _opened() {
-    if (_heard != null) return;
+    if (!mounted || _heard != null) return;
     _heard = widget.changes..addListener(_changed);
     setState(() {});
   }
@@ -215,11 +215,15 @@ class _ActionsMenuState extends State<_ActionsMenu> {
       menuChildren: _heard == null
           ? const []
           : _entries(Theme.of(context).textTheme),
-      builder: (context, controller, _) => TextButton.icon(
-        onPressed: controller.isOpen ? controller.close : controller.open,
-        icon: const Icon(Icons.arrow_drop_down, size: IconSize.action),
-        iconAlignment: IconAlignment.end,
-        label: const Text('Actions'),
+      // Ctrl+K opens the same actions as a list to type into.
+      builder: (context, controller, _) => Tooltip(
+        message: withKey('Actions', 'Ctrl+K'),
+        child: TextButton.icon(
+          onPressed: controller.isOpen ? controller.close : controller.open,
+          icon: const Icon(Icons.arrow_drop_down, size: IconSize.action),
+          iconAlignment: IconAlignment.end,
+          label: const Text('Actions'),
+        ),
       ),
     );
   }

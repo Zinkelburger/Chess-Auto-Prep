@@ -104,7 +104,8 @@ abstract base class ModeView {
   /// left anything. Tactics ends its sitting.
   bool leave() => false;
 
-  /// Called when the user switches to this mode.
+  /// Called when this mode comes on screen in place of another, whoever
+  /// switched to it.
   void entered() {}
 
   /// Called when another mode comes on screen instead of this one.
@@ -275,8 +276,10 @@ final class StudyView extends _DocumentModeView {
 
   final DocumentModes _modes;
 
+  /// The studies are read again each time they come on screen: one
+  /// imported or written since is listed.
   @override
-  Listenable get changes => Listenable.merge([super.changes, _modes.viewer]);
+  void entered() => unawaited(_modes.studies.refresh());
 
   @override
   MoveMenu get moveMenu =>
@@ -290,10 +293,14 @@ final class StudyView extends _DocumentModeView {
     trailing: toggle,
   );
 
+  /// A study opens from the list beside it, not the viewer's, so whatever
+  /// is on the board is what there is to close.
   @override
   AppAction get fileEntry => AppAction(
     'Close file',
-    _modes.viewer.file == null ? null : () => unawaited(requests.closeFile()),
+    workspace.session.source == null
+        ? null
+        : () => unawaited(requests.closeFile()),
   );
 }
 

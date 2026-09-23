@@ -24,6 +24,7 @@ import '../workspace/file_filter.dart';
 import 'environment.dart';
 import 'mode.dart';
 import 'workspace_requests.dart';
+import 'workspace_wiring.dart';
 
 /// The repertoires, the studies and the PGN Viewer.
 DocumentModes wireDocumentModes(
@@ -66,9 +67,9 @@ DocumentModes wireDocumentModes(
 }
 
 /// Builds the [TrainingModes] and keeps My games' book in step: it reads
-/// the games again when a repertoire changes, or when a download or a new
-/// username gives the accounts a new map — which the explorer's `My games`
-/// hears too.
+/// the games again when the repertoires are listed anew, or when a download
+/// or a new username gives the accounts a new map — which the explorer's
+/// `My games` hears too.
 final class TrainingWiring {
   TrainingWiring(
     AppEnvironment env, {
@@ -76,8 +77,7 @@ final class TrainingWiring {
     required Library library,
     required WorkspaceRequests requests,
     required this.games,
-  }) : _library = library,
-       _myGamesTree = workspace.myGamesTree {
+  }) : _myGamesTree = workspace.myGamesTree {
     final session = workspace.session;
     final tactics = TacticsSet(
       documents: env.store,
@@ -124,13 +124,13 @@ final class TrainingWiring {
         shelf: workspace.shelf,
       ),
     );
-    _library.addListener(modes.book.recheck);
+    _relisted = NewListings(library, modes.book.recheck);
     modes.myGames.addListener(_gamesMayHaveChanged);
   }
 
-  final Library _library;
   final LocalGames _myGamesTree;
   late final TrainingModes modes;
+  late final NewListings _relisted;
 
   /// The user's downloaded games, one file per account, shared with the
   /// old app: what the review, the book and the explorer read.
@@ -148,7 +148,7 @@ final class TrainingWiring {
   }
 
   void dispose() {
-    _library.removeListener(modes.book.recheck);
+    _relisted.dispose();
     modes.myGames.removeListener(_gamesMayHaveChanged);
     modes.dispose();
   }

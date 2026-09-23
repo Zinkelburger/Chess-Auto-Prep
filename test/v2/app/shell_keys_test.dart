@@ -4,6 +4,7 @@ import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/features/library/library_panel.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/workspace/comment_field.dart';
+import 'package:chess_auto_prep/v2/workspace/game_counter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -168,6 +169,32 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     await tester.pump(const Duration(seconds: 3));
     expect(w.session.currentMove?.san, 'e4', reason: 'the arrow stopped it');
+  });
+
+  testWidgets('once the game box lets go of the focus, the keys are the '
+      'workspace\'s again', (tester) async {
+    final games = collectionRef('games');
+    w.store.documents[games] = Opened(
+      threeGameFile,
+      scriptedRevision(threeGameFile),
+    );
+    await w.pumpShell(tester);
+    await w.requests.openFile(games);
+    await tester.pumpAndSettle();
+    final box = find.descendant(
+      of: find.byType(GameCounter),
+      matching: find.byType(TextField),
+    );
+    await tester.tap(box);
+    await tester.enterText(box, '2');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(w.session.game, 1);
+    await key(tester, LogicalKeyboardKey.arrowRight);
+    expect(w.session.currentMove?.san, 'd4');
+    final side = w.session.orientation;
+    await key(tester, LogicalKeyboardKey.keyF);
+    expect(w.session.orientation, isNot(side));
   });
 
   testWidgets('autoplay stops when the viewer is left', (tester) async {

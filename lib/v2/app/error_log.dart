@@ -4,8 +4,6 @@
 /// away can be read back tomorrow.
 library;
 
-import 'dart:ui' show PlatformDispatcher;
-
 import 'package:flutter/foundation.dart';
 
 import '../diagnostics/log.dart';
@@ -19,7 +17,9 @@ void installErrorLog() {
   };
   PlatformDispatcher.instance.onError = (error, stack) {
     log.e('run', uncaughtReport(error, stack));
-    return true;
+    // Not handled: the engine then prints its own full report, as it did
+    // before this hook was installed.
+    return false;
   };
 }
 

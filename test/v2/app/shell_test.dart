@@ -16,6 +16,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/scripted_store.dart';
+import '../support/study_fixture.dart';
 import '../support/viewer_fixture.dart';
 import '../support/window_fixture.dart';
 
@@ -324,12 +325,51 @@ void main() {
     await searchFromHere();
   });
 
-  testWidgets('Actions sits beside the mode menu, at the left', (tester) async {
+  testWidgets('Actions sits beside the mode menu, at the left, and says its '
+      'key', (tester) async {
     await pump(tester);
     final mode = tester.getTopRight(find.text('Repertoire builder').first);
     final actions = tester.getTopLeft(find.text('Actions'));
     expect(actions.dx, greaterThan(mode.dx));
     expect(actions.dx, lessThan(paneMinWidth * 2));
+    expect(find.byTooltip('Actions (Ctrl+K)'), findsOneWidget);
+  });
+
+  testWidgets('Close file in Study takes off the chapter its own list '
+      'opened', (tester) async {
+    final study = studyRef('Endgames');
+    w.store.documents[study] = Opened(
+      twoChapterStudy,
+      scriptedRevision(twoChapterStudy),
+    );
+    await pump(tester);
+    w.requests.switchTo(Mode.study);
+    await tester.pumpAndSettle();
+    await w.requests.open(study, game: 0);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Close file'));
+    await tester.pumpAndSettle();
+    expect(w.session.source, isNull);
+  });
+
+  testWidgets('a mode a request brings up is entered as one chosen from the '
+      'menu, and only when it changes', (tester) async {
+    await pump(tester);
+    final listed = w.studyFiles.listings;
+    w.requests.switchTo(Mode.study);
+    await tester.pumpAndSettle();
+    expect(w.studyFiles.listings, listed + 1, reason: 'read again on entry');
+    w.requests.switchTo(Mode.study);
+    await tester.pumpAndSettle();
+    expect(w.studyFiles.listings, listed + 1, reason: 'not entered twice');
+    w.requests.switchTo(Mode.bughouse);
+    await tester.pumpAndSettle();
+    expect(w.analysis.pausedFor, isNotNull, reason: 'Stockfish gives way');
+    w.requests.switchTo(Mode.repertoires);
+    await tester.pumpAndSettle();
+    expect(w.analysis.pausedFor, isNull);
   });
 
   testWidgets('the side is changed from Actions and written to the file', (

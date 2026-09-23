@@ -1,5 +1,7 @@
+import 'package:chess_auto_prep/v2/app/mode.dart';
 import 'package:chess_auto_prep/v2/chess/tactics/game_ids.dart';
 import 'package:chess_auto_prep/v2/features/tactics/my_games.dart';
+import 'package:chess_auto_prep/v2/workspace/comment_field.dart';
 import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -69,6 +71,25 @@ void main() {
     expect(w.session.game, 1);
   });
 
+  testWidgets('leaving Tactics puts the puzzle down: the board is the '
+      'document\'s, and a solved puzzle brings up no next one', (tester) async {
+    await toTactics(tester);
+    await tester.tap(find.text('4. Qe2??'));
+    await tester.pumpAndSettle();
+    w.trainer.play('h5f7');
+    await tester.pumpAndSettle();
+    expect(find.text('Correct!'), findsOneWidget);
+    w.requests.switchTo(Mode.repertoires);
+    await tester.pumpAndSettle();
+    expect(w.trainer.up, isNull);
+    expect(w.trainer.run, isNotNull, reason: 'the run is kept for Tactics');
+    expect(w.session.shownTo, isNull);
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pumpAndSettle();
+    expect(w.session.game, 0, reason: 'the next puzzle was not opened');
+    expect(w.trainer.up, isNull);
+  });
+
   testWidgets('Tactics shows the puzzle and its game only; the engine and '
       'the arrows wait for the answer, and Analyze opens the game', (
     tester,
@@ -104,6 +125,24 @@ void main() {
     await tester.pumpAndSettle();
     expect(w.trainer.up?.puzzle.index, 1);
     expect(w.trainer.up?.finished, isFalse);
+  });
+
+  testWidgets('Ctrl+E does not open the edit strip over a hidden answer', (
+    tester,
+  ) async {
+    await toTactics(tester);
+    await tester.tap(find.text('Play (4)'));
+    await tester.pumpAndSettle();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    // The answer shown, nothing is hidden any more: the strip would be up
+    // now had the key opened it.
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pumpAndSettle();
+    expect(find.text('Solution: e5 Nf3 Nc6'), findsOneWidget);
+    expect(find.byType(CommentField), findsNothing);
   });
 
   testWidgets('with no username the column asks for one; saving it offers '

@@ -1,4 +1,5 @@
 import 'package:chess_auto_prep/v2/app/error_log.dart';
+import 'package:chess_auto_prep/v2/diagnostics/log.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -77,5 +78,30 @@ void main() {
     final details = FlutterErrorDetails(exception: Exception('x'));
     expect(frameworkAction(details), 'run');
     expect(frameworkReport(details), 'Exception: x');
+  });
+
+  test('an uncaught error goes into the log and is still left to the '
+      'console', () {
+    final entries = <LogEntry>[];
+    void collect(LogEntry entry) => entries.add(entry);
+    final framework = FlutterError.onError;
+    final platform = PlatformDispatcher.instance.onError;
+    addTearDown(() {
+      log.remove(collect);
+      FlutterError.onError = framework;
+      PlatformDispatcher.instance.onError = platform;
+    });
+    log.install(collect);
+    installErrorLog();
+
+    final handled = PlatformDispatcher.instance.onError!(
+      StateError('lost'),
+      StackTrace.fromString(
+        '#0      main (package:chess_auto_prep/v2/x.dart:1:1)',
+      ),
+    );
+    expect(handled, isFalse, reason: 'the engine prints its full report');
+    expect(entries.single.level, LogLevel.error);
+    expect('${entries.single.error}', startsWith('Bad state: lost'));
   });
 }

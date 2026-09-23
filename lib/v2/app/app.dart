@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
 
 import '../diagnostics/log.dart';
 import '../features/settings/setting_rows.dart';
@@ -66,13 +65,14 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
   late final AppLifecycleListener _lifecycle;
 
   /// Writes the words on screen beside the original, under a name the user
-  /// gives, and answers the file it wrote. The question on the way out
-  /// points at this because it is the one way out that keeps them.
+  /// gives, and answers what came of it; null when they gave none. The
+  /// question on the way out points at this because it is the one way out
+  /// that keeps them.
   ///
   /// The copy does not take the session over: the user answered this while
   /// going somewhere else, and the document they are going to is the one
   /// they asked for.
-  Future<String?> _copyOnLeave(DocumentSession session) async {
+  Future<CopyResult?> _copyOnLeave(DocumentSession session) async {
     final context = _navigator.currentContext;
     if (context == null) return null;
     final name = await showCopyNameDialog(
@@ -80,8 +80,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
       session.chapter?.name ?? 'Chapter',
     );
     if (name == null) return null;
-    final written = await session.copyAside(name);
-    return written is CopySaved ? written.name : null;
+    return session.copyAside(name);
   }
 
   List<SettingGroup> _settingRows() => settingGroups(

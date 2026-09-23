@@ -35,8 +35,7 @@ final class WorkspaceWiring {
        _library = library,
        _filter = filter,
        _gamesCache = games {
-    _library.addListener(_answers.forget);
-    _library.addListener(_tree.forget);
+    _relisted = NewListings(_library, _filesChanged);
     _fill.addListener(_listTheDraft);
   }
 
@@ -46,6 +45,8 @@ final class WorkspaceWiring {
   final Library _library;
   final FileFilter _filter;
   final GamesCache _gamesCache;
+  late final NewListings _relisted;
+  bool _disposed = false;
 
   late final workspace = Workspace(
     session: _session,
@@ -148,8 +149,9 @@ final class WorkspaceWiring {
   }
 
   /// Starts the engine once the settings are read, and from then on has it
-  /// follow them.
+  /// follow them. Taken down first, it starts nothing.
   Future<void> start() async {
+    if (_disposed) return;
     final s = _env.settings.value;
     _engineRunsWith = (s.engineCores, s.engineMemoryMb);
     _analysis.setLines(s.engineLines);
@@ -172,17 +174,31 @@ final class WorkspaceWiring {
     }
   }
 
-  /// A finished fill wrote a chapter the library has not listed; reading
-  /// the folders again is what puts the draft in the outline. The fill
-  /// notifies only when its own state changes, not with the document.
+  /// The repertoire files were listed anew: what the gaps and the Tree tab
+  /// read from them is read again.
+  void _filesChanged() {
+    _answers.forget();
+    _tree.forget();
+  }
+
+  /// The draft whose chapter the library was last asked to list.
+  LinesWritten? _listed;
+
+  /// A search's lines were written into a draft chapter the library has not
+  /// listed; reading the folders again, once for that draft, is what puts
+  /// it in the list. The fill notifies for its progress and its tree too,
+  /// and those write no file.
   void _listTheDraft() {
-    if (_fill.state is FillDone) unawaited(_library.refresh());
+    final lines = _fill.lines;
+    if (lines is! LinesWritten || identical(lines, _listed)) return;
+    _listed = lines;
+    unawaited(_library.refresh());
   }
 
   void dispose() {
+    _disposed = true;
     _env.settings.removeListener(_engineSettings);
-    _library.removeListener(_answers.forget);
-    _library.removeListener(_tree.forget);
+    _relisted.dispose();
     _fill.removeListener(_listTheDraft);
     _fill.dispose();
     _analysis.dispose();
@@ -194,4 +210,29 @@ final class WorkspaceWiring {
     _tree.dispose();
     _games.dispose();
   }
+}
+
+/// Runs [_run] each time the library lists the repertoire files anew —
+/// after every change it makes, and every refresh — and not when it
+/// notifies for a search typed into its list or a command starting, which
+/// change nothing that was read from the files.
+final class NewListings {
+  NewListings(this._library, this._run) : _listed = _library.state {
+    _library.addListener(_heard);
+  }
+
+  final Library _library;
+  final void Function() _run;
+
+  /// The listing [_run] last ran for, or the one there was to begin with.
+  LibraryState _listed;
+
+  void _heard() {
+    final state = _library.state;
+    if (identical(state, _listed)) return;
+    _listed = state;
+    _run();
+  }
+
+  void dispose() => _library.removeListener(_heard);
 }
