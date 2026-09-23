@@ -13,6 +13,8 @@ import '../chess/fen.dart';
 import '../chess/generation/tree_wire_v4.dart' show treeWireVersion;
 import '../diagnostics/log.dart';
 import '../engines/engine_supervisor.dart';
+import '../engines/hivemind_engine.dart';
+import '../engines/hivemind_install.dart';
 import '../engines/maia/maia_model.dart';
 import '../engines/maia/move_policy.dart';
 import '../engines/stockfish_install.dart';
@@ -21,6 +23,7 @@ import '../net/lichess_login.dart';
 import '../net/lichess_studies.dart';
 import '../net/recent_games.dart';
 import '../storage/atomic_write.dart';
+import '../storage/bughouse_books.dart';
 import '../storage/chapter_files.dart';
 import '../storage/eval_cache.dart';
 import '../storage/lichess_token.dart';
@@ -43,6 +46,16 @@ typedef AppFolders = ({
   String collections,
   String gamesLibrary,
   ChapterRef tacticsSet,
+});
+
+/// What the Bughouse lab reaches outside the app: whether this build has
+/// the engine at all, how to start it on so many cores, and the two books
+/// the Python tools build.
+typedef BughouseOutside = ({
+  Future<bool> Function() bundled,
+  Future<HivemindStart> Function({required int cores}) launch,
+  HivemindBook hivemindBook,
+  FicsBook ficsBook,
 });
 
 /// Starts a Stockfish with these threads and this table.
@@ -82,6 +95,7 @@ final class AppEnvironment {
     required this.stopEngines,
     required this.evalCache,
     required this.keepTree,
+    required this.bughouse,
     this.now = DateTime.now,
     this.jitter = _noJitter,
     this.saveDelay = const Duration(seconds: 1),
@@ -105,6 +119,20 @@ final class AppEnvironment {
     final studies = p.join(documents.path, 'studies');
     final collections = p.join(documents.path, 'pgn_collections');
     final dice = Random();
+    final hivemindBook = SqliteHivemindBook(
+      bughouseBookPlaces(
+        'hivemind_book.db',
+        environment: Platform.environment,
+        support: support.path,
+      ),
+    );
+    final ficsBook = SqliteFicsBook(
+      bughouseBookPlaces(
+        'bughouse_book.db',
+        environment: Platform.environment,
+        support: support.path,
+      ),
+    );
     return AppEnvironment(
       folders: (
         repertoires: repertoires,
@@ -149,10 +177,19 @@ final class AppEnvironment {
       stopEngines: engines.dispose,
       evalCache: () => evalCache.cache,
       keepTree: _keepTreeBeside,
+      bughouse: (
+        bundled: _bughouseBundled,
+        launch: ({required cores}) =>
+            launchHivemind(support: support, engines: engines, cores: cores),
+        hivemindBook: hivemindBook,
+        ficsBook: ficsBook,
+      ),
       jitter: () => dice.nextDouble() * 2 - 1,
       close: () {
         evalCache.close();
         book.close();
+        hivemindBook.close();
+        ficsBook.close();
         maia.dispose();
         client.close();
         unawaited(engines.dispose());
@@ -209,6 +246,9 @@ final class AppEnvironment {
   /// Keeps a fill's search tree beside its chapter.
   final Future<void> Function(ChapterRef chapter, String tree) keepTree;
 
+  /// The Bughouse lab's engine and books.
+  final BughouseOutside bughouse;
+
   /// The clock the tactics set and the trainer schedule by.
   final DateTime Function() now;
 
@@ -232,6 +272,10 @@ final class AppEnvironment {
     cores: settings.value.engineCores,
     memoryMb: settings.value.engineMemoryMb,
   );
+
+  /// Hivemind with the cores the settings give the engine now.
+  Future<HivemindStart> startHivemind() =>
+      bughouse.launch(cores: settings.value.engineCores);
 }
 
 double _noJitter() => 0;
@@ -364,5 +408,34 @@ Future<Uint8List?> _readAsset(String asset) async {
     return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
   } on FlutterError {
     return null;
+  }
+}
+
+/// The bughouse engine: installed from the bundle into the support folder,
+/// checked against its manifest, then started under [engines].
+Future<HivemindStart> launchHivemind({
+  required Directory support,
+  required EngineSupervisor engines,
+  required int cores,
+}) async {
+  final install = HivemindInstall(
+    supportDirectory: support,
+    readAsset: _readAsset,
+  );
+  return switch (await install.locate()) {
+    HivemindMissing(:final reason) => HivemindStartFailed(reason),
+    HivemindReady(:final files) => engines.startHivemind(files, cores: cores),
+  };
+}
+
+/// Whether this build carries the bughouse engine, from the asset list the
+/// build ships: the bundle is fetched separately and may be missing.
+Future<bool> _bughouseBundled() async {
+  try {
+    final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
+    return HivemindInstall.bundledIn(manifest.listAssets());
+  } on Object catch (error) {
+    log.w('read the asset list for the bughouse engine', error);
+    return false;
   }
 }

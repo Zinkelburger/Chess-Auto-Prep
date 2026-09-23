@@ -35,8 +35,21 @@ final class SpawnedProcess implements UciProcess {
         .listen(_remember);
   }
 
-  static Future<SpawnedProcess> start(String executable) async =>
-      SpawnedProcess._(await Process.start(executable, const []));
+  /// Starts [executable] with [arguments], in [workingDirectory] when given,
+  /// with [environment] added to this process's own.
+  static Future<SpawnedProcess> start(
+    String executable, {
+    List<String> arguments = const [],
+    String? workingDirectory,
+    Map<String, String>? environment,
+  }) async => SpawnedProcess._(
+    await Process.start(
+      executable,
+      arguments,
+      workingDirectory: workingDirectory,
+      environment: environment,
+    ),
+  );
 
   final Process _process;
   final _errors = <String>[];
