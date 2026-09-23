@@ -81,21 +81,18 @@ void main() {
   });
 
   test(
-    'an imported study is a folder of chapter files, with no staging left',
+    'an imported study is one course file of chapters, with no staging left',
     () async {
       const study =
           '[Event "S: A"]\n[ChapterName "A"]\n\n1. e4 e5 (1... c5) *\n\n'
           '[Event "S: B"]\n[ChapterName "B"]\n\n1. d4 d5 *\n';
       final result = await library.importText(study, name: 'Study');
       expect(result, isA<LibraryAdded>());
+      final first = (result as LibraryAdded).first;
+      expect(first.path, at('repertoires/Study/Study.pgn'));
+      expect(first.section, 'A');
       expect(
-        (result as LibraryAdded).first.path,
-        at('repertoires/Study/A.pgn'),
-      );
-      expect(exists('repertoires/Study/A.pgn'), isTrue);
-      expect(exists('repertoires/Study/B.pgn'), isTrue);
-      expect(
-        File(at('repertoires/Study/A.pgn')).readAsStringSync(),
+        File(at('repertoires/Study/Study.pgn')).readAsStringSync(),
         contains('1. e4 c5 *'),
       );
       expect(

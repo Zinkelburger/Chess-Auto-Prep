@@ -102,12 +102,13 @@ final class LibraryWrites {
     }
   }
 
-  /// [text] as the repertoire [folder]: its variations become lines and its
-  /// chapters, when it has any, become chapter files.
+  /// [text] as the repertoire [folder]: its variations become lines, and a
+  /// course's chapters become chapters of one file, each line naming its
+  /// chapter in `[ChapterName]` ([courseText]).
   ///
-  /// The files are written into a staging folder the list does not show and
+  /// The file is written into a staging folder the list does not show and
   /// the folder is then renamed into place, so a write that stops half way
-  /// never leaves a repertoire with some of its chapters in the list.
+  /// never leaves a repertoire half there.
   Future<LibraryResult> importText(
     String text, {
     required String folder,
@@ -115,20 +116,33 @@ final class LibraryWrites {
     // A course of a thousand games is read where the screen does not wait
     // for it; a pasted line is not worth the trip.
     final created = DateTime.now();
-    final read = text.length < readOffThreadFrom
-        ? readImport(text, created: created)
-        : await Isolate.run(() => readImport(text, created: created));
-    if (read is! ImportedChapters) return const LibraryNothingToImport();
+    ({ImportRead read, String? file}) course() {
+      final read = readImport(text, created: created);
+      return (
+        read: read,
+        file: read is ImportedChapters
+            ? courseText(read, created: created)
+            : null,
+      );
+    }
+
+    final (:read, :file) = text.length < readOffThreadFrom
+        ? course()
+        : await Isolate.run(course);
+    if (read is! ImportedChapters || file == null) {
+      return const LibraryNothingToImport();
+    }
     final staging = p.join(_root, '$stagingPrefix${_stagingId()}');
-    final names = chapterFileNames(read.chapters);
-    for (final (index, chapter) in read.chapters.indexed) {
-      final ref = DocumentRef(p.join(staging, '${names[index]}.pgn'));
-      final refused = switch (await _store.create(ref, chapter.text)) {
-        store.Created() => null,
-        store.Collision() => LibraryFailure('${ref.path} was already there'),
-        store.IoFailure(:final detail) => LibraryFailure(detail),
-      };
-      if (refused == null) continue;
+    final name = read.chapters.length == 1
+        ? chapterFileNames(read.chapters).single
+        : importedName(folder, fallback: 'Course');
+    final ref = DocumentRef(p.join(staging, '$name.pgn'));
+    final refused = switch (await _store.create(ref, file)) {
+      store.Created() => null,
+      store.Collision() => LibraryFailure('${ref.path} was already there'),
+      store.IoFailure(:final detail) => LibraryFailure(detail),
+    };
+    if (refused != null) {
       await _files.removeStaging(staging);
       return refused;
     }
@@ -136,7 +150,12 @@ final class LibraryWrites {
     switch (await _store.moveFolder(staging, destination)) {
       case store.FolderMoved():
         return LibraryAdded(
-          ChapterRef.at(p.join(destination, '${names.first}.pgn')),
+          ChapterRef.at(
+            p.join(destination, '$name.pgn'),
+            section: read.chapters.length == 1
+                ? null
+                : read.chapters.first.title.trim(),
+          ),
           chapters: read.chapters.length,
           lines: read.lines,
         );
