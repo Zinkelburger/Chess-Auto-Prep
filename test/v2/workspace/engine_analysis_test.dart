@@ -21,6 +21,9 @@ void main() {
   late EngineAnalysis analysis;
   var notifications = 0;
   const tick = Duration(milliseconds: 200);
+  // Two jobs that take the engines, as the Search tab and the trainer do.
+  final fill = Object();
+  final sitting = Object();
 
   setUp(() async {
     session = (await openSession(blackChapter)).session;
@@ -124,7 +127,7 @@ void main() {
       running(async);
       engine.current.emit(line());
       async.elapse(tick);
-      analysis.pause('Paused while filling gaps');
+      analysis.pause(fill, 'Paused while filling gaps');
       async.flushMicrotasks();
       expect(engine.current.stopped, isTrue);
       expect(analysis.snapshot, isNull);
@@ -141,11 +144,48 @@ void main() {
       session.forward();
       async.flushMicrotasks();
       expect(engine.searches, hasLength(searches), reason: 'not following');
-      analysis.resume();
+      analysis.resume(fill);
       async.flushMicrotasks();
       expect(engine.searches, hasLength(searches + 1));
       expect(engine.current.fen, session.fen);
       expect(analysis.state, isA<EngineRunning>());
+    });
+  });
+
+  test('paused by two jobs, the engine waits for both: whichever ends '
+      'first leaves the other pause, and its reason, in place', () {
+    fakeAsync((async) {
+      running(async);
+      analysis
+        ..pause(sitting, 'Hidden while training')
+        ..pause(fill, 'Paused while searching');
+      async.flushMicrotasks();
+      final searches = engine.searches.length;
+      analysis.resume(fill);
+      async.flushMicrotasks();
+      expect(
+        analysis.state,
+        isA<EnginePaused>().having(
+          (s) => s.reason,
+          'reason',
+          'Hidden while training',
+        ),
+        reason: 'a fill ending mid-sitting would give the answers away',
+      );
+      expect(engine.searches, hasLength(searches), reason: 'not following');
+      analysis
+        ..pause(fill, 'Paused while searching')
+        ..resume(sitting);
+      async.flushMicrotasks();
+      expect(analysis.pausedFor, 'Paused while searching');
+      expect(engine.searches, hasLength(searches));
+      analysis.resume(sitting);
+      expect(analysis.paused, isTrue, reason: 'a second resume is not held');
+      analysis.resume(fill);
+      async.flushMicrotasks();
+      expect(analysis.paused, isFalse);
+      expect(engine.searches, hasLength(searches + 1));
+      expect(engine.current.fen, session.fen);
     });
   });
 
@@ -293,7 +333,7 @@ void main() {
     });
   });
 
-  test('a mate on the board reaches the bar', () {
+  test('a mate on the board reaches the pane', () {
     fakeAsync((async) {
       running(async);
       // What a real engine says about a position that is already over: a
@@ -303,8 +343,8 @@ void main() {
       async.flushMicrotasks();
       final best = analysis.snapshot!.best!;
       expect(best.pv, isEmpty);
-      // Black to move and mated, so the bar is White's from top to bottom.
-      expect(best.score.expected, 1);
+      // Black to move and mated, so from White's side it is White's mate.
+      expect(best.score, const MateIn(0).negated);
       expect(best.score.text, '#');
     });
   });

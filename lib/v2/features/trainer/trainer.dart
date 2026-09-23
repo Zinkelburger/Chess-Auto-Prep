@@ -127,7 +127,7 @@ class Trainer extends ChangeNotifier {
 
   /// What was last read: the chapter and scope a load was for, which a
   /// later load or a newer chapter overtakes.
-  ({ChapterRef? ref, TrainScope scope, Object? chapter})? _read;
+  ({ChapterRef? ref, TrainScope scope, Chapter? chapter})? _read;
 
   /// Counts loads, so an older one that finishes late is not taken for the
   /// newest when both asked for the same thing.
@@ -215,7 +215,7 @@ class Trainer extends ChangeNotifier {
       ..dispose();
     _lesson = null;
     board.value = null;
-    if (_analysis.pausedFor == _pauseReason) _analysis.resume();
+    _analysis.resume(this);
     notifyListeners();
   }
 
@@ -234,7 +234,7 @@ class Trainer extends ChangeNotifier {
     leave();
     _lesson = Lesson(kind: kind, lines: lines, progress: state.progress)
       ..addListener(_lessonChanged);
-    if (!_analysis.paused) _analysis.pause(_pauseReason);
+    _analysis.pause(this, _pauseReason);
     _lessonChanged();
   }
 
@@ -249,15 +249,21 @@ class Trainer extends ChangeNotifier {
   /// Keeps up with the session: another chapter reads everything again,
   /// an edit to this one works its lines out again. Another chapter of the
   /// repertoire being trained whole is one already read — a line sent to be
-  /// read from the list — so only its lines are worked out again.
+  /// read from the list — so only its lines are worked out again. One game
+  /// of the file on its own, as the viewer shows it, is another document
+  /// even when the file is the same: its side is that game's, and it is not
+  /// the chapter to train.
   void _follow() {
     final read = _read;
-    if (read == null || _session.source != read.ref) {
+    final chapter = _session.chapter;
+    if (read == null ||
+        _session.source != read.ref ||
+        chapter?.game != read.chapter?.game) {
       if (_inRepertoire(_session.source)) return _relined();
       if (_state is! TrainerIdle) unawaited(_load());
       return;
     }
-    if (!identical(_session.chapter, read.chapter)) _relined();
+    if (!identical(chapter, read.chapter)) _relined();
   }
 
   bool _inRepertoire(ChapterRef? ref) {
@@ -331,6 +337,9 @@ class Trainer extends ChangeNotifier {
 
   @override
   void dispose() {
+    // A load still reading is overtaken: it makes no progress to leak and
+    // tells nobody.
+    _loads++;
     _session.removeListener(_follow);
     leave();
     final state = _state;

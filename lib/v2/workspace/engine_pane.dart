@@ -2,7 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../chess/fen.dart';
 import '../chess/pv_text.dart';
+import '../ui/app_action.dart';
+import '../ui/listening_state.dart';
 import '../ui/theme.dart';
 import 'document_session.dart';
 import 'engine_analysis.dart';
@@ -36,9 +39,33 @@ class EnginePane extends StatefulWidget {
   State<EnginePane> createState() => _EnginePaneState();
 }
 
-class _EnginePaneState extends State<EnginePane> {
+class _EnginePaneState extends State<EnginePane>
+    with ListeningState<EnginePane> {
   final _preview = ValueNotifier<LinePreview?>(null);
   Timer? _settle;
+
+  /// The position the rows' lines are for; null while there are none.
+  Fen? _linesFor;
+
+  @override
+  void initState() {
+    super.initState();
+    _linesFor = widget.analysis.snapshot?.fen;
+  }
+
+  @override
+  Listenable listenableOf(EnginePane widget) => widget.analysis;
+
+  /// A row that goes takes the pointer's exit with it, so the floated board
+  /// goes with the rows: when they are for another position, or gone. A
+  /// deeper line for the same position keeps it.
+  @override
+  void changed() {
+    final linesFor = widget.analysis.snapshot?.fen;
+    if (linesFor == _linesFor) return;
+    _linesFor = linesFor;
+    _leave();
+  }
 
   @override
   void dispose() {
@@ -150,7 +177,7 @@ class _Header extends StatelessWidget {
             height: engineBarHeight,
             child: FittedBox(
               child: Tooltip(
-                message: 'Toggle engine',
+                message: withKey('Toggle engine', 'E'),
                 child: Switch(
                   value: analysis.enabled,
                   onChanged: (on) =>
@@ -263,6 +290,7 @@ class _LineRowState extends State<_LineRow> {
               ),
               padding: EdgeInsets.zero,
               onPressed: () {
+                if (!mounted) return;
                 widget.onLeave();
                 setState(() => _expanded = !_expanded);
               },

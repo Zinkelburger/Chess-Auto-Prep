@@ -4,6 +4,7 @@ import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../chess/fen.dart';
 import '../chess/generation/draft_lines.dart' show expectimaxText;
 import '../chess/generation/eval.dart';
 import '../chess/generation/search_node.dart';
@@ -12,6 +13,7 @@ import '../storage/chapter_files.dart';
 import '../storage/settings.dart';
 import '../storage/settings_store.dart';
 import '../ui/app_action.dart';
+import '../ui/listening_state.dart';
 import '../ui/theme.dart';
 import 'document_session.dart';
 import 'fill_gaps.dart';
@@ -55,7 +57,8 @@ class SearchPane extends StatefulWidget {
   State<SearchPane> createState() => _SearchPaneState();
 }
 
-class _SearchPaneState extends State<SearchPane> {
+class _SearchPaneState extends State<SearchPane>
+    with ListeningState<SearchPane> {
   late final _elo = TextEditingController(
     text: '${widget.settings.value.opponentElo}',
   );
@@ -69,6 +72,35 @@ class _SearchPaneState extends State<SearchPane> {
   /// Why the last press of Search did nothing: a number out of range or a
   /// refusal. Cleared by the next press.
   String? _problem;
+
+  /// The run and the position the rows are for.
+  (FillTarget?, Fen)? _rowsFor;
+
+  (FillTarget?, Fen) get _rowsNow =>
+      (widget.fill.found?.target, widget.session.fen);
+
+  @override
+  void initState() {
+    super.initState();
+    _rowsFor = _rowsNow;
+  }
+
+  /// Merged anew each time the pane is rebuilt from above, so [changed]
+  /// runs once more then; it compares, so that costs nothing.
+  @override
+  Listenable listenableOf(SearchPane widget) =>
+      Listenable.merge([widget.fill, widget.session.anyChange]);
+
+  /// A row that goes takes the pointer's exit with it, so the floated board
+  /// goes with the rows: at another position, or when another run starts.
+  /// The values filling in as the run goes keep it.
+  @override
+  void changed() {
+    final rowsFor = _rowsNow;
+    if (rowsFor == _rowsFor) return;
+    _rowsFor = rowsFor;
+    _leave();
+  }
 
   @override
   void dispose() {

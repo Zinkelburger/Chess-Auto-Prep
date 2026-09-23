@@ -232,6 +232,28 @@ void main() {
     expect(engine.searches.last.stopped, isFalse, reason: 'looking again');
   });
 
+  test('the run holds its own pause: a training sitting that outlives it '
+      'keeps the engine hidden, and one that ends during it does not wake '
+      'the engine early', () async {
+    final sitting = Object();
+    analysis.pause(sitting, 'Hidden while training');
+    await fillWith(ScriptedEvaluator(scores: e4Best())).start(request);
+    expect(analysis.pausedFor, 'Hidden while training');
+    analysis.resume(sitting);
+    expect(analysis.paused, isFalse);
+
+    final gate = GatedEvaluator();
+    final run = fillWith(gate).start(request);
+    await pumpEventQueue();
+    analysis
+      ..pause(sitting, 'Hidden while training')
+      ..resume(sitting);
+    expect(analysis.pausedFor, 'Paused while searching');
+    gate.release();
+    await run;
+    expect(analysis.paused, isFalse);
+  });
+
   test('a second run is refused while one is running', () async {
     final gate = GatedEvaluator();
     final fill = fillWith(gate);
@@ -367,6 +389,20 @@ void main() {
       expect(fixture.store.documents.keys, hasLength(1));
     },
   );
+
+  test('a search started while lines are being written takes over: the '
+      'lines of the run it replaced land nowhere', () async {
+    final fill = fillWith(ScriptedEvaluator(scores: e4Best()));
+    await fill.start(request);
+    final making = fill.makeLines();
+    final again = fill.start(request);
+    await making;
+    await again;
+    expect(fill.state, isA<FillDone>());
+    expect(fill.lines, isNull, reason: 'not the replaced run\'s');
+    expect(fill.canMakeLines, isTrue);
+    expect(fixture.store.documents.keys, [fixture.ref], reason: 'no draft');
+  });
 
   test(
     'a store that refuses the draft is a failure named in the tab',

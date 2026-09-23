@@ -58,7 +58,10 @@ class _ExplorerSourceBarState extends State<ExplorerSourceBar> {
                     maxWidth: explorerTrailingMaxWidth,
                   ),
                   child: TextButton(
-                    onPressed: () => setState(() => _unfolded = !_unfolded),
+                    onPressed: () {
+                      if (!mounted) return;
+                      setState(() => _unfolded = !_unfolded);
+                    },
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [

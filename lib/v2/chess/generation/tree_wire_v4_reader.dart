@@ -158,6 +158,15 @@ final class _Reader {
     final ourTurn =
         (white is bool ? white : fen.whiteToMove) == (ourSide == Side.white);
     final cp = json['engine_eval_cp'];
+    // JSON can spell a number no double holds, and `1e999` reads as
+    // infinity: a score, not a missing one, and not one to believe.
+    if (cp is num && !cp.isFinite) {
+      _fail(
+        'the node at ${fen.value} is scored $cp, which is not a number of '
+        'centipawns',
+      );
+      return null;
+    }
     // The file reports from the side to move; the search works from ours. A
     // node with no score at all keeps none, so it goes back out unscored.
     final evalForUs = cp is num
@@ -394,7 +403,9 @@ String? unsupportedTreeReason(
   Map<String, Object?> config,
   Map<String, Object?> tree,
 ) {
-  if (version is! num || version.toInt() != treeWireVersion) {
+  if (version is! num ||
+      !version.isFinite ||
+      version.toInt() != treeWireVersion) {
     return 'this tree was saved in format version ${version ?? 'unknown'}, '
         'and only version $treeWireVersion can be read';
   }
@@ -429,7 +440,8 @@ String? unsupportedTreeReason(
   if (config['play_as_white'] is! bool) {
     return 'this tree does not say which side it was built for';
   }
-  if (config['max_depth'] is! num) {
+  final depth = config['max_depth'];
+  if (depth is! num || !depth.isFinite) {
     return 'this tree does not say how deep it was built';
   }
   return null;
@@ -446,9 +458,13 @@ SearchConfig configFromSnapshot(Map<String, Object?> config) {
     side: side,
     horizonPlies: _intOr(config['max_depth'], defaults.horizonPlies),
     lossLimitCp: _intOr(config['max_eval_loss_cp'], defaults.lossLimitCp),
-    nodeBudget: budget is num && budget > 0 ? budget.toInt() : null,
+    nodeBudget: budget is num && budget.isFinite && budget > 0
+        ? budget.toInt()
+        : null,
   );
 }
 
+/// [value] as a whole number, or [fallback] when it is not a number or is
+/// one no int holds.
 int _intOr(Object? value, int fallback) =>
-    value is num ? value.toInt() : fallback;
+    value is num && value.isFinite ? value.toInt() : fallback;

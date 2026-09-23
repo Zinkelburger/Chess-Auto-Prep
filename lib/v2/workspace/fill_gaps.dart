@@ -228,12 +228,28 @@ final class FillGaps extends ChangeNotifier {
   FillState _state = const FillIdle();
   FillFound? _found;
   LinesState? _lines;
-  bool _cancelled = false;
-  bool _finishing = false;
   Future<void> Function()? _release;
   bool _disposed = false;
 
   FillState get state => _state;
+
+  /// Whether the run under way was asked to stop, either kind, or the
+  /// owner has gone.
+  bool get _stopping =>
+      _disposed ||
+      switch (_state) {
+        FillRunning(:final stopping) => stopping,
+        _ => false,
+      };
+
+  /// Whether what the run under way finds is to be thrown away: it was
+  /// cancelled, or the owner has gone.
+  bool get _discarded =>
+      _disposed ||
+      switch (_state) {
+        FillRunning(:final cancelling) => cancelling,
+        _ => false,
+      };
 
   /// The tree of the last run, as far as it has got: filled in while the
   /// run goes and kept until the next one starts.
@@ -287,16 +303,14 @@ final class FillGaps extends ChangeNotifier {
       side: side,
       chapter: drafting ? (chapter, source) : null,
     );
-    _cancelled = false;
-    _finishing = false;
     _found = null;
     _lines = null;
     _set(FillRunning(nodes: 1, depth: 0, of: request.depthPlies));
-    _analysis.pause('Paused while searching');
+    _analysis.pause(this, 'Paused while searching');
     try {
       await _run(request, target, root);
     } finally {
-      _analysis.resume();
+      _analysis.resume(this);
     }
     return null;
   }
@@ -317,7 +331,7 @@ final class FillGaps extends ChangeNotifier {
     // Disposed or cancelled while the engine was starting: dispose and
     // cancel had nothing to release then, so this engine is let go here or
     // its process outlives the run.
-    if (_cancelled || _disposed) {
+    if (_discarded) {
       await tools.release();
       _set(const FillIdle());
       return;
@@ -334,13 +348,13 @@ final class FillGaps extends ChangeNotifier {
       config: config,
       evaluator: tools.evaluator,
       policy: tools.policy,
-      isCancelled: () => _cancelled || _finishing,
+      isCancelled: () => _stopping,
       onProgress: _progress,
       onSnapshot: (tree) => _show(target, request, tree),
     );
     await _released();
     if (_disposed) return;
-    if (_cancelled) {
+    if (_discarded) {
       _found = null;
       _set(const FillIdle());
       return;
@@ -363,7 +377,7 @@ final class FillGaps extends ChangeNotifier {
   }
 
   void _show(FillTarget target, FillRequest request, SearchNode tree) {
-    if (_disposed || _cancelled) return;
+    if (_discarded) return;
     _found = FillFound(target: target, request: request, tree: tree);
     notifyListeners();
   }
@@ -407,7 +421,9 @@ final class FillGaps extends ChangeNotifier {
         : const <String>[];
     final created = _clock();
     final (plan, traps) = await foundIn(found.tree, known: known);
-    if (_disposed) return;
+    // Another search started meanwhile, and what it finds is the one on
+    // show: this run's lines are not written.
+    if (_disposed || !identical(_found, found)) return;
     final draft = await _draftUnder(
       p.dirname(source.path),
       source.name,
@@ -423,6 +439,10 @@ final class FillGaps extends ChangeNotifier {
       ),
     );
     if (_disposed) return;
+    if (!identical(_found, found)) {
+      log.i('lines from ${source.path}: written for a search since replaced');
+      return;
+    }
     switch (draft) {
       case _DraftWritten(:final ref):
         log.i('lines from ${source.path}: ${plan.lines} in ${ref.path}');
@@ -491,7 +511,6 @@ final class FillGaps extends ChangeNotifier {
   /// waited for.
   void cancel() {
     if (_state case final FillRunning running) {
-      _cancelled = true;
       _set(running.copyWith(cancelling: true));
       unawaited(_released());
     }
@@ -502,7 +521,6 @@ final class FillGaps extends ChangeNotifier {
   /// to the depth it reached. Nothing to do once a stop is asked for.
   void finish() {
     if (_state case final FillRunning running when !running.stopping) {
-      _finishing = true;
       _set(running.copyWith(finishing: true));
     }
   }
@@ -533,7 +551,6 @@ final class FillGaps extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
-    _cancelled = true;
     unawaited(_released());
     super.dispose();
   }

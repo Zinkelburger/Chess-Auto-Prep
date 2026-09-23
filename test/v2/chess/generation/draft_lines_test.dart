@@ -63,7 +63,7 @@ String ruyLopezDraft() {
     value: 0.55,
   );
   final plan = planDraft([kept, aside]);
-  expect(plan.folded, 1);
+  expect(plan.entries.single.sidelines, hasLength(1));
   return draftChapterText(
     name: 'Main (draft)',
     side: Side.white,
@@ -132,7 +132,6 @@ void main() {
       final e4e5 = line('e4 e5 Nf3');
       final plan = planDraft([e4e5], known: e4e5.decisions);
       expect(plan.lines, 0);
-      expect(plan.alreadyThere, 1);
     });
 
     test('lines that teach different decisions are all kept', () {
@@ -142,7 +141,7 @@ void main() {
         line('e4 e6 d4', reach: 0.2),
       ]);
       expect(plan.lines, 3);
-      expect(plan.folded, 0);
+      expect(plan.entries.expand((e) => e.sidelines), isEmpty);
     });
   });
 
@@ -155,7 +154,6 @@ void main() {
       final copy = line('e4 e5 Nf3 Nc6 Bb5 a6 Ba4 b5 Bb3', reach: 0.2);
       final plan = planDraft([host, copy]);
       expect(plan.lines, 1);
-      expect(plan.folded, 1);
       final (divergeAt, folded) = plan.entries.single.sidelines.single;
       expect(divergeAt, 7);
       expect(folded, same(copy));
@@ -188,7 +186,7 @@ void main() {
       ], reach: 0.2);
       final plan = planDraft([host, longTail, elsewhere]);
       expect(plan.lines, 1);
-      expect(plan.dropped, 2);
+      expect(plan.entries.single.sidelines, isEmpty, reason: 'both dropped');
     });
   });
 
@@ -208,7 +206,11 @@ void main() {
       ];
       final plan = planDraft(many);
       expect(plan.lines, DraftPlan.cap);
-      expect(plan.dropped, 20);
+      expect(
+        plan.entries.expand((e) => e.sidelines),
+        isEmpty,
+        reason: 'the twenty past the cap have nothing to hang off',
+      );
     });
   });
 

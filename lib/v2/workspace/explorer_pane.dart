@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../chess/explorer_answer.dart';
+import '../ui/listening_state.dart';
 import '../ui/theme.dart';
 import 'document_session.dart';
 import 'explorer.dart';
@@ -45,9 +46,19 @@ class ExplorerPane extends StatefulWidget {
   State<ExplorerPane> createState() => _ExplorerPaneState();
 }
 
-class _ExplorerPaneState extends State<ExplorerPane> {
+class _ExplorerPaneState extends State<ExplorerPane>
+    with ListeningState<ExplorerPane> {
   final _preview = ValueNotifier<LinePreview?>(null);
   Timer? _settle;
+
+  @override
+  Listenable listenableOf(ExplorerPane widget) => widget.explorer;
+
+  /// A row that goes takes the pointer's exit with it, so the floated board
+  /// goes whenever the explorer has something new to show: other rows, a
+  /// sentence in their place, or a line above them.
+  @override
+  void changed() => _leave();
 
   @override
   void dispose() {

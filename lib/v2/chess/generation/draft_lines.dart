@@ -133,29 +133,16 @@ final class DraftEntry {
   final List<(int, DraftLine)> sidelines;
 }
 
-/// What the draft holds, and what was done with the rest.
+/// What the draft holds: the lines it keeps, each with the near-copies
+/// folded into it.
 final class DraftPlan {
-  const DraftPlan({
-    required this.entries,
-    required this.folded,
-    required this.dropped,
-    required this.alreadyThere,
-  });
+  const DraftPlan({required this.entries});
 
   /// The most lines a draft holds: what a person can read, and about what
   /// the old builder wrote per chapter.
   static const cap = 100;
 
   final List<DraftEntry> entries;
-
-  /// Near-copies written as sidelines of the line they copy.
-  final int folded;
-
-  /// Near-copies with nothing to hang off, and lines past [cap].
-  final int dropped;
-
-  /// Lines whose every move of ours the chapter already plays.
-  final int alreadyThere;
 
   int get lines => entries.length;
 }
@@ -180,15 +167,9 @@ const int maxFoldPlies = 6;
 DraftPlan planDraft(List<DraftLine> lines, {Set<String> known = const {}}) {
   final entries = <_Kept>[];
   final taught = <String>{};
-  var folded = 0;
-  var dropped = 0;
-  var alreadyThere = 0;
   for (final line in lines) {
     final decisions = line.decisions;
-    if (decisions.every(known.contains)) {
-      alreadyThere++;
-      continue;
-    }
+    if (decisions.every(known.contains)) continue;
     if (!_tooClose(decisions, entries, taught) &&
         entries.length < DraftPlan.cap) {
       entries.add(_Kept(line, decisions));
@@ -196,18 +177,10 @@ DraftPlan planDraft(List<DraftLine> lines, {Set<String> known = const {}}) {
       continue;
     }
     final host = _hostFor(entries, line);
-    if (host == null) {
-      dropped++;
-      continue;
-    }
+    if (host == null) continue;
     final (kept, divergeAt) = host;
     final tail = line.moves.length - divergeAt;
-    if (tail <= 0 || tail > maxFoldPlies) {
-      dropped++;
-      continue;
-    }
-    kept.sidelines.add((divergeAt, line));
-    folded++;
+    if (tail > 0 && tail <= maxFoldPlies) kept.sidelines.add((divergeAt, line));
   }
   return DraftPlan(
     entries: List.unmodifiable([
@@ -217,9 +190,6 @@ DraftPlan planDraft(List<DraftLine> lines, {Set<String> known = const {}}) {
           sidelines: List.unmodifiable(kept.sidelines),
         ),
     ]),
-    folded: folded,
-    dropped: dropped,
-    alreadyThere: alreadyThere,
   );
 }
 
@@ -367,7 +337,7 @@ String expectimaxText(double value) {
   } else if (value >= 0.99) {
     cp = cap;
   } else {
-    cp = (-math.log(1 / value - 1) / 0.00368208).round().clamp(-cap, cap);
+    cp = (-math.log(1 / value - 1) / winProbSlope).round().clamp(-cap, cap);
   }
   final pawns = (cp / 100).toStringAsFixed(2);
   return cp < 0 ? pawns : '+$pawns';

@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:chess_auto_prep/v2/chess/explorer_answer.dart';
 import 'package:chess_auto_prep/v2/chess/fen.dart';
+import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/net/lichess_explorer.dart';
 import 'package:chess_auto_prep/v2/storage/master_book.dart';
 import 'package:chess_auto_prep/v2/storage/settings.dart';
@@ -41,6 +44,39 @@ const deepChapter = '''
 
 26. O-O *
 ''';
+
+/// Two ways to start, each five plies long: 1. e4 on the main line, 1. d4
+/// as its variation.
+const twoBranches = '''
+// Color: White
+
+[Event "Branches"]
+[Result "*"]
+
+1. e4 (1. d4 d5 2. c4 e6 3. Nc3) e5 2. Nf3 Nc6 3. Bb5 *
+''';
+
+/// A Lichess explorer that holds every answer until the test gives it, so
+/// the board can move while a request is out.
+final class HeldExplorerApi implements LichessExplorer {
+  final _out = <Completer<ExplorerFetch>>[];
+
+  /// How many requests are waiting for their answer.
+  int get waiting => _out.length;
+
+  /// Answers the oldest request still out.
+  void answer(ExplorerFetch fetch) => _out.removeAt(0).complete(fetch);
+
+  @override
+  Future<ExplorerFetch> fetch(ExplorerQuery query) {
+    final out = Completer<ExplorerFetch>();
+    _out.add(out);
+    return out.future;
+  }
+
+  @override
+  Future<String?> gamePgn(String id, {required bool masters}) async => null;
+}
 
 void main() {
   late SessionFixture fixture;
@@ -250,6 +286,110 @@ void main() {
     fixture.session.forward();
     await explorer.retry();
     expect(empties, 4);
+  });
+
+  test('three empty answers down one branch leave another branch to be '
+      'asked, however deep', () async {
+    fixture = await openSession(twoBranches);
+    lichess.answer = (query) => query.fen == Fen.initial
+        ? const ExplorerFetched(startAnswer)
+        : const ExplorerFetched(ExplorerAnswer.empty);
+    await start();
+    for (var i = 0; i < 3; i++) {
+      fixture.session.forward();
+      await pumpEventQueue();
+    }
+    final asked = lichess.asked.length;
+    fixture.session.forward();
+    await pumpEventQueue();
+    expect(lichess.asked, hasLength(asked), reason: 'this line is left');
+    // 1. d4 d5 2. c4 e6: as deep, on the other branch.
+    fixture.session.goTo(NodePath.of(const [1, 0, 0, 0]));
+    await pumpEventQueue();
+    expect(lichess.asked, hasLength(asked + 1));
+    expect(lichess.asked.last.fen, fixture.session.fen);
+  });
+
+  test('a refresh that failed says so beside its own rows only', () async {
+    await start();
+    lichess.throwing = StateError('boom');
+    await explorer.retry();
+    expect(explorer.notice, 'Could not ask Masters.');
+    lichess.throwing = null;
+    fixture.session.forward();
+    await pumpEventQueue();
+    expect(explorer.notice, isNull);
+  });
+
+  group('an answer that lands after the board has moved on', () {
+    late HeldExplorerApi held;
+
+    /// The explorer over [held], with the start position and 1. e4 both
+    /// answered and the board back at the start.
+    Future<void> startHeld() async {
+      held = HeldExplorerApi();
+      explorer = Explorer(
+        session: fixture.session,
+        settings: settings,
+        databases: ExplorerDatabases(
+          lichess: held,
+          book: book,
+          thisFile: thisFile,
+          myGames: myGames,
+        ),
+        debounce: Duration.zero,
+      );
+      await pumpEventQueue();
+      held.answer(const ExplorerFetched(startAnswer));
+      await pumpEventQueue();
+      fixture.session.forward();
+      await pumpEventQueue();
+      held.answer(const ExplorerFetched(afterE4Answer));
+      await pumpEventQueue();
+      fixture.session.back();
+      expect(shown().rows.first.san, 'e4', reason: 'from the cache');
+    }
+
+    const failure = ExplorerNotFetched(ExplorerProblem.http, status: 500);
+
+    test('a failure leaves the rows of the position on the board', () async {
+      await startHeld();
+      fixture.session.forward();
+      fixture.session.forward();
+      await pumpEventQueue();
+      expect(held.waiting, 1, reason: '1. e4 e5 is being asked about');
+      fixture.session.back();
+      expect(shown().rows.single.san, 'e5', reason: 'from the cache');
+      held.answer(failure);
+      await pumpEventQueue();
+      expect(shown().rows.single.san, 'e5');
+      expect(explorer.notice, isNull);
+    });
+
+    test('Try again that fails after the board moved does not bring its '
+        'rows to the new position', () async {
+      await startHeld();
+      final retrying = explorer.retry();
+      await pumpEventQueue();
+      expect(held.waiting, 1, reason: 'the start is being asked again');
+      fixture.session.forward();
+      expect(shown().rows.single.san, 'e5', reason: 'from the cache');
+      held.answer(failure);
+      await retrying;
+      expect(shown().rows.single.san, 'e5');
+      expect(explorer.notice, isNull);
+    });
+
+    test('Try again and a move before it asks: the position left is not '
+        'asked about', () async {
+      await startHeld();
+      unawaited(explorer.retry());
+      fixture.session.forward();
+      await pumpEventQueue();
+      expect(held.waiting, 0);
+      expect(shown().rows.single.san, 'e5');
+      expect(explorer.notice, isNull);
+    });
   });
 
   test('past move 25 nothing is asked', () async {

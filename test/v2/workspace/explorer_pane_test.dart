@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/v2/chess/fen.dart';
 import 'package:chess_auto_prep/v2/chess/tactics/game_ids.dart';
 import 'package:chess_auto_prep/v2/net/lichess_explorer.dart';
 import 'package:chess_auto_prep/v2/storage/my_accounts.dart';
@@ -9,6 +10,8 @@ import 'package:chess_auto_prep/v2/workspace/explorer.dart';
 import 'package:chess_auto_prep/v2/workspace/explorer_pane.dart';
 import 'package:chess_auto_prep/v2/workspace/file_filter.dart';
 import 'package:chess_auto_prep/v2/workspace/local_games.dart';
+import 'package:chessground/chessground.dart' show StaticChessboard;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -110,6 +113,23 @@ void main() {
     expect(find.text('Carlsen, M (2830) – Nakamura, H (2780)'), findsOneWidget);
     expect(find.text('1-0'), findsOneWidget);
     expect(find.text('2024'), findsOneWidget);
+  });
+
+  testWidgets('the board floated over a move goes when the board moves on '
+      'under the still pointer', (tester) async {
+    lichess.answer = (query) =>
+        ExplorerFetched(query.fen == Fen.initial ? startAnswer : afterE4Answer);
+    await show(tester);
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer();
+    addTearDown(mouse.removePointer);
+    await mouse.moveTo(tester.getCenter(find.textContaining('d4')));
+    await tester.pump(previewDelay);
+    expect(find.byType(StaticChessboard), findsOneWidget);
+    fixture.session.forward();
+    await tester.pumpAndSettle();
+    expect(find.textContaining('d4'), findsNothing, reason: 'its row is gone');
+    expect(find.byType(StaticChessboard), findsNothing);
   });
 
   testWidgets('clicking a move plays it into the document', (tester) async {

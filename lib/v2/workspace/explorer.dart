@@ -179,8 +179,6 @@ final class Explorer extends ChangeNotifier {
   /// machine: `40 games`, `12 of 40 games`. Null for the other databases.
   String? get summary => _databases.local(_choiceNow.source)?.summary;
 
-  bool get twicAvailable => _twic;
-
   /// How many plies deep the position on the board is.
   int get ply => plyOf(_session.fen);
 
@@ -198,11 +196,18 @@ final class Explorer extends ChangeNotifier {
       _followTheSession();
       return;
     }
+    final choice = _choiceNow;
+    final line = _lineHere();
+    // Taken before the book is looked for, while it is still this
+    // position's.
+    final kept = _state is ExplorerShown ? _state : null;
     _answers
-      ..forget(fen, _choiceNow)
+      ..forget(fen, choice)
       ..resetEmpties();
     await _checkTheBook();
-    await _ask(fen, kept: _state is ExplorerShown ? _state : null);
+    // The board moved on meanwhile, and the new position has been seen to.
+    if (_disposed || fen != _session.fen || choice != _choiceNow) return;
+    await _ask(fen, line, kept: kept);
   }
 
   Future<void> _checkTheBook() async {
@@ -217,7 +222,6 @@ final class Explorer extends ChangeNotifier {
     if (choice == _choiceNow) return;
     _choiceNow = choice;
     _answers.resetEmpties();
-    _notice = null;
     _followTheSession();
   }
 
@@ -240,6 +244,9 @@ final class Explorer extends ChangeNotifier {
   void _followTheSession() {
     if (_disposed) return;
     _rest?.cancel();
+    // A line beside the rows is about the rows it came with; what is shown
+    // next says its own.
+    _notice = null;
     if (_session.chapter == null) {
       _show(const ExplorerIdle());
       return;
@@ -254,22 +261,31 @@ final class Explorer extends ChangeNotifier {
       _show(_shown(fen, cached));
       return;
     }
-    final ply = plyOf(fen);
-    if (ply > deepestPly) {
+    if (plyOf(fen) > deepestPly) {
       _show(const ExplorerNothing('The database is not asked past move 25.'));
       return;
     }
-    if (_answers.pastEmpties(ply)) {
+    final line = _lineHere();
+    if (_answers.pastEmpties(line)) {
       _show(const ExplorerNothing('No games found for this position.'));
       return;
     }
     _show(ExplorerAsking(_choiceNow.source));
     // No rest is no timer: a test's clock has nothing left pending.
     if (debounce == Duration.zero) {
-      unawaited(_ask(fen));
+      unawaited(_ask(fen, line));
     } else {
-      _rest = Timer(debounce, () => unawaited(_ask(fen)));
+      _rest = Timer(debounce, () => unawaited(_ask(fen, line)));
     }
+  }
+
+  /// How the board got where it is, from the document's root.
+  ExplorerLine _lineHere() {
+    final tree = _session.tree;
+    return ExplorerLine(tree?.rootFen ?? _session.fen, [
+      for (final move in tree?.lineTo(_session.cursor) ?? const <MoveNode>[])
+        move.uci,
+    ]);
   }
 
   /// A tree being built answers from the one it had, when it had one.
@@ -302,10 +318,11 @@ final class Explorer extends ChangeNotifier {
     if (_choiceNow.source.local) _followTheSession();
   }
 
-  /// Asks the chosen database about [fen]; the games on this machine are
-  /// answered by [_showLocal] and never come here. [kept] is what stays on
-  /// the screen if the answer does not come, with a line saying so.
-  Future<void> _ask(Fen fen, {ExplorerState? kept}) async {
+  /// Asks the chosen database about [fen], reached by [line]; the games on
+  /// this machine are answered by [_showLocal] and never come here. [kept]
+  /// is what stays on the screen if the answer does not come, with a line
+  /// saying so.
+  Future<void> _ask(Fen fen, ExplorerLine line, {ExplorerState? kept}) async {
     final ticket = ++_ticket;
     final choice = _choiceNow;
     if (kept == null) _show(ExplorerAsking(choice.source));
@@ -318,6 +335,10 @@ final class Explorer extends ChangeNotifier {
       problem = 'Could not ask ${choice.source.title}.';
     }
     if (_disposed || ticket != _ticket) return;
+    if (answer != null) _answers.remember(fen, choice, answer, line);
+    // The board has moved on, or another database was chosen: what is on
+    // the screen now is about somewhere else, and a failure here is not.
+    if (fen != _session.fen || choice != _choiceNow) return;
     if (answer == null) {
       if (kept != null) {
         _notice = problem;
@@ -327,8 +348,6 @@ final class Explorer extends ChangeNotifier {
       }
       return;
     }
-    _answers.remember(fen, choice, answer);
-    if (fen != _session.fen || choice != _choiceNow) return;
     _show(_shown(fen, answer));
   }
 
@@ -381,18 +400,38 @@ final class Explorer extends ChangeNotifier {
   }
 }
 
+/// How the board got to a position: the document's root and the moves from
+/// it, as UCI. Two positions as deep as each other on different branches
+/// are on different lines, which is what the empty answers are counted by.
+final class ExplorerLine {
+  ExplorerLine(this.root, Iterable<String> moves)
+    : moves = List.unmodifiable(moves);
+
+  final Fen root;
+  final List<String> moves;
+
+  /// Whether this line goes on past the end of [other]: the same root,
+  /// [other]'s moves first, and at least one more.
+  bool continues(ExplorerLine other) =>
+      root == other.root &&
+      moves.length > other.moves.length &&
+      listEquals(moves.sublist(0, other.moves.length), other.moves);
+}
+
 /// What the databases have answered this session, and what that says about
 /// asking deeper.
 ///
 /// Answers are kept by choice and position, the oldest dropped past
-/// [cacheSize]. Empty answers are counted along a line: each one deeper
-/// than the last adds to the run, and after [emptiesBeforeStopping] of
-/// them nothing deeper is asked — a line that left the database three
-/// positions ago will not come back into it. A non-empty answer, or an
-/// empty one no deeper than the last, starts the count again.
+/// [cacheSize]. Empty answers are counted along a line: each one further
+/// down the line of the last adds to the run, and after
+/// [emptiesBeforeStopping] of them nothing further down that line is
+/// asked — a line that left the database three positions ago will not come
+/// back into it. A non-empty answer, or an empty one off that line, starts
+/// the count again.
 ///
-/// Example: empty answers at plies 8, 9 and 10 stop the asking at ply 11
-/// and below; the user stepping back to ply 7 is asked about as usual.
+/// Example: empty answers at plies 8, 9 and 10 of one line stop the asking
+/// at ply 11 and below on it; the user stepping back to ply 7, or into
+/// another branch however deep, is asked about as usual.
 final class ExplorerAnswers {
   /// How many answers are kept.
   static const cacheSize = 2000;
@@ -403,13 +442,19 @@ final class ExplorerAnswers {
 
   final _cache = <String, ExplorerAnswer>{};
   int _emptyRun = 0;
-  int _emptyPly = -1;
+  ExplorerLine? _emptyLine;
 
   ExplorerAnswer? at(Fen fen, ExplorerChoice choice) =>
       _cache[_key(fen, choice)];
 
-  /// Keeps [answer] and counts it if it is empty.
-  void remember(Fen fen, ExplorerChoice choice, ExplorerAnswer answer) {
+  /// Keeps [answer] and counts it if it is empty. [line] is how the board
+  /// got to [fen].
+  void remember(
+    Fen fen,
+    ExplorerChoice choice,
+    ExplorerAnswer answer,
+    ExplorerLine line,
+  ) {
     _cache[_key(fen, choice)] = answer;
     while (_cache.length > cacheSize) {
       _cache.remove(_cache.keys.first);
@@ -418,9 +463,8 @@ final class ExplorerAnswers {
       _emptyRun = 0;
       return;
     }
-    final ply = plyOf(fen);
-    _emptyRun = ply > _emptyPly ? _emptyRun + 1 : 1;
-    _emptyPly = ply;
+    _emptyRun = _goesOn(line) ? _emptyRun + 1 : 1;
+    _emptyLine = line;
   }
 
   /// Drops the answer for [fen], so the next ask goes to the database.
@@ -431,10 +475,15 @@ final class ExplorerAnswers {
   /// or asked another database.
   void resetEmpties() => _emptyRun = 0;
 
-  /// Whether a position [ply] plies deep is past the empty answers on its
-  /// line, and so not worth asking about.
-  bool pastEmpties(int ply) =>
-      _emptyRun >= emptiesBeforeStopping && ply > _emptyPly;
+  /// Whether the position [line] reaches is past the empty answers on it,
+  /// and so not worth asking about.
+  bool pastEmpties(ExplorerLine line) =>
+      _emptyRun >= emptiesBeforeStopping && _goesOn(line);
+
+  bool _goesOn(ExplorerLine line) {
+    final last = _emptyLine;
+    return last != null && line.continues(last);
+  }
 
   String _key(Fen fen, ExplorerChoice choice) =>
       '${choice.key}|${fen.position}';

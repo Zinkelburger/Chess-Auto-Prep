@@ -476,8 +476,7 @@ final class BughouseView extends ModeView {
   void entered() {
     // Stockfish would follow a board nobody sees, on the cores Hivemind is
     // using.
-    final analysis = workspace.analysis;
-    if (!analysis.paused) analysis.pause(_pauseReason);
+    workspace.analysis.pause(this, _pauseReason);
     _labs.search.open();
     unawaited(_labs.archive.open());
     unawaited(_labs.matches.load());
@@ -486,8 +485,7 @@ final class BughouseView extends ModeView {
   @override
   void left() {
     _labs.search.close();
-    final analysis = workspace.analysis;
-    if (analysis.pausedFor == _pauseReason) analysis.resume();
+    workspace.analysis.resume(this);
   }
 
   static const _pauseReason = 'Paused while the Bughouse lab is open';

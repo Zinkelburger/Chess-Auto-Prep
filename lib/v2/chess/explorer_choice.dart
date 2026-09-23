@@ -23,8 +23,6 @@ enum ExplorerSource {
 
   final String title;
 
-  bool get online => this == masters || this == lichess;
-
   /// Built from games on this machine and answered from memory: nothing
   /// to wait for between positions, and nothing to keep between sessions.
   bool get local => this == thisFile || this == myGames;

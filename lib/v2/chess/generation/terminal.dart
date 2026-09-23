@@ -18,7 +18,7 @@ const int _halfMovesForDraw = 100;
 /// half-move counter says. dartchess only writes an en-passant square when
 /// the capture is actually legal, so two keys that match really do offer the
 /// same moves.
-String repetitionKey(Fen fen) => fen.value.split(' ').take(4).join(' ');
+String repetitionKey(Fen fen) => fen.position;
 
 /// Why the game is over at [position], or null when it is not.
 ///

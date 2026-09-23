@@ -1,8 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
-import '../chess/explorer_answer.dart';
-import '../chess/explorer_choice.dart';
 import '../storage/chapter_files.dart';
 import '../storage/pgn_document_store.dart' as store;
 import 'explorer.dart';

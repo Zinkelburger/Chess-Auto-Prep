@@ -12,7 +12,7 @@ const int mateSaturationCp = 9000;
 
 /// Slope of the logistic curve below, shared with the old builder, the C
 /// builder and lila, so the three agree on what a centipawn is worth.
-const double _winProbSlope = 0.00368208;
+const double winProbSlope = 0.00368208;
 
 /// A fixed-depth engine score in centipawns.
 ///
@@ -40,5 +40,5 @@ extension type const Eval(int cp) {
 /// calibrated probability that a human wins it.
 double expectedScore(Eval eval) {
   if (eval.cp.abs() > mateSaturationCp) return eval.cp > 0 ? 1 : 0;
-  return 1 / (1 + math.exp(-_winProbSlope * eval.cp));
+  return 1 / (1 + math.exp(-winProbSlope * eval.cp));
 }

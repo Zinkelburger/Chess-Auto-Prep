@@ -85,8 +85,6 @@ void main() {
     expect(trap.lossCp, 330);
     expect(trap.reach, 1);
     expect(trap.springs, 0.3);
-    expect(trap.afterBest, const Eval(20));
-    expect(trap.afterBlunder, const Eval(350));
     expect(ucis(trap.moves), ['e2e4', 'f7f6', 'd1h5', 'g7g6']);
   });
 
@@ -235,7 +233,6 @@ void main() {
     final trap = trapsOf(tree).single;
 
     expect(trap.lossCp, trapLossCapCp);
-    expect(trap.afterBlunder, const Eval(mateBaseCp - 1));
   });
 
   test('a position with one scored reply sets no trap', () {

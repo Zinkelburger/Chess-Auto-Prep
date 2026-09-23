@@ -65,6 +65,42 @@ void main() {
     );
   });
 
+  test('a number too big for any double is refused or malformed, never an '
+      'exception', () {
+    // Valid JSON, and Dart reads it as infinity.
+    String huge(String key, String document) =>
+        document.replaceFirst(RegExp('"$key":[^,}]+'), '"$key":1e999');
+    final withBudget = wireDocument(
+      config: const {
+        'algorithm_version': 3,
+        'search_algorithm': 'pure',
+        'play_as_white': true,
+        'max_depth': 4,
+        'max_eval_loss_cp': 200,
+        'max_nodes': 50,
+      },
+    );
+
+    expect(
+      decodeTreeV4(huge('engine_eval_cp', wireDocument())),
+      isA<TreeMalformed>(),
+    );
+    expect(
+      decodeTreeV4(huge('version', wireDocument())),
+      isA<TreeUnsupported>(),
+    );
+    expect(
+      decodeTreeV4(huge('max_depth', wireDocument())),
+      isA<TreeUnsupported>(),
+    );
+    final fellBack = decodedTree(huge('max_eval_loss_cp', wireDocument()));
+    expect(fellBack.config.lossLimitCp, 200, reason: 'as if it were missing');
+    expect(
+      decodedTree(huge('max_nodes', withBudget)).config.nodeBudget,
+      isNull,
+    );
+  });
+
   test('a node the build never evaluated is a frontier, not a failure', () {
     // The old builder attaches a position's replies before evaluating them,
     // so this is what a pause or a node budget leaves behind.

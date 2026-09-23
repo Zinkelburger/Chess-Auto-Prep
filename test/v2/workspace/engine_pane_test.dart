@@ -139,6 +139,27 @@ void main() {
     expect(find.byType(StaticChessboard), findsNothing);
   });
 
+  testWidgets('the floated board goes with its row: a deeper line keeps it, '
+      'a move on the board under the still pointer takes it away', (
+    tester,
+  ) async {
+    await analyse(tester);
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer();
+    addTearDown(mouse.removePointer);
+    await mouse.moveTo(tester.getCenter(find.text('2. Nf3')));
+    await tester.pump(previewDelay);
+    expect(find.byType(StaticChessboard), findsOneWidget);
+    engine.current.emit(
+      line(score: const Centipawns(-30), depth: 19, pv: ['c7c5', 'g1f3']),
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.byType(StaticChessboard), findsOneWidget, reason: 'deeper');
+    session.forward();
+    await tester.pump();
+    expect(find.byType(StaticChessboard), findsNothing);
+  });
+
   testWidgets('clicking a move plays the line up to it', (tester) async {
     await analyse(tester);
     await tester.tap(find.text('2. Nf3'));

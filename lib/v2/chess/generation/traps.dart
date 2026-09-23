@@ -25,8 +25,6 @@ final class Trap {
     required this.share,
     required this.lossCp,
     required this.reach,
-    required this.afterBest,
-    required this.afterBlunder,
   });
 
   /// The moves from the search root to the position the opponent is to move
@@ -51,12 +49,6 @@ final class Trap {
   /// How often a game from the root reaches the trap position: the product
   /// of the opponent's shares along the way, our own moves counted as sure.
   final double reach;
-
-  /// The engine's score for us after the opponent's best reply.
-  final Eval afterBest;
-
-  /// The engine's score for us after [blunder].
-  final Eval afterBlunder;
 
   /// How often playing from the root springs it.
   double get springs => reach * share;
@@ -161,8 +153,6 @@ Iterable<Trap> _trapsAt(
       share: reply.probability,
       lossCp: loss,
       reach: reach,
-      afterBest: best.child.evalForUs,
-      afterBlunder: reply.child.evalForUs,
     );
   }
 }
@@ -235,10 +225,5 @@ DraftPlan withTraps(DraftPlan plan, List<Trap> traps) {
     added.add(DraftEntry(line: line));
   }
   if (added.isEmpty) return plan;
-  return DraftPlan(
-    entries: List.unmodifiable([...plan.entries, ...added]),
-    folded: plan.folded,
-    dropped: plan.dropped,
-    alreadyThere: plan.alreadyThere,
-  );
+  return DraftPlan(entries: List.unmodifiable([...plan.entries, ...added]));
 }

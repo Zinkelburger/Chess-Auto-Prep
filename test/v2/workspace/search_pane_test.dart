@@ -6,7 +6,9 @@ import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
 import 'package:chess_auto_prep/v2/workspace/fill_gaps.dart';
 import 'package:chess_auto_prep/v2/workspace/search_pane.dart';
+import 'package:chessground/chessground.dart' show StaticChessboard;
 import 'package:dartchess/dartchess.dart' show Side;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -86,6 +88,37 @@ void main() {
     expect(find.widgetWithText(TextField, 'Depth'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, 'Search'), findsOneWidget);
     expect(find.textContaining('for White'), findsOneWidget);
+  });
+
+  /// Runs a search two plies deep from the board, on real time.
+  Future<void> searched(WidgetTester tester) async {
+    await pump(tester);
+    await tester.enterText(find.widgetWithText(TextField, 'Depth'), '2');
+    await tester.runAsync(() async {
+      await tester.tap(find.widgetWithText(FilledButton, 'Search'));
+      while (!fill.running) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      while (fill.running) {
+        await Future<void>.delayed(Duration.zero);
+      }
+    });
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('the board floated over a move goes when the board moves on '
+      'under the still pointer', (tester) async {
+    await searched(tester);
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer();
+    addTearDown(mouse.removePointer);
+    await mouse.moveTo(tester.getCenter(find.text('e4')));
+    await tester.pump(previewDelay);
+    expect(find.byType(StaticChessboard), findsOneWidget);
+    fixture.session.playMove('e2e4');
+    await tester.pump();
+    expect(find.text('Their reply'), findsOneWidget, reason: 'other rows');
+    expect(find.byType(StaticChessboard), findsNothing);
   });
 
   testWidgets('the values at the board, following it: our moves near the best, '

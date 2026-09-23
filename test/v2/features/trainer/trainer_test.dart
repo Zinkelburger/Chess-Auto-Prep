@@ -570,6 +570,35 @@ void main() {
     });
   });
 
+  test('the file open one game at a time, as the viewer opens it, is not '
+      'trained; open whole again, it is', () {
+    fakeAsync((async) {
+      final trainer = ready(async)..learn();
+      unawaited(fixture.session.open(fixture.ref, game: 0));
+      async.flushMicrotasks();
+      expect((trainer.state as TrainerEmpty).why, NothingToTrain.studyChapter);
+      expect(trainer.lesson, isNull);
+      unawaited(fixture.session.open(fixture.ref));
+      async.flushMicrotasks();
+      expect(readyState(trainer).lines.map((l) => l.name), ['Ruy', 'Italian']);
+    });
+  });
+
+  test('a read that lands after the trainer is gone is let go', () {
+    fakeAsync((async) {
+      final trainer = Trainer(
+        session: fixture.session,
+        chapters: ScopeReader(files: ScriptedFiles(), documents: fixture.store),
+        files: files,
+        analysis: analysis,
+        time: (now: () => _now, jitter: () => 0),
+      )..show();
+      trainer.dispose();
+      async.flushMicrotasks();
+      expect(files.reads, 1);
+    });
+  });
+
   test('reading the progress again ends the sitting over the old copy', () {
     fakeAsync((async) {
       final trainer = ready(async)..learn();

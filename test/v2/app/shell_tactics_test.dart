@@ -81,7 +81,7 @@ void main() {
     }
     await tester.tap(find.text('Play (4)'));
     await tester.pumpAndSettle();
-    expect(find.byTooltip('Toggle engine'), findsNothing);
+    expect(find.byTooltip('Toggle engine (E)'), findsNothing);
     expect(find.byTooltip('Previous puzzle (↑)'), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
     await tester.pumpAndSettle();
@@ -92,7 +92,7 @@ void main() {
     );
     await tester.sendKeyEvent(LogicalKeyboardKey.space);
     await tester.pumpAndSettle();
-    expect(find.byTooltip('Toggle engine'), findsOneWidget);
+    expect(find.byTooltip('Toggle engine (E)'), findsOneWidget);
     await tester.tap(find.text('Analyze'));
     await tester.pumpAndSettle();
     expect(w.analysis.state, isA<EngineFailed>(), reason: 'it was asked');

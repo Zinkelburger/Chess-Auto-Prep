@@ -118,8 +118,10 @@ final class EngineAnalysis extends ChangeNotifier {
   /// [_elsewhere] holds one.
   Fen get position => _elsewhere?.value?.fen ?? _session.fen;
 
-  /// Why the analysis is not following the board, while it is not.
-  String? _pausedFor;
+  /// Who is keeping the analysis off the board, and why, oldest first. One
+  /// entry per holder, so a fill that ends during a training sitting does
+  /// not bring back the lines the sitting hides.
+  final _pauses = Map<Object, String>.identity();
   _Following? _following;
   AnalysisSnapshot? _snapshot;
 
@@ -137,7 +139,7 @@ final class EngineAnalysis extends ChangeNotifier {
   );
   bool _disposed = false;
 
-  EngineState get state => switch (_pausedFor) {
+  EngineState get state => switch (pausedFor) {
     final reason? when _state is EngineRunning => EnginePaused(reason),
     _ => _state,
   };
@@ -147,25 +149,28 @@ final class EngineAnalysis extends ChangeNotifier {
 
   bool get enabled => _state is EngineStarting || _state is EngineRunning;
 
-  bool get paused => _pausedFor != null;
+  bool get paused => _pauses.isNotEmpty;
 
-  /// Why the engine is paused, as [pause] was told; null while it is not.
-  String? get pausedFor => _pausedFor;
+  /// Why the engine is paused: the reason of the latest [pause] still held;
+  /// null while it is not paused.
+  String? get pausedFor => _pauses.values.lastOrNull;
 
-  /// Stops following the board and says [reason] in the pane, keeping the
-  /// engine warm, until [resume]: a fill has the machine, and two searches
-  /// at once would each get half of it.
-  void pause(String reason) {
-    _pausedFor = reason;
+  /// Stops following the board for [holder] and says [reason] in the pane,
+  /// keeping the engine warm, until [holder] resumes: a fill has the
+  /// machine, and two searches at once would each get half of it.
+  void pause(Object holder, String reason) {
+    _pauses
+      ..remove(holder)
+      ..[holder] = reason;
     _stopFollowing();
     _clearSnapshot();
     _notify();
   }
 
-  /// Follows the board again, from the position it is on now.
-  void resume() {
-    if (_pausedFor == null) return;
-    _pausedFor = null;
+  /// Lets go of [holder]'s pause. The board is followed again, from the
+  /// position it is on now, once no other holder is keeping it paused.
+  void resume(Object holder) {
+    if (_pauses.remove(holder) == null) return;
     _follow();
     _notify();
   }
@@ -215,7 +220,7 @@ final class EngineAnalysis extends ChangeNotifier {
   /// under it reads as an engine that does not work.
   void _follow() {
     final engine = _engine;
-    if (engine == null || _pausedFor != null) {
+    if (engine == null || paused) {
       // Nothing is searching, so the last score is about a position the
       // cursor has left; the pane and the bar must not keep showing it.
       _clearSnapshot();
