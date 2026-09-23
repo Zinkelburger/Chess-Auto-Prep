@@ -440,7 +440,7 @@ const gameOrdinalWidth = 40.0;
 const gameNumberWidth = 52.0;
 
 /// The Explorer tab's table: the move gutter, the games gutter, the header
-/// row over them and the menu the gear opens. The result bar sits after the
+/// row over them, and the height of one filter chip. The result bar sits after the
 /// games, no wider than [explorerBarMaxWidth]: a bar across the whole card
 /// is a stripe the eye reads before the moves.
 const explorerMoveWidth = 64.0;
@@ -448,7 +448,7 @@ const explorerGamesWidth = 96.0;
 const explorerBarMaxWidth = 220.0;
 const explorerBarHeight = 16.0;
 const explorerHeaderHeight = 22.0;
-const explorerMenuWidth = 300.0;
+const explorerChipHeight = 32.0;
 
 /// The Tree tab's table: the lines gutter and the files column; the move
 /// gutter is the explorer's, and how the line goes on takes the rest.

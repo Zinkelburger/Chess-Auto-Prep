@@ -31,10 +31,32 @@ void main() {
   setUp(() async => fixture = await openSession(annotated));
   tearDown(() => fixture.dispose());
 
-  testWidgets('the start shows the introduction and no move', (tester) async {
+  testWidgets('the start shows the introduction, then the first move and its '
+      'note, which a click plays', (tester) async {
     await pump(tester);
     expect(find.text('Play the Exchange.'), findsOneWidget);
     expect(find.textContaining('[%eval'), findsNothing);
+    expect(find.textContaining('1. d4'), findsOneWidget);
+    expect(find.byTooltip('Play d4 (→)'), findsOneWidget);
+    await tester.tap(find.textContaining('1. d4'));
+    await tester.pump();
+    expect(fixture.session.currentMove!.san, 'd4');
+    expect(find.byTooltip('Play d4 (→)'), findsNothing);
+  });
+
+  testWidgets('a game with no introduction still shows its first move', (
+    tester,
+  ) async {
+    fixture.dispose();
+    fixture = await openSession('''
+[Event "Bare"]
+[Result "*"]
+
+1. e4 {The king's pawn.} e5 *
+''');
+    await pump(tester);
+    expect(find.textContaining('1. e4'), findsOneWidget);
+    expect(find.text("The king's pawn."), findsOneWidget);
   });
 
   testWidgets('a move shows its number, glyph, meaning and note', (

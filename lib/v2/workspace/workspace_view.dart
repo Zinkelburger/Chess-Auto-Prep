@@ -307,9 +307,11 @@ class _Tabbed extends StatelessWidget {
   };
 
   Widget? _trailing(WorkspaceTab tab) => switch (tab) {
-    WorkspaceTab.moves || WorkspaceTab.train || WorkspaceTab.tree => null,
     WorkspaceTab.replies => _NextGap(gaps: gaps),
-    WorkspaceTab.explorer => ExplorerGear(explorer: explorer),
+    WorkspaceTab.moves ||
+    WorkspaceTab.train ||
+    WorkspaceTab.tree ||
+    WorkspaceTab.explorer ||
     WorkspaceTab.puzzle => null,
   };
 

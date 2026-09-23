@@ -203,24 +203,26 @@ Quirks worth a verdict:
 ## Decisions (owner, 2026-09-22)
 - **Keeping the UI clean.** A new capability is a tab on the reading card or a source behind an
   existing tab's gear, never a new dialog, dock or top-level control. Each tab owns at most one
-  control at the strip's right edge (`Next gap` on Replies, the gear on Explorer); configuration
-  lives behind it, never on the page. A dialog asks one question and closes; anything with more
+  control at the strip's right edge (`Next gap` on Replies); configuration
+  lives behind it, never on the page. The Explorer is the exception the owner chose (below). A dialog asks one question and closes; anything with more
   than three fields is wrong. The old app's import form (a tagline, a name, a colour switch, a
   paste box and two paths in one dialog) is the example of what not to build.
 - **The explorer is a tab**, as lila's book button swaps the move list for the explorer in the
-  same column: `Moves | Replies | Explorer`. The only new control on screen is the tab. Its gear,
-  at the strip's right edge, holds the source and that source's chips: `Masters`, `Lichess`
+  same column: `Moves | Replies | Explorer`. The only new control on screen is the tab. The
+  sources sit along the tab's top as one segmented row (the owner found the gear and its menu
+  unintuitive, 2026-09-22), with `Filters ▾` at the row's end for the chosen source's chips,
+  folded by default and reading what they are set to (`blitz rapid classical · 2000+`) while
+  folded; Masters has none and shows no button. The sources are `Masters`, `Lichess`
   (speed and rating chips), `TWIC` (`Classical OTB only`; the one source that works offline, and
   only with a local master database), `This file` (the games the viewer has open) and `My games`
-  (the player-analysis corpus). Under the strip one muted line summarises the choice
-  (`Lichess · blitz rapid classical · 2000+`) and clicking it opens the gear. The body is the
+  (the player-analysis corpus). The body is the
   table — move (ticked when the chapter plays it), games and share, the white/draw/black bar, a
   `Σ` totals row — and the games list under it, which opens a game in the PGN Viewer at that
   position. Clicking a row plays the move; on a repertoire chapter playing saves, so there is no
   `Add to repertoire`. No sorting. The old viewer's `Tree` tab is the `This file` source, not a
   tab of its own. Offline the Lichess sources say so with `Try again`, as decided above.
-  Built 2026-09-22 (step 6b): the tab, the gear with its chips (the last chip of a row cannot be
-  turned off), the summary line, the table with lila's result bar, the games list, and the game
+  Built 2026-09-22 (step 6b): the tab, the source row with its folding chips (the last chip of a
+  row cannot be turned off), the table with lila's result bar, the games list, and the game
   handoff: a click fetches the game's PGN, keeps it as its own file under
   `pgn_collections/explorer games/` (a file already there is opened as it is) and opens it in the
   PGN Viewer at the ply on the board. The choice is kept in `settings.json` with no dialog row.

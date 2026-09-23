@@ -35,26 +35,27 @@ void main() {
     expect(ExplorerAnswer.empty.isEmpty, isTrue);
   });
 
-  test('the choice summarises itself as one line', () {
-    expect(ExplorerChoice.defaults.summary, 'Masters');
+  test('the choice says how it is narrowed in a few words', () {
+    expect(ExplorerChoice.defaults.narrowing, '');
+    expect(const ExplorerChoice(source: ExplorerSource.twic).narrowing, '');
     expect(
-      const ExplorerChoice(source: ExplorerSource.lichess).summary,
-      'Lichess · blitz rapid classical · 2000+',
+      const ExplorerChoice(source: ExplorerSource.lichess).narrowing,
+      'blitz rapid classical · 2000+',
     );
     expect(
       const ExplorerChoice(
         source: ExplorerSource.lichess,
         speeds: {LichessSpeed.bullet},
         ratings: {1600, 2200},
-      ).summary,
-      'Lichess · bullet · 1600 2200',
+      ).narrowing,
+      'bullet · 1600 2200',
     );
     expect(
       const ExplorerChoice(
         source: ExplorerSource.twic,
         classicalOnly: true,
-      ).summary,
-      'TWIC · classical only',
+      ).narrowing,
+      'classical only',
     );
   });
 
