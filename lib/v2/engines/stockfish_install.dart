@@ -48,7 +48,26 @@ final class StockfishInstall {
   /// Reads a bundled asset, or null when the build has none by that name.
   final Future<Uint8List?> Function(String asset) readAsset;
 
-  Future<StockfishLocation> locate() async {
+  /// The look, and install if needed, in flight for each support folder.
+  ///
+  /// Every engine launch makes its own [StockfishInstall], and two launches
+  /// during a first-run install — a restart for new cores, a fill, a review
+  /// of my games — would unpack into one partial file, and one would rename
+  /// it into place while the other was still writing it. A launch that
+  /// finds one in flight shares its answer. Another process names its
+  /// partial file after its own [pid].
+  static final _locating = <String, Future<StockfishLocation>>{};
+
+  Future<StockfishLocation> locate() {
+    final key = p.normalize(p.absolute(supportDirectory.path));
+    // `remove` hands back this same future, which the callback must not
+    // return: `whenComplete` would wait for it and never finish.
+    return _locating[key] ??= _locate().whenComplete(
+      () => _locating.remove(key)?.ignore(),
+    );
+  }
+
+  Future<StockfishLocation> _locate() async {
     final bytes = await readAsset(_lockAsset);
     if (bytes == null) {
       return const StockfishMissing('This build has no Stockfish checksums');

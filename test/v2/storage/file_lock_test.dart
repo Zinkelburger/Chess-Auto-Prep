@@ -1,5 +1,6 @@
 // The lock the old app and v2 share. The protocol is written out again here,
 // so a change to either side of it fails this test rather than a user's save.
+import 'dart:async';
 import 'dart:io';
 
 import 'package:chess_auto_prep/v2/storage/file_lock.dart';
@@ -31,6 +32,26 @@ void main() {
     await Future.wait([first, second]);
     expect(order, ['first in', 'first out', 'second in']);
   });
+
+  test(
+    'a folder slow to look up still takes its turn in the order asked',
+    () async {
+      final answered = Completer<void>();
+      // One folder asked for twice; the first ask looks it up slowly, as a
+      // synced or network folder can.
+      final slow = _SlowToLookUp(fixture.documents, answered.future);
+      final order = <String>[];
+      final first = withDirectoryLock(slow, () async => order.add('first'));
+      final second = withDirectoryLock(
+        fixture.documents,
+        () async => order.add('second'),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      answered.complete();
+      await Future.wait([first, second]);
+      expect(order, ['first', 'second']);
+    },
+  );
 
   test('a failed action still hands the folder on', () async {
     final folder = fixture.documents;
@@ -93,6 +114,39 @@ void main() {
       expect(await File(ref.path).readAsString(), after);
     },
   );
+}
+
+/// A real folder whose lookups answer only once the future it is given
+/// completes. The lock reads nothing else of a folder.
+final class _SlowToLookUp implements Directory {
+  _SlowToLookUp(this._folder, this._answered);
+
+  final Directory _folder;
+  final Future<void> _answered;
+
+  @override
+  String get path => _folder.path;
+
+  @override
+  Future<bool> exists() async {
+    await _answered;
+    return _folder.exists();
+  }
+
+  @override
+  bool existsSync() => _folder.existsSync();
+
+  @override
+  Future<String> resolveSymbolicLinks() async {
+    await _answered;
+    return _folder.resolveSymbolicLinks();
+  }
+
+  @override
+  String resolveSymbolicLinksSync() => _folder.resolveSymbolicLinksSync();
+
+  @override
+  Object? noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 /// The old app's formula: `<system temp>/chess-auto-prep-file-locks/` and the

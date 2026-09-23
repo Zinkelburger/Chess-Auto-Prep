@@ -75,15 +75,18 @@ void main() {
     'a note nobody can make sense of is kept and nothing is rewritten',
     () async {
       final kid = fixture.ref('repertoires/KID/Main.pgn');
+      final renamed = fixture.ref('repertoires/KID/Renamed.pgn');
       final slav = fixture.ref('repertoires/Slav/Main.pgn');
       await chapter(kid);
+      await chapter(renamed);
       final other = await chapter(slav);
       writeRows([kid]);
-      // Neither path is the file the note describes: the user moved it by hand.
+      // Both paths hold a chapter and neither is the file the note
+      // describes, so nothing says which one the rows should name.
       await notes.record(
         'ambiguous',
         from: kid.path,
-        to: fixture.ref('repertoires/KID/Renamed.pgn').path,
+        to: renamed.path,
         identity: 'a file that is nowhere',
         folder: false,
       );
@@ -123,6 +126,71 @@ void main() {
       expect(await notes.read(), isEmpty);
     },
   );
+
+  test('a move that landed is finished though a save replaced the file '
+      'since', () async {
+    final kid = fixture.ref('repertoires/KID/Main.pgn');
+    final slav = fixture.ref('repertoires/Slav/Main.pgn');
+    await chapter(kid);
+    final identity = await identityOf(kid);
+    final other = await chapter(slav);
+    final renamed = fixture.ref('repertoires/KID/Renamed.pgn');
+    writeRows([kid]);
+    await File(kid.path).rename(renamed.path);
+    await notes.record(
+      'landed',
+      from: kid.path,
+      to: renamed.path,
+      identity: identity,
+      folder: false,
+    );
+    // The first autosave after the move publishes a new file under the
+    // new name.
+    final saved = await fixture.edit(
+      renamed,
+      '[Event "x"]\n\n1. d4 d5 *\n',
+      await fixture.revisionOf(renamed),
+    );
+    expect(saved, isA<Saved>());
+    expect(await identityOf(renamed), isNot(identity));
+
+    await fixture.store.rename(slav, 'Other.pgn', expected: other);
+
+    expect(read(), contains(_row(renamed.path)));
+    expect(read(), isNot(contains(_row(kid.path))));
+    expect(await notes.read(), isEmpty);
+  });
+
+  test('a move that never happened is dropped though a save replaced the '
+      'file since', () async {
+    final kid = fixture.ref('repertoires/KID/Main.pgn');
+    final slav = fixture.ref('repertoires/Slav/Main.pgn');
+    final revision = await chapter(kid);
+    final identity = await identityOf(kid);
+    final other = await chapter(slav);
+    writeRows([kid]);
+    // The machine stopped after the note, before the rename; the chapter
+    // was saved where it still is.
+    await notes.record(
+      'stopped-early',
+      from: kid.path,
+      to: fixture.ref('repertoires/KID/Renamed.pgn').path,
+      identity: identity,
+      folder: false,
+    );
+    final saved = await fixture.edit(
+      kid,
+      '[Event "x"]\n\n1. d4 d5 *\n',
+      revision,
+    );
+    expect(saved, isA<Saved>());
+    expect(await identityOf(kid), isNot(identity));
+
+    await fixture.store.rename(slav, 'Other.pgn', expected: other);
+
+    expect(read(), contains(_row(kid.path)));
+    expect(await notes.read(), isEmpty, reason: 'nothing is owed');
+  });
 
   test(
     'two moves that could not rewrite their rows are both finished later',

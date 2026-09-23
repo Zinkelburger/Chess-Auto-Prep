@@ -116,6 +116,30 @@ void main() {
     expect((read as ProgressUnreadable).line, 3);
   });
 
+  test('bytes that are not text make the file unreadable at their line, '
+      'and nothing is written over them', () async {
+    final bytes = [
+      ...utf8.encode('$reviewsHeader\n${_review(_kid, 'line_1')}\n'),
+      // 0xC3 starts a character and 0x28 is not the rest of one.
+      0xC3, 0x28, 0x0A,
+    ];
+    await file(reviewsFile).writeAsBytes(bytes);
+    final read = await store.read({_kid});
+    expect(read, isA<ProgressUnreadable>());
+    expect((read as ProgressUnreadable).file, reviewsFile);
+    expect(read.line, 3);
+    final written = await store.write(
+      reviews: [
+        (
+          before: null,
+          after: const Review(key: (source: _kid, id: 'line_2'), lineName: 'x'),
+        ),
+      ],
+    );
+    expect(written, isA<ProgressUnreadable>());
+    expect(await file(reviewsFile).readAsBytes(), bytes);
+  });
+
   Review rated(Review? before) => asWritten(
     (before ?? const Review(key: _mainline, lineName: 'Mainline')).copyWith(
       intervalDays: 25,
@@ -272,6 +296,28 @@ void main() {
       'phase': 'drilling',
       'timestampUtc': '2026-09-22T12:00:00.000Z',
     });
+  });
+
+  test('an answer goes after a torn line, whose bytes are kept', () async {
+    // An answer, then another cut short inside a character: bytes that are
+    // not text.
+    final answer = utf8.encode(encodeAttempt(_attempt(correct: false)));
+    final torn = [...answer, 0x0A, ...answer.sublist(0, 20), 0xC3];
+    await file(attemptsFile).writeAsBytes(torn);
+
+    expect(
+      await store.logAttempt(_attempt(correct: false)),
+      isA<ProgressWritten>(),
+    );
+
+    final bytes = await file(attemptsFile).readAsBytes();
+    expect(bytes.sublist(0, torn.length), torn);
+    expect(
+      utf8.decode(bytes.sublist(torn.length)),
+      '\n${encodeAttempt(_attempt(correct: false))}\n',
+    );
+    // The torn line is passed over; the answers either side of it are not.
+    expect((await read({_kid})).mistakes, hasLength(2));
   });
 
   test('waits for the old app holding the Documents folder', () async {

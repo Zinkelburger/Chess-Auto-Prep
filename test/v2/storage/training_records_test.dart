@@ -309,6 +309,22 @@ void main() {
     expect(read(_reviews), contains(_review(kid.path)));
   });
 
+  test('a file whose bytes are not text stops it, and says so', () async {
+    writeAll();
+    final log = File(p.join(fixture.documents.path, _attempts));
+    // The last of the four files, so the three before it were planned.
+    final torn = [...log.readAsBytesSync(), 0xC3];
+    log.writeAsBytesSync(torn);
+    final result = await records.repoint(
+      kid,
+      fixture.ref('repertoires/KID/Classical.pgn'),
+    );
+    expect(result, isA<IoFailure>());
+    expect((result as IoFailure).detail, contains('not UTF-8'));
+    expect(log.readAsBytesSync(), torn);
+    expect(read(_reviews), contains(_review(kid.path)));
+  });
+
   test('what a repoint replaces is kept where the old app keeps it', () async {
     writeAll();
     final before = [read(_reviews), read(_progress), read(_attempts)];

@@ -3,6 +3,9 @@ import 'dart:io';
 import 'package:chess_auto_prep/v2/storage/pgn_file_import.dart';
 import 'package:path/path.dart' as p;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqlite3/sqlite3.dart';
+
+import '../support/lock_path.dart';
 
 void main() {
   late Directory root;
@@ -64,5 +67,41 @@ void main() {
   test('a file that is not there cannot be copied, and says so', () async {
     final result = await import.insideDocuments(p.join(root.path, 'no.pgn'));
     expect(result, isA<ImportFailed>());
+  });
+
+  test('a copy waits while another writer holds pgn_collections', () async {
+    final source = File(p.join(root.path, 'course.pgn'));
+    await source.writeAsString('1. e4 *\n');
+    final into = Directory(p.join(documents.path, 'pgn_collections'));
+    await into.create();
+    // A save of a file already in the folder, by this app or the old one:
+    // it sweeps staged copies before writing its own.
+    final other = sqlite3.open(await lockPathOf(into));
+    other.execute('PRAGMA busy_timeout = 0');
+    other.execute('BEGIN IMMEDIATE');
+    var done = false;
+    final copied = import
+        .insideDocuments(source.path)
+        .whenComplete(() => done = true);
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    expect(done, isFalse, reason: 'the other writer still holds the folder');
+    expect(await into.list().toList(), isEmpty);
+    other
+      ..execute('ROLLBACK')
+      ..close();
+    final result = await copied as FileToOpen;
+    expect(await File(result.path).readAsString(), '1. e4 *\n');
+  });
+
+  test('a name taken by something that is not a file is passed over', () async {
+    final source = File(p.join(root.path, 'course.pgn'));
+    await source.writeAsString('1. e4 *\n');
+    final into = p.join(documents.path, 'pgn_collections');
+    // Not a file, so a look for a file there finds nothing, but the name is
+    // still taken when the copy is put in place.
+    await Directory(p.join(into, 'course.pgn')).create(recursive: true);
+    final result = await import.insideDocuments(source.path) as FileToOpen;
+    expect(p.basename(result.path), 'course (2).pgn');
+    expect(await File(result.path).readAsString(), '1. e4 *\n');
   });
 }

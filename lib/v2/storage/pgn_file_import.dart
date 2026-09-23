@@ -1,9 +1,11 @@
 import 'dart:io';
 
+import 'package:document_file_io/document_file_io.dart';
 import 'package:path/path.dart' as p;
 
 import '../diagnostics/log.dart';
 import 'atomic_write.dart';
+import 'file_lock.dart';
 
 /// Where a file the user browsed to is opened from.
 ///
@@ -59,9 +61,13 @@ final class NativePgnFileImport implements PgnFileImport {
       final bytes = await File(path).readAsBytes();
       final folder = Directory(into);
       await folder.create(recursive: true);
-      await removeStaleTemporaries(folder);
-      final copy = await _freeName(p.basename(path));
-      await createFileExclusively(copy, bytes);
+      // The folder's lock, which a save of a file already in it takes too:
+      // each sweeps staged copies before writing its own, and without it
+      // one would delete the copy the other is about to put in place.
+      final copy = await withDirectoryLock(folder, () async {
+        await removeStaleTemporaries(folder);
+        return _copyUnderFreeName(p.basename(path), bytes);
+      });
       log.i('copied $path into $copy');
       return FileToOpen(copy, copied: true);
     } on Object catch (error) {
@@ -70,16 +76,26 @@ final class NativePgnFileImport implements PgnFileImport {
     }
   }
 
-  /// `name.pgn`, `name (2).pgn`, `name (3).pgn`… whichever is free first, so
-  /// a second download of the same course sits beside the first rather
-  /// than over it.
-  Future<String> _freeName(String name) async {
+  /// Writes [bytes] as `name.pgn`, `name (2).pgn`, `name (3).pgn`…
+  /// whichever is free first, so a second download of the same course sits
+  /// beside the first rather than over it. A name taken between the look and
+  /// the write — by a program that does not take the lock — moves on to the
+  /// next one.
+  Future<String> _copyUnderFreeName(String name, List<int> bytes) async {
     final stem = p.basenameWithoutExtension(name);
     final extension = p.extension(name).isEmpty ? '.pgn' : p.extension(name);
-    var candidate = p.join(into, '$stem$extension');
-    for (var n = 2; await File(candidate).exists(); n++) {
-      candidate = p.join(into, '$stem ($n)$extension');
+    for (var n = 1; ; n++) {
+      final candidate = p.join(
+        into,
+        n == 1 ? '$stem$extension' : '$stem ($n)$extension',
+      );
+      if (await File(candidate).exists()) continue;
+      try {
+        await createFileExclusively(candidate, bytes);
+        return candidate;
+      } on NativeNameCollision {
+        log.w('copy into $candidate', 'the name was taken meanwhile');
+      }
     }
-    return candidate;
   }
 }

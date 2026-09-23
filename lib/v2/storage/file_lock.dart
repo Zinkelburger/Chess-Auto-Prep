@@ -28,7 +28,7 @@ Future<T> withDirectoryLock<T>(
   Directory directory,
   Future<T> Function() action,
 ) async {
-  final key = await _lockKey(directory);
+  final key = _lockKey(directory);
   final ahead = _turns[key] ?? Future<void>.value();
   final mine = Completer<void>();
   _turns[key] = mine.future;
@@ -101,10 +101,14 @@ Future<bool> _begin(Database database, String key) async {
 
 /// Two paths that name one directory must hash to one lock file, so the key
 /// is absolute, normalised and, where the directory exists, symlink-resolved.
-Future<String> _lockKey(Directory directory) async {
+///
+/// Worked out without an `await`, so a caller takes its turn in [_turns] in
+/// the order it asked: two lookups on the I/O pool can finish in either
+/// order, and the second caller would then run first.
+String _lockKey(Directory directory) {
   final absolute = p.normalize(p.absolute(directory.path));
-  if (!await directory.exists()) return absolute;
-  return p.normalize(await directory.resolveSymbolicLinks());
+  if (!directory.existsSync()) return absolute;
+  return p.normalize(directory.resolveSymbolicLinksSync());
 }
 
 /// FNV-1a over the UTF-8 key, so every process derives the same lock name.

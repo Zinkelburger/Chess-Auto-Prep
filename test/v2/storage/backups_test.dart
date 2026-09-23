@@ -90,6 +90,33 @@ void main() {
     expect(aside, contains(startsWith('index.json.corrupt-')));
   });
 
+  test(
+    'a list of versions whose bytes are not text is written again',
+    () async {
+      final ref = fixture.ref('KID/Main.pgn');
+      var revision = await fixture.put(ref, a);
+      revision =
+          (await fixture.edit(ref, b, revision) as Saved).receipt.committed;
+      final index = File(p.join(fixture.backupFolder(ref).path, 'index.json'));
+      // A list that would read but for one byte: 0xC3 starts a character the
+      // quote after it does not finish.
+      await index.writeAsBytes([
+        ...utf8.encode('{"path": "Main'),
+        0xC3,
+        ...utf8.encode('", "versions": []}'),
+      ]);
+
+      final saved = await fixture.edit(ref, c, revision);
+
+      expect(saved, isA<Saved>(), reason: 'a broken list is not a lost save');
+      expect(fixture.keptTexts(ref), [a, b]);
+      expect(
+        fixture.backupFolder(ref).listSync().map((e) => p.basename(e.path)),
+        contains(startsWith('index.json.corrupt-')),
+      );
+    },
+  );
+
   test('what an interrupted write left behind is no version', () async {
     final ref = fixture.ref('KID/Main.pgn');
     final revision = await fixture.put(ref, a);

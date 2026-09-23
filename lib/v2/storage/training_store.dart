@@ -15,6 +15,7 @@ library;
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:path/path.dart' as p;
 
@@ -117,19 +118,49 @@ final class TrainingStore implements ProgressFiles {
 
   /// The file is replaced whole rather than appended to in place: an
   /// append cut short leaves half a line, which the old app will not read
-  /// past.
+  /// past. What it held is copied as bytes rather than decoded and encoded
+  /// again, so a line torn inside a character stays as it was and the new
+  /// answer is the only text encoded, however long the log has grown.
   @override
   Future<ProgressWrite> logAttempt(Attempt attempt) =>
       _locked('log an answer', () async {
         final file = File(_path(attemptsFile));
-        final was = await file.exists() ? await file.readAsString() : '';
-        final gap = was.isEmpty || was.endsWith('\n') ? '' : '\n';
+        final before = await file.stat();
+        final was = await _bytes(attemptsFile) ?? Uint8List(0);
+        final line = encodeAttempt(attempt);
+        final gap = was.isEmpty || was.last == _lineFeed ? '' : '\n';
         await replaceFile(
           file.path,
-          utf8.encode('$was$gap${encodeAttempt(attempt)}\n'),
+          (BytesBuilder(copy: false)
+                ..add(was)
+                ..add(utf8.encode('$gap$line\n')))
+              .takeBytes(),
         );
+        await _logged(before, line);
         return const ProgressWritten();
       });
+
+  /// Keeps the wrong answers read before current once [line] is added, when
+  /// they described the log as it was just before it; otherwise the next
+  /// read looks at the file again, as it would have anyway.
+  Future<void> _logged(FileStat before, String line) async {
+    final cached = _log;
+    if (cached == null ||
+        cached.size != before.size ||
+        cached.modified != before.modified) {
+      return;
+    }
+    final after = await File(_path(attemptsFile)).stat();
+    if (after.type == FileSystemEntityType.notFound) return;
+    _log = (
+      size: after.size,
+      modified: after.modified,
+      wrong: [
+        ...cached.wrong,
+        if (decodeAttempt(line) case final a? when !a.correct) a,
+      ],
+    );
+  }
 
   Future<ProgressWrite> _locked(
     String action,
@@ -150,13 +181,23 @@ final class TrainingStore implements ProgressFiles {
 
   String _path(String name) => p.join(documents.path, name);
 
-  Future<String?> _text(String name) async {
+  /// What the file [name] holds, or null when there is no such file.
+  Future<Uint8List?> _bytes(String name) async {
     final file = File(_path(name));
     if (!await file.exists()) return null;
+    return file.readAsBytes();
+  }
+
+  /// Decoded here rather than by `readAsString`, which reports bytes that
+  /// are not UTF-8 as a [FileSystemException], so the file is unreadable at
+  /// the line that holds them instead of failing like a missing disk.
+  Future<String?> _text(String name) async {
+    final bytes = await _bytes(name);
+    if (bytes == null) return null;
     try {
-      return await file.readAsString();
-    } on FormatException {
-      throw _Unreadable(name, 1);
+      return utf8.decode(bytes);
+    } on FormatException catch (error) {
+      throw _Unreadable(name, _lineAt(bytes, error.offset));
     }
   }
 
@@ -201,11 +242,13 @@ final class TrainingStore implements ProgressFiles {
       return log.wrong;
     }
     // Stamped with the size and time from before the read: a write in
-    // between makes the next read look again rather than miss it.
+    // between makes the next read look again rather than miss it. Bytes
+    // that are not UTF-8 spoil only the line they are on, which is then
+    // passed over like any other line the log cannot read.
+    final bytes = await _bytes(attemptsFile);
+    final text = bytes == null ? '' : utf8.decode(bytes, allowMalformed: true);
     final wrong = [
-      for (final line in const LineSplitter().convert(
-        await _text(attemptsFile) ?? '',
-      ))
+      for (final line in const LineSplitter().convert(text))
         if (decodeAttempt(line) case final a? when !a.correct) a,
     ];
     _log = (size: stat.size, modified: stat.modified, wrong: wrong);
@@ -393,3 +436,15 @@ final class ProgressFailed implements ProgressRead, ProgressWrite {
 String _detail(Object error) => error is FileSystemException
     ? error.osError?.message ?? error.message
     : '$error';
+
+const _lineFeed = 0x0A;
+
+/// The line, counting from one, that holds the byte at [offset].
+int _lineAt(Uint8List bytes, int? offset) {
+  final end = offset == null ? 0 : offset.clamp(0, bytes.length);
+  var line = 1;
+  for (var i = 0; i < end; i++) {
+    if (bytes[i] == _lineFeed) line++;
+  }
+  return line;
+}

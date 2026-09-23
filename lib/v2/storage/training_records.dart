@@ -78,7 +78,9 @@ final class TrainingRecords {
     final String text;
     try {
       if (!await file.exists()) return const _Keep();
-      text = await file.readAsString();
+      // `readAsString` would report bytes that are not UTF-8 as a
+      // [FileSystemException]; decoding here says what is wrong.
+      text = utf8.decode(await file.readAsBytes());
     } on FileSystemException catch (error) {
       log.e('read $name to repoint $from', error);
       return _Refused(IoFailure(_detail(error)));

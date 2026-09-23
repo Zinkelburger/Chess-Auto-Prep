@@ -255,10 +255,22 @@ const _folderName = 'unfinished-moves';
 
 /// What the disk says happened to [move], which decides what its training
 /// rows should name.
+///
+/// A document is decided by which of its two paths holds a file, and by
+/// identity only when both or neither do: every save publishes a new file
+/// under the name, so after the first autosave the identity the note
+/// carries names nothing, and a move that landed would stay unclear for
+/// good. A folder keeps its identity through the saves inside it.
 Future<MoveVerdict> observeMove(UnfinishedMove move) async {
   try {
     final from = await _identityOf(move.from, move.folder);
     final to = await _identityOf(move.to, move.folder);
+    final seen = _decided(from.status) && _decided(to.status);
+    if (!move.folder && seen && from.status != to.status) {
+      return from.status == _missing
+          ? const MoveLanded()
+          : const MoveNeverHappened();
+    }
     if (to.identity == move.identity && from.status == _missing) {
       return const MoveLanded();
     }
@@ -273,14 +285,16 @@ sealed class MoveVerdict {
   const MoveVerdict();
 }
 
-/// The new path is the thing the note describes and the old path is empty:
-/// the rename happened, so the rows follow it.
+/// The old path is empty and the new one holds the thing moved — for a
+/// document, whatever file is there now, since a save since the rename
+/// replaced the file: the rename happened, so the rows follow it.
 final class MoveLanded extends MoveVerdict {
   const MoveLanded();
 }
 
-/// The thing is still at the old path, so the rename never happened and the
-/// rows are already naming the right file.
+/// The thing is still at the old path — for a document, a file is there and
+/// none at the new one — so the rename never happened and the rows are
+/// already naming the right file.
 final class MoveNeverHappened extends MoveVerdict {
   const MoveNeverHappened();
 }
@@ -303,5 +317,11 @@ Future<({int status, String? identity})> _identityOf(
   return (status: observed.status, identity: observed.identity);
 }
 
-/// The status a native observation reports for a path with nothing at it.
+/// The statuses a native observation reports for a path holding what was
+/// asked for, and for a path with nothing at it.
+const _present = 0;
 const _missing = 1;
+
+/// Whether [status] says a thing is there or that nothing is. Any other
+/// status is a path that could not be looked at, which says neither.
+bool _decided(int status) => status == _present || status == _missing;

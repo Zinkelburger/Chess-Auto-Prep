@@ -118,7 +118,7 @@ final class EvalCache {
     WHERE excluded.depth >= evals.depth
   ''';
 
-  void close() => _db?.dispose();
+  void close() => _db?.close();
 }
 
 /// The cache under [support], opened the first time [cache] is asked for.

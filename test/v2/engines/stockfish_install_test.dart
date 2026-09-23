@@ -66,6 +66,24 @@ void main() {
     expect(reads, ['tools/assets.lock.json'], reason: 'no second unpack');
   });
 
+  test('two launches during the first install share one unpack', () async {
+    // An engine restart for new cores while the first launch is still
+    // unpacking: each launch makes its own install.
+    final both = await Future.wait([install().locate(), install().locate()]);
+    final paths = [for (final found in both) (found as StockfishReady).path];
+    expect(paths.toSet(), hasLength(1));
+    expect(
+      reads.where((asset) => asset.endsWith('.gz')),
+      hasLength(1),
+      reason: 'one unpack',
+    );
+    expect((await Process.run(paths.first, const [])).stdout, 'uciok\n');
+    final left = await Directory(
+      p.join(support.path, 'app'),
+    ).list().map((entry) => p.basename(entry.path)).toList();
+    expect(left.where((name) => name.endsWith('.part')), isEmpty);
+  });
+
   test('a new release replaces the installed engine', () async {
     await install().locate();
     assets['tools/assets.lock.json'] = Uint8List.fromList(

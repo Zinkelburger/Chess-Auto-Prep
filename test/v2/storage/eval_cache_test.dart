@@ -50,7 +50,7 @@ void main() {
     cache.write(fen4, cpWhite: 35, depth: 14);
     cache.close();
     final db = sqlite3.open(p.join(dir.path, 'eval_cache.db'));
-    addTearDown(db.dispose);
+    addTearDown(db.close);
     expect(db.select('PRAGMA user_version').first.columnAt(0), 4);
     final tables = db
         .select("SELECT name FROM sqlite_master WHERE type = 'table'")

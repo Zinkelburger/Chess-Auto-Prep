@@ -5,6 +5,7 @@ import 'package:sqlite3/sqlite3.dart';
 
 import '../chess/explorer_answer.dart';
 import '../chess/fen.dart';
+import '../chess/pgn/game_text.dart';
 import '../diagnostics/log.dart';
 
 /// The master games on this machine, read as an opening book: the old
@@ -191,10 +192,11 @@ final class SqliteMasterBook implements MasterBook {
       'BlackElo': game['black_elo'],
       'ECO': game['eco'],
     };
+    // Through [PgnTag], which escapes a backslash as well as a quote: a
+    // value ending in one would otherwise swallow its closing quote.
     final lines = [
       for (final MapEntry(:key, :value) in tags.entries)
-        if (value != null && '$value'.isNotEmpty)
-          '[$key "${'$value'.replaceAll('"', '\\"')}"]',
+        if (value != null && '$value'.isNotEmpty) PgnTag(key, '$value').text,
     ];
     final movetext = _decode(game['movetext'] as List<int>);
     return '${lines.join('\n')}\n\n$movetext\n';

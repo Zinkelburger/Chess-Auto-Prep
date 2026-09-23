@@ -57,6 +57,30 @@ void main() {
     expect(read.copyFilesIntoDocuments, isTrue);
   });
 
+  test(
+    'changes faster than the writes are all saved, the newest last',
+    () async {
+      final store = SettingsStore(support: support);
+      addTearDown(store.dispose);
+      final problems = <String>[];
+      store.addListener(() {
+        if (store.problem case final problem?) problems.add(problem);
+      });
+      // Clicks on a stepper: no caller waits for the write before its own.
+      await Future.wait([
+        for (var cores = 2; cores <= 16; cores++)
+          store.update(store.value.copyWith(engineCores: cores)),
+      ]);
+      expect(problems, isEmpty, reason: 'no write was reported lost');
+      expect(Settings.fromJson(await file().readAsString()).engineCores, 16);
+      final next = SettingsStore(support: support);
+      addTearDown(next.dispose);
+      await next.load();
+      expect(next.problem, isNull);
+      expect(next.value, store.value);
+    },
+  );
+
   test('the same value again writes nothing', () async {
     final store = SettingsStore(support: support);
     addTearDown(store.dispose);

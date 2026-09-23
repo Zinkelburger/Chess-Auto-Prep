@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:chess_auto_prep/v2/chess/fen.dart';
+import 'package:chess_auto_prep/v2/chess/pgn/game_text.dart';
+import 'package:chess_auto_prep/v2/chess/pgn/pgn_reader.dart';
 import 'package:chess_auto_prep/v2/storage/master_book.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -165,6 +167,25 @@ void main() {
     expect(pgn, endsWith('\n\n1. e4 e5 2. Nf3 1-0\n'));
     expect(await book.gamePgn('9'), isNull);
     expect(await book.gamePgn('one'), isNull);
+  });
+
+  test('a tag value with a backslash or a quote in it reads back as it was '
+      'imported', () async {
+    const event = r'C:\TWIC\';
+    const site = 'The "Kurhaus"';
+    final db = sqlite3.open(p.join(folder.path, 'master_games.db'));
+    db.execute(
+      'INSERT INTO games(id, event, site, result, movetext) '
+      'VALUES(3, ?, ?, ?, ?)',
+      [event, site, '1-0', ZLibEncoder().convert(utf8.encode('1. e4 1-0'))],
+    );
+    db.close();
+
+    final read = readGame((await book.gamePgn('3'))!);
+
+    expect(tagValue(read.tags, 'Event'), event);
+    expect(tagValue(read.tags, 'Site'), site);
+    expect(read.rewritable, isTrue);
   });
 
   test('a file that is not a database is unreadable, not a crash', () async {

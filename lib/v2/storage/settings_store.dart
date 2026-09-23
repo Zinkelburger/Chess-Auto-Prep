@@ -28,6 +28,12 @@ final class SettingsStore extends ChangeNotifier {
   String? _problem;
   bool _disposed = false;
 
+  /// The write in flight, and whether [_value] changed since it started.
+  /// Two writes at once would share the staged copy's name, and the file
+  /// published could be torn or the older of the two.
+  Future<void>? _writing;
+  bool _dirty = false;
+
   Settings get value => _value;
 
   /// Why the file could not be read or written, or null. One sentence, for
@@ -54,15 +60,36 @@ final class SettingsStore extends ChangeNotifier {
   /// Replaces the settings with [next] and writes them. The screen shows
   /// [next] at once; a write that fails is reported, not undone, because
   /// the user's choice is still their choice.
+  ///
+  /// Changes made while a write is in flight are merged: the write that
+  /// follows it carries the newest value, and every caller's future
+  /// completes once that is on disk.
   Future<void> update(Settings next) async {
     if (next == _value) return;
     _value = next;
     _notify();
     final file = _file;
     if (file == null) return;
+    _dirty = true;
+    await (_writing ??= _writeNewest(file));
+  }
+
+  Future<void> _writeNewest(File file) async {
+    try {
+      while (_dirty) {
+        _dirty = false;
+        await _write(file, _value);
+      }
+    } finally {
+      _writing = null;
+    }
+  }
+
+  /// One write; its outcome decides [problem], so the last write says it.
+  Future<void> _write(File file, Settings value) async {
     try {
       await file.parent.create(recursive: true);
-      await replaceFile(file.path, utf8.encode(next.toJson()));
+      await replaceFile(file.path, utf8.encode(value.toJson()));
       if (_problem != null) {
         _problem = null;
         _notify();

@@ -157,7 +157,10 @@ final class BackupArchive {
     final file = File(p.join(folder.path, _indexName));
     try {
       if (!await file.exists()) return await _rebuilt(folder);
-      return _listed(await file.readAsString());
+      // Decoded here rather than by `readAsString`, which reports bytes
+      // that are not UTF-8 as a [FileSystemException] and so would skip
+      // the repair below.
+      return _listed(utf8.decode(await file.readAsBytes()));
     } on FormatException catch (error) {
       log.e('read the kept versions in ${folder.path}', error);
       await _putAside(file);
