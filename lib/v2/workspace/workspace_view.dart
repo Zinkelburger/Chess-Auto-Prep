@@ -384,11 +384,13 @@ class _BoardAndCounter extends StatelessWidget {
               children: [
                 ListenableBuilder(
                   listenable: Listenable.merge([session.anyChange, settings]),
+                  // A comment's line on the board is read, not played on.
                   builder: (context, _) => BoardView(
-                    fen: session.fen,
+                    fen: session.boardFen,
                     orientation: session.orientation,
-                    lastMove: session.currentMove?.uci,
+                    lastMove: session.boardLastMove,
                     onMove: onMove,
+                    movable: session.commentLine.value == null,
                     coordinates: settings.value.boardCoordinates,
                   ),
                 ),
@@ -405,8 +407,10 @@ class _BoardAndCounter extends StatelessWidget {
                         listenable: session.anyChange,
                         builder: (context, _) => _Typed(
                           moves: moves,
-                          fen: session.fen,
-                          onMove: onMove,
+                          fen: session.boardFen,
+                          onMove: session.commentLine.value == null
+                              ? onMove
+                              : null,
                         ),
                       ),
                       Expanded(

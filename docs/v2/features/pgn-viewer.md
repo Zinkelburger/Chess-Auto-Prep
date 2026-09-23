@@ -185,8 +185,11 @@ reach the same explorer; the tab bar disappears entirely during solitaire.
   or Ctrl+E: Done, Undo, the save state, the six glyphs and the comment field. Right-click ▸ Comment
   is the second way in (not built yet). Save trouble shows the strip on its own.
 - **No eval bar anywhere in the app.** The engine pane is one row when off.
-- **Comments are laid out**: paragraphs, inline moves (hover board, click plays into the document
-  when the line follows on from the move), bare-FEN diagrams, Chessable headings and quotes.
+- **Comments are laid out**: paragraphs, inline moves, bare-FEN diagrams, Chessable headings and
+  quotes. Hovering an inline move shows a small board. Clicking one that follows on from the move
+  shows that position on the main board and marks the move, without writing anything to the file.
+  ←/→ step through the line, and Esc or any move in the file goes back to the file. If the file
+  already has those moves, the cursor just goes there.
 - **One Actions menu** in the top bar, the same shape whatever mode opened the document, with Ctrl+K
   as a typeable palette over the same list.
 - **Solitaire is an action of the viewer**, not a mode. **A file outside Documents is copied into

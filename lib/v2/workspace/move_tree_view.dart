@@ -80,7 +80,9 @@ class _MoveTreeViewState extends State<MoveTreeView>
     orientation: widget.session.orientation,
     onHover: hoverMove,
     onLeave: leaveMove,
-    onPlay: (moves) => playFrom(from, moves),
+    from: from,
+    shown: session.commentLine,
+    onRead: (moves, at) => readFrom(from, moves, at),
   );
 
   @override

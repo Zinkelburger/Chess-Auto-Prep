@@ -103,7 +103,9 @@ class _MoveNoteState extends State<MoveNote> with CommentPreviews<MoveNote> {
     orientation: session.orientation,
     onHover: hoverMove,
     onLeave: leaveMove,
-    onPlay: (moves) => playFrom(from, moves),
+    from: from,
+    shown: session.commentLine,
+    onRead: (moves, at) => readFrom(from, moves, at),
   );
 }
 

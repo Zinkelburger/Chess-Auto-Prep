@@ -77,13 +77,41 @@ void main() {
     expect(find.textContaining('[%clk'), findsNothing);
   });
 
-  testWidgets('a move written in the note plays into the game', (tester) async {
+  testWidgets('a move written in the note goes on the board, marked, and '
+      'is not written into the game', (tester) async {
     await pump(tester);
     fixture.session.toEnd();
     await tester.pump();
+    final end = fixture.session.cursor;
+    final tree = fixture.session.tree;
     await tester.tap(find.text('3. e4'));
     await tester.pump();
-    expect(fixture.session.currentMove!.san, 'e4');
-    expect(fixture.session.cursor.indexes, hasLength(5));
+    final line = fixture.session.commentLine.value!;
+    expect(line.move.san, 'e4');
+    expect(fixture.session.boardFen, line.move.after);
+    expect(fixture.session.cursor, end);
+    expect(identical(fixture.session.tree, tree), isTrue);
+    expect(fixture.session.hasHeldEdits, isFalse);
+    expect(_marked(tester, '3. e4'), isTrue);
+    expect(_marked(tester, '2... dxc4'), isFalse);
+
+    fixture.session.back();
+    await tester.pump();
+    expect(fixture.session.commentLine.value!.move.san, 'dxc4');
+    expect(_marked(tester, '2... dxc4'), isTrue);
+    fixture.session.back();
+    await tester.pump();
+    expect(fixture.session.commentLine.value, isNull);
+    expect(fixture.session.cursor, end);
   });
+}
+
+/// Whether the move written as [text] is drawn as the one on the board.
+bool _marked(WidgetTester tester, String text) {
+  final box = tester.widget<DecoratedBox>(
+    find
+        .ancestor(of: find.text(text), matching: find.byType(DecoratedBox))
+        .first,
+  );
+  return (box.decoration as BoxDecoration).color != null;
 }

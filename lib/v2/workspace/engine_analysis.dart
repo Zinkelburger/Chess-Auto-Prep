@@ -115,8 +115,8 @@ final class EngineAnalysis extends ChangeNotifier {
   Engine? _engine;
 
   /// The position analysed: the board's, which is the free board's while
-  /// [_elsewhere] holds one.
-  Fen get position => _elsewhere?.value?.fen ?? _session.fen;
+  /// [_elsewhere] holds one, and a comment's line while one is shown.
+  Fen get position => _elsewhere?.value?.fen ?? _session.boardFen;
 
   /// Who is keeping the analysis off the board, and why, oldest first. One
   /// entry per holder, so a fill that ends during a training sitting does

@@ -98,9 +98,14 @@ class _WorkspaceKeysState extends State<WorkspaceKeys> {
     }
   }
 
-  /// Esc leaves the innermost thing the user is in: the variation, then
-  /// the edit strip, then whatever the window adds.
+  /// Esc leaves the innermost thing the user is in: a comment's line on
+  /// the board, the variation, then the edit strip, then whatever the
+  /// window adds.
   bool _escape() {
+    if (_session.commentLine.value != null) {
+      _session.closeCommentLine();
+      return true;
+    }
     if (_session.leaveVariation()) return true;
     if (widget.editing.value) {
       widget.editing.value = false;

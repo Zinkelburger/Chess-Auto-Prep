@@ -1,5 +1,6 @@
 import 'package:chess_auto_prep/v2/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
+import 'package:chess_auto_prep/v2/chess/pv_text.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
 import 'package:chess_auto_prep/v2/workspace/session_results.dart';
@@ -119,6 +120,56 @@ void main() {
     await pumpEventQueue();
     expect(fixture.onDisk, contains('1... c5 2. c3'));
     expect(fixture.onDisk, contains('LineID'));
+  });
+
+  test('a comment line not in the file goes on the board and writes '
+      'nothing', () async {
+    final from = NodePath.of([0]); // 1... c5
+    final line = pvMoves(session.tree!.fenAt(from), ['g1f3', 'e7e6', 'd2d4']);
+    final tree = session.tree;
+    session.showCommentLine(from, line, 1);
+    expect(session.cursor, from);
+    expect(session.boardFen, line[1].after);
+    expect(session.boardLastMove, 'e7e6');
+    expect(session.fen, session.tree!.fenAt(from), reason: 'the file stays');
+    session.playMove('d2d4');
+    expect(identical(session.tree, tree), isTrue, reason: 'no board moves');
+
+    session.forward();
+    expect(session.boardFen, line[2].after);
+    session.forward();
+    expect(session.boardFen, line[2].after, reason: 'the line ends there');
+    session.back();
+    session.back();
+    session.back();
+    expect(session.commentLine.value, isNull);
+    expect(session.boardFen, session.fen);
+    expect(session.cursor, from);
+    await pumpEventQueue();
+    expect(fixture.store.requestedSaves, isEmpty);
+  });
+
+  test('moving in the file puts the board back on it', () {
+    final from = NodePath.of([0]);
+    final line = pvMoves(session.tree!.fenAt(from), ['c2c3']);
+    session.showCommentLine(from, line, 0);
+    session.goTo(from);
+    expect(session.commentLine.value, isNull, reason: 'the same move again');
+    session.showCommentLine(from, line, 0);
+    session.goTo(NodePath.of([0, 0]));
+    expect(session.commentLine.value, isNull);
+    session.showCommentLine(from, line, 0);
+    expect(session.cursor, from, reason: 'the line starts at its comment');
+    session.showCommentLine(from, line, 0);
+    session.flip();
+    expect(session.commentLine.value, isNull, reason: 'a change to the view');
+  });
+
+  test('a comment line the file already plays moves the cursor there', () {
+    final line = pvMoves(session.tree!.rootFen, ['c7c5', 'g1f3', 'b8c6']);
+    session.showCommentLine(const NodePath.root(), line, 2);
+    expect(session.commentLine.value, isNull);
+    expect(session.currentMove?.san, 'Nc6');
   });
 
   test('an illegal move changes nothing at all', () async {

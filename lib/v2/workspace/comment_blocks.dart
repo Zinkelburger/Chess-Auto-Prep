@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart' show Side;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../chess/fen.dart';
@@ -9,6 +10,7 @@ import '../chess/pgn/comment_layout.dart';
 import '../chess/pv_text.dart';
 import '../chess/pgn/game_tree.dart';
 import '../ui/theme.dart';
+import 'comment_line.dart';
 import 'document_session.dart';
 import 'line_preview.dart';
 
@@ -16,13 +18,14 @@ import 'line_preview.dart';
 /// on the screen it is; and when it leaves.
 typedef HoverMove = void Function(PvMove move, Offset anchor);
 
-/// Asked to play [moves] from the position the comment belongs to.
-typedef PlayMoves = void Function(List<PvMove> moves);
+/// Asked to show the line [moves], written from the position the comment
+/// belongs to, as far as its move at [at].
+typedef ReadMoves = void Function(List<PvMove> moves, int at);
 
 /// What a view that shows comments does with the moves written in them: a
-/// board under the pointer once it rests on one, and a click plays the line
-/// into [session] from the move the comment belongs to. The view hands
-/// [preview] to a [LinePreviewOverlay].
+/// board under the pointer once it rests on one, and a click puts the line
+/// on the board as far as that move, without writing it into the file. The
+/// view hands [preview] to a [LinePreviewOverlay].
 mixin CommentPreviews<T extends StatefulWidget> on State<T> {
   DocumentSession get session;
 
@@ -54,23 +57,18 @@ mixin CommentPreviews<T extends StatefulWidget> on State<T> {
     preview.value = null;
   }
 
-  /// Plays [moves] from the move at [from], where the comment they were
-  /// written in belongs. A move that does not land, because the document
-  /// refused it, ends the walk there.
-  void playFrom(NodePath from, List<PvMove> moves) {
+  /// Shows [moves], written in the comment on the move at [from], as far
+  /// as the one at [at].
+  void readFrom(NodePath from, List<PvMove> moves, int at) {
     leaveMove();
-    session.goTo(from);
-    for (final move in moves) {
-      session.playMove(move.uci);
-      if (session.fen != move.after) return;
-    }
+    session.showCommentLine(from, moves, at);
   }
 }
 
 /// A comment as it reads: paragraphs at a book's measure, headings, quotes,
 /// diagrams, and lines of analysis whose moves float a board under the
-/// pointer and, when they follow on from the move the comment is on, play
-/// into the document when clicked.
+/// pointer and, when they follow on from the move the comment is on, go on
+/// the board when clicked; the move on the board is marked.
 class CommentBlocks extends StatelessWidget {
   const CommentBlocks({
     super.key,
@@ -79,7 +77,9 @@ class CommentBlocks extends StatelessWidget {
     required this.orientation,
     required this.onHover,
     required this.onLeave,
-    required this.onPlay,
+    required this.from,
+    required this.shown,
+    required this.onRead,
   });
 
   /// The comment as the file has it, tokens and all.
@@ -91,7 +91,13 @@ class CommentBlocks extends StatelessWidget {
   final Side orientation;
   final HoverMove onHover;
   final VoidCallback onLeave;
-  final PlayMoves onPlay;
+
+  /// The move the comment belongs to.
+  final NodePath from;
+
+  /// The comment line on the board, to mark its move.
+  final ValueListenable<CommentLine?> shown;
+  final ReadMoves onRead;
 
   @override
   Widget build(BuildContext context) {
@@ -157,19 +163,15 @@ class CommentBlocks extends StatelessWidget {
                       baseline: TextBaseline.alphabetic,
                       child: _InlineMove(
                         move: move,
+                        from: from,
+                        shown: shown,
                         onHover: onHover,
                         onLeave: onLeave,
                         onTap: fromComment == null
                             ? null
-                            : () => onPlay(
-                                fromComment
-                                    .take(
-                                      fromComment.length -
-                                          moves.length +
-                                          index +
-                                          1,
-                                    )
-                                    .toList(),
+                            : () => onRead(
+                                fromComment,
+                                fromComment.length - moves.length + index,
                               ),
                       ),
                     ),
@@ -184,17 +186,22 @@ class CommentBlocks extends StatelessWidget {
 }
 
 /// One move written in the prose: set in the move face, in the accent when
-/// it can be played, and under the pointer a board with the position after
-/// it.
+/// it can be read on the board, marked as the move list marks the cursor
+/// while it is on the board, and under the pointer a board with the
+/// position after it.
 class _InlineMove extends StatelessWidget {
   const _InlineMove({
     required this.move,
+    required this.from,
+    required this.shown,
     required this.onHover,
     required this.onLeave,
     required this.onTap,
   });
 
   final PvMove move;
+  final NodePath from;
+  final ValueListenable<CommentLine?> shown;
   final HoverMove onHover;
   final VoidCallback onLeave;
   final VoidCallback? onTap;
@@ -215,10 +222,22 @@ class _InlineMove extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(3),
         hoverColor: scheme.primary.withValues(alpha: 0.1),
-        child: Text(
-          move.text,
-          style: readingMoveText.copyWith(
-            color: onTap == null ? scheme.onSurface : scheme.primary,
+        child: ValueListenableBuilder<CommentLine?>(
+          valueListenable: shown,
+          builder: (context, line, child) => DecoratedBox(
+            decoration: BoxDecoration(
+              color: line != null && line.shows(from, move)
+                  ? scheme.primary.withValues(alpha: 0.35)
+                  : null,
+              borderRadius: BorderRadius.circular(3),
+            ),
+            child: child,
+          ),
+          child: Text(
+            move.text,
+            style: readingMoveText.copyWith(
+              color: onTap == null ? scheme.onSurface : scheme.primary,
+            ),
           ),
         ),
       ),

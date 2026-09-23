@@ -13,11 +13,13 @@ import '../chess/pgn/game_tree.dart';
 import '../chess/pgn/games_written.dart';
 import '../chess/pgn/line_id_pins.dart';
 import '../chess/pgn/tree_edit.dart';
+import '../chess/pv_text.dart';
 import '../diagnostics/log.dart';
 import '../storage/chapter_files.dart';
 import '../storage/document_ref.dart';
 import '../storage/edit_scope.dart';
 import '../storage/pgn_document_store.dart' as store;
+import 'comment_line.dart';
 import 'document_saver.dart';
 import 'session_results.dart';
 
@@ -42,6 +44,7 @@ import 'session_results.dart';
 final class DocumentSession extends ChangeNotifier {
   DocumentSession(this._store, this._saver) {
     _shown = (chapter: _board.chapter, view: null);
+    _cursor.addListener(closeCommentLine);
   }
 
   final store.PgnDocumentStore _store;
@@ -66,6 +69,7 @@ final class DocumentSession extends ChangeNotifier {
   /// The analysis board, up whenever no file is; the window starts on it.
   final _board = KeptBoard(analysisBoard(side: Side.white));
   final _cursor = ValueNotifier<NodePath>(const NodePath.root());
+  final _commentLine = ValueNotifier<CommentLine?>(null);
   EditRefused? _refused;
   NodePath? _shownTo;
   bool _flipped = false;
@@ -149,9 +153,55 @@ final class DocumentSession extends ChangeNotifier {
   /// for: what a view of the position, rather than of the document, needs.
   /// One object for the session's life, so a widget rebuilt with it keeps
   /// its subscription.
-  late final Listenable anyChange = Listenable.merge([this, _cursor]);
+  late final Listenable anyChange = Listenable.merge([
+    this,
+    _cursor,
+    _commentLine,
+  ]);
 
   Fen get fen => tree?.fenAt(cursor) ?? Fen.initial;
+
+  /// A line written in a comment that the board shows in place of the
+  /// cursor's position; null while it shows the cursor's. Nothing of it is
+  /// in the file: the cursor stays on the move the comment belongs to, the
+  /// board takes no moves, and moving in the file, or any change to it,
+  /// puts the board back on the file.
+  ValueListenable<CommentLine?> get commentLine => _commentLine;
+
+  /// The position on the board: the comment line's while one is shown.
+  Fen get boardFen => _commentLine.value?.fen ?? fen;
+
+  /// The move that reached [boardFen], as UCI, for the highlight.
+  String? get boardLastMove => _commentLine.value?.move.uci ?? currentMove?.uci;
+
+  /// Reads the line written in a comment on the move at [from], as far as
+  /// its move at [at]. When the file already plays those moves from there,
+  /// the cursor follows them instead; otherwise the board shows the line
+  /// and the file is left as it is.
+  void showCommentLine(NodePath from, List<PvMove> moves, int at) {
+    final tree = this.tree;
+    if (tree == null || _shownTo != null) return;
+    if (!from.isRoot && tree.nodeAt(from) == null) return;
+    final inFile = pathPlaying(tree, from, moves.take(at + 1));
+    if (inFile != null) {
+      closeCommentLine();
+      _cursor.value = inFile;
+      return;
+    }
+    _cursor.value = from;
+    _commentLine.value = CommentLine(from: from, moves: moves, at: at);
+  }
+
+  /// Puts the board back on the file's position.
+  void closeCommentLine() => _commentLine.value = null;
+
+  /// Whatever changes the document, or how it is shown, puts the board back
+  /// on the file: the line was read from a position that may be gone.
+  @override
+  void notifyListeners() {
+    closeCommentLine();
+    super.notifyListeners();
+  }
 
   /// The side at the bottom of the board: the repertoire's side, or a study
   /// chapter's own orientation tag, turned over while the user has flipped
@@ -373,18 +423,37 @@ final class DocumentSession extends ChangeNotifier {
     return index >= 0 && index < chapter.lines.length && index != chapter.game;
   }
 
-  /// Moves the cursor; a path not in the tree is ignored.
+  /// Moves the cursor; a path not in the tree is ignored. Going to the move
+  /// the cursor is already on still puts the board back on the file.
   void goTo(NodePath path) {
     final tree = this.tree;
+    if (path == cursor) closeCommentLine();
     if (tree == null || path == cursor) return;
     if (!path.isRoot && tree.nodeAt(path) == null) return;
     if (_shownTo case final limit? when !limit.startsWith(path)) return;
     _cursor.value = path;
   }
 
-  void forward() => goTo(cursor.mainChild);
+  /// The next move of the file, or of the comment line on the board.
+  void forward() {
+    if (_commentLine.value case final line?) {
+      if (line.at + 1 < line.moves.length) {
+        _commentLine.value = line.atMove(line.at + 1);
+      }
+      return;
+    }
+    goTo(cursor.mainChild);
+  }
 
-  void back() => goTo(cursor.parent);
+  /// The move before in the file; while a comment line is on the board, its
+  /// move before, and from its first move back to the file.
+  void back() {
+    if (_commentLine.value case final line?) {
+      _commentLine.value = line.at == 0 ? null : line.atMove(line.at - 1);
+      return;
+    }
+    goTo(cursor.parent);
+  }
 
   void toStart() => goTo(const NodePath.root());
 
@@ -419,6 +488,8 @@ final class DocumentSession extends ChangeNotifier {
   void playMove(String uci) {
     final chapter = _chapter;
     if (chapter == null || _shownTo != null) return;
+    // The board shows a comment's line, not the cursor's position.
+    if (_commentLine.value != null) return;
     // A move the chapter already holds writes nothing, so following it is
     // reading: a file this app may not write still shows its own lines.
     final here = edits.playedAlready(chapter, at: cursor, uci: uci);
@@ -837,6 +908,7 @@ final class DocumentSession extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _cursor.dispose();
+    _commentLine.dispose();
     _leaving.dispose();
     super.dispose();
   }
