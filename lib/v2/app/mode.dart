@@ -4,7 +4,8 @@ enum Mode {
   repertoires('Repertoire builder'),
   pgnViewer('PGN Viewer'),
   study('Study'),
-  tactics('Tactics');
+  tactics('Tactics'),
+  myGames('My games');
 
   const Mode(this.label);
 

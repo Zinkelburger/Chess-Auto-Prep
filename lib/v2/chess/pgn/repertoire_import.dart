@@ -344,8 +344,7 @@ List<PgnHeader> _sidelineTags(
     }
     if (_idHeaders.contains(header.key)) continue;
     final value = header.value.trim();
-    if (suffixed.contains(header.key) &&
-        !isPlaceholderTitle(value)) {
+    if (suffixed.contains(header.key) && !isPlaceholderTitle(value)) {
       tags.add(PgnTag(header.key, '$value — $label', trailer: header.trailer));
       continue;
     }

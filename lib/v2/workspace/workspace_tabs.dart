@@ -3,7 +3,8 @@ import '../ui/pane_tabs.dart';
 
 /// The tabs of the reading card: the moves, which are always there, the
 /// trainer, the opponent's replies, the explorer, the tree of the user's
-/// own repertoires, and the puzzle being solved. A new thing the card can show is a new value here, and the
+/// own repertoires, the puzzle being solved, and what the user's book says
+/// about one of their games. A new thing the card can show is a new value here, and the
 /// compiler then asks for its arm in the card's body; the strip, the keys
 /// and the Actions menu know nothing about which tabs there are.
 enum WorkspaceTab {
@@ -12,7 +13,8 @@ enum WorkspaceTab {
   replies('Replies'),
   explorer('Explorer'),
   tree('Tree'),
-  puzzle('Puzzle');
+  puzzle('Puzzle'),
+  book('Book');
 
   const WorkspaceTab(this.title, {this.pinned = false});
 
@@ -22,15 +24,19 @@ enum WorkspaceTab {
   PaneTab<WorkspaceTab> get tab => PaneTab(this, title, pinned: pinned);
 }
 
-/// The card's tabs as the Repertoire builder starts: all but the puzzle
+/// The tabs that mean something with any document on the board; the
+/// puzzle and the book verdict belong to their modes.
+List<PaneTab<WorkspaceTab>> get _documentTabs => [
+  for (final tab in WorkspaceTab.values)
+    if (tab != WorkspaceTab.puzzle && tab != WorkspaceTab.book) tab.tab,
+];
+
+/// The card's tabs as the Repertoire builder starts: all of the document's
 /// open, moves up. Training, the replies and the explorer are what a
 /// repertoire is for, so they are there from the start and closed by
 /// whoever is only reading.
 PaneTabs<WorkspaceTab> newWorkspaceTabs() => PaneTabs(
-  [
-    for (final tab in WorkspaceTab.values)
-      if (tab != WorkspaceTab.puzzle) tab.tab,
-  ],
+  _documentTabs,
   open: const [
     WorkspaceTab.train,
     WorkspaceTab.replies,
@@ -42,10 +48,7 @@ PaneTabs<WorkspaceTab> newWorkspaceTabs() => PaneTabs(
 /// The card's tabs as the PGN Viewer and Study start: the moves, the
 /// explorer and the tree. The repertoire's tabs can be shown from the Actions menu.
 PaneTabs<WorkspaceTab> readingTabs() => PaneTabs(
-  [
-    for (final tab in WorkspaceTab.values)
-      if (tab != WorkspaceTab.puzzle) tab.tab,
-  ],
+  _documentTabs,
   open: const [WorkspaceTab.explorer, WorkspaceTab.tree],
 );
 
@@ -59,6 +62,19 @@ PaneTabs<WorkspaceTab> puzzleTabs() => PaneTabs(
     PaneTab(WorkspaceTab.explorer, 'Explorer'),
   ],
   open: const [WorkspaceTab.moves],
+);
+
+/// The card's tabs in My games: the book's verdict on the game first and
+/// always there, the game beside it, and the user's repertoires as a tree
+/// to see what else the book plays. The explorer can be shown when wanted.
+PaneTabs<WorkspaceTab> bookTabs() => PaneTabs(
+  const [
+    PaneTab(WorkspaceTab.book, 'Book', pinned: true),
+    PaneTab(WorkspaceTab.moves, 'Game'),
+    PaneTab(WorkspaceTab.tree, 'Tree'),
+    PaneTab(WorkspaceTab.explorer, 'Explorer'),
+  ],
+  open: const [WorkspaceTab.moves, WorkspaceTab.tree],
 );
 
 /// The card's tabs as a browser's menu has them: each one that can be

@@ -26,6 +26,16 @@ final class CheckedGame {
   final GameSite site;
   final PlayedGame game;
   final BookVerdict verdict;
+
+  /// How many of the game's moves to show when it is opened for its
+  /// verdict: the move that left the book, the last move of a book that
+  /// ran out, the end of a game in book throughout, else the start.
+  int get moment => switch (verdict) {
+    LeftBook(kind: Deviation.bookEnded, :final ply) => ply,
+    LeftBook(:final ply) => ply + 1,
+    InBookThroughout() => game.moves.length,
+    NoBook() || OtherOpening() => 0,
+  };
 }
 
 /// Games that left the book the same way — the same move at the same
@@ -104,6 +114,16 @@ final class GameBook extends ChangeNotifier {
       if (checked.file == file && checked.game.index == game) return checked;
     }
     return null;
+  }
+
+  /// The game [by] places after the one [file] holds at [game] in the list,
+  /// newest first; null past either end or when that is not a checked game.
+  CheckedGame? step(ChapterRef? file, int? game, int by) {
+    final state = _state;
+    final here = find(file, game);
+    if (state is! BookChecked || here == null) return null;
+    final at = state.games.indexOf(here) + by;
+    return at < 0 || at >= state.games.length ? null : state.games[at];
   }
 
   /// A pane showing the book is up: read the games and the books now, and

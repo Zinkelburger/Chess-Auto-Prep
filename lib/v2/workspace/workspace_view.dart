@@ -56,6 +56,7 @@ class WorkspaceView extends StatelessWidget {
     this.boardClaim,
     this.trainTab,
     this.treeTab,
+    this.bookTab,
     this.onBoardMove,
     this.onEngineMove,
     this.puzzle,
@@ -102,6 +103,9 @@ class WorkspaceView extends StatelessWidget {
 
   /// The Tree tab's body, which the shell builds: it opens other files.
   final WidgetBuilder? treeTab;
+
+  /// The Book tab's body, which is the My games mode's.
+  final WidgetBuilder? bookTab;
 
   /// Where a move made on the board goes when not into the document: a
   /// puzzle judges it. Null plays it into the document.
@@ -194,6 +198,7 @@ class WorkspaceView extends StatelessWidget {
               onExplorerGame: onExplorerGame,
               trainTab: trainTab,
               treeTab: treeTab,
+              bookTab: bookTab,
               puzzle: puzzle,
             ),
           ),
@@ -273,6 +278,7 @@ class _Tabbed extends StatelessWidget {
     required this.onExplorerGame,
     required this.trainTab,
     required this.treeTab,
+    required this.bookTab,
     required this.puzzle,
   });
 
@@ -286,6 +292,7 @@ class _Tabbed extends StatelessWidget {
   final ValueChanged<ExplorerGame>? onExplorerGame;
   final WidgetBuilder? trainTab;
   final WidgetBuilder? treeTab;
+  final WidgetBuilder? bookTab;
   final Widget? puzzle;
 
   Widget _body(BuildContext context, WorkspaceTab tab) => switch (tab) {
@@ -304,6 +311,7 @@ class _Tabbed extends StatelessWidget {
     ),
     WorkspaceTab.tree => treeTab?.call(context) ?? const SizedBox.shrink(),
     WorkspaceTab.puzzle => puzzle ?? const SizedBox.shrink(),
+    WorkspaceTab.book => bookTab?.call(context) ?? const SizedBox.shrink(),
   };
 
   Widget? _trailing(WorkspaceTab tab) => switch (tab) {
@@ -312,7 +320,8 @@ class _Tabbed extends StatelessWidget {
     WorkspaceTab.train ||
     WorkspaceTab.tree ||
     WorkspaceTab.explorer ||
-    WorkspaceTab.puzzle => null,
+    WorkspaceTab.puzzle ||
+    WorkspaceTab.book => null,
   };
 
   @override

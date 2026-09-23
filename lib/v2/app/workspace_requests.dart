@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/foundation.dart';
 
 import '../chess/pgn/game_tree.dart' show NodePath;
@@ -140,6 +141,28 @@ final class WorkspaceRequests extends ChangeNotifier {
     final result = await open(ref);
     if (_disposed || result is! RequestDone) return result;
     if (_session.tree case final tree?) _session.goTo(pathAlong(tree, sans));
+    return result;
+  }
+
+  /// [ref] in the Repertoire builder at the position [sans] reach: a file
+  /// another mode found a move in.
+  Future<RequestResult> readInBuilder(ChapterRef ref, List<String> sans) {
+    switchTo(Mode.repertoires);
+    return openAt(ref, sans);
+  }
+
+  /// Game [game] of [ref] on the board, [ply] moves into it and seen from
+  /// [side]: one of the user's own games, opened where something happened.
+  Future<RequestResult> openGame(
+    ChapterRef ref, {
+    required int game,
+    required int ply,
+    required Side side,
+  }) async {
+    final result = await open(ref, game: game);
+    if (_disposed || result is! RequestDone) return result;
+    _session.goTo(NodePath.of(List.filled(ply, 0)));
+    if (_session.orientation != side) _session.flip();
     return result;
   }
 

@@ -26,20 +26,7 @@ List<AppAction> tacticsActions({
   final hidden = session.shownTo != null;
   return [
     ...puzzleActions(trainer),
-    AppAction(
-      games.running ? 'Pause the review' : 'Get my games',
-      games.running
-          ? games.pause
-          : games.accounts.isEmpty
-          ? null
-          : () => unawaited(games.start()),
-      group: 'My games',
-    ),
-    AppAction(
-      'My accounts…',
-      games.running ? null : onAccounts,
-      group: 'My games',
-    ),
+    ...myGamesActions(games, onAccounts: onAccounts),
     AppAction(
       'Flip board',
       open ? session.flip : null,
@@ -68,6 +55,28 @@ List<AppAction> tacticsActions({
     ...tabActions(tabs),
   ];
 }
+
+/// Getting the user's games, pausing that, and their usernames: the same
+/// entries wherever the games are shown.
+List<AppAction> myGamesActions(
+  MyGames games, {
+  required VoidCallback onAccounts,
+}) => [
+  AppAction(
+    games.running ? 'Pause the review' : 'Get my games',
+    games.running
+        ? games.pause
+        : games.accounts.isEmpty
+        ? null
+        : () => unawaited(games.start()),
+    group: 'My games',
+  ),
+  AppAction(
+    'My accounts…',
+    games.running ? null : onAccounts,
+    group: 'My games',
+  ),
+];
 
 /// What can be done to the puzzle on the board, while one is.
 List<AppAction> puzzleActions(PuzzleTrainer trainer) {

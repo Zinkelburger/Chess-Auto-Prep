@@ -11,7 +11,9 @@ import '../chess/generation/tree_wire_v4.dart' show treeWireVersion;
 import '../diagnostics/log.dart';
 import '../engines/engine_supervisor.dart';
 import '../engines/fixed_depth.dart';
+import '../chess/tactics/game_ids.dart' show GameSite;
 import '../features/library/chapter_outline.dart';
+import '../features/my_games/game_book.dart';
 import '../features/library/library.dart';
 import '../features/pgn_viewer/pgn_viewer.dart';
 import '../features/settings/setting_rows.dart';
@@ -342,6 +344,32 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
         await _requests.open(set, game: game) is RequestDone,
   );
 
+  /// The user's downloaded games, one file per account, shared with the old
+  /// app.
+  late final _gamesCache = GamesCache(
+    _store,
+    folder: p.join(widget.documents.path, 'games_library'),
+  );
+
+  /// The user's games read against their repertoires, for My games.
+  late final _gameBook = GameBook(
+    accounts: PreferencesAccounts(),
+    cache: _gamesCache,
+    shelf: _shelf,
+  );
+
+  /// The accounts as the book last heard of them: a download or a new
+  /// username gives the review a new map, which is when the book reads
+  /// the games again.
+  Map<GameSite, Account>? _accountsSeen;
+
+  void _gamesMayHaveChanged() {
+    final accounts = _myGames.accounts;
+    if (identical(accounts, _accountsSeen)) return;
+    _accountsSeen = accounts;
+    _gameBook.recheck();
+  }
+
   /// The user's accounts and the review that mines their games into the
   /// set, on a Stockfish of its own with the pane's threads and table.
   late final _myGames = MyGames(
@@ -350,10 +378,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
       LichessGamesApi(_lichess, token: readLichessToken),
       ChesscomGamesApi(_lichess),
     ],
-    cache: GamesCache(
-      _store,
-      folder: p.join(widget.documents.path, 'games_library'),
-    ),
+    cache: _gamesCache,
     set: SetAdditions(
       documents: _store,
       session: _session,
@@ -392,6 +417,8 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     // chapters answer is read again the next time a chapter is walked.
     _library.addListener(_answers.forget);
     _library.addListener(_tree.forget);
+    _library.addListener(_gameBook.recheck);
+    _myGames.addListener(_gamesMayHaveChanged);
     _fill.addListener(_listTheDraft);
     unawaited(_library.refresh());
     unawaited(_startWithSettings());
@@ -426,7 +453,9 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     _account.dispose();
     _requests.dispose();
     _lineTrainer.dispose();
+    _myGames.removeListener(_gamesMayHaveChanged);
     _myGames.dispose();
+    _gameBook.dispose();
     _tactics.dispose();
     _fill.removeListener(_listTheDraft);
     _fill.dispose();
@@ -444,6 +473,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     _outline.dispose();
     _library.removeListener(_answers.forget);
     _library.removeListener(_tree.forget);
+    _library.removeListener(_gameBook.recheck);
     _library.dispose();
     _studies.dispose();
     _viewer.dispose();
@@ -463,6 +493,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
       debugShowCheckedModeBanner: false,
       home: Shell(
         myGames: _myGames,
+        book: _gameBook,
         requests: _requests,
         library: _library,
         studies: _studies,

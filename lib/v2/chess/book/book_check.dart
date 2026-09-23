@@ -25,7 +25,12 @@ final class BookPlace {
 
 /// One move the book plays at a position, over every file of the side.
 final class BookMove {
-  const BookMove({required this.label, required this.lines, required this.at});
+  const BookMove({
+    required this.label,
+    required this.lines,
+    required this.at,
+    required this.file,
+  });
 
   /// Numbered as it would start a line: `6.Bg5`.
   final String label;
@@ -33,9 +38,13 @@ final class BookMove {
   /// How many lines of the books go through it.
   final int lines;
 
-  /// The move in the file with the most lines through it, for how that
-  /// file goes on.
+  /// The move in [file], the file with the most lines through it: how that
+  /// file goes on after it, and where to read it.
   final IndexedMove at;
+  final BookFile file;
+
+  /// Where the position after the move is in [file].
+  BookPlace get place => BookPlace(file, at.sans);
 }
 
 /// What the user's books say about one of their games.
@@ -186,20 +195,25 @@ BookPlace _placeOf(String position, List<BookFile> books) {
 /// Every move any of [books] plays at [position], each once, most lines
 /// first.
 List<BookMove> _bookMoves(String position, List<BookFile> books) {
-  final byUci = <String, List<IndexedMove>>{};
+  final byUci = <String, List<(BookFile, IndexedMove)>>{};
   for (final file in books) {
-    for (final move
-        in file.index.movesAt(position)?.values ?? const <IndexedMove>[]) {
-      (byUci[move.node.uci] ??= []).add(move);
+    final here = file.index.movesAt(position) ?? const {};
+    for (final move in here.values) {
+      (byUci[move.node.uci] ??= []).add((file, move));
     }
   }
   final moves = [
     for (final seen in byUci.values)
-      BookMove(
-        label: numberedMoves([seen.first.node]),
-        lines: seen.fold(0, (sum, move) => sum + move.lines),
-        at: seen.reduce((a, b) => b.lines > a.lines ? b : a),
-      ),
+      if (seen.reduce((a, b) => b.$2.lines > a.$2.lines ? b : a) case (
+        final file,
+        final most,
+      ))
+        BookMove(
+          label: numberedMoves([most.node]),
+          lines: seen.fold(0, (sum, s) => sum + s.$2.lines),
+          at: most,
+          file: file,
+        ),
   ]..sort((a, b) => b.lines.compareTo(a.lines));
   return List.unmodifiable(moves);
 }

@@ -73,6 +73,7 @@ const _modes = [
   'Repertoire trainer',
   'Study',
   'Tactics',
+  'My games',
   'Player analysis',
   'Players & prep',
   'Databases',
