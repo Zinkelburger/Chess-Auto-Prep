@@ -120,6 +120,31 @@ void main() {
       expect(saved, [scholarsMate, quietChesscomGame]);
       expect(await cache.read(GameSite.lichess, 'me', max: 1), [scholarsMate]);
     });
+
+    test('a file of hundreds of games reads the same, newest first, and '
+        'takes only the games it does not have', () async {
+      String two(int n) => '$n'.padLeft(2, '0');
+      // Game i is played i seconds after ten o'clock.
+      String game(int i) =>
+          '[Event "Rated blitz game"]\n'
+          '[Site "https://lichess.org/${'g$i'.padLeft(8, '0')}"]\n'
+          '[UTCDate "2026.09.20"]\n'
+          '[UTCTime "10:${two(i ~/ 60)}:${two(i % 60)}"]\n'
+          '[White "Me"]\n[Black "Other"]\n[Result "*"]\n\n'
+          '1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O Be7 *';
+      final many = [for (var i = 0; i < 400; i++) game(i)];
+      expect(many.join('\n\n').length, greaterThan(64 * 1024));
+      final when = DateTime(2026, 9, 22);
+      await cache.keep(GameSite.lichess, 'me', many, when);
+      await cache.keep(GameSite.lichess, 'me', [game(399), game(400)], when);
+
+      final all = await cache.all(GameSite.lichess, 'me');
+      expect(all, hasLength(401));
+      expect(all!.last, game(400));
+      final newest = await cache.newest(GameSite.lichess, 'me', max: 3);
+      expect([for (final g in newest!) g.index], [400, 399, 398]);
+      expect(newest.first.text, game(400));
+    });
   });
 
   test('the old app\'s separate list of analysed games is read', () async {
@@ -131,5 +156,13 @@ void main() {
       'lichess_a',
       'chesscom_1',
     });
+  });
+
+  test('a list of analysed games that cannot be read is no answer, not '
+      'an empty one', () async {
+    await File(
+      p.join(fixture.documents.path, 'analyzed_games.txt'),
+    ).writeAsBytes([0x6c, 0x69, 0xff, 0xfe, 0x0a]);
+    expect(await readOlderAnalyzed(fixture.documents), isNull);
   });
 }

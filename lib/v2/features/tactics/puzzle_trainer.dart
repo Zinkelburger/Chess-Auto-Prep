@@ -53,7 +53,8 @@ final class PuzzleTrainer extends ChangeNotifier {
        _analysis = analysis,
        _settings = settings,
        _open = open,
-       _now = now {
+       _now = now,
+       _showing = (source: session.source, game: session.game) {
     _session.addListener(_documentChanged);
   }
 
@@ -69,6 +70,10 @@ final class PuzzleTrainer extends ChangeNotifier {
   Timer? _timer;
   bool _disposed = false;
 
+  /// The document and game the session had on the board when last heard,
+  /// so an edit, a flip or an answer hidden is not taken for a game coming.
+  ({ChapterRef? source, int? game}) _showing;
+
   /// The sitting under way, or null.
   PuzzleRun? get run => _run;
 
@@ -81,8 +86,13 @@ final class PuzzleTrainer extends ChangeNotifier {
 
   bool get autoAdvance => _settings.value.autoAdvance;
 
-  void setAutoAdvance(bool on) =>
-      _settings.update(_settings.value.copyWith(autoAdvance: on));
+  /// Keeps [on] in the settings, for this sitting and the next launch. The
+  /// pane listens here, not to the settings, so this says it changed.
+  void setAutoAdvance(bool on) {
+    if (on == autoAdvance) return;
+    unawaited(_settings.update(_settings.value.copyWith(autoAdvance: on)));
+    notifyListeners();
+  }
 
   /// Starts a run over the filtered queue, from [first] when given.
   Future<void> start({Puzzle? first}) async {
@@ -125,6 +135,17 @@ final class PuzzleTrainer extends ChangeNotifier {
       _up = null;
       _session.showOnlyTo(null);
     }
+    notifyListeners();
+  }
+
+  /// Takes the puzzle off the board and keeps the run: another mode has the
+  /// board now, and nothing played on it is judged. A puzzle clicked in the
+  /// list comes up in the same run.
+  void putDown() {
+    if (_up == null) return;
+    _cancelTimer();
+    _up = null;
+    _session.showOnlyTo(null);
     notifyListeners();
   }
 
@@ -195,11 +216,14 @@ final class PuzzleTrainer extends ChangeNotifier {
   }
 
   /// Shows the rest of the answer and steps to its next move. Nothing is
-  /// written: a revealed puzzle counts as skipped, as the old app counts it.
+  /// written, then or when the puzzle is played again after a reset or a
+  /// step back: a revealed puzzle counts as skipped, as the old app counts
+  /// it.
   void showSolution() {
     final up = _up;
     if (up == null || up.finished) return;
     _cancelTimer();
+    _run = _run?.revealedAt(up.puzzle.fen);
     final rest =
         _session.tree?.lineTo(_session.tree!.endOfLineFrom(up.frontier)) ??
         const [];
@@ -289,22 +313,20 @@ final class PuzzleTrainer extends ChangeNotifier {
     await _open(_set.ref, puzzle.index);
   }
 
-  /// The session changed document or game. A game of the set arriving while
-  /// a run is going is the puzzle; any other document takes it away.
+  /// The session changed. A game of the set arriving while a run is going
+  /// is the puzzle; any other document, or a game of the set that is no
+  /// puzzle, takes it away.
   void _documentChanged() {
-    final up = _up;
-    final game = _session.game;
-    if (!_set.isOpen || game == null) {
-      if (up != null) {
-        _cancelTimer();
-        _up = null;
-        notifyListeners();
-      }
-      return;
-    }
-    if (_run == null || up?.puzzle.index == game) return;
-    final puzzle = _set.at(game);
-    if (puzzle != null) _putUp(puzzle);
+    final showing = (source: _session.source, game: _session.game);
+    if (showing == _showing) return;
+    _showing = showing;
+    final game = showing.game;
+    final puzzle = _set.isOpen && game != null ? _set.at(game) : null;
+    if (puzzle != null && _run != null) return _putUp(puzzle);
+    if (_up == null) return;
+    _cancelTimer();
+    _up = null;
+    notifyListeners();
   }
 
   void _putUp(Puzzle puzzle) {
@@ -322,11 +344,13 @@ final class PuzzleTrainer extends ChangeNotifier {
   }
 
   /// Writes the first attempt at [up]'s puzzle into its game, and counts it
-  /// in the run.
+  /// in the run. A puzzle already decided, or whose answer was shown first,
+  /// has had its attempt: nothing more is written.
   void _record(PuzzleUp up, Outcome outcome) {
-    if (up.decided != null) return;
+    final run = _run;
+    if (run == null || !run.counts(up.puzzle.fen)) return;
     final took = _now().difference(up.startedAt).inMilliseconds / 1000;
-    _run = _run?.decided(up.puzzle.fen, outcome, took);
+    _run = run.decided(up.puzzle.fen, outcome, took);
     final refusal = _session.apply(
       (set) => recordAttempt(
         set,

@@ -133,14 +133,20 @@ class _LineListState extends State<LineList> {
         ],
         selected: {_showing},
         showSelectedIcon: false,
-        onSelectionChanged: (s) => setState(() => _showing = s.single),
+        onSelectionChanged: (s) {
+          if (!mounted) return;
+          setState(() => _showing = s.single);
+        },
       ),
       const SizedBox(width: Space.m),
       Expanded(
         child: SearchField(
           controller: _search,
           hint: _showing == _Showing.lines ? 'Search lines' : 'Search mistakes',
-          onChanged: (text) => setState(() => _query = text.toLowerCase()),
+          onChanged: (text) {
+            if (!mounted) return;
+            setState(() => _query = text.toLowerCase());
+          },
         ),
       ),
     ],

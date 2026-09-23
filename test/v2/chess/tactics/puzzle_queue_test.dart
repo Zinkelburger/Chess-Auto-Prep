@@ -1,5 +1,3 @@
-import 'dart:math';
-
 import 'package:chess_auto_prep/v2/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/v2/chess/tactics/puzzle.dart';
 import 'package:chess_auto_prep/v2/chess/tactics/puzzle_queue.dart';
@@ -122,18 +120,50 @@ $move. e4 *
     ]);
   });
 
-  test('random order is a shuffle of the same puzzles', () {
-    final shuffled = queueOf(
-      puzzles,
-      const PuzzleFilter(
-        days: 14,
-        order: PuzzleOrder.random,
-        groupByGame: false,
-      ),
-      today: tacticsToday,
-      random: Random(1),
+  test('random order is a shuffle of the same puzzles, which one seed keeps '
+      'however the puzzles\' headers change', () {
+    const random = PuzzleFilter(
+      days: 14,
+      order: PuzzleOrder.random,
+      groupByGame: false,
     );
-    expect({for (final p in shuffled) p.index}, {0, 1, 3});
+    List<int> shuffled(List<Puzzle> from) => [
+      for (final p in queueOf(from, random, today: tacticsToday, seed: 7))
+        p.index,
+    ];
+    expect(shuffled(puzzles).toSet(), {0, 1, 3});
+    // The set read again after an attempt was written into it.
+    final tried = read(
+      tacticsSet.replaceFirst(
+        '[OpponentBestResponse "d4"]',
+        '[OpponentBestResponse "d4"]\n[ReviewCount "1"]\n[SuccessCount "1"]',
+      ),
+    );
+    expect(shuffled(tried), shuffled(puzzles));
+  });
+
+  test('newest first puts a date the game does not know after the ones it '
+      'could be', () {
+    String game(String date) =>
+        '''
+[Event "x"]
+[Date "$date"]
+[FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"]
+[SetUp "1"]
+[UserMove "a3"]
+[MistakeType "??"]
+
+1. e4 *
+''';
+    final set = read(
+      [
+        game('????.??.??'),
+        game('2026.09.??'),
+        game('2026.09.02'),
+        game('2026.08.30'),
+      ].join('\n'),
+    );
+    expect(queued(const PuzzleFilter(groupByGame: false), set), [2, 1, 3, 0]);
   });
 
   test('the filter is kept as JSON, every date as a written null', () {

@@ -42,6 +42,22 @@ void main() {
     expect(run.seconds, {a: 4});
   });
 
+  test('a puzzle whose answer was shown first is never decided: it stays '
+      'skipped and comes back in the retry', () {
+    final run = const PuzzleRun(queue: [a, b])
+        .shown(a)
+        .revealedAt(a)
+        .decided(a, Outcome.solved, 3)
+        .shown(b)
+        .decided(b, Outcome.failed, 4)
+        .revealedAt(b);
+    expect(run.counts(a), isFalse);
+    expect(run.outcomes, {b: Outcome.failed}, reason: 'b was tried first');
+    final recap = run.recap;
+    expect((recap.solved, recap.failed, recap.skipped), (0, 1, 1));
+    expect(recap.retry, [a, b]);
+  });
+
   test('the recap counts solved, failed and skipped, and offers the failed '
       'and skipped again in the order they came', () {
     final recap = const PuzzleRun(queue: [a, b, c])

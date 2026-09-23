@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/foundation.dart';
 
 import '../../chess/pgn/chapter.dart';
@@ -52,10 +54,13 @@ final class TacticsSet extends ChangeNotifier {
     required SettingsStore settings,
     required this.ref,
     DateTime Function() now = DateTime.now,
+    Random? random,
   }) : _documents = documents,
        _session = session,
        _settings = settings,
-       _now = now {
+       _now = now,
+       _random = random ?? Random() {
+    _seed = _random.nextInt(_seeds);
     _session.addListener(_documentChanged);
     _settings.addListener(_settingsChanged);
   }
@@ -64,9 +69,16 @@ final class TacticsSet extends ChangeNotifier {
   final DocumentSession _session;
   final SettingsStore _settings;
   final DateTime Function() _now;
+  final Random _random;
 
   /// The set's file.
   final ChapterRef ref;
+
+  /// What Random order shuffles by. It stays for the set's life, so the
+  /// attempt written after each puzzle does not shuffle the list again, and
+  /// changes when Random is picked again, which is asking for a new order.
+  int _seed = 0;
+  static const _seeds = 1 << 32;
 
   SetState _state = const SetLoading();
   List<ChapterLine>? _readFrom;
@@ -74,6 +86,7 @@ final class TacticsSet extends ChangeNotifier {
     List<Puzzle> puzzles,
     PuzzleFilter filter,
     DateTime day,
+    int seed,
     List<Puzzle> queue,
   })?
   _queued;
@@ -98,11 +111,18 @@ final class TacticsSet extends ChangeNotifier {
     if (memo != null &&
         identical(memo.puzzles, puzzles) &&
         memo.filter == filter &&
-        memo.day == day) {
+        memo.day == day &&
+        memo.seed == _seed) {
       return memo.queue;
     }
-    final queue = queueOf(puzzles, filter, today: day);
-    _queued = (puzzles: puzzles, filter: filter, day: day, queue: queue);
+    final queue = queueOf(puzzles, filter, today: day, seed: _seed);
+    _queued = (
+      puzzles: puzzles,
+      filter: filter,
+      day: day,
+      seed: _seed,
+      queue: queue,
+    );
     return queue;
   }
 
@@ -157,7 +177,12 @@ final class TacticsSet extends ChangeNotifier {
 
   /// The filter lives in the settings, so a change to it is heard here.
   void _settingsChanged() {
-    if (_queued?.filter != filter) notifyListeners();
+    final was = _queued?.filter;
+    if (was == filter) return;
+    if (filter.order == PuzzleOrder.random && was?.order != filter.order) {
+      _seed = _random.nextInt(_seeds);
+    }
+    notifyListeners();
   }
 
   @override

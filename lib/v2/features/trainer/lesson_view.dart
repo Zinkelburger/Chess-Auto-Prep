@@ -54,6 +54,9 @@ class _LessonViewState extends State<LessonView> {
     if (old.lesson == widget.lesson) return;
     old.lesson.removeListener(_lessonChanged);
     widget.lesson.addListener(_lessonChanged);
+    // A new sitting over this one, from the recap's buttons, takes the keys
+    // too, wherever the focus went meanwhile.
+    _focus.requestFocus();
   }
 
   @override

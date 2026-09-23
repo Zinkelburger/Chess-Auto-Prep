@@ -66,7 +66,9 @@ List<TrainingLine> dueNow(
   ];
 }
 
-/// How many of [lines] stand where.
+/// How many of [lines] stand where. A line with none of the user's moves is
+/// left out, as the queues leave it out, so the untrained and due counts
+/// are what Learn and Review have left to take; a model game still counts.
 Map<LineStatus, int> countsOf(
   List<TrainingLine> lines,
   Map<LineKey, Review> reviews,
@@ -74,6 +76,7 @@ Map<LineStatus, int> countsOf(
 ) {
   final counts = {for (final status in LineStatus.values) status: 0};
   for (final line in lines) {
+    if (line.yourMoves == 0 && !line.modelGame) continue;
     final status = statusOf(line, reviews[line.key], now);
     counts[status] = counts[status]! + 1;
   }

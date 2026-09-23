@@ -34,6 +34,8 @@ final class _Review {
     GamesFetch? chesscom,
     ReviewEngine? engine,
     Map<GameSite, Account>? accounts,
+    Future<Set<String>?> Function()? older,
+    DateTime Function() now = DateTime.now,
   }) {
     this.lichess = ScriptedSite(GameSite.lichess, [
       lichess ?? const GamesFetched([scholarsMate]),
@@ -48,18 +50,20 @@ final class _Review {
             GameSite.chesscom: const Account('Me'),
           },
     );
+    additions = SetAdditions(
+      documents: store,
+      session: session,
+      saver: saver,
+      set: set,
+      older: older ?? () async => {},
+    );
     games = MyGames(
       accounts: this.accounts,
       sites: [this.lichess, this.chesscom],
       cache: cache,
-      set: SetAdditions(
-        documents: store,
-        session: session,
-        saver: saver,
-        set: set,
-        older: () async => {},
-      ),
+      set: additions,
       engine: engine ?? () async => Started(this.engine),
+      now: now,
     );
   }
 
@@ -85,6 +89,7 @@ final class _Review {
   late final ScriptedSite lichess;
   late final ScriptedSite chesscom;
   late final MemoryAccounts accounts;
+  late final SetAdditions additions;
   late final MyGames games;
 
   String get setText => (store.documents[tacticsRef]! as Opened).text;
@@ -231,6 +236,86 @@ void main() {
     expect(myGamesLine(r.games.status), 'Analysis failed: no Stockfish.');
     expect(r.games.queued, 2);
     expect(r.setText, tacticsSet);
+  });
+
+  test('a review carried on after the engine would not start still counts '
+      'the puzzles it added before', () async {
+    var starts = 0;
+    r = _Review(
+      engine: () async =>
+          ++starts == 2 ? const StartFailed('no Stockfish') : Started(r.engine),
+    );
+    r.engine.onSearch = () {
+      r.engine.onSearch = null;
+      r.games.pause();
+    };
+    await r.start();
+    expect(r.games.newPuzzles, 1);
+
+    await r.games.start();
+    expect(r.games.status, isA<MyGamesFailed>());
+    expect(r.games.newPuzzles, 1);
+
+    await r.games.start();
+    expect((r.games.status as MyGamesDone).added, 1);
+  });
+
+  test('a download is dated by the clock the review is given', () async {
+    final when = DateTime(2026, 9, 22, 10, 30);
+    r = _Review(now: () => when);
+    await r.start();
+    expect(r.games.accounts[GameSite.lichess]?.downloaded, when);
+    final ref = r.cache.refFor(GameSite.lichess, 'Me');
+    expect(
+      File('${ref.path}.fetched').readAsStringSync(),
+      '${when.millisecondsSinceEpoch}',
+    );
+  });
+
+  test('an old app\'s list of reviewed games that cannot be read stops the '
+      'review before anything is mined', () async {
+    r = _Review(older: () async => null);
+    await r.start();
+    expect(
+      (r.games.status as MyGamesFailed).problem,
+      MyGamesProblem.setUnreadable,
+    );
+    expect(r.engine.asked, isEmpty);
+    expect(r.setText, tacticsSet);
+  });
+
+  test('a set the workspace opens while the review is reading it takes the '
+      'puzzles through the session, whose own saves still land', () async {
+    r = _Review();
+    r.store.hold = true;
+    final adding = r.additions.add('lichess_AbCd1234', [minedScholarsMate()]);
+    await pumpEventQueue();
+    expect(r.store.waiting, 1, reason: 'the review is reading the set');
+    final opening = r.session.open(tacticsRef, game: 0);
+    await pumpEventQueue();
+    // The session's read lands first; then the review's.
+    r.store.releaseLast();
+    await pumpEventQueue();
+    expect(r.session.source, tacticsRef);
+    r.store.hold = false;
+    r.store.releaseAll();
+    expect(await adding, isA<Added>());
+    await opening;
+
+    expect(r.session.chapter!.lines, hasLength(6));
+    r.session.apply(
+      (set) => recordAttempt(
+        set,
+        index: 0,
+        solved: true,
+        seconds: 4,
+        now: tacticsToday,
+      ),
+    );
+    await r.saver.flush();
+    expect(r.saver.settled, isTrue);
+    expect(r.puzzlesOnDisk, hasLength(6));
+    expect(r.puzzlesOnDisk.first.stats.reviews, 1);
   });
 
   test('saving usernames downloads nothing and forgets the other account\'s '

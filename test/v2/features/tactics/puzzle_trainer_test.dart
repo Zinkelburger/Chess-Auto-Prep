@@ -8,6 +8,7 @@ import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/scripted_store.dart';
 import '../../support/tactics_fixture.dart';
 import '../../support/window_fixture.dart';
 
@@ -17,19 +18,24 @@ import '../../support/window_fixture.dart';
 void main() {
   late WindowFixture w;
 
-  /// Runs [body] in fake time with a fresh window, the set read.
-  void sitting(void Function(FakeAsync async) body) => fakeAsync((async) {
-    w = WindowFixture();
-    unawaited(
-      w.settings.update(
-        w.settings.value.copyWith(puzzles: const PuzzleFilter(days: 14)),
-      ),
-    );
-    unawaited(w.tactics.load());
-    async.flushMicrotasks();
-    body(async);
-    w.dispose();
-  });
+  /// Runs [body] in fake time with a fresh window, the set read: [set], or
+  /// the usual one.
+  void sitting(void Function(FakeAsync async) body, {String? set}) =>
+      fakeAsync((async) {
+        w = WindowFixture();
+        if (set != null) {
+          w.store.documents[tacticsRef] = Opened(set, scriptedRevision(set));
+        }
+        unawaited(
+          w.settings.update(
+            w.settings.value.copyWith(puzzles: const PuzzleFilter(days: 14)),
+          ),
+        );
+        unawaited(w.tactics.load());
+        async.flushMicrotasks();
+        body(async);
+        w.dispose();
+      });
 
   String setText() => (w.store.documents[tacticsRef]! as Opened).text;
 
@@ -137,6 +143,80 @@ void main() {
       // Walking the answer is allowed; nothing new is played into the set.
       w.trainer.play('e1d1');
       expect(w.session.cursor, NodePath.of([0]));
+    }),
+  );
+
+  test(
+    'a puzzle whose answer was shown writes nothing when it is played again '
+    'after a reset or a step back, and counts as skipped',
+    () => sitting((async) {
+      unawaited(
+        w.settings.update(w.settings.value.copyWith(autoAdvance: false)),
+      );
+      begin(async);
+      w.trainer.showSolution();
+      w.trainer.reset();
+      w.trainer.play('e7e5');
+      async.elapse(replyDelay);
+      w.trainer.play('b8c6');
+      expect(w.trainer.up!.feedback, isA<Solved>());
+      unawaited(w.trainer.next());
+      async.flushMicrotasks();
+      unawaited(w.trainer.previous());
+      async.flushMicrotasks();
+      expect(w.trainer.up?.puzzle.index, 1);
+      w.trainer.play('d7d5');
+      async.elapse(Duration.zero);
+      expect(gameOnDisk(1), isNot(contains('ReviewCount')));
+      expect(w.trainer.run?.outcomes, isEmpty);
+      w.trainer.end();
+      final recap = w.trainer.recap!;
+      expect((recap.solved, recap.failed, recap.skipped), (0, 0, 2));
+      expect(recap.retry, hasLength(2));
+    }),
+  );
+
+  test(
+    'turning auto-advance off is heard at once',
+    () => sitting((async) {
+      var heard = 0;
+      w.trainer.addListener(() => heard++);
+      w.trainer.setAutoAdvance(false);
+      expect(w.trainer.autoAdvance, isFalse);
+      expect(heard, 1);
+    }),
+  );
+
+  test(
+    'putting the puzzle down keeps the run and calls the reply off; the '
+    'list brings a puzzle back into it',
+    () => sitting((async) {
+      begin(async);
+      w.trainer.play('e7e5');
+      w.trainer.putDown();
+      expect(w.trainer.up, isNull);
+      expect(w.trainer.run, isNotNull);
+      expect(w.session.shownTo, isNull);
+      async.elapse(replyDelay);
+      expect(w.session.cursor, NodePath.of([0]), reason: 'no reply played');
+      unawaited(w.trainer.show(w.tactics.at(0)!));
+      async.flushMicrotasks();
+      expect(w.trainer.up?.puzzle.index, 0);
+      expect(w.trainer.run?.seen, hasLength(2), reason: 'the same run');
+    }),
+  );
+
+  test(
+    'a game of the set that is no puzzle takes the puzzle off the board, '
+    'with the reply on its way',
+    () => sitting(set: '$tacticsSet\n[Event "Default #6"]\n\n*\n', (async) {
+      begin(async);
+      w.trainer.play('e7e5');
+      w.session.showGame(5);
+      expect(w.trainer.up, isNull);
+      async.elapse(replyDelay);
+      expect(w.session.shownTo, isNull);
+      expect(w.session.cursor, const NodePath.root());
     }),
   );
 

@@ -1,5 +1,3 @@
-import 'dart:math';
-
 import 'puzzle.dart';
 
 /// The order a session plays its puzzles in.
@@ -145,6 +143,14 @@ bool _bool(Object? value, bool fallback) => value is bool ? value : fallback;
 ///
 /// Newest compares the games' PGN dates as text, which for `YYYY.MM.DD` is
 /// the same as comparing days, and keeps file order among one day's games.
+/// A part of the date the game does not know, `??`, counts as the lowest:
+/// `2026.09.??` comes after every known day of that month and `????.??.??`
+/// after every date.
+///
+/// Random ranks each puzzle by a hash of [seed] and its position, so one
+/// seed keeps one order however often the puzzles' headers are written;
+/// another seed is another shuffle.
+///
 /// Grouping by game then ranks each game by where its first puzzle came and
 /// plays that game's puzzles together, earliest move first — so a game's
 /// three mistakes are three puzzles in a row, in the order they were made.
@@ -152,7 +158,7 @@ List<Puzzle> queueOf(
   List<Puzzle> puzzles,
   PuzzleFilter filter, {
   required DateTime today,
-  Random? random,
+  int seed = 0,
 }) {
   final chosen = [
     for (final puzzle in puzzles)
@@ -160,7 +166,7 @@ List<Puzzle> queueOf(
   ];
   switch (filter.order) {
     case PuzzleOrder.newest:
-      _stableSort(chosen, (a, b) => b.date.compareTo(a.date));
+      _stableSort(chosen, (a, b) => _day(b).compareTo(_day(a)));
     case PuzzleOrder.leastReviewed:
       _stableSort(chosen, (a, b) => a.stats.reviews.compareTo(b.stats.reviews));
     case PuzzleOrder.worstSuccess:
@@ -169,10 +175,16 @@ List<Puzzle> queueOf(
         (a, b) => a.stats.successRate.compareTo(b.stats.successRate),
       );
     case PuzzleOrder.random:
-      chosen.shuffle(random);
+      _stableSort(
+        chosen,
+        (a, b) => Object.hash(seed, a.fen).compareTo(Object.hash(seed, b.fen)),
+      );
   }
   return filter.groupByGame ? _grouped(chosen) : chosen;
 }
+
+/// A puzzle's date as text that sorts, an unknown part as zeros.
+String _day(Puzzle puzzle) => puzzle.date.replaceAll('?', '0');
 
 List<Puzzle> _grouped(List<Puzzle> ordered) {
   final rank = <String, int>{};

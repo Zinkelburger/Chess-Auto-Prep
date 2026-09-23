@@ -143,6 +143,16 @@ void main() {
       );
     });
 
+    test('a header value is read as the PGN reader reads it', () {
+      expect(
+        gameIdIn(
+          r'[GameId "lichess_a\"b\\"]'
+          '\n\n1. e4 *',
+        ),
+        r'lichess_a"b\',
+      );
+    });
+
     test('the user is found by name, ignoring case, and exactly', () {
       final tags = readGame(scholarsMate).tags;
       expect(sideOf(tags, 'ME'), Side.black);

@@ -101,8 +101,8 @@ ChapterEdit _withTags(Chapter set, int index, Map<String, String?> values) {
 List<PgnHeader> _set(List<PgnHeader> tags, String key, String? value) {
   final at = tags.indexWhere((tag) => tag is PgnTag && tag.key == key);
   if (value == null) {
-    return at < 0 ? tags : [...tags]
-      ..removeAt(at);
+    if (at < 0) return tags;
+    return [...tags]..removeAt(at);
   }
   if (at >= 0) {
     final old = tags[at];

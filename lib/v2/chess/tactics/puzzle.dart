@@ -32,15 +32,15 @@ enum MistakeKind {
   };
 }
 
-/// How a puzzle has gone so far, from the six headers the old app writes
-/// after each attempt. Zero reviews means never tried.
+/// How a puzzle has gone so far, from the headers the old app writes after
+/// each attempt; its `HintsUsed` is kept in the file and not read, as this
+/// app gives no hints. Zero reviews means never tried.
 final class PuzzleStats {
   const PuzzleStats({
     this.reviews = 0,
     this.successes = 0,
     this.lastReviewed,
     this.seconds,
-    this.hints = 0,
     this.stars = 0,
   });
 
@@ -52,8 +52,6 @@ final class PuzzleStats {
 
   /// How long the last attempt took, not an average.
   final double? seconds;
-
-  final int hints;
 
   /// 1 to 5, or 0 when unrated. One star means "hide this puzzle".
   final int stars;
@@ -217,7 +215,6 @@ Puzzle? puzzleOf(ChapterLine line, int index) {
       successes: count('SuccessCount'),
       lastReviewed: DateTime.tryParse(tag('LastReviewed') ?? ''),
       seconds: double.tryParse(tag('TimeToSolve') ?? ''),
-      hints: count('HintsUsed'),
       stars: count('StarRating').clamp(0, 5),
     ),
   );

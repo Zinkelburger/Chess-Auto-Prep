@@ -241,8 +241,9 @@ final class AppEnvironment {
   final AccountStore accounts;
   final ProgressFiles progressFiles;
 
-  /// The games the old app already mined for puzzles.
-  final Future<Set<String>> Function() olderAnalyzed;
+  /// The games the old app already mined for puzzles; null when the file is
+  /// there and could not be read.
+  final Future<Set<String>?> Function() olderAnalyzed;
 
   /// The human-move model: the Replies tab, the gaps and the fill.
   final MovePolicy maia;
@@ -339,8 +340,9 @@ Future<void> openFolder(Directory folder) async {
 Future<bool> openInBrowser(Uri page) async {
   try {
     final opened = await launchUrl(page, mode: LaunchMode.externalApplication);
-    if (!opened)
+    if (!opened) {
       log.w('open ${page.host} in the browser', 'the desktop declined');
+    }
     return opened;
   } on Object catch (error) {
     log.w('open ${page.host} in the browser', error);

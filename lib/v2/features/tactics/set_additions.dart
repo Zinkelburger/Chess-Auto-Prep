@@ -38,19 +38,20 @@ final class NotAdded extends Addition {
 /// addition waits for, so an attempt the solver is recording and the new
 /// puzzles are one queue of saves and neither overwrites the other. While
 /// it is not open, this writes it through the store against the revision it
-/// read, reading again when the file changed meanwhile.
+/// read, reading again when the file changed meanwhile; a set the workspace
+/// opened while it was being read goes back to the session.
 ///
-/// One gap remains: the set opened in the workspace between this reading it
-/// and the store's write holds a revision a moment old, and its next save is
-/// refused as a conflict — the file is never overwritten, and reopening the
-/// set shows everything.
+/// One gap remains: the set opened in the workspace while the store's write
+/// is on its way to disk can read the file as it was, and its next save is
+/// then refused as a conflict — the file is never overwritten, and
+/// reopening the set shows everything.
 final class SetAdditions {
   SetAdditions({
     required PgnDocumentStore documents,
     required DocumentSession session,
     required DocumentSaver saver,
     required TacticsSet set,
-    required Future<Set<String>> Function() older,
+    required Future<Set<String>?> Function() older,
   }) : _documents = documents,
        _session = session,
        _saver = saver,
@@ -62,16 +63,19 @@ final class SetAdditions {
   final DocumentSaver _saver;
   final TacticsSet _set;
 
-  /// The ids the old app kept apart from the set, still counted as done.
-  final Future<Set<String>> Function() _older;
+  /// The ids the old app kept apart from the set, still counted as done;
+  /// null when its file is there and could not be read.
+  final Future<Set<String>?> Function() _older;
 
   /// How many times a write that lost a race with another writer is tried.
   static const _attempts = 3;
 
-  /// The games already reviewed, by either app; null when the set cannot be
-  /// read, which is no answer: mining then would mine everything again.
+  /// The games already reviewed, by either app; null when the set or the
+  /// old app's list cannot be read, which is no answer: mining then would
+  /// mine again what was mined before.
   Future<Set<String>?> analyzed() async {
     final older = await _older();
+    if (older == null) return null;
     if (_set.isOpen) {
       final open = _session.chapter;
       return open == null ? null : _idsIn(open.preamble, older);
@@ -89,7 +93,10 @@ final class SetAdditions {
   /// Adds [puzzles], from the game [gameId], and marks the game done, in
   /// one write.
   Future<Addition> add(String gameId, List<MinedPuzzle> puzzles) async {
-    final older = await _older();
+    // The old app's list, if it cannot be read now, was read a moment ago
+    // by [analyzed] and keeps its ids in its own file: the set's line goes
+    // without them this time and nothing is lost.
+    final older = await _older() ?? const <String>{};
     if (_set.isOpen) return _addInSession(gameId, puzzles, older);
     for (var attempt = 1; attempt <= _attempts; attempt++) {
       final written = await _addOnDisk(gameId, puzzles, older);
@@ -122,6 +129,7 @@ final class SetAdditions {
   }
 
   /// One attempt; null when the file changed between the read and the write.
+  /// A set the workspace opened during the read is written by the session.
   Future<Addition?> _addOnDisk(
     String gameId,
     List<MinedPuzzle> puzzles,
@@ -143,6 +151,10 @@ final class SetAdditions {
         return NotAdded(readOnly);
       case Opened(:final text, :final revision):
         final set = await readChapter(name: ref.name, text: text);
+        // Opened in the workspace while it was read, the set is the
+        // session's to write: a save here would leave the session's copy
+        // behind the file, and its next save refused.
+        if (_set.isOpen) return _addInSession(gameId, puzzles, older);
         final edit = _edit(set, gameId, puzzles, older);
         if (edit is! ChapterEdited) return _notEdited(edit);
         return switch (await _documents.save(

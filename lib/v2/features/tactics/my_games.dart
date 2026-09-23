@@ -123,17 +123,22 @@ final class MyGames extends ChangeNotifier {
     required GamesCache cache,
     required SetAdditions set,
     required ReviewEngine engine,
+    DateTime Function() now = DateTime.now,
   }) : _store = accounts,
        _sites = sites,
        _cache = cache,
        _set = set,
-       _engine = engine;
+       _engine = engine,
+       _now = now;
 
   final AccountStore _store;
   final List<RecentGames> _sites;
   final GamesCache _cache;
   final SetAdditions _set;
   final ReviewEngine _engine;
+
+  /// When a download came down, for its note and the account's date.
+  final DateTime Function() _now;
 
   Map<GameSite, Account> _accounts = const {};
   MyGamesStatus _status = const MyGamesIdle();
@@ -281,7 +286,7 @@ final class MyGames extends ChangeNotifier {
     final max = await _toAskFor(site, username);
     switch (await source.recent(username, max: max)) {
       case GamesFetched(:final games):
-        final when = DateTime.now();
+        final when = _now();
         await _cache.keep(site, username, games, when);
         await _store.setDownloaded(site, when);
         _accounts = {..._accounts, site: Account(username, downloaded: when)};
@@ -345,7 +350,9 @@ final class MyGames extends ChangeNotifier {
     }
     switch (start) {
       case StartFailed(:final reason):
-        _become(MyGamesFailed(MyGamesProblem.engine, detail: reason));
+        _become(
+          MyGamesFailed(MyGamesProblem.engine, detail: reason, added: added),
+        );
       case Started(:final engine):
         _quit = engine.quit;
         final ended = await _reviewQueue(engine, total, added, notReached);
@@ -433,9 +440,8 @@ const reviewDepth = 15;
 Future<List<MinedPuzzle>?> reviewGame(
   Engine engine,
   String gameText,
-  String username, {
-  int depth = reviewDepth,
-}) async {
+  String username,
+) async {
   final read = readGame(gameText);
   final tree = read.tree;
   final side = sideOf(read.tags, username);
@@ -446,10 +452,10 @@ Future<List<MinedPuzzle>?> reviewGame(
   final found = <MinedPuzzle>[];
   for (final move in movesBy(tree, side)) {
     if (isOver(move.after)) continue;
-    final before = await verdictAt(engine, move.before, depth: depth);
+    final before = await verdictAt(engine, move.before, depth: reviewDepth);
     if (before == null) return null;
     if (playedBest(move, before)) continue;
-    final after = await verdictAt(engine, move.after, depth: depth);
+    final after = await verdictAt(engine, move.after, depth: reviewDepth);
     if (after == null) return null;
     final puzzle = minedFrom(move, before, after, game);
     if (puzzle != null) found.add(puzzle);

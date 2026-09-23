@@ -117,6 +117,21 @@ void main() {
     expect(find.text('Learn 2'), findsOneWidget);
   });
 
+  testWidgets('a sitting started over the one on screen takes the keys, '
+      'wherever the focus went', (tester) async {
+    await pump(tester);
+    await tester.tap(find.text('Learn 2'));
+    await tester.pumpAndSettle();
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pump();
+    // As the recap's Learn more does, with the lesson view still up.
+    trainer.learn();
+    await tester.pumpAndSettle();
+    expect(find.text('Remember 1.e4'), findsOneWidget);
+    await key(tester, LogicalKeyboardKey.space);
+    expect(find.text('Your move'), findsOneWidget);
+  });
+
   testWidgets('a wrong move is said with the right one', (tester) async {
     await pump(tester);
     await tester.tap(find.text('Learn 2'));

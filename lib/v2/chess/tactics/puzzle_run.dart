@@ -15,6 +15,7 @@ final class PuzzleRun {
     this.seen = const [],
     this.outcomes = const {},
     this.seconds = const {},
+    this.revealed = const {},
   });
 
   /// Every puzzle of the run, in the order they come.
@@ -28,6 +29,11 @@ final class PuzzleRun {
   /// How long each decided puzzle took.
   final Map<Fen, double> seconds;
 
+  /// The puzzles whose answer was shown before any attempt at them. Found
+  /// after that, an answer proves nothing, so none of them is ever decided:
+  /// the recap counts them skipped and a retry plays them again.
+  final Set<Fen> revealed;
+
   /// The run with [puzzle] on the board.
   PuzzleRun shown(Fen puzzle) => seen.contains(puzzle)
       ? this
@@ -36,19 +42,39 @@ final class PuzzleRun {
           seen: [...seen, puzzle],
           outcomes: outcomes,
           seconds: seconds,
+          revealed: revealed,
         );
 
-  /// The run with [puzzle] decided, unless it already was: the first
-  /// attempt is the one that counts.
+  /// The run with [puzzle] decided, unless it already was or its answer
+  /// was shown first: the first attempt is the one that counts.
   PuzzleRun decided(Fen puzzle, Outcome outcome, double took) =>
-      outcomes.containsKey(puzzle)
+      outcomes.containsKey(puzzle) || revealed.contains(puzzle)
       ? this
       : PuzzleRun(
           queue: queue,
           seen: seen,
           outcomes: {...outcomes, puzzle: outcome},
           seconds: {...seconds, puzzle: took},
+          revealed: revealed,
         );
+
+  /// The run with [puzzle]'s answer shown. One already decided keeps its
+  /// outcome.
+  PuzzleRun revealedAt(Fen puzzle) =>
+      outcomes.containsKey(puzzle) || revealed.contains(puzzle)
+      ? this
+      : PuzzleRun(
+          queue: queue,
+          seen: seen,
+          outcomes: outcomes,
+          seconds: seconds,
+          revealed: {...revealed, puzzle},
+        );
+
+  /// Whether an attempt at [puzzle] still counts: it is not decided and
+  /// its answer has not been shown.
+  bool counts(Fen puzzle) =>
+      !outcomes.containsKey(puzzle) && !revealed.contains(puzzle);
 
   /// The puzzle after [current]: the next one already shown when the user
   /// stepped back to [current], else the next that has not been on the

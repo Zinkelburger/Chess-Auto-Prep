@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:path/path.dart' as p;
 
+import '../chess/pgn/chapter.dart' show readOffThreadFrom;
 import '../chess/pgn/game_text.dart';
 import '../chess/pgn/games_written.dart';
 import '../chess/tactics/game_ids.dart';
@@ -62,27 +64,25 @@ final class GamesCache {
     String username, {
     required int max,
   }) async {
-    final games = await all(site, username);
-    if (games == null || games.isEmpty) return null;
-    // Stable, so games that do not say when they were played keep the
-    // order the file has them in.
-    final order = [for (final (i, g) in games.indexed) (i, playedAt(g))]
-      ..sort((a, b) {
-        final byTime = b.$2.compareTo(a.$2);
-        return byTime != 0 ? byTime : a.$1.compareTo(b.$1);
-      });
-    return [for (final (i, _) in order.take(max)) (index: i, text: games[i])];
+    final text = await _textOf(site, username);
+    if (text == null) return null;
+    final games = await _newestOf(text, max);
+    return games.isEmpty ? null : games;
   }
 
   /// Every game saved for [username], in the order the file has them, or
   /// null when there is no file or it cannot be read.
   Future<List<String>?> all(GameSite site, String username) async {
+    final text = await _textOf(site, username);
+    return text == null ? null : _gamesOf(text);
+  }
+
+  Future<String?> _textOf(GameSite site, String username) async {
     final read = await _store.open(refFor(site, username));
     if (read is Unreadable) {
       log.w('read the ${site.label} games of $username', read.detail);
     }
-    if (read is! Opened) return null;
-    return [for (final game in splitChapterText(read.text).games) game.text];
+    return read is Opened ? read.text : null;
   }
 
   /// Adds the games of [downloaded] the file does not have yet at its end,
@@ -122,13 +122,7 @@ final class GamesCache {
     Revision revision,
     List<String> downloaded,
   ) async {
-    final have = {
-      for (final game in splitChapterText(text).games) gameIdIn(game.text),
-    };
-    final fresh = [
-      for (final game in downloaded)
-        if (have.add(gameIdIn(game))) game,
-    ];
+    final fresh = await _freshOf(text, downloaded);
     if (fresh.isEmpty) return null;
     final base = text.trimRight();
     final joined = fresh.join('\n\n');
@@ -167,11 +161,54 @@ final class GamesCache {
   }
 }
 
+// What reads every game of a saved file. The file grows with every
+// download, to megabytes the window would wait for; so from
+// [readOffThreadFrom] characters on, the work goes to another isolate, with
+// nothing but the text in hand.
+
+Future<List<String>> _gamesOf(String text) =>
+    _offThread(text, () => _gamesIn(text));
+
+Future<List<CachedGame>> _newestOf(String text, int max) =>
+    _offThread(text, () => _newestIn(text, max));
+
+Future<List<String>> _freshOf(String text, List<String> downloaded) =>
+    _offThread(text, () => _freshIn(text, downloaded));
+
+Future<T> _offThread<T>(String text, T Function() work) =>
+    text.length < readOffThreadFrom ? Future.value(work()) : Isolate.run(work);
+
+List<String> _gamesIn(String text) => [
+  for (final game in splitChapterText(text).games) game.text,
+];
+
+/// The newest [max] games of [text], newest first. Stable, so games that
+/// do not say when they were played keep the order the file has them in.
+List<CachedGame> _newestIn(String text, int max) {
+  final games = _gamesIn(text);
+  final order = [for (final (i, g) in games.indexed) (i, playedAt(g))]
+    ..sort((a, b) {
+      final byTime = b.$2.compareTo(a.$2);
+      return byTime != 0 ? byTime : a.$1.compareTo(b.$1);
+    });
+  return [for (final (i, _) in order.take(max)) (index: i, text: games[i])];
+}
+
+/// The games of [downloaded] that [text] does not have yet, each once.
+List<String> _freshIn(String text, List<String> downloaded) {
+  final have = {for (final game in _gamesIn(text)) gameIdIn(game)};
+  return [
+    for (final game in downloaded)
+      if (have.add(gameIdIn(game))) game,
+  ];
+}
+
 /// The ids of games the old app reviewed before its sets carried their own
 /// analysed-games line: `Documents/analyzed_games.txt`, one per line. It
 /// goes on reading them beside the line, so both apps count them as done.
-/// A missing file is none.
-Future<Set<String>> readOlderAnalyzed(Directory documents) async {
+/// A missing file is none; null when the file is there and cannot be read,
+/// which is no answer: every game it names would be mined again.
+Future<Set<String>?> readOlderAnalyzed(Directory documents) async {
   final file = File(p.join(documents.path, 'analyzed_games.txt'));
   try {
     if (!await file.exists()) return {};
@@ -181,6 +218,6 @@ Future<Set<String>> readOlderAnalyzed(Directory documents) async {
     };
   } on Object catch (error) {
     log.w('read ${file.path}', error);
-    return {};
+    return null;
   }
 }

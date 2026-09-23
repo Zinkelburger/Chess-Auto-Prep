@@ -1,6 +1,7 @@
 import 'package:dartchess/dartchess.dart' show Side;
 
 import '../pgn/game_text.dart';
+import '../pgn/pgn_chars.dart' show unescapedTagValue;
 
 /// Where a game of the user's was downloaded from. The names are the old
 /// app's: they are in its cache file names and its game ids.
@@ -67,11 +68,12 @@ final _header = RegExp(
   multiLine: true,
 );
 
-/// The header values of [gameText], the first of each name winning.
+/// The header values of [gameText], the first of each name winning, read
+/// as the PGN reader reads them: `\"` a quote and `\\` a backslash.
 Map<String, String> _headerValues(String gameText) {
   final values = <String, String>{};
   for (final match in _header.allMatches(gameText)) {
-    values.putIfAbsent(match[1]!, () => match[2]!.trim());
+    values.putIfAbsent(match[1]!, () => unescapedTagValue(match[2]!).trim());
   }
   return values;
 }
