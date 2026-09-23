@@ -4,19 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:multi_split_view/multi_split_view.dart';
 
-import '../features/library/library_panel.dart';
 import '../features/library/outline_panel.dart';
-import '../features/my_games/book_pane.dart';
-import '../features/my_games/my_games_panel.dart';
-import '../features/pgn_viewer/pgn_viewer_panel.dart';
-import '../features/study/quiz_menu.dart';
 import '../features/settings/setting_rows.dart';
 import '../features/settings/settings_dialog.dart';
-import '../features/study/study_panel.dart';
-import '../chess/tactics/puzzle.dart';
 import '../features/tactics/my_games_block.dart';
-import '../features/tactics/puzzle_pane.dart';
-import '../features/tactics/tactics_panel.dart';
 import '../features/trainer/train_pane.dart';
 import '../features/trainer/trainer.dart';
 import '../ui/app_action.dart';
@@ -36,8 +27,7 @@ import '../workspace/workspace_view.dart';
 import 'board_actions.dart';
 import 'generate_doors.dart';
 import 'mode.dart';
-import 'mode_actions.dart';
-import 'my_games_doors.dart';
+import 'mode_view.dart';
 import 'sitting_in_view.dart';
 import 'top_bar.dart';
 import 'workspace_requests.dart';
@@ -79,36 +69,19 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   /// Who holds the board: a lesson first, then the Tree tab's free board.
   late final _claim = FirstClaim([_train.lines.board, _ws.tree.board]);
 
-  /// The reading card's tabs of each mode: which are open and which is up.
-  /// Each mode starts with its own — the builder its four, Tactics the
-  /// puzzle and its game — and keeps what the user did to them while the
-  /// window lasts, as the old viewer's did.
-  final _tabsByMode = <Mode, PaneTabs<WorkspaceTab>>{};
-
-  PaneTabs<WorkspaceTab> get _tabs =>
-      _tabsByMode[_requests.mode] ??= switch (_requests.mode) {
-        Mode.repertoires => newWorkspaceTabs(),
-        Mode.pgnViewer || Mode.study => readingTabs(),
-        Mode.tactics => puzzleTabs(),
-        Mode.myGames => bookTabs(),
-      }..addListener(_sitting.check);
-
-  late final _myGames = MyGamesDoors(
+  /// Each mode's list, tabs, Actions menu and what it adds to the
+  /// workspace; the window asks the one on screen.
+  late final _views = modeViews(
+    workspace: _ws,
     requests: _requests,
-    session: _ws.session,
-    book: _train.book,
+    documents: _docs,
+    training: _train,
   );
 
-  late final _modeActions = ModeActions(
-    requests: _requests,
-    session: _ws.session,
-    analysis: _ws.analysis,
-    gaps: _ws.gaps,
-    fill: _ws.fill,
-    viewer: _docs.viewer,
-    trainer: _train.puzzles,
-    myGames: _train.myGames,
-  );
+  ModeView get _view => _views[_requests.mode]!;
+
+  /// The reading card's tabs of the mode on screen.
+  PaneTabs<WorkspaceTab> get _tabs => _view.tabs;
 
   late final _sitting = SittingInView(
     trainer: _train.lines,
@@ -149,6 +122,9 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     super.initState();
     _outlineShown = _wantsOutline;
     _arrange();
+    for (final view in _views.values) {
+      view.tabs.addListener(_sitting.check);
+    }
     _sitting.check();
   }
 
@@ -157,8 +133,8 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     _sitting.dispose();
     _editing.dispose();
     _claim.dispose();
-    for (final tabs in _tabsByMode.values) {
-      tabs.dispose();
+    for (final view in _views.values) {
+      view.dispose();
     }
     _panes.dispose();
     super.dispose();
@@ -198,31 +174,9 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     requests: _requests,
   );
 
-  /// Starts a sitting, from [first] when the list asked for one, with the
-  /// Puzzle tab up.
-  void _play({Puzzle? first}) {
-    if (!mounted) return;
-    _tabs.show(WorkspaceTab.puzzle);
-    unawaited(
-      first == null ? _train.puzzles.start() : _train.puzzles.show(first),
-    );
-  }
-
-  /// Tactics starts with the engine off: it is for solving, and the engine
-  /// comes back with Analyze or E once an answer is on view.
   void _switchTo(Mode mode) {
     _requests.switchTo(mode);
-    if (mode == Mode.tactics && _ws.analysis.enabled) {
-      unawaited(_ws.analysis.disable());
-    }
-  }
-
-  /// The solved puzzle's game with the engine on: the Game tab, not
-  /// another mode.
-  void _analyze() {
-    if (!mounted) return;
-    _tabs.show(WorkspaceTab.moves);
-    unawaited(_ws.analysis.enable());
+    _view.entered();
   }
 
   /// A line the Train tab sent to be read: its chapter on the board at the
@@ -245,26 +199,26 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   void _engineMove(String uci) =>
       _ws.tree.watching ? _ws.tree.play(uci) : _ws.session.playMove(uci);
 
-  Widget _bookTab(BuildContext context) => BookPane(
-    book: _train.book,
-    session: _ws.session,
-    onReadBook: _myGames.readBook,
-  );
-
-  /// Whether the board has the file's game counter under it. Tactics' list
-  /// is the way to another puzzle, and My games walks its own list with the
-  /// arrows, not the saved file's order.
-  bool get _counted =>
-      _requests.mode != Mode.tactics && _requests.mode != Mode.myGames;
-
-  Widget _treeTab(BuildContext context) => TreePane(
-    session: _ws.session,
-    tree: _ws.tree,
-    // The file a move was found in: that file, in the builder, at the
-    // position the move leads to.
-    onOpen: (place) =>
-        unawaited(_requests.readInBuilder(place.ref, place.sans)),
-  );
+  /// The body of a tab the workspace does not draw: the mode's own first,
+  /// then the Train and Tree tabs every mode that has them shares.
+  Widget? _tabBody(BuildContext context, WorkspaceTab tab) =>
+      _view.tab(context, tab) ??
+      switch (tab) {
+        WorkspaceTab.train => TrainPane(
+          trainer: _train.lines,
+          onRead: (line) => unawaited(_readLine(line)),
+          offerBuilder: _view.offersBuilder,
+        ),
+        WorkspaceTab.tree => TreePane(
+          session: _ws.session,
+          tree: _ws.tree,
+          // The file a move was found in: that file, in the builder, at the
+          // position the move leads to.
+          onOpen: (place) =>
+              unawaited(_requests.readInBuilder(place.ref, place.sans)),
+        ),
+        _ => null,
+      };
 
   /// Space and ↓ are the puzzle's while one is on the board, and the
   /// document's otherwise; in My games ↑ and ↓ walk the list.
@@ -272,11 +226,11 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     if (_train.puzzles.up != null) _train.puzzles.showSolution();
   }
 
-  /// ↓ (1) / ↑ (−1) walk what is in front of the user: the book's games in
-  /// My games, the Prep tab's rows while it is up, the puzzles in a
-  /// sitting, else the file's games.
+  /// ↓ (1) / ↑ (−1) walk what is in front of the user: the mode's own list
+  /// when it has one (My games), the Prep tab's rows while it is up, the
+  /// puzzles in a sitting, else the file's games.
   void _walk(int by) {
-    if (_requests.mode == Mode.myGames) return _myGames.step(by);
+    if (_view.walk(by)) return;
     if (_tabs.selected == WorkspaceTab.prep && _generate.step(by)) return;
     final trainer = _train.puzzles;
     if (trainer.up != null) {
@@ -308,10 +262,9 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   }
 
   /// Everything the Actions menu offers now, in the mode on screen.
-  List<AppAction> _actions() => _modeActions.now(
-    tabs: _tabs,
+  List<AppAction> _actions() => _view.actions((
     editing: _editing,
-    board: boardActions(
+    board: () => boardActions(
       context,
       session: _ws.session,
       requests: _requests,
@@ -323,7 +276,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       generate: () => unawaited(_generate.generate(context, _tabs)),
       accounts: () => unawaited(editAccounts(context, _train.myGames)),
     ),
-  );
+  ));
 
   /// The same actions, typed for: a searchable list that the enter key
   /// takes the one match of.
@@ -384,50 +337,6 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     SingleActivator(key, meta: true): run,
   };
 
-  /// The mode's list, with the `«` that hides it in its top right corner:
-  /// the pane's edge is where the toggle lives, whichever mode fills it.
-  Widget _leftColumn() {
-    final toggle = ListToggle(shown: true, onPressed: _toggleList);
-    return switch (_requests.mode) {
-      Mode.repertoires => ListenableBuilder(
-        listenable: _ws.session,
-        builder: (context, _) => LibraryPanel(
-          library: _docs.library,
-          selected: _ws.session.source,
-          onOpen: (ref) => unawaited(_requests.open(ref)),
-          trailing: toggle,
-        ),
-      ),
-      Mode.study => StudyPanel(
-        studies: _docs.studies,
-        session: _ws.session,
-        onOpen: (study, chapter) =>
-            unawaited(_requests.open(study, game: chapter)),
-        trailing: toggle,
-      ),
-      Mode.pgnViewer => PgnViewerPanel(
-        viewer: _docs.viewer,
-        onOpen: (file) => unawaited(_requests.openFile(file)),
-        onBrowse: () => unawaited(_requests.browse()),
-        trailing: toggle,
-      ),
-      Mode.tactics => TacticsPanel(
-        set: _train.tactics,
-        trainer: _train.puzzles,
-        myGames: _train.myGames,
-        onPlay: _play,
-        trailing: toggle,
-      ),
-      Mode.myGames => MyGamesPanel(
-        book: _train.book,
-        session: _ws.session,
-        accounts: MyGamesBlock(games: _train.myGames),
-        onOpen: _myGames.open,
-        trailing: toggle,
-      ),
-    };
-  }
-
   /// The mode and the status are the requests'; a change to either redraws
   /// the window, as a change of mode must.
   @override
@@ -446,19 +355,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
               actions: _actions,
               // What the entries' enabled states read, heard only while the
               // menu is open: the bar itself shows none of it.
-              actionsChange: Listenable.merge([
-                _ws.session,
-                _ws.saver,
-                _ws.analysis,
-                _ws.gaps,
-                _ws.fill,
-                _docs.viewer,
-                _train.puzzles,
-                _train.myGames,
-                _train.book,
-                _editing,
-                _tabs,
-              ]),
+              actionsChange: Listenable.merge([_view.changes, _editing, _tabs]),
             ),
             const Divider(height: 1),
             if (_requests.status case final status?) ErrorBar(status),
@@ -489,7 +386,8 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   }
 
   Widget _pane(BuildContext context, Area area) => switch (area.data) {
-    _Pane.list => _leftColumn(),
+    // The mode's list, with the `«` that hides it in its top right corner.
+    _Pane.list => _view.list(ListToggle(shown: true, onPressed: _toggleList)),
     _Pane.outline => OutlinePanel(
       outline: _docs.outline,
       library: _docs.library,
@@ -500,30 +398,23 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       workspace: _ws,
       tabs: _tabs,
       editing: _editing,
-      moveMenu: _requests.mode == Mode.study
-          ? (path) => quizMenuItems(_ws.session, path)
-          : null,
-      onBoardMove: _boardMove,
-      puzzle: PuzzlePane(trainer: _train.puzzles, onAnalyze: _analyze),
-      onExplorerGame: (game) => unawaited(
-        _requests.openExplorerGame(
-          game,
-          source: _ws.explorer.choice.source,
-          ply: _ws.explorer.ply,
+      hooks: WorkspaceHooks(
+        header: _view.header,
+        gameCounter: _view.gameCounter,
+        moveMenu: _view.moveMenu,
+        tabBody: _tabBody,
+        boardClaim: _claim,
+        onBoardMove: _boardMove,
+        onEngineMove: _engineMove,
+        onExplorerGame: (game) => unawaited(
+          _requests.openExplorerGame(
+            game,
+            source: _ws.explorer.choice.source,
+            ply: _ws.explorer.ply,
+          ),
         ),
-      ),
-      header: _requests.mode != Mode.tactics,
-      gameCounter: _counted,
-      boardClaim: _claim,
-      onEngineMove: _engineMove,
-      treeTab: _treeTab,
-      onGenerate: () => unawaited(_generate.generate(context, _tabs)),
-      onFound: _generate.go,
-      bookTab: _bookTab,
-      trainTab: (_) => TrainPane(
-        trainer: _train.lines,
-        onRead: (line) => unawaited(_readLine(line)),
-        offerBuilder: _requests.mode != Mode.repertoires,
+        onGenerate: () => unawaited(_generate.generate(context, _tabs)),
+        onFound: _generate.go,
       ),
     ),
   };

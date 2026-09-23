@@ -1,0 +1,410 @@
+import 'dart:async';
+
+import 'package:dartchess/dartchess.dart' show Side;
+import 'package:flutter/widgets.dart';
+
+import '../chess/book/book_check.dart' show BookPlace;
+import '../features/library/library_panel.dart';
+import '../features/my_games/book_pane.dart';
+import '../features/my_games/game_book.dart';
+import '../features/my_games/my_games_panel.dart';
+import '../features/pgn_viewer/pgn_viewer_panel.dart';
+import '../features/study/quiz_menu.dart';
+import '../features/study/study_panel.dart';
+import '../chess/tactics/puzzle.dart';
+import '../features/tactics/my_games_block.dart';
+import '../features/tactics/puzzle_pane.dart';
+import '../features/tactics/tactics_actions.dart';
+import '../features/tactics/tactics_panel.dart';
+import '../storage/chapter_files.dart';
+import '../ui/app_action.dart';
+import '../ui/pane_tabs.dart';
+import '../workspace/chapter_commands.dart';
+import '../workspace/document_actions.dart';
+import '../workspace/move_tree_view.dart' show MoveMenu;
+import '../workspace/workspace.dart';
+import '../workspace/workspace_tabs.dart';
+import 'mode.dart';
+import 'workspace_requests.dart';
+
+/// What the window's own dialogs do, which the shell runs: they need its
+/// context. The Actions menu only points at them.
+typedef ShellDialogs = ({
+  VoidCallback saveCopy,
+  VoidCallback generate,
+  VoidCallback accounts,
+});
+
+/// What the Actions menu is built from besides the mode: whether the edit
+/// strip is open, the analysis board's entries (built only when a mode
+/// offers them, since they read the shell's context) and the dialogs.
+typedef ModeMenu = ({
+  ValueNotifier<bool> editing,
+  List<AppAction> Function() board,
+  ShellDialogs dialogs,
+});
+
+/// One mode as the window shows it: its list on the left, the tabs of its
+/// reading card, its Actions menu, and what it adds to the workspace.
+///
+/// The shell asks the mode on screen rather than asking which mode is on
+/// screen, so a mode's behaviour is in one class and a new mode is a new
+/// subclass, not a new arm in every `switch` of the window. Each keeps its
+/// own tabs for the life of the window, so what the user opened in one mode
+/// is still open when they come back to it.
+abstract base class ModeView {
+  ModeView(this.workspace, this.tabs);
+
+  final Workspace workspace;
+
+  /// The reading card's tabs in this mode: which are open and which is up.
+  final PaneTabs<WorkspaceTab> tabs;
+
+  /// The left column, with [toggle] — the `«` that hides it — in its corner.
+  Widget list(Widget toggle);
+
+  /// Everything the Actions menu offers in this mode now.
+  List<AppAction> actions(ModeMenu menu);
+
+  /// What the entries' enabled states read, heard only while the menu is
+  /// open.
+  Listenable get changes;
+
+  /// Whether the card is headed with the game's players.
+  bool get header => true;
+
+  /// Whether the board has the file's game counter under it.
+  bool get gameCounter => true;
+
+  /// Whether the Train tab offers to read a line in the builder: from
+  /// anywhere but the builder itself.
+  bool get offersBuilder => true;
+
+  /// What a right-click on a move offers.
+  MoveMenu? get moveMenu => null;
+
+  /// The body of a tab only this mode has, or null.
+  Widget? tab(BuildContext context, WorkspaceTab tab) => null;
+
+  /// ↓ (1) / ↑ (−1) when the mode walks a list of its own; answers whether
+  /// it took the key.
+  bool walk(int by) => false;
+
+  /// Called when the user switches to this mode.
+  void entered() {}
+
+  void dispose() => tabs.dispose();
+
+  /// What can be done to the document on the board, in every mode that
+  /// shows one as a document.
+  List<AppAction> documentEntries(ModeMenu menu) => documentActions(
+    session: workspace.session,
+    analysis: workspace.analysis,
+    editing: menu.editing,
+    onSaveCopy: menu.dialogs.saveCopy,
+  );
+}
+
+/// The three modes whose list opens a document: the builder, the viewer and
+/// Study. They share the Actions menu and differ in the list and in the one
+/// file entry.
+abstract base class _DocumentModeView extends ModeView {
+  _DocumentModeView(super.workspace, super.tabs, this.requests);
+
+  final WorkspaceRequests requests;
+
+  /// Pasting a repertoire in the builder, closing the file elsewhere.
+  AppAction get fileEntry;
+
+  @override
+  Listenable get changes => Listenable.merge([
+    workspace.session,
+    workspace.saver,
+    workspace.analysis,
+    workspace.gaps,
+    workspace.fill,
+  ]);
+
+  @override
+  List<AppAction> actions(ModeMenu menu) => [
+    AppAction(
+      'Open PGN file…',
+      () => unawaited(requests.openPgnFile()),
+      shortcut: 'Ctrl+O',
+    ),
+    fileEntry,
+    ...menu.board(),
+    ...documentEntries(menu),
+    ..._repertoire(menu.dialogs),
+    ...tabActions(tabs),
+  ];
+
+  /// The chapter as a repertoire — its gaps, its side and the fill — or,
+  /// on the analysis board, the search from it.
+  List<AppAction> _repertoire(ShellDialogs dialogs) {
+    final session = workspace.session;
+    return [
+      AppAction(
+        'Next gap',
+        (workspace.gaps.walk?.gaps ?? const []).isEmpty
+            ? null
+            : workspace.gaps.nextGap,
+        group: 'Repertoire',
+      ),
+      if (session.chapter case final chapter? when chapter.game == null)
+        AppAction(
+          chapter.side == Side.white ? 'Play as Black' : 'Play as White',
+          () => setSide(session, chapter.side.opposite),
+          group: 'Repertoire',
+        ),
+      AppAction(
+        session.isScratch ? 'Generate from here…' : 'Fill gaps from here…',
+        workspace.fill.canStart ? dialogs.generate : null,
+        shortcut: 'Ctrl+G',
+        group: session.isScratch ? 'Analysis' : 'Repertoire',
+      ),
+    ];
+  }
+}
+
+/// The Repertoire builder: the user's repertoires on the left.
+final class RepertoiresView extends _DocumentModeView {
+  RepertoiresView(Workspace workspace, WorkspaceRequests requests, this._modes)
+    : super(workspace, newWorkspaceTabs(), requests);
+
+  final DocumentModes _modes;
+
+  @override
+  bool get offersBuilder => false;
+
+  @override
+  Widget list(Widget toggle) => ListenableBuilder(
+    listenable: workspace.session,
+    builder: (context, _) => LibraryPanel(
+      library: _modes.library,
+      selected: workspace.session.source,
+      onOpen: (ref) => unawaited(requests.open(ref)),
+      trailing: toggle,
+    ),
+  );
+
+  @override
+  AppAction get fileEntry => AppAction(
+    'Paste PGN',
+    () => unawaited(requests.pasteRepertoire()),
+    // On the analysis board Ctrl+V pastes onto the board instead.
+    shortcut: workspace.session.isScratch ? null : 'Ctrl+V',
+  );
+}
+
+/// The files the PGN Viewer has open or has had open.
+final class ViewerView extends _DocumentModeView {
+  ViewerView(Workspace workspace, WorkspaceRequests requests, this._modes)
+    : super(workspace, readingTabs(), requests);
+
+  final DocumentModes _modes;
+
+  @override
+  Listenable get changes => Listenable.merge([super.changes, _modes.viewer]);
+
+  @override
+  Widget list(Widget toggle) => PgnViewerPanel(
+    viewer: _modes.viewer,
+    onOpen: (file) => unawaited(requests.openFile(file)),
+    onBrowse: () => unawaited(requests.browse()),
+    trailing: toggle,
+  );
+
+  @override
+  AppAction get fileEntry => AppAction(
+    'Close file',
+    _modes.viewer.file == null ? null : () => unawaited(requests.closeFile()),
+  );
+}
+
+/// Study: the studies and their chapters, and the quiz markers a
+/// right-click puts on a move.
+final class StudyView extends _DocumentModeView {
+  StudyView(Workspace workspace, WorkspaceRequests requests, this._modes)
+    : super(workspace, readingTabs(), requests);
+
+  final DocumentModes _modes;
+
+  @override
+  Listenable get changes => Listenable.merge([super.changes, _modes.viewer]);
+
+  @override
+  MoveMenu get moveMenu =>
+      (path) => quizMenuItems(workspace.session, path);
+
+  @override
+  Widget list(Widget toggle) => StudyPanel(
+    studies: _modes.studies,
+    session: workspace.session,
+    onOpen: (study, chapter) => unawaited(requests.open(study, game: chapter)),
+    trailing: toggle,
+  );
+
+  @override
+  AppAction get fileEntry => AppAction(
+    'Close file',
+    _modes.viewer.file == null ? null : () => unawaited(requests.closeFile()),
+  );
+}
+
+/// Tactics: the puzzle set on the left, the puzzle and the game it came
+/// from on the card. It is for solving, so it starts with the engine off
+/// and neither heads the card nor counts the file's games: the puzzle says
+/// whose game it was and the list is the way to another.
+final class TacticsView extends ModeView {
+  TacticsView(Workspace workspace, this._training)
+    : super(workspace, puzzleTabs());
+
+  final TrainingModes _training;
+
+  @override
+  bool get header => false;
+
+  @override
+  bool get gameCounter => false;
+
+  @override
+  Listenable get changes => Listenable.merge([
+    workspace.session,
+    workspace.analysis,
+    _training.puzzles,
+    _training.myGames,
+  ]);
+
+  @override
+  void entered() {
+    if (workspace.analysis.enabled) unawaited(workspace.analysis.disable());
+  }
+
+  /// Starts a sitting, from [first] when the list asked for one, with the
+  /// Puzzle tab up.
+  void _play({Puzzle? first}) {
+    tabs.show(WorkspaceTab.puzzle);
+    final puzzles = _training.puzzles;
+    unawaited(first == null ? puzzles.start() : puzzles.show(first));
+  }
+
+  /// The solved puzzle's game with the engine on: the Game tab, not
+  /// another mode.
+  void _analyze() {
+    tabs.show(WorkspaceTab.moves);
+    unawaited(workspace.analysis.enable());
+  }
+
+  @override
+  Widget list(Widget toggle) => TacticsPanel(
+    set: _training.tactics,
+    trainer: _training.puzzles,
+    myGames: _training.myGames,
+    onPlay: _play,
+    trailing: toggle,
+  );
+
+  @override
+  Widget? tab(BuildContext context, WorkspaceTab tab) =>
+      tab == WorkspaceTab.puzzle
+      ? PuzzlePane(trainer: _training.puzzles, onAnalyze: _analyze)
+      : null;
+
+  @override
+  List<AppAction> actions(ModeMenu menu) => tacticsActions(
+    trainer: _training.puzzles,
+    games: _training.myGames,
+    session: workspace.session,
+    analysis: workspace.analysis,
+    tabs: tabs,
+    onAccounts: menu.dialogs.accounts,
+  );
+}
+
+/// My games: the user's games read against their repertoires. ↑ and ↓
+/// walk its own list, not the saved file's order, so the board has no
+/// game counter; a game opens at the moment its verdict is about.
+final class MyGamesView extends ModeView {
+  MyGamesView(Workspace workspace, this._requests, this._training)
+    : super(workspace, bookTabs());
+
+  final WorkspaceRequests _requests;
+  final TrainingModes _training;
+
+  GameBook get _book => _training.book;
+
+  @override
+  bool get gameCounter => false;
+
+  @override
+  Listenable get changes => Listenable.merge([
+    workspace.session,
+    workspace.saver,
+    workspace.analysis,
+    _training.myGames,
+    _book,
+  ]);
+
+  /// The game on the board, seen from the user's side, at its moment.
+  void _open(CheckedGame checked) => unawaited(
+    _requests.openGame(
+      checked.file,
+      game: checked.game.index,
+      ply: checked.moment,
+      side: checked.game.side,
+    ),
+  );
+
+  /// The file of the book at [place], in the builder.
+  void _readBook(BookPlace place) => unawaited(
+    _requests.readInBuilder(ChapterRef.at(place.file.path), place.sans),
+  );
+
+  @override
+  bool walk(int by) {
+    final session = workspace.session;
+    final next = _book.step(session.source, session.game, by);
+    if (next != null) _open(next);
+    return true;
+  }
+
+  @override
+  Widget list(Widget toggle) => MyGamesPanel(
+    book: _book,
+    session: workspace.session,
+    accounts: MyGamesBlock(games: _training.myGames),
+    onOpen: _open,
+    trailing: toggle,
+  );
+
+  @override
+  Widget? tab(BuildContext context, WorkspaceTab tab) =>
+      tab == WorkspaceTab.book
+      ? BookPane(book: _book, session: workspace.session, onReadBook: _readBook)
+      : null;
+
+  @override
+  List<AppAction> actions(ModeMenu menu) => [
+    ...myGamesActions(_training.myGames, onAccounts: menu.dialogs.accounts),
+    ...documentEntries(menu),
+    ...tabActions(tabs),
+  ];
+}
+
+/// The view of each mode, made once for the window.
+Map<Mode, ModeView> modeViews({
+  required Workspace workspace,
+  required WorkspaceRequests requests,
+  required DocumentModes documents,
+  required TrainingModes training,
+}) => {
+  for (final mode in Mode.values)
+    mode: switch (mode) {
+      Mode.repertoires => RepertoiresView(workspace, requests, documents),
+      Mode.pgnViewer => ViewerView(workspace, requests, documents),
+      Mode.study => StudyView(workspace, requests, documents),
+      Mode.tactics => TacticsView(workspace, training),
+      Mode.myGames => MyGamesView(workspace, requests, training),
+    },
+};

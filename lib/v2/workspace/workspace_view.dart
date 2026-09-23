@@ -17,17 +17,72 @@ import 'explorer_pane.dart';
 import 'fill_gaps.dart';
 import 'fill_line.dart';
 import 'game_counter.dart';
-import 'game_fetcher.dart';
 import 'gap_hunt.dart';
 import 'move_note.dart';
 import 'move_tree_view.dart';
 import 'nav_row.dart';
 import 'prep_pane.dart';
 import 'reading_header.dart';
-import 'replies.dart';
 import 'replies_pane.dart';
 import 'workspace.dart';
 import 'workspace_tabs.dart';
+
+/// What the window around the workspace adds to it: the mode's own tabs
+/// and right-click menu, where a move goes when it is not the document's,
+/// and the ways out of the card into another mode. The default is a plain
+/// document: every move into it, nothing of a mode's own.
+final class WorkspaceHooks {
+  const WorkspaceHooks({
+    this.header = true,
+    this.gameCounter = true,
+    this.moveMenu,
+    this.tabBody,
+    this.boardClaim,
+    this.onBoardMove,
+    this.onEngineMove,
+    this.onExplorerGame,
+    this.onGenerate,
+    this.onFound,
+  });
+
+  /// Asked to open a game the explorer lists, which is the shell's
+  /// business: another mode shows it.
+  final ValueChanged<ExplorerGame>? onExplorerGame;
+
+  /// What a right-click on a move offers, which is the mode's business: a
+  /// study marks where a quiz starts, and nothing else offers anything yet.
+  final MoveMenu? moveMenu;
+
+  /// A position another owner is showing on the board instead of the
+  /// document's, while it holds one: a lesson.
+  final ValueListenable<BoardClaim?>? boardClaim;
+
+  /// Opens the search dialog: the Prep tab's `Generate…`. Null leaves it
+  /// off.
+  final VoidCallback? onGenerate;
+
+  /// Puts the found item at this index on the board: a Prep tab row.
+  final ValueChanged<int>? onFound;
+
+  /// Where a move made on the board goes when not into the document: a
+  /// puzzle judges it. Null plays it into the document.
+  final ValueChanged<String>? onBoardMove;
+
+  /// Where the moves of a clicked engine line go when not into the
+  /// document: the Tree tab's free board. Null plays them into it.
+  final ValueChanged<String>? onEngineMove;
+
+  /// Whether the card is headed with the game's players and the board has
+  /// the file's game counter under it. Tactics has neither: the puzzle says
+  /// whose game it was and the list is how to get to another.
+  final bool header;
+  final bool gameCounter;
+
+  /// The body of a tab the workspace does not draw itself — Train, Tree,
+  /// Puzzle, Book — which the mode on screen or the shell supplies. A tab it
+  /// answers null for is empty.
+  final Widget? Function(BuildContext context, WorkspaceTab tab)? tabBody;
+}
 
 /// The board with the game counter and the move's note under it on the
 /// left; on the right the reading card, top to bottom in a fixed order: the
@@ -43,27 +98,11 @@ class WorkspaceView extends StatelessWidget {
     required this.workspace,
     required this.tabs,
     required this.editing,
-    this.moveMenu,
-    this.onExplorerGame,
-    this.boardClaim,
-    this.trainTab,
-    this.treeTab,
-    this.onGenerate,
-    this.onFound,
-    this.bookTab,
-    this.onBoardMove,
-    this.onEngineMove,
-    this.puzzle,
-    this.header = true,
-    this.gameCounter = true,
+    this.hooks = const WorkspaceHooks(),
   });
 
   /// The document and every owner worked out from its cursor.
   final Workspace workspace;
-
-  /// Asked to open a game the explorer lists, which is the shell's
-  /// business: another mode shows it.
-  final ValueChanged<ExplorerGame>? onExplorerGame;
 
   /// Which of the card's tabs are open and which is up. The shell owns it,
   /// as it owns [editing]: the keys and the Actions menu turn it too.
@@ -73,46 +112,8 @@ class WorkspaceView extends StatelessWidget {
   /// and Ctrl+E turn it, and the strip's Done turns it off.
   final ValueNotifier<bool> editing;
 
-  /// What a right-click on a move offers, which is the mode's business: a
-  /// study marks where a quiz starts, and nothing else offers anything yet.
-  final MoveMenu? moveMenu;
-
-  /// A position another owner is showing on the board instead of the
-  /// document's, while it holds one: a lesson.
-  final ValueListenable<BoardClaim?>? boardClaim;
-
-  /// The Train tab's body, which is a feature's: the shell hands it in.
-  final WidgetBuilder? trainTab;
-
-  /// The Tree tab's body, which the shell builds: it opens other files.
-  final WidgetBuilder? treeTab;
-
-  /// Opens the search dialog: the Prep tab's `Generate…`. Null leaves it
-  /// off.
-  final VoidCallback? onGenerate;
-
-  /// Puts the found item at this index on the board: a Prep tab row.
-  final ValueChanged<int>? onFound;
-
-  /// The Book tab's body, which is the My games mode's.
-  final WidgetBuilder? bookTab;
-
-  /// Where a move made on the board goes when not into the document: a
-  /// puzzle judges it. Null plays it into the document.
-  final ValueChanged<String>? onBoardMove;
-
-  /// Where the moves of a clicked engine line go when not into the
-  /// document: the Tree tab's free board. Null plays them into it.
-  final ValueChanged<String>? onEngineMove;
-
-  /// What the Puzzle tab shows, which is the Tactics mode's.
-  final Widget? puzzle;
-
-  /// Whether the card is headed with the game's players and the board has
-  /// the file's game counter under it. Tactics has neither: the puzzle says
-  /// whose game it was and the list is how to get to another.
-  final bool header;
-  final bool gameCounter;
+  /// What the mode on screen and the shell add.
+  final WorkspaceHooks hooks;
 
   /// The board and the card beside it, with a divider the user can drag
   /// between them. The card starts the wider of the two: training, the
@@ -128,13 +129,13 @@ class WorkspaceView extends StatelessWidget {
   Widget _board(BuildContext context) => Padding(
     padding: const EdgeInsets.all(Space.l),
     child: ValueListenableBuilder<BoardClaim?>(
-      valueListenable: boardClaim ?? const _NoClaim(),
+      valueListenable: hooks.boardClaim ?? const _NoClaim(),
       builder: (context, claim, _) => claim == null
           ? _BoardAndCounter(
               session: workspace.session,
               settings: workspace.settings,
-              onMove: onBoardMove ?? workspace.session.playMove,
-              counter: gameCounter,
+              onMove: hooks.onBoardMove ?? workspace.session.playMove,
+              counter: hooks.gameCounter,
             )
           : _ClaimedBoard(claim: claim, settings: workspace.settings),
     ),
@@ -152,7 +153,7 @@ class WorkspaceView extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (header)
+          if (hooks.header)
             ReadingHeader(session: workspace.session)
           else
             const SizedBox(height: Space.s),
@@ -168,7 +169,7 @@ class WorkspaceView extends StatelessWidget {
               child: EnginePane(
                 session: workspace.session,
                 analysis: workspace.analysis,
-                onMove: onEngineMove,
+                onMove: hooks.onEngineMove,
               ),
             ),
           ),
@@ -177,23 +178,7 @@ class WorkspaceView extends StatelessWidget {
             child: FillLine(fill: workspace.fill),
           ),
           Expanded(
-            child: _Tabbed(
-              session: workspace.session,
-              replies: workspace.replies,
-              gaps: workspace.gaps,
-              explorer: workspace.explorer,
-              games: workspace.games,
-              tabs: tabs,
-              moveMenu: moveMenu,
-              onExplorerGame: onExplorerGame,
-              trainTab: trainTab,
-              treeTab: treeTab,
-              bookTab: bookTab,
-              puzzle: puzzle,
-              fill: workspace.fill,
-              onGenerate: onGenerate,
-              onFound: onFound,
-            ),
+            child: _Tabbed(workspace: workspace, tabs: tabs, hooks: hooks),
           ),
           EditStrip(
             session: workspace.session,
@@ -265,68 +250,53 @@ enum _Side { board, card }
 /// [_body], and one more of [_trailing] when it owns a control.
 class _Tabbed extends StatelessWidget {
   const _Tabbed({
-    required this.session,
-    required this.replies,
-    required this.gaps,
-    required this.explorer,
-    required this.games,
+    required this.workspace,
     required this.tabs,
-    required this.moveMenu,
-    required this.onExplorerGame,
-    required this.trainTab,
-    required this.treeTab,
-    required this.bookTab,
-    required this.puzzle,
-    required this.fill,
-    required this.onGenerate,
-    required this.onFound,
+    required this.hooks,
   });
 
-  final DocumentSession session;
-  final Replies replies;
-  final GapHunt gaps;
-  final Explorer explorer;
-  final GameFetcher games;
+  final Workspace workspace;
   final PaneTabs<WorkspaceTab> tabs;
-  final MoveMenu? moveMenu;
-  final ValueChanged<ExplorerGame>? onExplorerGame;
-  final WidgetBuilder? trainTab;
-  final WidgetBuilder? treeTab;
-  final WidgetBuilder? bookTab;
-  final Widget? puzzle;
-  final FillGaps fill;
-  final VoidCallback? onGenerate;
-  final ValueChanged<int>? onFound;
+  final WorkspaceHooks hooks;
 
   Widget _body(BuildContext context, WorkspaceTab tab) => switch (tab) {
-    WorkspaceTab.moves => MoveTreeView(session: session, moveMenu: moveMenu),
-    WorkspaceTab.train => trainTab?.call(context) ?? const SizedBox.shrink(),
+    WorkspaceTab.moves => MoveTreeView(
+      session: workspace.session,
+      moveMenu: hooks.moveMenu,
+    ),
+    WorkspaceTab.train => _supplied(context, tab),
     WorkspaceTab.replies => RepliesPane(
-      session: session,
-      replies: replies,
-      gaps: gaps,
+      session: workspace.session,
+      replies: workspace.replies,
+      gaps: workspace.gaps,
     ),
     WorkspaceTab.explorer => ExplorerPane(
-      session: session,
-      explorer: explorer,
-      games: games,
-      onOpenGame: onExplorerGame,
+      session: workspace.session,
+      explorer: workspace.explorer,
+      games: workspace.games,
+      onOpenGame: hooks.onExplorerGame,
     ),
-    WorkspaceTab.tree => treeTab?.call(context) ?? const SizedBox.shrink(),
+    WorkspaceTab.tree => _supplied(context, tab),
     WorkspaceTab.prep => PrepPane(
-      fill: fill,
-      session: session,
-      onGo: onFound ?? _nowhere,
+      fill: workspace.fill,
+      session: workspace.session,
+      onGo: hooks.onFound ?? _nowhere,
     ),
-    WorkspaceTab.puzzle => puzzle ?? const SizedBox.shrink(),
-    WorkspaceTab.book => bookTab?.call(context) ?? const SizedBox.shrink(),
+    WorkspaceTab.puzzle => _supplied(context, tab),
+    WorkspaceTab.book => _supplied(context, tab),
   };
 
   static void _nowhere(int index) {}
 
+  Widget _supplied(BuildContext context, WorkspaceTab tab) =>
+      hooks.tabBody?.call(context, tab) ?? const SizedBox.shrink();
+
   Widget? _trailing(WorkspaceTab tab) => switch (tab) {
-    WorkspaceTab.replies => _NextGap(gaps: gaps),
-    WorkspaceTab.prep => _Generate(fill: fill, onGenerate: onGenerate),
+    WorkspaceTab.replies => _NextGap(gaps: workspace.gaps),
+    WorkspaceTab.prep => _Generate(
+      fill: workspace.fill,
+      onGenerate: hooks.onGenerate,
+    ),
     WorkspaceTab.moves ||
     WorkspaceTab.train ||
     WorkspaceTab.tree ||
