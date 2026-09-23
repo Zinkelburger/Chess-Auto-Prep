@@ -190,8 +190,8 @@ reach the same explorer; the tab bar disappears entirely during solitaire.
 - **One Actions menu** in the top bar, the same shape whatever mode opened the document, with Ctrl+K
   as a typeable palette over the same list.
 - **Solitaire is an action of the viewer**, not a mode. **A file outside Documents is copied into
-  `pgn_collections` on open** (default on; a setting later). Autosave stays on; Scid export and
-  paging remain open questions.
+  `pgn_collections` on open** (default on; a setting later). Autosave was kept here; superseded
+  on 2026-09-23 (below). Scid export and paging remain open questions.
 - **`Tree` and `Database explorer` are one `Explorer` tab** of the reading card (owner, 2026-09-22;
   `workspace.md`). The old `Tree` tab's merged opening tree of the open file is the `This file`
   source in the tab's source row, beside `My games`, `Masters`, `Lichess` and `TWIC`; the old app's
@@ -230,3 +230,15 @@ reach the same explorer; the tab bar disappears entirely during solitaire.
   the old header rules (`contains`, `excludes`, `is`, `regex`, `≥`, `≤`, `Player` on either
   colour, `;` between names) and apply 300 ms after typing rests; another file clears them. Not
   built: position and move-sequence filters, the saved slice per path, `Check filters`.
+
+## Owner decisions (2026-09-23)
+
+- **Edits in the viewer are not saved until the user saves them.** Moves played on the board,
+  notes and glyphs are shown at once but held in memory (`DocumentSession.holdsEdits`, on while the
+  viewer is up). The edit strip then shows `Unsaved changes` with `Discard` and `Save` (Ctrl+S; also
+  in the Actions menu); Ctrl+Z takes held edits back one at a time. Opening another file or game
+  file, or reloading, drops them without asking. Once an edit is held, later edits join it in every
+  mode until it is saved or discarded. The builder and Study keep autosaving.
+- **No colour for the unsaved state**, and **no snackbars anywhere in v2**: deletions say nothing
+  (Ctrl+Z undoes them), and a failure goes to the status bar under the top bar, which has a Close
+  button and, when there is a way out, one action such as Reload.
