@@ -3,7 +3,6 @@ import 'package:chess_auto_prep/v2/chess/tactics/game_ids.dart';
 import 'package:chess_auto_prep/v2/storage/my_accounts.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:dartchess/dartchess.dart' show Side;
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -53,8 +52,11 @@ void main() {
   ) async {
     await toMyGames(tester);
     expect(w.requests.mode, Mode.myGames);
-    expect(find.text('You left book: 2...e6 (book 2...d6)'), findsOneWidget);
-    expect(find.text('Book ended after 3...cxd4'), findsOneWidget);
+    expect(find.text('2...e6 left book', findRichText: true), findsOneWidget);
+    expect(
+      find.text('3...cxd4 book ended', findRichText: true),
+      findsOneWidget,
+    );
     for (final tab in ['Book', 'Game', 'Tree']) {
       expect(find.text(tab), findsOneWidget, reason: tab);
     }
@@ -64,7 +66,7 @@ void main() {
   testWidgets('a game opens from the user\'s side at the move that left the '
       'book, and the arrows walk the list', (tester) async {
     await toMyGames(tester);
-    await tester.tap(find.text('You left book: 2...e6 (book 2...d6)'));
+    await tester.tap(find.text('2...e6 left book', findRichText: true));
     await tester.pumpAndSettle();
     expect(w.session.game, 1);
     expect(w.session.orientation, Side.black);
@@ -80,7 +82,7 @@ void main() {
     tester,
   ) async {
     await toMyGames(tester);
-    await tester.tap(find.text('Book ended after 3...cxd4'));
+    await tester.tap(find.text('3...cxd4 book ended', findRichText: true));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Open in builder'));
     await tester.pumpAndSettle();

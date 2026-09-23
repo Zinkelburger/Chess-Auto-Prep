@@ -20,6 +20,21 @@ String verdictLine(CheckedGame checked) => switch (checked.verdict) {
     'Book ended after ${checked.game.moves[ply - 1].label}',
 };
 
+/// A row's short form of the verdict: the move it is about, when there is
+/// one, and a few words — `6.f3` `left book` — so a narrow column still
+/// shows the move.
+(String, String) verdictTag(CheckedGame checked) => switch (checked.verdict) {
+  NoBook() => ('', 'no ${sideName(checked.game.side)} book'),
+  OtherOpening() => ('', 'another opening'),
+  InBookThroughout() => ('', 'in book to the end'),
+  LeftBook(kind: Deviation.mine, :final played) => (played, 'left book'),
+  LeftBook(kind: Deviation.theirs, :final played) => (played, 'not in book'),
+  LeftBook(kind: Deviation.bookEnded, :final ply) => (
+    checked.game.moves[ply - 1].label,
+    'book ended',
+  ),
+};
+
 /// `White`, `Black`.
 String sideName(Side side) => side == Side.white ? 'White' : 'Black';
 

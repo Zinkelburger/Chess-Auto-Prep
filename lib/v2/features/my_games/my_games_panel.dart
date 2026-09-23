@@ -119,7 +119,12 @@ class _MyGamesPanelState extends State<MyGamesPanel> {
           ],
           selected: {_view},
           showSelectedIcon: false,
-          style: const ButtonStyle(visualDensity: VisualDensity.compact),
+          style: const ButtonStyle(
+            visualDensity: VisualDensity.compact,
+            padding: WidgetStatePropertyAll(
+              EdgeInsets.symmetric(horizontal: Space.xs),
+            ),
+          ),
           onSelectionChanged: (picked) => _show(picked.single),
         ),
       ),
@@ -225,8 +230,7 @@ class _CountLine extends StatelessWidget {
 }
 
 /// One game: who it was against, how it went and when on the first line,
-/// cut short in a narrow column;
-/// what the book says on the second, in full ink when the game left it.
+/// cut short in a narrow column; what the book says on the second.
 class _GameRow extends StatelessWidget {
   const _GameRow({
     required this.checked,
@@ -244,7 +248,6 @@ class _GameRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final game = checked.game;
-    final left = checked.verdict is LeftBook;
     return Material(
       color: open ? theme.colorScheme.surfaceContainerHighest : null,
       child: InkWell(
@@ -261,18 +264,39 @@ class _GameRow extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              Text(
-                verdictLine(checked),
-                style: left
-                    ? monoText.copyWith(color: theme.colorScheme.onSurface)
-                    : theme.textTheme.labelSmall,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
+              _Tag(checked: checked),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The move a verdict is about in full ink, then what happened there in
+/// muted words: `6.f3 left book`.
+class _Tag extends StatelessWidget {
+  const _Tag({required this.checked});
+
+  final CheckedGame checked;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final (move, words) = verdictTag(checked);
+    return Text.rich(
+      TextSpan(
+        children: [
+          if (move.isNotEmpty)
+            TextSpan(
+              text: '$move ',
+              style: monoText.copyWith(color: theme.colorScheme.onSurface),
+            ),
+          TextSpan(text: words, style: theme.textTheme.labelSmall),
+        ],
+      ),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
     );
   }
 }
@@ -350,6 +374,7 @@ class _WayRow extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
+                  const SizedBox(width: Space.s),
                   Text(
                     count == 1 ? '1 game' : '$count games',
                     style: theme.textTheme.labelSmall,
