@@ -21,6 +21,8 @@ class TopBar extends StatelessWidget {
     required this.onSettings,
     required this.listShown,
     required this.onToggleList,
+    required this.positionsShown,
+    required this.onTogglePositions,
     required this.actions,
     required this.actionsChange,
   });
@@ -35,6 +37,11 @@ class TopBar extends StatelessWidget {
   final VoidCallback onSettings;
   final bool listShown;
   final VoidCallback onToggleList;
+
+  /// Whether the list column shows the Positions the searches found; null
+  /// in a mode with a screen of its own, which has no list column.
+  final bool? positionsShown;
+  final VoidCallback onTogglePositions;
 
   /// Everything the Actions menu offers, asked each time it opens rather
   /// than each time something it reads changes: the engine alone would ask
@@ -57,6 +64,10 @@ class TopBar extends StatelessWidget {
           _ModeMenu(mode: mode, onMode: onMode, offered: offered),
           const SizedBox(width: Space.s),
           _ActionsMenu(actions: actions, changes: actionsChange),
+          if (positionsShown case final shown?) ...[
+            const SizedBox(width: Space.s),
+            _PositionsButton(shown: shown, onPressed: onTogglePositions),
+          ],
           const Spacer(),
           IconButton(
             icon: const Icon(Icons.settings_outlined, size: IconSize.action),
@@ -225,6 +236,35 @@ class _ActionsMenuState extends State<_ActionsMenu> {
           label: const Text('Actions'),
         ),
       ),
+    );
+  }
+}
+
+/// Puts the Positions in the list column, or the mode's own list back:
+/// the same column in every mode, so the switch sits with the menus rather
+/// than in each list's own corner. Pressed in while the Positions show.
+class _PositionsButton extends StatelessWidget {
+  const _PositionsButton({required this.shown, required this.onPressed});
+
+  final bool shown;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = const Text('Positions');
+    const icon = Icon(Icons.travel_explore, size: IconSize.action);
+    return Tooltip(
+      message: withKey(
+        shown ? 'Back to the list' : 'What the searches found',
+        'Ctrl+P',
+      ),
+      child: shown
+          ? FilledButton.tonalIcon(
+              onPressed: onPressed,
+              icon: icon,
+              label: label,
+            )
+          : TextButton.icon(onPressed: onPressed, icon: icon, label: label),
     );
   }
 }

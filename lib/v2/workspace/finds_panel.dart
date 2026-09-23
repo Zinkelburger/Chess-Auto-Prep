@@ -7,6 +7,7 @@ import '../chess/fen.dart';
 import '../chess/generation/finds.dart';
 import '../chess/pgn/tree_edit.dart' show positionOf;
 import '../storage/finds_store.dart';
+import '../ui/choice_field.dart';
 import '../ui/row_actions.dart';
 import '../ui/theme.dart';
 import 'finds.dart';
@@ -184,12 +185,12 @@ class _Order extends StatelessWidget {
         ),
         ButtonSegment(
           value: FindOrder.reach,
-          label: Text('Common'),
+          label: Text('Often'),
           tooltip: 'How often a game gets there',
         ),
         ButtonSegment(
           value: FindOrder.newest,
-          label: Text('Newest'),
+          label: Text('New'),
           tooltip: 'The last found first',
         ),
       ],
@@ -206,28 +207,30 @@ class _Order extends StatelessWidget {
   );
 }
 
+/// Which kind is shown: every kind, or one, typed or picked.
 class _Kinds extends StatelessWidget {
   const _Kinds({required this.finds});
 
   final Finds finds;
 
+  static const _all = 'Every kind';
+
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.m, 0),
-    child: Wrap(
-      spacing: Space.xs,
-      runSpacing: Space.xs,
-      children: [
-        for (final kind in FindKind.values)
-          FilterChip(
-            label: Text(kindName(kind)),
-            tooltip: _kindTip(kind),
-            selected: finds.kinds.contains(kind),
-            showCheckmark: false,
-            visualDensity: VisualDensity.compact,
-            onSelected: (_) => finds.toggle(kind),
-          ),
-      ],
+    child: ChoiceField(
+      text: switch (finds.kind) {
+        null => _all,
+        final kind => kindName(kind),
+      },
+      options: [_all, for (final kind in FindKind.values) kindName(kind)],
+      hint: 'Kind',
+      onChanged: (typed) {
+        if (typed == _all) return finds.show(null);
+        for (final kind in FindKind.values) {
+          if (kindName(kind) == typed) return finds.show(kind);
+        }
+      },
     ),
   );
 }
@@ -314,11 +317,11 @@ class _FindRow extends StatelessWidget {
                       Text.rich(
                         TextSpan(
                           children: [
-                            TextSpan(text: '${kindName(find.kind)}  '),
                             TextSpan(
                               text: keyMoveText(kept),
                               style: monoText.copyWith(color: scheme.onSurface),
                             ),
+                            TextSpan(text: '  ${kindName(find.kind)}'),
                           ],
                         ),
                         style: theme.textTheme.bodyMedium,
@@ -358,24 +361,24 @@ String kindName(FindKind kind) => switch (kind) {
   FindKind.practical => 'Practical',
 };
 
-String _kindTip(FindKind kind) => switch (kind) {
-  FindKind.trap =>
-    'A reply they play often that throws away half a pawn or more',
-  FindKind.onlyMove => 'One move of yours holds; the rest lose',
-  FindKind.theirOnlyMove =>
-    'One reply holds for them, and they find it less than half the time',
-  FindKind.practical =>
-    'Not the engine\'s first choice, but it scores better against them',
-};
-
-/// The move the find is about, numbered, a blunder marked `?`.
+/// The move the find is about and the one before it, numbered — so two
+/// finds of the same move in different lines read apart — a blunder marked
+/// `?` and an only move `!`.
 String keyMoveText(KeptFind kept) {
   final find = kept.find;
-  if (find.keyPly >= find.sans.length) return '';
-  final (number, black) = _moveNumber(kept.rootFen, find.keyPly);
-  final san = find.sans[find.keyPly];
-  final mark = find.kind == FindKind.trap ? '?' : '';
-  return black ? '$number…$san$mark' : '$number.$san$mark';
+  final key = find.keyPly;
+  if (key >= find.sans.length) return '';
+  final mark = switch (find.kind) {
+    FindKind.trap => '?',
+    FindKind.onlyMove || FindKind.theirOnlyMove => '!',
+    FindKind.practical => '',
+  };
+  final (number, black) = _moveNumber(kept.rootFen, key);
+  final san = '${find.sans[key]}$mark';
+  if (key == 0) return black ? '$number…$san' : '$number.$san';
+  final (before, _) = _moveNumber(kept.rootFen, key - 1);
+  final previous = find.sans[key - 1];
+  return black ? '$before.$previous $san' : '$before…$previous $number.$san';
 }
 
 /// The numbers under a find: how often it comes up and what is at stake.
@@ -384,20 +387,20 @@ String findNumbers(KeptFind kept) {
   final pawns = (find.lossCp / 100).toStringAsFixed(1);
   final percent = '${(find.share * 100).round()}%';
   final stake = switch (find.kind) {
-    FindKind.trap => 'played $percent · loses $pawns',
-    FindKind.onlyMove => 'the rest lose $pawns+',
-    FindKind.theirOnlyMove => 'found $percent · the rest lose $pawns+',
-    FindKind.practical => 'gives up $pawns, scores better',
+    FindKind.trap => 'played $percent, loses $pawns',
+    FindKind.onlyMove => 'the rest lose $pawns',
+    FindKind.theirOnlyMove => 'found $percent, the rest lose $pawns',
+    FindKind.practical => 'gives up $pawns, scores more',
   };
   final side = kept.side == Side.white ? 'White' : 'Black';
-  return '$stake · ${_reach(find.reach)} · $side';
+  return '$stake · ${_reach(find.reach)} · as $side';
 }
 
+/// How often a game from where the search started gets there.
 String _reach(double reach) {
-  if (reach >= 0.995) return 'every game';
-  if (reach <= 0) return 'rare';
-  final onceIn = (1 / reach).round();
-  return onceIn > 9999 ? 'rare' : '1 in $onceIn games';
+  if (reach >= 0.995) return 'always';
+  final onceIn = reach <= 0 ? 0 : (1 / reach).round();
+  return onceIn < 1 || onceIn > 9999 ? 'rarely' : '1 in $onceIn';
 }
 
 /// The number of the move [ply] half-moves after [root], and whether it is

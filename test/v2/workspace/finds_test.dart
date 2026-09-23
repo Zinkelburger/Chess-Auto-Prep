@@ -146,10 +146,10 @@ void main() {
 
       expect(finds.shown.map((k) => k.find.worth), [9, 5, 1]);
 
-      finds.toggle(FindKind.onlyMove);
+      finds.show(FindKind.onlyMove);
       expect(finds.shown.map((k) => k.find.kind), [FindKind.onlyMove]);
-      finds.toggle(FindKind.onlyMove);
-      expect(finds.shown, hasLength(3), reason: 'no kind picked shows all');
+      finds.show(null);
+      expect(finds.shown, hasLength(3));
 
       final first = finds.step(1)!;
       expect(first.find.worth, 9);

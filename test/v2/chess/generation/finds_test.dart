@@ -71,6 +71,23 @@ void main() {
     expect(trap.evalCp, 250);
   });
 
+  test('a reply that only fails to punish a worse move of ours is no trap', () {
+    // After d4 their best is worth -100 to us and g5 lets us off to +20:
+    // a blunder, but e4 was worth +50 anyway.
+    final tree = ours('root', [
+      ('e4', leaf('after e4', 50)),
+      (
+        'd4',
+        theirs('after d4', cp: -100, [
+          ('Nxe4', 0.6, leaf('punished', -100)),
+          ('g5', 0.4, leaf('let off', 20)),
+        ]),
+      ),
+    ]);
+
+    expect(ofKind(findsOf(tree), FindKind.trap), isEmpty);
+  });
+
   test('one move of ours that holds while the rest lose is an only move', () {
     final tree = ours('root', [
       ('Qd1', leaf('holds', 20)),

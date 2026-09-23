@@ -257,7 +257,8 @@ are trivial — do not go straight to lines*. Supersedes the two sections above 
   up and start it with the same numbers, anywhere a position is on the board and not hidden —
   a read-only file or a game included, since nothing is written.
 - **No `Prefer traps`, no pins.** The loss window is always 50 cp; every legal move of ours
-  inside it is searched, the chapter's or not.
+  inside it is searched, the chapter's or not. *Superseded the same day by the section below:
+  nothing is pruned.*
 - **The table follows the board.** Under a status line (`Searching for White · depth 3 of 8 ·
   406 positions`, then `Searched …` or `Stopped at depth 3 …`), the position on the board is
   looked up in the search tree by the moves from the document's root. At our move: `Your move ·
@@ -277,3 +278,45 @@ are trivial — do not go straight to lines*. Supersedes the two sections above 
 - Gone: `fill_dialog.dart`, `prep_pane.dart`, the fill line above the tabs, `showFound`, ↑/↓
   over Prep rows, `FillRequest.preferTraps`, `trapLossLimitCp`.
 
+## Explore, don't prune: the Positions column (owner, 2026-09-23)
+The owner wants the search to explore, not prepare: "no pruning etc … the most braindead
+approach … build my DB of stuff and find interesting positions" they can click through, in a
+column on the left like the old Player analysis positions list, with the PGN on the right.
+Supersedes the Search tab section where they differ.
+
+- **Nothing is pruned.** Every legal move of ours (`SearchConfig.lossLimitCp` null) and every
+  reply the model gives any weight (no reply floor); `Skip under 1 in` is gone from the tab.
+  `Depth` is empty by default (`Any`): the search goes level by level until stopped. While it
+  runs, `Stop` keeps what it has and `Stop after depth N` lets the level under way finish
+  (`LastPly` in `search.dart`, `StopReason.levelDone`). A typed depth still ends there. A
+  tree with no horizon or window is written to v4 as `max_depth` 512 and `max_eval_loss_cp`
+  100000 and read back as none.
+- **The cost is real.** At engine depth 14 a run scores about 25 positions a second, so from
+  a middlegame depth 2 (~1k positions) takes about a minute, depth 3 (~25k) about fifteen,
+  depth 4 hours. Cached scores (`eval_cache.db`) make a repeat run over the same positions
+  quick. Lichess cloud evals or ChessDB as a score source would cut this; not built.
+- **Finds.** When a run stops, `findsOf` (`chess/generation/finds.dart`) reads the tree —
+  every move of ours followed — for four kinds, at no engine cost: *trap* (a reply played
+  ≥ 20% that loses ≥ 50 cp against their best, leaving us level or better and ≥ 50 cp better
+  than our best move at our last turn, so a reply that only fails to punish a bad move of ours
+  is not one), *only move* (one move of ours holds, the rest lose ≥ 150 cp, from −150 up to
+  +300), *their only move* (one reply holds for them, the rest lose ≥ 150 cp, found < 50%)
+  and *practical* (the move worth most against the model is ≥ 30 cp worse for the engine and
+  ≥ 0.02 better in expected score). A find's rank is how often a game gets there times what
+  is at stake, divided by one plus the pawns our own moves gave up on the way; past three
+  pawns the find is left out. At most 1000 per run.
+- **Kept globally.** `finds.db` in the support folder (`storage/finds_store.dart`), one row
+  per kind, side and position: found again, replaced by the newer finding. Each keeps its line
+  from the document's root, the ply of the position, the key move, the scores, the rating and
+  when. Opened on first use.
+- **The Positions column.** `Positions` in the top bar (Ctrl+P, also in Actions) swaps the
+  list column's content for the finds, in every mode with a list; pressed again it gives the
+  mode's list back. `Top | Often | New` orders them, a typeable `Kind` field narrows to one
+  kind. A row reads `4.d4 Bc5?  Trap` over `played 29%, loses 1.7 · 1 in 3 · as White`; hover
+  floats the position, `⋯ ▸ Remove` forgets it. A click (or ↑/↓ while the column is up) puts
+  the whole line on a new analysis board at the position, seen from the side searched for, so
+  the move list, engine and Search tab read it as any line and it can be played on or saved.
+  The Search tab's status says `… · 4 found, listed in Positions (Ctrl+P)`.
+- Owner-facing open items: whether finds from a sharper, deeper search are the right ones;
+  a score source faster than depth-14 Stockfish; whether the column should also list other
+  result sets (My games mistakes, TWIC scan hits) through the same `FindsPanel` shape.

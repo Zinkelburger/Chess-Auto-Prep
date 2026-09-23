@@ -59,9 +59,12 @@ void main() {
     await ctrlP(tester);
     expect(find.byType(FindsPanel), findsOneWidget);
     expect(find.byType(LibraryPanel), findsNothing);
-    expect(find.textContaining('2.Nf3', findRichText: true), findsOneWidget);
+    expect(
+      find.textContaining('e5 2.Nf3!', findRichText: true),
+      findsOneWidget,
+    );
 
-    await tester.tap(find.textContaining('2.Nf3', findRichText: true));
+    await tester.tap(find.textContaining('e5 2.Nf3!', findRichText: true));
     await tester.pumpAndSettle();
     expect(w.session.isScratch, isTrue);
     expect(w.session.fen, afterE4E5);
@@ -72,11 +75,11 @@ void main() {
     expect(find.byType(LibraryPanel), findsOneWidget);
   });
 
-  testWidgets('the corner button switches too, and says its key', (
+  testWidgets('the top bar button switches too, and says its key', (
     tester,
   ) async {
     await w.pumpShell(tester);
-    await tester.tap(find.byTooltip('Positions the searches found (Ctrl+P)'));
+    await tester.tap(find.byTooltip('What the searches found (Ctrl+P)'));
     await tester.pumpAndSettle();
     expect(find.byType(FindsPanel), findsOneWidget);
     expect(find.textContaining('Nothing found yet'), findsOneWidget);

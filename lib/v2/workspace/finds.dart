@@ -57,7 +57,7 @@ final class Finds extends ChangeNotifier {
   List<KeptFind>? _all;
   List<KeptFind>? _shown;
   FindOrder _order = FindOrder.worth;
-  Set<FindKind> _kinds = const {};
+  FindKind? _kind;
   int? _selected;
   FindsRecorded? _recorded;
   bool _disposed = false;
@@ -69,8 +69,8 @@ final class Finds extends ChangeNotifier {
 
   FindOrder get order => _order;
 
-  /// The kinds shown; empty shows every kind.
-  Set<FindKind> get kinds => _kinds;
+  /// The one kind shown; null shows every kind.
+  FindKind? get kind => _kind;
 
   /// The find last opened, whose row is marked.
   int? get selected => _selected;
@@ -81,7 +81,7 @@ final class Finds extends ChangeNotifier {
   /// The finds of the kinds shown, in the order chosen.
   List<KeptFind> get shown => _shown ??= _sorted([
     for (final kept in all)
-      if (_kinds.isEmpty || _kinds.contains(kept.find.kind)) kept,
+      if (_kind == null || kept.find.kind == _kind) kept,
   ]);
 
   /// Reads the store once; later calls do nothing.
@@ -97,12 +97,10 @@ final class Finds extends ChangeNotifier {
     _changed();
   }
 
-  /// Shows [kind] as well, or no longer; the last kind turned off shows
-  /// every kind again.
-  void toggle(FindKind kind) {
-    final kinds = {..._kinds};
-    if (!kinds.remove(kind)) kinds.add(kind);
-    _kinds = kinds;
+  /// Shows only [kind], or every kind when null.
+  void show(FindKind? kind) {
+    if (kind == _kind) return;
+    _kind = kind;
     _changed();
   }
 
@@ -142,7 +140,7 @@ final class Finds extends ChangeNotifier {
     required int elo,
   }) async {
     _recorded = const FindsReading();
-    notifyListeners();
+    if (!_disposed) notifyListeners();
     final found = await _findsIn(tree);
     if (_disposed) return;
     final lines = [for (final find in found) find.after(prefix)];

@@ -315,27 +315,6 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     );
   }
 
-  /// The list column's corner: the switch between its two lists, then
-  /// the `«` that hides it.
-  Widget _listCorner() => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      IconButton(
-        icon: Icon(
-          _positionsShown ? Icons.list : Icons.travel_explore,
-          size: IconSize.action,
-        ),
-        tooltip: withKey(
-          _positionsShown ? 'Back to the list' : 'Positions the searches found',
-          'Ctrl+P',
-        ),
-        onPressed: _togglePositions,
-        visualDensity: VisualDensity.compact,
-      ),
-      ListToggle(shown: true, onPressed: _toggleList),
-    ],
-  );
-
   Future<void> _saveCopy() async {
     final name = await showCopyNameDialog(
       context,
@@ -479,6 +458,8 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         // A mode with a screen of its own has no list to show or hide.
         listShown: _listShown || screen != null,
         onToggleList: _toggleList,
+        positionsShown: screen != null ? null : _listShown && _positionsShown,
+        onTogglePositions: _togglePositions,
         actions: _actions,
         // What the entries' enabled states read, heard only while the
         // menu is open: the bar itself shows none of it.
@@ -514,16 +495,16 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   }
 
   Widget _pane(BuildContext context, Area area) => switch (area.data) {
-    // The mode's list or the Positions, with the switch between them and
-    // the `«` that hides the column in its top right corner.
+    // The mode's list or the Positions, with the `«` that hides the
+    // column in its top right corner.
     _Pane.list =>
       _positionsShown
           ? FindsPanel(
               finds: _ws.finds,
               onOpen: _openFind,
-              trailing: _listCorner(),
+              trailing: ListToggle(shown: true, onPressed: _toggleList),
             )
-          : _view.list(_listCorner()),
+          : _view.list(ListToggle(shown: true, onPressed: _toggleList)),
     _Pane.outline => OutlinePanel(
       outline: _docs.outline,
       library: _docs.library,

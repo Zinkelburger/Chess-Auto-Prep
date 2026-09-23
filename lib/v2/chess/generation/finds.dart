@@ -11,13 +11,21 @@ import 'traps.dart';
 /// Four kinds, each a plain rule over the scores the tree holds:
 ///
 /// * a trap — a reply the opponent plays at least a fifth of the time that
-///   throws away half a pawn or more against their best ([trapsOf]);
+///   throws away half a pawn or more against their best ([trapsOf]), and
+///   leaves us at least level and better than our best move would have:
+///   a reply that only fails to punish a bad move of ours sets no trap;
 /// * our only move — one move of ours holds and every other loses a pawn
 ///   and a half more;
 /// * their only move — one reply holds the opponent's position, the rest
 ///   lose a pawn and a half more, and they find it less than half the time;
 /// * a practical choice — the move worth most against the modelled opponent
 ///   is not the engine's best, and what it gives up is paid back in games.
+///
+/// Every move of ours is explored, most of them bad, and a trap after a bad
+/// move of ours is only the opponent failing to punish it. So each find
+/// carries what our own moves on the way gave up against our best there:
+/// it lowers the find's rank, and past [findMaxGivenCp] the find is left
+/// out.
 
 /// What a find is.
 enum FindKind { trap, onlyMove, theirOnlyMove, practical }
@@ -74,6 +82,23 @@ final class Find {
   /// how much it matters.
   final double worth;
 
+  /// The same find ranked lower for the [givenCp] our own moves gave up on
+  /// the way to it: a pawn given up halves it.
+  Find discounted(int givenCp) => givenCp <= 0
+      ? this
+      : Find(
+          kind: kind,
+          sans: sans,
+          ply: ply,
+          keyPly: keyPly,
+          fen: fen,
+          evalCp: evalCp,
+          lossCp: lossCp,
+          share: share,
+          reach: reach,
+          worth: worth / (1 + givenCp / 100),
+        );
+
   /// [sans] played after [prefix]: the same find seen from further back.
   Find after(List<String> prefix) => prefix.isEmpty
       ? this
@@ -110,19 +135,40 @@ const onlyMoveCeilingCp = 300;
 const practicalMinLossCp = 30;
 const practicalMinGain = 0.02;
 
+/// The most our moves on the way to a find may give up, added together,
+/// against our best move at each; a line worse than this is not one we
+/// would play.
+const findMaxGivenCp = 300;
+
+/// The least a trap must leave us, in centipawns: a blunder that still
+/// leaves us worse is not one we would be waiting for.
+const trapMinEvalCp = 0;
+
+/// What a sprung trap must leave us beyond our best move at our last turn
+/// before it: less, and the move that set it was only a worse move the
+/// opponent failed to punish.
+const trapMinGainCp = 50;
+
 /// The most finds one search hands back, the most worth first.
 const findsPerSearch = 1000;
 
 /// Every find in [root], the most worth first, at most [limit].
 List<Find> findsOf(SearchNode root, {int limit = findsPerSearch}) {
   final found = <(FindKind, String), Find>{};
-  void keep(Find find) {
+  void keep(Find find, int given) {
+    if (given > findMaxGivenCp) return;
+    find = find.discounted(given);
     final key = (find.kind, find.fen.position);
     final held = found[key];
     if (held == null || find.worth > held.worth) found[key] = find;
   }
 
   for (final trap in trapsOf(root, everyMove: true)) {
+    final (evalCp, given, bestBefore) = _walkTo(root, [
+      for (final move in [...trap.toTrap, trap.blunder]) move.move.uci,
+    ]);
+    if (evalCp < trapMinEvalCp) continue;
+    if (bestBefore != null && evalCp - bestBefore < trapMinGainCp) continue;
     keep(
       Find(
         kind: FindKind.trap,
@@ -130,34 +176,43 @@ List<Find> findsOf(SearchNode root, {int limit = findsPerSearch}) {
         ply: trap.toTrap.length + 1,
         keyPly: trap.toTrap.length,
         fen: trap.blunder.after,
-        evalCp: _evalAfter(root, trap),
+        evalCp: evalCp,
         lossCp: trap.lossCp,
         share: trap.share,
         reach: trap.reach,
         worth: trap.springs * math.min(trap.lossCp, findRankLossCapCp),
       ),
+      given,
     );
   }
 
-  void walk(SearchNode node, List<String> sofar, double reach) {
+  void walk(SearchNode node, List<String> sofar, double reach, int given) {
+    if (given > findMaxGivenCp) return;
+    void keepHere(Find find) => keep(find, given);
     switch (node) {
       case OurNode(:final candidates):
-        _ourOnlyMove(node, sofar, reach, keep);
-        _practical(node, sofar, reach, keep);
+        _ourOnlyMove(node, sofar, reach, keepHere);
+        _practical(node, sofar, reach, keepHere);
+        final best = _bestCp(node);
         for (final c in candidates) {
-          walk(c.child, [...sofar, c.move.san], reach);
+          walk(
+            c.child,
+            [...sofar, c.move.san],
+            reach,
+            given + (best - c.evalForUs.cp),
+          );
         }
       case OpponentNode(:final replies):
-        _theirOnlyMove(node, sofar, reach, keep);
+        _theirOnlyMove(node, sofar, reach, keepHere);
         for (final r in replies) {
-          walk(r.child, [...sofar, r.move.san], reach * r.probability);
+          walk(r.child, [...sofar, r.move.san], reach * r.probability, given);
         }
       case TerminalNode() || HorizonNode() || FrontierNode():
         return;
     }
   }
 
-  walk(root, const [], 1);
+  walk(root, const [], 1, 0);
   final ranked = found.values.toList()
     ..sort((a, b) {
       final byWorth = b.worth.compareTo(a.worth);
@@ -168,16 +223,28 @@ List<Find> findsOf(SearchNode root, {int limit = findsPerSearch}) {
   return ranked.length > limit ? ranked.sublist(0, limit) : ranked;
 }
 
-/// The score of the position a trap's blunder leaves, from the tree.
-int _evalAfter(SearchNode root, Trap trap) {
+/// The score of the position [ucis] reach, what our moves on the way gave
+/// up against our best at each, and our best at the last of our turns on
+/// the way (null when there was none).
+(int, int, int?) _walkTo(SearchNode root, List<String> ucis) {
   var node = root;
-  for (final move in [...trap.toTrap, trap.blunder]) {
-    final next = _child(node, move.move.uci);
-    if (next == null) return 0;
+  var given = 0;
+  int? bestBefore;
+  for (final uci in ucis) {
+    final next = _child(node, uci);
+    if (next == null) break;
+    if (node is OurNode) {
+      bestBefore = _bestCp(node);
+      given += bestBefore - next.evalForUs.cp;
+    }
     node = next;
   }
-  return node.evalForUs.cp;
+  return (node.evalForUs.cp, given, bestBefore);
 }
+
+/// The engine's score of our best move at [node].
+int _bestCp(OurNode node) =>
+    node.candidates.map((c) => c.evalForUs.cp).reduce((a, b) => a > b ? a : b);
 
 SearchNode? _child(SearchNode node, String uci) => switch (node) {
   OurNode(:final candidates) =>

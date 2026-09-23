@@ -261,6 +261,11 @@ Quirks worth a verdict:
   plus the same accounts' games in the old app's `app_games.db`) were built 2026-09-23 in step 6c.
 - **The settings gear sits at the right end of the top bar**, the old app's place, and is the one
   way in besides Ctrl+,; the mode menu lists modes only.
+- **The list column holds one of two lists**: the mode's own, or the `Positions` the searches
+  found (2026-09-23). The `Positions` button beside Actions, Ctrl+P or Actions ▸ `Positions`
+  swaps them in every mode with a list; the `«` still hides the column. Another result set that
+  wants the column should become a second list there, not a new mode or dialog
+  (`generation.md`, last section).
 - **No eval bar** (question 1; the viewer's decision of 2026-09-21). **One move list** for reading
   and editing, the reading card (question 2). **Esc cancels a promotion** (question 6).
 
