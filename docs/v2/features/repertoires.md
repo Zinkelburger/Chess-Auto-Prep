@@ -204,5 +204,11 @@ picker.
   values ride in the comments, so they follow a line dragged from a draft into a real chapter.
   Nothing is computed while browsing (owner, 2026-08-21); `Fill gaps from here…` is the one way
   to get a value.
+- **Deleted chapters** (built 2026-09-22, decided without the owner; the old `Recovery` view,
+  read against the outline): a `Deleted chapters` link under the repertoire list swaps the list
+  for every chapter in the repertoires' `.cap-pgn-history/` folders, under the repertoire's name,
+  newest first, each with `Restore`. Restoring puts the file back under its name with its
+  training rows; when that name has been taken since, the user names it (`Main (restored)`).
+  A deleted repertoire is its chapters, so it comes back one chapter at a time.
 - Left for later: training rows do not follow a line that changes chapter; the model's answers are
   cached in memory only; the trainer must skip draft chapters.

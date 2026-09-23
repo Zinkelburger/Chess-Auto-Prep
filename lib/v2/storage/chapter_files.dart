@@ -5,9 +5,12 @@ import 'package:path/path.dart' as p;
 
 import '../chess/pgn/chapter_heading.dart';
 import '../diagnostics/log.dart';
+import 'deleted_chapters.dart';
 import 'document_ref.dart';
 
 export '../chess/pgn/chapter_heading.dart' show ChapterHeading;
+export 'deleted_chapters.dart'
+    show DeletedChapter, DeletedChapters, DeletedListing, DeletedUnreadable;
 
 /// One chapter file on disk: a document, plus what the lists show about it
 /// without opening it — its two names and its heading. The store takes it as
@@ -120,6 +123,10 @@ final class RepertoiresUnreadable extends RepertoireListing {
 abstract interface class ChapterFiles {
   Future<RepertoireListing> list();
 
+  /// The chapters deleted from every repertoire and still in recovery,
+  /// which is what a restore can bring back.
+  Future<DeletedListing> deleted();
+
   /// Takes away a repertoire folder whose chapters have all been deleted, so
   /// deleting a repertoire leaves nothing behind in the user's Documents.
   ///
@@ -163,6 +170,9 @@ final class ChapterDirectory implements ChapterFiles {
       return RepertoiresUnreadable(_detail(e));
     }
   }
+
+  @override
+  Future<DeletedListing> deleted() => listDeleted(root);
 
   @override
   Future<void> removeIfEmpty(String folder) async {

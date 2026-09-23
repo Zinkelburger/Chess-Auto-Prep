@@ -157,6 +157,61 @@ void main() {
     expect(reviews(), contains('.cap-pgn-history'));
   });
 
+  Future<List<DeletedChapter>> deletedChapters() async =>
+      (await library.deleted() as DeletedChapters).chapters;
+
+  test(
+    'a deleted repertoire comes back chapter by chapter, rows and all',
+    () async {
+      await library.createRepertoire('Sidelines', Side.black);
+      await library.createChapter(named('Sidelines'), 'Modern');
+      trainOn('repertoires/Sidelines/Modern.pgn');
+      await library.deleteRepertoire(named('Sidelines'));
+      final gone = await deletedChapters();
+      expect(gone.map((c) => c.name), unorderedEquals(['Main', 'Modern']));
+      expect(gone.every((c) => c.repertoire == 'Sidelines'), isTrue);
+
+      for (final chapter in gone) {
+        expect(await library.restoreChapter(chapter), isA<LibraryDone>());
+      }
+      expect(named('Sidelines').chapters.map((c) => c.name), [
+        'Main',
+        'Modern',
+      ]);
+      expect(
+        File(at('repertoires/Sidelines/Modern.pgn')).readAsStringSync(),
+        startsWith('// Modern\n'),
+      );
+      expect(reviews(), contains(at('repertoires/Sidelines/Modern.pgn')));
+      expect(reviews(), isNot(contains('.cap-pgn-history')));
+      expect(await deletedChapters(), isEmpty);
+    },
+  );
+
+  test('a restore never replaces a chapter of the same name', () async {
+    await library.createRepertoire('Benoni', Side.black);
+    await library.createChapter(named('Benoni'), 'Modern');
+    await library.deleteChapter(chapter('Benoni', 'Modern'));
+    await library.createChapter(named('Benoni'), 'Modern');
+    File(at('repertoires/Benoni/Modern.pgn')).writeAsStringSync('// New\n');
+    final gone = (await deletedChapters()).single;
+
+    expect(await library.restoreChapter(gone), isA<LibraryNameTaken>());
+    expect(
+      File(at('repertoires/Benoni/Modern.pgn')).readAsStringSync(),
+      '// New\n',
+    );
+    expect(
+      await library.restoreChapter(gone, name: 'Modern (restored)'),
+      isA<LibraryDone>(),
+    );
+    expect(
+      File(at('repertoires/Benoni/Modern (restored).pgn')).readAsStringSync(),
+      startsWith('// Modern\n'),
+    );
+    expect(await deletedChapters(), isEmpty);
+  });
+
   /// A repertoire as generation leaves it: two chapters, the raw-game sidecar
   /// written beside one of them, and the bundle folder under it.
   Future<void> generatedRepertoire() async {

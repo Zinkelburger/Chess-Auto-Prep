@@ -220,6 +220,23 @@ final class Library extends ChangeNotifier {
     return _writes.renameFolder(folder, p.join(_root, name));
   });
 
+  /// The deleted chapters still in recovery, most recently deleted first.
+  /// Read on demand: nothing but the recovery view asks, and it asks again
+  /// after each restore.
+  Future<DeletedListing> deleted() => _files.deleted();
+
+  /// Puts [chapter] back in the folder it was deleted from, under [name]
+  /// (its old name when null). The store moves it, so its training rows
+  /// come back with it; a chapter of that name already there is
+  /// [LibraryNameTaken], and nothing is replaced.
+  Future<LibraryResult> restoreChapter(
+    DeletedChapter chapter, {
+    String? name,
+  }) => _run('restore ${chapter.path}', () {
+    final to = DocumentRef(chapter.restoredAs(name));
+    return _writes.relocate(ChapterRef.at(chapter.path), to);
+  });
+
   /// Every chapter to the recovery folder, then the folder when it is empty.
   Future<LibraryResult> deleteRepertoire(RepertoireFolder folder) => _run(
     'delete the repertoire ${folder.name}',

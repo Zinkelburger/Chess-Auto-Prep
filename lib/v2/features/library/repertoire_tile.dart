@@ -112,8 +112,8 @@ class _RepertoireRow extends StatelessWidget {
       context,
       title: 'Delete repertoire "${folder.name}"?',
       message:
-          'Its chapters will be removed from this folder and kept in '
-          'recovery storage.',
+          'Its chapters can be restored from Deleted chapters under this '
+          'list.',
       confirm: 'Delete',
     );
     if (!yes || !context.mounted) return;
@@ -235,8 +235,8 @@ class _ChapterRow extends StatelessWidget {
       context,
       title: 'Delete chapter "${chapter.name}"?',
       message:
-          'The chapter, including edits you have just made, will be removed '
-          'from this folder and kept in recovery storage.',
+          'The chapter, including edits you have just made, can be restored '
+          'from Deleted chapters under this list.',
       confirm: 'Delete',
     );
     if (!yes || !context.mounted) return;
