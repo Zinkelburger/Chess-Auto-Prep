@@ -202,7 +202,7 @@ final class Library extends ChangeNotifier {
   /// file is part of that file and goes where the file goes.
   Future<LibraryResult> moveChapter(ChapterRef ref, RepertoireFolder to) =>
       _run('move ${ref.path} to ${to.name}', () async {
-        if (_sharesFile(ref)) {
+        if (sharesFile(ref)) {
           return const LibraryFailure(
             'a chapter of a course file moves with its file',
           );
@@ -216,7 +216,7 @@ final class Library extends ChangeNotifier {
   /// and the file's other chapters stay.
   Future<LibraryResult> deleteChapter(ChapterRef ref) =>
       _run('delete ${ref.path}', () {
-        if (_sharesFile(ref)) {
+        if (sharesFile(ref)) {
           return _writes.editFile(
             ref,
             (file) => sectionRemoved(file, ref.section),
@@ -225,8 +225,9 @@ final class Library extends ChangeNotifier {
         return _writes.remove(ref);
       });
 
-  /// Whether [ref] is one of several chapters its file holds by tag.
-  bool _sharesFile(ChapterRef ref) =>
+  /// Whether [ref] is one of several chapters its file holds by tag, so
+  /// deleting it rewrites that file rather than moving one into recovery.
+  bool sharesFile(ChapterRef ref) =>
       ref.section != null ||
       repertoires
               .expand((folder) => folder.chapters)

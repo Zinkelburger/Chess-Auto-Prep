@@ -234,9 +234,11 @@ class _ChapterRow extends StatelessWidget {
     final yes = await confirmAction(
       context,
       title: 'Delete chapter "${chapter.name}"?',
-      message:
-          'The chapter, including edits you have just made, can be restored '
-          'from Deleted chapters under this list.',
+      message: library.sharesFile(chapter)
+          ? 'Its games, including edits you have just made, will be taken '
+                'out of the course file they share.'
+          : 'The chapter, including edits you have just made, can be '
+                'restored from Deleted chapters under this list.',
       confirm: 'Delete',
     );
     if (!yes || !context.mounted) return;

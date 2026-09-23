@@ -267,6 +267,29 @@ void main() {
     expect(fixture.textAt('/repertoires/Sidelines/Classical.pgn'), isNotNull);
   });
 
+  testWidgets('a course chapter’s delete does not promise a restore', (
+    tester,
+  ) async {
+    final course = RepertoireFolder(
+      name: 'Course',
+      path: '/repertoires/Course',
+      modified: DateTime.now(),
+      chapters: [
+        ChapterRef.at('/repertoires/Course/Main.pgn', section: 'Open'),
+        ChapterRef.at('/repertoires/Course/Main.pgn', section: 'Closed'),
+      ],
+    );
+    await show(tester, [course]);
+    await tester.tap(find.text('Course'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.more_horiz).at(1));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete…'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('course file they share'), findsOneWidget);
+    expect(find.textContaining('Deleted chapters under'), findsNothing);
+  });
+
   const trashed = '/repertoires/KID/.cap-pgn-history/1-a-Main.pgn';
   final main = DeletedChapter(
     path: trashed,
