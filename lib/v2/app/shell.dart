@@ -20,7 +20,9 @@ import '../ui/pane_tabs.dart';
 import '../ui/theme.dart';
 import '../workspace/board_claim.dart';
 import '../workspace/copy_name_dialog.dart';
+import '../storage/finds_store.dart';
 import '../workspace/fill_gaps.dart';
+import '../workspace/finds_panel.dart';
 import '../workspace/move_field.dart';
 import '../workspace/tree_pane.dart';
 import '../workspace/workspace.dart';
@@ -140,6 +142,11 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   );
   bool _outlineShown = false;
   bool _listShown = true;
+
+  /// Whether the list column shows the Positions the searches found in
+  /// place of the mode's own list. One switch for every mode: the finds
+  /// are the same wherever they are looked at.
+  bool _positionsShown = false;
 
   WorkspaceRequests get _requests => widget.requests;
   Workspace get _ws => widget.workspace;
@@ -265,6 +272,10 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   /// when it has one (My games), the puzzles in a sitting, else the file's
   /// games.
   void _walk(int by) {
+    if (_listShown && _positionsShown) {
+      if (_ws.finds.step(by) case final next?) _openFind(next);
+      return;
+    }
     if (_view.walk(by)) return;
     final trainer = _train.puzzles;
     if (trainer.up != null) {
@@ -280,6 +291,51 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     _arrange();
   }
 
+  /// The Positions in the list column, or the mode's own list back; the
+  /// column comes out if it was hidden.
+  void _togglePositions() {
+    if (!mounted) return;
+    setState(() {
+      _positionsShown = !_positionsShown || !_listShown;
+      _listShown = true;
+    });
+    _arrange();
+  }
+
+  /// A find's line on an analysis board at its position.
+  void _openFind(KeptFind kept) {
+    _ws.finds.select(kept.id);
+    unawaited(
+      _requests.openLine(
+        root: kept.rootFen,
+        sans: kept.find.sans,
+        ply: kept.find.ply,
+        side: kept.side,
+      ),
+    );
+  }
+
+  /// The list column's corner: the switch between its two lists, then
+  /// the `«` that hides it.
+  Widget _listCorner() => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      IconButton(
+        icon: Icon(
+          _positionsShown ? Icons.list : Icons.travel_explore,
+          size: IconSize.action,
+        ),
+        tooltip: withKey(
+          _positionsShown ? 'Back to the list' : 'Positions the searches found',
+          'Ctrl+P',
+        ),
+        onPressed: _togglePositions,
+        visualDensity: VisualDensity.compact,
+      ),
+      ListToggle(shown: true, onPressed: _toggleList),
+    ],
+  );
+
   Future<void> _saveCopy() async {
     final name = await showCopyNameDialog(
       context,
@@ -294,6 +350,12 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   /// Everything the Actions menu offers now, in the mode on screen.
   List<AppAction> _actions() => [
     ..._modeActions(),
+    AppAction(
+      _listShown && _positionsShown ? 'Back to the list' : 'Positions',
+      _togglePositions,
+      shortcut: 'Ctrl+P',
+      group: 'Window',
+    ),
     AppAction(
       widget.fullScreen.on ? 'Leave full screen' : 'Full screen',
       widget.fullScreen.toggle,
@@ -349,6 +411,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     const SingleActivator(LogicalKeyboardKey.arrowLeft): _ws.tree.back,
     ..._command(LogicalKeyboardKey.comma, () => unawaited(_settings())),
     ..._command(LogicalKeyboardKey.keyB, _toggleList),
+    ..._command(LogicalKeyboardKey.keyP, _togglePositions),
     ..._command(
       LogicalKeyboardKey.keyO,
       () => unawaited(_requests.openPgnFile()),
@@ -451,8 +514,16 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   }
 
   Widget _pane(BuildContext context, Area area) => switch (area.data) {
-    // The mode's list, with the `«` that hides it in its top right corner.
-    _Pane.list => _view.list(ListToggle(shown: true, onPressed: _toggleList)),
+    // The mode's list or the Positions, with the switch between them and
+    // the `«` that hides the column in its top right corner.
+    _Pane.list =>
+      _positionsShown
+          ? FindsPanel(
+              finds: _ws.finds,
+              onOpen: _openFind,
+              trailing: _listCorner(),
+            )
+          : _view.list(_listCorner()),
     _Pane.outline => OutlinePanel(
       outline: _docs.outline,
       library: _docs.library,
@@ -571,7 +642,7 @@ final class PuzzleInView {
 
 /// The way into a search from outside the Search tab — the Actions entry
 /// and Ctrl+G: the tab comes up and the search starts with the numbers it
-/// last had, the Replies tab's rating and cover rule and the tab's depth.
+/// last had, the Replies tab's rating and the tab's depth.
 final class SearchDoor {
   SearchDoor({
     required this.fill,
@@ -590,13 +661,8 @@ final class SearchDoor {
     if (!fill.canStart) return;
     if (!tabs.tabs.any((tab) => tab.id == WorkspaceTab.search)) return;
     tabs.show(WorkspaceTab.search);
-    final s = settings.value;
     final refusal = await fill.start(
-      FillRequest(
-        elo: s.opponentElo,
-        depthPlies: fill.depth,
-        onceIn: s.coverOnceIn,
-      ),
+      FillRequest(elo: settings.value.opponentElo, depthPlies: fill.depth),
     );
     if (refusal != null) requests.say(refusal);
   }

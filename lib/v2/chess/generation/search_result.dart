@@ -8,6 +8,9 @@ enum StopReason {
 
   /// The next expansion would not fit in the node budget.
   nodeBudget,
+
+  /// The caller asked it to stop once a level was done, and it was.
+  levelDone,
 }
 
 /// What a search produced. Every outcome is a value, including the two

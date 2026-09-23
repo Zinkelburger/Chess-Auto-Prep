@@ -68,7 +68,9 @@ const int trapLossCapCp = mateBaseCp;
 /// first.
 ///
 /// The walk follows our chosen move at each of our positions — the other
-/// candidates are not what we would play — and every reply at the opponent's.
+/// candidates are not what we would play — and every reply at the opponent's;
+/// with [everyMove] it follows every move of ours too, for a search that
+/// explores rather than prepares.
 /// Two traps that leave the same position after the blunder are one trap,
 /// kept where it springs more often. They are ranked by how often they spring
 /// times how much they win, the win capped at [trapRankLossCapCp].
@@ -77,16 +79,19 @@ List<Trap> trapsOf(
   double minShare = 0.2,
   int minLossCp = 50,
   int punishPlies = 6,
+  bool everyMove = false,
 }) {
   final found = <String, Trap>{};
 
   void walk(SearchNode node, List<DraftMove> sofar, double reach) {
     switch (node) {
-      case OurNode(:final chosen):
-        walk(chosen.child, [
-          ...sofar,
-          _step(node.fen, chosen.move, chosen.child, ours: true),
-        ], reach);
+      case OurNode(:final candidates, :final chosen):
+        for (final candidate in everyMove ? candidates : [chosen]) {
+          walk(candidate.child, [
+            ...sofar,
+            _step(node.fen, candidate.move, candidate.child, ours: true),
+          ], reach);
+        }
       case OpponentNode(:final replies):
         for (final trap in _trapsAt(
           node,

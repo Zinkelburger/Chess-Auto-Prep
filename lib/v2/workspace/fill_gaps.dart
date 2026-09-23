@@ -27,40 +27,29 @@ import '../storage/eval_cache.dart';
 import '../storage/pgn_document_store.dart' as store;
 import 'document_session.dart';
 import 'engine_analysis.dart';
+import 'finds.dart';
 
-/// What a search is asked for: the three numbers of the Search tab.
+/// What a search is asked for: the opponent's rating and how deep to go.
+///
+/// Nothing else narrows it. Every legal move of ours is played and every
+/// reply the model gives any weight is answered, level by level, so what a
+/// search finds is not decided in advance by a window or a cover rule.
 final class FillRequest {
-  const FillRequest({
-    required this.elo,
-    required this.depthPlies,
-    required this.onceIn,
-  });
+  const FillRequest({required this.elo, this.depthPlies});
 
   /// The rating the opponent's replies are predicted for.
   final int elo;
 
-  /// How many half-moves past the board the search plays out.
-  final int depthPlies;
-
-  /// A reply reached less than once in this many games is valued where it
-  /// stands and not answered.
-  final int onceIn;
-
-  /// How much a move of ours may lose against our best and still be tried.
-  int get lossLimitCp => fillLossLimitCp;
+  /// How many half-moves past the board the search plays out; null goes on
+  /// until the user stops it.
+  final int? depthPlies;
 }
 
 /// The engine depth every search scores positions at: the old app's
 /// default, and what the shared cache is keyed on.
 const fillEvalDepth = 14;
 
-/// The most a move of ours may lose against our best, in centipawns, and
-/// still be searched: the model's own default.
-const fillLossLimitCp = 50;
-
-/// How deep a search looks unless the user says otherwise, and the range
-/// it may be set to.
-const defaultSearchDepth = 8;
+/// The range a search's depth may be set to, when it is set at all.
 const minFillDepth = 1;
 const maxFillDepth = 64;
 
@@ -113,12 +102,19 @@ final class FillRunning extends FillState {
     required this.of,
     this.cancelling = false,
     this.finishing = false,
+    this.lastPly,
   });
 
   final int nodes;
   final int depth;
-  final int of;
+
+  /// The depth asked for; null when the search goes on until stopped.
+  final int? of;
   final bool cancelling;
+
+  /// The depth the search was asked to stop at once it is done there; null
+  /// until it is.
+  final int? lastPly;
 
   /// Asked to stop and keep what it has: the expansion under way is
   /// finished, then the tree as it stands is read.
@@ -132,12 +128,14 @@ final class FillRunning extends FillState {
     int? depth,
     bool? cancelling,
     bool? finishing,
+    int? lastPly,
   }) => FillRunning(
     nodes: nodes ?? this.nodes,
     depth: depth ?? this.depth,
     of: of,
     cancelling: cancelling ?? this.cancelling,
     finishing: finishing ?? this.finishing,
+    lastPly: lastPly ?? this.lastPly,
   );
 }
 
@@ -205,6 +203,7 @@ final class FillGaps extends ChangeNotifier {
     required store.PgnDocumentStore documents,
     required FillToolsFactory tools,
     TreeKeeper? keepTree,
+    this.finds,
     DateTime Function() clock = DateTime.now,
   }) : _session = session,
        _analysis = analysis,
@@ -224,6 +223,9 @@ final class FillGaps extends ChangeNotifier {
   final FillToolsFactory _tools;
   final TreeKeeper? _keepTree;
   final DateTime Function() _clock;
+
+  /// Where what each stopped run points out is kept: the Positions list.
+  final Finds? finds;
 
   FillState _state = const FillIdle();
   FillFound? _found;
@@ -261,8 +263,9 @@ final class FillGaps extends ChangeNotifier {
   bool get running => _state is FillRunning;
 
   /// How many half-moves deep the next search looks: the Search tab's
-  /// number, kept for the life of the window.
-  int depth = defaultSearchDepth;
+  /// number, kept for the life of the window. Null, the default, searches
+  /// until the user stops it.
+  int? depth;
 
   /// Whether a search can start now: a position is on the board and not
   /// hidden, and no search is running.
@@ -340,8 +343,7 @@ final class FillGaps extends ChangeNotifier {
     final config = SearchConfig(
       side: target.side,
       horizonPlies: request.depthPlies,
-      lossLimitCp: request.lossLimitCp,
-      replyFloor: 1 / request.onceIn,
+      lossLimitCp: null,
     );
     final result = await buildSearchTree(
       root: root,
@@ -349,6 +351,10 @@ final class FillGaps extends ChangeNotifier {
       evaluator: tools.evaluator,
       policy: tools.policy,
       isCancelled: () => _stopping,
+      lastPly: () => switch (_state) {
+        FillRunning(:final lastPly) => lastPly,
+        _ => null,
+      },
       onProgress: _progress,
       onSnapshot: (tree) => _show(target, request, tree),
     );
@@ -367,9 +373,18 @@ final class FillGaps extends ChangeNotifier {
     _set(
       FillDone(
         nodes: nodesIn(tree),
-        depth: result is SearchComplete ? request.depthPlies : reached,
+        depth: result is SearchComplete
+            ? request.depthPlies ?? reached
+            : reached,
         complete: result is SearchComplete,
       ),
+    );
+    await finds?.record(
+      tree,
+      rootFen: target.rootFen,
+      prefix: target.sans,
+      side: target.side,
+      elo: request.elo,
     );
     if (target.chapter case (_, final source)) {
       await _kept(source, tree, config, result, request);
@@ -522,6 +537,18 @@ final class FillGaps extends ChangeNotifier {
   void finish() {
     if (_state case final FillRunning running when !running.stopping) {
       _set(running.copyWith(finishing: true));
+    }
+  }
+
+  /// Lets the level under way finish, every position at the depth the
+  /// search has reached scored, then stops and keeps the tree. Asked again
+  /// it changes nothing: the level it named is the one it stops after.
+  void finishLevel() {
+    if (_state case final FillRunning running
+        when !running.stopping && running.lastPly == null) {
+      // Before the first expansion is done there is no level to finish but
+      // the first.
+      _set(running.copyWith(lastPly: running.depth < 1 ? 1 : running.depth));
     }
   }
 

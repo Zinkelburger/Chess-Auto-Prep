@@ -119,7 +119,6 @@ const paneTabUnderline = 2.0;
 /// the columns for how often a reply is played and for the two values.
 const searchEloWidth = 84.0;
 const searchDepthWidth = 64.0;
-const searchOnceInWidth = 112.0;
 const searchHeaderHeight = 24.0;
 const searchRowHeight = 32.0;
 const searchShareWidth = 64.0;

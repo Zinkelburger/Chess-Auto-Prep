@@ -17,6 +17,7 @@ import '../ui/listening_state.dart';
 import '../ui/theme.dart';
 import 'document_session.dart';
 import 'fill_gaps.dart';
+import 'finds.dart';
 import 'line_preview.dart';
 
 /// The Search tab of the reading card: the expectimax search from the
@@ -62,9 +63,8 @@ class _SearchPaneState extends State<SearchPane>
   late final _elo = TextEditingController(
     text: '${widget.settings.value.opponentElo}',
   );
-  late final _depth = TextEditingController(text: '${widget.fill.depth}');
-  late final _onceIn = TextEditingController(
-    text: '${widget.settings.value.coverOnceIn}',
+  late final _depth = TextEditingController(
+    text: widget.fill.depth == null ? '' : '${widget.fill.depth}',
   );
   final _preview = ValueNotifier<LinePreview?>(null);
   Timer? _settle;
@@ -108,7 +108,6 @@ class _SearchPaneState extends State<SearchPane>
     _preview.dispose();
     _elo.dispose();
     _depth.dispose();
-    _onceIn.dispose();
     super.dispose();
   }
 
@@ -119,33 +118,25 @@ class _SearchPaneState extends State<SearchPane>
 
   Future<void> _search() async {
     final elo = _number(_elo, Settings.minElo, Settings.maxElo);
-    final depth = _number(_depth, minFillDepth, maxFillDepth);
-    final onceIn = _number(
-      _onceIn,
-      Settings.minCoverOnceIn,
-      Settings.maxCoverOnceIn,
-    );
+    // An empty depth is no depth: the search goes on until it is stopped.
+    final unbounded = _depth.text.trim().isEmpty;
+    final depth = unbounded
+        ? null
+        : _number(_depth, minFillDepth, maxFillDepth);
     final problem = elo == null
         ? 'Rating: ${Settings.minElo} to ${Settings.maxElo}'
-        : depth == null
-        ? 'Depth: $minFillDepth to $maxFillDepth'
-        : onceIn == null
-        ? 'Skip under 1 in: '
-              '${Settings.minCoverOnceIn} to ${Settings.maxCoverOnceIn}'
+        : !unbounded && depth == null
+        ? 'Depth: $minFillDepth to $maxFillDepth, or empty for no limit'
         : null;
     setState(() => _problem = problem);
-    if (elo == null || depth == null || onceIn == null) return;
+    if (problem != null || elo == null) return;
     widget.fill.depth = depth;
     final s = widget.settings.value;
-    if (s.opponentElo != elo || s.coverOnceIn != onceIn) {
-      unawaited(
-        widget.settings.update(
-          s.copyWith(opponentElo: elo, coverOnceIn: onceIn),
-        ),
-      );
+    if (s.opponentElo != elo) {
+      unawaited(widget.settings.update(s.copyWith(opponentElo: elo)));
     }
     final refusal = await widget.fill.start(
-      FillRequest(elo: elo, depthPlies: depth, onceIn: onceIn),
+      FillRequest(elo: elo, depthPlies: depth),
     );
     if (!mounted || refusal == null) return;
     setState(() => _problem = refusal);
@@ -176,7 +167,11 @@ class _SearchPaneState extends State<SearchPane>
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: Listenable.merge([widget.fill, widget.session.anyChange]),
+      listenable: Listenable.merge([
+        widget.fill,
+        widget.session.anyChange,
+        ?widget.fill.finds,
+      ]),
       builder: (context, _) => LinePreviewOverlay(
         preview: _preview,
         orientation: widget.session.orientation,
@@ -217,14 +212,7 @@ class _SearchPaneState extends State<SearchPane>
             width: searchDepthWidth,
             enabled: running == null,
             onSubmitted: _search,
-          ),
-          const SizedBox(width: Space.m),
-          _NumberBox(
-            label: 'Skip under 1 in',
-            box: _onceIn,
-            width: searchOnceInWidth,
-            enabled: running == null,
-            onSubmitted: _search,
+            hint: 'Any',
           ),
           const Spacer(),
           if (running == null)
@@ -235,14 +223,33 @@ class _SearchPaneState extends State<SearchPane>
                 child: const Text('Search'),
               ),
             )
-          else
+          else ...[
+            // A search with a depth ends there by itself.
+            if (running.of == null) ...[
+              Tooltip(
+                message:
+                    'Score every position at this depth, then stop and '
+                    'keep the tree',
+                child: OutlinedButton(
+                  onPressed: running.stopping || running.lastPly != null
+                      ? null
+                      : fill.finishLevel,
+                  child: Text(
+                    'Stop after depth '
+                    '${running.lastPly ?? (running.depth < 1 ? 1 : running.depth)}',
+                  ),
+                ),
+              ),
+              const SizedBox(width: Space.s),
+            ],
             Tooltip(
-              message: 'Stop and keep what it found',
+              message: 'Stop now and keep what it found',
               child: FilledButton.tonal(
                 onPressed: running.stopping ? null : fill.finish,
                 child: const Text('Stop'),
               ),
             ),
+          ],
         ],
       ),
     );
@@ -258,18 +265,29 @@ class _SearchPaneState extends State<SearchPane>
     final (words, error) = switch (widget.fill.state) {
       _ when _problem != null => (_problem!, true),
       FillIdle() => (
-        'Scores every move from here against the opponent, $forSide.',
+        'Plays every move from here, $forSide, level by level'
+            '${widget.fill.depth == null ? ' until you stop it' : ''}.',
         false,
       ),
-      FillRunning(:final depth, :final of, :final nodes, :final stopping) => (
-        stopping
-            ? 'Stopping at depth $depth · $nodes positions'
-            : 'Searching $forSide · depth $depth of $of · $nodes positions',
-        false,
-      ),
+      FillRunning(
+        :final depth,
+        :final of,
+        :final nodes,
+        :final stopping,
+        :final lastPly,
+      ) =>
+        (
+          stopping
+              ? 'Stopping at depth $depth · $nodes positions'
+              : 'Searching $forSide · depth $depth'
+                    '${of == null ? '' : ' of $of'} · $nodes positions'
+                    '${lastPly == null ? '' : ' · stops after depth $lastPly'}',
+          false,
+        ),
       FillDone(:final depth, :final nodes, :final complete) => (
         '${complete ? 'Searched' : 'Stopped at'} depth $depth $forSide · '
-            '$nodes positions · rated ${found?.request.elo ?? ''}',
+            '$nodes positions · rated ${found?.request.elo ?? ''}'
+            '${_findsWords()}',
         false,
       ),
       FillFailed(:final reason) => (reason, true),
@@ -286,6 +304,13 @@ class _SearchPaneState extends State<SearchPane>
       ),
     );
   }
+
+  /// What the run pointed out, and where to see it.
+  String _findsWords() => switch (widget.fill.finds?.recorded) {
+    FindsReading() => ' · looking for positions…',
+    FindsKept(:final count) => ' · $count found, listed in Positions (Ctrl+P)',
+    null => '',
+  };
 
   Widget _table(BuildContext context) {
     final found = widget.fill.found;
@@ -505,7 +530,7 @@ final class _Row {
   final bool trap;
 }
 
-/// A labelled number field, narrow enough for three in a row.
+/// A labelled number field, narrow enough for several in a row.
 class _NumberBox extends StatelessWidget {
   const _NumberBox({
     required this.label,
@@ -513,9 +538,13 @@ class _NumberBox extends StatelessWidget {
     required this.width,
     required this.enabled,
     required this.onSubmitted,
+    this.hint,
   });
 
   final String label;
+
+  /// What an empty box means.
+  final String? hint;
   final TextEditingController box;
   final double width;
   final bool enabled;
@@ -529,7 +558,14 @@ class _NumberBox extends StatelessWidget {
       enabled: enabled,
       keyboardType: TextInputType.number,
       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-      decoration: InputDecoration(labelText: label, isDense: true),
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        isDense: true,
+        floatingLabelBehavior: hint == null
+            ? null
+            : FloatingLabelBehavior.always,
+      ),
       onSubmitted: (_) => unawaited(onSubmitted()),
     ),
   );

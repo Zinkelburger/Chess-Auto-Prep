@@ -80,14 +80,15 @@ void main() {
     ),
   );
 
-  testWidgets('before a search: its three numbers and one button', (
+  testWidgets('before a search: its two numbers and one button', (
     tester,
   ) async {
     await pump(tester);
     expect(find.widgetWithText(TextField, 'Opponent'), findsOneWidget);
     expect(find.widgetWithText(TextField, 'Depth'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Skip under 1 in'), findsNothing);
     expect(find.widgetWithText(FilledButton, 'Search'), findsOneWidget);
-    expect(find.textContaining('for White'), findsOneWidget);
+    expect(find.textContaining('until you stop it'), findsOneWidget);
   });
 
   /// Runs a search two plies deep from the board, on real time.
@@ -121,7 +122,7 @@ void main() {
     expect(find.byType(StaticChessboard), findsNothing);
   });
 
-  testWidgets('the values at the board, following it: our moves near the best, '
+  testWidgets('the values at the board, following it: every move of ours, '
       'then their replies most played first with the trap marked', (
     tester,
   ) async {
@@ -141,9 +142,9 @@ void main() {
     expect(fill.depth, 2);
     expect(find.text('Your move'), findsOneWidget);
     expect(find.text('Expectimax'), findsOneWidget);
-    // Only moves within half a pawn of the best are searched.
+    // Nothing is pruned: a move the engine thinks little of is searched too.
     expect(find.text('e4'), findsOneWidget);
-    expect(find.text('e3'), findsNothing);
+    expect(find.text('e3'), findsOneWidget);
     await tester.tap(find.text('e4'));
     await tester.pumpAndSettle();
     expect(fixture.session.currentMove?.san, 'e4');

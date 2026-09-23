@@ -27,12 +27,14 @@ Future<SearchResult> searchFrom(
   PositionEvaluator? evaluator,
   OpponentPolicy policy = oneReply,
   CancelSignal? isCancelled,
+  LastPly? lastPly,
 }) => buildSearchTree(
   root: positionOf(fen),
   config: config,
   evaluator: evaluator ?? ScriptedEvaluator(),
   policy: policy,
   isCancelled: isCancelled ?? () => false,
+  lastPly: lastPly,
 );
 
 SearchNode treeOf(SearchResult result) => switch (result) {

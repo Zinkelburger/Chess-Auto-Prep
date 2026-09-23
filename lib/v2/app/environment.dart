@@ -28,6 +28,7 @@ import '../storage/bughouse_books.dart';
 import '../storage/bughouse_matches.dart';
 import '../storage/chapter_files.dart';
 import '../storage/eval_cache.dart';
+import '../storage/finds_store.dart';
 import '../storage/game_store.dart';
 import '../storage/lichess_token.dart';
 import '../storage/master_book.dart';
@@ -100,6 +101,7 @@ final class AppEnvironment {
     required this.stopEngines,
     required this.evalCache,
     required this.keepTree,
+    this.finds = FindsStore.inMemory,
     required this.setFullScreen,
     required this.bughouse,
     this.now = DateTime.now,
@@ -121,6 +123,7 @@ final class AppEnvironment {
     final maia = MaiaLaunch();
     final book = SqliteMasterBook(p.join(support.path, 'master_games.db'));
     final evalCache = EvalCacheOnDemand(support);
+    final finds = FindsStoreOnDemand(support);
     final repertoires = p.join(documents.path, 'repertoires');
     final studies = p.join(documents.path, 'studies');
     final collections = p.join(documents.path, 'pgn_collections');
@@ -184,6 +187,7 @@ final class AppEnvironment {
       stopEngines: engines.dispose,
       evalCache: () => evalCache.cache,
       keepTree: _keepTreeBeside,
+      finds: () => finds.store,
       setFullScreen: _setFullScreen,
       bughouse: (
         bundled: _bughouseBundled,
@@ -196,6 +200,7 @@ final class AppEnvironment {
       jitter: () => dice.nextDouble() * 2 - 1,
       close: () {
         evalCache.close();
+        finds.close();
         book.close();
         hivemindBook.close();
         ficsBook.close();
@@ -255,6 +260,11 @@ final class AppEnvironment {
   /// The engine's verdicts, shared with the old app, opened the first time
   /// a fill asks.
   final EvalCache Function() evalCache;
+
+  /// What the searches point out, kept between runs, opened the first time
+  /// one is recorded or listed. Called once; the default keeps them in
+  /// memory, for a test.
+  final FindsStore Function() finds;
 
   /// Keeps a fill's search tree beside its chapter.
   final Future<void> Function(ChapterRef chapter, String tree) keepTree;

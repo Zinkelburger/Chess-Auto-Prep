@@ -4,9 +4,10 @@ import 'package:dartchess/dartchess.dart' show Side;
 ///
 /// The defaults are a small search for tests and hand-built trees: four
 /// half-moves ahead, every move within two pawns of the best one. The
-/// Search tab asks for its own, the depth the user typed and half a pawn
-/// (`FillRequest` in `workspace/fill_gaps.dart`). A deeper horizon costs
-/// exponentially more.
+/// Search tab asks for no limit at all by default: every legal move of ours,
+/// every reply the model gives any weight, level by level until the user
+/// stops it (`FillRequest` in `workspace/fill_gaps.dart`). A deeper horizon
+/// costs exponentially more.
 final class SearchConfig {
   const SearchConfig({
     required this.side,
@@ -23,12 +24,15 @@ final class SearchConfig {
   final Side side;
 
   /// How many half-moves from the root the search plays out before it stops
-  /// and lets the engine value the position instead.
-  final int horizonPlies;
+  /// and lets the engine value the position instead. Null has no horizon:
+  /// the search goes on level by level until it is stopped or the budget
+  /// runs out.
+  final int? horizonPlies;
 
   /// L in centipawns: one of our legal moves is prepared when the engine
-  /// scores it within this much of our best move at the fixed depth.
-  final int lossLimitCp;
+  /// scores it within this much of our best move at the fixed depth. Null
+  /// keeps every legal move.
+  final int? lossLimitCp;
 
   /// The most nodes the tree may hold, the root counted among them. Null
   /// runs to the horizon however large that is. The Search tab sets none;

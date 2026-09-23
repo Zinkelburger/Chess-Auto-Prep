@@ -239,4 +239,37 @@ void main() {
       expect(reply.child, isA<FrontierNode>());
     }
   });
+
+  test('with no loss limit every legal move of ours is kept', () async {
+    final result = await searchFrom(
+      kingAndPawn,
+      config: const SearchConfig(
+        side: Side.white,
+        horizonPlies: 1,
+        lossLimitCp: null,
+      ),
+    );
+    // Four king moves and two pawn pushes, whatever the engine says.
+    expect((treeOf(result) as OurNode).candidates, hasLength(6));
+  });
+
+  test('with no horizon a last ply stops it once that level is done', () async {
+    final result = await searchFrom(
+      kingAndPawn,
+      config: const SearchConfig(
+        side: Side.white,
+        horizonPlies: null,
+        lossLimitCp: null,
+      ),
+      lastPly: () => 1,
+    );
+    expect((result as SearchIncomplete).reason, StopReason.levelDone);
+    final tree = treeOf(result) as OurNode;
+    expect(tree.candidates, hasLength(6));
+    expect(
+      tree.candidates.map((c) => c.child),
+      everyElement(isA<FrontierNode>()),
+      reason: 'every move of the first level is scored, none expanded',
+    );
+  });
 }

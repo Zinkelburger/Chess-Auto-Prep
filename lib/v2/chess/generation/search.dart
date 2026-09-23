@@ -20,6 +20,11 @@ typedef CancelSignal = bool Function();
 /// holds and the deepest ply expanded so far.
 typedef SearchProgress = ({int nodes, int depth});
 
+/// The ply no node at or past is expanded, asked before every expansion;
+/// null while there is none. The search goes level by level, so a cap set
+/// while it runs lets the level under way finish and stops there.
+typedef LastPly = int? Function();
+
 /// The tree as it stands, handed out each time the search starts a deeper
 /// level — every position above it is expanded, so what it says about the
 /// moves near the root is already worth reading — and every
@@ -59,6 +64,7 @@ Future<SearchResult> buildSearchTree({
   required PositionEvaluator evaluator,
   required OpponentPolicy policy,
   CancelSignal isCancelled = _neverCancelled,
+  LastPly? lastPly,
   void Function(SearchProgress progress)? onProgress,
   SearchSnapshot? onSnapshot,
 }) => _Search(
@@ -66,6 +72,7 @@ Future<SearchResult> buildSearchTree({
   evaluator: evaluator,
   policy: policy,
   isCancelled: isCancelled,
+  lastPly: lastPly,
   onProgress: onProgress,
   onSnapshot: onSnapshot,
 ).run(root);
@@ -128,6 +135,7 @@ final class _Search {
     required this.evaluator,
     required this.policy,
     required this.isCancelled,
+    required this.lastPly,
     required this.onProgress,
     required this.onSnapshot,
   });
@@ -136,6 +144,7 @@ final class _Search {
   final PositionEvaluator evaluator;
   final OpponentPolicy policy;
   final CancelSignal isCancelled;
+  final LastPly? lastPly;
   final void Function(SearchProgress progress)? onProgress;
   final SearchSnapshot? onSnapshot;
 
@@ -199,8 +208,10 @@ final class _Search {
         return _Unscored(reason);
       case Evaluated(:final eval):
         final forUs = eval.forUs(config.side, path.position.turn);
+        final horizon = config.horizonPlies;
         final beyond =
-            path.ply >= config.horizonPlies || path.reach < config.replyFloor;
+            (horizon != null && path.ply >= horizon) ||
+            path.reach < config.replyFloor;
         return _Scored(
           beyond
               ? HorizonNode(fen: path.fen, evalForUs: forUs)
@@ -264,6 +275,11 @@ final class _Search {
     while (queue.isNotEmpty && !_stopping()) {
       final pending = queue.removeFirst();
       if (pending.leaf is! FrontierNode) continue;
+      // Every node still queued is at least this deep.
+      if (lastPly?.call() case final last? when pending.path.ply >= last) {
+        _stop ??= const _Requested(StopReason.levelDone);
+        break;
+      }
       // The queue is ordered by depth, so the first node of a new level
       // means every level above it is done.
       if (onSnapshot != null &&
@@ -405,7 +421,8 @@ final class _Search {
 }
 
 /// The moves worth preparing: every one whose fixed-depth evaluation is
-/// within [lossLimitCp] centipawns of our best move's.
+/// within [lossLimitCp] centipawns of our best move's, or all of them when
+/// there is no limit.
 ///
 /// The search enumerates *every* legal move at one of our positions,
 /// promotions to all four pieces included, evaluates each of them at the same
@@ -422,8 +439,9 @@ final class _Search {
 /// terminal, not an empty choice.
 List<CandidateMove> admittedMoves(
   List<CandidateMove> candidates, {
-  required int lossLimitCp,
+  required int? lossLimitCp,
 }) {
+  if (lossLimitCp == null) return candidates;
   final best = candidates
       .map((candidate) => candidate.evalForUs.cp)
       .reduce((a, b) => a > b ? a : b);

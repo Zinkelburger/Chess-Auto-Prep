@@ -4,6 +4,7 @@ import 'document_session.dart';
 import 'engine_analysis.dart';
 import 'explorer.dart';
 import 'fill_gaps.dart';
+import 'finds.dart';
 import 'game_fetcher.dart';
 import 'gap_hunt.dart';
 import 'local_games.dart';
@@ -32,6 +33,7 @@ final class Workspace {
     required this.shelf,
     required this.tree,
     required this.fill,
+    required this.finds,
     required this.myGamesTree,
   });
 
@@ -53,6 +55,9 @@ final class Workspace {
   /// The user's own repertoires, looked up by position: the Tree tab.
   final RepertoireTree tree;
   final FillGaps fill;
+
+  /// What the searches have pointed out: the Positions list.
+  final Finds finds;
 
   /// The user's saved games as one opening tree: the explorer's
   /// `My games`, read again when their games change.

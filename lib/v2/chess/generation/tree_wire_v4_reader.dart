@@ -87,7 +87,7 @@ TreeReadResult _readTree(
 ) {
   final reader = _Reader(
     ourSide: config.side,
-    horizonPlies: config.horizonPlies,
+    horizonPlies: config.horizonPlies ?? unboundedDepthWire,
   );
   final root = reader.read(tree, 0);
   if (root == null) {
@@ -456,8 +456,14 @@ SearchConfig configFromSnapshot(Map<String, Object?> config) {
   final budget = config['max_nodes'];
   return SearchConfig(
     side: side,
-    horizonPlies: _intOr(config['max_depth'], defaults.horizonPlies),
-    lossLimitCp: _intOr(config['max_eval_loss_cp'], defaults.lossLimitCp),
+    horizonPlies: _limit(
+      _intOr(config['max_depth'], defaults.horizonPlies),
+      unboundedDepthWire,
+    ),
+    lossLimitCp: _limit(
+      _intOr(config['max_eval_loss_cp'], defaults.lossLimitCp),
+      unboundedLossWire,
+    ),
     nodeBudget: budget is num && budget.isFinite && budget > 0
         ? budget.toInt()
         : null,
@@ -466,5 +472,10 @@ SearchConfig configFromSnapshot(Map<String, Object?> config) {
 
 /// [value] as a whole number, or [fallback] when it is not a number or is
 /// one no int holds.
-int _intOr(Object? value, int fallback) =>
+int? _intOr(Object? value, int? fallback) =>
     value is num && value.isFinite ? value.toInt() : fallback;
+
+/// [value], or null — no limit — when it is the number a search with none
+/// writes.
+int? _limit(int? value, int unbounded) =>
+    value != null && value >= unbounded ? null : value;

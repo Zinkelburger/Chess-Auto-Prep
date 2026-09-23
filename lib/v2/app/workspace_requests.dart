@@ -295,6 +295,29 @@ final class WorkspaceRequests extends ChangeNotifier {
     return const RequestDone();
   }
 
+  /// A line on a new analysis board, from [root] seen from [side], with the
+  /// board at the position [ply] moves in: a position the searches pointed
+  /// out, with the moves to it and on past it to read, play over or save.
+  Future<RequestResult> openLine({
+    required Fen root,
+    required List<String> sans,
+    required int ply,
+    required Side side,
+  }) async {
+    final ticket = ++_asked;
+    final leave = await _leavingFile();
+    if (_overtaken(ticket) || leave == null) return const RequestDropped();
+    final shown = await _session.showAnalysisBoard(
+      boards.analysisBoard(side: side, root: root, sans: sans),
+    );
+    if (!shown || _overtaken(ticket)) return const RequestDropped();
+    if (_session.tree case final tree?) {
+      _session.goTo(pathAlong(tree, sans.take(ply).toList()));
+    }
+    _saidCopy(leave);
+    return const RequestDone();
+  }
+
   /// Ctrl+V: the clipboard onto the analysis board while it is up, else a
   /// new repertoire in the builder; anywhere else it does nothing.
   Future<RequestResult> paste() async {

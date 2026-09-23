@@ -40,6 +40,13 @@ const int treeWireVersion = 4;
 /// positions differently and shared values between paths.
 const int pureAlgorithmVersion = 3;
 
+/// What a search with no horizon writes as its `max_depth`.
+const int unboundedDepthWire = 512;
+
+/// What a search that keeps every move writes as its `max_eval_loss_cp`:
+/// wider than a mate to a mate the other way.
+const int unboundedLossWire = 100000;
+
 /// [root] and [config] as a v4 document, with [complete] saying whether the
 /// search reached the horizon everywhere.
 ///
@@ -106,8 +113,11 @@ Map<String, Object?> _configJson(
   'maia_only': true,
   'maia_policy_version': 1,
   'play_as_white': config.side == Side.white,
-  'max_depth': config.horizonPlies,
-  'max_eval_loss_cp': config.lossLimitCp,
+  // A search with no horizon or no window is written with numbers no build
+  // reaches, so a reader treats every childless node as unexpanded and
+  // keeps every move.
+  'max_depth': config.horizonPlies ?? unboundedDepthWire,
+  'max_eval_loss_cp': config.lossLimitCp ?? unboundedLossWire,
   'max_nodes': ?config.nodeBudget,
   'eval_depth': ?evalDepth,
   'maia_elo': ?opponentRating,

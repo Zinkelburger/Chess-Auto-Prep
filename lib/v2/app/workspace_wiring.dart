@@ -9,6 +9,7 @@ import '../workspace/engine_analysis.dart';
 import '../workspace/explorer.dart';
 import '../workspace/file_filter.dart';
 import '../workspace/fill_gaps.dart';
+import '../workspace/finds.dart';
 import '../workspace/game_fetcher.dart';
 import '../workspace/gap_hunt.dart';
 import '../workspace/local_games.dart';
@@ -61,6 +62,7 @@ final class WorkspaceWiring {
     shelf: _shelf,
     tree: _tree,
     fill: _fill,
+    finds: _finds,
     myGamesTree: _myGamesTree,
   );
 
@@ -128,8 +130,11 @@ final class WorkspaceWiring {
     documents: _env.store,
     tools: _fillTools,
     keepTree: _env.keepTree,
+    finds: _finds,
     clock: _env.now,
   );
+
+  late final _finds = Finds(store: _env.finds, clock: _env.now);
 
   /// A second Stockfish for the fill, with the pane's threads and table:
   /// the pane's own engine is paused for the run, so the machine is not
@@ -203,6 +208,7 @@ final class WorkspaceWiring {
     _relisted.dispose();
     _fill.removeListener(_listTheDraft);
     _fill.dispose();
+    _finds.dispose();
     _analysis.dispose();
     _replies.dispose();
     _gaps.dispose();

@@ -8,7 +8,9 @@ import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
+import 'package:chess_auto_prep/v2/storage/finds_store.dart';
 import 'package:chess_auto_prep/v2/workspace/fill_gaps.dart';
+import 'package:chess_auto_prep/v2/workspace/finds.dart';
 import 'package:chess_auto_prep/v2/chess/fen.dart';
 import 'package:dartchess/dartchess.dart' show Position, Side;
 import 'package:flutter_test/flutter_test.dart';
@@ -54,7 +56,7 @@ void main() {
   late EngineAnalysis analysis;
   late int releases;
 
-  const request = FillRequest(elo: 2200, depthPlies: 3, onceIn: 50);
+  const request = FillRequest(elo: 2200, depthPlies: 3);
 
   setUp(() async {
     fixture = await openSession(chapter);
@@ -73,6 +75,7 @@ void main() {
     PositionEvaluator evaluator, {
     OpponentPolicy policy = const ScriptedPolicy({'e8d8': 1}),
     TreeKeeper? keepTree,
+    Finds? finds,
   }) {
     final fill = FillGaps(
       session: fixture.session,
@@ -84,6 +87,7 @@ void main() {
         release: () async => releases++,
       ),
       keepTree: keepTree,
+      finds: finds,
       clock: () => DateTime(2026, 9, 22, 12),
     );
     addTearDown(fill.dispose);
@@ -179,7 +183,7 @@ void main() {
     );
     expect(fill.canStart, isTrue);
     final writes = fixture.store.creates.length;
-    const shallow = FillRequest(elo: 2200, depthPlies: 2, onceIn: 50);
+    const shallow = FillRequest(elo: 2200, depthPlies: 2);
     expect(await fill.start(shallow), isNull);
     expect(fill.state, isA<FillDone>());
     expect(fixture.store.creates, hasLength(writes), reason: 'nothing saved');
@@ -198,7 +202,7 @@ void main() {
     }
 
     fill.addListener(finishEarly);
-    await fill.start(const FillRequest(elo: 2200, depthPlies: 8, onceIn: 50));
+    await fill.start(const FillRequest(elo: 2200, depthPlies: 8));
     fill.removeListener(finishEarly);
     final done = fill.state as FillDone;
     expect(done.complete, isFalse);
@@ -376,7 +380,7 @@ void main() {
     () async {
       // Horizon one: the best move is e4, which the chapter already plays.
       final fill = fillWith(ScriptedEvaluator(scores: e4Best()));
-      await fill.start(const FillRequest(elo: 2200, depthPlies: 1, onceIn: 50));
+      await fill.start(const FillRequest(elo: 2200, depthPlies: 1));
       await fill.makeLines();
       expect(
         fill.lines,
@@ -460,7 +464,7 @@ void main() {
     fixture.session.forward();
     final evaluator = ScriptedEvaluator();
     final fill = fillWith(evaluator);
-    await fill.start(const FillRequest(elo: 2200, depthPlies: 1, onceIn: 50));
+    await fill.start(const FillRequest(elo: 2200, depthPlies: 1));
     final board = positionOf(fixture.session.fen.value);
     expect(evaluator.asked.first, board.fen);
     expect(
@@ -471,5 +475,32 @@ void main() {
     // the board, so they can be dropped into the chapter.
     await fill.makeLines();
     expect(textOf(draft()), contains('1. e4 Kd8 2. '));
+  });
+
+  test('with no depth it goes on until asked to stop after a level, then '
+      'keeps what it points out', () async {
+    final store = FindsStore.inMemory();
+    addTearDown(store.close);
+    final finds = Finds(store: () => store);
+    addTearDown(finds.dispose);
+    final fill = fillWith(ScriptedEvaluator(scores: e4Best()), finds: finds);
+    fill.addListener(() {
+      if (fill.state case FillRunning(:final depth) when depth >= 2) {
+        fill.finishLevel();
+      }
+    });
+
+    await fill.start(const FillRequest(elo: 2200));
+
+    final done = fill.state as FillDone;
+    expect(done.complete, isFalse);
+    expect(done.depth, 2, reason: 'the level under way was finished');
+    expect(finds.recorded, isA<FindsKept>());
+    finds.load();
+    // Every find's line runs from the chapter's root through the board.
+    for (final kept in finds.all) {
+      expect(kept.rootFen, const Fen(kingAndPawn));
+      expect(kept.side, Side.white);
+    }
   });
 }
