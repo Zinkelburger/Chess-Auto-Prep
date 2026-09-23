@@ -325,6 +325,42 @@ void main() {
       expect(await openListed(), isA<RequestDropped>());
       expect(w.session.source, kid);
     });
+
+    test('from This file is put on the board where its main line reaches '
+        'the position, by its own move order, reading and keeping '
+        'nothing', () async {
+      const transposed = '''
+[Event "A"]
+[Result "1-0"]
+
+1. d4 Nf6 2. c4 e6 3. Nc3 1-0
+
+[Event "B"]
+[Result "0-1"]
+
+1. c4 e6 2. d4 Nf6 3. Nf3 0-1
+''';
+      final games = collectionRef('games');
+      w.store.documents[games] = Opened(
+        transposed,
+        scriptedRevision(transposed),
+      );
+      await w.requests.openFile(games);
+      w.session.goTo(NodePath.of(const [0, 0, 0, 0]));
+      final shared = w.session.fen;
+      final result = await w.requests.openExplorerGame(
+        const ExplorerGame(id: '1', white: '', black: '', result: '0-1'),
+        source: ExplorerSource.thisFile,
+        ply: w.explorer.ply,
+      );
+      expect(result, isA<RequestDone>());
+      expect(w.session.source, games);
+      expect(w.session.game, 1);
+      expect(w.session.cursor, NodePath.of(const [0, 0, 0, 0]));
+      expect(w.session.fen.position, shared.position);
+      expect(w.session.currentMove?.san, 'Nf6');
+      expect(w.store.creates, isEmpty);
+    });
   });
 
   group('the analysis board', () {

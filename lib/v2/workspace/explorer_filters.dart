@@ -34,23 +34,29 @@ class _ExplorerSourceBarState extends State<ExplorerSourceBar> {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(Space.m, Space.xs, Space.s, 0),
-          child: Row(
+          // The end of the row goes under the databases when the card is
+          // too narrow for both, and the databases scroll sideways when it
+          // is too narrow for them alone: nothing is cut off.
+          child: Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              SegmentedButton<ExplorerSource>(
-                segments: [
-                  for (final source in _explorer.sources)
-                    ButtonSegment(value: source, label: Text(source.title)),
-                ],
-                selected: {choice.source},
-                showSelectedIcon: false,
-                style: const ButtonStyle(visualDensity: VisualDensity.compact),
-                onSelectionChanged: (picked) =>
-                    _explorer.choose(choice.copyWith(source: picked.single)),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: _Sources(explorer: _explorer),
               ),
-              const Spacer(),
-              if (summary != null) Flexible(child: _Summary(summary)),
+              if (summary != null)
+                ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxWidth: explorerTrailingMaxWidth,
+                  ),
+                  child: _Summary(summary),
+                ),
               if (narrowable)
-                Flexible(
+                ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxWidth: explorerTrailingMaxWidth,
+                  ),
                   child: TextButton(
                     onPressed: () => setState(() => _unfolded = !_unfolded),
                     child: Row(
@@ -94,6 +100,35 @@ class _ExplorerSourceBarState extends State<ExplorerSourceBar> {
   String _folded(ExplorerChoice choice) {
     final narrowing = choice.narrowing;
     return narrowing.isEmpty ? 'Filters' : narrowing;
+  }
+}
+
+/// The databases side by side, the chosen one pressed.
+class _Sources extends StatelessWidget {
+  const _Sources({required this.explorer});
+
+  final Explorer explorer;
+
+  @override
+  Widget build(BuildContext context) {
+    final choice = explorer.choice;
+    return SegmentedButton<ExplorerSource>(
+      segments: [
+        for (final source in explorer.sources)
+          ButtonSegment(value: source, label: Text(source.title)),
+      ],
+      selected: {choice.source},
+      showSelectedIcon: false,
+      style: const ButtonStyle(
+        visualDensity: VisualDensity.compact,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        padding: WidgetStatePropertyAll(
+          EdgeInsets.symmetric(horizontal: Space.s),
+        ),
+      ),
+      onSelectionChanged: (picked) =>
+          explorer.choose(choice.copyWith(source: picked.single)),
+    );
   }
 }
 

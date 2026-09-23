@@ -48,22 +48,31 @@ class _GameFilterBarState extends State<GameFilterBar> {
   Widget _heading(BuildContext context) {
     final theme = Theme.of(context);
     return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        TextButton(
-          onPressed: () => setState(() => _unfolded = !_unfolded),
-          style: const ButtonStyle(visualDensity: VisualDensity.compact),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Filter games'),
-              Icon(
-                _unfolded ? Icons.expand_less : Icons.expand_more,
-                size: IconSize.menu,
-              ),
-            ],
+        // Room for the count first: a narrow column cuts the label.
+        Flexible(
+          child: TextButton(
+            onPressed: () => setState(() => _unfolded = !_unfolded),
+            style: const ButtonStyle(visualDensity: VisualDensity.compact),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Flexible(
+                  child: Text(
+                    'Filter games',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Icon(
+                  _unfolded ? Icons.expand_less : Icons.expand_more,
+                  size: IconSize.menu,
+                ),
+              ],
+            ),
           ),
         ),
-        const Spacer(),
         if (_filter.narrowing)
           Text(
             '${_filter.kept} of ${_filter.total}',
@@ -117,7 +126,9 @@ class _GameFilterBarState extends State<GameFilterBar> {
             filter.copyWith(rules: [...rules]..removeAt(index)),
           ),
         ),
-      Row(
+      Wrap(
+        spacing: Space.s,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           TextButton.icon(
             onPressed: () => _filter.apply(
@@ -138,7 +149,6 @@ class _GameFilterBarState extends State<GameFilterBar> {
               onSelectionChanged: (any) =>
                   _filter.apply(filter.copyWith(any: any.single)),
             ),
-          const Spacer(),
           if (!filter.isEmpty)
             TextButton(
               onPressed: () => _filter.apply(GameFilter.none),

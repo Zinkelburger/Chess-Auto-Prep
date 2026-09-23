@@ -5,6 +5,8 @@ import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:chess_auto_prep/v2/workspace/file_filter.dart';
+
 import '../../support/viewer_fixture.dart';
 
 void main() {
@@ -92,6 +94,46 @@ void main() {
     await tester.enterText(find.byType(TextField), 'fischer');
     await tester.pumpAndSettle();
     expect(find.text('Nothing matches "fischer".'), findsOneWidget);
+  });
+
+  testWidgets('Filter games unfolds a Field / Rule / Value row; a rule '
+      'narrows the list and folds to a chip that removes it', (tester) async {
+    fixture = await viewerOver(threeGameFile);
+    await fixture.open();
+    await pump(tester);
+    expect(find.text('Field'), findsNothing, reason: 'folded');
+    await tester.tap(find.text('Filter games'));
+    await tester.pumpAndSettle();
+    expect(find.text('Player'), findsOneWidget, reason: 'one blank row');
+    expect(find.text('contains'), findsOneWidget);
+    final value = find.widgetWithText(TextField, 'Value');
+    await tester.enterText(value, 'Carlsen');
+    await tester.pumpAndSettle();
+    expect(find.text('Carlsen, Magnus – Nakamura, Hikaru'), findsWidgets);
+    expect(find.text('Ding, Liren – Giri, Anish'), findsNothing);
+    expect(find.text('1 of 3'), findsOneWidget);
+    await tester.tap(find.text('Filter games'));
+    await tester.pumpAndSettle();
+    expect(find.text('Player contains Carlsen'), findsOneWidget);
+    await tester.tap(find.byTooltip('Remove this rule'));
+    await tester.pumpAndSettle();
+    expect(find.text('Ding, Liren – Giri, Anish'), findsOneWidget);
+    expect(fixture.filter.narrowing, isFalse);
+  });
+
+  testWidgets('a filter nothing passes says so and offers every game back', (
+    tester,
+  ) async {
+    fixture = await viewerOver(threeGameFile);
+    await fixture.open();
+    fixture.filter.apply(
+      const GameFilter(rules: [HeaderRule(value: 'Fischer')]),
+    );
+    await pump(tester);
+    expect(find.text('No games match the filter.'), findsOneWidget);
+    await tester.tap(find.text('Show all games'));
+    await tester.pumpAndSettle();
+    expect(find.text('Club night'), findsOneWidget);
   });
 
   // Under 64 KiB, so the file is read on this isolate: a widget test's

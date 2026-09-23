@@ -5,6 +5,7 @@ import 'package:chess_auto_prep/v2/storage/master_book.dart';
 import 'package:chess_auto_prep/v2/storage/settings.dart';
 import 'package:chess_auto_prep/v2/storage/settings_store.dart';
 import 'package:chess_auto_prep/v2/workspace/explorer.dart';
+import 'package:chess_auto_prep/v2/workspace/local_games.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/scripted_explorer.dart';
@@ -46,6 +47,8 @@ void main() {
   late SettingsStore settings;
   late ScriptedExplorerApi lichess;
   late ScriptedBook book;
+  late ScriptedLocalGames thisFile;
+  late ScriptedLocalGames myGames;
   late Explorer explorer;
 
   setUp(() async {
@@ -53,6 +56,8 @@ void main() {
     settings = SettingsStore();
     lichess = ScriptedExplorerApi();
     book = ScriptedBook(present: true);
+    thisFile = ScriptedLocalGames();
+    myGames = ScriptedLocalGames();
   });
 
   tearDown(() {
@@ -67,6 +72,8 @@ void main() {
       settings: settings,
       lichess: lichess,
       book: book,
+      thisFile: thisFile,
+      myGames: myGames,
     );
     await pumpEventQueue();
   }
@@ -263,5 +270,105 @@ void main() {
     await start();
     fixture.session.closed();
     expect(explorer.state, isNot(isA<ExplorerIdle>()));
+  });
+
+  group('the games on this machine:', () {
+    Future<void> choose(ExplorerSource source) async {
+      await start();
+      explorer.choose(ExplorerChoice(source: source));
+      await pumpEventQueue();
+    }
+
+    test('This file and My games are listed after the databases', () async {
+      await start();
+      expect(explorer.sources.skip(explorer.sources.length - 2), [
+        ExplorerSource.thisFile,
+        ExplorerSource.myGames,
+      ]);
+    });
+
+    test('choosing one has it read its games, and says so meanwhile', () async {
+      await choose(ExplorerSource.thisFile);
+      expect(thisFile.wanted, greaterThan(0));
+      expect(explorer.state, isA<ExplorerReading>());
+      thisFile.state = const TreeReading(200, 400);
+      thisFile.changed();
+      final reading = explorer.state as ExplorerReading;
+      expect((reading.done, reading.total), (200, 400));
+      expect(myGames.wanted, 0, reason: 'only the one on show is read');
+    });
+
+    test('once read, every position is answered at once and no database is '
+        'asked', () async {
+      await choose(ExplorerSource.myGames);
+      lichess.asked.clear();
+      book.asked.clear();
+      myGames
+        ..state = const TreeBuilt()
+        ..answer = startAnswer
+        ..summary = '2 games';
+      myGames.changed();
+      expect(shown().rows.map((r) => r.san), ['e4', 'd4']);
+      expect(shown().rows.first.inRepertoire, isTrue);
+      expect(explorer.summary, '2 games');
+      myGames.answer = afterE4Answer;
+      fixture.session.forward();
+      expect(shown().rows.single.san, 'e5', reason: 'no rest');
+      expect(lichess.asked, isEmpty);
+      expect(book.asked, isEmpty);
+    });
+
+    test('a position the games never reached has nothing', () async {
+      await choose(ExplorerSource.thisFile);
+      thisFile
+        ..state = const TreeBuilt()
+        ..answer = ExplorerAnswer.empty;
+      thisFile.changed();
+      expect(
+        (explorer.state as ExplorerNothing).sentence,
+        'No games found for this position.',
+      );
+    });
+
+    test('a part that could not be read is a line beside the rows, and a '
+        'tree that failed is a sentence whose Try again reads again', () async {
+      await choose(ExplorerSource.myGames);
+      myGames
+        ..state = const TreeBuilt(notice: 'The database could not be read.')
+        ..answer = startAnswer;
+      myGames.changed();
+      expect(explorer.notice, 'The database could not be read.');
+      myGames
+        ..state = const TreeFailed('Could not read your games.')
+        ..answer = null;
+      myGames.changed();
+      expect(
+        (explorer.state as ExplorerFailed).sentence,
+        'Could not read your games.',
+      );
+      await explorer.retry();
+      expect(myGames.forgotten, 1);
+      expect(myGames.wanted, greaterThan(1));
+    });
+
+    test('an empty tree says why', () async {
+      await choose(ExplorerSource.myGames);
+      myGames.state = const TreeEmpty('No games of yours are saved yet.');
+      myGames.changed();
+      expect(
+        (explorer.state as ExplorerNothing).sentence,
+        'No games of yours are saved yet.',
+      );
+    });
+
+    test('a tree that changes while another source is chosen is not '
+        'shown', () async {
+      await start();
+      thisFile
+        ..state = const TreeBuilt()
+        ..answer = afterE4Answer;
+      thisFile.changed();
+      expect(shown().rows.map((r) => r.san), ['e4', 'd4']);
+    });
   });
 }

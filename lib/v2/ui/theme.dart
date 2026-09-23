@@ -454,6 +454,11 @@ const gameNumberWidth = 52.0;
 /// is a stripe the eye reads before the moves.
 const explorerMoveWidth = 64.0;
 const explorerGamesWidth = 96.0;
+
+/// The widest the end of the Explorer tab's source row grows — the
+/// filters' summary or what a source on this machine is over — so the
+/// databases keep the rest of the row.
+const explorerTrailingMaxWidth = 220.0;
 const explorerBarMaxWidth = 220.0;
 const explorerBarHeight = 16.0;
 const explorerHeaderHeight = 22.0;
