@@ -20,15 +20,15 @@ import '../ui/pane_tabs.dart';
 import '../ui/theme.dart';
 import '../workspace/board_claim.dart';
 import '../workspace/copy_name_dialog.dart';
-import '../workspace/document_session.dart';
-import '../workspace/fill_dialog.dart';
 import '../workspace/fill_gaps.dart';
+import '../workspace/move_field.dart';
 import '../workspace/session_results.dart';
 import '../workspace/tree_pane.dart';
 import '../workspace/workspace.dart';
 import '../workspace/workspace_keys.dart';
 import '../workspace/workspace_tabs.dart';
 import '../workspace/workspace_view.dart';
+import 'full_screen.dart';
 import 'mode_view.dart';
 import 'mode.dart';
 import 'top_bar.dart';
@@ -46,6 +46,7 @@ class Shell extends StatefulWidget {
     required this.workspace,
     required this.documents,
     required this.training,
+    required this.fullScreen,
     required this.settingRows,
     required this.settingsAlso,
   });
@@ -54,6 +55,9 @@ class Shell extends StatefulWidget {
   final Workspace workspace;
   final DocumentModes documents;
   final TrainingModes training;
+
+  /// Whether the window fills the screen: F11, Esc and the Actions menu.
+  final FullScreen fullScreen;
 
   /// The settings page's rows, as the app wires them, and the one owner
   /// besides the store they are built from: the Lichess account.
@@ -68,6 +72,10 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   /// Whether the edit strip is open. The strip's own Done closes it.
   final _editing = ValueNotifier(false);
 
+  /// The words and the focus of the move field under the board, which `/`
+  /// and a lesson reach as well as the field.
+  final _moves = MoveEntry();
+
   /// Who holds the board: a lesson first, then the Tree tab's free board.
   late final _claim = FirstClaim([_train.lines.board, _ws.tree.board]);
 
@@ -81,6 +89,17 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   );
 
   ModeView get _view => _views[_requests.mode]!;
+
+  /// The mode on screen as last seen, so the one left can be told; the
+  /// mode changes through the requests, whoever asked.
+  Mode? _shown;
+
+  void _modeMayHaveChanged() {
+    final mode = _requests.mode;
+    if (mode == _shown) return;
+    if (_shown case final left?) _views[left]!.left();
+    _shown = mode;
+  }
 
   /// The reading card's tabs of the mode on screen.
   PaneTabs<WorkspaceTab> get _tabs => _view.tabs;
@@ -128,12 +147,16 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       view.tabs.addListener(_sitting.check);
     }
     _sitting.check();
+    _shown = _requests.mode;
+    _requests.addListener(_modeMayHaveChanged);
   }
 
   @override
   void dispose() {
+    _requests.removeListener(_modeMayHaveChanged);
     _sitting.dispose();
     _editing.dispose();
+    _moves.dispose();
     _claim.dispose();
     for (final view in _views.values) {
       view.dispose();
@@ -169,9 +192,8 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     _arrange();
   }
 
-  late final _generate = GenerateDoors(
+  late final _search = SearchDoor(
     fill: _ws.fill,
-    session: _ws.session,
     settings: _ws.settings,
     requests: _requests,
   );
@@ -208,6 +230,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       switch (tab) {
         WorkspaceTab.train => TrainPane(
           trainer: _train.lines,
+          moves: _moves,
           onRead: (line) => unawaited(_readLine(line)),
           offerBuilder: _view.offersBuilder,
         ),
@@ -222,18 +245,22 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         _ => null,
       };
 
-  /// Space and ↓ are the puzzle's while one is on the board, and the
-  /// document's otherwise; in My games ↑ and ↓ walk the list.
+  /// Space shows the answer while a puzzle is on the board; otherwise it
+  /// is the mode's: the viewer's autoplay.
   void _space() {
-    if (_train.puzzles.up != null) _train.puzzles.showSolution();
+    if (_train.puzzles.up == null) return _view.space();
+    _train.puzzles.showSolution();
   }
 
+  /// What Esc leaves once the workspace has nothing left: the mode's
+  /// sitting, then full screen.
+  bool _leave() => _view.leave() || widget.fullScreen.leave();
+
   /// ↓ (1) / ↑ (−1) walk what is in front of the user: the mode's own list
-  /// when it has one (My games), the Prep tab's rows while it is up, the
-  /// puzzles in a sitting, else the file's games.
+  /// when it has one (My games), the puzzles in a sitting, else the file's
+  /// games.
   void _walk(int by) {
     if (_view.walk(by)) return;
-    if (_tabs.selected == WorkspaceTab.prep && _generate.step(by)) return;
     final trainer = _train.puzzles;
     if (trainer.up != null) {
       unawaited(by > 0 ? trainer.next() : trainer.previous());
@@ -264,7 +291,17 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   }
 
   /// Everything the Actions menu offers now, in the mode on screen.
-  List<AppAction> _actions() => _view.actions((
+  List<AppAction> _actions() => [
+    ..._modeActions(),
+    AppAction(
+      widget.fullScreen.on ? 'Leave full screen' : 'Full screen',
+      widget.fullScreen.toggle,
+      shortcut: 'F11',
+      group: 'Window',
+    ),
+  ];
+
+  List<AppAction> _modeActions() => _view.actions((
     editing: _editing,
     board: () => boardActions(
       context,
@@ -275,7 +312,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     ),
     dialogs: (
       saveCopy: () => unawaited(_saveCopy()),
-      generate: () => unawaited(_generate.generate(context, _tabs)),
+      search: () => unawaited(_search.search(_tabs)),
       accounts: () => unawaited(editAccounts(context, _train.myGames)),
     ),
   ));
@@ -317,26 +354,33 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     ),
     ..._command(LogicalKeyboardKey.keyV, () => unawaited(_requests.paste())),
     ..._command(
+      LogicalKeyboardKey.keyV,
+      () => unawaited(_requests.pasteFen()),
+      shift: true,
+    ),
+    ..._command(
       LogicalKeyboardKey.keyN,
       () => unawaited(_requests.newAnalysisBoard()),
     ),
     ..._command(
       LogicalKeyboardKey.keyG,
-      () => unawaited(_generate.generate(context, _tabs)),
+      () => unawaited(_search.search(_tabs)),
     ),
     ..._command(LogicalKeyboardKey.keyK, () => unawaited(_palette())),
     const SingleActivator(LogicalKeyboardKey.space): _space,
+    const SingleActivator(LogicalKeyboardKey.f11): widget.fullScreen.toggle,
     const SingleActivator(LogicalKeyboardKey.arrowDown): () => _walk(1),
     const SingleActivator(LogicalKeyboardKey.arrowUp): () => _walk(-1),
   };
 
-  /// [key] with Ctrl, and with Cmd for macOS.
+  /// [key] with Ctrl, and with Cmd for macOS; with Shift too when [shift].
   static Map<ShortcutActivator, VoidCallback> _command(
     LogicalKeyboardKey key,
-    VoidCallback run,
-  ) => {
-    SingleActivator(key, control: true): run,
-    SingleActivator(key, meta: true): run,
+    VoidCallback run, {
+    bool shift = false,
+  }) => {
+    SingleActivator(key, control: true, shift: shift): run,
+    SingleActivator(key, meta: true, shift: shift): run,
   };
 
   /// The mode and the status are the requests'; a change to either redraws
@@ -367,7 +411,9 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
                 analysis: _ws.analysis,
                 editing: _editing,
                 tabs: _tabs,
+                moves: _moves,
                 extra: _windowKeys,
+                leave: _leave,
                 child: _columns(),
               ),
             ),
@@ -400,6 +446,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       workspace: _ws,
       tabs: _tabs,
       editing: _editing,
+      moves: _moves,
       hooks: WorkspaceHooks(
         header: _view.header,
         gameCounter: _view.gameCounter,
@@ -415,8 +462,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
             ply: _ws.explorer.ply,
           ),
         ),
-        onGenerate: () => unawaited(_generate.generate(context, _tabs)),
-        onFound: _generate.go,
+        onOpenChapter: (ref) => unawaited(_requests.readInBuilder(ref, [])),
       ),
     ),
   };
@@ -471,65 +517,34 @@ final class SittingInView {
   }
 }
 
-/// The ways into a search from the board and back to what it found: the
-/// dialog behind the Actions entry, Ctrl+G and the Prep tab's `Generate…`,
-/// and ↑ / ↓ over the Prep tab's rows. On the analysis board the search is `Generate from
-/// here…` and plays for the side at the bottom of the board; on a chapter
-/// it is `Fill gaps from here…` and plays for the chapter's side.
-final class GenerateDoors {
-  GenerateDoors({
+/// The way into a search from outside the Search tab — the Actions entry
+/// and Ctrl+G: the tab comes up and the search starts with the numbers it
+/// last had, the Replies tab's rating and cover rule and the tab's depth.
+final class SearchDoor {
+  SearchDoor({
     required this.fill,
-    required this.session,
     required this.settings,
     required this.requests,
   });
 
   final FillGaps fill;
-  final DocumentSession session;
   final SettingsStore settings;
   final WorkspaceRequests requests;
 
-  /// The dialog, then the run with the Prep tab up to watch it; what
-  /// refused it goes in the bar.
-  Future<void> generate(
-    BuildContext context,
-    PaneTabs<WorkspaceTab> tabs,
-  ) async {
+  /// What refused the search goes in the bar.
+  Future<void> search(PaneTabs<WorkspaceTab> tabs) async {
     if (!fill.canStart) return;
-    final s = settings.value;
-    final onBoard = session.isScratch;
-    final request = await showFillDialog(
-      context,
-      title: onBoard ? 'Generate from here' : 'Fill gaps from here',
-      action: onBoard ? 'Generate' : 'Fill',
-      side: session.orientation,
-      elo: s.opponentElo,
-      onceIn: s.coverOnceIn,
-    );
-    if (request == null || !context.mounted) return;
-    if (tabs.tabs.any((tab) => tab.id == WorkspaceTab.prep)) {
-      tabs.show(WorkspaceTab.prep);
+    if (tabs.tabs.any((tab) => tab.id == WorkspaceTab.search)) {
+      tabs.show(WorkspaceTab.search);
     }
-    final refusal = await fill.start(request);
+    final s = settings.value;
+    final refusal = await fill.start(
+      FillRequest(
+        elo: s.opponentElo,
+        depthPlies: fill.depth,
+        onceIn: s.coverOnceIn,
+      ),
+    );
     if (refusal != null) requests.say(refusal);
-  }
-
-  /// Puts the found item at [index] on the board.
-  void go(int index) {
-    final found = fill.found;
-    if (found == null || index < 0 || index >= found.items.length) return;
-    fill.pick(index);
-    unawaited(requests.showFound(found, index));
-  }
-
-  /// The next (or, with [by] −1, the previous) found item; the first one
-  /// when none has been gone to yet. Answers whether there was one to take
-  /// the key, so ↑ / ↓ keep their other meanings when there is not.
-  bool step(int by) {
-    final count = fill.found?.items.length ?? 0;
-    if (count == 0) return false;
-    final picked = fill.picked;
-    go(picked == null ? 0 : (picked + by).clamp(0, count - 1));
-    return true;
   }
 }

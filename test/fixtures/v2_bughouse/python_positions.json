@@ -1,0 +1,278 @@
+{
+ "cases": [
+  {
+   "root": "",
+   "line": "",
+   "plies": [],
+   "dual_fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1|rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1",
+   "key_fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - | rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq -",
+   "key": -1476275556734231047
+  },
+  {
+   "root": "",
+   "line": "A:e4",
+   "plies": [
+    {
+     "board": "A",
+     "san": "e4",
+     "uci": "e2e4"
+    }
+   ],
+   "dual_fen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR[] b KQkq - 0 1|rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1",
+   "key_fen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR[] b KQkq - | rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq -",
+   "key": -1972696940672877240
+  },
+  {
+   "root": "",
+   "line": "A:e4 B:d4",
+   "plies": [
+    {
+     "board": "A",
+     "san": "e4",
+     "uci": "e2e4"
+    },
+    {
+     "board": "B",
+     "san": "d4",
+     "uci": "d2d4"
+    }
+   ],
+   "dual_fen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR[] b KQkq - 0 1|rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR[] b KQkq - 0 1",
+   "key_fen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR[] b KQkq - | rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR[] b KQkq -",
+   "key": -4369470982570380187
+  },
+  {
+   "root": "",
+   "line": "A:e4 A:d5 A:exd5",
+   "plies": [
+    {
+     "board": "A",
+     "san": "e4",
+     "uci": "e2e4"
+    },
+    {
+     "board": "A",
+     "san": "d5",
+     "uci": "d7d5"
+    },
+    {
+     "board": "A",
+     "san": "exd5",
+     "uci": "e4d5"
+    }
+   ],
+   "dual_fen": "rnbqkbnr/ppp1pppp/8/3P4/8/8/PPPP1PPP/RNBQKBNR[] b KQkq - 0 2|rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[p] w KQkq - 0 1",
+   "key_fen": "rnbqkbnr/ppp1pppp/8/3P4/8/8/PPPP1PPP/RNBQKBNR[] b KQkq - | rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[p] w KQkq -",
+   "key": -533902661317312253
+  },
+  {
+   "root": "",
+   "line": "A:e4 A:d5 A:exd5 A:Qxd5 A:Nc3 A:Qxg2 A:Bxg2",
+   "plies": [
+    {
+     "board": "A",
+     "san": "e4",
+     "uci": "e2e4"
+    },
+    {
+     "board": "A",
+     "san": "d5",
+     "uci": "d7d5"
+    },
+    {
+     "board": "A",
+     "san": "exd5",
+     "uci": "e4d5"
+    },
+    {
+     "board": "A",
+     "san": "Qxd5",
+     "uci": "d8d5"
+    },
+    {
+     "board": "A",
+     "san": "Nc3",
+     "uci": "b1c3"
+    },
+    {
+     "board": "A",
+     "san": "Qxg2",
+     "uci": "d5g2"
+    },
+    {
+     "board": "A",
+     "san": "Bxg2",
+     "uci": "f1g2"
+    }
+   ],
+   "dual_fen": "rnb1kbnr/ppp1pppp/8/8/8/2N5/PPPP1PBP/R1BQK1NR[] b KQkq - 0 4|rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[PPqp] w KQkq - 0 1",
+   "key_fen": "rnb1kbnr/ppp1pppp/8/8/8/2N5/PPPP1PBP/R1BQK1NR[] b KQkq - | rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[PPqp] w KQkq -",
+   "key": 381687727185093014
+  },
+  {
+   "root": "",
+   "line": "A:e4 A:d5 A:exd5 B:e4 B:P@d5 B:exd5",
+   "plies": [
+    {
+     "board": "A",
+     "san": "e4",
+     "uci": "e2e4"
+    },
+    {
+     "board": "A",
+     "san": "d5",
+     "uci": "d7d5"
+    },
+    {
+     "board": "A",
+     "san": "exd5",
+     "uci": "e4d5"
+    },
+    {
+     "board": "B",
+     "san": "e4",
+     "uci": "e2e4"
+    },
+    {
+     "board": "B",
+     "san": "P@d5",
+     "uci": "P@d5"
+    },
+    {
+     "board": "B",
+     "san": "exd5",
+     "uci": "e4d5"
+    }
+   ],
+   "dual_fen": "rnbqkbnr/ppp1pppp/8/3P4/8/8/PPPP1PPP/RNBQKBNR[p] b KQkq - 0 2|rnbqkbnr/pppppppp/8/3P4/8/8/PPPP1PPP/RNBQKBNR[] b KQkq - 0 2",
+   "key_fen": "rnbqkbnr/ppp1pppp/8/3P4/8/8/PPPP1PPP/RNBQKBNR[p] b KQkq - | rnbqkbnr/pppppppp/8/3P4/8/8/PPPP1PPP/RNBQKBNR[] b KQkq -",
+   "key": 23148622770728020
+  },
+  {
+   "root": "",
+   "line": "A:e4 A:Nf6 A:e5 A:d5",
+   "plies": [
+    {
+     "board": "A",
+     "san": "e4",
+     "uci": "e2e4"
+    },
+    {
+     "board": "A",
+     "san": "Nf6",
+     "uci": "g8f6"
+    },
+    {
+     "board": "A",
+     "san": "e5",
+     "uci": "e4e5"
+    },
+    {
+     "board": "A",
+     "san": "d5",
+     "uci": "d7d5"
+    }
+   ],
+   "dual_fen": "rnbqkb1r/ppp1pppp/5n2/3pP3/8/8/PPPP1PPP/RNBQKBNR[] w KQkq d6 0 3|rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1",
+   "key_fen": "rnbqkb1r/ppp1pppp/5n2/3pP3/8/8/PPPP1PPP/RNBQKBNR[] w KQkq d6 | rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq -",
+   "key": 68476070537332022
+  },
+  {
+   "root": "",
+   "line": "A:e4 A:Nf6 A:e5 A:d5 A:exd6",
+   "plies": [
+    {
+     "board": "A",
+     "san": "e4",
+     "uci": "e2e4"
+    },
+    {
+     "board": "A",
+     "san": "Nf6",
+     "uci": "g8f6"
+    },
+    {
+     "board": "A",
+     "san": "e5",
+     "uci": "e4e5"
+    },
+    {
+     "board": "A",
+     "san": "d5",
+     "uci": "d7d5"
+    },
+    {
+     "board": "A",
+     "san": "exd6",
+     "uci": "e5d6"
+    }
+   ],
+   "dual_fen": "rnbqkb1r/ppp1pppp/3P1n2/8/8/8/PPPP1PPP/RNBQKBNR[] b KQkq - 0 3|rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[p] w KQkq - 0 1",
+   "key_fen": "rnbqkb1r/ppp1pppp/3P1n2/8/8/8/PPPP1PPP/RNBQKBNR[] b KQkq - | rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[p] w KQkq -",
+   "key": -4390430024725458775
+  },
+  {
+   "root": "",
+   "line": "A:e4 A:e5 A:Nf3 A:Nc6 A:Bc4 A:Bc5 A:O-O",
+   "plies": [
+    {
+     "board": "A",
+     "san": "e4",
+     "uci": "e2e4"
+    },
+    {
+     "board": "A",
+     "san": "e5",
+     "uci": "e7e5"
+    },
+    {
+     "board": "A",
+     "san": "Nf3",
+     "uci": "g1f3"
+    },
+    {
+     "board": "A",
+     "san": "Nc6",
+     "uci": "b8c6"
+    },
+    {
+     "board": "A",
+     "san": "Bc4",
+     "uci": "f1c4"
+    },
+    {
+     "board": "A",
+     "san": "Bc5",
+     "uci": "f8c5"
+    },
+    {
+     "board": "A",
+     "san": "O-O",
+     "uci": "e1g1"
+    }
+   ],
+   "dual_fen": "r1bqk1nr/pppp1ppp/2n5/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQ1RK1[] b kq - 5 4|rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1",
+   "key_fen": "r1bqk1nr/pppp1ppp/2n5/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQ1RK1[] b kq - | rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq -",
+   "key": 3497844293558993426
+  },
+  {
+   "root": "1r2k3/P7/8/8/8/8/1r6/4K3[] w - - 0 1|rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1",
+   "line": "A:axb8=Q+ A:Rxb8",
+   "plies": [
+    {
+     "board": "A",
+     "san": "axb8=Q+",
+     "uci": "a7b8q"
+    },
+    {
+     "board": "A",
+     "san": "Rxb8",
+     "uci": "b2b8"
+    }
+   ],
+   "dual_fen": "1r2k3/8/8/8/8/8/8/4K3[] w - - 0 2|rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[Pr] w KQkq - 0 1",
+   "key_fen": "1r2k3/8/8/8/8/8/8/4K3[] w - - | rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[Pr] w KQkq -",
+   "key": 2377264201232580693
+  }
+ ]
+}

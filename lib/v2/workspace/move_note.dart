@@ -4,6 +4,7 @@ import '../chess/fen.dart';
 import '../chess/pgn/comment_text.dart';
 import '../chess/pgn/game_tree.dart';
 import '../chess/pgn/move_label.dart';
+import '../ui/app_action.dart';
 import '../ui/theme.dart';
 import 'comment_blocks.dart';
 import 'document_session.dart';
@@ -175,7 +176,7 @@ class _MoveRow extends StatelessWidget {
           : Align(
               alignment: Alignment.centerLeft,
               child: Tooltip(
-                message: 'Play ${move.san} (→)',
+                message: withKey('Play ${move.san}', '→'),
                 child: InkWell(
                   onTap: onTap,
                   borderRadius: BorderRadius.circular(Space.xs),

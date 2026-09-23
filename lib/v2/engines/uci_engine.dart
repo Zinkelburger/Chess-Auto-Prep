@@ -13,7 +13,7 @@ import 'uci_process.dart';
 /// is on. That is what keeps a stale evaluation off the board. The wait is
 /// bounded: an engine that answers neither `bestmove` nor anything else is
 /// killed rather than waited on.
-final class UciEngine implements Engine {
+final class UciEngine implements Engine, EngineProcess {
   UciEngine._(this._process) {
     _process.lines.listen(_onLine, onDone: _onExit);
   }
@@ -57,6 +57,7 @@ final class UciEngine implements Engine {
   @override
   String get name => _name;
 
+  @override
   int get pid => _process.pid;
 
   @override

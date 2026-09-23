@@ -21,6 +21,16 @@ abstract interface class Engine {
   Future<void> quit();
 }
 
+/// An engine process as the supervisor keeps it: something to end on the
+/// way out, whatever it speaks.
+abstract interface class EngineProcess {
+  int get pid;
+
+  Future<EngineExit> get exited;
+
+  Future<void> quit();
+}
+
 /// How an engine's process ended, which is what decides whether starting
 /// another one is worth anything.
 enum EngineExit {

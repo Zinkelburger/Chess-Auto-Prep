@@ -17,7 +17,6 @@ import '../workspace/chapter_commands.dart';
 import '../workspace/document_session.dart';
 import '../chess/explorer_answer.dart' show ExplorerGame;
 import '../chess/explorer_choice.dart' show ExplorerSource;
-import '../workspace/fill_gaps.dart';
 import '../workspace/game_fetcher.dart';
 import '../workspace/session_results.dart';
 import 'exit_guard.dart';
@@ -259,42 +258,6 @@ final class WorkspaceRequests extends ChangeNotifier {
     return const RequestDone();
   }
 
-  /// The item at [index] of what a search found, on the board: for a run
-  /// on the analysis board, played onto it — the moves already there are
-  /// followed, the rest added — and stopped where the item stops; for a run
-  /// on a chapter, the draft it wrote opened there in the builder.
-  Future<RequestResult> showFound(FillFound found, int index) async {
-    final item = found.items[index];
-    final moves = [for (final move in item.moves) move.move];
-    switch (found.origin) {
-      case InDraft(:final draft, :final sans):
-        switchTo(Mode.repertoires);
-        return openAt(draft, [
-          ...sans,
-          for (final move in moves.take(item.stopAfter)) move.san,
-        ]);
-      case OnTheBoard(:final root, :final line):
-        final back = await analysisBoard();
-        if (_disposed || back is! RequestDone) return back;
-        if (_session.tree?.rootFen != root) {
-          await _session.showAnalysisBoard(
-            boards.analysisBoard(side: found.side, root: root),
-          );
-        }
-        _session.goTo(const NodePath.root());
-        for (final move in line) {
-          _session.playMove(move.uci);
-        }
-        var stop = _session.cursor;
-        for (final (i, move) in moves.indexed) {
-          _session.playMove(move.uci);
-          if (i + 1 == item.stopAfter) stop = _session.cursor;
-        }
-        _session.goTo(stop);
-        return const RequestDone();
-    }
-  }
-
   /// A new analysis board holding the line on the board up to where the
   /// user is, from whatever is up — a file, a game, the analysis board
   /// itself — and facing the same way, so it looks as it did.
@@ -324,17 +287,30 @@ final class WorkspaceRequests extends ChangeNotifier {
   }
 
   /// The clipboard — a PGN, bare moves or a FEN — as a new analysis board.
-  Future<RequestResult> pasteOntoBoard() async {
+  Future<RequestResult> pasteOntoBoard() => _pasteAsBoard(boards.pastedBoard);
+
+  /// Ctrl+Shift+V: a FEN on the clipboard as a new analysis board, from
+  /// whatever is up.
+  Future<RequestResult> pasteFen() => _pasteAsBoard(boards.pastedPosition);
+
+  /// The clipboard read by [read] and, when it holds what [read] takes, put
+  /// up as the analysis board — with the question about a file's draft
+  /// asked only then, so a clipboard that holds nothing costs nothing.
+  Future<RequestResult> _pasteAsBoard(
+    boards.Pasted Function(String text, {required Side side}) read,
+  ) async {
     final text = await _input.clipboard() ?? '';
     if (_disposed) return const RequestDropped();
-    final leave = await _leavingFile();
-    if (_disposed || leave == null) return const RequestDropped();
-    switch (boards.pastedBoard(text, side: _session.orientation)) {
+    final boards.PastedBoard pasted;
+    switch (read(text, side: _session.orientation)) {
       case boards.PasteRefused(:final reason):
         return _refused(reason);
-      case boards.PastedBoard(:final chapter):
-        await _session.showAnalysisBoard(chapter);
+      case final boards.PastedBoard board:
+        pasted = board;
     }
+    final leave = await _leavingFile();
+    if (_disposed || leave == null) return const RequestDropped();
+    await _session.showAnalysisBoard(pasted.chapter);
     if (_disposed) return const RequestDropped();
     _saidCopy(leave);
     return const RequestDone();

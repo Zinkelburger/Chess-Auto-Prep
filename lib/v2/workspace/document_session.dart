@@ -298,6 +298,25 @@ final class DocumentSession extends ChangeNotifier {
 
   void toStart() => goTo(const NodePath.root());
 
+  /// Steps into the first variation that branches off where the cursor is:
+  /// the move played instead of the main continuation. Whether there was
+  /// one to step into.
+  bool enterVariation() {
+    final variation = cursor.child(1);
+    if (tree?.nodeAt(variation) == null) return false;
+    goTo(variation);
+    return cursor == variation;
+  }
+
+  /// Back out of the variation the cursor is in, to the move of the line
+  /// it branches from. Whether the cursor was in one.
+  bool leaveVariation() {
+    final branch = cursor.branchPoint;
+    if (branch == null) return false;
+    goTo(branch);
+    return cursor == branch;
+  }
+
   void toEnd() {
     final tree = this.tree;
     if (tree != null) goTo(tree.endOfLineFrom(cursor));

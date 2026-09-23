@@ -1,6 +1,7 @@
 import '../features/library/chapter_outline.dart';
 import '../features/library/library.dart';
 import '../features/my_games/game_book.dart';
+import '../features/pgn_viewer/auto_play.dart';
 import '../features/pgn_viewer/pgn_viewer.dart';
 import '../features/study/studies.dart';
 import '../features/tactics/my_games.dart';
@@ -25,8 +26,8 @@ enum Mode {
 
 /// The owners behind the lists of the modes that open documents: the
 /// repertoires and the open chapter's outline, the studies, the PGN
-/// Viewer's files and the filter over the open file's games. Each disposes
-/// with this.
+/// Viewer's files and autoplay, and the filter over the open file's games.
+/// Each disposes with this.
 final class DocumentModes {
   const DocumentModes({
     required this.library,
@@ -34,6 +35,7 @@ final class DocumentModes {
     required this.studies,
     required this.viewer,
     required this.filter,
+    required this.autoplay,
   });
 
   final Library library;
@@ -45,7 +47,11 @@ final class DocumentModes {
   /// explorer's `This file` both read it.
   final FileFilter filter;
 
+  /// The viewer's Space: the game played forward on its own.
+  final AutoPlay autoplay;
+
   void dispose() {
+    autoplay.dispose();
     outline.dispose();
     library.dispose();
     studies.dispose();

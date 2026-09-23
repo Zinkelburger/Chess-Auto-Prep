@@ -8,6 +8,7 @@ import '../workspace/document_session.dart';
 import '../workspace/workspace.dart';
 import 'environment.dart';
 import 'exit_guard.dart';
+import 'full_screen.dart';
 import 'mode.dart';
 import 'mode_wiring.dart';
 import 'window_input.dart';
@@ -64,6 +65,9 @@ final class AppParts {
     games: gamesCache,
   );
   Workspace get workspace => _workspace.workspace;
+
+  /// Whether the window fills the screen.
+  late final fullScreen = FullScreen(env.setFullScreen, say: requests.say);
 
   /// The question before the words on screen are left behind.
   late final exit = ExitGuard(

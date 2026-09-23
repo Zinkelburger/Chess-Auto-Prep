@@ -35,8 +35,21 @@ final class SpawnedProcess implements UciProcess {
         .listen(_remember);
   }
 
-  static Future<SpawnedProcess> start(String executable) async =>
-      SpawnedProcess._(await Process.start(executable, const []));
+  /// Starts [executable] with [arguments], in [workingDirectory] when given,
+  /// with [environment] added to this process's own.
+  static Future<SpawnedProcess> start(
+    String executable, {
+    List<String> arguments = const [],
+    String? workingDirectory,
+    Map<String, String>? environment,
+  }) async => SpawnedProcess._(
+    await Process.start(
+      executable,
+      arguments,
+      workingDirectory: workingDirectory,
+      environment: environment,
+    ),
+  );
 
   final Process _process;
   final _errors = <String>[];
@@ -47,9 +60,12 @@ final class SpawnedProcess implements UciProcess {
   @override
   int get pid => _process.pid;
 
+  /// Bytes that are not UTF-8 read as replacement characters rather than
+  /// an error nobody listens for.
   @override
-  Stream<String> get lines =>
-      _process.stdout.transform(utf8.decoder).transform(const LineSplitter());
+  Stream<String> get lines => _process.stdout
+      .transform(const Utf8Decoder(allowMalformed: true))
+      .transform(const LineSplitter());
 
   @override
   void send(String line) => _process.stdin.writeln(line);

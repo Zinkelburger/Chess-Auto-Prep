@@ -7,6 +7,7 @@ import 'package:chess_auto_prep/v2/features/library/outline_panel.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/storage/recent_pgn_files.dart';
+import 'package:chess_auto_prep/v2/workspace/search_pane.dart';
 import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
 import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:dartchess/dartchess.dart' show Side;
@@ -79,7 +80,9 @@ void main() {
     w.lineTrainer.learn();
     await tester.pump();
     expect(w.lineTrainer.lesson, isNotNull);
-    await tester.tap(find.byTooltip(RegExp(r'^Close Train')));
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyW);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pump();
     expect(w.lineTrainer.lesson, isNull);
     expect(w.lineTrainer.board.value, isNull);
@@ -279,42 +282,46 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Next tab'), findsOneWidget);
     expect(find.text('Ctrl+Tab'), findsOneWidget);
+    // The menu is taller than this window; its last entries scroll in.
+    await tester.ensureVisible(find.text('Close Replies'));
     await tester.tap(find.text('Close Replies'));
     await tester.pumpAndSettle();
     expect(find.text('Replies'), findsNothing);
     await tester.tap(find.text('Actions'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Show Replies'));
     await tester.tap(find.text('Show Replies'));
     await tester.pumpAndSettle();
     expect(find.text('Replies'), findsOneWidget);
     expect(find.text('Next gap'), findsOneWidget, reason: 'brought up');
   });
 
-  testWidgets('the analysis board generates from here; a chapter fills its '
-      'gaps, asking the same numbers', (tester) async {
+  testWidgets('Search from here (Ctrl+G) brings the Search tab up and '
+      'starts it, on the analysis board and on a chapter', (tester) async {
     await pump(tester);
-    await tester.tap(find.text('Actions'));
-    await tester.pumpAndSettle();
-    final onBoard = tester.widget<MenuItemButton>(
-      find.widgetWithText(MenuItemButton, 'Generate from here…'),
-    );
-    expect(onBoard.onPressed, isNotNull);
-    expect(find.text('Fill gaps from here…'), findsNothing);
-    await tester.tap(find.text('Actions'));
-    await tester.pumpAndSettle();
+    Future<void> searchFromHere() async {
+      await tester.tap(find.text('Actions'));
+      await tester.pumpAndSettle();
+      final entry = tester.widget<MenuItemButton>(
+        find.widgetWithText(MenuItemButton, 'Search from here'),
+      );
+      expect(entry.onPressed, isNotNull);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+      // No engine in this test: the tab says so, and the pane is back.
+      expect(find.byType(SearchPane), findsOneWidget);
+      expect(find.text('no engine in this test'), findsOneWidget);
+      expect(w.analysis.paused, isFalse);
+    }
+
+    await searchFromHere();
     await tester.tap(inLibrary(find.text('Main')).last);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Actions'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Fill gaps from here…'));
-    await tester.pumpAndSettle();
-    expect(find.text('Fill gaps from here'), findsOneWidget);
-    expect(find.widgetWithText(TextField, 'Opponent rating'), findsOneWidget);
-    await tester.tap(find.text('Fill'));
-    await tester.pumpAndSettle();
-    // No engine in this test: the card says so, and the pane is back.
-    expect(find.text('no engine in this test'), findsOneWidget);
-    expect(w.analysis.paused, isFalse);
+    await searchFromHere();
   });
 
   testWidgets('Actions sits beside the mode menu, at the left', (tester) async {

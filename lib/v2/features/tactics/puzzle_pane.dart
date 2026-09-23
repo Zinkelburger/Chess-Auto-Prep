@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../chess/tactics/puzzle.dart';
 import '../../chess/tactics/puzzle_run.dart';
+import '../../ui/app_action.dart';
 import '../../ui/theme.dart';
 import 'puzzle_trainer.dart';
 
@@ -250,7 +251,7 @@ class _Buttons extends StatelessWidget {
             'Show solution',
             Icons.lightbulb_outline,
             trainer.showSolution,
-            tip: 'Show solution (Space)',
+            tip: withKey('Show solution', 'Space'),
           ),
         IconButton(
           icon: const Icon(Icons.replay, size: IconSize.action),
@@ -262,7 +263,7 @@ class _Buttons extends StatelessWidget {
             'Next',
             Icons.arrow_forward,
             next,
-            tip: 'Next puzzle (↓)',
+            tip: withKey('Next puzzle', '↓'),
             filled: true,
             iconAfter: true,
           )
@@ -271,7 +272,7 @@ class _Buttons extends StatelessWidget {
             'Skip',
             Icons.skip_next,
             next,
-            tip: 'Skip this puzzle (↓)',
+            tip: withKey('Skip this puzzle', '↓'),
             iconAfter: true,
           ),
       ],
@@ -378,7 +379,7 @@ class _Progress extends StatelessWidget {
       children: [
         IconButton(
           icon: const Icon(Icons.chevron_left, size: IconSize.action),
-          tooltip: 'Previous puzzle (↑)',
+          tooltip: withKey('Previous puzzle', '↑'),
           onPressed: trainer.hasPrevious
               ? () => unawaited(trainer.previous())
               : null,

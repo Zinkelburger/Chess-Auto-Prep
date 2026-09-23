@@ -4,6 +4,7 @@ import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
 
 import '../chess/pgn/move_label.dart' show numberedMoves;
+import '../ui/app_action.dart';
 import '../ui/theme.dart';
 import 'repertoire_tree.dart';
 import 'document_session.dart';
@@ -169,7 +170,7 @@ class _Summary extends StatelessWidget {
           ),
           if (off.isNotEmpty) ...[
             IconButton(
-              tooltip: 'Take back (←)',
+              tooltip: withKey('Take back', '←'),
               iconSize: IconSize.menu,
               visualDensity: VisualDensity.compact,
               onPressed: tree.back,

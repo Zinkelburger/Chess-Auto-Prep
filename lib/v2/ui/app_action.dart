@@ -20,5 +20,11 @@ final class AppAction {
   final String? group;
 
   /// The label with its key after it, the way a tooltip says it.
-  String get labelWithKey => shortcut == null ? label : '$label ($shortcut)';
+  String get labelWithKey => withKey(label, shortcut);
 }
+
+/// [description] with the key that does it after it — `Flip board (F)` —
+/// the way every control with a key says so in its tooltip; [description]
+/// alone when there is no key.
+String withKey(String description, String? key) =>
+    key == null ? description : '$description ($key)';

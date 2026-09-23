@@ -33,6 +33,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fixtures.dart';
+import 'scripted_bughouse.dart';
 import 'scripted_explorer.dart';
 import 'scripted_progress.dart';
 import 'scripted_files.dart';
@@ -68,8 +69,11 @@ final class WindowFixture {
   /// in [ScriptedDraftQuestion.answer].
   final question = ScriptedDraftQuestion();
 
+  /// The Bughouse lab's engine, book and archive.
+  final bughouse = ScriptedBughouse();
+
   late final parts = AppParts(
-    _environment(),
+    _environment(bughouse),
     question: question,
     input: _input ?? DialogInput(navigator),
     copyOnLeave: _copyAside,
@@ -81,7 +85,10 @@ final class WindowFixture {
     return written is CopySaved ? written.name : null;
   }
 
-  static AppEnvironment _environment() {
+  /// What the window was asked, in order: true for into full screen.
+  final fullScreenAsked = <bool>[];
+
+  AppEnvironment _environment(ScriptedBughouse bughouse) {
     final store = ScriptedDocumentStore()
       ..documents[kidMain] = Opened(
         blackChapter,
@@ -139,6 +146,8 @@ final class WindowFixture {
       stopEngines: () async {},
       evalCache: () => throw StateError('no eval cache in this test'),
       keepTree: (_, _) async {},
+      setFullScreen: (on) async => fullScreenAsked.add(on),
+      bughouse: bughouse.outside,
       now: () => tacticsToday,
       saveDelay: Duration.zero,
       explorerDelay: Duration.zero,
@@ -198,6 +207,7 @@ final class WindowFixture {
           workspace: parts.workspace,
           documents: parts.documents,
           training: parts.training,
+          fullScreen: parts.fullScreen,
           settingRows: () => const [],
           settingsAlso: settings,
         ),

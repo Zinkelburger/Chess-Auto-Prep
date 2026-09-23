@@ -102,6 +102,8 @@ and forcing a reload, because a course export says nothing about whose side it i
 **Read / edit elsewhere** — `Read` hands the chapter's games to the PGN Viewer, `Explore position in
 Builder` the exact position, `Open in Builder` / `Edit study…` the source file.
 **Keyboard** — Space next learning step, 1–4 rate, ↓ skip, Escape leave the line, `/` focus the move box.
+(v2: the move box is the workspace's move field under the board; a move letter typed on the lesson
+goes there.)
 
 ## Data
 Four loose files in the OS Documents root, keyed by `repertoire_id` = the chapter file's path.

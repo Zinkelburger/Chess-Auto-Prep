@@ -20,6 +20,14 @@ typedef CancelSignal = bool Function();
 /// holds and the deepest ply expanded so far.
 typedef SearchProgress = ({int nodes, int depth});
 
+/// The tree as it stands, handed out each time the search starts a deeper
+/// level — every position above it is expanded, so what it says about the
+/// moves near the root is already worth reading — and every
+/// [snapshotEvery] within a long level.
+typedef SearchSnapshot = void Function(SearchNode tree);
+
+const snapshotEvery = Duration(seconds: 2);
+
 /// Searches from [root] and returns the tree it found.
 ///
 /// The recurrence, all of it, in expected score for [SearchConfig.side]:
@@ -52,12 +60,14 @@ Future<SearchResult> buildSearchTree({
   required OpponentPolicy policy,
   CancelSignal isCancelled = _neverCancelled,
   void Function(SearchProgress progress)? onProgress,
+  SearchSnapshot? onSnapshot,
 }) => _Search(
   config: config,
   evaluator: evaluator,
   policy: policy,
   isCancelled: isCancelled,
   onProgress: onProgress,
+  onSnapshot: onSnapshot,
 ).run(root);
 
 bool _neverCancelled() => false;
@@ -119,6 +129,7 @@ final class _Search {
     required this.policy,
     required this.isCancelled,
     required this.onProgress,
+    required this.onSnapshot,
   });
 
   final SearchConfig config;
@@ -126,11 +137,16 @@ final class _Search {
   final OpponentPolicy policy;
   final CancelSignal isCancelled;
   final void Function(SearchProgress progress)? onProgress;
+  final SearchSnapshot? onSnapshot;
 
   _Stop? _stop;
 
   /// The deepest ply an expansion has reached.
   int _deepest = 0;
+
+  /// The ply of the level last handed to [onSnapshot].
+  int _level = 0;
+  final _sinceSnapshot = Stopwatch()..start();
 
   /// Nodes in the tree so far, the root included, the way the old builder
   /// counts them.
@@ -248,6 +264,15 @@ final class _Search {
     while (queue.isNotEmpty && !_stopping()) {
       final pending = queue.removeFirst();
       if (pending.leaf is! FrontierNode) continue;
+      // The queue is ordered by depth, so the first node of a new level
+      // means every level above it is done.
+      if (onSnapshot != null &&
+          (pending.path.ply > _level ||
+              _sinceSnapshot.elapsed > snapshotEvery)) {
+        _level = pending.path.ply;
+        _sinceSnapshot.reset();
+        onSnapshot!(assembleTree(start));
+      }
       final expansion = pending.path.position.turn == config.side
           ? await _ourMoves(pending.path)
           : await _replies(pending.path);

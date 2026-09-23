@@ -7,6 +7,7 @@ import 'package:chess_auto_prep/v2/features/trainer/train_pane.dart';
 import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
+import 'package:chess_auto_prep/v2/workspace/move_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -33,10 +34,12 @@ void main() {
   late EngineAnalysis analysis;
   late Trainer trainer;
   late List<LineToRead> reads;
+  late MoveEntry moves;
 
   setUp(() async {
     fixture = await openSession(_chapter);
     files = ScriptedProgress();
+    moves = MoveEntry();
     analysis = EngineAnalysis(
       fixture.session,
       () async => const StartFailed('no engine in this test'),
@@ -45,6 +48,7 @@ void main() {
 
   tearDown(() {
     trainer.dispose();
+    moves.dispose();
     analysis.dispose();
     fixture.dispose();
   });
@@ -63,7 +67,7 @@ void main() {
       MaterialApp(
         theme: darkTheme(),
         home: Scaffold(
-          body: TrainPane(trainer: trainer, onRead: reads.add),
+          body: TrainPane(trainer: trainer, moves: moves, onRead: reads.add),
         ),
       ),
     );
@@ -168,45 +172,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Excluded'), findsOneWidget);
     expect(find.text('Learn 1'), findsOneWidget);
-  });
-
-  testWidgets('a move typed on the lesson goes to the box and is played', (
-    tester,
-  ) async {
-    await pump(tester);
-    await tester.tap(find.text('Learn 2'));
-    await tester.pumpAndSettle();
-    await key(tester, LogicalKeyboardKey.space);
-    expect(find.text('Your move'), findsOneWidget);
-    await key(tester, LogicalKeyboardKey.keyE);
-    final box = tester.widget<TextField>(find.byType(TextField));
-    expect(box.controller!.text, 'e');
-    expect(box.focusNode!.hasFocus, isTrue);
-    // The rest arrives as text, as the platform types it into the field.
-    await tester.enterText(find.byType(TextField), 'e4');
-    await tester.pump(const Duration(seconds: 2));
-    await tester.pumpAndSettle();
-    expect(files.attempts.single.played, 'e4');
-    expect(files.attempts.single.correct, isTrue);
-    expect(box.focusNode!.hasFocus, isFalse, reason: 'the lesson has the keys');
-  });
-
-  testWidgets('a move written in the box is played without Enter', (
-    tester,
-  ) async {
-    await pump(tester);
-    await tester.tap(find.text('Learn 2'));
-    await tester.pumpAndSettle();
-    await key(tester, LogicalKeyboardKey.space);
-    await tester.enterText(find.byType(TextField), 'Qh5');
-    await tester.testTextInput.receiveAction(TextInputAction.done);
-    await tester.pump();
-    expect(find.text('Not a legal move here'), findsOneWidget);
-    expect(files.attempts, isEmpty);
-    await tester.enterText(find.byType(TextField), 'E4');
-    await tester.pump(const Duration(seconds: 2));
-    await tester.pumpAndSettle();
-    expect(files.attempts.single.played, 'e4');
   });
 
   testWidgets('the lines in another order; likeliest only when told', (

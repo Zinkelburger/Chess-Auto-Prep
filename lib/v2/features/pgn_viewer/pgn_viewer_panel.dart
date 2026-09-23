@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 
 import '../../chess/pgn/game_summary.dart';
 import '../../storage/chapter_files.dart';
+import '../../ui/app_action.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
 import '../../workspace/file_filter.dart';
@@ -350,7 +351,7 @@ class _Toolbar extends StatelessWidget {
           const SizedBox(width: Space.xs),
           IconButton(
             icon: const Icon(Icons.add, size: IconSize.action),
-            tooltip: 'Open PGN file… (Ctrl+O)',
+            tooltip: withKey('Open PGN file…', 'Ctrl+O'),
             onPressed: onBrowse,
             visualDensity: VisualDensity.compact,
           ),

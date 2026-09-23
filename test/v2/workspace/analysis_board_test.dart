@@ -130,6 +130,14 @@ void main() {
       expect(line(), ['d4']);
     });
 
+    test('a paste of a FEN alone takes a FEN and nothing else', () {
+      final fields = _sicilian.split(' ').take(4).join(' ');
+      final board = pastedPosition(' $fields\n', side: Side.black);
+      expect((board as PastedBoard).chapter.tree.rootFen, Fen('$fields 0 1'));
+      expect(board.chapter.side, Side.black);
+      expect(pastedPosition('1. e4 c5', side: Side.white), isA<PasteRefused>());
+    });
+
     test('the pasted board keeps the side the board faces', () async {
       session.flip();
       await paste('1.e4 c5');
