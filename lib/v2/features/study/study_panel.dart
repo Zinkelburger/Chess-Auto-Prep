@@ -12,11 +12,9 @@ import '../../ui/row_actions.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
 import '../../workspace/document_session.dart';
-import 'import_dialog.dart';
 import 'new_chapter_dialog.dart';
 import 'studies.dart';
 import 'study_commands.dart';
-import 'study_rows.dart';
 
 /// Opens one chapter of a study in the workspace.
 typedef OpenChapter = void Function(ChapterRef study, int chapter);
@@ -388,5 +386,239 @@ class _Message extends StatelessWidget {
       padding: const EdgeInsets.all(Space.l),
       child: Text(text, style: Theme.of(context).textTheme.bodySmall),
     );
+  }
+}
+
+/// One study in the list. The open one is highlighted and its chapters are
+/// listed under it.
+class StudyRow extends StatelessWidget {
+  const StudyRow({
+    super.key,
+    required this.study,
+    required this.open,
+    required this.busy,
+    required this.onOpen,
+    required this.onCopyPgn,
+    required this.onDelete,
+  });
+
+  final ChapterRef study;
+
+  /// This is the study the workspace has open.
+  final bool open;
+
+  final bool busy;
+  final VoidCallback onOpen;
+  final VoidCallback onCopyPgn;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: open ? scheme.surfaceContainerHighest : Colors.transparent,
+      child: InkWell(
+        onTap: onOpen,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(Space.s, 0, Space.xs, 0),
+          child: SizedBox(
+            height: listRowHeight,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(study.name, overflow: TextOverflow.ellipsis),
+                ),
+                RowActions(
+                  children: [
+                    // Only the open study's text is in hand; another one
+                    // would have to be read from disk first.
+                    rowAction('Copy study PGN', onCopyPgn, busy: busy || !open),
+                    rowAction('Delete study…', onDelete, busy: busy),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// What a chapter row's menu can ask for.
+typedef ChapterActions = ({
+  VoidCallback rename,
+  void Function(Side orientation) face,
+  void Function(int by) move,
+  VoidCallback copyPgn,
+  VoidCallback remove,
+});
+
+/// One chapter of the open study: its place in the file, its name, and the
+/// operations that change it.
+class ChapterRow extends StatelessWidget {
+  const ChapterRow({
+    super.key,
+    required this.chapter,
+    required this.open,
+    required this.busy,
+    required this.onOpen,
+    required this.actions,
+  });
+
+  final StudyChapter chapter;
+
+  /// This is the chapter on the board.
+  final bool open;
+
+  final bool busy;
+  final VoidCallback onOpen;
+  final ChapterActions actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: open ? theme.colorScheme.surfaceContainerHighest : null,
+      child: InkWell(
+        onTap: onOpen,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(Space.l, 0, Space.xs, 0),
+          child: SizedBox(
+            height: listRowHeight,
+            child: Row(
+              children: [
+                SizedBox(
+                  width: Space.l + Space.xs,
+                  child: Text(
+                    '${chapter.ordinal}',
+                    style: theme.textTheme.labelSmall,
+                  ),
+                ),
+                Expanded(
+                  child: Text(chapter.name, overflow: TextOverflow.ellipsis),
+                ),
+                RowActions(
+                  tooltip: 'Chapter actions',
+                  children: [
+                    rowAction('Rename…', actions.rename, busy: busy),
+                    rowAction(
+                      'Face White',
+                      () => actions.face(Side.white),
+                      busy: busy || chapter.orientation == Side.white,
+                    ),
+                    rowAction(
+                      'Face Black',
+                      () => actions.face(Side.black),
+                      busy: busy || chapter.orientation == Side.black,
+                    ),
+                    rowAction('Move up', () => actions.move(-1), busy: busy),
+                    rowAction('Move down', () => actions.move(1), busy: busy),
+                    rowAction('Copy chapter PGN', actions.copyPgn, busy: busy),
+                    rowAction('Delete chapter…', actions.remove, busy: busy),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Asks for a Lichess study link and answers what the user typed, or null
+/// when they backed out.
+///
+/// [describe] says what a link is recognised as, or null when it is not one
+/// the app can fetch; it comes from the owner, so this dialog knows nothing
+/// about the service. What was recognised is echoed back on a line that is
+/// always there, so it appearing does not push the button out from under the
+/// pointer, and only a recognised link enables the button. The download
+/// itself, and anything that goes wrong with it, belongs to the panel.
+Future<String?> showImportStudyDialog(
+  BuildContext context, {
+  required String? Function(String input) describe,
+}) => showDialog<String>(
+  context: context,
+  builder: (context) => _ImportDialog(describe: describe),
+);
+
+class _ImportDialog extends StatefulWidget {
+  const _ImportDialog({required this.describe});
+
+  final String? Function(String input) describe;
+
+  @override
+  State<_ImportDialog> createState() => _ImportDialogState();
+}
+
+class _ImportDialogState extends State<_ImportDialog> {
+  final _url = TextEditingController();
+  String? _recognised;
+
+  @override
+  void dispose() {
+    _url.dispose();
+    super.dispose();
+  }
+
+  void _typed(String text) {
+    if (!mounted) return;
+    setState(() => _recognised = widget.describe(text));
+  }
+
+  void _import() {
+    if (_recognised != null) Navigator.of(context).pop(_url.text.trim());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return AlertDialog(
+      title: const Text('Import from URL'),
+      content: SizedBox(
+        width: nameDialogWidth,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _url,
+              autofocus: true,
+              onChanged: _typed,
+              onSubmitted: (_) => _import(),
+              decoration: const InputDecoration(
+                labelText: 'Study link',
+                hintText: 'lichess.org/study/abcd1234',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: Space.s),
+            Text(_echo, style: text.bodySmall),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _recognised == null ? null : _import,
+          child: const Text('Import'),
+        ),
+      ],
+    );
+  }
+
+  String get _echo {
+    if (_recognised case final recognised?) return recognised;
+    if (_url.text.trim().isEmpty) {
+      return 'Accepts lichess.org/study/<id> and '
+          'lichess.org/study/<id>/<chapter>.';
+    }
+    return 'Not a Lichess study link.';
   }
 }

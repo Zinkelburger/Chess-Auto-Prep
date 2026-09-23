@@ -4,13 +4,12 @@ import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/study.dart';
 import 'package:chess_auto_prep/v2/features/study/study_commands.dart';
 import 'package:chess_auto_prep/v2/storage/edit_scope.dart';
+import 'package:chess_auto_prep/v2/workspace/chapter_commands.dart';
+import 'package:chess_auto_prep/v2/workspace/session_results.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/study_fixture.dart';
-import 'package:chess_auto_prep/v2/workspace/session_results.dart';
-import 'package:chess_auto_prep/v2/workspace/chapter_commands.dart';
-import 'package:chess_auto_prep/v2/workspace/edit_refused.dart';
 
 void main() {
   late StudyFixture study;

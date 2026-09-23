@@ -366,7 +366,8 @@ final class DocumentRelocation {
 }
 
 /// The old app's chapter quarantine folder beside each chapter; both apps
-/// delete into it, and `deleted_chapters.dart` lists what is in it.
+/// delete into it, and `DeletedChapters` in `chapter_files.dart` lists what
+/// is in it.
 const recoveryFolder = '.cap-pgn-history';
 
 const _unlistable = 'the folder could not be read';

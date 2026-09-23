@@ -1,9 +1,11 @@
-/// What the library shows and what its commands answer.
+/// What the library shows, what its commands answer, and what each answer
+/// leaves in the log.
 ///
 /// These are values, so they live apart from the owner that produces them and
 /// a widget can be written against them alone.
 library;
 
+import '../../diagnostics/log.dart';
 import '../../storage/chapter_files.dart';
 import '../../storage/training_records.dart' as records;
 
@@ -150,4 +152,28 @@ bool listsChapter(LibraryState state, String path) {
     if (folder.chapters.any((chapter) => chapter.path == path)) return true;
   }
   return false;
+}
+
+/// What a change to the catalog leaves in the log.
+///
+/// The log is for whoever reads a user's report of "it did not work", and
+/// there is one line here for each way a change can fail.
+void reportLibraryResult(String action, LibraryResult result) {
+  switch (result) {
+    case LibraryDone() || LibraryAdded() || LibraryBusy():
+      return;
+    case LibraryNothingToImport():
+      log.w(action, 'no game with a move in it');
+    case LibraryFileUnreadable(:final detail):
+      log.w(action, detail);
+    case LibraryNameTaken():
+      log.w(action, 'the name is taken');
+    case LibraryStale() || LibraryConflicted():
+      log.w(action, 'the file changed on disk');
+    case LibraryFailure(:final detail):
+      log.e(action, detail);
+    case LibraryStoppedAt(:final chapter, :final cause):
+      log.e(action, 'stopped at $chapter');
+      reportLibraryResult('$action: $chapter', cause);
+  }
 }

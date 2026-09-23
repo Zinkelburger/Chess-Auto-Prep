@@ -9,7 +9,6 @@ import 'comment_field.dart';
 import 'copy_name_dialog.dart';
 import 'document_saver.dart';
 import 'document_session.dart';
-import 'edit_refused.dart';
 import 'save_state.dart';
 import 'session_results.dart';
 

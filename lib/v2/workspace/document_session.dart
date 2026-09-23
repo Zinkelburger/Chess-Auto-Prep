@@ -9,18 +9,16 @@ import '../chess/pgn/chapter_edit.dart' as edits;
 import '../chess/pgn/chapter_edits.dart' as edits;
 import '../chess/pgn/chapter_sections.dart';
 import '../chess/pgn/comment_edits.dart' as edits;
-import '../chess/pgn/games_written.dart';
 import '../chess/pgn/game_tree.dart';
+import '../chess/pgn/games_written.dart';
+import '../chess/pgn/line_id_pins.dart';
 import '../chess/pgn/tree_edit.dart';
 import '../diagnostics/log.dart';
 import '../storage/chapter_files.dart';
 import '../storage/document_ref.dart';
+import '../storage/edit_scope.dart';
 import '../storage/pgn_document_store.dart' as store;
-import 'document_read.dart';
 import 'document_saver.dart';
-import 'edit_landing.dart';
-import 'edit_refused.dart';
-import 'kept_board.dart';
 import 'save_state.dart';
 import 'session_results.dart';
 
@@ -626,4 +624,187 @@ final class DocumentSession extends ChangeNotifier {
     _cursor.dispose();
     super.dispose();
   }
+}
+
+/// What reading a document for the workspace came to: the chapter to show,
+/// or the sentence saying why there is none.
+sealed class DocumentRead {
+  const DocumentRead();
+}
+
+final class DocumentShown extends DocumentRead {
+  const DocumentShown({
+    required this.chapter,
+    required this.view,
+    required this.revision,
+    required this.readOnly,
+  });
+
+  /// What goes on the board: the file, one game of it, or one chapter of a
+  /// course file.
+  final Chapter chapter;
+
+  /// Where that chapter sits in its file, for one chapter of a course file;
+  /// null when the chapter is the whole file or one game of it.
+  final SectionView? view;
+
+  /// The revision every later save is checked against.
+  final Revision revision;
+
+  /// Why this app may not write the file, or null when it may.
+  final String? readOnly;
+}
+
+final class DocumentUnread extends DocumentRead {
+  const DocumentUnread(this.reason);
+
+  final String reason;
+}
+
+/// Reads [ref] through [documents] as the chapter the workspace shows.
+/// [game] reads one game of the file as the whole document, which is what a
+/// study chapter is; null merges its games, or takes the chapter [ref]
+/// names in a course file.
+Future<DocumentRead> readDocument(
+  store.PgnDocumentStore documents,
+  ChapterRef ref, {
+  int? game,
+}) async {
+  switch (await documents.open(ref)) {
+    case store.Opened(:final text, :final revision, :final readOnly):
+      final (:file, :view) = await readShown(ref, text, game: game);
+      // A chapter the file does not have would otherwise open as every
+      // game merged, which looks like a chapter and is not one.
+      if (game != null && game >= file.lines.length) {
+        return DocumentUnread('${ref.name} has no chapter ${game + 1}');
+      }
+      if (view != null && view.places.isEmpty) {
+        return DocumentUnread('${ref.name} is no longer in its file');
+      }
+      return DocumentShown(
+        chapter: view?.chapter ?? file,
+        view: view,
+        revision: revision,
+        readOnly: readOnly,
+      );
+    case store.Absent():
+      return DocumentUnread('${ref.name} is no longer on disk');
+    case store.Unreadable(:final detail):
+      return DocumentUnread('Could not read ${ref.name}: $detail');
+  }
+}
+
+/// [text], the file [ref] names, as read for the workspace: the whole file
+/// or the one [game] of it, and — for one chapter of a course file — where
+/// that chapter sits in it.
+Future<({Chapter file, SectionView? view})> readShown(
+  ChapterRef ref,
+  String text, {
+  int? game,
+}) async {
+  final file = await readChapter(name: ref.fileName, text: text, game: game);
+  return (file: file, view: game == null ? partOf(file, ref.section) : null);
+}
+
+/// An edit of the chapter on the board as its file takes it: the file's
+/// text, the scope the store checks that text against, and the chapter to
+/// show afterwards — with its [SectionView] when it is one chapter of a
+/// course file.
+typedef Landing = ({
+  String text,
+  EditScope scope,
+  Chapter chapter,
+  SectionView? view,
+});
+
+/// [edited], an edit of [before] placed by [games], as its file writes it.
+///
+/// A chapter that is its whole file is written as it is, with the ids the
+/// edit would change pinned ([withIdsPinned]); [written], when the edit said
+/// only which games it wrote, is the scope, which the pins do not widen —
+/// they land on games the edit wrote anyway. A chapter of a course file
+/// ([view]) goes back into its file ([spliced]) and the file is written.
+///
+/// Null when a game the edit added could not be given its chapter's name.
+Landing? landing(
+  Chapter before,
+  SectionView? view,
+  Chapter edited,
+  GamesArranged games, {
+  GamesWritten? written,
+}) {
+  if (view == null) {
+    final pinned = withIdsPinned(before, edited, games);
+    return (
+      text: writeChapter(pinned.chapter),
+      scope: written == null
+          ? GamesRearranged(pinned.games)
+          : GamesEdited(written),
+      chapter: pinned.chapter,
+      view: null,
+    );
+  }
+  final back = spliced(view, edited, games);
+  if (back == null) return null;
+  return fileLanding(view.file, back.file, back.games, view.section);
+}
+
+/// [edited], an edit of the whole course [file] placed by [games], showing
+/// its chapter [section] afterwards — or its first, when the edit left none
+/// of that chapter's games.
+Landing fileLanding(
+  Chapter file,
+  Chapter edited,
+  GamesArranged games,
+  String? section,
+) {
+  final edit = fileEdit(file, edited, games, section);
+  return (
+    text: writeChapter(edit.file),
+    scope: GamesRearranged(edit.games),
+    chapter: edit.shown.chapter,
+    view: edit.shown,
+  );
+}
+
+/// The analysis board as the [DocumentSession] keeps it: its moves, where
+/// the user was on it, and its earlier versions for undo. No file holds any
+/// of this, so it lives as long as the window, and a file opened in its
+/// place leaves it here to go back to.
+///
+/// Only the session touches it; it is a part of the session's state, kept
+/// apart so the session's own fields stay about the document that is up.
+final class KeptBoard {
+  KeptBoard(this.chapter);
+
+  /// How many edits undo can take back.
+  static const undoDepth = 200;
+
+  /// The board as last seen: current while the board is up only after
+  /// [DocumentSession] puts it aside.
+  Chapter chapter;
+
+  NodePath cursor = const NodePath.root();
+
+  /// Earlier versions of the board, newest last.
+  final _undo = <Chapter>[];
+
+  bool get canUndo => _undo.isNotEmpty;
+
+  /// A new board in place of this one, with the cursor at the end of its
+  /// main line and nothing to undo.
+  void restart(Chapter board) {
+    chapter = board;
+    cursor = board.tree.endOfLineFrom(const NodePath.root());
+    _undo.clear();
+  }
+
+  /// [before] is the version an edit just replaced.
+  void remember(Chapter before) {
+    _undo.add(before);
+    if (_undo.length > undoDepth) _undo.removeAt(0);
+  }
+
+  /// The version before the last edit, or null when there is none.
+  Chapter? takeBack() => _undo.isEmpty ? null : _undo.removeLast();
 }

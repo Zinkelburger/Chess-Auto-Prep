@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
+import 'package:chess_auto_prep/v2/engines/maia/maia_model.dart';
 import 'package:chess_auto_prep/v2/engines/maia/maia_vocabulary.dart';
-import 'package:chess_auto_prep/v2/engines/maia/move_shares.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// A stand-in table: index 0 is e2e4, 1 is d2d4, 2 is g1f3.

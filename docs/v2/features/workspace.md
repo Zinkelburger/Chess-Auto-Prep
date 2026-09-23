@@ -86,7 +86,7 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
   a pasted PGN (first game, variations and comments kept), bare moves or a FEN; `Save to
   repertoire…` and `Save to study…` ask where, then the chapter name, and write a new
   chapter (the board's side as its colour). Closing the window forgets it, as on lichess.
-  Owners: `DocumentSession` (`isScratch`, `workspace/kept_board.dart`),
+  Owners: `DocumentSession` (`isScratch`, `KeptBoard` in `workspace/document_session.dart`),
   `chess/pgn/analysis_board.dart`, `app/board_actions.dart`.
 - **Board editor** — dialog (960×720) or embedded panel. Spare strips above and below the board
   swap with the flip, each `[pointer] K Q R B N P [bin]`; then side to move, Start position, Clear

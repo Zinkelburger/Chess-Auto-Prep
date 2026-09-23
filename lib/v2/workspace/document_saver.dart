@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
@@ -6,11 +9,8 @@ import '../diagnostics/log.dart';
 import '../storage/document_ref.dart';
 import '../storage/edit_scope.dart';
 import '../storage/pgn_document_store.dart' as store;
-import 'save_clock.dart';
-import 'save_queue.dart';
 import 'save_state.dart';
 import 'session_results.dart';
-import 'undo_history.dart';
 
 typedef _Target = ({DocumentRef ref, Revision revision});
 
@@ -420,3 +420,185 @@ final class DocumentSaver extends ChangeNotifier {
 /// second hold may begin; in [held] the change itself is running and nothing
 /// is written until it is over.
 enum _Hold { none, settling, held }
+
+/// When a draft goes to the disk: the wait after the last edit, and what is
+/// on its way once it is over.
+///
+/// An edit starts the wait, every edit inside it puts the whole of it back,
+/// and the write goes out once when it runs out, with the newest text: a
+/// burst of moves is one write, not a queue of stale snapshots. Anything
+/// that needs the file now — opening another document, a rename, the window
+/// closing — [flush]es, which ends the wait at once and answers when nothing
+/// is on its way any more. This owns the timing; what is written, and what
+/// the store's answer means, is the saver's.
+final class SaveClock {
+  SaveClock({required this.delay});
+
+  /// How long the file waits after the last edit before it is written.
+  final Duration delay;
+
+  /// The clock a draft is waiting on, and the wait itself. Both are null
+  /// when nothing is waiting.
+  Timer? _timer;
+  Completer<void>? _waiting;
+
+  /// The write going out and everything that collapses behind it, so the
+  /// app can wait for the file to hold the draft before it closes.
+  Future<void>? _inFlight;
+
+  /// Whether a draft is waiting for its second to run out.
+  bool get isWaiting => _waiting != null;
+
+  /// A draft was typed. [write] goes out when the wait is over; an edit
+  /// while one is already waiting puts the whole wait back instead.
+  void edited(Future<void> Function() write) {
+    if (_waiting != null) {
+      _restart();
+      return;
+    }
+    waitsFor(_waitThenWrite(write));
+  }
+
+  /// [work] is what the file is waiting for now — a hold for a rename, or an
+  /// undo — so a [flush] waits for the whole of it rather than for a write
+  /// that finished before it began.
+  ///
+  /// What is kept here can only complete, never fail: work that throws is
+  /// its caller's to handle, and a failed future left here would throw again
+  /// at every later flush.
+  void waitsFor<T>(Future<T> work) {
+    _inFlight = work.then<void>((_) {}, onError: (Object _) {});
+  }
+
+  /// Ends the wait and answers when nothing is on its way any more: the
+  /// write in flight, the one that collapsed behind it, and a hold that is
+  /// keeping both waiting. A write that was refused or failed also ends it.
+  Future<void> flush() {
+    hurry();
+    return _inFlight ?? Future<void>.value();
+  }
+
+  /// Ends the wait, if there is one, without waiting for what it starts.
+  /// The wait is always ended rather than dropped: a flush is waiting on it.
+  void hurry() {
+    _timer?.cancel();
+    _timer = null;
+    final waiting = _waiting;
+    _waiting = null;
+    waiting?.complete();
+  }
+
+  Future<void> _waitThenWrite(Future<void> Function() write) async {
+    final waiting = _waiting = Completer<void>();
+    // No wait at all is no clock at all: the draft goes out on the next
+    // turn, and nothing is left ticking for a test's widget tree to trip on.
+    if (delay == Duration.zero) {
+      hurry();
+    } else {
+      _restart();
+    }
+    await waiting.future;
+    await write();
+  }
+
+  void _restart() {
+    _timer?.cancel();
+    _timer = Timer(delay, hurry);
+  }
+}
+
+/// Words waiting for the disk and the games the edits that made them wrote.
+typedef Draft = ({String text, EditScope scope});
+
+/// The one draft waiting to be written, and what it is allowed to change.
+///
+/// Only one write goes out at a time, so edits made during one collapse into
+/// a single draft of the newest words. The scope has to collapse with them:
+/// the earlier edit is in those words too, and the store checks a save
+/// against the file, not against the draft that never reached it.
+final class SaveQueue {
+  Draft? _waiting;
+
+  bool get isEmpty => _waiting == null;
+
+  /// Words the user has just typed. They are the newest there are, so they
+  /// are what gets written, under a scope covering this edit and whatever
+  /// was already waiting.
+  void typed(String text, EditScope scope) {
+    final waiting = _waiting;
+    _waiting = (
+      text: text,
+      scope: waiting == null ? scope : scopeOfBoth(waiting.scope, scope),
+    );
+  }
+
+  /// A draft the store did not take, coming back. Words typed while it was
+  /// out are newer and win, and they take this draft's scope with them: the
+  /// file still holds the version both of them were typed over.
+  void returned(Draft draft) {
+    final waiting = _waiting;
+    _waiting = waiting == null
+        ? draft
+        : (text: waiting.text, scope: scopeOfBoth(waiting.scope, draft.scope));
+  }
+
+  /// The draft to write now, and the queue is empty again; null when nothing
+  /// is waiting.
+  Draft? take() {
+    final waiting = _waiting;
+    _waiting = null;
+    return waiting;
+  }
+
+  /// Lets go of whatever is waiting: another document was opened, or nothing
+  /// more will be written to this one until the user decides what to do.
+  void clear() => _waiting = null;
+}
+
+/// The saves of one document that can still be taken back.
+///
+/// A receipt is the store's own record of a write: the version it replaced
+/// and the version it committed. Stepping back is writing that earlier
+/// version again, so this keeps no text of its own and decides only which
+/// receipt is next and what the rest of them mean afterwards.
+final class UndoHistory {
+  /// Undo is for the mistake you just made, not a version history; the
+  /// versions themselves are kept in Support by the store.
+  static const depth = 20;
+
+  final _entries = <store.Receipt>[];
+
+  bool get isEmpty => _entries.isEmpty;
+
+  /// The save the next undo takes back, or null when there is none.
+  store.Receipt? get newest => _entries.lastOrNull;
+
+  /// The history of the document that was open. A new document takes none of
+  /// it: the file those receipts name is not the one being written now.
+  void clear() => _entries.clear();
+
+  void keep(store.Receipt receipt) {
+    _entries.add(receipt);
+    if (_entries.length > depth) _entries.removeAt(0);
+  }
+
+  /// [undone] has been taken back by writing [written].
+  ///
+  /// The entry below it holds content that is on disk again, but as the file
+  /// the undo wrote, so it is pointed at that revision. An entry whose
+  /// revision was not the one the undone save replaced is left alone:
+  /// something else wrote in between, and undoing to it would throw that
+  /// away.
+  void tookBack(store.Receipt undone, store.Receipt written) {
+    _entries.removeLast();
+    final previous = _entries.lastOrNull;
+    if (previous == null || previous.committed != undone.beforeRevision) {
+      return;
+    }
+    _entries[_entries.length - 1] = store.Receipt(
+      committed: written.committed,
+      before: previous.before,
+      beforeRevision: previous.beforeRevision,
+    );
+  }
+}

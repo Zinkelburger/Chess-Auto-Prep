@@ -6,7 +6,6 @@
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/features/library/chapter_outline.dart';
 import 'package:chess_auto_prep/v2/features/library/outline_panel.dart';
-import 'package:chess_auto_prep/v2/features/library/outline_rows.dart';
 import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:chess_auto_prep/v2/workspace/move_tree_view.dart';
 import 'package:flutter/material.dart';
