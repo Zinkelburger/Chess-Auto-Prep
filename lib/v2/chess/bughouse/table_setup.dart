@@ -31,21 +31,8 @@ final class SetupRefused extends SetupRead {
 }
 
 /// The boxes for [position]'s [board], as the user would have typed them.
-BoardBoxes boxesOf(TablePosition position, BoardNumber board) {
-  final fen = position.board(board).fen;
-  final fields = fen.split(' ');
-  final open = fields.first.indexOf('[');
-  final pocket = open < 0
-      ? ''
-      : fields.first.substring(open + 1, fields.first.length - 1);
-  fields[0] = open < 0 ? fields.first : fields.first.substring(0, open);
-  final letters = pocket.split('');
-  return (
-    fen: fields.join(' '),
-    white: formatReserve(letters.where(_isUpper).join()),
-    black: formatReserve(letters.where((l) => !_isUpper(l)).join()),
-  );
-}
+BoardBoxes boxesOf(TablePosition position, BoardNumber board) =>
+    _splitBoxes(position.board(board).fen);
 
 /// A pasted `<board 1>|<board 2>`, or a single FEN for board 1 with board 2
 /// at the start, as the MCP server and the old app read one.
@@ -307,7 +294,9 @@ String formatReserve(String pocket) {
 ReserveRead parseReserve(String text) {
   final letters = StringBuffer();
   final unread = text.replaceAllMapped(
-    RegExp(r'(\d*)\s*([a-z])', caseSensitive: false),
+    // At most two digits: a count past 99 is a typo, and an unbounded one
+    // would build a string of that many letters on every keystroke.
+    RegExp(r'(\d{0,2})\s*([a-z])', caseSensitive: false),
     (match) {
       letters.write(
         match[2]!.toUpperCase() *

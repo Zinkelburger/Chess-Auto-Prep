@@ -32,6 +32,10 @@ final class StartFailed extends EngineStart {
 final class EngineSupervisor {
   final _running = <EngineProcess>{};
 
+  /// Set once the app is on its way out: an engine that finishes starting
+  /// after that is quit at once rather than kept.
+  bool _disposed = false;
+
   /// Process ids of the engines alive right now. Only the tests and the
   /// exit harness ask: the app never addresses an engine by its pid.
   Iterable<int> get pids => _running.map((engine) => engine.pid);
@@ -57,7 +61,7 @@ final class EngineSupervisor {
         options: options,
         patience: patience,
       );
-      _keep(engine);
+      if (!_keep(engine)) return const StartFailed('The app is closing.');
       return Started(engine);
     } on TimeoutException {
       await process.kill();
@@ -105,19 +109,28 @@ final class EngineSupervisor {
         'The bughouse engine did not start. $said'.trim(),
       );
     }
-    _keep(engine);
+    if (!_keep(engine)) return const HivemindStartFailed('The app is closing.');
     await limitCores(process.pid, cores);
     return HivemindStarted(engine);
   }
 
-  void _keep(EngineProcess engine) {
+  /// Keeps [engine] to end on the way out; answers false, having quit it,
+  /// when the way out has already begun.
+  bool _keep(EngineProcess engine) {
+    if (_disposed) {
+      unawaited(engine.quit());
+      return false;
+    }
     _running.add(engine);
     unawaited(engine.exited.then((_) => _running.remove(engine)));
+    return true;
   }
 
   /// Quits every engine, killing any that has not left within two seconds.
-  Future<void> dispose() =>
-      Future.wait(_running.toList().map((engine) => engine.quit()));
+  Future<void> dispose() {
+    _disposed = true;
+    return Future.wait(_running.toList().map((engine) => engine.quit()));
+  }
 }
 
 /// What Hivemind is started with besides this process's environment: where

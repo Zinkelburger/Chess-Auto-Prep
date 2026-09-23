@@ -29,11 +29,14 @@ List<String> bughouseBookPlaces(
   required Map<String, String> environment,
   required String support,
 }) {
+  final home = environment['HOME'] ?? environment['USERPROFILE'] ?? '';
   final override = environment['BUGHOUSE_DB_HOME'];
   if (override != null && override.isNotEmpty) {
-    return [p.join(override, fileName)];
+    final expanded = override == '~' || override.startsWith('~/')
+        ? home + override.substring(1)
+        : override;
+    return [p.join(expanded, fileName)];
   }
-  final home = environment['HOME'] ?? environment['USERPROFILE'] ?? '';
   return [
     if (home.isNotEmpty)
       p.join(home, '.local', 'share', 'chess-prep', 'bughouse-db', fileName),
@@ -96,9 +99,12 @@ final class SqliteHivemindBook implements HivemindBook {
       case _Opened(:final db):
         try {
           return _read(db, position.bookKey);
-        } on SqliteException catch (error) {
+        } on Object catch (error) {
+          // Not a database, or rows not of the builder's shape. Closed, so a
+          // book half-written by a running build is opened afresh next time.
           log.w('read the Hivemind book at ${_file.path}', error);
-          return HivemindUnreadable(error.message);
+          _file.close();
+          return HivemindUnreadable('$error');
         }
     }
   }
@@ -147,8 +153,10 @@ final class SqliteHivemindBook implements HivemindBook {
 ClockCase? _clockNamed(String name) =>
     ClockCase.values.where((clock) => clock.bookName == name).firstOrNull;
 
+/// Swaps the seat letters of an old book's line. A seat letter is always
+/// followed by a space (`B e5`); the `B` of a bishop drop (`B@c4`) is not.
 String _swapBandC(String text) => text.replaceAllMapped(
-  RegExp(r'\b[BC]\b'),
+  RegExp(r'\b[BC](?= |$)'),
   (match) => match[0] == 'B' ? 'C' : 'B',
 );
 
@@ -224,9 +232,10 @@ final class SqliteFicsBook implements FicsBook {
         try {
           final archive = _archive ??= _readArchive(db);
           return FicsFound(archive, _readPosition(db, position.bookKey));
-        } on SqliteException catch (error) {
+        } on Object catch (error) {
           log.w('read the FICS archive at ${_file.path}', error);
-          return FicsUnreadable(error.message);
+          _file.close();
+          return FicsUnreadable('$error');
         }
     }
   }

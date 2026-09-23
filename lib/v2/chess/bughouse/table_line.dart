@@ -44,12 +44,14 @@ final class TableLine {
 
   /// The moves on the boards now, in the order they were played.
   List<LineMove> get applied {
-    var one = 0, two = 0;
-    return [
-      for (final move in moves)
-        if (move.board == BoardNumber.one ? one++ < _upto.$1 : two++ < _upto.$2)
-          move,
-    ];
+    final seen = {BoardNumber.one: 0, BoardNumber.two: 0};
+    final on = <LineMove>[];
+    for (final move in moves) {
+      final count = seen[move.board]!;
+      seen[move.board] = count + 1;
+      if (count < upto(move.board)) on.add(move);
+    }
+    return on;
   }
 
   /// The last move on [board] now, for its highlight and its list.
@@ -70,7 +72,10 @@ final class TableLine {
 
   /// [move] played at [board]'s cursor: the next move already there when it
   /// is the same one, or a new one that replaces what followed on that
-  /// board. It goes in after the last move now on either board.
+  /// board. It goes in after the last move now on either board. The other
+  /// board's moves past its cursor stay, even one whose drop needed a
+  /// capture this replaces: stepping into it is refused, as [replay] says,
+  /// rather than a move the user played being thrown away.
   TableLine played(LineMove move) {
     final board = move.board;
     final own = of(board);

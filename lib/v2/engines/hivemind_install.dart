@@ -95,7 +95,10 @@ final class HivemindInstall {
     final folder = Directory(p.join(supportDirectory.path, 'bughouse'));
     try {
       final problem = await _installAll(folder, manifest);
-      if (problem != null) return HivemindMissing(problem);
+      if (problem != null) {
+        log.e('install the bughouse engine', problem);
+        return HivemindMissing(problem);
+      }
     } on Object catch (error) {
       log.e('install the bughouse engine', error);
       return HivemindMissing('Could not install the bughouse engine: $error');
@@ -111,6 +114,7 @@ final class HivemindInstall {
   /// problem, or null.
   Future<String?> _installAll(Directory folder, _Manifest manifest) async {
     await folder.create(recursive: true);
+    await _sweepLeftovers(folder);
     for (final name in installedNames) {
       final problem = await _ensure(folder, name, manifest.files[name]!);
       if (problem != null) return problem;
@@ -122,6 +126,21 @@ final class HivemindInstall {
       return 'Could not make $binary runnable: ${chmod.stderr}';
     }
     return null;
+  }
+
+  /// Removes a half-written `.part` an install that was killed left behind:
+  /// one an hour old is no install still running.
+  Future<void> _sweepLeftovers(Directory folder) async {
+    final stale = DateTime.now().subtract(const Duration(hours: 1));
+    await for (final entry in folder.list()) {
+      if (entry is! File || !entry.path.endsWith('.part')) continue;
+      if ((await entry.lastModified()).isAfter(stale)) continue;
+      try {
+        await entry.delete();
+      } on FileSystemException catch (error) {
+        log.w('remove ${entry.path}', error);
+      }
+    }
   }
 
   /// Makes [name] in [folder] match [want]; answers the problem, or null.
@@ -179,13 +198,15 @@ bool _isRuntimeDll(String name) {
 }
 
 /// Whether [file] is there with the size and hash promised. Hashed on its
-/// own isolate: this runs before every launch, over 80 MB.
+/// own isolate and read in chunks: this runs before every launch, over
+/// 80 MB.
 Future<bool> _matches(File file, _Integrity want) {
   final path = file.path;
-  return Isolate.run(() {
+  return Isolate.run(() async {
     final found = File(path);
     if (!found.existsSync() || found.lengthSync() != want.bytes) return false;
-    return sha256.convert(found.readAsBytesSync()).toString() == want.sha256;
+    final digest = await sha256.bind(found.openRead()).first;
+    return digest.toString() == want.sha256;
   });
 }
 

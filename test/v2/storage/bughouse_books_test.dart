@@ -92,7 +92,7 @@ void main() {
     );
     for (final row in [
       ['A:e5', 'C', 'e7e5', 'even', -0.12, null, 'C e5 · A Nf3'],
-      ['A:c5', 'C', 'c7c5', 'even', 0.05, null, 'C c5 · D d4'],
+      ['A:c5', 'C', 'c7c5', 'even', 0.05, null, 'C c5 · A B@c4'],
       ['A:e5', 'C', 'e7e5', 'ahead', 2.3, null, 'C e5 · sit'],
       ['B:e4', 'D', 'e2e4', 'even', null, 4, 'D e4'],
     ]) {
@@ -126,12 +126,20 @@ void main() {
         found.moves[(BoardNumber.one, 'e7e5')]![ClockCase.even]!.pv,
         'B e5 · A Nf3',
       );
+      // The B of a bishop drop is a piece, not a seat.
+      expect(
+        found.moves[(BoardNumber.one, 'c7c5')]![ClockCase.even]!.pv,
+        'B c5 · A B@c4',
+      );
       book.close();
     });
 
     test('a queued or unknown position is a miss', () async {
       final book = SqliteHivemindBook([hivemindBook()]);
-      expect(await book.lookup(afterLine('A:e4 B:d4')), isA<HivemindNotFound>());
+      expect(
+        await book.lookup(afterLine('A:e4 B:d4')),
+        isA<HivemindNotFound>(),
+      );
       expect(await book.lookup(TablePosition.initial), isA<HivemindNotFound>());
       book.close();
     });

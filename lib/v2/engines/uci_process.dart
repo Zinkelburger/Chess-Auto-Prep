@@ -60,9 +60,12 @@ final class SpawnedProcess implements UciProcess {
   @override
   int get pid => _process.pid;
 
+  /// Bytes that are not UTF-8 read as replacement characters rather than
+  /// an error nobody listens for.
   @override
-  Stream<String> get lines =>
-      _process.stdout.transform(utf8.decoder).transform(const LineSplitter());
+  Stream<String> get lines => _process.stdout
+      .transform(const Utf8Decoder(allowMalformed: true))
+      .transform(const LineSplitter());
 
   @override
   void send(String line) => _process.stdin.writeln(line);

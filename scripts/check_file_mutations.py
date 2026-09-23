@@ -52,9 +52,10 @@ APPROVED: dict[str, tuple[int, str]] = {
         ".part write, rename, stamp",
     ),
     "lib/v2/engines/hivemind_install.dart": (
-        3,
+        4,
         "reproducible bughouse engine bundle, v2: verified .part write, "
-        "rename into place, removal of its own leftover .part",
+        "rename into place, removal of its own leftover .part and of an "
+        "hour-old one a killed install left",
     ),
     "lib/v2/storage/atomic_write.dart": (4, "v2 atomic publication: staged temporary, rename into place, sweep of interrupted writes"),
     "lib/v2/storage/document_relocation.dart": (1, "v2 rename, move and quarantine-delete: revision-checked and backed up; the one direct mutation takes back an empty folder a refused move created"),

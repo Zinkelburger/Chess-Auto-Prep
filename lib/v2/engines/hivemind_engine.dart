@@ -122,8 +122,9 @@ final class HivemindProcess implements Hivemind, EngineProcess {
   }
 
   /// Handshakes and applies [options]. Loading the network takes seconds, so
-  /// the handshake gets [patience]; an engine that says nothing by then is
-  /// killed and the answer is null.
+  /// the handshake gets [patience]; an engine that says nothing by then, or
+  /// exits first, is killed and the answer is null — the caller logs it,
+  /// with what the engine wrote to stderr.
   static Future<HivemindProcess?> start(
     UciProcess process, {
     Map<String, String> options = const {},
@@ -138,8 +139,10 @@ final class HivemindProcess implements Hivemind, EngineProcess {
       }
       await engine._ready(patience);
       return engine;
-    } on Object catch (error) {
-      log.e('start the bughouse engine', error);
+    } on TimeoutException {
+      await process.kill();
+      return null;
+    } on EngineFailure {
       await process.kill();
       return null;
     }
@@ -194,6 +197,7 @@ final class HivemindProcess implements Hivemind, EngineProcess {
       await _process.kill();
       return const HivemindFailed('The bughouse engine stopped answering.');
     } on EngineFailure catch (error) {
+      log.e('search on the bughouse engine', error);
       return HivemindFailed(error.message);
     } finally {
       _collecting = null;
@@ -201,6 +205,10 @@ final class HivemindProcess implements Hivemind, EngineProcess {
     }
   }
 
+  /// Sends the options that changed, then waits for `readyok` whatever
+  /// changed: the engine goes on thinking after `bestmove` until the `stop`
+  /// that follows it, and anything it prints before `readyok` belongs to
+  /// the search before, which must not land in this one.
   Future<void> _configure(HivemindQuestion question) async {
     final options = [
       'Team value ${engineTeam(question.team)}',
@@ -209,9 +217,10 @@ final class HivemindProcess implements Hivemind, EngineProcess {
       'MultiPV value ${question.lines < 1 ? 1 : question.lines}',
     ];
     final key = options.join('|');
-    if (key == _configured) return;
-    for (final option in options) {
-      _send('setoption name $option');
+    if (key != _configured) {
+      for (final option in options) {
+        _send('setoption name $option');
+      }
     }
     await _ready(const Duration(minutes: 1));
     _configured = key;
@@ -232,8 +241,9 @@ final class HivemindProcess implements Hivemind, EngineProcess {
     await exited.timeout(
       const Duration(seconds: 5),
       onTimeout: () async {
+        _unresponsive = true;
         await _process.kill();
-        return EngineExit.ended;
+        return EngineExit.unresponsive;
       },
     );
   }

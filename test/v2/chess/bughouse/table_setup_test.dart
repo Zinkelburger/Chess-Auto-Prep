@@ -26,6 +26,8 @@ void main() {
         '“X” isn’t a piece: use P, N, B, R or Q.',
       );
       expect(parseReserve('N !'), isA<ReserveWrong>());
+      // A count of a billion is a typo, not a string of a billion pawns.
+      expect(parseReserve('999999999P'), isA<ReserveWrong>());
     });
   });
 

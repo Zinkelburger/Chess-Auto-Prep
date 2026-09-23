@@ -184,7 +184,7 @@ final class TableScore {
     if (line.mate case final mate?) return TableScore(mate: sign * mate);
     final q = line.q;
     if (q == null) return const TableScore();
-    return TableScore(score: sign * scoreOf((q - offset).clamp(-1.0, 1.0)));
+    return TableScore(score: sign * scoreOf(q - offset));
   }
 
   final double? score;
@@ -228,7 +228,7 @@ String _signed(double score) {
 Team answering(TablePosition position, BoardNumber board) =>
     position.mover(board).team.other;
 
-/// [side] as the engine's `Team` option: the colour on board 1.
+/// [team] as the engine's `Team` option: its colour on board 1.
 String engineTeam(Team team) =>
     team.onBoardOne == Side.white ? 'white' : 'black';
 

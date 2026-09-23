@@ -148,6 +148,24 @@ void main() {
     expect(process.sent, contains('go movetime 3000'));
   });
 
+  test(
+    'what the engine prints after a search never lands in the next',
+    () async {
+      final (engine, process) = await started();
+      process.next = startSearch;
+      await engine.search(question());
+      // Thinking on after bestmove, until the stop that followed it.
+      process.say(
+        'info depth 9 multipv 1 score cp 999 nodes 500 pv (e2e4,pass)',
+      );
+      process.say('bestmove (e2e4,pass)');
+      process.next = ['bestmove (none)'];
+      final answer = await engine.search(question()) as HivemindSearched;
+      expect(answer.best, isNull);
+      expect(answer.lines, isEmpty);
+    },
+  );
+
   test('a team with no move gets no action and no lines', () async {
     final (engine, process) = await started();
     process.next = ['bestmove (none)'];
