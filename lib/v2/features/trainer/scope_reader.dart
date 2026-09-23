@@ -1,4 +1,5 @@
 import '../../chess/pgn/chapter.dart';
+import '../../chess/pgn/chapter_sections.dart';
 import '../../chess/training/training_line.dart';
 import '../../diagnostics/log.dart';
 import '../../storage/chapter_files.dart';
@@ -34,20 +35,28 @@ final class ScopeReader {
               .firstOrNull
         : null;
     if (folder == null) return [(ref: open, lines: openLines)];
+    // A file of several chapters is read once for all of them.
+    final files = <String, Future<Chapter?>>{};
     return [
       for (final ref in folder.chapters)
-        if (ref.path == open.path)
+        if (ref == open)
           (ref: open, lines: openLines)
         else if (!ref.heading.draft)
-          if (await _read(ref) case final lines?) (ref: ref, lines: lines),
+          if (await (files[ref.path] ??= _read(ref)) case final file?)
+            (
+              ref: ref,
+              lines: trainingLines(
+                sectionView(file, ref.section, name: ref.name).chapter,
+                source: ref.path,
+              ),
+            ),
     ];
   }
 
-  Future<List<TrainingLine>?> _read(ChapterRef ref) async {
+  Future<Chapter?> _read(ChapterRef ref) async {
     switch (await _documents.open(ref)) {
       case Opened(:final text):
-        final chapter = await readChapter(name: ref.name, text: text);
-        return trainingLines(chapter, source: ref.path);
+        return readChapter(name: ref.name, text: text);
       case Absent():
         return null;
       case Unreadable(:final detail):

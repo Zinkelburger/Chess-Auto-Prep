@@ -75,7 +75,7 @@ final class TrainingLine {
 /// file's path. A game with no moves, or one nothing could read, is no line
 /// but keeps its place, so the ids of the games after it do not move.
 List<TrainingLine> trainingLines(Chapter chapter, {required String source}) {
-  final ids = trainedIds(chapter.lines);
+  final ids = chapter.lineIds ?? trainedIds(chapter.lines);
   return [
     for (final (index, line) in chapter.lines.indexed)
       if (ids[index] case final id?)

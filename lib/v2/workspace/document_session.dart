@@ -6,6 +6,7 @@ import '../chess/fen.dart';
 import '../chess/pgn/chapter.dart';
 import '../chess/pgn/chapter_edit.dart' as edits;
 import '../chess/pgn/chapter_edits.dart' as edits;
+import '../chess/pgn/chapter_sections.dart';
 import '../chess/pgn/comment_edits.dart' as edits;
 import '../chess/pgn/games_written.dart';
 import '../chess/pgn/line_id_pins.dart';
@@ -46,6 +47,11 @@ final class DocumentSession extends ChangeNotifier {
   final store.PgnDocumentStore _store;
   final DocumentSaver _saver;
   Chapter? _chapter;
+
+  /// The file and where the open chapter's games sit in it, when the open
+  /// chapter is one of several a file holds by tag; null when it is the
+  /// whole file. Edits are made to [_chapter] and put back into the file.
+  SectionView? _view;
   ChapterRef? _source;
   String? _readOnly;
   final _cursor = ValueNotifier<NodePath>(const NodePath.root());
@@ -176,7 +182,12 @@ final class DocumentSession extends ChangeNotifier {
         if (game != null && game >= chapter.lines.length) {
           return _openFailed(ref, '${ref.name} has no chapter ${game + 1}');
         }
-        _show(chapter, ref, revision, readOnly);
+        final view = game == null ? _viewOf(chapter, ref) : null;
+        if (view != null && view.places.isEmpty) {
+          return _openFailed(ref, '${ref.name} is no longer in its file');
+        }
+        _view = view;
+        _show(view?.chapter ?? chapter, ref, revision, readOnly);
         return const DocumentOpened();
       case store.Absent():
         return _openFailed(ref, '${ref.name} is no longer on disk');
@@ -194,13 +205,18 @@ final class DocumentSession extends ChangeNotifier {
   }
 
   /// The open document was renamed or moved: the same file with the same
-  /// bytes, so only the name shown and the file saves go to change.
+  /// bytes, so only the name shown and the file saves go to change. A file
+  /// moved takes the chapter of it that is open along.
   void relocated(ChapterRef ref) {
     final chapter = _chapter;
-    if (_source == null || chapter == null) return;
-    _source = ref;
-    _chapter = renamedChapter(chapter, ref.name);
-    _saver.relocated(ref);
+    final source = _source;
+    if (source == null || chapter == null) return;
+    final moved = ref.section == null && source.section != null
+        ? source.inFile(ref.path)
+        : ref;
+    _source = moved;
+    _chapter = renamedChapter(chapter, moved.name);
+    _saver.relocated(moved);
     notifyListeners();
   }
 
@@ -210,6 +226,7 @@ final class DocumentSession extends ChangeNotifier {
     if (_source == null) return;
     _opens++;
     _chapter = null;
+    _view = null;
     _source = null;
     _refused = null;
     _shownTo = null;
@@ -385,9 +402,15 @@ final class DocumentSession extends ChangeNotifier {
     if (_disposed || ticket != _opens) return const UndoRefused();
     if (result case Restored(:final text)) {
       final showing = showingGameText(_chapter);
-      final read = await readChapter(name: ref.name, text: text, game: game);
+      final read = await readChapter(
+        name: p.basenameWithoutExtension(ref.path),
+        text: text,
+        game: game,
+      );
       if (_disposed || ticket != _opens) return const UndoRefused();
-      final restored = showingGame(read, showing);
+      final view = game == null ? _viewOf(read, ref) : null;
+      _view = view;
+      final restored = view?.chapter ?? showingGame(read, showing);
       final before = _chapter?.tree;
       _chapter = restored;
       _cursor.value = before == null
@@ -453,6 +476,15 @@ final class DocumentSession extends ChangeNotifier {
   /// A game the edit rewrote keeps the id it is trained under ([withIdsPinned]);
   /// that header lands on a game the edit wrote anyway, so the scope stands.
   void _replace(Chapter edited, GamesWritten written) {
+    final view = _view;
+    if (view != null) {
+      _putBack(
+        view,
+        edited,
+        GamesArranged.of(written, before: view.chapter.lines.length),
+      );
+      return;
+    }
     final before = _chapter;
     final pinned = before == null
         ? edited
@@ -491,6 +523,15 @@ final class DocumentSession extends ChangeNotifier {
         _refused = EditNotWritten(reason);
         notifyListeners();
         return reason;
+      case edits.ChapterEdited(chapter: final edited, :final games)
+          when _view != null:
+        final reason = _putBack(_view!, edited, games);
+        if (reason != null) {
+          notifyListeners();
+          return reason;
+        }
+        _clearRefusal();
+        _cursor.value = samePathIn(chapter.tree, _chapter!.tree, cursor);
       case edits.ChapterEdited(chapter: final edited, :final games):
         _clearRefusal();
         final pinned = withIdsPinned(chapter, edited, games);
@@ -503,6 +544,110 @@ final class DocumentSession extends ChangeNotifier {
     }
     notifyListeners();
     return null;
+  }
+
+  /// Where the games at [games] of the open chapter sit in its file: the
+  /// same indexes when the chapter is the whole file.
+  Set<int> placesInFile(Set<int> games) {
+    final view = _view;
+    if (view == null) return games;
+    return {
+      for (final game in games)
+        if (game >= 0 && game < view.places.length) view.places[game],
+    };
+  }
+
+  /// Makes [edit] to the whole file the open chapter is in — the chapters
+  /// of a course file named, renamed, taken out — and writes it through the
+  /// same one path every edit takes. [section] is the chapter to show after
+  /// it, when the edit renamed the one that is open. Answers why it did not
+  /// happen, or null when it did.
+  String? applyToFile(
+    edits.ChapterEdit Function(Chapter file) edit, {
+    String? section,
+  }) {
+    final view = _view;
+    final source = _source;
+    if (view == null || source == null) return apply(edit);
+    if (_refuseWhenReadOnly()) return _readOnly;
+    switch (edit(view.file)) {
+      case edits.ChapterUnchanged():
+        return null;
+      case edits.ChapterEditRefused(:final reason):
+        log.w('edit ${source.path}', reason);
+        _refused = EditNotWritten(reason);
+        notifyListeners();
+        return reason;
+      case edits.ChapterEdited(chapter: final edited, :final games):
+        _clearRefusal();
+        final pinned = withIdsPinned(view.file, edited, games);
+        _saver.save(
+          writeChapter(pinned.chapter),
+          GamesRearranged(pinned.games),
+        );
+        final ref = _stillIn(
+          pinned.chapter,
+          section == null || section == source.section
+              ? source
+              : ChapterRef.at(source.path, section: section),
+        );
+        final before = _chapter?.tree;
+        final next = sectionView(pinned.chapter, ref.section, name: ref.name);
+        _view = next;
+        _chapter = next.chapter;
+        if (ref != source) {
+          _source = ref;
+          _saver.relocated(ref);
+        }
+        _cursor.value = before == null
+            ? const NodePath.root()
+            : samePathIn(before, next.chapter.tree, cursor);
+    }
+    notifyListeners();
+    return null;
+  }
+
+  /// The chapter [ref] names in [file]: null when it is the whole file,
+  /// which is every file whose games name no chapter.
+  SectionView? _viewOf(Chapter file, ChapterRef ref) {
+    final view = sectionView(file, ref.section, name: ref.name);
+    return view.isWholeFile ? null : view;
+  }
+
+  /// Puts [edited], an edit of [view]'s chapter placed by [games], back into
+  /// the file and writes the file, saying in the file's own places what the
+  /// edit did. The chapter shown is then the file's again, with the ids the
+  /// file trains its games under. Answers why it did not happen, or null.
+  String? _putBack(SectionView view, Chapter edited, GamesArranged games) {
+    final back = spliced(view, edited, games);
+    if (back == null) {
+      const reason = 'a new line could not be given its chapter name';
+      log.w('edit ${_source?.path}', reason);
+      _refused = const EditNotWritten(reason);
+      return reason;
+    }
+    final pinned = withIdsPinned(view.file, back.file, back.games);
+    _saver.save(writeChapter(pinned.chapter), GamesRearranged(pinned.games));
+    final source = _source!;
+    final ref = _stillIn(pinned.chapter, source);
+    final next = sectionView(pinned.chapter, ref.section, name: ref.name);
+    _view = next;
+    _chapter = next.chapter;
+    if (ref != source) {
+      _source = ref;
+      _saver.relocated(ref);
+    }
+    return null;
+  }
+
+  /// [ref], or — when an edit took the last of its games out of [file], or
+  /// left the file one chapter — the file's first chapter, so the board
+  /// does not show a chapter that is no longer anywhere and names it as the
+  /// library does. The draft and its saver stay with the file.
+  ChapterRef _stillIn(Chapter file, ChapterRef ref) {
+    final sections = chapterSections(file.lines);
+    if (sections.contains(ref.section)) return ref;
+    return ChapterRef.at(ref.path, section: sections.first);
   }
 
   @override

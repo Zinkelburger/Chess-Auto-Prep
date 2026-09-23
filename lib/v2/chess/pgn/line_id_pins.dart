@@ -114,8 +114,6 @@ List<String> mainLineSpellings(GameTree tree) {
 /// again from its tree, so a line that reading could not take whole still
 /// arrives carrying everything it had.
 ChapterLine? withIdHeader(ChapterLine line, String id) {
-  final moves = movesOf(line);
-  if (moves == null) return null;
   final had = line.lineId;
   final List<PgnHeader> tags;
   if (had == null) {
@@ -129,10 +127,19 @@ ChapterLine? withIdHeader(ChapterLine line, String id) {
     final was = line.tags[at] as PgnTag;
     tags = [...line.tags]..[at] = PgnTag(was.key, id, trailer: was.trailer);
   }
+  final written = withHeaders(line, tags);
+  return written?.lineId == id ? written : null;
+}
+
+/// [line] carrying [tags] in place of its own, its moves' text untouched, or
+/// null when its text does not begin with the headers it carries.
+ChapterLine? withHeaders(ChapterLine line, List<PgnHeader> tags) {
+  final moves = movesOf(line);
+  if (moves == null) return null;
   // A game with no headers at all has nothing between them and its moves;
   // the first header needs a line of its own.
   final separator = line.tags.isEmpty ? '\n' : line.separator;
-  final written = ChapterLine(
+  return ChapterLine(
     tags: List.unmodifiable(tags),
     tree: line.tree,
     text: '${headerText(tags)}$separator$moves',
@@ -141,7 +148,6 @@ ChapterLine? withIdHeader(ChapterLine line, String id) {
     separator: separator,
     issues: line.issues,
   );
-  return written.lineId == id ? written : null;
 }
 
 /// The line's movetext exactly as the file has it: its own bytes past the

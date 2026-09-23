@@ -217,7 +217,9 @@ final class DocumentSaver extends ChangeNotifier {
   /// open that asked for it, so it is not history here.
   void _catchUp(store.SaveResult result, DocumentRef ref) {
     final target = _target;
-    if (target == null || target.ref != ref) return;
+    // By path: two chapters of one file are one file on disk, and the
+    // revision a write committed is that file's.
+    if (target == null || target.ref.path != ref.path) return;
     if (result case store.Saved(:final receipt)) {
       _target = (ref: ref, revision: receipt.committed);
     }

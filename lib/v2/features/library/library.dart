@@ -4,6 +4,7 @@ import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
+import '../../chess/pgn/chapter_sections.dart';
 import '../../diagnostics/log.dart';
 import '../../storage/chapter_files.dart';
 import '../../storage/document_ref.dart';
@@ -180,20 +181,58 @@ final class Library extends ChangeNotifier {
     return _writes.create(ref, name, side, rootMoves: rootMoves);
   });
 
+  /// A chapter file is renamed on disk; a chapter of a course file is its
+  /// games' `[ChapterName]`, so renaming it rewrites that tag and nothing
+  /// else. The games of a course file that name no chapter are called after
+  /// the file, so renaming them renames the file.
   Future<LibraryResult> renameChapter(ChapterRef ref, String name) =>
       _run('rename ${ref.path}', () {
+        if (ref.section case final section?) {
+          return _writes.editFile(
+            ref,
+            (file) => sectionRenamed(file, section, name),
+            section: name.trim(),
+          );
+        }
         final to = p.join(p.dirname(ref.path), '$name.pgn');
         return _writes.relocate(ref, DocumentRef(to));
       });
 
+  /// A chapter file moves to the other repertoire. A chapter of a course
+  /// file is part of that file and goes where the file goes.
   Future<LibraryResult> moveChapter(ChapterRef ref, RepertoireFolder to) =>
-      _run('move ${ref.path} to ${to.name}', () {
+      _run('move ${ref.path} to ${to.name}', () async {
+        if (_sharesFile(ref)) {
+          return const LibraryFailure(
+            'a chapter of a course file moves with its file',
+          );
+        }
         final target = p.join(to.path, p.basename(ref.path));
         return _writes.relocate(ref, DocumentRef(target));
       });
 
+  /// A chapter file goes to the recovery folder; a chapter of a course file
+  /// is its games, which are taken out of the file — undo puts them back —
+  /// and the file's other chapters stay.
   Future<LibraryResult> deleteChapter(ChapterRef ref) =>
-      _run('delete ${ref.path}', () => _writes.remove(ref));
+      _run('delete ${ref.path}', () {
+        if (_sharesFile(ref)) {
+          return _writes.editFile(
+            ref,
+            (file) => sectionRemoved(file, ref.section),
+          );
+        }
+        return _writes.remove(ref);
+      });
+
+  /// Whether [ref] is one of several chapters its file holds by tag.
+  bool _sharesFile(ChapterRef ref) =>
+      ref.section != null ||
+      repertoires
+              .expand((folder) => folder.chapters)
+              .where((chapter) => chapter.path == ref.path)
+              .length >
+          1;
 
   /// Moves the lines at [games] of the open chapter into [to], or into the
   /// line at [asSidelineOf] there. This is what dropping lines on a chapter,

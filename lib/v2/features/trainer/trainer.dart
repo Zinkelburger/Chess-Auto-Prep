@@ -74,7 +74,8 @@ final class TrainerReady extends TrainerState {
   /// [line] as far as [ply] — the whole of it when null — to be read in
   /// [place].
   LineToRead toRead(TrainingLine line, ReadIn place, {int? ply}) => (
-    ref: chapters.firstWhere((c) => c.ref.path == line.key.source).ref,
+    // By the line, not its file: one file can hold several chapters.
+    ref: chapters.firstWhere((c) => c.lines.any((l) => l.key == line.key)).ref,
     sans: [
       for (final move in line.moves.take(ply ?? line.moves.length)) move.san,
     ],

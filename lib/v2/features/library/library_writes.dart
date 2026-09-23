@@ -6,6 +6,8 @@ import 'package:path/path.dart' as p;
 import '../../chess/pgn/chapter.dart';
 import '../../chess/pgn/chapter_edit.dart';
 import '../../chess/pgn/chapter_line.dart';
+import '../../chess/pgn/chapter_sections.dart';
+import '../../chess/pgn/line_id_pins.dart';
 import '../../chess/pgn/games_written.dart';
 import '../../chess/pgn/line_moves.dart';
 import '../../chess/pgn/repertoire_import.dart';
@@ -156,7 +158,7 @@ final class LibraryWrites {
       _withRevision(ref, (revision) async {
         switch (await _store.move(ref, to, expected: revision)) {
           case store.Moved(:final training):
-            if (_session.source == ref) {
+            if (_session.source?.path == ref.path) {
               _session.relocated(ChapterRef.at(to.path));
             }
             return LibraryDone(training: training);
@@ -175,7 +177,7 @@ final class LibraryWrites {
       _withRevision(ref, (revision) async {
         switch (await _store.delete(ref, expected: revision)) {
           case store.Deleted(:final training):
-            if (_session.source == ref) _session.closed();
+            if (_session.source?.path == ref.path) _session.closed();
             return LibraryDone(training: training);
           case store.Conflict():
             return const LibraryStale();
@@ -269,6 +271,20 @@ final class LibraryWrites {
     ];
     if (lines.isEmpty) return const LibraryDone();
     if (to == from) return _foldedHere(moving, asSidelineOf);
+    if (to.path == from.path) {
+      // Another chapter of the same file: the lines keep their places and
+      // take the other chapter's name, one edit to one file.
+      if (asSidelineOf != null) {
+        return const LibraryFailure(
+          'a line can only be folded into a line of the chapter on the board',
+        );
+      }
+      final places = _session.placesInFile(moving);
+      final reason = _session.applyToFile(
+        (file) => linesNamed(file, places, to.section),
+      );
+      return reason == null ? const LibraryDone() : LibraryFailure(reason);
+    }
     final written = await _writtenInto(to, lines, asSidelineOf);
     if (written != null) return written;
     final reason = _session.apply((c) => linesTakenOut(c, games: moving));
@@ -302,7 +318,9 @@ final class LibraryWrites {
     if (read is! store.Opened) {
       return LibraryFailure('${to.name} could not be read');
     }
-    var target = await readChapter(name: to.name, text: read.text);
+    final file = await readChapter(name: to.name, text: read.text);
+    final view = sectionView(file, to.section, name: to.name);
+    var target = view.chapter;
     var arranged = GamesArranged.of(
       GamesWritten(),
       before: target.lines.length,
@@ -318,9 +336,21 @@ final class LibraryWrites {
           arranged = composedArrangement(arranged, games) ?? games;
       }
     }
+    // A chapter of a course file goes back into its file.
+    var text = writeChapter(target);
+    if (!view.isWholeFile) {
+      final back = spliced(view, target, arranged);
+      if (back == null) {
+        return const LibraryFailure(
+          'the lines could not be given their chapter name',
+        );
+      }
+      text = writeChapter(back.file);
+      arranged = back.games;
+    }
     return switch (await _store.save(
       to,
-      writeChapter(target),
+      text,
       expected: read.revision,
       scope: GamesRearranged(arranged),
     )) {
@@ -328,6 +358,45 @@ final class LibraryWrites {
       store.Conflict() => const LibraryStale(),
       store.SaveDidNotLand(:final detail) => LibraryFailure(detail),
     };
+  }
+
+  /// Makes [edit] to the whole file [ref] is in: through the workspace when
+  /// that file is open, so the edit lands behind its draft and its undo
+  /// covers it; otherwise read, edited and saved against the revision read.
+  /// [section] is what the open chapter is called afterwards, when the edit
+  /// renamed it.
+  Future<LibraryResult> editFile(
+    ChapterRef ref,
+    ChapterEdit Function(Chapter file) edit, {
+    String? section,
+  }) async {
+    if (_session.source?.path == ref.path) {
+      final reason = _session.applyToFile(edit, section: section);
+      return reason == null ? const LibraryDone() : LibraryFailure(reason);
+    }
+    final read = await _store.open(ref);
+    if (read is! store.Opened) {
+      return LibraryFailure('${ref.name} could not be read');
+    }
+    final file = await readChapter(name: ref.name, text: read.text);
+    switch (edit(file)) {
+      case ChapterUnchanged():
+        return const LibraryDone();
+      case ChapterEditRefused(:final reason):
+        return LibraryFailure(reason);
+      case ChapterEdited(chapter: final edited, :final games):
+        final pinned = withIdsPinned(file, edited, games);
+        return switch (await _store.save(
+          ref,
+          writeChapter(pinned.chapter),
+          expected: read.revision,
+          scope: GamesRearranged(pinned.games),
+        )) {
+          store.Saved() => const LibraryDone(),
+          store.Conflict() => const LibraryStale(),
+          store.SaveDidNotLand(:final detail) => LibraryFailure(detail),
+        };
+    }
   }
 
   /// The edits that put [lines] into a chapter: one append, or one graft
@@ -353,12 +422,13 @@ final class LibraryWrites {
     ChapterRef ref,
     Future<LibraryResult> Function(Revision revision) write,
   ) async {
-    if (_session.source == ref) return _held(write);
+    // By path: any chapter of the open file is the open file.
+    if (_session.source?.path == ref.path) return _held(write);
     switch (await _store.open(ref)) {
       case store.Opened(:final revision):
         // The user may have opened this very chapter while it was being read,
         // and from here on its writes belong behind the saver's hold.
-        if (_session.source == ref) return _held(write);
+        if (_session.source?.path == ref.path) return _held(write);
         return write(revision);
       case store.Absent():
         return const LibraryStale();
