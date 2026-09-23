@@ -9,6 +9,7 @@ normalised PGN per broadcast, a manifest, and one merged PGN ready for
 database) or for opening in the app.
 
     python3 tools/lichess_broadcasts.py by falstan --collection massachusetts
+    python3 tools/lichess_broadcasts.py by jsr12345 --community-only --collection us-community
     python3 tools/lichess_broadcasts.py tour GiQfOTDu --collection massachusetts
     python3 tools/lichess_broadcasts.py search "World Open"
     python3 tools/lichess_broadcasts.py status --collection massachusetts
@@ -467,6 +468,12 @@ def main(argv: list[str] | None = None) -> int:
 
     p_by = sub.add_parser("by", help="fetch every broadcast run by a Lichess user")
     p_by.add_argument("user")
+    p_by.add_argument(
+        "--community-only",
+        action="store_true",
+        help="skip the user's official (tiered) broadcasts; those are in the "
+        "Lichess monthly downloads (tools/lichess_broadcast_archive.py) and TWIC",
+    )
     add_collection_args(p_by)
 
     p_tour = sub.add_parser("tour", help="fetch broadcasts by tour id")
@@ -493,6 +500,11 @@ def main(argv: list[str] | None = None) -> int:
         if not tours:
             print(f"no broadcasts by {args.user}", file=sys.stderr)
             return 1
+        if args.community_only:
+            official = [t for t in tours if t.get("tier")]
+            tours = [t for t in tours if not t.get("tier")]
+            if official:
+                print(f"skipping {len(official)} official broadcasts", file=sys.stderr)
         ids = [t["id"] for t in tours]
     elif args.command == "tour":
         ids = args.tour_id

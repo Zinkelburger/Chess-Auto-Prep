@@ -1,0 +1,476 @@
+{
+ "merged_games": 2400,
+ "tours": {
+  "2MK7o7ZL": {
+   "dates": [
+    1751036400000,
+    1751382000000
+   ],
+   "fetched_at": 1790193006,
+   "finished": true,
+   "games": 45,
+   "id": "2MK7o7ZL",
+   "location": "Dulles, Virginia USA",
+   "name": "2nd Annual Independence Day Norm Invitational - IM",
+   "owner": "jsr12345",
+   "rounds": 9,
+   "slug": "2nd-annual-independence-day-norm-invitational-im",
+   "source": "lichess",
+   "url": "https://lichess.org/broadcast/2nd-annual-independence-day-norm-invitational-im/2MK7o7ZL"
+  },
+  "5yhvK9xR": {
+   "dates": [
+    1750514400000,
+    1750615200000
+   ],
+   "fetched_at": 1790192999,
+   "finished": true,
+   "games": 25,
+   "id": "5yhvK9xR",
+   "location": "Akron, Ohio USA",
+   "name": "2nd Annual Chess for Cure",
+   "owner": "jsr12345",
+   "rounds": 5,
+   "slug": "2nd-annual-chess-for-cure",
+   "source": "lichess",
+   "url": "https://lichess.org/broadcast/2nd-annual-chess-for-cure/5yhvK9xR"
+  },
+  "7vSl4mwW": {
+   "dates": [
+    1765573200000,
+    1765749600000
+   ],
+   "fetched_at": 1790192960,
+   "finished": true,
+   "games": 208,
+   "id": "7vSl4mwW",
+   "location": "Spokane, WA",
+   "name": "2025 National K12 Grade Chess Championship",
+   "owner": "jsr12345",
+   "rounds": 7,
+   "slug": "2025-national-k12-grade-chess-championship",
+   "source": "lichess",
+   "url": "https://lichess.org/broadcast/2025-national-k12-grade-chess-championship/7vSl4mwW"
+  },
+  "96Tb6DvO": {
+   "dates": [
+    1785798000000,
+    1786302000000
+   ],
+   "fetched_at": 1790192861,
+   "finished": true,
+   "games": 0,
+   "id": "96Tb6DvO",
+   "location": "Grand Rapids, MI",
+   "name": "126th U.S. Open",
+   "owner": "jsr12345",
+   "rounds": 9,
+   "slug": "126th-us-open",
+   "source": "lichess",
+   "url": "https://lichess.org/broadcast/126th-us-open/96Tb6DvO"
+  },
+  "A7znunlI": {
+   "dates": [
+    1753747200000,
+    1754251200000
+   ],
+   "fetched_at": 1790192994,
+   "finished": true,
+   "games": 169,
+   "id": "A7znunlI",
+   "location": "Middleton, WI USA",
+   "name": "2025 US Open - 7 Day [Main Event]",
+   "owner": "jsr12345",
+   "rounds": 9,
+   "slug": "2025-us-open-7-day-main-event",
+   "source": "lichess",
+   "url": "https://lichess.org/broadcast/2025-us-open-7-day-main-event/A7znunlI"
+  },
+  "AJ5Mrq2k": {
+   "dates": [
+    1778868000000,
+    1779044400000
+   ],
+   "fetched_at": 1790192877,
+   "finished": true,
+   "games": 140,
+   "id": "AJ5Mrq2k",
+   "location": "Round Rock, Texas USA",
+   "name": "2026 National Middle School (K-8) Championships",
+   "owner": "jsr12345",
+   "rounds": 7,
+   "slug": "2026-national-middle-school-k-8-championships",
+   "source": "lichess",
+   "url": "https://lichess.org/broadcast/2026-national-middle-school-k-8-championships/AJ5Mrq2k"
+  },
+  "B6dcN8EW": {
+   "dates": [
+    1725318000000
+   ],
+   "fetched_at": 1790193062,
+   "finished": true,
+   "games": 14,
+   "id": "B6dcN8EW",
+   "location": "",
+   "name": "2024 Maryland Blitz Championship",
+   "owner": "jsr12345",
+   "rounds": 2,
+   "slug": "2024-maryland-blitz-championship",
+   "source": "lichess",
+   "url": "https://lichess.org/broadcast/2024-maryland-blitz-championship/B6dcN8EW"
+  },
+  "DobwwOER": {
+   "dates": [
+    1746810780000,
+    1746987180000
+   ],
+   "fetched_at": 1790193033,
+   "finished": true,
+   "games": 77,
+   "id": "DobwwOER",
+   "location": "Orlando, FL USA",
+   "name": "2025 SuperNationals VIII - Elementary",
+   "owner": "jsr12345",
+   "rounds": 7,
+   "slug": "2025-supernationals-viii-elementary",
+   "source": "lichess",
+   "url": "https://lichess.org/broadcast/2025-supernationals-viii-elementary/DobwwOER"
+  },
+  "EvMK41KB": {
+   "dates": [
+    1777125600000,
+    1777226400000
+   ],
+   "fetched_at": 1790192901,
+   "finished": true,
+   "games": 15,
+   "id": "EvMK41KB",
+   "location": "Akron, OH USA",
+   "name": "3rd Annual Chess for Cure",
+   "owner": "jsr12345",
+   "rounds": 5,
+   "slug": "3rd-annual-chess-for-cure",
+   "source": "lichess",
+   "url": "https://lichess.org/broadcast/3rd-annual-chess-for-cure/EvMK41KB"
+  },
+  "GvTTnYl4": {
+   "dates": [
+    1746810780000,
+    1746987180000
+   ],
+   "fetched_at": 1790193023,
+   "finished": true,
+   "games": 42,
+   "id": "GvTTnYl4",
+   "location": "Orlando, FL USA",
+   "name": "2025 SuperNationals VIII - Middle",
+   "owner": "jsr12345",
+   "rounds": 7,
+   "slug": "2025-supernationals-viii-middle",
+   "source": "lichess",
+   "url": "https://lichess.org/broadcast/2025-supernationals-viii-middle/GvTTnYl4"
+  },
+  "IBJaJ1RD": {
+   "dates": [
+    1733508780000,
+    1733685180000
+   ],
+   "fetched_at": 1790193058,
+   "finished": true,
+   "games": 194,
+   "id": "IBJaJ1RD",
+   "location": "National Harbor, Maryland USA",
+   "name": "U.S. National K-12 Grade Championships 2024",
+   "owner": "jsr12345",
+   "rounds": 7,
+   "slug": "us-national-k-12-grade-championships-2024",
+   "source": "lichess",
+   "url": "https://lichess.org/broadcast/us-national-k-12-grade-championships-2024/IBJaJ1RD"
+  },
+  "KmzWuGbr": {
+   "dates": [
+    1714151580000,
+    1714326180000
+   ],
+   "fetched_at": 1790193121,
+   "finished": true,
+   "games": 189,
+   "id": "KmzWuGbr",
+   "location": "",
+   "name": "2024 US National Elementary School Championship",
+   "owner": "jsr12345",
+   "rounds": 7,
+   "slug": "2024-us-national-elementary-school-championship",
+   "source": "lichess",
+   "url": "https://lichess.org/broadcast/2024-us-national-elementary-school-championship/KmzWuGbr"
+  },
+  "RgBAyvRA": {
+   "dates": [
+    1685055600000,
+    1685388600000
+   ],
+   "fetched_at": 1790193149,
+   "finished": true,
+   "games": 49,
+   "id": "RgBAyvRA",
+   "location": "",
+   "name": "Cherry Blossom Classic Chess-2023-U2300",
+   "owner": "jsr12345",
+   "rounds": 9,
+   "slug": "cherry-blossom-classic-chess-2023-u2300",
+   "source": "lichess",
+   "url": "https://lichess.org/broadcast/cherry-blossom-classic-chess-2023-u2300/RgBAyvRA"
+  },
+  "U38jiXAw": {
+   "dates": [
+    1746810780000,
+    1746987180000
+   ],
+   "fetched_at": 1790193016,
+   "finished": true,
+   "games": 70,
+   "id": "U38jiXAw",
+   "location": "Orlando, FL USA",
+   "name": "2025 SuperNationals VIII - High",
+   "owner": "jsr12345",
+   "rounds": 7,
+   "slug": "2025-supernationals-viii-high",
+   "source": "lichess",
+   "url": "https://lichess.org/broadcast/2025-supernationals-viii-high/U38jiXAw"
+  },
+  "Uh7adGWJ": {
+   "dates": [
+    1712337180000,
+    1712511780000
+   ],
+   "fetched_at": 1790193142,
+   "finished": true,
+   "games": 189,
+   "id": "Uh7adGWJ",
+   "location": "",
+   "name": "2024 US National High School Championship",
+   "owner": "jsr12345",
+   "rounds": 7,
+   "slug": "2024-us-national-high-school-championship",
+   "source": "lichess",
+   "url": "https://lichess.org/broadcast/2024-us-national-high-school-championship/Uh7adGWJ"
+  },
+  "YwB3E3bf": {
+   "dates": [
+    1772236800000,
+    1772397000000
+   ],
+   "fetched_at": 1790192937,
+   "finished": true,
+   "games": 30,
+   "id": "YwB3E3bf",
+   "location": "Dulles, VA",
+   "name": "10th Annual Geoorge Washington Open",
+   "owner": "jsr12345",
+   "rounds": 5,
+   "slug": "10th-annual-geoorge-washington-open",
+   "source": "lichess",
+   "url": "https://lichess.org/broadcast/10th-annual-geoorge-washington-open/YwB3E3bf"
+  },
+  "ZoFB6wH0": {
+   "dates": [],
+   "fetched_at": 1790193099,
+   "finished": false,
+   "games": 0,
+   "id": "ZoFB6wH0",
+   "location": "",
+   "name": "test",
+   "owner": "jsr12345",
+   "rounds": 0,
+   "slug": "test",
+   "source": "lichess",
+   "url": "https://lichess.org/broadcast/test/ZoFB6wH0"
+  },
+  "bU3uLLio": {
+   "dates": [
+    1772892000000,
+    1772991000000
+   ],
+   "fetched_at": 1790192932,
+   "finished": true,
+   "games": 90,
+   "id": "bU3uLLio",
+   "location": "Alexandria, VA USA",
+   "name": "2025-2026 VA Scholastic & College Chess Championships",
+   "owner": "jsr12345",
+   "rounds": 5,
+   "slug": "2025-2026-va-scholastic-college-chess-championships",
+   "source": "lichess",
+   "url": "https://lichess.org/broadcast/2025-2026-va-scholastic-college-chess-championships/bU3uLLio"
+  },
+  "fLRWmRKe": {
+   "dates": [
+    1722719861864,
+    1779487088279
+   ],
+   "fetched_at": 1790193094,
+   "finished": false,
+   "games": 221,
+   "id": "fLRWmRKe",
+   "location": "",
+   "name": "MCA Tnmt Test",
+   "owner": "jsr12345",
+   "rounds": 8,
+   "slug": "mca-tnmt-test",
+   "source": "lichess",
+   "url": "https://lichess.org/broadcast/mca-tnmt-test/fLRWmRKe"
+  },
+  "hPfRsqsI": {
+   "dates": [
+    1753747200000,
+    1753974000000
+   ],
+   "fetched_at": 1790192975,
+   "finished": true,
+   "games": 120,
+   "id": "hPfRsqsI",
+   "location": "Middleton, WI USA",
+   "name": "2025 US Open - Invitationals",
+   "owner": "jsr12345",
+   "rounds": 6,
+   "slug": "2025-us-open-invitationals",
+   "source": "lichess",
+   "url": "https://lichess.org/broadcast/2025-us-open-invitationals/hPfRsqsI"
+  },
+  "iTGDeVux": {
+   "dates": [
+    1774634400000,
+    1774809000000
+   ],
+   "fetched_at": 1790192920,
+   "finished": true,
+   "games": 139,
+   "id": "iTGDeVux",
+   "location": "Chicago, IL USA",
+   "name": "2026 National High School K-12 Chess Championship",
+   "owner": "jsr12345",
+   "rounds": 7,
+   "slug": "2026-national-high-school-k-12-chess-championship",
+   "source": "lichess",
+   "url": "https://lichess.org/broadcast/2026-national-high-school-k-12-chess-championship/iTGDeVux"
+  },
+  "nn0TPj8d": {
+   "dates": [
+    1774634400000,
+    1774792800000
+   ],
+   "fetched_at": 1790192904,
+   "finished": true,
+   "games": 0,
+   "id": "nn0TPj8d",
+   "location": "Chicago IL, USA",
+   "name": "2026 National High School Chess U1200-U800-Unr",
+   "owner": "jsr12345",
+   "rounds": 7,
+   "slug": "2026-national-high-school-chess-u1200-u800-unr",
+   "source": "lichess",
+   "url": "https://lichess.org/broadcast/2026-national-high-school-chess-u1200-u800-unr/nn0TPj8d"
+  },
+  "noFwBOfF": {
+   "dates": [
+    1684969200000,
+    1685388600000
+   ],
+   "fetched_at": 1790193172,
+   "finished": true,
+   "games": 202,
+   "id": "noFwBOfF",
+   "location": "",
+   "name": "Cherry Blossom Classic Chess-2023",
+   "owner": "jsr12345",
+   "rounds": 9,
+   "slug": "cherry-blossom-classic-chess-2023",
+   "source": "lichess",
+   "url": "https://lichess.org/broadcast/cherry-blossom-classic-chess-2023/noFwBOfF"
+  },
+  "pvWavEoy": {
+   "dates": [
+    1777654800000,
+    1777831200000
+   ],
+   "fetched_at": 1790192897,
+   "finished": true,
+   "games": 168,
+   "id": "pvWavEoy",
+   "location": "Baltimore, Maryland USA",
+   "name": "2026 National Elementary K-6 Championships",
+   "owner": "jsr12345",
+   "rounds": 7,
+   "slug": "2026-national-elementary-k-6-championships",
+   "source": "lichess",
+   "url": "https://lichess.org/broadcast/2026-national-elementary-k-6-championships/pvWavEoy"
+  },
+  "rj0DWWNr": {
+   "dates": [
+    1734728408684,
+    1734966999143
+   ],
+   "fetched_at": 1790193036,
+   "finished": false,
+   "games": 4,
+   "id": "rj0DWWNr",
+   "location": "",
+   "name": "CLONO - NO DELAY",
+   "owner": "jsr12345",
+   "rounds": 9,
+   "slug": "clono-no-delay",
+   "source": "lichess",
+   "url": "https://lichess.org/broadcast/clono-no-delay/rj0DWWNr"
+  },
+  "suD9uIsG": {
+   "dates": [
+    1725287400000
+   ],
+   "fetched_at": 1790193067,
+   "finished": true,
+   "games": 19,
+   "id": "suD9uIsG",
+   "location": "",
+   "name": "2024 Maryland Action Championship",
+   "owner": "jsr12345",
+   "rounds": 5,
+   "slug": "2024-maryland-action-championship",
+   "source": "lichess",
+   "url": "https://lichess.org/broadcast/2024-maryland-action-championship/suD9uIsG"
+  },
+  "uB2RfxuQ": {
+   "dates": [
+    1684457860291,
+    1684550700000
+   ],
+   "fetched_at": 1790193178,
+   "finished": false,
+   "games": 33,
+   "id": "uB2RfxuQ",
+   "location": "",
+   "name": "CB Test Tournament1",
+   "owner": "jsr12345",
+   "rounds": 7,
+   "slug": "cb-test-tournament1",
+   "source": "lichess",
+   "url": "https://lichess.org/broadcast/cb-test-tournament1/uB2RfxuQ"
+  },
+  "yRajysag": {
+   "dates": [
+    1722537300000,
+    1726664400000
+   ],
+   "fetched_at": 1790193097,
+   "finished": true,
+   "games": 4,
+   "id": "yRajysag",
+   "location": "",
+   "name": "TEST 11 WI TNMT",
+   "owner": "jsr12345",
+   "rounds": 2,
+   "slug": "test-11-wi-tnmt",
+   "source": "lichess",
+   "url": "https://lichess.org/broadcast/test-11-wi-tnmt/yRajysag"
+  }
+ }
+}

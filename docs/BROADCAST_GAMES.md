@@ -86,6 +86,7 @@ weekend tournament the scoresheet is the only copy.
 |---|---|
 | `tools/lichess_broadcasts.py` | `by USER`, `tour ID...`, `search QUERY`, `status`. Writes a collection: `tours/<tourId>.pgn` per broadcast, `manifest.json`, and the merged `<collection>.pgn`. Zero dependencies |
 | `tools/chesscom_events.py` | `search QUERY`, `event SLUG...`, `status`. Same collection layout; `tours/chesscom-<slug>.pgn`. Contains the stdlib RFC 6455 + Socket.IO client |
+| `tools/lichess_broadcast_archive.py` | `fetch`, `build`, `status`. Every official Lichess broadcast from the monthly downloads, minus variants, engine games and anything TWIC or another collection already holds; builds the collection `lichess-official`. Needs `zstd` |
 | `tools/master_import_pgn.dart` | Runs the app's TWIC importer on PGN files to build a master-format database (`games` + position `book`). Runs under `flutter test` because the PGN parser depends on Flutter foundation |
 
 Collections live under `Documents/lichess_broadcasts/<collection>/` by
@@ -142,6 +143,52 @@ rebuild is picked up without restarting the server (fixed alongside this work).
 (`Documents/lichess_broadcasts/<name>/<name>.db`; override the root with
 `CHESS_PREP_BROADCASTS_DIR`) alongside TWIC, and report the games per source
 under `otb.sources` — see [OPPONENT_PREP.md](OPPONENT_PREP.md#filling-the-players-directory).
+
+## The official archive and US community broadcasts
+
+`Documents/lichess_broadcasts/lichess-official/` holds every official Lichess
+broadcast since January 2020 that is not already in TWIC or another
+collection:
+
+```
+python3 tools/lichess_broadcast_archive.py fetch     # cached in ~/.cache/chess-prep/lichess-broadcast-db/
+python3 tools/lichess_broadcast_archive.py build     # months/<YYYY-MM>.pgn, manifest.json, lichess-official.db
+```
+
+The first build (23 September 2026, months 2020-01 to 2026-08) read
+1,235,275 games and kept 596,200: 530,299 were already in TWIC, a curated
+collection or an earlier month, 88,128 had no moves, 13,629 were Chess960
+and 7,019 were engine games. The 80 downloads are 693 MB; the kept month
+files 605 MB.
+
+The downloads carry no `Date` tag, so the game's `UTCDate` stands in, and a
+Lichess URL in `Site` becomes `?`. A game counts as already held when its
+full move list and result match one in TWIC, a curated collection or an
+earlier month and White shares a name part with it (`Zhou Jianchao`,
+`Zhou, Jianchao`), so a lookup never counts a game twice. Build the curated
+collections first: `build` reads whatever `*/<name>.db` exist beside it.
+Re-run both commands monthly; `build` refilters every cached month from
+scratch. The archive is regenerable and not committed.
+
+Community broadcasts are not in the downloads. `us-community` collects the
+operators found so far:
+
+```
+python3 tools/lichess_broadcasts.py by jsr12345 --community-only --collection us-community
+MASTER_IMPORT_ARGS="$HOME/Documents/lichess_broadcasts/us-community/us-community.db \
+  $HOME/Documents/lichess_broadcasts/us-community/us-community.pgn" \
+  scripts/ci.sh test tools/master_import_pgn.dart
+```
+
+`--community-only` skips an owner's official broadcasts, which the archive
+already has. As of 23 September 2026 it holds `jsr12345`'s 28 community
+broadcasts, 2,400 unique games: the US Open 2025 (main event and
+invitationals), the National High School, Middle School, Elementary and K-12
+Grade championships 2024-2026, SuperNationals VIII, the Cherry Blossom
+Classic 2023, Maryland Action/Blitz 2024, the George Washington Open 2026 and
+more. A few are operator tests (`test`, `CB Test Tournament1`, `MCA Tnmt
+Test`); they relay real boards and are kept. The 126th U.S. Open (August
+2026) broadcast has no games. The committed copy is `scripts/data/broadcasts/us-community/`.
 
 ## The Massachusetts collection
 
