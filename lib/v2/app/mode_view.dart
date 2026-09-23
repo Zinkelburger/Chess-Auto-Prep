@@ -215,6 +215,7 @@ final class ViewerView extends _DocumentModeView {
   @override
   Widget list(Widget toggle) => PgnViewerPanel(
     viewer: _modes.viewer,
+    filter: _modes.filter,
     onOpen: (file) => unawaited(requests.openFile(file)),
     onBrowse: () => unawaited(requests.browse()),
     trailing: toggle,

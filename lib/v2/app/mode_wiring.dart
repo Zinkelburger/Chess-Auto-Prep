@@ -11,9 +11,11 @@ import '../features/tactics/tactics_set.dart';
 import '../features/trainer/trainer.dart';
 import '../storage/my_accounts.dart';
 import '../storage/my_games_files.dart';
+import '../workspace/local_games.dart';
 import '../workspace/workspace.dart';
 import '../workspace/document_saver.dart';
 import '../workspace/document_session.dart';
+import '../workspace/file_filter.dart';
 import 'environment.dart';
 import 'mode.dart';
 import 'workspace_requests.dart';
@@ -32,6 +34,7 @@ DocumentModes wireDocumentModes(
     picker: env.libraryPicker,
     root: env.folders.repertoires,
   );
+  final filter = FileFilter(session);
   return DocumentModes(
     library: library,
     outline: ChapterOutline(library: library, session: session),
@@ -49,21 +52,26 @@ DocumentModes wireDocumentModes(
       import: env.fileImport,
       settings: env.settings,
       session: session,
+      filter: filter,
       collections: env.folders.collections,
     ),
+    filter: filter,
   );
 }
 
 /// Builds the [TrainingModes] and keeps My games' book in step: it reads
 /// the games again when a repertoire changes, or when a download or a new
-/// username gives the accounts a new map.
+/// username gives the accounts a new map — which the explorer's `My games`
+/// hears too.
 final class TrainingWiring {
   TrainingWiring(
     AppEnvironment env, {
     required Workspace workspace,
     required Library library,
     required WorkspaceRequests requests,
-  }) : _library = library {
+    required this.games,
+  }) : _library = library,
+       _myGamesTree = workspace.myGamesTree {
     final session = workspace.session;
     final tactics = TacticsSet(
       documents: env.store,
@@ -72,9 +80,6 @@ final class TrainingWiring {
       ref: env.folders.tacticsSet,
       now: env.now,
     );
-    // The user's downloaded games, one file per account, shared with the
-    // old app.
-    games = GamesCache(env.store, folder: env.folders.gamesLibrary);
     modes = TrainingModes(
       tactics: tactics,
       puzzles: PuzzleTrainer(
@@ -118,10 +123,12 @@ final class TrainingWiring {
   }
 
   final Library _library;
+  final LocalGames _myGamesTree;
   late final TrainingModes modes;
 
-  /// The user's downloaded games, as the review and the book read them.
-  late final GamesCache games;
+  /// The user's downloaded games, one file per account, shared with the
+  /// old app: what the review, the book and the explorer read.
+  final GamesCache games;
 
   /// The accounts as the book last heard of them.
   Map<GameSite, Account>? _accountsSeen;
@@ -131,6 +138,7 @@ final class TrainingWiring {
     if (identical(accounts, _accountsSeen)) return;
     _accountsSeen = accounts;
     modes.book.recheck();
+    _myGamesTree.forget();
   }
 
   void dispose() {

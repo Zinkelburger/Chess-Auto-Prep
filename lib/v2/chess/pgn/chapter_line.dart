@@ -89,3 +89,15 @@ final class ChapterLine {
     return event == null || event.isEmpty ? 'Line ${index + 1}' : event;
   }
 }
+
+/// Whether [a] and [b] are the same games, one for one: what a chapter
+/// built again around the same lines — another game of a file put on the
+/// board — still is, though the list holding them is new.
+bool sameLines(List<ChapterLine> a, List<ChapterLine> b) {
+  if (identical(a, b)) return true;
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (!identical(a[i], b[i])) return false;
+  }
+  return true;
+}

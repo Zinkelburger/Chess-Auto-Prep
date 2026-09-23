@@ -47,12 +47,21 @@ final class AppParts {
     write: env.writeAccount,
   );
 
+  /// The user's downloaded games, one file per account, shared with the
+  /// old app: the review, the book and the explorer read them.
+  late final gamesCache = GamesCache(
+    env.store,
+    folder: env.folders.gamesLibrary,
+  );
+
   late final DocumentModes documents = wireDocumentModes(env, session, saver);
   late final _workspace = WorkspaceWiring(
     env,
     session: session,
     saver: saver,
     library: documents.library,
+    filter: documents.filter,
+    games: gamesCache,
   );
   Workspace get workspace => _workspace.workspace;
 
@@ -77,11 +86,9 @@ final class AppParts {
     workspace: workspace,
     library: documents.library,
     requests: requests,
+    games: gamesCache,
   );
   TrainingModes get training => _training.modes;
-
-  /// The user's downloaded games, as the review and the book read them.
-  GamesCache get gamesCache => _training.games;
 
   /// Reads what the app starts from: the repertoires, the settings and the
   /// account, then the engine with the settings it was left with, and the

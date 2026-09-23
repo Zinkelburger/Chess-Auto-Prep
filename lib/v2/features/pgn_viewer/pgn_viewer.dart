@@ -12,9 +12,12 @@ import '../../storage/pgn_file_picker.dart';
 import '../../storage/recent_pgn_files.dart';
 import '../../storage/settings_store.dart';
 import '../../workspace/document_session.dart';
+import '../../workspace/file_filter.dart';
 
 /// The PGN Viewer's own state: the files opened before, which file the
-/// viewer has open now, and the search over its games.
+/// viewer has open now, and the search over its games. The list shows the
+/// games that pass both the search and the [FileFilter], which the
+/// explorer's `This file` reads too.
 ///
 /// The games themselves are not here. A viewed file is the document the
 /// workspace has open, one game of it on the board, so the session holds
@@ -27,14 +30,17 @@ final class PgnViewer extends ChangeNotifier {
     required PgnFileImport import,
     required SettingsStore settings,
     required DocumentSession session,
+    required FileFilter filter,
     required String collections,
   }) : _recentFiles = recent,
        _picker = picker,
        _import = import,
        _settings = settings,
        _session = session,
+       _filter = filter,
        _collections = collections {
     _session.addListener(_followTheDocument);
+    _filter.addListener(_followTheFilter);
   }
 
   /// How many files the list remembers, which is the old app's number.
@@ -45,6 +51,7 @@ final class PgnViewer extends ChangeNotifier {
   final PgnFileImport _import;
   final SettingsStore _settings;
   final DocumentSession _session;
+  final FileFilter _filter;
 
   /// The `pgn_collections` folder, absolute: where the file dialog starts
   /// when nothing was opened before.
@@ -59,6 +66,7 @@ final class PgnViewer extends ChangeNotifier {
   /// Each game's chapter, when the file has chapters; else null.
   List<String>? _chapterOf;
   String _query = '';
+  GameFilter _filterSeen = GameFilter.none;
   int _loads = 0;
   bool _disposed = false;
 
@@ -80,13 +88,16 @@ final class PgnViewer extends ChangeNotifier {
   /// One summary per game of [file], in file order.
   List<GameSummary> get games => file == null ? const [] : _rows;
 
-  /// The games whose players, result or event match the search, paired
-  /// with their place in the file, which is what opening one needs.
+  /// The games that pass the filter and whose players, result or event
+  /// match the search, paired with their place in the file, which is what
+  /// opening one needs.
   List<(int, GameSummary)> get visible {
     final needle = _query.trim().toLowerCase();
     return [
       for (final (index, game) in games.indexed)
-        if (needle.isEmpty || game.searchText.contains(needle)) (index, game),
+        if (_filter.keeps(index) &&
+            (needle.isEmpty || game.searchText.contains(needle)))
+          (index, game),
     ];
   }
 
@@ -103,11 +114,11 @@ final class PgnViewer extends ChangeNotifier {
       final title = of[index];
       sizes[title] = (sizes[title] ?? 0) + 1;
       final inChapter = grouped.putIfAbsent(title, () => []);
-      if (needle.isEmpty ||
+      final found =
+          needle.isEmpty ||
           game.searchText.contains(needle) ||
-          title.toLowerCase().contains(needle)) {
-        inChapter.add((index, game));
-      }
+          title.toLowerCase().contains(needle);
+      if (found && _filter.keeps(index)) inChapter.add((index, game));
     }
     return [
       for (final MapEntry(key: title, value: games) in grouped.entries)
@@ -254,10 +265,18 @@ final class PgnViewer extends ChangeNotifier {
     );
   }
 
+  /// The filter applied: the list is another list.
+  void _followTheFilter() {
+    if (_filter.applied == _filterSeen) return;
+    _filterSeen = _filter.applied;
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     _disposed = true;
     _session.removeListener(_followTheDocument);
+    _filter.removeListener(_followTheFilter);
     super.dispose();
   }
 }

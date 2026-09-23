@@ -7,6 +7,7 @@ import 'package:chess_auto_prep/v2/storage/recent_pgn_files.dart';
 import 'package:chess_auto_prep/v2/storage/settings_store.dart';
 import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
+import 'package:chess_auto_prep/v2/workspace/file_filter.dart';
 
 import 'scripted_store.dart';
 
@@ -103,18 +104,6 @@ const threeGameFile = '''
 1. c4 *
 ''';
 
-/// A viewer over [session] whose dialog answers nothing, for tests about
-/// the window around it.
-PgnViewer viewerFor(DocumentSession session, ScriptedRecentFiles recent) =>
-    PgnViewer(
-      recent: recent,
-      picker: ScriptedPicker(),
-      import: ScriptedImport(),
-      settings: SettingsStore(),
-      session: session,
-      collections: collectionsRoot,
-    );
-
 /// Everything a viewer test needs: a scripted store holding [text] under
 /// [name] in the collections folder, a session over it, and the viewer.
 final class ViewerFixture {
@@ -123,6 +112,7 @@ final class ViewerFixture {
     required this.saver,
     required this.session,
     required this.viewer,
+    required this.filter,
     required this.recent,
     required this.picker,
     required this.import,
@@ -134,6 +124,9 @@ final class ViewerFixture {
   final DocumentSaver saver;
   final DocumentSession session;
   final PgnViewer viewer;
+
+  /// Applies as soon as it is set: no rest in these tests.
+  final FileFilter filter;
   final ScriptedRecentFiles recent;
   final ScriptedPicker picker;
   final ScriptedImport import;
@@ -156,6 +149,7 @@ final class ViewerFixture {
 
   void dispose() {
     viewer.dispose();
+    filter.dispose();
     settings.dispose();
     session.dispose();
     saver.dispose();
@@ -177,12 +171,14 @@ Future<ViewerFixture> viewerOver(
   final picker = ScriptedPicker();
   final import = ScriptedImport();
   final settings = SettingsStore();
+  final filter = FileFilter(session, delay: Duration.zero);
   final viewer = PgnViewer(
     recent: recentFiles,
     picker: picker,
     import: import,
     settings: settings,
     session: session,
+    filter: filter,
     collections: collectionsRoot,
   );
   return ViewerFixture._(
@@ -190,6 +186,7 @@ Future<ViewerFixture> viewerOver(
     saver: saver,
     session: session,
     viewer: viewer,
+    filter: filter,
     recent: recentFiles,
     picker: picker,
     import: import,

@@ -160,6 +160,21 @@ final class GameTree {
 
   Fen fenAt(NodePath path) => nodeAt(path)?.fen ?? rootFen;
 
+  /// The first place along the main line where the position is [fen]'s,
+  /// move counters aside — where a game reached by another move order
+  /// comes to it — or null when the main line never does.
+  NodePath? mainLineTo(Fen fen) {
+    final wanted = fen.position;
+    var path = const NodePath.root();
+    if (rootFen.position == wanted) return path;
+    for (var node = children.firstOrNull; node != null;) {
+      path = path.mainChild;
+      if (node.fen.position == wanted) return path;
+      node = node.children.firstOrNull;
+    }
+    return null;
+  }
+
   /// The last node reached by following main continuations from [path].
   NodePath endOfLineFrom(NodePath path) {
     var end = path;

@@ -66,6 +66,8 @@ void main() {
       databases: ExplorerDatabases(
         lichess: ScriptedExplorerApi(),
         book: ScriptedBook(),
+        thisFile: ScriptedLocalGames(),
+        myGames: ScriptedLocalGames(),
       ),
       debounce: Duration.zero,
     );
@@ -100,6 +102,7 @@ void main() {
       shelf: shelf,
       tree: tree,
       fill: fill,
+      myGamesTree: ScriptedLocalGames(),
     );
   }
 

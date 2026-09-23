@@ -107,6 +107,11 @@ class _ExplorerPaneState extends State<ExplorerPane> {
         'Open a chapter or a game to see what is played.',
       ),
       ExplorerAsking(:final source) => _Sentence('Asking ${source.title}…'),
+      ExplorerReading(:final done, :final total) => _Sentence(
+        total == 0
+            ? 'Reading the games…'
+            : 'Reading the games… $done of $total',
+      ),
       ExplorerNothing(:final sentence) => _Sentence(sentence),
       ExplorerFailed(:final sentence) => _Sentence(
         sentence,
@@ -294,7 +299,11 @@ class _Totals extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final total = answer.whiteTotal + answer.drawTotal + answer.blackTotal;
+    final total =
+        answer.whiteTotal +
+        answer.drawTotal +
+        answer.blackTotal +
+        answer.undecidedTotal;
     return SizedBox(
       height: replyRowHeight,
       child: Row(

@@ -38,6 +38,13 @@ const nameDialogWidth = 360.0;
 /// list does not grow and shrink under the pointer as the search narrows it.
 const choiceDialogHeight = 280.0;
 
+/// The widest a typeable choice field's suggestions grow.
+const choiceFieldMenuWidth = 280.0;
+
+/// How wide a filter rule's rule box is, beside a field box that takes the
+/// rest of the line.
+const filterRuleWidth = 96.0;
+
 /// How big an icon is. Icons sit with the text they label, so they follow
 /// the type scale rather than Material's default 24.
 abstract final class IconSize {

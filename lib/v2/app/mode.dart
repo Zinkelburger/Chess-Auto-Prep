@@ -7,6 +7,7 @@ import '../features/tactics/my_games.dart';
 import '../features/tactics/puzzle_trainer.dart';
 import '../features/tactics/tactics_set.dart';
 import '../features/trainer/trainer.dart';
+import '../workspace/file_filter.dart';
 
 /// The modes `v2` has. Each one fills the left column; the workspace, the
 /// document and the draft in it are the same whichever is showing.
@@ -23,14 +24,16 @@ enum Mode {
 }
 
 /// The owners behind the lists of the modes that open documents: the
-/// repertoires and the open chapter's outline, the studies and the PGN
-/// Viewer's files. Each disposes with this.
+/// repertoires and the open chapter's outline, the studies, the PGN
+/// Viewer's files and the filter over the open file's games. Each disposes
+/// with this.
 final class DocumentModes {
   const DocumentModes({
     required this.library,
     required this.outline,
     required this.studies,
     required this.viewer,
+    required this.filter,
   });
 
   final Library library;
@@ -38,11 +41,16 @@ final class DocumentModes {
   final Studies studies;
   final PgnViewer viewer;
 
+  /// Which games of the open file pass: the viewer's list and the
+  /// explorer's `This file` both read it.
+  final FileFilter filter;
+
   void dispose() {
     outline.dispose();
     library.dispose();
     studies.dispose();
     viewer.dispose();
+    filter.dispose();
   }
 }
 

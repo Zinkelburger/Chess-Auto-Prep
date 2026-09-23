@@ -25,6 +25,7 @@ void main() {
             width: libraryPanelWidth,
             child: PgnViewerPanel(
               viewer: fixture.viewer,
+              filter: fixture.filter,
               onOpen: opened.add,
               onBrowse: () => browsed++,
             ),

@@ -24,8 +24,11 @@ class _ExplorerSourceBarState extends State<ExplorerSourceBar> {
   @override
   Widget build(BuildContext context) {
     final choice = _explorer.choice;
-    final narrowable = choice.source != ExplorerSource.masters;
+    final narrowable =
+        choice.source == ExplorerSource.lichess ||
+        choice.source == ExplorerSource.twic;
     final unfolded = narrowable && _unfolded;
+    final summary = _explorer.summary;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -45,6 +48,7 @@ class _ExplorerSourceBarState extends State<ExplorerSourceBar> {
                     _explorer.choose(choice.copyWith(source: picked.single)),
               ),
               const Spacer(),
+              if (summary != null) Flexible(child: _Summary(summary)),
               if (narrowable)
                 Flexible(
                   child: TextButton(
@@ -76,7 +80,9 @@ class _ExplorerSourceBarState extends State<ExplorerSourceBar> {
             child: switch (choice.source) {
               ExplorerSource.lichess => _LichessFilters(explorer: _explorer),
               ExplorerSource.twic => _TwicFilters(explorer: _explorer),
-              ExplorerSource.masters => const SizedBox.shrink(),
+              ExplorerSource.masters ||
+              ExplorerSource.thisFile ||
+              ExplorerSource.myGames => const SizedBox.shrink(),
             },
           ),
         const SizedBox(height: Space.xs),
@@ -88,6 +94,31 @@ class _ExplorerSourceBarState extends State<ExplorerSourceBar> {
   String _folded(ExplorerChoice choice) {
     final narrowing = choice.narrowing;
     return narrowing.isEmpty ? 'Filters' : narrowing;
+  }
+}
+
+/// What a source on this machine answers over, in muted words where the
+/// filters of the online databases would be.
+class _Summary extends StatelessWidget {
+  const _Summary(this.words);
+
+  final String words;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(left: Space.s, right: Space.s),
+      child: Text(
+        words,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        textAlign: TextAlign.right,
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      ),
+    );
   }
 }
 

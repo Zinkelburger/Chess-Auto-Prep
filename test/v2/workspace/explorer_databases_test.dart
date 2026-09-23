@@ -10,12 +10,23 @@ import '../support/scripted_explorer.dart';
 void main() {
   late ScriptedExplorerApi lichess;
   late ScriptedBook book;
+  late ScriptedLocalGames thisFile;
+  late ScriptedLocalGames myGames;
   late ExplorerDatabases databases;
+
+  ExplorerDatabases over(ScriptedBook book) => ExplorerDatabases(
+    lichess: lichess,
+    book: book,
+    thisFile: thisFile,
+    myGames: myGames,
+  );
 
   setUp(() {
     lichess = ScriptedExplorerApi();
     book = ScriptedBook(present: true);
-    databases = ExplorerDatabases(lichess: lichess, book: book);
+    thisFile = ScriptedLocalGames();
+    myGames = ScriptedLocalGames();
+    databases = over(book);
   });
 
   test('TWIC is asked on this machine, the others over the network', () async {
@@ -35,7 +46,7 @@ void main() {
     book = ScriptedBook(answer: (_, _) => const BookAbsent());
     lichess.answer = (_) =>
         const ExplorerNotFetched(ExplorerProblem.unreachable);
-    databases = ExplorerDatabases(lichess: lichess, book: book);
+    databases = over(book);
     final (_, noBook) = await databases.ask(
       Fen.initial,
       const ExplorerChoice(source: ExplorerSource.twic),
@@ -46,14 +57,37 @@ void main() {
       ExplorerChoice.defaults,
     );
     expect(offline, ExplorerProblem.unreachable.sentence);
-    databases = ExplorerDatabases(
-      lichess: lichess,
-      book: ScriptedBook(present: true),
-    );
+    databases = over(ScriptedBook(present: true));
     final (_, offlineWithBook) = await databases.ask(
       Fen.initial,
       ExplorerChoice.defaults,
     );
     expect(offlineWithBook, endsWith('TWIC works offline.'));
+  });
+
+  test('the games on this machine answer from their trees, and a game of '
+      'My games is its kept PGN', () async {
+    myGames
+      ..answer = startAnswer
+      ..pgns['lichess_abcd1234'] = '[Event "Mine"]\n\n1. e4 1-0\n';
+    final (answer, problem) = await databases.ask(
+      Fen.initial,
+      const ExplorerChoice(source: ExplorerSource.myGames),
+    );
+    expect(answer, same(startAnswer));
+    expect(problem, isNull);
+    expect(lichess.asked, isEmpty);
+    const game = ExplorerGame(
+      id: 'lichess_abcd1234',
+      white: 'Me',
+      black: 'You',
+      result: '1-0',
+    );
+    expect(
+      await databases.gamePgn(game, ExplorerSource.myGames),
+      startsWith('[Event "Mine"]'),
+    );
+    expect(await databases.gamePgn(game, ExplorerSource.thisFile), isNull);
+    expect(lichess.gamesAsked, isEmpty);
   });
 }

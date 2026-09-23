@@ -219,18 +219,3 @@ final class SqliteMasterBook implements MasterBook {
     };
   }
 }
-
-const _fnvOffset = -3750763034362895579; // 0xcbf29ce484222325 as signed
-const _fnvPrime = 1099511628211;
-
-/// The book's key for [fen]: 64-bit FNV-1a over its four position fields,
-/// the same sum the old app's importer took, so its rows are found.
-int positionKey(Fen fen) {
-  final text = fen.position;
-  var hash = _fnvOffset;
-  for (var i = 0; i < text.length; i++) {
-    hash ^= text.codeUnitAt(i);
-    hash *= _fnvPrime;
-  }
-  return hash;
-}

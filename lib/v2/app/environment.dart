@@ -23,6 +23,7 @@ import '../net/recent_games.dart';
 import '../storage/atomic_write.dart';
 import '../storage/chapter_files.dart';
 import '../storage/eval_cache.dart';
+import '../storage/game_store.dart';
 import '../storage/lichess_token.dart';
 import '../storage/master_book.dart';
 import '../storage/my_accounts.dart';
@@ -73,6 +74,7 @@ final class AppEnvironment {
     required this.lichessStudies,
     required this.lichessExplorer,
     required this.masterBook,
+    required this.gameStore,
     required this.gameSites,
     required this.accounts,
     required this.progressFiles,
@@ -132,6 +134,7 @@ final class AppEnvironment {
       lichessStudies: LichessStudyApi(client, token: readLichessToken),
       lichessExplorer: LichessExplorerApi(client, token: readLichessToken),
       masterBook: book,
+      gameStore: SqliteGameStore(p.join(support.path, 'app_games.db')),
       gameSites: [
         LichessGamesApi(client, token: readLichessToken),
         ChesscomGamesApi(client),
@@ -184,6 +187,9 @@ final class AppEnvironment {
 
   /// The old app's master database: TWIC, when the file is there.
   final MasterBook masterBook;
+
+  /// The old app's database of the user's games, `app_games.db`.
+  final GameStore gameStore;
 
   /// Where the user's own games are downloaded from.
   final List<RecentGames> gameSites;

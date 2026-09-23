@@ -200,6 +200,7 @@ final class WorkspaceRequests extends ChangeNotifier {
     required ExplorerSource source,
     required int ply,
   }) async {
+    if (source == ExplorerSource.thisFile) return _showFileGame(game);
     final kept = await _games.keep(game, source: source, ply: ply);
     if (_disposed) return const RequestDropped();
     switch (kept) {
@@ -211,6 +212,19 @@ final class WorkspaceRequests extends ChangeNotifier {
         _session.goTo(NodePath.of(List.filled(at, 0)));
         return result;
     }
+  }
+
+  /// A game of the open file `This file` listed: already in hand, so it is
+  /// put on the board without reading anything, at the position the
+  /// explorer was showing, where its main line comes to it. A merged
+  /// chapter has no other game to show, and the board stays where it is.
+  RequestResult _showFileGame(ExplorerGame game) {
+    final index = int.tryParse(game.id);
+    if (index == null || _session.game == null) return const RequestDropped();
+    final at = _session.fen;
+    _session.showGame(index);
+    if (_session.tree?.mainLineTo(at) case final path?) _session.goTo(path);
+    return const RequestDone();
   }
 
   /// The desktop's file dialog, then the file as a new repertoire named

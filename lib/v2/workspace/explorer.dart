@@ -14,6 +14,7 @@ import '../storage/master_book.dart';
 import '../storage/settings_store.dart';
 import 'document_session.dart';
 import 'gap_walk.dart' show indexOfReply;
+import 'local_games.dart';
 
 export '../chess/explorer_answer.dart' show ExplorerGame;
 export '../chess/explorer_choice.dart';
@@ -77,6 +78,15 @@ final class ExplorerShown extends ExplorerState {
   final ExplorerAnswer answer;
 }
 
+/// The games on this machine are being read into a tree. [total] is 0
+/// until it is known.
+final class ExplorerReading extends ExplorerState {
+  const ExplorerReading(this.done, this.total);
+
+  final int done;
+  final int total;
+}
+
 /// The database answered and had nothing, or was not asked because it
 /// would have nothing.
 final class ExplorerNothing extends ExplorerState {
@@ -106,6 +116,11 @@ final class ExplorerFailed extends ExplorerState {
 /// that fails takes nothing away: what was cached stays cached, and a
 /// retry that fails leaves the rows it was refreshing on the screen with
 /// one line saying what went wrong.
+///
+/// `This file` and `My games` are trees of games on this machine
+/// ([LocalGames]): the first look builds one, and after that every
+/// position is answered at once, with no rest, no cache and no limit on
+/// empty answers, since asking costs nothing.
 final class Explorer extends ChangeNotifier {
   Explorer({
     required DocumentSession session,
@@ -118,6 +133,8 @@ final class Explorer extends ChangeNotifier {
     _choiceNow = _settings.value.explorer;
     _session.anyChange.addListener(_followTheBoard);
     _settings.addListener(_followTheSettings);
+    _databases.thisFile.addListener(_followTheLocalGames);
+    _databases.myGames.addListener(_followTheLocalGames);
     unawaited(_checkTheBook());
     _followTheBoard();
   }
@@ -154,7 +171,13 @@ final class Explorer extends ChangeNotifier {
     ExplorerSource.masters,
     ExplorerSource.lichess,
     if (_twic) ExplorerSource.twic,
+    ExplorerSource.thisFile,
+    ExplorerSource.myGames,
   ];
+
+  /// What the chosen source's answers are over, when it is games on this
+  /// machine: `40 games`, `12 of 40 games`. Null for the other databases.
+  String? get summary => _databases.local(_choiceNow.source)?.summary;
 
   bool get twicAvailable => _twic;
 
@@ -170,6 +193,11 @@ final class Explorer extends ChangeNotifier {
     _notice = null;
     final fen = _session.fen;
     if (_session.chapter == null) return;
+    if (_databases.local(_choiceNow.source) case final games?) {
+      games.forget();
+      _followTheSession();
+      return;
+    }
     _answers
       ..forget(fen, _choiceNow)
       ..resetEmpties();
@@ -217,6 +245,10 @@ final class Explorer extends ChangeNotifier {
       return;
     }
     final fen = _session.fen;
+    if (_databases.local(_choiceNow.source) case final games?) {
+      _showLocal(fen, games);
+      return;
+    }
     final cached = _answers.at(fen, _choiceNow);
     if (cached != null) {
       _show(_shown(fen, cached));
@@ -238,6 +270,30 @@ final class Explorer extends ChangeNotifier {
     } else {
       _rest = Timer(debounce, () => unawaited(_ask(fen)));
     }
+  }
+
+  /// A tree being built answers from the one it had, when it had one.
+  void _showLocal(Fen fen, LocalGames games) {
+    games.want();
+    final state = games.state;
+    _notice = state is TreeBuilt ? state.notice : null;
+    if (games.answerAt(fen) case final answer?) {
+      _show(_shown(fen, answer));
+      return;
+    }
+    _show(switch (state) {
+      TreeReading(:final done, :final total) => ExplorerReading(done, total),
+      TreeUnbuilt() => const ExplorerReading(0, 0),
+      TreeEmpty(:final sentence) => ExplorerNothing(sentence),
+      TreeFailed(:final sentence) => ExplorerFailed(sentence),
+      TreeBuilt() => const ExplorerNothing('No games found for this position.'),
+    });
+  }
+
+  /// A local tree was built, rebuilt or narrowed: the table follows when it
+  /// is the one on show.
+  void _followTheLocalGames() {
+    if (_choiceNow.source.local) _followTheSession();
   }
 
   /// Asks the chosen database about [fen]. [kept] is what stays on the
@@ -312,6 +368,8 @@ final class Explorer extends ChangeNotifier {
     _rest?.cancel();
     _session.anyChange.removeListener(_followTheBoard);
     _settings.removeListener(_followTheSettings);
+    _databases.thisFile.removeListener(_followTheLocalGames);
+    _databases.myGames.removeListener(_followTheLocalGames);
     super.dispose();
   }
 }
@@ -378,19 +436,36 @@ final class ExplorerAnswers {
 /// How many plies deep [fen] is: nought at the start.
 int plyOf(Fen fen) => (fen.fullMove - 1) * 2 + (fen.whiteToMove ? 0 : 1);
 
-/// The databases the explorer can ask: Lichess's two over the network and
-/// the master book (TWIC) on this machine. Says how to reach each one for a
-/// position or for one game's moves, and puts what went wrong in a sentence;
-/// holds nothing between asks.
+/// The databases the explorer can ask: Lichess's two over the network, the
+/// master book (TWIC) on this machine, and the two trees built from games
+/// on this machine — the open file's and the user's own. Says how to reach
+/// each one for a position or for one game's moves, and puts what went
+/// wrong in a sentence; the network and the book hold nothing between
+/// asks.
 final class ExplorerDatabases {
   const ExplorerDatabases({
     required LichessExplorer lichess,
     required MasterBook book,
+    required this.thisFile,
+    required this.myGames,
   }) : _lichess = lichess,
        _book = book;
 
   final LichessExplorer _lichess;
   final MasterBook _book;
+
+  /// `This file`: the open document's games ([FileTree]).
+  final LocalGames thisFile;
+
+  /// `My games`: the user's saved games ([MyGamesTree]).
+  final LocalGames myGames;
+
+  /// The tree [source] is answered from, when it is one on this machine.
+  LocalGames? local(ExplorerSource source) => switch (source) {
+    ExplorerSource.thisFile => thisFile,
+    ExplorerSource.myGames => myGames,
+    _ => null,
+  };
 
   /// Whether the master book is on this machine.
   Future<bool> bookAvailable() => _book.available();
@@ -398,6 +473,9 @@ final class ExplorerDatabases {
   /// What [choice] says about [fen], or the sentence saying why there is
   /// no answer. A network failure names TWIC when the book is here.
   Future<(ExplorerAnswer?, String?)> ask(Fen fen, ExplorerChoice choice) async {
+    if (local(choice.source) case final games?) {
+      return (games.answerAt(fen), null);
+    }
     if (choice.source == ExplorerSource.twic) {
       return switch (await _book.lookup(
         fen,
@@ -419,9 +497,16 @@ final class ExplorerDatabases {
   }
 
   /// The PGN of [game] from the database that listed it, or null when it
-  /// could not be had.
-  Future<String?> gamePgn(ExplorerGame game, ExplorerSource source) =>
-      source == ExplorerSource.twic
-      ? _book.gamePgn(game.id)
-      : _lichess.gamePgn(game.id, masters: source == ExplorerSource.masters);
+  /// could not be had. A game of `This file` is already open, and is not
+  /// fetched.
+  Future<String?> gamePgn(ExplorerGame game, ExplorerSource source) async =>
+      switch (source) {
+        ExplorerSource.twic => _book.gamePgn(game.id),
+        ExplorerSource.masters || ExplorerSource.lichess => _lichess.gamePgn(
+          game.id,
+          masters: source == ExplorerSource.masters,
+        ),
+        ExplorerSource.myGames => myGames.gamePgn(game.id),
+        ExplorerSource.thisFile => null,
+      };
 }
