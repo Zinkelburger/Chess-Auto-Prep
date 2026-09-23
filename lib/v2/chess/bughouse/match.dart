@@ -319,9 +319,11 @@ final class StoredMatch {
   final List<MatchGame> games;
   final String? error;
 
-  /// A stopped or failed match with games still to play.
+  /// A match not running with games still to play: stopped, failed, or
+  /// made and never started (the app went before its first game).
   bool get resumable =>
-      (status == MatchStatus.cancelled || status == MatchStatus.failed) &&
+      status != MatchStatus.running &&
+      status != MatchStatus.completed &&
       games.length < config.games;
 
   StoredMatch copyWith({

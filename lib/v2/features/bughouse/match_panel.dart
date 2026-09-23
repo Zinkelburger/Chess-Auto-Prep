@@ -35,7 +35,10 @@ class MatchPanel extends StatelessWidget {
             if (matches.problem case final problem?)
               Padding(
                 padding: const EdgeInsets.only(top: Space.xs),
-                child: Text(problem, style: TextStyle(color: scheme.error)),
+                child: Text(
+                  _said(problem),
+                  style: TextStyle(color: scheme.error),
+                ),
               ),
             const SizedBox(height: Space.s),
             if (matches.matches.isEmpty)
@@ -61,6 +64,16 @@ class MatchPanel extends StatelessWidget {
     );
   }
 }
+
+String _said(MatchProblem problem) => switch (problem) {
+  NotAPosition() => notAPosition,
+  CannotCreate(:final detail) =>
+    'Could not create the match directory: $detail',
+  CannotSave(:final detail) => 'Could not save the match: $detail',
+  CannotDelete(:final detail) => 'Could not delete the match: $detail',
+  EngineWouldNotStart(:final reason) => reason,
+  MatchEngineFailed(:final reason) => 'The match stopped: $reason',
+};
 
 class _Head extends StatelessWidget {
   const _Head({required this.matches, required this.lab});

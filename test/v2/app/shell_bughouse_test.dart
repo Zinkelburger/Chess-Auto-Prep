@@ -257,6 +257,34 @@ void main() {
     );
   });
 
+  testWidgets('leaving the lab quits its engine and gives Stockfish back', (
+    tester,
+  ) async {
+    await toLab(tester);
+    expect(w.analysis.pausedFor, isNotNull);
+    expect(w.bughouse.engine.gone, isFalse);
+    await tester.tap(find.text('Bughouse lab').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Repertoire builder').last);
+    await tester.pumpAndSettle();
+    expect(w.bughouse.engine.gone, isTrue);
+    expect(w.analysis.pausedFor, isNull);
+  });
+
+  testWidgets('a setup box keeps the arrow keys while it is typed in', (
+    tester,
+  ) async {
+    startInBook();
+    await toLab(tester);
+    await tester.tap(row(BoardNumber.one, 'e4'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey(('fen', BoardNumber.one))));
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pumpAndSettle();
+    expect(w.lab.line.upto(BoardNumber.one), 1);
+  });
+
   testWidgets('the arrow keys step the board last played on', (tester) async {
     startInBook();
     await toLab(tester);

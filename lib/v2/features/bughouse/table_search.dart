@@ -212,6 +212,7 @@ final class TableSearch extends ChangeNotifier {
     if (resting) {
       _generation++;
       _engine?.stop();
+      if (_analysis is AnalysisRunning) _set(analysis: const AnalysisIdle());
     } else {
       _scored = null;
       _labChanged();
@@ -393,7 +394,7 @@ final class TableSearch extends ChangeNotifier {
     await _busy;
     if (!_current(generation)) return const _Stale();
     final searching = engine.search(question);
-    _busy = searching.then((_) {});
+    _busy = searching.then((_) {}, onError: (Object _) {});
     final answer = await searching;
     if (!_current(generation)) return const _Stale();
     return switch (answer) {
@@ -405,7 +406,7 @@ final class TableSearch extends ChangeNotifier {
   /// Analyze: [BughouseLab.team]'s search for the Search chip's time, with
   /// its board that must be moved on, then the other team's for the zero.
   Future<void> analyze() async {
-    if (!_open) return;
+    if (!_open || _resting) return;
     final generation = ++_generation;
     _engine?.stop();
     _startFailure = null;

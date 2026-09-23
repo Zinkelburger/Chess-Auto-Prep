@@ -53,6 +53,7 @@ final class MatchRunner {
     var sits = 0;
     _End? end;
     while (end == null) {
+      if (_stopped) return null;
       if (moves.length >= config.maxPlies) {
         end = _atLimit;
         break;
@@ -116,17 +117,18 @@ final class MatchRunner {
           ending: MatchEnding.engineFailure,
           detail: reason,
         ));
+      // `bestmove (none)` for a team on move: no legal joint action, and
+      // nothing to sample around.
+      case HivemindSearched(best: null):
+        return _Ended((
+          result: lossFor(team),
+          ending: MatchEnding.checkmate,
+          detail: _whereLost(position, team),
+        ));
       case final HivemindSearched searched:
         final action = sampling
-            ? pickFromShortlist(searched, config.variety, random)
-            : searched.best;
-        if (action == null) {
-          return _Ended((
-            result: lossFor(team),
-            ending: MatchEnding.checkmate,
-            detail: _whereLost(position, team),
-          ));
-        }
+            ? pickFromShortlist(searched, config.variety, random)!
+            : searched.best!;
         return _apply(position, team, action) ??
             _Ended((
               result: MatchResult.unfinished,

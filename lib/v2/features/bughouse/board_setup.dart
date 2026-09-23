@@ -213,6 +213,11 @@ class _BoardBoxes extends StatelessWidget {
       autocorrect: false,
       enableSuggestions: false,
       onChanged: (_) => onChanged(),
+      // Clicked away from, the focus goes back to where it was before —
+      // the lab — rather than up to the window, where no key reaches it.
+      onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(
+        disposition: UnfocusDisposition.previouslyFocusedChild,
+      ),
       decoration: const InputDecoration(
         isDense: true,
         border: OutlineInputBorder(),

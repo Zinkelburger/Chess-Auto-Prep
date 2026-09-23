@@ -53,7 +53,7 @@ the left, the question and the tables on the right.
   `Stop`); the history, four rows tall, newest first, each with its score and state (`5½/10 · Completed`);
   then the match chosen: `White on board 1 scored 5½/10 (55% ± 27) · 5W 1D 4L`, what was left out (`1
   unfinished, not counted`, drawn at the move limit or by both teams sitting), the opening with `Show`,
-  `Resume` for a stopped or failed match with games still to play, `Delete`; and its games, `#`, `White on
+  `Resume` for a stopped, failed or never-started match with games still to play, `Delete`; and its games, `#`, `White on
   board 1`, `Black on board 1`, result and ending. Empty: `No matches yet. Set a position up on the boards,
   then play it out.`
 
@@ -91,7 +91,9 @@ Each game is written as it ends → `That is not a position yet — check the mo
 create the match directory: …`, `Could not save the match: …`, or the engine's reason.
 **Read a run** — click a history row; `Show` puts the opening on the boards, a game row puts that game on
 them at its end, `Follow the game being played` makes the boards follow the live game while the tables
-rest; `Stop` drops the game in flight so `Resume` plays it again; `Delete` asks, then moves the match to
+rest; `Stop` drops the game in flight so `Resume` plays it again (as does a last game the engine failed
+in; `Resume` reads the match from disk, so a game the old app added since is kept); `Delete` asks, then
+moves the match to
 `.trash` → `Could not delete the match: …`
 **New game / Flip boards** — the start on both boards, the chips kept / the other colour at the bottom.
 **Actions menu** — Analyze, New game, Flip boards, Copy dual FEN, Paste dual FEN.

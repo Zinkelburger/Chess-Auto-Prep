@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:chess_auto_prep/v2/chess/bughouse/hivemind.dart';
 import 'package:chess_auto_prep/v2/chess/bughouse/table.dart';
 import 'package:chess_auto_prep/v2/engines/hivemind_engine.dart';
@@ -252,6 +254,24 @@ void main() {
     // one; what matters is that another was asked for.
     expect(outside.starts, 2);
   });
+
+  test(
+    'an engine that finishes starting after the lab is gone is quit',
+    () async {
+      final starting = Completer<HivemindStart>();
+      final late = TableSearch(
+        lab: lab,
+        book: outside.book,
+        startEngine: () => starting.future,
+      )..open();
+      await pumpEventQueue();
+      late.dispose();
+      final engine = ScriptedHivemind();
+      starting.complete(HivemindStarted(engine));
+      await pumpEventQueue();
+      expect(engine.gone, isTrue);
+    },
+  );
 
   test('a failed Analyze gives the engine back to the tables', () async {
     search.open();

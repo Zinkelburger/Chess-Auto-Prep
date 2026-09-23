@@ -128,9 +128,9 @@ class _RightPanelState extends State<_RightPanel> {
 }
 
 /// The lab's keys, and the window's, wherever the focus is inside it —
-/// unless the user is typing, when the keys are the text box's. A click
-/// anywhere in the lab takes the focus back from a box left behind, so the
-/// arrows step the boards again.
+/// unless the user is typing, when the keys are the text box's. A setup box
+/// clicked away from hands the focus back here (see `board_setup.dart`), so
+/// the arrows step the boards again.
 class _LabKeys extends StatefulWidget {
   const _LabKeys({
     required this.lab,
@@ -185,13 +185,10 @@ class _LabKeysState extends State<_LabKeys> {
   }
 
   @override
-  Widget build(BuildContext context) => Listener(
-    onPointerDown: (_) => _focus.requestFocus(),
-    child: Focus(
-      focusNode: _focus,
-      autofocus: true,
-      onKeyEvent: _onKey,
-      child: widget.child,
-    ),
+  Widget build(BuildContext context) => Focus(
+    focusNode: _focus,
+    autofocus: true,
+    onKeyEvent: _onKey,
+    child: widget.child,
   );
 }

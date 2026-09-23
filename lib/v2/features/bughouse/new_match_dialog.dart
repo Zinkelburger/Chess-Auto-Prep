@@ -20,6 +20,9 @@ Future<MatchConfig?> showNewMatchDialog(
   builder: (context) => _NewMatchDialog(lab: lab),
 );
 
+/// Said of a start that does not read, here and of a stored match.
+const notAPosition = 'That is not a position yet — check the moves or the FEN.';
+
 class _NewMatchDialog extends StatefulWidget {
   const _NewMatchDialog({required this.lab});
 
@@ -77,7 +80,7 @@ class _NewMatchDialogState extends State<_NewMatchDialog> {
           };
     if (start == null) {
       setState(() {
-        _problem = 'That is not a position yet — check the moves or the FEN.';
+        _problem = notAPosition;
       });
       return;
     }
