@@ -339,7 +339,7 @@ def relabel_seats(con: sqlite3.Connection) -> None:
     if con.execute("SELECT 1 FROM meta WHERE key='seats'").fetchone():
         return
     swap = lambda text: None if not text else re.sub(  # noqa: E731
-        r"\b([BC])\b", lambda m: {"B": "C", "C": "B"}[m.group(1)], text)
+        r"\b([BC])(?= |$)", lambda m: {"B": "C", "C": "B"}[m.group(1)], text)
     renamed = {"AC": "AB", "BD": "CD"}
     with con:
         # Claim it inside the transaction: several workers open the same book at

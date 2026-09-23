@@ -99,14 +99,29 @@ const engineRowHeight = 28.0;
 const engineScoreWidth = 54.0;
 
 /// The tab strip at the top of a pane whose content the user can switch —
-/// Moves and Replies in the reading card — and the line under the chosen
-/// tab. The old viewer's tabs were this: words in a row, one underlined.
-const paneTabHeight = 32.0;
+/// Moves, Replies, Search in the reading card: the tabs share its width,
+/// each one a target as big as a button, the chosen one filled. The line
+/// is what shows where a dragged tab will land.
+const paneTabHeight = 40.0;
+const paneTabInset = 4.0;
+const paneTabMinWidth = 84.0;
+const paneTabRadius = 6.0;
 const paneTabUnderline = 2.0;
+
+/// The Search tab: its number fields, the table's header and rows, and
+/// the columns for how often a reply is played and for the two values.
+const searchEloWidth = 84.0;
+const searchDepthWidth = 64.0;
+const searchOnceInWidth = 112.0;
+const searchHeaderHeight = 24.0;
+const searchRowHeight = 32.0;
+const searchShareWidth = 64.0;
+const searchValueWidth = 88.0;
 
 /// The Replies table: a row per move the model expects, as tall as an
 /// engine row, with its share in a gutter as wide as an engine score.
 const replyRowHeight = engineRowHeight;
+const repliesStatusHeight = 44.0;
 const replyShareWidth = engineScoreWidth;
 
 /// How many rows a line opens out to when its chevron is pressed.

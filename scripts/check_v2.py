@@ -45,8 +45,8 @@ FLUTTER_FREE = {"chess", "engines", "diagnostics"}
 # net/ holds sockets as well as HTTP clients: the Lichess login listens on
 # a loopback port for the browser. Files are still written only in storage/.
 IO_ALLOWED = {"storage", "engines", "net", "app"}
-# Writers outside storage/: only the engine installer, which writes a binary, not user data.
-WRITERS_ALLOWED = {"engines/stockfish_install.dart"}
+# Writers outside storage/: only the engine installers, which write binaries, not user data.
+WRITERS_ALLOWED = {"engines/stockfish_install.dart", "engines/hivemind_install.dart"}
 
 FUNCTION_START = re.compile(
     r"^(\s*)(?:static\s+)?(?:@\w+\s+)*[\w<>?,\s\[\]()]+\s+_?\w+\s*\([^;]*\)\s*(?:async\*?\s*)?\{\s*$"

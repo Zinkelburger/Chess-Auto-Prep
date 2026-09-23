@@ -1,7 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
-import 'app_action.dart';
 import 'listening_state.dart';
 import 'theme.dart';
 
@@ -146,33 +145,20 @@ class PaneTabs<K extends Object> extends ChangeNotifier {
   }
 }
 
-/// The row of tabs at the top of a pane, one underlined: what the pane is
-/// showing, and the other things it could show instead. Each tab that can
-/// be closed carries its `×` when it is up or under the pointer, a middle
-/// click closes it too, and a tab can be dragged in front of another. The
-/// wheel scrolls the row when it is wider than the pane, and the tab that
-/// comes up is brought into view.
+/// The row of tabs at the top of a pane: what the pane is showing, and the
+/// other things it could show instead. The tabs share the row's width, so
+/// each is a target as big as a button, and the one that is up is filled.
+/// A middle click closes a tab that can be closed, and a tab can be dragged
+/// in front of another. When the tabs would be too narrow to read, the row
+/// scrolls instead — the wheel scrolls it, and the tab that comes up is
+/// brought into view.
 ///
-/// The old viewer switched its right column this way and it was the one
-/// part of that screen nobody complained about: no second pane, no menu,
-/// one glance says what is there and one click changes it. As there, the
-/// row is left out while only one tab is open: a row with one word in it
-/// says nothing the pane does not. [trailing] is for the one control that
-/// belongs to the chosen tab and nowhere else.
+/// As in the old viewer, the row is left out while only one tab is open: a
+/// row with one word in it says nothing the pane does not.
 class PaneTabStrip<K extends Object> extends StatefulWidget {
-  const PaneTabStrip({
-    super.key,
-    required this.tabs,
-    this.trailing,
-    this.closeShortcut,
-  });
+  const PaneTabStrip({super.key, required this.tabs});
 
   final PaneTabs<K> tabs;
-  final Widget? trailing;
-
-  /// The key the pane binds to closing the tab that is up, in a tooltip's
-  /// words (`Ctrl+W`), so the `×` on that tab can say so. Null when none.
-  final String? closeShortcut;
 
   @override
   State<PaneTabStrip<K>> createState() => _PaneTabStripState<K>();
@@ -228,40 +214,39 @@ class _PaneTabStripState<K extends Object> extends State<PaneTabStrip<K>>
     _keys.removeWhere((id, _) => !tabs.isOpen(id));
     if (tabs.open.length < 2) return const SizedBox.shrink();
     _reveal(tabs.selected);
-    final scheme = Theme.of(context).colorScheme;
+    List<Widget> slots() => [
+      for (final id in tabs.open)
+        _TabSlot<K>(
+          key: _keys.putIfAbsent(id, GlobalKey.new),
+          tabs: tabs,
+          tab: tabs.tabOf(id),
+        ),
+    ];
     return SizedBox(
       height: paneTabHeight,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(color: scheme.outlineVariant, width: 0.5),
-          ),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Listener(
-                onPointerSignal: _wheel,
-                child: SingleChildScrollView(
-                  controller: _scroll,
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      for (final id in tabs.open)
-                        _TabSlot<K>(
-                          key: _keys.putIfAbsent(id, GlobalKey.new),
-                          tabs: tabs,
-                          tab: tabs.tabOf(id),
-                          closeShortcut: widget.closeShortcut,
-                        ),
-                    ],
-                  ),
-                ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final fits =
+              constraints.maxWidth / tabs.open.length >= paneTabMinWidth;
+          if (fits) {
+            return Row(
+              children: [for (final slot in slots()) Expanded(child: slot)],
+            );
+          }
+          return Listener(
+            onPointerSignal: _wheel,
+            child: SingleChildScrollView(
+              controller: _scroll,
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (final slot in slots())
+                    SizedBox(width: paneTabMinWidth, child: slot),
+                ],
               ),
             ),
-            ?widget.trailing,
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -270,16 +255,10 @@ class _PaneTabStripState<K extends Object> extends State<PaneTabStrip<K>>
 /// One tab in the row, a drop target for another tab and the source of its
 /// own drag. Dropping on it puts the dragged tab in front of it.
 class _TabSlot<K extends Object> extends StatelessWidget {
-  const _TabSlot({
-    super.key,
-    required this.tabs,
-    required this.tab,
-    required this.closeShortcut,
-  });
+  const _TabSlot({super.key, required this.tabs, required this.tab});
 
   final PaneTabs<K> tabs;
   final PaneTab<K> tab;
-  final String? closeShortcut;
 
   @override
   Widget build(BuildContext context) {
@@ -293,12 +272,13 @@ class _TabSlot<K extends Object> extends StatelessWidget {
         maxSimultaneousDrags: tab.pinned ? 0 : 1,
         feedback: Material(
           color: scheme.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(paneTabRadius),
           child: Padding(
             padding: const EdgeInsets.all(Space.s),
             child: Text(tab.title),
           ),
         ),
-        childWhenDragging: Opacity(opacity: 0.4, child: _tab(context)),
+        childWhenDragging: Opacity(opacity: 0.4, child: _tab()),
         child: DecoratedBox(
           decoration: BoxDecoration(
             border: Border(
@@ -308,119 +288,68 @@ class _TabSlot<K extends Object> extends StatelessWidget {
               ),
             ),
           ),
-          child: _tab(context),
+          child: _tab(),
         ),
       ),
     );
   }
 
-  Widget _tab(BuildContext context) => _Tab(
-    tab: tab,
+  Widget _tab() => _Tab(
+    title: tab.title,
     selected: tabs.selected == tab.id,
-    closeShortcut: closeShortcut,
     onTap: () => tabs.show(tab.id),
     onClose: tab.pinned ? null : () => tabs.close(tab.id),
   );
 }
 
-/// The word and, on a tab that can be closed, its `×`. The `×` takes its
-/// room whether or not it is drawn, so a tab is the same width under the
-/// pointer as away from it.
-class _Tab extends StatefulWidget {
+/// The word, centred on a rounded patch that is filled while the tab is
+/// up and tinted under the pointer.
+class _Tab extends StatelessWidget {
   const _Tab({
-    required this.tab,
+    required this.title,
     required this.selected,
-    required this.closeShortcut,
     required this.onTap,
     required this.onClose,
   });
 
-  final PaneTab<Object> tab;
+  final String title;
   final bool selected;
-  final String? closeShortcut;
   final VoidCallback onTap;
   final VoidCallback? onClose;
 
-  @override
-  State<_Tab> createState() => _TabState();
-}
-
-class _TabState extends State<_Tab> {
-  bool _hovered = false;
-
-  void _hover(bool over) {
-    if (mounted && _hovered != over) setState(() => _hovered = over);
-  }
-
   void _pointerDown(PointerDownEvent event) {
-    if (event.buttons == kMiddleMouseButton) widget.onClose?.call();
+    if (event.buttons == kMiddleMouseButton) onClose?.call();
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final closeable = widget.onClose != null;
+    final shape = BorderRadius.circular(paneTabRadius);
     return Listener(
-      onPointerDown: closeable ? _pointerDown : null,
-      child: InkWell(
-        onTap: widget.onTap,
-        onHover: _hover,
-        child: Container(
-          padding: EdgeInsets.only(
-            left: Space.m,
-            right: closeable ? Space.xs : Space.m,
-          ),
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(
-                color: widget.selected ? scheme.primary : Colors.transparent,
-                width: paneTabUnderline,
-              ),
-            ),
-          ),
-          alignment: Alignment.center,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                widget.tab.title,
+      onPointerDown: onClose == null ? null : _pointerDown,
+      child: Padding(
+        padding: const EdgeInsets.all(paneTabInset),
+        child: Material(
+          color: selected ? scheme.surfaceContainerHigh : Colors.transparent,
+          borderRadius: shape,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: shape,
+            child: Center(
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.bodyMedium?.copyWith(
-                  color: widget.selected
-                      ? scheme.onSurface
-                      : scheme.onSurfaceVariant,
-                  fontWeight: widget.selected
-                      ? FontWeight.w600
-                      : FontWeight.normal,
+                  color: selected ? scheme.onSurface : scheme.onSurfaceVariant,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
                 ),
               ),
-              if (closeable) _close(scheme, shown: widget.selected || _hovered),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
-
-  /// The `×`, holding its room while hidden.
-  Widget _close(ColorScheme scheme, {required bool shown}) => Visibility(
-    visible: shown,
-    maintainSize: true,
-    maintainAnimation: true,
-    maintainState: true,
-    child: IconButton(
-      onPressed: widget.onClose,
-      tooltip: withKey(
-        'Close ${widget.tab.title}',
-        widget.selected ? widget.closeShortcut : null,
-      ),
-      icon: const Icon(Icons.close, size: IconSize.menu),
-      color: scheme.onSurfaceVariant,
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints.tightFor(
-        width: paneTabHeight - Space.s,
-        height: paneTabHeight - Space.s,
-      ),
-    ),
-  );
 }

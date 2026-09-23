@@ -46,16 +46,19 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
   (v2 has this bar: the 32px switch row with `Depth {d} · {engine}`, 54px gutters, hover floats a
   200px board under the move, a click plays the line up to it, the chevron opens six rows; no
   threat, gear, nodes or settings yet. The old app's large headline score was tried and dropped.
-  While a fill runs the row reads `Paused while filling gaps` and the lines are gone; the fill's
-  own line sits under the bar, 2026-09-22.)
-- **Tab strip and Replies** (v2, 2026-09-21; browser tabs 2026-09-22) — under the engine bar,
-  `Moves` | `Replies`, one underlined, the old viewer's closeable side-panel tabs with fixed
-  identities: `Moves` is pinned, the others carry an `×` when up or under the pointer, a middle
-  click closes, a drag puts a tab in front of another, Ctrl+Tab / Ctrl+Shift+Tab walk them and
+  Since 2026-09-23 it sits **under the board**, not above the card's tabs (owner: "ugly above all
+  the tabs"): the board shrinks to leave the switch row and one row per line, on or off, so it
+  never changes size. While a search runs the row reads `Paused while searching`.)
+- **Tab strip and Replies** (v2, 2026-09-21; browser tabs 2026-09-22; big tabs 2026-09-23) —
+  under the card's heading, `Moves | Train | Replies | Explorer | Tree | Search`. Since 2026-09-23
+  the tabs share the strip's width, 40px tall, the one that is up filled (owner: the small
+  underlined tabs were "ugly, small and hard to click"); no `×` is drawn and no control sits at
+  the strip's end. Fixed identities: `Moves` is pinned, a middle click closes, a drag puts a tab
+  in front of another, Ctrl+Tab / Ctrl+Shift+Tab walk them and
   Ctrl+W closes the one that is up. A closed tab comes back from Actions ▸ `Show Replies`; the
   strip is left out while only one tab is open. Which tabs are open is window state, kept across
-  modes and lost with the window. Both start open, `Moves` up. `Next gap` sits at the strip's
-  right edge on the Replies tab. Replies is the Maia-3 table described in `repertoires.md`: share
+  modes and lost with the window. `Moves` starts up. `Next gap` is an outlined button at the end
+  of the Replies tab's status line. Replies is the Maia-3 table described in `repertoires.md`: share
   gutter, numbered move, tick or `gap`, a hover board of the position after the move, a click
   plays it. A new tab is one `PaneTab` in `workspace/workspace_tabs.dart` and one body in the card.
 - **Explorer (Database dock)** — sources: Engine evals, ChessDB, Repertoire, Opening explorer,
@@ -78,7 +81,7 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
 - **Analysis board** (v2, 2026-09-22) — lila's analysis board: with no file open the
   workspace is a board kept in memory, headed `Analysis board` over `Not saved`, which is
   where the window starts. Moves, variations, comments, NAGs, delete / promote and Ctrl+Z
-  (200 steps) work as on a chapter; the engine, Explorer, Replies and Prep follow it, with
+  (200 steps) work as on a chapter; the engine, Explorer, Replies and Search follow it, with
   the side at the bottom as ours. Opening a file sets it aside for the window's life:
   Actions ▸ `Analysis board` goes back to it. `New analysis board from here` (Ctrl+N)
   replaces it with the line on the board up to the cursor, from any file, game or the board
