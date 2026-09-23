@@ -1,6 +1,22 @@
 {
  "merged_games": 75,
  "tours": {
+  "2QchhP2O": {
+   "dates": [
+    1791736500000
+   ],
+   "fetched_at": 1790192664,
+   "finished": false,
+   "games": 0,
+   "id": "2QchhP2O",
+   "location": "Massachusetts, USA",
+   "name": "2026 Massachusetts Masters vs Challengers Invitational",
+   "owner": "",
+   "rounds": 4,
+   "slug": "2026-massachusetts-masters-vs-challengers-invitational",
+   "source": "lichess",
+   "url": "https://lichess.org/broadcast/2026-massachusetts-masters-vs-challengers-invitational/2QchhP2O"
+  },
   "Aofh44jt": {
    "dates": [
     1761488789447

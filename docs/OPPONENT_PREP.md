@@ -119,8 +119,11 @@ people_confirm   {person_id, site: "chesscom", username: "…"}   # only after t
 `player_lookup` (and so `people_populate`) asks, in order: the players
 directory already on disk; the bundled USCF → chess.com directory; the US
 Chess API, whose spelling of the name (`Will Schiminger`) becomes an alias and
-which says whether the player was ever online-rated; the TWIC master-games
-database under every spelling; and a probe of about eight usernames built from
+which says whether the player was ever online-rated; over-the-board games
+under every spelling in the TWIC master-games database and in each broadcast
+collection (`Documents/lichess_broadcasts/<name>/<name>.db`, regional events
+TWIC never carries — see [BROADCAST_GAMES.md](BROADCAST_GAMES.md)), counted
+per source; and a probe of about eight usernames built from
 each spelling on chess.com and Lichess (one Lichess request covers them all).
 
 **Spellings.** A person row carries `aliases`, and every search takes all of
@@ -130,9 +133,13 @@ Shmelov finds Shmeliov) and the given names agree: exactly, closely
 (`Denys`/`Denis`), or by an initial when one side only has an initial
 (`Shmeliov,D`). Two-part names are also read surname-first (`Zhou
 Jianchao`), and then the given name must agree in full. TWIC rows are grouped
-by FIDE ID, which catches every later spelling; a TWIC identity is taken only
-when one fits at the best match grade and its latest Elo is within 300 of the
-known rating. Otherwise the rows are listed as ambiguous.
+by FIDE ID, which catches every later spelling. In each database the
+best-graded names whose latest Elo is within 300 of the known rating are
+taken as the person unless they carry two different FIDE IDs (then the rows
+are listed as ambiguous); well-matched names with no FIDE ID fold into the
+one that has it, since one broadcaster may omit the ID another sent. Across
+databases, TWIC's FIDE ID wins, and a collection whose pick carries a
+different ID is reported under `conflicts` rather than counted.
 
 **Trust.** `chesscom` and `lichess` on a person are the accounts the app
 downloads games from. Only the directory's USCF-event match, an account the

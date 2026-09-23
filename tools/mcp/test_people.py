@@ -38,10 +38,11 @@ CREATE TABLE twic_issues(issue INTEGER PRIMARY KEY, games INTEGER, imported_at I
 """
 
 
-def _make_twic(path: Path) -> None:
+def _make_twic(path: Path, rows: list | None = None) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     c = sqlite3.connect(path)
     c.executescript(_SCHEMA)
-    rows = [
+    rows = rows or [
         # (white, black, date, welo, belo, wfide, bfide)
         ("Shmeliov,D", "Erenburg,S", "2026.06.29", 2338, 2600, 14115433, 2000001),
         ("Kaidanov,G", "Shmeliov,D", "2025.03.01", 2550, 2350, 2000002, 14115433),
@@ -229,10 +230,20 @@ class Populate(unittest.TestCase):
         self.people_dir = root / "opponents"
         self.twic = root / "master_games.db"
         _make_twic(self.twic)
+        # A regional collection: one broadcaster wrote no FIDE ID.
+        _make_twic(
+            root / "broadcasts" / "massachusetts" / "massachusetts.db",
+            [
+                ("Shmelov, Denys", "Katsman, David", "2025.05.25", None, 1971, None, None),
+                ("Feng, Eric", "Shmelov, Denys", "2025.05.26", None, None, None, None),
+                ("Pan, Zachary", "Shmeliov, Denis", "2025.09.21", 2200, None, 2000009, 14115433),
+            ],
+        )
         self._env = mock.patch.dict(
             os.environ,
             {"CHESS_PREP_PEOPLE_DIR": str(self.people_dir),
-             "CHESS_PREP_ROSTER": str(root / "roster.json")},
+             "CHESS_PREP_ROSTER": str(root / "roster.json"),
+             "CHESS_PREP_BROADCASTS_DIR": str(root / "broadcasts")},
         )
         self._env.start()
         self._patches = [
@@ -284,6 +295,23 @@ class Populate(unittest.TestCase):
         again = self.registry.call("people_populate", {"db": str(self.twic)})
         self.assertEqual(again["group"]["added"], 0)
         self.assertEqual(len(json.loads(Path(out["people_file"]).read_text())["people"]), 3)
+
+    def test_broadcast_collections_add_to_the_otb_count(self):
+        out = self.registry.call("people_populate", {"db": str(self.twic), "player_ids": ["13433622"]})
+        otb = out["players"][0]["otb"]
+        self.assertEqual(otb["fide_id"], 14115433)
+        self.assertEqual(otb["games"], 6)
+        by_source = {s["source"]: s for s in otb["sources"]}
+        self.assertEqual(by_source["twic"]["games"], 3)
+        mass = by_source["broadcasts:massachusetts"]
+        self.assertEqual(mass["games"], 3, "the ID-less spelling folds into the FIDE one")
+        self.assertEqual(sorted(mass["names"]), ["Shmeliov, Denis", "Shmelov, Denys"])
+
+        out = self.registry.call(
+            "player_lookup",
+            {"name": "Denys Shmelov", "probe_handles": False, "broadcasts": False, "db": str(self.twic)},
+        )
+        self.assertEqual([s["source"] for s in out["otb"]["sources"]], ["twic"])
 
     def test_confirm_moves_a_candidate_into_the_downloaded_accounts(self):
         self.registry.call("people_populate", {"db": str(self.twic)})

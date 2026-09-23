@@ -36,6 +36,18 @@ weekend tournament the scoresheet is the only copy.
   `GET /api/broadcast/by/<user>` (paged). The Massachusetts Chess Association
   broadcasts as `falstan`; the owner name is in the broadcast page's embedded
   JSON (`communityOwner`).
+- Neither the website search (`/broadcast/search`) nor the monthly calendar
+  (`/broadcast/calendar/YYYY/M`) lists community broadcasts either; the
+  calendar is the official ones only. The monthly downloads on
+  `database.lichess.org` (about 1.2M broadcast games since 2023) are official
+  only too: July 2025 has the World Open but not the community-broadcast
+  US Open run in the same month.
+- Operators worth following besides `falstan`: `jsr12345` runs the DGT
+  boards for Mid-Atlantic events (World Open, Washington International,
+  Cherry Blossom, Colonial and Skyline Opens — these official) and for US
+  Chess nationals, the US Open, Chess for Cure and George Washington Open
+  (community). The owner of any broadcast is `ownerId` in its page's
+  embedded JSON.
 - Any tour is downloadable as one PGN, no login:
   `GET /api/broadcast/<tourId>.pgn`. `GET /api/broadcast/<tourId>` gives the
   rounds and whether they are finished.
@@ -88,6 +100,14 @@ dates (one site stamps the round, the other the broadcast), so no tag the
 broadcaster set is trusted. When both sites have a game the copy with more
 information is kept, which is the chess.com one with clocks.
 
+The merged PGN writes each player one way: per order-free name key, the
+comma form some source used (`Wu, Felix`), else the name turned
+surname-first (`Emma Linyue Zhang` → `Zhang, Emma Linyue`). Lichess
+broadcasters often write `First Last` where chess.com and TWIC write
+`Last, First`, which listed the same player twice. Real respellings
+(`Shmelov, Denys` / `Shmeliov, Denis`) are different keys and stay as
+written; the player lookup joins them.
+
 Tests: `tools/test_lichess_broadcasts.py`, `tools/test_chesscom_events.py`
 (both offline; the websocket client is exercised against a scripted fake).
 
@@ -118,11 +138,18 @@ MASTER_IMPORT_ARGS="$HOME/Documents/lichess_broadcasts/massachusetts/massachuset
 The MCP reopens a cached handle when the database file is replaced, so a
 rebuild is picked up without restarting the server (fixed alongside this work).
 
+`player_lookup` and `people_populate` search every collection database
+(`Documents/lichess_broadcasts/<name>/<name>.db`; override the root with
+`CHESS_PREP_BROADCASTS_DIR`) alongside TWIC, and report the games per source
+under `otb.sources` — see [OPPONENT_PREP.md](OPPONENT_PREP.md#filling-the-players-directory).
+
 ## The Massachusetts collection
 
 `scripts/data/broadcasts/massachusetts/` holds everything found for the state
-as of 9 September 2026: 94 games fetched from seven broadcasts, 75 unique
-games after merging.
+as of 23 September 2026: 94 games fetched from eight broadcasts, 75 unique
+games after merging. The eighth, `falstan`'s 2026 Masters vs Challengers
+Invitational (tour `2QchhP2O`, 11 October 2026), has no games yet; re-run
+step 2 after it.
 
 | Event | Where | Source | Games |
 |---|---|---|---|
@@ -135,7 +162,9 @@ games after merging.
 chess.com also lists a Massachusetts Girls Championship 2026 and a New
 England Blitz 2025, both with empty game lists. Searches for Boylston,
 Harvard, MIT, Worcester and the other New England states found nothing on
-either site. To grow the collection, add a broadcaster account or tour id on
+either site; a second pass on 23 September 2026 (MetroWest, Wachusett,
+Marlborough, Bay State, Greater Boston, Northeast Open, Eastern and
+Continental Class, Spiegel) found nothing new either. To grow the collection, add a broadcaster account or tour id on
 Lichess, or an event slug on chess.com, and re-run step 2.
 
 The database file itself is generated and not committed; step 3 rebuilds it

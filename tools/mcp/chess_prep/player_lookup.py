@@ -8,7 +8,10 @@ not find:
 2. the bundled USCF → chess.com directory — exact where it hits;
 3. the US Chess API — their official spelling (an alias for free) and
    whether they ever played USCF-rated online;
-4. the TWIC master-games database — every respelling, grouped by FIDE ID;
+4. over-the-board games under every respelling, grouped by FIDE ID: the
+   TWIC master-games database and each broadcast collection
+   (`Documents/lichess_broadcasts/<name>/<name>.db`, built from Lichess and
+   chess.com broadcasts of events TWIC never carries);
 5. a probe of usernames built from the name on chess.com and Lichess,
    kept only when the profile's real name or title agrees.
 
@@ -221,13 +224,13 @@ def lookup_person(
     title: str | None = None,
     probe: bool = True,
     people: PeopleStore | None = None,
-    master_db: Any = None,
+    otb_dbs: list[tuple[str, Any]] = (),
     use_uscf: bool = True,
 ) -> dict[str, Any]:
     """Everything the sources say about one person, and what is still open.
 
-    Pure reporting: writes nothing. `master_db` is an open `MasterGamesDb`,
-    or None to skip TWIC.
+    Pure reporting: writes nothing. `otb_dbs` are `(label, MasterGamesDb)`
+    pairs — TWIC and the broadcast collections — searched in that order.
     """
     aliases = [a for a in (aliases or []) if a and a.strip()]
     report: dict[str, Any] = {"name": name}
@@ -304,9 +307,10 @@ def lookup_person(
     report["aliases"] = aliases
 
     # 4. TWIC, under every spelling.
-    if master_db is not None:
-        identities = master_db.find_players(spellings)
-        report["otb"] = _pick_otb(identities, rating)
+    if otb_dbs:
+        report["otb"] = _combine_otb(
+            [(label, _pick_otb(db.find_players(spellings), rating)) for label, db in otb_dbs]
+        )
 
     # 5. Username probes.
     if probe:
@@ -343,29 +347,137 @@ def lookup_person(
     return report
 
 
+_GOOD_GRADES = ("exact", "spelling")
+
+
 def _pick_otb(identities: list[dict], rating: int | None) -> dict[str, Any]:
-    """The TWIC identity that is this person, when one clearly is."""
+    """The identity in one database that is this person, when one clearly is.
+
+    The best-graded names whose Elo agrees are this person unless they carry
+    two different FIDE IDs. Names that agree well (exact or close spelling)
+    and carry no FIDE ID, or the same one, are folded in: a broadcaster that
+    wrote `Shmelov, Denys` without an ID and one that wrote `Shmeliov, Denis`
+    with it are one player.
+    """
     if not identities:
         return {"games": 0}
-    best_grade = identities[0]["match"]
-    top = [i for i in identities if i["match"] == best_grade]
-    others = [i for i in identities if i not in top][:4]
 
     def elo_agrees(i: dict) -> bool:
         return not rating or not i.get("latest_elo") or abs(i["latest_elo"] - rating) <= ELO_AGREEMENT
 
-    agreeing = [i for i in top if elo_agrees(i)]
-    if len(agreeing) == 1:
-        pick = agreeing[0]
-        basis = f"{pick['match']} name match"
-        if rating and pick.get("latest_elo"):
-            basis += f", FIDE {pick['latest_elo']} near rating {rating}"
-        return {
-            **pick,
-            "basis": basis,
-            **({"alternates": [i for i in identities if i is not pick][:4]} if len(identities) > 1 else {}),
+    best_grade = identities[0]["match"]
+    top = [i for i in identities if i["match"] == best_grade and elo_agrees(i)]
+    fides = {i["fide_id"] for i in top if i.get("fide_id")}
+    if not top or len(fides) > 1:
+        ambiguous = [i for i in identities if i["match"] == best_grade]
+        return {"games": 0, "ambiguous": ambiguous[:6]}
+    group = list(top)
+    for i in identities:
+        if i in group or i["match"] not in _GOOD_GRADES or not elo_agrees(i):
+            continue
+        fide = i.get("fide_id")
+        if fide and fides and fide not in fides:
+            continue
+        if fide:
+            fides.add(fide)
+        group.append(i)
+
+    by_date = sorted(group, key=lambda i: i.get("last_date") or "", reverse=True)
+    latest_elo = next((i["latest_elo"] for i in by_date if i.get("latest_elo")), None)
+    names: list[str] = []
+    for i in group:
+        names += [n for n in i["names"] if n not in names]
+    pick = {
+        "fide_id": next(iter(fides), None),
+        "match": group[0]["match"],
+        "names": names,
+        "games": sum(i["games"] for i in group),
+        "first_date": min(i.get("first_date") or "" for i in group),
+        "last_date": max(i.get("last_date") or "" for i in group),
+        "latest_elo": latest_elo,
+    }
+    basis = f"{pick['match']} name match"
+    if rating and latest_elo:
+        basis += f", Elo {latest_elo} near rating {rating}"
+    pick["basis"] = basis
+    alternates = [i for i in identities if i not in group][:4]
+    if alternates:
+        pick["alternates"] = alternates
+    return pick
+
+
+def _combine_otb(picks: list[tuple[str, dict]]) -> dict[str, Any]:
+    """One OTB summary across TWIC and the broadcast collections.
+
+    The FIDE ID is the first source's that has one (TWIC is asked first);
+    a source whose pick carries a different ID is kept out of the totals
+    and reported as a conflict rather than merged into somebody else.
+    """
+    fide = next((p["fide_id"] for _, p in picks if p.get("fide_id")), None)
+    sources: list[dict] = []
+    conflicts: list[dict] = []
+    ambiguous: dict[str, list] = {}
+    for label, p in picks:
+        if p.get("ambiguous"):
+            ambiguous[label] = p["ambiguous"]
+        if not p.get("games"):
+            continue
+        row = {
+            "source": label,
+            **{k: p[k] for k in ("fide_id", "names", "games", "first_date", "last_date", "latest_elo", "basis") if p.get(k) is not None},
         }
-    return {"games": 0, "ambiguous": top[:6], **({"alternates": others} if others else {})}
+        if fide and p.get("fide_id") and p["fide_id"] != fide:
+            conflicts.append(row)
+        else:
+            sources.append(row)
+    out: dict[str, Any] = {"games": sum(r["games"] for r in sources)}
+    if sources:
+        names: list[str] = []
+        for r in sources:
+            names += [n for n in r["names"] if n not in names]
+        out.update(
+            fide_id=fide,
+            names=names,
+            last_date=max(r["last_date"] for r in sources),
+            latest_elo=next((r["latest_elo"] for r in sources if r.get("latest_elo")), None),
+            basis="; ".join(f"{r['source']}: {r['basis']}" for r in sources),
+            sources=sources,
+        )
+    if conflicts:
+        out["conflicts"] = conflicts
+    if ambiguous:
+        out["ambiguous"] = ambiguous
+    return {k: v for k, v in out.items() if v is not None}
+
+
+def otb_databases(twic_path: str | None = None, twic: bool = True, broadcasts: bool = True) -> list[tuple[str, Any]]:
+    """Open handles on TWIC and every broadcast collection that exists.
+
+    Collections live under `Documents/lichess_broadcasts/` (override with
+    CHESS_PREP_BROADCASTS_DIR), one `<name>/<name>.db` each, built by
+    `tools/master_import_pgn.dart` from the collection's merged PGN.
+    """
+    import os
+    from pathlib import Path
+
+    from .master_games import MasterGamesDb
+    from .people import documents_dir
+    from .tools import ToolError
+
+    out: list[tuple[str, Any]] = []
+    if twic:
+        try:
+            out.append(("twic", MasterGamesDb(twic_path)))
+        except ToolError:
+            pass
+    if broadcasts:
+        root = Path(
+            os.environ.get("CHESS_PREP_BROADCASTS_DIR") or documents_dir() / "lichess_broadcasts"
+        ).expanduser()
+        for db in sorted(root.glob("*/*.db")):
+            if db.stem == db.parent.name:
+                out.append((f"broadcasts:{db.stem}", MasterGamesDb(db)))
+    return out
 
 
 def _next_steps(report: dict, notes: list[str]) -> list[str]:
@@ -400,8 +512,8 @@ def _next_steps(report: dict, notes: list[str]) -> list[str]:
     )
     if (report.get("otb") or {}).get("ambiguous"):
         steps.append(
-            "Several TWIC players fit the name; add an alias or check the "
-            "Elo to pick one (master_games {fide_id})."
+            "Several over-the-board players fit the name; add an alias or "
+            "check the Elo to pick one (master_games {fide_id, db})."
         )
     return steps
 
@@ -418,7 +530,7 @@ def lookup_block(report: dict) -> dict:
             {
                 "otb": {
                     k: otb[k]
-                    for k in ("fide_id", "names", "games", "last_date", "latest_elo", "basis")
+                    for k in ("fide_id", "names", "games", "last_date", "latest_elo", "basis", "sources", "conflicts")
                     if otb.get(k) is not None
                 }
             }
@@ -516,17 +628,19 @@ _APP_OPEN_NOTE = (
 
 
 def register_people_tools(registry: Any) -> None:
-    from .master_games import MasterGamesDb
     from .roster import load_roster, save_roster
     from .tools import ToolError, _b, _i, _obj, _s, _text
 
-    def _master(args: dict) -> Any:
-        if args.get("twic") is False:
-            return None
-        try:
-            return MasterGamesDb(args.get("db"))
-        except ToolError:
-            return None
+    def _otb(args: dict) -> list[tuple[str, Any]]:
+        return otb_databases(
+            args.get("db"),
+            twic=args.get("twic") is not False,
+            broadcasts=args.get("broadcasts") is not False,
+        )
+
+    def _close(dbs: list[tuple[str, Any]]) -> None:
+        for _, db in dbs:
+            db.close()
 
     def _store() -> PeopleStore:
         try:
@@ -544,7 +658,7 @@ def register_people_tools(registry: Any) -> None:
         name = _text(args, "name")
         if not name:
             raise ToolError("name is required.")
-        db = _master(args)
+        dbs = _otb(args)
         try:
             return lookup_person(
                 registry,
@@ -555,11 +669,10 @@ def register_people_tools(registry: Any) -> None:
                 title=_text(args, "title") or None,
                 probe=args.get("probe_handles", True) is not False,
                 people=_store(),
-                master_db=db,
+                otb_dbs=dbs,
             )
         finally:
-            if db is not None:
-                db.close()
+            _close(dbs)
 
     def people_list(args: dict) -> dict:
         store = _store()
@@ -674,7 +787,7 @@ def register_people_tools(registry: Any) -> None:
             if not e.is_me and (not wanted or e.id in wanted)
         ]
         store = _store()
-        db = _master(args)
+        dbs = _otb(args)
         probe = args.get("probe_handles", True) is not False
         summary: dict[str, list[str]] = {
             "account": [], "candidates": [], "otb_only": [], "not_found": []
@@ -693,7 +806,7 @@ def register_people_tools(registry: Any) -> None:
                     title=entry.title or identity.get("title"),
                     probe=probe,
                     people=store,
-                    master_db=db,
+                    otb_dbs=dbs,
                     use_uscf=args.get("uscf", True) is not False,
                 )
                 # What the user confirmed on the roster counts as confirmed.
@@ -739,7 +852,7 @@ def register_people_tools(registry: Any) -> None:
                         ],
                         "otb": {
                             k: (report.get("otb") or {}).get(k)
-                            for k in ("fide_id", "names", "games", "last_date", "latest_elo", "basis")
+                            for k in ("fide_id", "names", "games", "last_date", "latest_elo", "sources")
                             if (report.get("otb") or {}).get(k) is not None
                         },
                         "aliases": row.get("aliases", []),
@@ -747,8 +860,7 @@ def register_people_tools(registry: Any) -> None:
                     }
                 )
         finally:
-            if db is not None:
-                db.close()
+            _close(dbs)
         store.save()
         group_name = _text(args, "group") or roster.event_name
         group = None
@@ -783,8 +895,10 @@ def register_people_tools(registry: Any) -> None:
         "Find one person online and over the board, deterministically and in a "
         "fixed order: your players directory (people.json) → the bundled USCF → "
         "chess.com directory → the US Chess API (their official spelling becomes "
-        "an alias; says whether they ever played USCF-rated online) → the TWIC "
-        "master-games database under every spelling, grouped by FIDE ID → a "
+        "an alias; says whether they ever played USCF-rated online) → OTB games "
+        "under every spelling, grouped by FIDE ID, in the TWIC master-games "
+        "database and every broadcast collection (Lichess/chess.com broadcasts "
+        "of regional events, per-source counts in otb.sources) → a "
         "probe of usernames built from each spelling on chess.com and Lichess "
         "(~8 guesses; kept only when the profile's real name, title or rating "
         "agrees). Returns status (account / candidates / otb_only / not_found), "
@@ -799,7 +913,8 @@ def register_people_tools(registry: Any) -> None:
                 "rating": _i("Known rating; used to tell namesakes apart"),
                 "title": _s("GM, IM, FM…; a matching chess.com/Lichess title counts as evidence"),
                 "probe_handles": _b("Try username guesses on chess.com and Lichess (default true)"),
-                "twic": _b("Search the master-games database (default true)"),
+                "twic": _b("Search the TWIC master-games database (default true)"),
+                "broadcasts": _b("Search every broadcast collection under Documents/lichess_broadcasts (default true)"),
                 "db": _s("Path to master_games.db (default: the app's)"),
             },
             ["name"],
@@ -812,7 +927,7 @@ def register_people_tools(registry: Any) -> None:
         "runs player_lookup on every entrant (or player_ids), adds or updates one "
         "person each in Documents/opponents/people.json — aliases, USCF/FIDE ID, "
         "rating, title, trusted accounts, and a `lookup` block with candidates, "
-        "the TWIC identity and next steps — and a group (tournament file) for "
+        "the OTB identity (TWIC + broadcast collections) and next steps — and a group (tournament file) for "
         "the event with everyone in it. Existing people are matched by USCF ID, "
         "FIDE ID, handle or exact name/alias, and only have blanks filled; "
         "nothing the user typed is replaced. Only trusted matches become "
@@ -827,7 +942,8 @@ def register_people_tools(registry: Any) -> None:
                 "probe_handles": _b("Try username guesses (default true)"),
                 "uscf": _b("Ask the US Chess API per entrant (default true)"),
                 "make_group": _b("Write the group file (default true)"),
-                "twic": _b("Search the master-games database (default true)"),
+                "twic": _b("Search the TWIC master-games database (default true)"),
+                "broadcasts": _b("Search every broadcast collection under Documents/lichess_broadcasts (default true)"),
                 "db": _s("Path to master_games.db (default: the app's)"),
             }
         ),
