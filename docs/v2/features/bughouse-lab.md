@@ -1,179 +1,114 @@
 # Bughouse lab
 
-Status: draft from the old app
-Old code (oracle only): `lib/features/bughouse/`, `lib/widgets/board_editor/`, `tools/bughouse_db/`
+Status: built 2026-09-23 from the web pages (decisions below, not yet seen by the owner)
+Old code (oracle only): `lib/features/bughouse/`, `tools/bughouse_db/`, `tools/mcp/bughouse/`
+Web pages it follows: `python/twic-position-finder/frontend/src/pages/bughouse.astro`, `bughousedb.astro`
 Plan step: 12
 
 ## Purpose
-A bughouse player sets a two-board position up — from the start, a typed line or a dual FEN — and asks
-a neural-network engine what the *team* should do, with sitting and the clock as first-class inputs.
-They leave with a ranked answer for both boards, what the FICS archive played there, and optionally a
-self-play score for the line.
+A bughouse player sets a two-board position up — from the start, by playing, or from a FEN per board —
+and sees every legal move on each board scored for the clock situation they choose: from the precomputed
+Hivemind book when the position is in it, from a live Hivemind search when it is not. They can ask the
+engine what their team should play as a joint action over both boards, and see what the FICS archive played.
 
 ## Screen
-Reached from the mode menu, group `Lab`, as `Bughouse lab`; the whole mode is removed from the menu
-when the build carries no engine. No screenshot.
+Reached from the mode menu as `Bughouse lab`; the entry is left out when the build carries no engine.
+One screen, no scrolling at an ordinary window size, laid out as the BughouseDB page: the two boards on
+the left, the question and the tables on the right.
 
-- **Top bar** — breadcrumb, a `Board` overflow menu (`Flip board A`, `Flip board B`), the mode
-  switcher, a settings gear repeating the engine settings.
-- **Board columns** — `Board 1` and `Board 2` side by side, each stacking header, far seat, far
-  reserve, the board (240–400px, sized from the leftover height so the pair never resizes mid-game),
-  near reserve, near seat, and a fixed 68px movetext column numbered as *that* board counts, drops
-  written `P@f7`, the cursor's ply lit, click to jump, empty `No moves on this board yet.` On a
-  narrow window the side panel stacks below instead of beside.
-- **Board header** — the board's name, the last move played *on that board* (`12. Nf3`, blank before
-  the first), a copy-moves button (disabled while empty) and `Draw board 1 the other way up`.
-- **Seat rows** — four people, not two colours: a letter badge `A`/`B`/`C`/`D` on a white or black
-  chip (ours outlined), the role in words (`You`, `Opponent`, `Partner`, `Partner's opponent`), a
-  fixed-width to-move marker, and an editable clock (default 3:00, `m:ss` or bare seconds, committed
-  on blur or Enter). Between each seat and the board its reserve: five slots (pawn to queen, never a
-  king) always drawn, empty ones faint so the tray never reflows, every piece counted.
-- **Line controls** (under both boards) — start / back / `cursor / length` / forward / end, `Take the
-  last move back`, a copy menu (`Both boards' moves`, `Dual FEN`), `New game`, and the FICS book
-  toggle, disabled with `No FICS bughouse database on this machine`.
-- **Side panel** — one card in three modes, with tabs `Engine`, `Board`, `Engine settings`; outside
-  analysis an eyebrow reads `EDIT POSITION` or `ENGINE TOURNAMENT` and the corner button says `Done`.
-- **Score header** (pinned, never scrolls) — pause/resume, the score at 26px, `You + Partner`, icons
-  for `Edit position` and `Engine tournament`, and under it `depth 14 · 120000 nodes · 8s`, or
-  `Loading the network…` / `Thinking…` / `Paused` / `Comparing clock scenarios…`, plus `· read off
-  their search` when our team had no move and the number came from theirs.
-- **Engine tab** — per board, `Board 1   White to move` and one row slot per requested line (empty
-  slots keep their height): a 54px score column, then that board's part of the joint line as numbered
-  SAN, `sit` for a deliberate pass, blank where the seat had nothing to decide. Superseded rows read
-  `no longer fits this position`; before the first result, `Thinking…` or `Analysis paused`. A
-  comparison puts its own block above them (`Comparing… 2 of 3 ready`, `Comparison complete`,
-  `Comparison stopped · 1 of 3 ready`; a row per scenario — `Ahead (may sit)`, `Level or behind`,
-  `Forced to move on 1` — with score and seat-labelled moves) and heads the live lines `CURRENT
-  CLOCK SETTINGS · PAUSED`.
-- **Board tab** — `You play on Board 1` (`White on 1` / `Black on 1`), `Your team's clock advantage`
-  (`Ahead` / `Level` / `Behind`), `Use the board clocks` (the segments then go read-only; both
-  diagonal pairs must agree by more than 5 seconds, and clocks do not run in this model),
-  `Require a move` (`Allow sitting` / `On 1` / `On 2`), and `Compare clock scenarios`.
-- **Engine settings tab** — number steppers for `CPU cores` (Linux only, default 2, capped by the
-  parent CPU set; elsewhere `CPU cores: managed by this engine build`), `Lines` (1–10, default 3),
-  `Memory` (16–65536 MB, default 256), `Time per pass` (1–3600 s, default 30) and `Batch size`
-  (1–1024, default 8), with the note that larger batches may be faster but not better.
-- **Banner** — a failure or a notice above the tabs; a failure carries `Copy full report`, `Show
-  details` over a bounded report, and on Windows `Download the Microsoft runtime`.
-- **FICS archive block** — under the lines when the book is open: `FICS archive`, `{games} games ·
-  {years}` (read from the book's own metadata), a `Board 1` / `Board 2` filter, then up to 12 recorded continuations with a W/D/L bar
-  always read as *your team* and an average-rating tooltip. Empty it says `No archived game reached
-  this position.`, `Past the archive, which is indexed to {plies} plies.`, or `No continuations meet the
-  archive minimum of {n} games, or this is the end of the indexed line.`
-- **Edit position panel** — `Place pieces` with the shared spare-piece palette and its instruction
-  paragraph, then per board `To move`, four castling chips (`K Q k q`), `Start position`, `Clear`;
-  then `Dual FEN` with `<Board 1 FEN>|<Board 2 FEN>`, `Load`, `Copy current`, `Paste`.
-- **Engine tournament panel** — `New tournament` or `Playing game 4 of 10` with `Stop`; a `HISTORY`
-  list (four rows before scrolling, newest first, each with its score); then the run:
-  `WHITE ON BOARD 1 SCORED` with the score, percentage, `6W 2D 2L`, a 95% sampling range, excluded
-  unfinished games and draws by move limit or mutual sitting; the opening label with `Show`; a
-  progress bar; `Follow the game being played`; the games table headed `A + C (White on 1)` / `B + D
-  (Black on 1)`; a shut `Crosstable` and `Settings`; `Delete this tournament`. Empty: `No tournaments
-  yet` — `Set a position up on the boards, then play it out.`
+- **Boards** — board 1 has A (White) and C (Black), board 2 D (White) and B (Black); teams A + B and C + D.
+  Our team's colour is at the bottom of board 1 until `Flip boards`. Each board is as large as the window
+  allows (200–480 px), the last move marked, a move played by click or drag.
+- **Seat rows** — above and below each board: a plain turn dot beside the player on move, `Player A`
+  in grey (in the text colour when on move), then that player's reserve, each piece once with its count.
+  A reserve piece of the player on move is dragged onto the board, or clicked and then its square clicked;
+  while it is picked up the squares it may drop on are ringed.
+- **Move list** — under each board its own moves, numbered as that board counts them (`1. e4 d5`), the
+  current one marked, the ones stepped back past faint; click one to go there. Four step buttons under it.
+- **Setup boxes** — per board a FEN box and one reserve box per player (`A`, `C`; `D`, `B`), filled from
+  the table as it is played; `Set position` under both boards and a live `Pieces outstanding: …` line
+  (`Too many: …` for extras). A dual FEN pasted into either FEN box fills both boards.
+- **Chips** — `Our team` (A + B / C + D), `Must move on` (Either / Board 1 / Board 2), `Time` (`A + B may
+  sit` / `Even` / `C + D may sit`, Even first, each with its one-line tooltip) and `Search` (3 s / 10 s / 30 s).
+- **Buttons** — `Analyze` (`Stop` while it runs), `FICS archive` when this machine has it, `Flip boards`,
+  `New game`.
+- **Status line** — one line, always there: `From the Hivemind book.`, `Not in the book · searching 3 of
+  10…`, `Not in the book · Hivemind scored the likeliest moves.`, `Hivemind is searching for A + B…`,
+  `Comparing C + D…`, or what was refused or failed, in the error colour only then.
+- **Analyze result** — after Analyze: `A + B: +0.78` (or `Mate for A + B`), then up to three rows `Best`,
+  `2`, `3`, each the seat-lettered half on each board where our team is on move (`A dxe5`, `B sits`) and its
+  score. The headline's tooltip says where zero came from.
+- **Move tables** — one per board side by side, a plain rule between them: header `Move: Player D`, then
+  every legal move on that board, drops included, with its score for the chosen `Time`, read from the
+  mover's side, best first and bold; unscored moves `—` below by SAN. The score's tooltip is the line after
+  the move. The `Score` header's tooltip says it is Hivemind's scale, not pawns.
+- **FICS archive** — under the tables while open: `FICS archive · {games} games here · {years}` and up to
+  12 continuations, most played first: seat and SAN (`D exd5`), games, and a won / drawn / lost bar for
+  our team (average rating and unfinished games in the tooltip). Empty: `No archived game reached this
+  position.`, `Past the archive, which is indexed to {plies} plies.`, or `No continuations meet the archive
+  minimum of {n} games, or this is the end of the indexed line.`
+- **Engine tournament panel** — not built (see Decisions).
 
 ## Actions
-**Play a move or a drop** — drag on either board, or click a reserve piece then a square (its legal
-squares light up) → the ply joins the whole-table line, the other board's reserve is credited and
-analysis restarts → `Nf3 is not legal here.`, `That drop is not legal.`, `It is not white's turn on
-board 2.`
-**Walk the line** — arrows, Home/End, a movetext chip, undo; `New game` keeps the team, stance and
-clocks and clears both boards.
-**Edit a position** — the pencil or the corner button → the boards become the shared lichess-style
-editor: drag a piece, paint with a brush held down, right-click to clear or swap the brush's colour;
-reserve slots take a click to add and a right-click to remove; turn, castling, `Start position` and
-`Clear` sit beside them; `Load` replaces both boards from a pasted dual FEN and resets the line,
-`Position loaded.` → `That leaves an impossible position.`, `There is no rook on the square that
-right needs.`, `That is not a valid dual FEN.`
-**Analyse** — starts when the pane appears, stops when the mode is left (a running tournament keeps
-the process alive), pause/resume from the header. Both teams are searched on every pass, because a
-two-board position has no single side to move; passes start at 2 s and double up to `Time per pass`,
-carrying nothing between them → `Analysis failed: …` with the diagnostic attached.
-**Read the score** — the number is **not pawns**: it is Hivemind's own scale (`180·tan(1.56·Q)`)
-re-centred. The `TimeAdvantage` bit alone is worth about ±0.58 Q — raw, a level position reads about
-−2.3 when neither team may sit — so the offset is measured from this position's two searches, and the
-tooltip says whether zero was measured here, carried from the last position, or assumed.
-**Hover a line** — a row previews its first ply on both boards and reserves, a move token previews
-through that move, leaving a token falls back to the row and leaving the row restores the live
-position. User moves are blocked while a preview is up and nothing is written to the line.
-**Play a continuation** — click a row or a move token → the joint sequence is played through that
-point, including the other board's halves → `That line no longer fits the position.`
-**Set the table rules** — team, clock stance, `Use the board clocks`, `Require a move`; each restarts
-the search and throws away the measured zero.
-**Compare clock scenarios** — Board tab → three 6 s searches run in turn, results appear as they land,
-live analysis pauses meanwhile and resumes after → `Comparison failed: …`
-**Browse the FICS archive** — the book icon → the archive opens in the Engine tab; a row hovers a
-preview and clicks to play the move. The key is the *pair* of positions, so every interleaving that
-reaches the same place is merged.
-**Run a tournament** — the trophy icon, then `New tournament`: a name defaulted to the line; a start
-position from `The boards` / `A line` (SAN, `2:` prefixes board 2, board 1 played through first) /
-`A dual FEN`; `Games` (1–1000, default 10); `A + C thinks` and `B + D thinks` in nodes a move
-(50–1,000,000, default 800 — nodes, so a run replays); Advanced holds variety (8 sampled plies from
-the top 3 within 5% of the best), `Swap seats every other game`, a whole-run clock stance, ply limit
-(240, filed as a draw), memory and batch → `Play 10 games` → `That is not a position yet — check the
-moves or the FEN.`, `Could not create the match directory: …`
-**Read a run** — click a history row; `Show` puts the opening on the boards, a games row replays that
-game there, `Follow the game being played` returns to the live one → `Could not delete the match: …`
-**Keyboard** — ← / → a ply, Home / End the ends of the line; any text field wins the keys.
+**Play a move or a drop** — on a board, a table row or an archive row → it joins that board's list after
+whatever is on the boards, a capture is credited to the partner's reserve, the tables update → `That drop is
+not legal.`, `It is not black’s turn on board 2.`, `{uci} is not legal here.`
+**Step a board** — its list, its buttons, or ← → Home End for the board last played or stepped on (a text
+box keeps those keys) → only that board moves → `Can’t step there: P@d5 on board 2 would have no piece to
+drop.` when the other board dropped a piece this step would take back.
+**Set a position** — `Set position` → both boards from the boxes, a new line → the problem under the
+board's boxes: `Player B: A king can’t be in reserve (N is the knight).`, `A FEN has 8 ranks; this has 7.`,
+`That leaves an impossible position.`, `That is not a valid dual FEN.`
+**Read the scores** — the book's when the position is in it, at once for every clock case; otherwise each
+team with a move is searched (400 nodes) for the zero and to rank its moves, then each board's four
+likeliest moves are played and the answering team searched (200 nodes), as the book builder and
+BughouseDB's `Analyze locally` do. Searches are remembered for the session. → `Analysis failed: …`, or the
+reason the engine would not start, which stops the tables asking until `Analyze` is pressed.
+**Read the score** — Hivemind's own scale (`180·tan(1.56·Q)`), re-centred: each team's search of the
+position gives the offset, `(q_A+B + q_C+D) / 2`, taken off in Q; when a team has no move the level-table
+offset stands in. 0.00 is level. The book stores the same scale.
+**Analyze** — our team searched for the `Search` time with `Must move on` and our clock bit, then the other
+team for the zero → the result above the tables; `Stop` keeps what was found against the assumed zero; a
+new position, clock or question throws the answer away → `{team} has no move here.`
+**Point at a row** — a table, analysis or archive row draws its move as an arrow (a drop: the piece faint on
+its square) on its board; leaving the row takes it away; clicking plays it.
+**New game / Flip boards** — the start on both boards, the chips kept / the other colour at the bottom.
+**Actions menu** — Analyze, New game, Flip boards, Copy dual FEN, Paste dual FEN.
 
 ## Data
-- **Engine bundle** — `hivemind` (~1.9 MB), the ONNX Runtime library (~28 MB) and `hivemind.onnx`
-  (~54 MB) are extracted gzipped from `assets/bughouse/` on first use into the app's support
-  directory, then verified against the shipped `manifest.json` (size and SHA-256) before every
-  launch; mismatched files are removed and rewritten. On Windows the build's x64 VC++ DLLs are kept
-  privately under `data/bughouse-runtime/` and checked the same way; only engine-local files are ever
-  repaired. Failures name the exit code and NTSTATUS. All of it is MIT (Hivemind, aminwoo).
-- **Engine settings** — five `bughouse.engine.*` preference keys; a broken store costs the knobs.
-- **FICS archive** — read-only `bughouse_book.db` (SQLite, ~177 MB from a 2 GB corpus, 21 years of
-  bughouse-db.org BPGN), looked for under `$BUGHOUSE_DB_HOME`, then
-  `~/.local/share/chess-prep/bughouse-db/`, then the app support directory; built by
-  `tools/bughouse_db` and never written by the app. Keyed by an FNV-1a hash of the canonical dual FEN
-  (pocket letters in `KQRBNP` order — one byte of disagreement is a total miss). Results are
-  team-relative and `unknown` is real: about one archived game in nine ends `*`.
-- **Tournaments** — one directory per run under `Documents/bughouse_matches/<id>/` holding
-  `match.json` (config and every game) and `games.bpgn` in the form `tools/bughouse_db` can index;
-  deleting quarantines it under `.trash`.
-- **Precomputed Hivemind book** — `~/.local/share/chess-prep/bughouse-db/hivemind_book.db`, beside
-  the FICS book on the same key: every legal move on both boards scored for the four clock cases with
-  a principal variation, to ply 10. Published to **BughouseDB** (`/bughousedb` on the website), and
-  **the desktop lab does not read it**.
+- **Engine** — `hivemind` (~3.7 MB on Linux), the ONNX Runtime library (~28 MB) and `hivemind.onnx` (~54 MB)
+  from `assets/bughouse/`, installed into `<support>/bughouse/` and checked against `manifest.json` (size
+  and SHA-256) before every launch; a mismatch is written again from the asset under a temporary name. On
+  Windows the build's VC++ DLLs under `data/bughouse-runtime/` are copied beside it the same way. Hivemind
+  runs on half of the machine's cores, 256 MB hash, batch 8. MIT (aminwoo).
+- **Hivemind book** — read-only `hivemind_book.db` (`tools/bughouse_db/hivemind_book.py`), looked for under
+  `$BUGHOUSE_DB_HOME` alone when set, else `~/.local/share/chess-prep/bughouse-db/`, then the support folder.
+  Keyed by FNV-1a of each board's four FEN fields with the reserve in `KQRBNP` order, joined by ` | `.
+  Scores are A + B's; a book in the old seat lettering (board 1 Black `B`) is read with `B` and `C` swapped.
+- **FICS archive** — read-only `bughouse_book.db` beside it, same key; results team-relative.
+- **Nothing is written.** The lab is a scratchpad: leaving the mode keeps the table for the session,
+  quitting loses it.
 
 ## Keep / Change / Drop
-Keep — Top bar
-Keep — Board columns
-Keep — Board header
-Keep — Seat rows
-Keep — Line controls
-Keep — Side panel
-Keep — Score header
-Keep — Engine tab
-Keep — Board tab
-Keep — Engine settings tab
-Keep — Banner
-Keep — FICS archive block
-Keep — Edit position panel
-Keep — Engine tournament panel
-Keep — Play a move or a drop
-Keep — Walk the line
-Keep — Edit a position
-Keep — Analyse
-Keep — Read the score
-Keep — Hover a line
-Keep — Play a continuation
-Keep — Set the table rules
-Keep — Compare clock scenarios
-Keep — Browse the FICS archive
-Keep — Run a tournament
-Keep — Read a run
-Keep — Keyboard
+Keep — Boards
+Keep — Seat rows (Change: plain dot and `Player A`, reserve only as held pieces, from the web page)
+Keep — Move list (Change: per board, each board steps on its own, from the web page)
+Change — Setup boxes replace the Edit position panel (FEN and reserve per board, pieces outstanding)
+Change — Chips replace the Board tab (Our team, Must move on, Time, Search)
+Change — Move tables replace the Engine tab's lines (every legal move scored, book or live)
+Keep — Analyze (Change: one search for the chosen time, not continuous passes)
+Keep — Read the score (measured, or assumed when a team has no move; no carried zero)
+Keep — FICS archive (a toggle under the tables)
+Keep — Point at a row, Play a move or a drop, Step a board, Set a position
+Drop — Score header, Engine settings tab, editable clocks, Use the board clocks, Compare clock scenarios
+Keep — Engine tournament panel (not built yet)
 
-Quirks to rule on: the printed score is Hivemind's re-centred scale, not pawns, and its zero can be
-measured, carried or assumed; `Level` and `Behind` run the identical search because the engine's clock
-model is one bit; the lab saves nothing — leaving the mode or `New game` loses the line, and only
-tournament games reach disk; a typed opening plays board 1 through before board 2, so a capture in it
-can produce the wrong reserves; the mode vanishes from the menu when the engine was not fetched.
-
-## Questions for the owner
-- Should the lab save and reopen a two-board line, or stay a scratchpad?
-- Does the desktop lab read the precomputed Hivemind book, or does that stay on the website?
-- Do bughouse matches belong in the Engine tournament mode instead of a panel inside the lab?
-- Is `Compare clock scenarios` worth keeping, when two of its three cases search identically?
+## Decisions (2026-09-23, made without the owner)
+- The lab stays a scratchpad; nothing is saved but tournament games (tournaments not built yet).
+- The desktop lab reads the precomputed Hivemind book, and searches live when the position or clock case is
+  not in it. It never writes to the book.
+- The FICS archive stays, shut by default, when the file is on this machine.
+- `Compare clock scenarios` is dropped: the three `Time` chips replace it.
+- No engine settings rows: Hivemind takes half the machine's cores (the Stockfish setting defaults to one,
+  far too slow for a network engine), 256 MB and batch 8, the old app's defaults.
+- The lab's own search depths (400 / 200 nodes, four moves a board) are fixed.

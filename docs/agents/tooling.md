@@ -26,7 +26,8 @@ heavy checks/builds use `scripts/ci.sh with -- COMMAND`.
 
 The app hides Bughouse Lab without the optional bughouse assets. Archive/book
 data lives under `~/.local/share/chess-prep/bughouse-db/`, not repo/assets;
-the app does not currently read that offline book.
+the `v2` lab reads `hivemind_book.db` and `bughouse_book.db` there read only
+(`$BUGHOUSE_DB_HOME` overrides; the headless driver points it into its profile).
 
 The MCP server and app share files only. The server reads `master_games.db`
 and `app_games.db` read-only and writes its own runs under `~/Documents` and

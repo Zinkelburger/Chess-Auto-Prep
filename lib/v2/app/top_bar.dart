@@ -17,6 +17,7 @@ class TopBar extends StatelessWidget {
     super.key,
     required this.mode,
     required this.onMode,
+    required this.offered,
     required this.onSettings,
     required this.listShown,
     required this.onToggleList,
@@ -26,6 +27,11 @@ class TopBar extends StatelessWidget {
 
   final Mode mode;
   final ValueChanged<Mode> onMode;
+
+  /// Whether this build can offer [Mode] at all: the Bughouse lab needs its
+  /// engine, which a build may not carry. A mode not offered is left out
+  /// of the menu, not greyed.
+  final bool Function(Mode mode) offered;
   final VoidCallback onSettings;
   final bool listShown;
   final VoidCallback onToggleList;
@@ -48,7 +54,7 @@ class TopBar extends StatelessWidget {
       child: Row(
         children: [
           if (!listShown) ListToggle(shown: false, onPressed: onToggleList),
-          _ModeMenu(mode: mode, onMode: onMode),
+          _ModeMenu(mode: mode, onMode: onMode, offered: offered),
           const SizedBox(width: Space.s),
           _ActionsMenu(actions: actions, changes: actionsChange),
           const Spacer(),
@@ -84,31 +90,44 @@ const _modes = [
 /// The modes, and nothing else: the settings are the gear at the other end
 /// of the row.
 class _ModeMenu extends StatelessWidget {
-  const _ModeMenu({required this.mode, required this.onMode});
+  const _ModeMenu({
+    required this.mode,
+    required this.onMode,
+    required this.offered,
+  });
 
   final Mode mode;
   final ValueChanged<Mode> onMode;
+  final bool Function(Mode mode) offered;
 
   /// The mode this entry switches to, or null when `v2` does not have it yet
   /// and the entry is there only to show that the product does.
   Mode? _modeNamed(String name) =>
       Mode.values.where((mode) => mode.label == name).firstOrNull;
 
+  /// Every entry is listed — `v2`'s modes and the ones still to come — but
+  /// a mode this build cannot offer.
+  bool _listed(String name) => switch (_modeNamed(name)) {
+    null => true,
+    final named => offered(named),
+  };
+
   @override
   Widget build(BuildContext context) {
     return MenuAnchor(
       menuChildren: [
         for (final name in _modes)
-          MenuItemButton(
-            onPressed: switch (_modeNamed(name)) {
-              null => null,
-              final named => () => onMode(named),
-            },
-            leadingIcon: name == mode.label
-                ? const Icon(Icons.check, size: IconSize.menu)
-                : const SizedBox(width: IconSize.menu),
-            child: Text(name),
-          ),
+          if (_listed(name))
+            MenuItemButton(
+              onPressed: switch (_modeNamed(name)) {
+                null => null,
+                final named => () => onMode(named),
+              },
+              leadingIcon: name == mode.label
+                  ? const Icon(Icons.check, size: IconSize.menu)
+                  : const SizedBox(width: IconSize.menu),
+              child: Text(name),
+            ),
       ],
       builder: (context, controller, _) => TextButton.icon(
         onPressed: controller.isOpen ? controller.close : controller.open,

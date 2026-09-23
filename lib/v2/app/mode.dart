@@ -1,3 +1,8 @@
+import 'package:flutter/foundation.dart';
+
+import '../features/bughouse/archive_moves.dart';
+import '../features/bughouse/bughouse_lab.dart';
+import '../features/bughouse/table_search.dart';
 import '../features/library/chapter_outline.dart';
 import '../features/library/library.dart';
 import '../features/my_games/game_book.dart';
@@ -15,7 +20,8 @@ enum Mode {
   pgnViewer('PGN Viewer'),
   study('Study'),
   tactics('Tactics'),
-  myGames('My games');
+  myGames('My games'),
+  bughouse('Bughouse lab');
 
   const Mode(this.label);
 
@@ -76,5 +82,33 @@ final class TrainingModes {
     book.dispose();
     tactics.dispose();
     puzzles.dispose();
+  }
+}
+
+/// The owners behind the labs, the modes with a screen of their own: the
+/// Bughouse lab's table, what Hivemind and its book say about it, and the
+/// FICS archive. [offered] says whether this build has the engine, which
+/// is what puts the lab in the mode menu at all.
+final class LabModes {
+  LabModes({required this.lab, required this.search, required this.archive});
+
+  final BughouseLab lab;
+  final TableSearch search;
+  final ArchiveMoves archive;
+  final offered = ValueNotifier(false);
+  bool _disposed = false;
+
+  /// Asks whether the build carries the engine, and offers the lab if so.
+  Future<void> offer(Future<bool> Function() bundled) async {
+    final yes = await bundled();
+    if (!_disposed) offered.value = yes;
+  }
+
+  void dispose() {
+    _disposed = true;
+    offered.dispose();
+    archive.dispose();
+    search.dispose();
+    lab.dispose();
   }
 }

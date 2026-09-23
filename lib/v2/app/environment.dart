@@ -273,9 +273,11 @@ final class AppEnvironment {
     memoryMb: settings.value.engineMemoryMb,
   );
 
-  /// Hivemind with the cores the settings give the engine now.
+  /// Hivemind on half of this machine's cores, as BughouseDB runs it. Not
+  /// the Stockfish setting: that defaults to one core, and a network engine
+  /// on one core takes a minute over what the lab asks in ten seconds.
   Future<HivemindStart> startHivemind() =>
-      bughouse.launch(cores: settings.value.engineCores);
+      bughouse.launch(cores: max(1, Platform.numberOfProcessors ~/ 2));
 }
 
 double _noJitter() => 0;

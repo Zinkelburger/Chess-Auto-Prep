@@ -1,4 +1,7 @@
 import '../chess/tactics/game_ids.dart' show GameSite;
+import '../features/bughouse/archive_moves.dart';
+import '../features/bughouse/bughouse_lab.dart';
+import '../features/bughouse/table_search.dart';
 import '../features/library/chapter_outline.dart';
 import '../features/library/library.dart';
 import '../features/my_games/game_book.dart';
@@ -138,4 +141,18 @@ final class TrainingWiring {
     modes.myGames.removeListener(_gamesMayHaveChanged);
     modes.dispose();
   }
+}
+
+/// The Bughouse lab over the environment's engine and books.
+LabModes wireLabModes(AppEnvironment env) {
+  final lab = BughouseLab();
+  return LabModes(
+    lab: lab,
+    search: TableSearch(
+      lab: lab,
+      book: env.bughouse.hivemindBook,
+      startEngine: env.startHivemind,
+    ),
+    archive: ArchiveMoves(lab: lab, book: env.bughouse.ficsBook),
+  );
 }

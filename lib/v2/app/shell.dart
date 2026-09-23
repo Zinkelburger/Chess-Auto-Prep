@@ -44,6 +44,7 @@ class Shell extends StatefulWidget {
     required this.workspace,
     required this.documents,
     required this.training,
+    required this.labs,
     required this.settingRows,
     required this.settingsAlso,
   });
@@ -52,6 +53,7 @@ class Shell extends StatefulWidget {
   final Workspace workspace;
   final DocumentModes documents;
   final TrainingModes training;
+  final LabModes labs;
 
   /// The settings page's rows, as the app wires them, and the one owner
   /// besides the store they are built from: the Lichess account.
@@ -76,6 +78,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     requests: _requests,
     documents: _docs,
     training: _train,
+    labs: widget.labs,
   );
 
   ModeView get _view => _views[_requests.mode]!;
@@ -174,6 +177,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   );
 
   void _switchTo(Mode mode) {
+    _view.left();
     _requests.switchTo(mode);
     _view.entered();
   }
@@ -326,6 +330,13 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     const SingleActivator(LogicalKeyboardKey.arrowUp): () => _walk(-1),
   };
 
+  /// The window's keys a mode with a screen of its own keeps: the settings
+  /// and the actions typed for. The rest are the workspace's.
+  Map<ShortcutActivator, VoidCallback> get _screenKeys => {
+    ..._command(LogicalKeyboardKey.comma, () => unawaited(_settings())),
+    ..._command(LogicalKeyboardKey.keyK, () => unawaited(_palette())),
+  };
+
   /// [key] with Ctrl, and with Cmd for macOS.
   static Map<ShortcutActivator, VoidCallback> _command(
     LogicalKeyboardKey key,
@@ -341,37 +352,45 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: ListenableBuilder(
-        listenable: _requests,
-        builder: (context, _) => Column(
-          children: [
-            TopBar(
-              mode: _requests.mode,
-              onMode: _switchTo,
-              onSettings: () => unawaited(_settings()),
-              listShown: _listShown,
-              onToggleList: _toggleList,
-              actions: _actions,
-              // What the entries' enabled states read, heard only while the
-              // menu is open: the bar itself shows none of it.
-              actionsChange: Listenable.merge([_view.changes, _editing, _tabs]),
-            ),
-            const Divider(height: 1),
-            if (_requests.status case final status?) ErrorBar(status),
-            Expanded(
-              child: WorkspaceKeys(
-                session: _ws.session,
-                analysis: _ws.analysis,
-                editing: _editing,
-                tabs: _tabs,
-                extra: _windowKeys,
-                child: _columns(),
-              ),
-            ),
-          ],
-        ),
+        listenable: Listenable.merge([_requests, widget.labs.offered]),
+        builder: (context, _) => _window(_view.screen(_screenKeys)),
       ),
     );
   }
+
+  /// The top bar, the status, and under them [screen] — a mode's own — or
+  /// the columns over the workspace.
+  Widget _window(Widget? screen) => Column(
+    children: [
+      TopBar(
+        mode: _requests.mode,
+        onMode: _switchTo,
+        offered: (mode) => mode != Mode.bughouse || widget.labs.offered.value,
+        onSettings: () => unawaited(_settings()),
+        // A mode with a screen of its own has no list to show or hide.
+        listShown: _listShown || screen != null,
+        onToggleList: _toggleList,
+        actions: _actions,
+        // What the entries' enabled states read, heard only while the
+        // menu is open: the bar itself shows none of it.
+        actionsChange: Listenable.merge([_view.changes, _editing, _tabs]),
+      ),
+      const Divider(height: 1),
+      if (_requests.status case final status?) ErrorBar(status),
+      Expanded(
+        child:
+            screen ??
+            WorkspaceKeys(
+              session: _ws.session,
+              analysis: _ws.analysis,
+              editing: _editing,
+              tabs: _tabs,
+              extra: _windowKeys,
+              child: _columns(),
+            ),
+      ),
+    ],
+  );
 
   /// The columns the mode puts side by side, under one set of keys: the
   /// mode's own list, the outline when a repertoire chapter is open, and the

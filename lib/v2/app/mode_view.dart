@@ -2,10 +2,12 @@ import 'dart:async';
 
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../chess/book/book_check.dart' show BookPlace;
 import '../chess/tactics/puzzle.dart';
+import '../features/bughouse/bughouse_screen.dart';
 import '../features/library/library.dart';
 import '../features/library/library_panel.dart';
 import '../features/my_games/book_pane.dart';
@@ -97,6 +99,14 @@ abstract base class ModeView {
 
   /// Called when the user switches to this mode.
   void entered() {}
+
+  /// Called when the user switches away from it.
+  void left() {}
+
+  /// The whole of the window under the top bar, for a mode that is a
+  /// screen of its own rather than a list beside the workspace; null for
+  /// the rest. The screen binds [windowKeys] beside its own.
+  Widget? screen(Map<ShortcutActivator, VoidCallback> windowKeys) => null;
 
   void dispose() => tabs.dispose();
 
@@ -397,12 +407,75 @@ final class MyGamesView extends ModeView {
   ];
 }
 
+/// The Bughouse lab: its own screen, two boards and what Hivemind makes
+/// of them, with nothing of the workspace but the window around it. The
+/// engine searches only while it is on screen.
+final class BughouseView extends ModeView {
+  BughouseView(Workspace workspace, this._labs)
+    : super(workspace, readingTabs());
+
+  final LabModes _labs;
+
+  @override
+  Widget list(Widget toggle) => const SizedBox.shrink();
+
+  @override
+  Widget screen(Map<ShortcutActivator, VoidCallback> windowKeys) =>
+      BughouseScreen(
+        lab: _labs.lab,
+        search: _labs.search,
+        archive: _labs.archive,
+        windowKeys: windowKeys,
+      );
+
+  @override
+  Listenable get changes => Listenable.merge([_labs.lab, _labs.search]);
+
+  @override
+  void entered() {
+    _labs.search.open();
+    unawaited(_labs.archive.open());
+  }
+
+  @override
+  void left() => _labs.search.close();
+
+  @override
+  List<AppAction> actions(ModeMenu menu) {
+    final lab = _labs.lab;
+    final search = _labs.search;
+    return [
+      AppAction(
+        'Analyze',
+        () => unawaited(search.analyze()),
+        group: 'Bughouse',
+      ),
+      AppAction('New game', lab.newGame, group: 'Bughouse'),
+      AppAction('Flip boards', lab.flip, group: 'Bughouse'),
+      AppAction(
+        'Copy dual FEN',
+        () => unawaited(
+          Clipboard.setData(ClipboardData(text: lab.position.dualFen)),
+        ),
+        group: 'Position',
+      ),
+      AppAction('Paste dual FEN', () => unawaited(_paste()), group: 'Position'),
+    ];
+  }
+
+  Future<void> _paste() async {
+    final text = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
+    if (text != null && text.trim().isNotEmpty) _labs.lab.loadDualFen(text);
+  }
+}
+
 /// The view of each mode, made once for the window.
 Map<Mode, ModeView> modeViews({
   required Workspace workspace,
   required WorkspaceRequests requests,
   required DocumentModes documents,
   required TrainingModes training,
+  required LabModes labs,
 }) => {
   for (final mode in Mode.values)
     mode: switch (mode) {
@@ -411,6 +484,7 @@ Map<Mode, ModeView> modeViews({
       Mode.study => StudyView(workspace, requests, documents),
       Mode.tactics => TacticsView(workspace, training),
       Mode.myGames => MyGamesView(workspace, requests, training),
+      Mode.bughouse => BughouseView(workspace, labs),
     },
 };
 

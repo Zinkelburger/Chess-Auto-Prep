@@ -126,6 +126,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
         workspace: _parts.workspace,
         documents: _parts.documents,
         training: _parts.training,
+        labs: _parts.labs,
         settingRows: _settingRows,
         settingsAlso: _parts.account,
       ),

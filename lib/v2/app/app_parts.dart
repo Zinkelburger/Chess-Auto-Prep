@@ -83,6 +83,9 @@ final class AppParts {
   /// The user's downloaded games, as the review and the book read them.
   GamesCache get gamesCache => _training.games;
 
+  /// The labs: the Bughouse lab's owners.
+  late final labs = wireLabModes(env);
+
   /// Reads what the app starts from: the repertoires, the settings and the
   /// account, then the engine with the settings it was left with, and the
   /// user's games.
@@ -91,10 +94,12 @@ final class AppParts {
     unawaited(training.myGames.load());
     await settings.load();
     unawaited(account.load());
+    unawaited(labs.offer(env.bughouse.bundled));
     await _workspace.start();
   }
 
   void dispose() {
+    labs.dispose();
     requests.dispose();
     _training.dispose();
     _workspace.dispose();

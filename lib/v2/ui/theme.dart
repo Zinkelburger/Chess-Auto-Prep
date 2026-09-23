@@ -485,3 +485,54 @@ const resultBarBlackInk = Color(0xFF9A9AA0);
 
 /// The number in a bar part: mono at the small size.
 const resultBarText = TextStyle(fontFamily: 'SourceCodePro', fontSize: 12);
+
+/// The Bughouse lab, laid out as the BughouseDB page: two boards side by
+/// side, each as large as the window leaves room for between these two.
+const labBoardMin = 200.0;
+const labBoardMax = 480.0;
+
+/// What the left column needs under and over the boards: the seat rows,
+/// the move list and its buttons, the setup boxes and the pieces line.
+const labBoardChrome = 330.0;
+
+/// The narrowest the right-hand panel may become before the boards shrink.
+const labPanelMinWidth = 540.0;
+
+/// The gap between the two boards, and between the boards and the panel.
+const labBoardGap = 20.0;
+const labColumnGap = 28.0;
+
+/// A seat row beside a board: the turn dot, `Player A`, the reserve.
+const labSeatHeight = 40.0;
+const labTurnDot = 11.0;
+
+/// A reserve piece in a seat row, and the room its count takes.
+const labReservePiece = 30.0;
+
+/// Each board's own move list: a few moves tall, then it scrolls.
+const labMoveListHeight = 80.0;
+const labMoveNumberWidth = 34.0;
+
+/// The label column of the right panel's rows (`Our team`, `Time`).
+const labLabelWidth = 104.0;
+
+/// A row of a board's move table, and its score column.
+const labTableRowHeight = 28.0;
+const labScoreWidth = 60.0;
+
+/// The status line over the tables: one line tall whatever it says, so the
+/// tables never move.
+const labStatusHeight = 30.0;
+
+/// The setup boxes' text: FENs and reserves in mono at the small size.
+const labSetupText = TextStyle(fontFamily: 'SourceCodePro', fontSize: 12);
+
+/// The turn dot of the seat to move: White's plain white, Black's black in
+/// a grey ring so it shows on the dark panel. A fact, not decoration.
+const labWhiteDot = Color(0xFFFFFFFF);
+const labBlackDot = Color(0xFF000000);
+const labBlackDotRing = Color(0xFF5A5A60);
+
+/// A move pointed at in a table, or the squares a picked-up reserve piece
+/// can be dropped on: Lichess's pale blue.
+const labHintColor = Color(0x99003088);

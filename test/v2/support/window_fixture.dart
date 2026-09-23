@@ -5,6 +5,9 @@ import 'package:chess_auto_prep/v2/app/shell.dart';
 import 'package:chess_auto_prep/v2/app/window_input.dart';
 import 'package:chess_auto_prep/v2/app/workspace_requests.dart';
 import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
+import 'package:chess_auto_prep/v2/features/bughouse/archive_moves.dart';
+import 'package:chess_auto_prep/v2/features/bughouse/bughouse_lab.dart';
+import 'package:chess_auto_prep/v2/features/bughouse/table_search.dart';
 import 'package:chess_auto_prep/v2/features/library/chapter_outline.dart';
 import 'package:chess_auto_prep/v2/features/my_games/game_book.dart';
 import 'package:chess_auto_prep/v2/features/library/library.dart';
@@ -189,6 +192,10 @@ final class WindowFixture {
   GameBook get book => parts.training.book;
   GamesCache get gamesCache => parts.gamesCache;
 
+  BughouseLab get lab => parts.labs.lab;
+  TableSearch get tableSearch => parts.labs.search;
+  ArchiveMoves get archive => parts.labs.archive;
+
   /// The window over these parts, the library listed and both
   /// repertoires' rows opened, since the chapters are what tests click.
   Future<void> pumpShell(WidgetTester tester) async {
@@ -202,12 +209,14 @@ final class WindowFixture {
           workspace: parts.workspace,
           documents: parts.documents,
           training: parts.training,
+          labs: parts.labs,
           settingRows: () => const [],
           settingsAlso: settings,
         ),
       ),
     );
     await library.refresh();
+    await parts.labs.offer(parts.env.bughouse.bundled);
     await tester.pumpAndSettle();
     await tester.tap(find.text('benko'));
     await tester.tap(find.text('KID'));
