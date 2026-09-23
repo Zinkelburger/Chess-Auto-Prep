@@ -140,7 +140,11 @@ class WorkspaceView extends StatelessWidget {
                 ),
               ),
             )
-          : _ClaimedBoard(claim: claim, settings: workspace.settings),
+          : _ClaimedBoard(
+              claim: claim,
+              settings: workspace.settings,
+              counter: hooks.gameCounter,
+            ),
     ),
   );
 
@@ -313,14 +317,18 @@ class _UnlessHidden extends StatelessWidget {
   );
 }
 
-/// The room under the board the engine's lines take: its switch row and
-/// one row per line, whether or not the engine is on, so the board keeps
-/// its size as it is turned on and off. A line opened out scrolls in it.
-double _engineRoom(SettingsStore settings) =>
-    engineBarHeight + settings.value.engineLines * engineRowHeight;
+/// The room under the board the engine's lines and the counter take: the
+/// engine's switch row and one row per line, the counter's row when there
+/// is one, whether or not the engine is on, so the board keeps its size
+/// as it is turned on and off. A line opened out scrolls in its room.
+double _roomUnder(SettingsStore settings, {required bool counter}) =>
+    (counter ? navRowHeight : 0) +
+    Space.s +
+    engineBarHeight +
+    settings.value.engineLines * engineRowHeight;
 
-/// The largest square board that fits above the counter and the engine's
-/// lines, at the top, and the move's note in what they leave below, when
+/// The largest square board that fits above the engine's lines and the
+/// counter, at the top, and the move's note in what they leave below, when
 /// that is enough to read a few lines in.
 class _BoardAndCounter extends StatelessWidget {
   const _BoardAndCounter({
@@ -345,13 +353,10 @@ class _BoardAndCounter extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final room = _engineRoom(settings);
-        final side = min(
-          constraints.maxWidth,
-          constraints.maxHeight - navRowHeight - Space.s - room,
-        );
-        final below =
-            constraints.maxHeight - side - navRowHeight - 2 * Space.s - room;
+        final room = _roomUnder(settings, counter: counter);
+        final engineRoom = room - Space.s - (counter ? navRowHeight : 0);
+        final side = min(constraints.maxWidth, constraints.maxHeight - room);
+        final below = constraints.maxHeight - side - room - Space.s;
         return Align(
           alignment: Alignment.topCenter,
           child: SizedBox(
@@ -370,13 +375,14 @@ class _BoardAndCounter extends StatelessWidget {
                 ),
                 const SizedBox(height: Space.s),
                 SizedBox(
-                  height: navRowHeight,
-                  child: counter ? GameCounter(session: session) : null,
-                ),
-                SizedBox(
-                  height: room,
+                  height: engineRoom,
                   child: SingleChildScrollView(child: engine),
                 ),
+                if (counter)
+                  SizedBox(
+                    height: navRowHeight,
+                    child: GameCounter(session: session),
+                  ),
                 if (below >= moveNoteMinHeight) ...[
                   const SizedBox(height: Space.s),
                   SizedBox(
@@ -398,10 +404,17 @@ class _BoardAndCounter extends StatelessWidget {
 /// room the counter, the engine and the note would take left empty, so the board does
 /// not change size as a lesson starts and ends.
 class _ClaimedBoard extends StatelessWidget {
-  const _ClaimedBoard({required this.claim, required this.settings});
+  const _ClaimedBoard({
+    required this.claim,
+    required this.settings,
+    required this.counter,
+  });
 
   final BoardClaim claim;
   final SettingsStore settings;
+
+  /// Whether the unclaimed board has the counter under it.
+  final bool counter;
 
   @override
   Widget build(BuildContext context) {
@@ -409,10 +422,7 @@ class _ClaimedBoard extends StatelessWidget {
       builder: (context, constraints) {
         final side = min(
           constraints.maxWidth,
-          constraints.maxHeight -
-              navRowHeight -
-              Space.s -
-              _engineRoom(settings),
+          constraints.maxHeight - _roomUnder(settings, counter: counter),
         );
         return Align(
           alignment: Alignment.topCenter,

@@ -78,24 +78,6 @@ Set<String> chapterDecisions(Chapter chapter) {
   return decisions;
 }
 
-/// Every move [chapter] plays for its side, by the position it is played
-/// from: the pins a fill keeps.
-Map<String, Set<String>> chapterPins(Chapter chapter) {
-  final pins = <String, Set<String>>{};
-  final ours = chapter.side == Side.white;
-  void visit(Fen fen, List<MoveNode> children) {
-    for (final child in children) {
-      if (fen.whiteToMove == ours) {
-        (pins[fen.position] ??= {}).add(child.uci);
-      }
-      visit(child.fen, child.children);
-    }
-  }
-
-  visit(chapter.tree.rootFen, chapter.tree.children);
-  return pins;
-}
-
 /// The model's spelling of a castling move the tree spells king-to-rook,
 /// or null for any other move. `e1h1` with a white king on e1 is `e1g1`.
 String? standardCastling(String uci, Fen fen) {
