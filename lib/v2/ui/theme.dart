@@ -45,6 +45,10 @@ const choiceFieldMenuWidth = 280.0;
 /// rest of the line.
 const filterRuleWidth = 96.0;
 
+/// The narrowest a filter rule's first line holds both its field and its
+/// rule box; under it the rule goes on a line of its own.
+const filterRuleLineWidth = 260.0;
+
 /// How big an icon is. Icons sit with the text they label, so they follow
 /// the type scale rather than Material's default 24.
 abstract final class IconSize {

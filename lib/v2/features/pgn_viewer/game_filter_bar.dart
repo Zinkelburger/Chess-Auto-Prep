@@ -188,58 +188,69 @@ class _RuleBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: Space.s),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
+    final field = ChoiceField(
+      text: fieldLabel(rule.field),
+      options: fields,
+      hint: 'Field',
+      onChanged: (typed) => onChanged(rule.copyWith(field: _fieldNamed(typed))),
+    );
+    final how = ChoiceField(
+      text: rule.rule.label,
+      options: [for (final r in FilterRule.values) r.label],
+      hint: 'Rule',
+      onChanged: (typed) {
+        if (_ruleNamed(typed) case final named?) {
+          onChanged(rule.copyWith(rule: named));
+        }
+      },
+    );
+    final value = ChoiceField(
+      text: rule.value,
+      options: values,
+      hint: 'Value',
+      onChanged: (typed) => onChanged(rule.copyWith(value: typed)),
+    );
+    final remove = IconButton(
+      icon: const Icon(Icons.close, size: IconSize.menu),
+      tooltip: 'Remove this rule',
+      visualDensity: VisualDensity.compact,
+      onPressed: onRemove,
+    );
+    // Field and rule share a line when the column has room for both; a
+    // narrow column gives each its own, so neither is cut to nothing.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final roomy = constraints.maxWidth >= filterRuleLineWidth;
+        return Padding(
+          padding: const EdgeInsets.only(top: Space.s),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: Space.xs,
             children: [
-              Expanded(
-                child: ChoiceField(
-                  text: fieldLabel(rule.field),
-                  options: fields,
-                  hint: 'Field',
-                  onChanged: (typed) =>
-                      onChanged(rule.copyWith(field: _fieldNamed(typed))),
-                ),
+              Row(
+                children: [
+                  Expanded(child: field),
+                  if (roomy) ...[
+                    const SizedBox(width: Space.xs),
+                    SizedBox(width: filterRuleWidth, child: how),
+                  ],
+                  remove,
+                ],
               ),
-              const SizedBox(width: Space.xs),
-              SizedBox(
-                width: filterRuleWidth,
-                child: ChoiceField(
-                  text: rule.rule.label,
-                  options: [for (final r in FilterRule.values) r.label],
-                  hint: 'Rule',
-                  onChanged: (typed) {
-                    if (_ruleNamed(typed) case final named?) {
-                      onChanged(rule.copyWith(rule: named));
-                    }
-                  },
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.close, size: IconSize.menu),
-                tooltip: 'Remove this rule',
-                visualDensity: VisualDensity.compact,
-                onPressed: onRemove,
-              ),
+              if (!roomy) _besideRemove(how),
+              _besideRemove(value),
             ],
           ),
-          const SizedBox(height: Space.xs),
-          Padding(
-            padding: const EdgeInsets.only(right: IconSize.action + Space.m),
-            child: ChoiceField(
-              text: rule.value,
-              options: values,
-              hint: 'Value',
-              onChanged: (typed) => onChanged(rule.copyWith(value: typed)),
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
+
+  /// [box] under the first line, ending where its boxes end.
+  Widget _besideRemove(Widget box) => Padding(
+    padding: const EdgeInsets.only(right: IconSize.action + Space.m),
+    child: box,
+  );
 }
 
 /// The header [typed] names: a usual field by what people call it, else
