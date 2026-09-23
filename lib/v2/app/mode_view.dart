@@ -234,9 +234,17 @@ final class ViewerView extends _DocumentModeView {
   @override
   void space() => _modes.autoplay.toggle();
 
+  /// Moves played here are for looking: they stay off the file until the
+  /// user saves them.
+  @override
+  void entered() => workspace.session.holdsEdits = true;
+
   /// Nothing would be left to stop it by: Space is the viewer's.
   @override
-  void left() => _modes.autoplay.stop();
+  void left() {
+    _modes.autoplay.stop();
+    workspace.session.holdsEdits = false;
+  }
 
   @override
   List<AppAction> actions(ModeMenu menu) {

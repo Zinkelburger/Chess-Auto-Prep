@@ -102,9 +102,9 @@ class _OutlinePanelState extends State<OutlinePanel> {
     // index names a place in the file rather than a line: renaming by the
     // index alone could put the name on somebody else's line.
     if (widget.outline.nameOf(line.game) != line.name) {
-      StatusScope.of(
-        context,
-      )('That line changed while you were typing; nothing was renamed.');
+      StatusScope.of(context)(
+        'That line changed while you were typing; nothing was renamed.',
+      );
       return;
     }
     renameLine(widget.session, line.game, name);

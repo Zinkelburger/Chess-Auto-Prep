@@ -32,6 +32,15 @@ List<AppAction> documentActions({
       shortcut: 'Ctrl+Z',
       group: 'Document',
     ),
+    if (session.hasHeldEdits) ...[
+      AppAction(
+        'Save changes',
+        session.keepHeld,
+        shortcut: 'Ctrl+S',
+        group: 'Document',
+      ),
+      AppAction('Discard changes', session.discardHeld, group: 'Document'),
+    ],
     AppAction(
       'Save a copy…',
       when(session.source != null, onSaveCopy),

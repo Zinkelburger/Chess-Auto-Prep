@@ -141,6 +141,10 @@ class _WorkspaceKeysState extends State<WorkspaceKeys> {
       const SingleActivator(LogicalKeyboardKey.keyE, meta: true): _edit,
       const SingleActivator(LogicalKeyboardKey.keyZ, control: true): _undo,
       const SingleActivator(LogicalKeyboardKey.keyZ, meta: true): _undo,
+      const SingleActivator(LogicalKeyboardKey.keyS, control: true):
+          _session.keepHeld,
+      const SingleActivator(LogicalKeyboardKey.keyS, meta: true):
+          _session.keepHeld,
       const SingleActivator(LogicalKeyboardKey.tab, control: true): tabs.next,
       const SingleActivator(LogicalKeyboardKey.tab, control: true, shift: true):
           tabs.previous,

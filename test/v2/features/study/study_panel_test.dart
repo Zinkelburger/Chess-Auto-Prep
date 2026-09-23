@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/study_fixture.dart';
+import '../../support/status_host.dart';
 
 /// About as wide as the list pane opens.
 const _panelWidth = 300.0;
@@ -26,12 +27,17 @@ void main() {
       MaterialApp(
         theme: darkTheme(),
         home: Scaffold(
-          body: SizedBox(
-            width: _panelWidth,
-            child: StudyPanel(
-              studies: study.studies,
-              session: study.session,
-              onOpen: (ref, chapter) => opened.add((ref, chapter)),
+          body: StatusHost(
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: _panelWidth,
+                child: StudyPanel(
+                  studies: study.studies,
+                  session: study.session,
+                  onOpen: (ref, chapter) => opened.add((ref, chapter)),
+                ),
+              ),
             ),
           ),
         ),

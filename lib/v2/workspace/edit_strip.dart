@@ -15,8 +15,9 @@ import 'session_results.dart';
 /// Everything about changing the document, under the moves: Done, Undo, the
 /// save state, the six glyphs and the note on the move the board is on.
 ///
-/// It exists while [editing] is on and the whole game is on view, and
-/// otherwise only when there is trouble to report — a save that failed, a
+/// It exists while [editing] is on and the whole game is on view, while
+/// the file has edits that are not saved (the PGN Viewer's), and otherwise
+/// only when there is trouble to report — a save that failed, a
 /// file that changed on disk, a file this app may not write, an edit that
 /// was refused — because reading a file is not editing it and needs none of
 /// this on screen. Trouble shows the state line, the ways out and the
@@ -113,7 +114,8 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
         final state = widget.saver.state;
         final refusal = widget.session.refusedEdit;
         final trouble = _trouble(state) || refusal != null || _notice != null;
-        if (!editing && !trouble) return const SizedBox.shrink();
+        final held = widget.session.hasHeldEdits;
+        if (!editing && !trouble && !held) return const SizedBox.shrink();
         return Container(
           decoration: BoxDecoration(
             border: Border(
@@ -174,10 +176,36 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
         const SizedBox(width: Space.s),
       ],
       Expanded(
-        child: widget.session.isScratch
-            ? const _Notice('Not saved')
-            : _SaveLine(state: state),
+        child: switch (widget.session) {
+          DocumentSession(isScratch: true) => const _Notice('Not saved'),
+          DocumentSession(hasHeldEdits: true) => const _Notice(
+            'Unsaved changes',
+          ),
+          // The viewer keeps edits off the file, so there is nothing for
+          // the save line to report until one is made.
+          DocumentSession(holdsEdits: true) => const _Notice(
+            'Edits stay unsaved until you save them',
+          ),
+          _ => _SaveLine(state: state),
+        },
       ),
+      if (widget.session.hasHeldEdits) ...[
+        TextButton(
+          onPressed: widget.session.discardHeld,
+          child: const Text('Discard'),
+        ),
+        const SizedBox(width: Space.s),
+        Tooltip(
+          message: withKey('Save to the file', 'Ctrl+S'),
+          child: FilledButton.tonal(
+            onPressed: widget.session.keepHeld,
+            style: secondaryButtonStyle.merge(
+              FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+            ),
+            child: const Text('Save'),
+          ),
+        ),
+      ],
     ],
   );
 }

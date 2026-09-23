@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../support/library_fixture.dart';
 import '../support/scripted_files.dart';
 import '../support/scripted_store.dart';
+import '../support/status_host.dart';
 
 void main() {
   final kid = folder('KID', [
@@ -32,10 +33,12 @@ void main() {
       MaterialApp(
         theme: darkTheme(),
         home: Scaffold(
-          body: LibraryPanel(
-            library: fixture.library,
-            selected: selected,
-            onOpen: opened.add,
+          body: StatusHost(
+            child: LibraryPanel(
+              library: fixture.library,
+              selected: selected,
+              onOpen: opened.add,
+            ),
           ),
         ),
       ),
@@ -324,9 +327,7 @@ void main() {
     },
   );
 
-  testWidgets('deleted chapters come back where they were', (
-    tester,
-  ) async {
+  testWidgets('deleted chapters come back where they were', (tester) async {
     await showDeleted(tester);
     fixture.files.deletedListing = const DeletedChapters([]);
     await tester.tap(find.text('Restore'));

@@ -84,6 +84,26 @@ final class DocumentSession extends ChangeNotifier {
 
   bool _disposed = false;
 
+  /// Edits to the open file shown but not written; null when there are none.
+  _Held? _held;
+
+  /// Whether an edit to a file is kept in memory rather than written: on in
+  /// the PGN Viewer, where moves played on the board are for looking, off
+  /// in the builder, which saves every edit as it is made. Once one edit is
+  /// held, the rest join it until [keepHeld] or [discardHeld], whichever
+  /// mode is up: a file half on disk and half in memory could not be undone
+  /// or thrown away as one.
+  bool get holdsEdits => _holdsEdits;
+  bool _holdsEdits = false;
+  set holdsEdits(bool on) {
+    if (on == _holdsEdits) return;
+    _holdsEdits = on;
+    notifyListeners();
+  }
+
+  /// Whether the file on the board has edits that are not on disk.
+  bool get hasHeldEdits => _held != null;
+
   Chapter? get chapter => _chapter;
 
   /// Why the last edit did not happen, or null when it did. A game reading
@@ -101,8 +121,9 @@ final class DocumentSession extends ChangeNotifier {
   bool get isScratch => _chapter != null && _source == null;
 
   /// Whether an edit can be taken back now: from the saver's receipts for a
-  /// file, from memory on the analysis board.
-  bool get canUndo => isScratch ? _board.canUndo : _saver.canUndo;
+  /// file, from memory on the analysis board and for held edits.
+  bool get canUndo =>
+      isScratch ? _board.canUndo : _held != null || _saver.canUndo;
 
   /// The file the chapter was read from, and which game of it is on the
   /// board — null when its games are merged. A repertoire chapter is the
@@ -315,6 +336,7 @@ final class DocumentSession extends ChangeNotifier {
   }
 
   void _showBoard() {
+    _held = null;
     _shown = (chapter: _board.chapter, view: null);
     _file = null;
     _refused = null;
@@ -511,6 +533,7 @@ final class DocumentSession extends ChangeNotifier {
   /// now is not touched.
   Future<UndoResult> undo() async {
     if (isScratch) return _undoOnBoard();
+    if (_held != null) return _undoHeld();
     final ref = _source;
     if (ref == null || _opening != null || _restoring) {
       return const UndoRefused();
@@ -564,6 +587,53 @@ final class DocumentSession extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// The file as it was before the last held edit; the first one taken
+  /// back leaves the file as it is on disk, with nothing held.
+  UndoResult _undoHeld() {
+    final held = _held!;
+    final before = _shown!;
+    final restored = held.takeBack();
+    if (held.isEmpty) _held = null;
+    _showHeld(before.chapter, restored);
+    return Restored(writeChapter(restored.chapter));
+  }
+
+  /// Writes the held edits to the file, as one save.
+  void keepHeld() {
+    final held = _held;
+    if (held == null) return;
+    _held = null;
+    // An edit that gave the file a chapter took the board to it, and the
+    // saver waited for the edits to be kept before going there too.
+    if (_source case final ref?) _saver.relocated(ref);
+    _saver.save(held.text, held.scope);
+    notifyListeners();
+  }
+
+  /// Throws the held edits away and shows the file as it is on disk.
+  void discardHeld() {
+    final held = _held;
+    if (held == null) return;
+    _leaving.announce();
+    final before = _shown!.chapter;
+    _held = null;
+    _showHeld(before, held.original);
+  }
+
+  void _showHeld(Chapter before, _Shown shown) {
+    _shown = shown;
+    final source = _source;
+    if (source != null && shown.view?.section != source.section) {
+      _file = (
+        ref: ChapterRef.at(source.path, section: shown.view?.section),
+        readOnly: _readOnly,
+      );
+    }
+    _clearRefusal();
+    _cursor.value = samePathIn(before.tree, shown.chapter.tree, cursor);
+    notifyListeners();
+  }
+
   /// The analysis board as it was before its last edit.
   UndoResult _undoOnBoard() {
     final before = _chapter;
@@ -588,6 +658,7 @@ final class DocumentSession extends ChangeNotifier {
         ..chapter = board
         ..cursor = cursor;
     }
+    _held = null;
     _shown = (chapter: chapter, view: view);
     _file = (ref: ref, readOnly: readOnly);
     _flipped = false;
@@ -701,7 +772,13 @@ final class DocumentSession extends ChangeNotifier {
     if (landed == null) {
       return _editRefused('a new line could not be given its chapter name');
     }
-    _saver.save(landed.text, landed.scope);
+    if (_held case final held?) {
+      held.add(_shown!, landed);
+    } else if (_holdsEdits) {
+      _held = _Held(_shown!, landed);
+    } else {
+      _saver.save(landed.text, landed.scope);
+    }
     _shown = (chapter: landed.chapter, view: landed.view);
     _follow(landed.view);
     return null;
@@ -715,7 +792,9 @@ final class DocumentSession extends ChangeNotifier {
     if (view == null || view.section == source.section) return;
     final moved = ChapterRef.at(source.path, section: view.section);
     _file = (ref: moved, readOnly: _readOnly);
-    _saver.relocated(moved);
+    // Held edits have not given the file that chapter yet: the saver goes
+    // to it when they are kept.
+    if (_held == null) _saver.relocated(moved);
   }
 
   /// Writes the draft on screen beside its file as `<name>.pgn`, replacing
@@ -942,6 +1021,45 @@ Landing fileLanding(
     chapter: edit.shown.chapter,
     view: edit.shown,
   );
+}
+
+typedef _Shown = ({Chapter chapter, SectionView? view});
+
+/// Edits to a file the [DocumentSession] shows but has not written: the
+/// file as it was before them, the text and scope of all of them together,
+/// and each version they replaced, for undo.
+final class _Held {
+  _Held(this.original, Landing first)
+    : text = first.text,
+      scope = first.scope,
+      _versions = [(shown: original, text: null, scope: null)];
+
+  /// What was on the board before the first edit: the file as on disk.
+  final _Shown original;
+
+  String text;
+  EditScope scope;
+
+  /// The versions the edits replaced, newest last, each with the text and
+  /// scope that had been held up to it (null for the original).
+  final List<({_Shown shown, String? text, EditScope? scope})> _versions;
+
+  bool get isEmpty => _versions.isEmpty;
+
+  /// One more edit, [landed], made to [before].
+  void add(_Shown before, Landing landed) {
+    _versions.add((shown: before, text: text, scope: scope));
+    text = landed.text;
+    scope = scopeOfBoth(scope, landed.scope);
+  }
+
+  /// The version before the last edit, with what was held up to it.
+  _Shown takeBack() {
+    final last = _versions.removeLast();
+    if (last.text case final earlier?) text = earlier;
+    if (last.scope case final earlier?) scope = earlier;
+    return last.shown;
+  }
 }
 
 /// The analysis board as the [DocumentSession] keeps it: its moves, where
