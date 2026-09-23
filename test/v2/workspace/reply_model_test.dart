@@ -2,7 +2,7 @@ import 'package:chess_auto_prep/v2/chess/fen.dart';
 import 'package:chess_auto_prep/v2/engines/maia/move_policy.dart';
 import 'package:chess_auto_prep/v2/storage/settings.dart';
 import 'package:chess_auto_prep/v2/storage/settings_store.dart';
-import 'package:chess_auto_prep/v2/workspace/reply_model.dart';
+import 'package:chess_auto_prep/v2/workspace/replies.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Answers at the start and fails everywhere else, counting every ask.

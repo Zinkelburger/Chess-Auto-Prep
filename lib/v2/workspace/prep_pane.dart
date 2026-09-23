@@ -8,7 +8,6 @@ import '../chess/pgn/game_tree.dart';
 import '../chess/pgn/move_label.dart' show moveNumberLabel;
 import '../ui/theme.dart';
 import 'document_session.dart';
-import 'fill_found.dart';
 import 'fill_gaps.dart';
 import 'line_preview.dart';
 

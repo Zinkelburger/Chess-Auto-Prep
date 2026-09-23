@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:ui' show AppExitResponse;
 
-import 'package:chess_auto_prep/v2/app/app_exit.dart';
+import 'package:chess_auto_prep/v2/app/app.dart';
 import 'package:chess_auto_prep/v2/app/exit_guard.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:flutter_test/flutter_test.dart';

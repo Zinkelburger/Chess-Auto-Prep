@@ -6,7 +6,6 @@ import 'package:chess_auto_prep/v2/chess/training/line_order.dart';
 import 'package:chess_auto_prep/v2/chess/training/records.dart';
 import 'package:chess_auto_prep/v2/chess/training/schedule.dart';
 import 'package:chess_auto_prep/v2/features/trainer/lesson.dart';
-import 'package:chess_auto_prep/v2/features/trainer/scope_reader.dart';
 import 'package:chess_auto_prep/v2/features/trainer/trainer.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';

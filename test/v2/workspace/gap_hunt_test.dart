@@ -5,8 +5,7 @@ import 'package:chess_auto_prep/v2/storage/settings.dart';
 import 'package:chess_auto_prep/v2/storage/settings_store.dart';
 import 'package:chess_auto_prep/v2/workspace/gap_hunt.dart';
 import 'package:chess_auto_prep/v2/workspace/gap_walk.dart';
-import 'package:chess_auto_prep/v2/workspace/repertoire_answers.dart';
-import 'package:chess_auto_prep/v2/workspace/reply_model.dart';
+import 'package:chess_auto_prep/v2/workspace/replies.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/scripted_files.dart';

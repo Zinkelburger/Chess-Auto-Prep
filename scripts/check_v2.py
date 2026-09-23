@@ -108,8 +108,9 @@ def check_functions(path: Path, lines: list[str], findings: list[str]) -> None:
         if not m or lines[i].lstrip().startswith(("if ", "for ", "while ", "switch ", "return ")):
             i += 1
             continue
-        # A test file's main() is a list of cases, not a function to read.
-        if TEST in path.parents and re.match(r"^void main\(", lines[i]):
+        # A test file's main() and its group(...) bodies are lists of cases,
+        # not functions to read; each test(...) inside is still checked.
+        if TEST in path.parents and re.match(r"^(void main\(|\s*group\()", lines[i]):
             i += 1
             continue
         indent = len(m.group(1))

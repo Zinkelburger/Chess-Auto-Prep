@@ -17,7 +17,7 @@ import '../workspace/chapter_commands.dart';
 import '../workspace/document_session.dart';
 import '../chess/explorer_answer.dart' show ExplorerGame;
 import '../chess/explorer_choice.dart' show ExplorerSource;
-import '../workspace/fill_found.dart';
+import '../workspace/fill_gaps.dart';
 import '../workspace/game_fetcher.dart';
 import '../workspace/session_results.dart';
 import 'exit_guard.dart';

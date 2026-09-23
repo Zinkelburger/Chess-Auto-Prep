@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:multi_split_view/multi_split_view.dart';
@@ -10,25 +11,26 @@ import '../features/settings/settings_dialog.dart';
 import '../features/tactics/my_games_block.dart';
 import '../features/trainer/train_pane.dart';
 import '../features/trainer/trainer.dart';
+import '../storage/settings_store.dart';
 import '../ui/app_action.dart';
 import '../ui/choice_dialog.dart';
 import '../ui/error_bar.dart';
 import '../ui/listening_state.dart';
 import '../ui/pane_tabs.dart';
 import '../ui/theme.dart';
-import '../workspace/copy_name_dialog.dart';
 import '../workspace/board_claim.dart';
+import '../workspace/copy_name_dialog.dart';
+import '../workspace/document_session.dart';
+import '../workspace/fill_dialog.dart';
+import '../workspace/fill_gaps.dart';
 import '../workspace/session_results.dart';
 import '../workspace/tree_pane.dart';
+import '../workspace/workspace.dart';
 import '../workspace/workspace_keys.dart';
 import '../workspace/workspace_tabs.dart';
-import '../workspace/workspace.dart';
 import '../workspace/workspace_view.dart';
-import 'board_actions.dart';
-import 'generate_doors.dart';
-import 'mode.dart';
 import 'mode_view.dart';
-import 'sitting_in_view.dart';
+import 'mode.dart';
 import 'top_bar.dart';
 import 'workspace_requests.dart';
 
@@ -422,3 +424,112 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
 
 /// The columns of the window, left to right.
 enum _Pane { list, outline, workspace }
+
+/// Keeps the Train tab's sitting beside its controls: in the mode it was
+/// started in, with the Train tab open. Anywhere else the board would go on
+/// showing the lesson and taking moves for it with nothing to answer or
+/// leave it by, so the sitting ends.
+final class SittingInView {
+  SittingInView({
+    required Trainer trainer,
+    required WorkspaceRequests requests,
+    required bool Function() trainTabOpen,
+  }) : _trainer = trainer,
+       _requests = requests,
+       _trainTabOpen = trainTabOpen {
+    for (final owner in _owners) {
+      owner.addListener(check);
+    }
+  }
+
+  final Trainer _trainer;
+  final WorkspaceRequests _requests;
+
+  /// Whether the mode on screen has its Train tab open: the tabs are the
+  /// shell's, one set per mode.
+  final bool Function() _trainTabOpen;
+
+  /// The mode the sitting runs in, while one does.
+  Mode? _mode;
+
+  List<Listenable> get _owners => [_trainer, _requests];
+
+  /// Ends the sitting if it is out of view; also listens to the tabs.
+  void check() {
+    if (_trainer.lesson == null) {
+      _mode = null;
+      return;
+    }
+    final mode = _mode ??= _requests.mode;
+    if (_requests.mode != mode || !_trainTabOpen()) _trainer.leave();
+  }
+
+  void dispose() {
+    for (final owner in _owners) {
+      owner.removeListener(check);
+    }
+  }
+}
+
+/// The ways into a search from the board and back to what it found: the
+/// dialog behind the Actions entry, Ctrl+G and the Prep tab's `Generate…`,
+/// and ↑ / ↓ over the Prep tab's rows. On the analysis board the search is `Generate from
+/// here…` and plays for the side at the bottom of the board; on a chapter
+/// it is `Fill gaps from here…` and plays for the chapter's side.
+final class GenerateDoors {
+  GenerateDoors({
+    required this.fill,
+    required this.session,
+    required this.settings,
+    required this.requests,
+  });
+
+  final FillGaps fill;
+  final DocumentSession session;
+  final SettingsStore settings;
+  final WorkspaceRequests requests;
+
+  /// The dialog, then the run with the Prep tab up to watch it; what
+  /// refused it goes in the bar.
+  Future<void> generate(
+    BuildContext context,
+    PaneTabs<WorkspaceTab> tabs,
+  ) async {
+    if (!fill.canStart) return;
+    final s = settings.value;
+    final onBoard = session.isScratch;
+    final request = await showFillDialog(
+      context,
+      title: onBoard ? 'Generate from here' : 'Fill gaps from here',
+      action: onBoard ? 'Generate' : 'Fill',
+      side: session.orientation,
+      elo: s.opponentElo,
+      onceIn: s.coverOnceIn,
+    );
+    if (request == null || !context.mounted) return;
+    if (tabs.tabs.any((tab) => tab.id == WorkspaceTab.prep)) {
+      tabs.show(WorkspaceTab.prep);
+    }
+    final refusal = await fill.start(request);
+    if (refusal != null) requests.say(refusal);
+  }
+
+  /// Puts the found item at [index] on the board.
+  void go(int index) {
+    final found = fill.found;
+    if (found == null || index < 0 || index >= found.items.length) return;
+    fill.pick(index);
+    unawaited(requests.showFound(found, index));
+  }
+
+  /// The next (or, with [by] −1, the previous) found item; the first one
+  /// when none has been gone to yet. Answers whether there was one to take
+  /// the key, so ↑ / ↓ keep their other meanings when there is not.
+  bool step(int by) {
+    final count = fill.found?.items.length ?? 0;
+    if (count == 0) return false;
+    final picked = fill.picked;
+    go(picked == null ? 0 : (picked + by).clamp(0, count - 1));
+    return true;
+  }
+}

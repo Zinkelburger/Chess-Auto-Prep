@@ -358,7 +358,7 @@ The independent review of a finished step answers these, each with a location:
 
 1. Any file over 1,000 lines, function over 80, nesting over 3?
    (`scripts/check_v2.py` finds all three. A `group(...)` or `test(...)`
-   body in a test file is a function too; `main()` is not.) Any split made
+   body in a test file is a function; `main()` and `group(...)` bodies are lists of cases and are not.) Any split made
    only to get under one of them, or a file too small to be read on its
    own?
 2. Any owner holding data that belongs to another owner in the

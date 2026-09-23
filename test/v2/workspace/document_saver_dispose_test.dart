@@ -3,7 +3,7 @@
 // is already with the store lands; nothing is said afterwards; nothing
 // hangs.
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
-import 'package:chess_auto_prep/v2/workspace/save_state.dart';
+import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/fixtures.dart';

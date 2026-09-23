@@ -7,7 +7,6 @@ import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
 import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
 import 'package:chess_auto_prep/v2/workspace/explorer.dart';
-import 'package:chess_auto_prep/v2/workspace/explorer_databases.dart';
 import 'package:chess_auto_prep/v2/workspace/game_fetcher.dart';
 import 'package:chess_auto_prep/v2/workspace/gap_hunt.dart';
 import 'package:chess_auto_prep/v2/workspace/explorer_pane.dart';

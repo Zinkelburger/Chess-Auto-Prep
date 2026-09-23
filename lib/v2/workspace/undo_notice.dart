@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'document_session.dart';
-import 'save_state.dart';
+import 'document_saver.dart';
 
 /// How long a deletion's notice stays, with the way back on it. The delete
 /// itself asks nothing first: undo is the answer, so the offer has to

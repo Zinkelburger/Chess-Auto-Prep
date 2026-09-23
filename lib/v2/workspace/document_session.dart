@@ -19,7 +19,6 @@ import '../storage/document_ref.dart';
 import '../storage/edit_scope.dart';
 import '../storage/pgn_document_store.dart' as store;
 import 'document_saver.dart';
-import 'save_state.dart';
 import 'session_results.dart';
 
 /// The document open in the workspace, where the user is in it, and the

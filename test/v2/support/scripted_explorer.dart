@@ -6,7 +6,6 @@ import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/storage/settings_store.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
 import 'package:chess_auto_prep/v2/workspace/explorer.dart';
-import 'package:chess_auto_prep/v2/workspace/explorer_databases.dart';
 import 'package:chess_auto_prep/v2/workspace/game_fetcher.dart';
 
 /// What the masters database says at the start: two moves and one game.

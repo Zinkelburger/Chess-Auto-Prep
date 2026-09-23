@@ -7,7 +7,6 @@ import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
-import 'package:chess_auto_prep/v2/workspace/fill_found.dart';
 import 'package:chess_auto_prep/v2/workspace/fill_gaps.dart';
 import 'package:chess_auto_prep/v2/chess/fen.dart';
 import 'package:dartchess/dartchess.dart' show Position, Side;

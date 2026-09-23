@@ -7,7 +7,7 @@ import 'package:chess_auto_prep/v2/chess/generation/search_node.dart';
 import 'package:chess_auto_prep/v2/chess/generation/traps.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/tree_edit.dart' show positionOf;
-import 'package:chess_auto_prep/v2/workspace/fill_found.dart';
+import 'package:chess_auto_prep/v2/workspace/fill_gaps.dart';
 import 'package:dartchess/dartchess.dart' show NormalMove, Side;
 import 'package:flutter_test/flutter_test.dart';
 

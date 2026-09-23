@@ -2,15 +2,18 @@ import 'dart:async';
 import 'dart:isolate';
 
 import 'package:dartchess/dartchess.dart' show Position, Side;
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import '../chess/fen.dart';
 import '../chess/generation/draft_chapter.dart';
 import '../chess/generation/draft_lines.dart';
+import '../chess/generation/eval.dart';
 import '../chess/generation/search.dart';
 import '../chess/generation/search_config.dart';
 import '../chess/generation/search_node.dart';
+import '../chess/generation/search_node.dart' show MoveRef;
 import '../chess/generation/search_result.dart';
 import '../chess/generation/sources.dart';
 import '../chess/generation/traps.dart';
@@ -20,11 +23,12 @@ import '../chess/pgn/chapter_heading.dart';
 import '../chess/pgn/game_tree.dart';
 import '../chess/pgn/tree_edit.dart' show positionOf;
 import '../diagnostics/log.dart';
+import '../engines/maia/move_policy.dart';
 import '../storage/chapter_files.dart';
+import '../storage/eval_cache.dart';
 import '../storage/pgn_document_store.dart' as store;
 import 'document_session.dart';
 import 'engine_analysis.dart';
-import 'fill_found.dart';
 
 /// What the user asked a fill for: the knobs of the dialog.
 final class FillRequest {
@@ -645,3 +649,138 @@ int nodesIn(SearchNode node) => switch (node) {
     1 + replies.fold(0, (sum, r) => sum + nodesIn(r.child)),
   _ => 1,
 };
+
+/// Where the results of a run can be read.
+sealed class FillOrigin {
+  const FillOrigin();
+}
+
+/// A run on the analysis board: the board's root and the moves from it to
+/// where the search started. A result is shown by playing it there.
+final class OnTheBoard extends FillOrigin {
+  const OnTheBoard({required this.root, required this.line});
+
+  final Fen root;
+  final List<MoveRef> line;
+}
+
+/// A run on a chapter: the draft it wrote, and the moves from the draft's
+/// root to where the search started. A result is shown by opening the
+/// draft there.
+final class InDraft extends FillOrigin {
+  const InDraft({required this.draft, required this.sans});
+
+  final ChapterRef draft;
+  final List<String> sans;
+}
+
+/// One thing a run found worth looking at: a trap or a line.
+sealed class FoundItem {
+  const FoundItem();
+
+  /// The moves from where the search started.
+  List<DraftMove> get moves;
+
+  /// How many of [moves] to play before stopping on the board: a trap stops
+  /// on the blunder, so the punishment is the user's to find.
+  int get stopAfter;
+}
+
+final class FoundTrap extends FoundItem {
+  const FoundTrap(this.trap);
+
+  final Trap trap;
+
+  @override
+  List<DraftMove> get moves => trap.moves;
+
+  @override
+  int get stopAfter => trap.toTrap.length + 1;
+}
+
+final class FoundLine extends FoundItem {
+  const FoundLine(this.line);
+
+  final DraftLine line;
+
+  @override
+  List<DraftMove> get moves => line.moves;
+
+  @override
+  int get stopAfter => line.moves.length;
+}
+
+/// What the last finished run found, kept until the next one starts: its
+/// traps, best first, then its lines, most reached first.
+final class FillFound {
+  const FillFound({
+    required this.origin,
+    required this.side,
+    required this.traps,
+    required this.lines,
+  });
+
+  final FillOrigin origin;
+
+  /// The side the search played for.
+  final Side side;
+  final List<Trap> traps;
+  final List<DraftLine> lines;
+
+  /// The traps and then the lines, in the order the Prep tab lists them.
+  List<FoundItem> get items => [
+    for (final trap in traps) FoundTrap(trap),
+    for (final line in lines) FoundLine(line),
+  ];
+}
+
+/// The engine with the cache in front of it: a position the cache holds at
+/// the depth asked for is answered from there, and every verdict the engine
+/// gives is written back, from White's side, so a later run of either app
+/// finds it.
+///
+/// The engine answers from the side to move and the cache keeps White's
+/// view, so one negation each way when it is Black's move.
+final class CachedEvaluator implements PositionEvaluator {
+  const CachedEvaluator(this.engine, this.cache, {required this.depth});
+
+  final PositionEvaluator engine;
+  final EvalCache cache;
+  final int depth;
+
+  @override
+  Future<EvaluationResult> evaluate(Position position) async {
+    final fen = Fen(position.fen);
+    final white = position.turn == Side.white;
+    final kept = cache.read(fen.position, minDepth: depth);
+    if (kept != null) return Evaluated(Eval(white ? kept : -kept));
+    final answer = await evaluationOf(engine, position);
+    if (answer case Evaluated(:final eval)) {
+      cache.write(
+        fen.position,
+        cpWhite: white ? eval.cp : -eval.cp,
+        depth: depth,
+      );
+    }
+    return answer;
+  }
+}
+
+/// The Maia model as the search's opponent, at one rating.
+///
+/// The model answers with shares over the legal moves, most likely first,
+/// which is already a policy; a position it cannot read is a position the
+/// search stops at, as the algorithm requires.
+final class MaiaOpponent implements OpponentPolicy {
+  const MaiaOpponent(this.model, {required this.elo});
+
+  final MovePolicy model;
+  final int elo;
+
+  @override
+  Future<PolicyResult> policyFor(Position position) async =>
+      switch (await model.policy(Fen(position.fen), elo)) {
+        MaiaPolicy(:final shares) => PolicyFound(Policy(shares)),
+        MaiaFailed(:final reason) => PolicyUnavailable(reason),
+      };
+}

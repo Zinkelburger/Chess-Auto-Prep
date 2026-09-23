@@ -6,7 +6,7 @@ import '../../chess/tactics/mining.dart';
 import '../../diagnostics/log.dart';
 import '../../storage/edit_scope.dart';
 import '../../storage/pgn_document_store.dart';
-import '../../workspace/document_saver.dart';
+import '../../workspace/document_saver.dart' show DocumentSaver;
 import '../../workspace/document_session.dart';
 import 'tactics_set.dart';
 

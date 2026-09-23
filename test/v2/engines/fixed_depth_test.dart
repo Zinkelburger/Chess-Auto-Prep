@@ -4,7 +4,7 @@ import 'package:chess_auto_prep/v2/chess/generation/sources.dart';
 import 'package:chess_auto_prep/v2/engines/engine_line.dart';
 import 'package:chess_auto_prep/v2/engines/fixed_depth.dart';
 import 'package:chess_auto_prep/v2/storage/eval_cache.dart';
-import 'package:chess_auto_prep/v2/workspace/fill_sources.dart';
+import 'package:chess_auto_prep/v2/workspace/fill_gaps.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 

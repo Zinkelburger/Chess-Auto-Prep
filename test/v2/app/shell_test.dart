@@ -7,7 +7,7 @@ import 'package:chess_auto_prep/v2/features/library/outline_panel.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/storage/recent_pgn_files.dart';
-import 'package:chess_auto_prep/v2/workspace/save_state.dart';
+import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
 import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';

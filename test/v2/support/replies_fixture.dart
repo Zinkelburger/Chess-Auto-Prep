@@ -2,9 +2,7 @@ import 'package:chess_auto_prep/v2/engines/maia/move_policy.dart';
 import 'package:chess_auto_prep/v2/storage/settings_store.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
 import 'package:chess_auto_prep/v2/workspace/gap_hunt.dart';
-import 'package:chess_auto_prep/v2/workspace/repertoire_answers.dart';
 import 'package:chess_auto_prep/v2/workspace/replies.dart';
-import 'package:chess_auto_prep/v2/workspace/reply_model.dart';
 
 import 'scripted_files.dart';
 import 'scripted_store.dart';

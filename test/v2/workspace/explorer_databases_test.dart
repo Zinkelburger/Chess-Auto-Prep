@@ -2,7 +2,7 @@ import 'package:chess_auto_prep/v2/chess/explorer_choice.dart';
 import 'package:chess_auto_prep/v2/chess/fen.dart';
 import 'package:chess_auto_prep/v2/net/lichess_explorer.dart';
 import 'package:chess_auto_prep/v2/storage/master_book.dart';
-import 'package:chess_auto_prep/v2/workspace/explorer_databases.dart';
+import 'package:chess_auto_prep/v2/workspace/explorer.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/scripted_explorer.dart';

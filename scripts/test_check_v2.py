@@ -2,7 +2,7 @@
 """Each v2 rule fires on a small bad input and stays quiet on a good one."""
 import unittest
 
-from check_v2 import LIB, MAX_FUNCTION_LINES, check_classes, check_functions, check_imports
+from check_v2 import LIB, MAX_FUNCTION_LINES, TEST, check_classes, check_functions, check_imports
 
 
 def class_findings(source: str) -> list[str]:
@@ -76,6 +76,14 @@ class FunctionsTest(unittest.TestCase):
         check_functions(LIB / "chess/x.dart", lines, findings)
         self.assertEqual(len(findings), 1)
         self.assertIn(f"function is {MAX_FUNCTION_LINES + 2} lines", findings[0])
+
+    def test_a_long_group_is_a_list_of_cases_but_its_tests_are_checked(self):
+        body = ["    work();"] * MAX_FUNCTION_LINES
+        lines = ["  group('g', () {"] + ["    test('t', () {"] + body + ["    });"] + ["  });"]
+        findings: list[str] = []
+        check_functions(TEST / "x_test.dart", lines, findings)
+        self.assertEqual(len(findings), 1)
+        self.assertIn(":2: function is", findings[0])
 
 
 if __name__ == "__main__":

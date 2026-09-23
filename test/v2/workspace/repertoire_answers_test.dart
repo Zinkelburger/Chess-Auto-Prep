@@ -2,7 +2,7 @@ import 'package:chess_auto_prep/v2/chess/fen.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/document_ref.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
-import 'package:chess_auto_prep/v2/workspace/repertoire_answers.dart';
+import 'package:chess_auto_prep/v2/workspace/gap_hunt.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 

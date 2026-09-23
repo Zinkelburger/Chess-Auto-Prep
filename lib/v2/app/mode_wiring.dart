@@ -8,7 +8,6 @@ import '../features/tactics/my_games.dart';
 import '../features/tactics/puzzle_trainer.dart';
 import '../features/tactics/set_additions.dart';
 import '../features/tactics/tactics_set.dart';
-import '../features/trainer/scope_reader.dart';
 import '../features/trainer/trainer.dart';
 import '../storage/my_accounts.dart';
 import '../storage/my_games_files.dart';

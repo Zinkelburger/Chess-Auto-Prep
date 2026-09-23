@@ -5,7 +5,6 @@ import 'package:path/path.dart' as p;
 
 import '../diagnostics/log.dart';
 import '../workspace/document_saver.dart';
-import '../workspace/save_state.dart';
 
 /// What the user said about words that are not on disk.
 enum DraftChoice {
