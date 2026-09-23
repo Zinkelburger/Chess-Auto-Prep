@@ -141,8 +141,8 @@ class _Transport extends StatelessWidget {
         : (
             'Get games',
             Icons.download,
-            'Download your newest $reviewWindow games on each account and '
-                'turn your mistakes into puzzles',
+            'Download your new games on each account and turn your '
+                'mistakes in the newest $reviewWindow into puzzles',
           );
     return Tooltip(
       message: tip,

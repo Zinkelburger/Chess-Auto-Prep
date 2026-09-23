@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../storage/settings_store.dart';
-import '../ui/app_action.dart';
 import '../ui/pane_tabs.dart';
 import '../workspace/document_session.dart';
 import '../workspace/fill_dialog.dart';
@@ -12,8 +11,8 @@ import '../workspace/workspace_tabs.dart';
 import 'workspace_requests.dart';
 
 /// The ways into a search from the board and back to what it found: the
-/// Actions entry and Ctrl+G, the Prep tab's `Generate…`, and ↑ / ↓ over
-/// the Prep tab's rows. On the analysis board the search is `Generate from
+/// dialog behind the Actions entry, Ctrl+G and the Prep tab's `Generate…`,
+/// and ↑ / ↓ over the Prep tab's rows. On the analysis board the search is `Generate from
 /// here…` and plays for the side at the bottom of the board; on a chapter
 /// it is `Fill gaps from here…` and plays for the chapter's side.
 final class GenerateDoors {
@@ -29,17 +28,6 @@ final class GenerateDoors {
   final SettingsStore settings;
   final WorkspaceRequests requests;
 
-  bool get _onBoard => session.isScratch;
-
-  /// The Actions entry, with the key that takes it.
-  AppAction action(BuildContext context, PaneTabs<WorkspaceTab> tabs) =>
-      AppAction(
-        _onBoard ? 'Generate from here…' : 'Fill gaps from here…',
-        fill.canStart ? () => unawaited(generate(context, tabs)) : null,
-        shortcut: 'Ctrl+G',
-        group: _onBoard ? 'Analysis' : 'Repertoire',
-      );
-
   /// The dialog, then the run with the Prep tab up to watch it; what
   /// refused it goes in the bar.
   Future<void> generate(
@@ -48,7 +36,7 @@ final class GenerateDoors {
   ) async {
     if (!fill.canStart) return;
     final s = settings.value;
-    final onBoard = _onBoard;
+    final onBoard = session.isScratch;
     final request = await showFillDialog(
       context,
       title: onBoard ? 'Generate from here' : 'Fill gaps from here',

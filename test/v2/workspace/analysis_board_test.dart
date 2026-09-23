@@ -34,6 +34,18 @@ void main() {
     saver.dispose();
   });
 
+  /// [text] onto the board as Ctrl+V puts it there: the reason it was
+  /// refused, or null.
+  Future<String?> paste(String text) async {
+    switch (pastedBoard(text, side: session.orientation)) {
+      case PasteRefused(:final reason):
+        return reason;
+      case PastedBoard(:final chapter):
+        await session.showAnalysisBoard(chapter);
+        return null;
+    }
+  }
+
   List<String> line() => [
     for (final node in session.tree!.lineTo(session.cursor)) node.san,
   ];
@@ -87,7 +99,7 @@ void main() {
 
   group('paste', () {
     test('a PGN keeps its variations and comments', () async {
-      final refusal = await session.pasteOntoBoard(
+      final refusal = await paste(
         '[Event "x"]\n\n1. e4 {King pawn} c5 (1... e5 2. Nf3) 2. Nf3 *',
       );
       expect(refusal, isNull);
@@ -97,13 +109,13 @@ void main() {
     });
 
     test('bare moves are a game', () async {
-      expect(await session.pasteOntoBoard('1.e4 c5 2.Nf3'), isNull);
+      expect(await paste('1.e4 c5 2.Nf3'), isNull);
       expect(line(), ['e4', 'c5', 'Nf3']);
     });
 
     test('a FEN is where the board starts, counters or not', () async {
       final fields = _sicilian.split(' ').take(4).join(' ');
-      expect(await session.pasteOntoBoard(fields), isNull);
+      expect(await paste(fields), isNull);
       expect(session.tree!.rootFen, Fen('$fields 0 1'));
       session.playMove('g1f3');
       expect(line(), ['Nf3']);
@@ -112,16 +124,16 @@ void main() {
     test('text with no game is refused and the board kept', () async {
       session.playMove('d2d4');
       expect(
-        await session.pasteOntoBoard('hello there'),
+        await paste('hello there'),
         startsWith('The clipboard holds no game'),
       );
-      expect(await session.pasteOntoBoard('  '), contains('Nothing to paste'));
+      expect(await paste('  '), contains('Nothing to paste'));
       expect(line(), ['d4']);
     });
 
     test('the pasted board keeps the side the board faces', () async {
       session.flip();
-      await session.pasteOntoBoard('1.e4 c5');
+      await paste('1.e4 c5');
       expect(session.orientation, Side.black);
     });
   });
@@ -159,10 +171,12 @@ void main() {
       final sans = [
         for (final node in session.tree!.lineTo(session.cursor)) node.san,
       ];
-      await session.newAnalysisBoard(
-        side: session.orientation,
-        root: session.tree!.rootFen,
-        sans: sans,
+      await session.showAnalysisBoard(
+        analysisBoard(
+          side: session.orientation,
+          root: session.tree!.rootFen,
+          sans: sans,
+        ),
       );
       expect(session.isScratch, isTrue);
       expect(session.source, isNull);
@@ -189,7 +203,7 @@ void main() {
 
     test('the board never writes the file it was made from', () async {
       final before = file.onDisk;
-      await file.session.newAnalysisBoard(side: Side.black);
+      await file.session.showAnalysisBoard(analysisBoard(side: Side.black));
       file.session.playMove('e2e4');
       await pumpEventQueue();
       expect(file.onDisk, before);

@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:multi_split_view/multi_split_view.dart';
@@ -9,6 +8,9 @@ import '../features/library/chapter_outline.dart';
 import '../features/library/library.dart';
 import '../features/library/library_panel.dart';
 import '../features/library/outline_panel.dart';
+import '../features/my_games/book_pane.dart';
+import '../features/my_games/game_book.dart';
+import '../features/my_games/my_games_panel.dart';
 import '../features/pgn_viewer/pgn_viewer.dart';
 import '../features/pgn_viewer/pgn_viewer_panel.dart';
 import '../features/study/quiz_menu.dart';
@@ -21,7 +23,6 @@ import '../features/tactics/my_games.dart';
 import '../features/tactics/my_games_block.dart';
 import '../features/tactics/puzzle_pane.dart';
 import '../features/tactics/puzzle_trainer.dart';
-import '../features/tactics/tactics_actions.dart';
 import '../features/tactics/tactics_panel.dart';
 import '../features/tactics/tactics_set.dart';
 import '../features/trainer/train_pane.dart';
@@ -33,9 +34,7 @@ import '../ui/error_bar.dart';
 import '../ui/listening_state.dart';
 import '../ui/pane_tabs.dart';
 import '../ui/theme.dart';
-import '../workspace/chapter_commands.dart';
 import '../workspace/copy_name_dialog.dart';
-import '../workspace/document_actions.dart';
 import '../workspace/board_claim.dart';
 import '../workspace/document_saver.dart';
 import '../workspace/document_session.dart';
@@ -54,9 +53,12 @@ import '../workspace/workspace_view.dart';
 import 'board_actions.dart';
 import 'generate_doors.dart';
 import 'mode.dart';
+import 'mode_actions.dart';
+import 'my_games_doors.dart';
 import 'sitting_in_view.dart';
 import 'top_bar.dart';
 import 'workspace_requests.dart';
+import '../workspace/copy_aside.dart';
 
 /// The window: a top bar with the mode menu and the Actions menu, the
 /// mode's list on the left and the workspace filling the rest. What the
@@ -84,6 +86,7 @@ class Shell extends StatefulWidget {
     required this.lineTrainer,
     required this.trainer,
     required this.myGames,
+    required this.book,
     required this.settings,
     required this.settingRows,
     required this.settingsAlso,
@@ -110,6 +113,9 @@ class Shell extends StatefulWidget {
 
   /// The usernames and the review that mines their games into the set.
   final MyGames myGames;
+
+  /// The user's games read against their repertoires: My games.
+  final GameBook book;
 
   /// The Train tab's owner: the repertoire's lines and the sitting.
   final Trainer lineTrainer;
@@ -142,7 +148,25 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         Mode.repertoires => newWorkspaceTabs(),
         Mode.pgnViewer || Mode.study => readingTabs(),
         Mode.tactics => puzzleTabs(),
+        Mode.myGames => bookTabs(),
       }..addListener(_sitting.check);
+
+  late final _myGames = MyGamesDoors(
+    requests: _requests,
+    session: widget.session,
+    book: widget.book,
+  );
+
+  late final _modeActions = ModeActions(
+    requests: _requests,
+    session: widget.session,
+    analysis: widget.analysis,
+    gaps: widget.gaps,
+    fill: widget.fill,
+    viewer: widget.viewer,
+    trainer: widget.trainer,
+    myGames: widget.myGames,
+  );
 
   late final _sitting = SittingInView(
     trainer: widget.lineTrainer,
@@ -277,28 +301,38 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       ? widget.tree.play(uci)
       : widget.session.playMove(uci);
 
+  Widget _bookTab(BuildContext context) => BookPane(
+    book: widget.book,
+    session: widget.session,
+    onReadBook: _myGames.readBook,
+  );
+
+  /// Whether the board has the file's game counter under it. Tactics' list
+  /// is the way to another puzzle, and My games walks its own list with the
+  /// arrows, not the saved file's order.
+  bool get _counted =>
+      _requests.mode != Mode.tactics && _requests.mode != Mode.myGames;
+
   Widget _treeTab(BuildContext context) => TreePane(
     session: widget.session,
     tree: widget.tree,
-    onOpen: (place) => unawaited(_readTree(place)),
+    // The file a move was found in: that file, in the builder, at the
+    // position the move leads to.
+    onOpen: (place) =>
+        unawaited(_requests.readInBuilder(place.ref, place.sans)),
   );
 
-  /// The file a move of the Tree tab was found in: that file, in the
-  /// builder, at the position the move leads to.
-  Future<void> _readTree(TreePlace place) async {
-    _requests.switchTo(Mode.repertoires);
-    await _requests.openAt(place.ref, place.sans);
-  }
-
   /// Space and ↓ are the puzzle's while one is on the board, and the
-  /// document's otherwise.
+  /// document's otherwise; in My games ↑ and ↓ walk the list.
   void _space() {
     if (widget.trainer.up != null) widget.trainer.showSolution();
   }
 
-  /// ↓ (1) / ↑ (−1) walk what is in front of the user: the Prep tab's
-  /// rows while it is up, the puzzles in a sitting, else the file's games.
+  /// ↓ (1) / ↑ (−1) walk what is in front of the user: the book's games in
+  /// My games, the Prep tab's rows while it is up, the puzzles in a
+  /// sitting, else the file's games.
   void _walk(int by) {
+    if (_requests.mode == Mode.myGames) return _myGames.step(by);
     if (_tabs.selected == WorkspaceTab.prep && _generate.step(by)) return;
     final trainer = widget.trainer;
     if (trainer.up != null) {
@@ -320,7 +354,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       widget.session.chapter?.name ?? 'Chapter',
     );
     if (name == null || !mounted) return;
-    final result = await widget.session.saveCopy(name);
+    final result = await saveCopy(widget.session, widget.saver, name);
     if (!mounted) return;
     _requests.say(switch (result) {
       CopySaved(:final name) => 'Saved a copy as $name',
@@ -329,66 +363,23 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     });
   }
 
-  /// Everything the Actions menu offers now: the mode's own doors first,
-  /// then what can be done to the document, whichever mode opened it.
-  List<AppAction> _actions() => _requests.mode == Mode.tactics
-      ? tacticsActions(
-          trainer: widget.trainer,
-          games: widget.myGames,
-          session: widget.session,
-          analysis: widget.analysis,
-          tabs: _tabs,
-          onAccounts: () => unawaited(editAccounts(context, widget.myGames)),
-        )
-      : [
-          AppAction(
-            'Open PGN file…',
-            () => unawaited(_requests.openPgnFile()),
-            shortcut: 'Ctrl+O',
-          ),
-          ...boardActions(
-            context,
-            session: widget.session,
-            requests: _requests,
-            library: widget.library,
-            studies: widget.studies,
-          ),
-          if (_requests.mode == Mode.repertoires)
-            AppAction(
-              'Paste PGN',
-              () => unawaited(_requests.pasteRepertoire()),
-              shortcut: widget.session.isScratch ? null : 'Ctrl+V',
-            )
-          else
-            AppAction(
-              'Close file',
-              widget.viewer.file == null
-                  ? null
-                  : () => unawaited(_requests.closeFile()),
-            ),
-          ...documentActions(
-            session: widget.session,
-            analysis: widget.analysis,
-            editing: _editing,
-            onSaveCopy: () => unawaited(_saveCopy()),
-          ),
-          AppAction(
-            'Next gap',
-            (widget.gaps.walk?.gaps ?? const []).isEmpty
-                ? null
-                : widget.gaps.nextGap,
-            group: 'Repertoire',
-          ),
-          if (widget.session.chapter case final chapter?
-              when chapter.game == null)
-            AppAction(
-              chapter.side == Side.white ? 'Play as Black' : 'Play as White',
-              () => setSide(widget.session, chapter.side.opposite),
-              group: 'Repertoire',
-            ),
-          _generate.action(context, _tabs),
-          ...tabActions(_tabs),
-        ];
+  /// Everything the Actions menu offers now, in the mode on screen.
+  List<AppAction> _actions() => _modeActions.now(
+    tabs: _tabs,
+    editing: _editing,
+    board: boardActions(
+      context,
+      session: widget.session,
+      requests: _requests,
+      library: widget.library,
+      studies: widget.studies,
+    ),
+    dialogs: (
+      saveCopy: () => unawaited(_saveCopy()),
+      generate: () => unawaited(_generate.generate(context, _tabs)),
+      accounts: () => unawaited(editAccounts(context, widget.myGames)),
+    ),
+  );
 
   /// The same actions, typed for: a searchable list that the enter key
   /// takes the one match of.
@@ -484,6 +475,13 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         onPlay: _play,
         trailing: toggle,
       ),
+      Mode.myGames => MyGamesPanel(
+        book: widget.book,
+        session: widget.session,
+        accounts: MyGamesBlock(games: widget.myGames),
+        onOpen: _myGames.open,
+        trailing: toggle,
+      ),
     };
   }
 
@@ -514,6 +512,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
                 widget.viewer,
                 widget.trainer,
                 widget.myGames,
+                widget.book,
                 _editing,
                 _tabs,
               ]),
@@ -579,12 +578,13 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         ),
       ),
       header: _requests.mode != Mode.tactics,
-      gameCounter: _requests.mode != Mode.tactics,
+      gameCounter: _counted,
       boardClaim: _claim,
       onEngineMove: _engineMove,
       treeTab: _treeTab,
       onGenerate: () => unawaited(_generate.generate(context, _tabs)),
       onFound: _generate.go,
+      bookTab: _bookTab,
       trainTab: (_) => TrainPane(
         trainer: widget.lineTrainer,
         onRead: (line) => unawaited(_readLine(line)),

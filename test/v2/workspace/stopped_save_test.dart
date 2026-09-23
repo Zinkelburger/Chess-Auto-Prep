@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/v2/workspace/copy_aside.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart'
@@ -97,7 +98,7 @@ void main() {
       expect(fixture.onDisk, isNot(contains('first')));
       expect(fixture.onDisk, isNot(contains('second')));
 
-      expect(await session.saveCopy('Elsewhere'), isA<CopySaved>());
+      expect(await saveCopy(session, saver, 'Elsewhere'), isA<CopySaved>());
       expect(_copyText(fixture, 'Elsewhere.pgn'), contains('first'));
       expect(_copyText(fixture, 'Elsewhere.pgn'), contains('second'));
     },
@@ -162,7 +163,7 @@ void main() {
     edit('frozen words');
     await pumpEventQueue();
 
-    final copy = await session.copyAside('Elsewhere') as CopySaved;
+    final copy = await copyAside(session, saver, 'Elsewhere') as CopySaved;
     expect(copy.nowEditing, isFalse);
     expect(session.source, fixture.ref, reason: 'still on the original');
     expect(saver.state, isA<SaveStopped>());
@@ -177,7 +178,7 @@ void main() {
     await pumpEventQueue();
     expect(saver.state, isA<SaveStopped>());
 
-    final copy = await session.saveCopy('Elsewhere') as CopySaved;
+    final copy = await saveCopy(session, saver, 'Elsewhere') as CopySaved;
     expect(copy.nowEditing, isTrue);
     expect(session.source?.name, 'Elsewhere');
     expect(saver.state, isA<Saved>());

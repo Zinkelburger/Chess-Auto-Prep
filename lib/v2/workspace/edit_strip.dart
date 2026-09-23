@@ -12,6 +12,7 @@ import 'document_session.dart';
 import 'edit_refused.dart';
 import 'save_state.dart';
 import 'session_results.dart';
+import 'copy_aside.dart';
 
 /// Everything about changing the document, under the moves: Done, Undo, the
 /// save state, the six glyphs and the note on the move the board is on.
@@ -91,7 +92,7 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
       widget.session.chapter?.name ?? 'Chapter',
     );
     if (name == null || !mounted) return;
-    final result = await widget.session.saveCopy(name);
+    final result = await saveCopy(widget.session, widget.saver, name);
     if (!mounted) return;
     setState(
       () => _notice = switch (result) {

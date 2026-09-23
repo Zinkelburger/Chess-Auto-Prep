@@ -4,6 +4,7 @@ import 'package:chess_auto_prep/v2/app/window_input.dart';
 import 'package:chess_auto_prep/v2/app/workspace_requests.dart';
 import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/v2/features/library/chapter_outline.dart';
+import 'package:chess_auto_prep/v2/features/my_games/game_book.dart';
 import 'package:chess_auto_prep/v2/features/library/library.dart';
 import 'package:chess_auto_prep/v2/features/pgn_viewer/pgn_viewer.dart';
 import 'package:chess_auto_prep/v2/features/study/studies.dart';
@@ -22,6 +23,7 @@ import 'package:chess_auto_prep/v2/workspace/document_session.dart';
 import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
 import 'package:chess_auto_prep/v2/features/trainer/scope_reader.dart';
 import 'package:chess_auto_prep/v2/features/trainer/trainer.dart';
+import 'package:chess_auto_prep/v2/workspace/repertoire_shelf.dart';
 import 'package:chess_auto_prep/v2/workspace/repertoire_tree.dart';
 import 'package:chess_auto_prep/v2/workspace/explorer.dart';
 import 'package:chess_auto_prep/v2/workspace/fill_gaps.dart';
@@ -42,6 +44,7 @@ import 'scripted_store.dart';
 import 'study_fixture.dart';
 import 'tactics_fixture.dart';
 import 'viewer_fixture.dart';
+import 'package:chess_auto_prep/v2/workspace/copy_aside.dart';
 
 /// KID/Main: a Black chapter of two lines.
 final kidMain = ref('KID', 'Main');
@@ -105,7 +108,7 @@ final class WindowFixture {
   MyGames _myGamesOver() => MyGames(
     accounts: accounts,
     sites: const [],
-    cache: GamesCache(store, folder: '/games_library'),
+    cache: gamesCache,
     set: SetAdditions(
       documents: store,
       session: session,
@@ -119,6 +122,17 @@ final class WindowFixture {
   /// The usernames, in memory: none until a test sets them.
   final accounts = MemoryAccounts();
   late final MyGames myGames = _myGamesOver();
+
+  /// The saved games of the accounts, under `/games_library` in [store].
+  late final gamesCache = GamesCache(store, folder: '/games_library');
+
+  /// The repertoires as the Tree tab and My games read them.
+  late final shelf = RepertoireShelf(files: chapterFiles, documents: store);
+  late final book = GameBook(
+    accounts: accounts,
+    cache: gamesCache,
+    shelf: shelf,
+  );
 
   final store = ScriptedDocumentStore()
     ..documents[kidMain] = Opened(blackChapter, scriptedRevision(blackChapter))
@@ -199,11 +213,7 @@ final class WindowFixture {
     );
     explorer = explorerOver(session, settings: settings, lichess: lichess);
     games = gamesOver(store, lichess: lichess);
-    tree = RepertoireTree(
-      session: session,
-      files: chapterFiles,
-      documents: store,
-    );
+    tree = RepertoireTree(session: session, shelf: shelf);
     lineTrainer = Trainer(
       session: session,
       chapters: ScopeReader(files: ScriptedFiles(), documents: store),
@@ -218,7 +228,7 @@ final class WindowFixture {
     saver: saver,
     question: question,
     saveCopy: () async {
-      final written = await session.copyAside('Main copy');
+      final written = await copyAside(session, saver, 'Main copy');
       return written is CopySaved ? written.name : null;
     },
     wait: const Duration(milliseconds: 20),
@@ -254,6 +264,7 @@ final class WindowFixture {
           trainer: trainer,
           lineTrainer: lineTrainer,
           myGames: myGames,
+          book: book,
         ),
       ),
     );
@@ -266,6 +277,7 @@ final class WindowFixture {
 
   void dispose() {
     myGames.dispose();
+    book.dispose();
     lineTrainer.dispose();
     tactics.dispose();
     requests.dispose();

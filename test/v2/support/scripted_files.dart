@@ -5,9 +5,16 @@ import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 /// A repertoire listing the test writes, whose timing the test controls:
 /// every call waits until the test releases it.
 final class ScriptedFiles implements ChapterFiles {
-  ScriptedFiles({this.listing = const Repertoires([]), this.isEmpty});
+  ScriptedFiles({
+    this.listing = const Repertoires([]),
+    this.deletedListing = const DeletedChapters([]),
+    this.isEmpty,
+  });
 
   RepertoireListing listing;
+
+  /// What the recovery folders hold.
+  DeletedListing deletedListing;
 
   /// Whether a folder has nothing left in it, which the real listing answers
   /// from the disk the store just wrote to. Without it every folder counts as
@@ -45,6 +52,12 @@ final class ScriptedFiles implements ChapterFiles {
     listings++;
     await _wait();
     return listing;
+  }
+
+  @override
+  Future<DeletedListing> deleted() async {
+    await _wait();
+    return deletedListing;
   }
 
   @override

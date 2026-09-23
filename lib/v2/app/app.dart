@@ -11,7 +11,9 @@ import '../chess/generation/tree_wire_v4.dart' show treeWireVersion;
 import '../diagnostics/log.dart';
 import '../engines/engine_supervisor.dart';
 import '../engines/fixed_depth.dart';
+import '../chess/tactics/game_ids.dart' show GameSite;
 import '../features/library/chapter_outline.dart';
+import '../features/my_games/game_book.dart';
 import '../features/library/library.dart';
 import '../features/pgn_viewer/pgn_viewer.dart';
 import '../features/settings/setting_rows.dart';
@@ -47,6 +49,7 @@ import '../workspace/document_saver.dart';
 import '../workspace/document_session.dart';
 import '../workspace/session_results.dart';
 import '../workspace/engine_analysis.dart';
+import '../workspace/repertoire_shelf.dart';
 import '../workspace/repertoire_tree.dart';
 import '../workspace/explorer.dart';
 import '../workspace/explorer_databases.dart';
@@ -65,6 +68,7 @@ import 'open_folder.dart';
 import 'shell.dart';
 import 'window_input.dart';
 import 'workspace_requests.dart';
+import '../workspace/copy_aside.dart';
 
 /// Builds the owners and hands them to the shell. This is the only place
 /// that knows how the pieces fit together.
@@ -190,11 +194,11 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     settings: _settings,
     databases: _databases,
   );
-  late final _tree = RepertoireTree(
-    session: _session,
-    files: _chapterFiles,
-    documents: _store,
-  );
+
+  /// Every repertoire file, indexed by position once until it changes:
+  /// the Tree tab and the book check read the same one.
+  late final _shelf = RepertoireShelf(files: _chapterFiles, documents: _store);
+  late final _tree = RepertoireTree(session: _session, shelf: _shelf);
   late final _games = GameFetcher(
     databases: _databases,
     documents: _store,
@@ -308,7 +312,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
       _session.chapter?.name ?? 'Chapter',
     );
     if (name == null) return null;
-    final written = await _session.copyAside(name);
+    final written = await copyAside(_session, _saver, name);
     return written is CopySaved ? written.name : null;
   }
 
@@ -341,6 +345,32 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
         await _requests.open(set, game: game) is RequestDone,
   );
 
+  /// The user's downloaded games, one file per account, shared with the old
+  /// app.
+  late final _gamesCache = GamesCache(
+    _store,
+    folder: p.join(widget.documents.path, 'games_library'),
+  );
+
+  /// The user's games read against their repertoires, for My games.
+  late final _gameBook = GameBook(
+    accounts: PreferencesAccounts(),
+    cache: _gamesCache,
+    shelf: _shelf,
+  );
+
+  /// The accounts as the book last heard of them: a download or a new
+  /// username gives the review a new map, which is when the book reads
+  /// the games again.
+  Map<GameSite, Account>? _accountsSeen;
+
+  void _gamesMayHaveChanged() {
+    final accounts = _myGames.accounts;
+    if (identical(accounts, _accountsSeen)) return;
+    _accountsSeen = accounts;
+    _gameBook.recheck();
+  }
+
   /// The user's accounts and the review that mines their games into the
   /// set, on a Stockfish of its own with the pane's threads and table.
   late final _myGames = MyGames(
@@ -349,10 +379,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
       LichessGamesApi(_lichess, token: readLichessToken),
       ChesscomGamesApi(_lichess),
     ],
-    cache: GamesCache(
-      _store,
-      folder: p.join(widget.documents.path, 'games_library'),
-    ),
+    cache: _gamesCache,
     set: SetAdditions(
       documents: _store,
       session: _session,
@@ -391,6 +418,8 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     // chapters answer is read again the next time a chapter is walked.
     _library.addListener(_answers.forget);
     _library.addListener(_tree.forget);
+    _library.addListener(_gameBook.recheck);
+    _myGames.addListener(_gamesMayHaveChanged);
     _fill.addListener(_listTheDraft);
     unawaited(_library.refresh());
     unawaited(_startWithSettings());
@@ -425,7 +454,9 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     _account.dispose();
     _requests.dispose();
     _lineTrainer.dispose();
+    _myGames.removeListener(_gamesMayHaveChanged);
     _myGames.dispose();
+    _gameBook.dispose();
     _tactics.dispose();
     _fill.removeListener(_listTheDraft);
     _fill.dispose();
@@ -443,6 +474,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     _outline.dispose();
     _library.removeListener(_answers.forget);
     _library.removeListener(_tree.forget);
+    _library.removeListener(_gameBook.recheck);
     _library.dispose();
     _studies.dispose();
     _viewer.dispose();
@@ -462,6 +494,7 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
       debugShowCheckedModeBanner: false,
       home: Shell(
         myGames: _myGames,
+        book: _gameBook,
         requests: _requests,
         library: _library,
         studies: _studies,

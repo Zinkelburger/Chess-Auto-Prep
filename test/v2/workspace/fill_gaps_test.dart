@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:chess_auto_prep/v2/chess/pgn/analysis_board.dart';
 import 'package:chess_auto_prep/v2/chess/generation/eval.dart';
 import 'package:chess_auto_prep/v2/chess/generation/sources.dart';
 import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
@@ -152,9 +153,8 @@ void main() {
 
   test('on the analysis board a run writes nothing and keeps what it found, '
       'for the side at the bottom of the board', () async {
-    await fixture.session.newAnalysisBoard(
-      side: Side.white,
-      root: const Fen(kingAndPawn),
+    await fixture.session.showAnalysisBoard(
+      analysisBoard(side: Side.white, root: const Fen(kingAndPawn)),
     );
     final afterE4 = afterUci(positionOf(kingAndPawn), 'e2e4');
     final fill = fillWith(
@@ -179,9 +179,8 @@ void main() {
 
   test('Finish now stops after the expansion under way and keeps what the '
       'search has so far', () async {
-    await fixture.session.newAnalysisBoard(
-      side: Side.white,
-      root: const Fen(kingAndPawn),
+    await fixture.session.showAnalysisBoard(
+      analysisBoard(side: Side.white, root: const Fen(kingAndPawn)),
     );
     final fill = fillWith(ScriptedEvaluator());
     // Finish as soon as the first position is answered.

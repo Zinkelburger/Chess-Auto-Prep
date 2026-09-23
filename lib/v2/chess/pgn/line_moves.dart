@@ -1,10 +1,10 @@
 import 'chapter.dart';
 import 'chapter_edit.dart';
 import 'chapter_line.dart';
-import 'game_text.dart';
 import 'game_tree.dart';
 import 'games_written.dart';
 import 'line_id.dart';
+import 'line_id_pins.dart';
 import 'move_text.dart';
 import 'rewrite_gate.dart';
 import 'tree_edit.dart';
@@ -149,7 +149,7 @@ List<ChapterLine>? _withOwnIds(Chapter chapter, List<ChapterLine> lines) {
     }
     final at = chapter.lines.length + offset;
     final fresh = newLineId(mainlineSans(tree), at, taken);
-    final written = _withIdHeader(line, fresh);
+    final written = withIdHeader(line, fresh);
     if (written == null) return null;
     taken.add(fresh);
     out.add(written);
@@ -160,58 +160,6 @@ List<ChapterLine>? _withOwnIds(Chapter chapter, List<ChapterLine> lines) {
 Set<String> _takenIds(Chapter chapter) => {
   for (final line in chapter.lines) ?line.lineId,
 };
-
-/// [line] with the header its id comes from holding [id] instead, its moves'
-/// text untouched, or null when nothing here can make that change.
-///
-/// Which header the id comes from is [ChapterLine.lineId]'s to say — files
-/// in the wild spell the key five ways — so the header is found by the value
-/// it holds and the result is then asked again. A line whose id does not
-/// come back as [id] is one this rewrote the wrong header of, and it is
-/// refused rather than written.
-///
-/// The movetext is taken from the line's own bytes rather than written
-/// again from its tree, so a line that reading could not take whole still
-/// arrives carrying everything it had.
-ChapterLine? _withIdHeader(ChapterLine line, String id) {
-  final had = line.lineId;
-  final at = line.tags.indexWhere(
-    (header) => header is PgnTag && header.value.trim() == had,
-  );
-  final moves = _movesOf(line);
-  if (at < 0 || moves == null) return null;
-  final was = line.tags[at] as PgnTag;
-  final tags = [...line.tags]..[at] = PgnTag(was.key, id, trailer: was.trailer);
-  final written = ChapterLine(
-    tags: List.unmodifiable(tags),
-    tree: line.tree,
-    text: '${_headerText(tags)}${line.separator}$moves',
-    trailer: line.trailer,
-    terminator: line.terminator,
-    separator: line.separator,
-    issues: line.issues,
-  );
-  return written.lineId == id ? written : null;
-}
-
-/// The line's movetext exactly as the file has it: its own bytes past the
-/// headers and the whitespace after them.
-String? _movesOf(ChapterLine line) {
-  final prefix = '${_headerText(line.tags)}${line.separator}';
-  return line.text.startsWith(prefix)
-      ? line.text.substring(prefix.length)
-      : null;
-}
-
-String _headerText(List<PgnHeader> tags) {
-  final buffer = StringBuffer();
-  for (final header in tags) {
-    buffer
-      ..write(header.text)
-      ..write(header.trailer);
-  }
-  return buffer.toString();
-}
 
 /// [chapter]'s games with [added] after them, each starting its own
 /// `[Event ` line.

@@ -1,8 +1,10 @@
 import 'dart:async';
 
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/foundation.dart';
 
 import '../chess/fen.dart';
+import '../chess/pgn/analysis_board.dart' as boards;
 import '../chess/pgn/game_tree.dart' show NodePath;
 import '../chess/pgn/tree_edit.dart' show pathAlong;
 import '../features/library/library.dart';
@@ -146,6 +148,28 @@ final class WorkspaceRequests extends ChangeNotifier {
     return result;
   }
 
+  /// [ref] in the Repertoire builder at the position [sans] reach: a file
+  /// another mode found a move in.
+  Future<RequestResult> readInBuilder(ChapterRef ref, List<String> sans) {
+    switchTo(Mode.repertoires);
+    return openAt(ref, sans);
+  }
+
+  /// Game [game] of [ref] on the board, [ply] moves into it and seen from
+  /// [side]: one of the user's own games, opened where something happened.
+  Future<RequestResult> openGame(
+    ChapterRef ref, {
+    required int game,
+    required int ply,
+    required Side side,
+  }) async {
+    final result = await open(ref, game: game);
+    if (_disposed || result is! RequestDone) return result;
+    _session.goTo(NodePath.of(List.filled(ply, 0)));
+    if (_session.orientation != side) _session.flip();
+    return result;
+  }
+
   /// A file from the viewer's recent list: brought inside Documents if it
   /// is not, then opened in the viewer. When no copy could be made the
   /// viewer's list says why.
@@ -239,7 +263,9 @@ final class WorkspaceRequests extends ChangeNotifier {
         final back = await analysisBoard();
         if (_disposed || back is! RequestDone) return back;
         if (_session.tree?.rootFen != root) {
-          await _session.newAnalysisBoard(side: found.side, root: root);
+          await _session.showAnalysisBoard(
+            boards.analysisBoard(side: found.side, root: root),
+          );
         }
         _session.goTo(const NodePath.root());
         for (final move in line) {
@@ -268,7 +294,9 @@ final class WorkspaceRequests extends ChangeNotifier {
     ];
     final leave = await _leavingFile();
     if (_disposed || leave == null) return const RequestDropped();
-    await _session.newAnalysisBoard(side: side, root: root, sans: sans);
+    await _session.showAnalysisBoard(
+      boards.analysisBoard(side: side, root: root, sans: sans),
+    );
     _saidCopy(leave);
     return const RequestDone();
   }
@@ -287,9 +315,13 @@ final class WorkspaceRequests extends ChangeNotifier {
     if (_disposed) return const RequestDropped();
     final leave = await _leavingFile();
     if (_disposed || leave == null) return const RequestDropped();
-    final refusal = await _session.pasteOntoBoard(text);
+    switch (boards.pastedBoard(text, side: _session.orientation)) {
+      case boards.PasteRefused(:final reason):
+        return _refused(reason);
+      case boards.PastedBoard(:final chapter):
+        await _session.showAnalysisBoard(chapter);
+    }
     if (_disposed) return const RequestDropped();
-    if (refusal != null) return _refused(refusal);
     _saidCopy(leave);
     return const RequestDone();
   }

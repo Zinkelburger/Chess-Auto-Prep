@@ -4,6 +4,9 @@ Status: draft from the old app
 Old code (oracle only): `lib/features/tactics/`, `lib/features/games/`, `lib/screens/main_screen.dart`
 Plan step: 9
 
+> The book check, the opening review and the games list became their own mode on 2026-09-22:
+> see [my-games.md](my-games.md).
+
 ## Purpose
 Someone gives the app their Lichess or Chess.com username; it downloads their recent games, checks them
 against their books and lets Stockfish grade every move they made. They leave with their own blunders as

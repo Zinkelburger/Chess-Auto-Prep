@@ -9,11 +9,17 @@ base class DocumentRef {
   /// Absolute, as the operating system spells it.
   final String path;
 
-  @override
-  bool operator ==(Object other) => other is DocumentRef && other.path == path;
+  /// The chapter of the file this names, when the file holds several by
+  /// tag (`ChapterRef.section`); null for the file as a whole. Two refs to
+  /// one file are one document only when they name the same part of it.
+  String? get section => null;
 
   @override
-  int get hashCode => path.hashCode;
+  bool operator ==(Object other) =>
+      other is DocumentRef && other.path == path && other.section == section;
+
+  @override
+  int get hashCode => Object.hash(path, section);
 
   @override
   String toString() => path;

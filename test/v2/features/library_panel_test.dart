@@ -1,11 +1,14 @@
 import 'package:chess_auto_prep/v2/features/library/library_panel.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
+import 'package:chess_auto_prep/v2/storage/document_ref.dart';
+import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/library_fixture.dart';
 import '../support/scripted_files.dart';
+import '../support/scripted_store.dart';
 
 void main() {
   final kid = folder('KID', [
@@ -181,8 +184,8 @@ void main() {
     expect(find.text('Delete repertoire "benko"?'), findsOneWidget);
     expect(
       find.text(
-        'Its chapters will be removed from this folder and kept in recovery '
-        'storage.',
+        'Its chapters can be restored from Deleted chapters under this '
+        'list.',
       ),
       findsOneWidget,
     );
@@ -262,5 +265,101 @@ void main() {
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
     expect(fixture.textAt('/repertoires/Sidelines/Classical.pgn'), isNotNull);
+  });
+
+  testWidgets('a course chapter’s delete does not promise a restore', (
+    tester,
+  ) async {
+    final course = RepertoireFolder(
+      name: 'Course',
+      path: '/repertoires/Course',
+      modified: DateTime.now(),
+      chapters: [
+        ChapterRef.at('/repertoires/Course/Main.pgn', section: 'Open'),
+        ChapterRef.at('/repertoires/Course/Main.pgn', section: 'Closed'),
+      ],
+    );
+    await show(tester, [course]);
+    await tester.tap(find.text('Course'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.more_horiz).at(1));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete…'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('course file they share'), findsOneWidget);
+    expect(find.textContaining('Deleted chapters under'), findsNothing);
+  });
+
+  const trashed = '/repertoires/KID/.cap-pgn-history/1-a-Main.pgn';
+  final main = DeletedChapter(
+    path: trashed,
+    folder: '/repertoires/KID',
+    name: 'Main',
+    deletedAt: DateTime.now().subtract(const Duration(days: 2)),
+  );
+
+  Future<void> showDeleted(WidgetTester tester, {bool taken = false}) async {
+    await show(tester, [
+      folder('KID', taken ? ['Main'] : ['Classical']),
+    ]);
+    fixture.files.deletedListing = DeletedChapters([main]);
+    fixture.store.documents[const DocumentRef(trashed)] = Opened(
+      '// Main\n',
+      scriptedRevision('// Main\n'),
+    );
+    await tester.tap(find.text('Deleted chapters'));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets(
+    'deleted chapters are listed with where they came from and when',
+    (tester) async {
+      await showDeleted(tester);
+      expect(find.text('Main'), findsOneWidget);
+      expect(find.text('KID'), findsOneWidget);
+      expect(find.text('2d ago'), findsOneWidget);
+      await tester.tap(find.byTooltip('Back to repertoires'));
+      await tester.pumpAndSettle();
+      expect(find.text('KID'), findsOneWidget);
+    },
+  );
+
+  testWidgets('deleted chapters come back where they were, and can be opened', (
+    tester,
+  ) async {
+    await showDeleted(tester);
+    fixture.files.deletedListing = const DeletedChapters([]);
+    await tester.tap(find.text('Restore'));
+    await tester.pumpAndSettle();
+    expect(fixture.textAt('/repertoires/KID/Main.pgn'), '// Main\n');
+    expect(fixture.textAt(trashed), isNull);
+    expect(find.text('Restored "Main" to KID.'), findsOneWidget);
+    expect(find.textContaining('Nothing deleted'), findsOneWidget);
+    await tester.tap(find.text('Open'));
+    expect(opened.single.path, '/repertoires/KID/Main.pgn');
+  });
+
+  testWidgets(
+    'a deleted chapter asks for another name rather than replace a chapter',
+    (tester) async {
+      await showDeleted(tester, taken: true);
+      await tester.tap(find.text('Restore'));
+      await tester.pumpAndSettle();
+      expect(find.text('"Main" is already in KID'), findsOneWidget);
+      await tester.tap(find.widgetWithText(FilledButton, 'Restore'));
+      await tester.pumpAndSettle();
+      expect(
+        fixture.textAt('/repertoires/KID/Main (restored).pgn'),
+        '// Main\n',
+      );
+      expect(fixture.textAt('/repertoires/KID/Main.pgn'), isNot('// Main\n'));
+    },
+  );
+
+  testWidgets('no deleted chapters says so', (tester) async {
+    await show(tester, [kid]);
+    await tester.tap(find.text('Deleted chapters'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Nothing deleted'), findsOneWidget);
   });
 }

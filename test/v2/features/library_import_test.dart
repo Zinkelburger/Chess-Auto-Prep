@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/v2/chess/pgn/chapter_sections.dart';
 import 'package:chess_auto_prep/v2/features/library/library.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/document_ref.dart';
@@ -41,24 +42,25 @@ void main() {
   tearDown(() => fixture.dispose());
 
   test(
-    'a pasted study becomes one folder with a chapter per study chapter',
+    'a pasted study becomes one course file with a chapter per study chapter',
     () async {
       final result = await fixture.library.importText(study, name: 'Najdorf');
       expect(result, isA<LibraryAdded>());
       final added = result as LibraryAdded;
-      expect(added.first.path, '/repertoires/Najdorf/6.Bg5 e6.pgn');
+      expect(added.first.path, '/repertoires/Najdorf/Najdorf.pgn');
+      expect(added.first.section, '6.Bg5 e6');
       expect(added.chapters, 2);
       expect(added.lines, 3);
       expect(
         paths().where((path) => p.isWithin('/repertoires/Najdorf', path)),
-        unorderedEquals([
-          '/repertoires/Najdorf/6.Bg5 e6.pgn',
-          '/repertoires/Najdorf/6.Be3.pgn',
-        ]),
+        ['/repertoires/Najdorf/Najdorf.pgn'],
       );
+      final text = fixture.textAt('/repertoires/Najdorf/Najdorf.pgn')!;
+      expect(sectionsInText(text), ['6.Bg5 e6', '6.Be3']);
       expect(
-        fixture.textAt('/repertoires/Najdorf/6.Bg5 e6.pgn'),
-        startsWith('// 6.Bg5 e6\n'),
+        '[LineID '.allMatches(text),
+        hasLength(3),
+        reason: 'every line carries the id it is trained under',
       );
       expect(
         paths().where((path) => p.basename(p.dirname(path)).startsWith('.')),
@@ -107,10 +109,7 @@ void main() {
   });
 
   test('a write that fails takes the staging folder with it', () async {
-    fixture.store.creates.addAll([
-      const Created(Revision('first')),
-      const IoFailure('disk full'),
-    ]);
+    fixture.store.creates.add(const IoFailure('disk full'));
     final result = await fixture.library.importText(study, name: 'Najdorf');
     expect(result, isA<LibraryFailure>());
     expect((result as LibraryFailure).detail, 'disk full');

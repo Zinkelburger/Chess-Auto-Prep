@@ -2,8 +2,9 @@
 ///
 /// A Lichess study export titles every game with `ChapterName`; a Chessable
 /// course titles a chapter's games alike in one player header. Anything else
-/// is one chapter. The import writes one chapter file per title, and the PGN
-/// Viewer lists a file's games under the same titles, so both read them here.
+/// is one chapter. The import writes each title into its lines'
+/// `[ChapterName]`, and the PGN Viewer lists a file's games under the same
+/// titles, so both read them here.
 ///
 /// Pure: the games' headers in, one title per game out.
 library;

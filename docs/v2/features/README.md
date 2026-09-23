@@ -20,6 +20,7 @@ when its spec says `Status: corrected by the owner`.
 | Study | [study.md](study.md) | 4 |
 | Repertoire trainer | [trainer.md](trainer.md) | 5 |
 | Tactics | [tactics.md](tactics.md) | 9 |
+| My games (your games against your book) | [my-games.md](my-games.md) | 9c |
 | Player analysis, Players & prep | [players.md](players.md) | 10 |
 | Databases | [databases.md](databases.md) | 11 |
 | Engine tournament | [engine-tournament.md](engine-tournament.md) | 12 |

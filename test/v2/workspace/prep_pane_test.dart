@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/v2/chess/pgn/analysis_board.dart';
 import 'package:chess_auto_prep/v2/chess/fen.dart';
 import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/v2/ui/theme.dart';
@@ -28,9 +29,8 @@ void main() {
       () async => Started(ScriptedEngine()),
     );
     went = [];
-    await fixture.session.newAnalysisBoard(
-      side: Side.white,
-      root: const Fen(kingAndPawn),
+    await fixture.session.showAnalysisBoard(
+      analysisBoard(side: Side.white, root: const Fen(kingAndPawn)),
     );
     final afterE4 = afterUci(positionOf(kingAndPawn), 'e2e4');
     fill = FillGaps(

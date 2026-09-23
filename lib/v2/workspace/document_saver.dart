@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 
+import '../chess/pgn/chapter.dart';
 import '../diagnostics/log.dart';
 import '../storage/document_ref.dart';
 import '../storage/edit_scope.dart';
@@ -7,6 +9,7 @@ import '../storage/pgn_document_store.dart' as store;
 import 'save_clock.dart';
 import 'save_queue.dart';
 import 'save_state.dart';
+import 'session_results.dart';
 import 'undo_history.dart';
 
 typedef _Target = ({DocumentRef ref, Revision revision});
@@ -217,7 +220,9 @@ final class DocumentSaver extends ChangeNotifier {
   /// open that asked for it, so it is not history here.
   void _catchUp(store.SaveResult result, DocumentRef ref) {
     final target = _target;
-    if (target == null || target.ref != ref) return;
+    // By path: two chapters of one file are one file on disk, and the
+    // revision a write committed is that file's.
+    if (target == null || target.ref.path != ref.path) return;
     if (result case store.Saved(:final receipt)) {
       _target = (ref: ref, revision: receipt.committed);
     }
@@ -379,6 +384,26 @@ final class DocumentSaver extends ChangeNotifier {
     // the user the file holds words it does not hold yet.
     _state = state is Saved && !_pending.isEmpty ? const Unsaved() : state;
     notifyListeners();
+  }
+
+  /// Writes [chapter] into a new file next to [beside], under [name].
+  ///
+  /// This is the one way out of a document that can take no more words — a
+  /// save the store stopped, a file this app may not write, a conflict the
+  /// user does not want to lose their draft to. It replaces nothing: the
+  /// name being taken is a result, never permission to overwrite.
+  Future<CopyResult> copyAside(
+    Chapter chapter, {
+    required DocumentRef beside,
+    required String name,
+  }) async {
+    final file = p.extension(name) == '.pgn' ? name : '$name.pgn';
+    final target = DocumentRef(p.join(p.dirname(beside.path), file));
+    return switch (await _store.create(target, writeChapter(chapter))) {
+      store.Created() => CopySaved(file),
+      store.Collision() => const CopyNameTaken(),
+      store.IoFailure(:final detail) => CopyFailed(detail),
+    };
   }
 
   @override
