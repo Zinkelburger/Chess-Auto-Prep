@@ -17,6 +17,9 @@ import 'package:chess_auto_prep/v2/workspace/replies.dart';
 import 'package:chess_auto_prep/v2/workspace/replies_pane.dart';
 import 'package:chess_auto_prep/v2/workspace/workspace_keys.dart';
 import 'package:chess_auto_prep/v2/workspace/workspace_tabs.dart';
+import 'package:chess_auto_prep/v2/workspace/repertoire_shelf.dart';
+import 'package:chess_auto_prep/v2/workspace/repertoire_tree.dart';
+import 'package:chess_auto_prep/v2/workspace/workspace.dart';
 import 'package:chess_auto_prep/v2/workspace/workspace_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -25,6 +28,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../support/fixtures.dart';
 import '../support/replies_fixture.dart';
 import '../support/scripted_explorer.dart';
+import '../support/scripted_files.dart';
 import '../support/scripted_store.dart';
 import '../support/scripted_policy.dart';
 import '../support/session_fixture.dart';
@@ -78,6 +82,28 @@ void main() {
     addTearDown(fill.dispose);
   }
 
+  Workspace workspace() {
+    final shelf = RepertoireShelf(
+      files: ScriptedFiles(),
+      documents: fixture.store,
+    );
+    final tree = RepertoireTree(session: session, shelf: shelf);
+    addTearDown(tree.dispose);
+    return Workspace(
+      session: session,
+      saver: saver,
+      settings: settings,
+      analysis: analysis,
+      explorer: explorer,
+      games: games,
+      replies: replies,
+      gaps: gaps,
+      shelf: shelf,
+      tree: tree,
+      fill: fill,
+    );
+  }
+
   Future<void> pump(WidgetTester tester) async {
     await tester.binding.setSurfaceSize(const Size(1200, 700));
     await tester.pumpWidget(
@@ -92,17 +118,9 @@ void main() {
             editing: editing,
             tabs: tabs,
             child: WorkspaceView(
-              session: session,
-              saver: saver,
-              analysis: analysis,
-              replies: replies,
-              gaps: gaps,
-              explorer: explorer,
-              games: games,
-              fill: fill,
+              workspace: workspace(),
               tabs: tabs,
               editing: editing,
-              settings: settings,
             ),
           ),
         ),

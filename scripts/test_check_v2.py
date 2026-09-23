@@ -2,21 +2,13 @@
 """Each v2 rule fires on a small bad input and stays quiet on a good one."""
 import unittest
 
-from check_v2 import LIB, check_classes, check_functions, check_imports, owner_classes
+from check_v2 import LIB, MAX_FUNCTION_LINES, check_classes, check_functions, check_imports
 
 
-def owner(fields: str, base: str = "extends ChangeNotifier") -> str:
-    return f"final class Busy {base} {{\n{fields}\n}}\n"
-
-
-def class_findings(source: str, extra: dict[str, str] | None = None) -> list[str]:
-    owners = owner_classes({"a.dart": source, **(extra or {})})
+def class_findings(source: str) -> list[str]:
     findings: list[str] = []
-    check_classes("a.dart", source, owners, findings)
+    check_classes("a.dart", source, findings)
     return findings
-
-
-ELEVEN_STATE_FIELDS = "\n".join(f"  int _f{i} = 0;" for i in range(11))
 
 
 class ImportsTest(unittest.TestCase):
@@ -37,54 +29,6 @@ class ImportsTest(unittest.TestCase):
     def test_net_may_listen_on_a_socket_but_ui_may_not(self):
         self.assertFalse(self.findings("net/login.dart", "dart:io"))
         self.assertTrue(self.findings("ui/theme.dart", "dart:io"))
-
-
-class OwnerFieldsTest(unittest.TestCase):
-    def test_an_owner_with_eleven_fields_of_its_own_fails(self):
-        found = class_findings(owner(ELEVEN_STATE_FIELDS))
-        self.assertEqual(len(found), 1)
-        self.assertIn("owner Busy keeps 11 fields (max 10)", found[0])
-
-    def test_ten_fields_pass(self):
-        ten = "\n".join(f"  int _f{i} = 0;" for i in range(10))
-        self.assertFalse(class_findings(owner(ten)))
-
-    def test_statics_and_constructor_filled_finals_do_not_count(self):
-        fields = "\n".join(
-            [f"  int _f{i} = 0;" for i in range(10)]
-            + [
-                "  Busy(this._store, {this.delay = const Duration(seconds: 1)});",
-                "  static const cap = 3;",
-                "  static final pattern = RegExp('x');",
-                "  final Store _store;",
-                "  final Duration delay;",
-                "  int get f0 => _f0;",
-                "  void bump() { _f0++; }",
-                "  final Future<bool> Function(Uri) _open;",
-            ]
-        )
-        self.assertFalse(class_findings(owner(fields)))
-
-    def test_owned_finals_late_fields_and_one_line_lists_count(self):
-        fields = "\n".join(
-            [f"  int _f{i} = 0;" for i in range(8)]
-            + ["  final _answers = <String, int>{};", "  late final Timer _timer;", "  int? _a, _b;"]
-        )
-        found = class_findings(owner(fields))
-        self.assertEqual(len(found), 1)
-        self.assertIn("12 fields", found[0])
-
-    def test_braces_in_strings_and_comments_do_not_end_the_class(self):
-        fields = "  // }\n  final _s = '${x.map((y) { return y; })} }';\n" + ELEVEN_STATE_FIELDS
-        self.assertIn("12 fields", class_findings(owner(fields))[0])
-
-    def test_a_subclass_of_an_owner_is_an_owner(self):
-        base = "class Base extends ChangeNotifier {}\n"
-        self.assertTrue(class_findings(owner(ELEVEN_STATE_FIELDS, "extends Base"), {"b.dart": base}))
-        self.assertTrue(class_findings(owner(ELEVEN_STATE_FIELDS, "with ChangeNotifier")))
-
-    def test_a_value_class_is_not_an_owner(self):
-        self.assertFalse(class_findings(owner(ELEVEN_STATE_FIELDS, "")))
 
 
 LISTENING = """
@@ -119,14 +63,19 @@ class ListeningTest(unittest.TestCase):
         )
         self.assertFalse(class_findings(mixin))
 
+    def test_braces_in_strings_and_comments_do_not_end_the_class(self):
+        noise = "  // }\n  final _s = '${x.map((y) { return y; })} }';\n"
+        source = LISTENING.format(extra="").replace("{\n  @override", "{\n" + noise + "  @override", 1)
+        self.assertTrue(class_findings(source))
+
 
 class FunctionsTest(unittest.TestCase):
     def test_a_long_function_fails(self):
-        lines = ["void long() {"] + ["  work();"] * 50 + ["}"]
+        lines = ["void long() {"] + ["  work();"] * MAX_FUNCTION_LINES + ["}"]
         findings: list[str] = []
         check_functions(LIB / "chess/x.dart", lines, findings)
         self.assertEqual(len(findings), 1)
-        self.assertIn("function is 52 lines", findings[0])
+        self.assertIn(f"function is {MAX_FUNCTION_LINES + 2} lines", findings[0])
 
 
 if __name__ == "__main__":

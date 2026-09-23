@@ -91,13 +91,8 @@ Library libraryOver(
   String root = '/repertoires',
 }) => Library(
   files: files,
-  writes: LibraryWrites(
-    files: files,
-    documents: documents,
-    session: session,
-    saver: saver,
-    root: root,
-  ),
+  documents: documents,
+  saver: saver,
   session: session,
   picker: picker ?? ScriptedPicker(),
   root: root,

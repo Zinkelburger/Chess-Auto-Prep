@@ -9,10 +9,8 @@ import '../ui/pane_tabs.dart';
 import '../ui/theme.dart';
 import 'board_claim.dart';
 import 'board_view.dart';
-import 'document_saver.dart';
 import 'document_session.dart';
 import 'edit_strip.dart';
-import 'engine_analysis.dart';
 import 'engine_pane.dart';
 import 'explorer.dart';
 import 'explorer_pane.dart';
@@ -28,6 +26,7 @@ import 'prep_pane.dart';
 import 'reading_header.dart';
 import 'replies.dart';
 import 'replies_pane.dart';
+import 'workspace.dart';
 import 'workspace_tabs.dart';
 
 /// The board with the game counter and the move's note under it on the
@@ -41,17 +40,9 @@ import 'workspace_tabs.dart';
 class WorkspaceView extends StatelessWidget {
   const WorkspaceView({
     super.key,
-    required this.session,
-    required this.saver,
-    required this.analysis,
-    required this.replies,
-    required this.gaps,
-    required this.explorer,
-    required this.games,
-    required this.fill,
+    required this.workspace,
     required this.tabs,
     required this.editing,
-    required this.settings,
     this.moveMenu,
     this.onExplorerGame,
     this.boardClaim,
@@ -67,27 +58,16 @@ class WorkspaceView extends StatelessWidget {
     this.gameCounter = true,
   });
 
-  final DocumentSession session;
-  final DocumentSaver saver;
-  final EngineAnalysis analysis;
-  final Replies replies;
-  final GapHunt gaps;
-  final Explorer explorer;
-  final GameFetcher games;
+  /// The document and every owner worked out from its cursor.
+  final Workspace workspace;
 
   /// Asked to open a game the explorer lists, which is the shell's
   /// business: another mode shows it.
   final ValueChanged<ExplorerGame>? onExplorerGame;
 
-  /// The run that writes proposed lines, for its one line on the card.
-  final FillGaps fill;
-
   /// Which of the card's tabs are open and which is up. The shell owns it,
   /// as it owns [editing]: the keys and the Actions menu turn it too.
   final PaneTabs<WorkspaceTab> tabs;
-
-  /// For what the board draws: the coordinates, today.
-  final SettingsStore settings;
 
   /// Whether the edit strip is open. The shell owns it: the Actions menu
   /// and Ctrl+E turn it, and the strip's Done turns it off.
@@ -151,12 +131,12 @@ class WorkspaceView extends StatelessWidget {
       valueListenable: boardClaim ?? const _NoClaim(),
       builder: (context, claim, _) => claim == null
           ? _BoardAndCounter(
-              session: session,
-              settings: settings,
-              onMove: onBoardMove ?? session.playMove,
+              session: workspace.session,
+              settings: workspace.settings,
+              onMove: onBoardMove ?? workspace.session.playMove,
               counter: gameCounter,
             )
-          : _ClaimedBoard(claim: claim, settings: settings),
+          : _ClaimedBoard(claim: claim, settings: workspace.settings),
     ),
   );
 
@@ -173,36 +153,36 @@ class WorkspaceView extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (header)
-            ReadingHeader(session: session)
+            ReadingHeader(session: workspace.session)
           else
             const SizedBox(height: Space.s),
           // While part of the game is hidden — a puzzle's answer — the
           // engine would read it out and the arrows would walk into it, so
           // neither is on the card until it is found or shown.
           _UnlessHidden(
-            session: session,
+            session: workspace.session,
             child: Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: readingCardInset - Space.s,
               ),
               child: EnginePane(
-                session: session,
-                analysis: analysis,
+                session: workspace.session,
+                analysis: workspace.analysis,
                 onMove: onEngineMove,
               ),
             ),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: readingCardInset),
-            child: FillLine(fill: fill),
+            child: FillLine(fill: workspace.fill),
           ),
           Expanded(
             child: _Tabbed(
-              session: session,
-              replies: replies,
-              gaps: gaps,
-              explorer: explorer,
-              games: games,
+              session: workspace.session,
+              replies: workspace.replies,
+              gaps: workspace.gaps,
+              explorer: workspace.explorer,
+              games: workspace.games,
               tabs: tabs,
               moveMenu: moveMenu,
               onExplorerGame: onExplorerGame,
@@ -210,19 +190,23 @@ class WorkspaceView extends StatelessWidget {
               treeTab: treeTab,
               bookTab: bookTab,
               puzzle: puzzle,
-              fill: fill,
+              fill: workspace.fill,
               onGenerate: onGenerate,
               onFound: onFound,
             ),
           ),
-          EditStrip(session: session, saver: saver, editing: editing),
+          EditStrip(
+            session: workspace.session,
+            saver: workspace.saver,
+            editing: editing,
+          ),
           _UnlessHidden(
-            session: session,
+            session: workspace.session,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const Divider(height: 1),
-                NavRow(session: session),
+                NavRow(session: workspace.session),
               ],
             ),
           ),

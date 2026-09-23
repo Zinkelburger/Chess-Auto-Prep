@@ -1,4 +1,3 @@
-import 'package:chess_auto_prep/v2/workspace/copy_aside.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/storage/edit_scope.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart'
@@ -66,7 +65,7 @@ void main() {
     edit('one');
     await pumpEventQueue();
     expect(saver.state, isA<SaveStopped>());
-    expect(await saveCopy(session, saver, 'Main draft'), isA<CopySaved>());
+    expect(await session.saveCopy('Main draft'), isA<CopySaved>());
     expect(
       fixture.store.documents.keys.map((ref) => ref.path),
       contains(endsWith('Main draft.pgn')),
@@ -295,7 +294,7 @@ void main() {
     );
     fixture.store.creates.add(const Collision());
     fixture.store.hold = true;
-    final copying = saveCopy(session, saver, 'Main draft');
+    final copying = session.saveCopy('Main draft');
     final opening = session.open(other);
     await pumpEventQueue();
     fixture.store.releaseAll();
@@ -328,7 +327,7 @@ void main() {
     });
 
     test('a copy is written beside the original', () async {
-      expect(await saveCopy(session, saver, 'Main draft'), isA<CopySaved>());
+      expect(await session.saveCopy('Main draft'), isA<CopySaved>());
       expect(
         fixture.store.documents.keys.map((ref) => ref.path),
         contains('/repertoires/KID/Main draft.pgn'),
@@ -337,12 +336,12 @@ void main() {
 
     test('a taken name replaces nothing and says so', () async {
       fixture.store.creates.add(const Collision());
-      expect(await saveCopy(session, saver, 'Main'), isA<CopyNameTaken>());
+      expect(await session.saveCopy('Main'), isA<CopyNameTaken>());
     });
 
     test('a copy that could not be written says why', () async {
       fixture.store.creates.add(const IoFailure('Permission denied'));
-      final result = await saveCopy(session, saver, 'Main draft');
+      final result = await session.saveCopy('Main draft');
       expect((result as CopyFailed).detail, 'Permission denied');
     });
   });

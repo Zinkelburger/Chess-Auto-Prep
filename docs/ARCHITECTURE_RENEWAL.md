@@ -114,7 +114,10 @@ total is the sanity check.
 ### Workspace owners
 
 The workspace is several small owners, not one. A panel takes the one or two
-it uses; nothing takes "the workspace".
+it uses. What lays panels out — the shell, `WorkspaceView`, the Actions
+menu — takes the `Workspace` value (`workspace/workspace.dart`), which only
+holds the owners below, so a new owner is one field there rather than one
+more parameter on every layer.
 
 | Owner | Holds | Never holds |
 |---|---|---|
@@ -138,11 +141,12 @@ cursor move redraws two rows, and builds its rows lazily
 rebuild uses `ui/listening_state.dart`, which follows the widget across
 `didUpdateWidget`.
 
-If an owner grows past about 300 lines or ten fields, it has two jobs; split
-it by job. The old `PgnViewerController` (1,341 lines) is what this table
-prevents. The split keeps whether a change may run apart from how it lands:
-`Library` holds the list and runs one change at a time, `LibraryWrites` says
-how each change reaches the document store and how the session follows it.
+Split an owner when it has two jobs, which its fields and its listeners
+show — never to get under a count. The old `PgnViewerController` (1,341
+lines) is what this table prevents. A split whose second half only answers
+the first's calls is a forwarding layer (rule 3): `Library` and the
+`LibraryWrites` cut from it to pass a ten-field cap were merged back on
+2026-09-22, because every `Library` command was `_writes.x()`.
 
 ## Layout
 
@@ -264,13 +268,23 @@ decide it, and the reviewer answers each with a file and line, not an opinion.
   works means the block should be rewritten (kernel `coding-style`). A
   non-obvious algorithm gets a short paragraph with its representation, units
   and one worked example beside the code (Knuth).
-- A function does one thing and fits on a screen: at most 50 lines, 3
-  levels of nesting and 5 parameters. Extract a piece when it has a name and a
+- A function does one thing and usually fits on a screen. The checker fails
+  past 80 lines or 3 levels of nesting; aim for 5 parameters or fewer. Extract a piece when it has a name and a
   contract, not to hit a length; one long linear function that runs top to
   bottom once is better than six that share state through fields (Carmack).
-- A file holds one type or one group of closely related functions, at most
-  600 lines. Never `part`. The cap was 400 until 2026-09-21, when two core
-  owners sat on it and a commit went in only to shorten a comment.
+- A file holds one type or one group of closely related functions. Never
+  `part`. The checker fails past 1,000 lines, a backstop against a god file
+  rather than a target: splitting one job across files to get under a
+  number costs more reading than it saves. The caps were 400/50 until
+  2026-09-21 and 600/50 until 2026-09-22; both times commits went in only
+  to get under them (a shortened comment, a session split, a `Writes` half).
+- Composition is split by part, as lila wires each module in its own `Env`:
+  `app/basics.dart` (store, settings, session, engines, network),
+  `app/mode_wiring.dart` (document and training modes),
+  `app/workspace_wiring.dart` (the workspace's owners and what keeps them
+  in step). Each builds its owners, connects them and disposes them;
+  `app/app.dart` only orders the parts. A new owner goes in the part it
+  belongs to, never straight into `app.dart` or a new `Shell` parameter.
 - Clear beats clever (Pike). No tricks that need a second reading.
 
 **Can I reason about it?**
@@ -342,14 +356,11 @@ it before saying a step is done. `scripts/ci.sh lint` runs it and its tests
 
 The independent review of a finished step answers these, each with a location:
 
-1. Any file over 600 lines, function over 50, nesting over 3, owner over 10
-   fields? (`scripts/check_v2.py` finds all four. A `group(...)` or `test(...)`
-   body in a test file is a function too; `main()` is not. An owner is a class
-   that extends or mixes in `ChangeNotifier` or `ValueNotifier`, or extends
-   such a class; its fields are its instance fields, `late` ones included,
-   except `static` ones and `final` ones without an initializer — those the
-   constructor fills from its arguments are collaborators and settings handed
-   in, not state it keeps. `final _cache = {}` is state and counts.)
+1. Any file over 1,000 lines, function over 80, nesting over 3?
+   (`scripts/check_v2.py` finds all three. A `group(...)` or `test(...)`
+   body in a test file is a function too; `main()` is not.) Any split made
+   only to get under one of them, or a file too small to be read on its
+   own?
 2. Any owner holding data that belongs to another owner in the
    [workspace table](#workspace-owners)? Any mode importing another mode's
    folder? (`scripts/check_v2.py` finds the second: shared code moves to

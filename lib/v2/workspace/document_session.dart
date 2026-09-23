@@ -1,5 +1,6 @@
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 
 import '../chess/fen.dart';
 import '../chess/pgn/analysis_board.dart';
@@ -585,6 +586,38 @@ final class DocumentSession extends ChangeNotifier {
     _file = (ref: moved, readOnly: _readOnly);
     _saver.relocated(moved);
     return null;
+  }
+
+  /// Writes the draft on screen beside its file as `<name>.pgn`, replacing
+  /// nothing. A copy changes nothing in the session, so nothing goes stale:
+  /// whatever the user opened meanwhile, the answer is about the file they
+  /// asked for.
+  ///
+  /// A document that can still take words keeps the session; one frozen by a
+  /// stopped save, or that this app may not write, hands it over, because the
+  /// copy is the only place those words can go on being edited. A conflicted
+  /// document keeps it: it can still be reloaded.
+  Future<CopyResult> saveCopy(String name) async {
+    final written = await copyAside(name);
+    if (written is! CopySaved) return written;
+    final ref = _source;
+    final frozen = _saver.state is SaveStopped || _readOnly != null;
+    if (ref == null || !frozen) return written;
+    final path = p.join(p.dirname(ref.path), written.name);
+    final opened = await open(ChapterRef.at(path), game: game);
+    return CopySaved(written.name, nowEditing: opened is DocumentOpened);
+  }
+
+  /// Writes the words on screen beside their file and leaves the session
+  /// where it is, which is what the question on the way out asks for: the
+  /// user is going somewhere else, so the copy is not what they want open.
+  Future<CopyResult> copyAside(String name) async {
+    final ref = _source;
+    final chapter = _chapter;
+    if (ref == null || chapter == null) {
+      return const CopyFailed('there is nothing open to copy');
+    }
+    return _saver.copyAside(chapter, beside: ref, name: name);
   }
 
   @override

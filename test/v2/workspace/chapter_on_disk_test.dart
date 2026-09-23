@@ -3,7 +3,6 @@
 // at the profile the app really uses.
 import 'dart:io';
 
-import 'package:chess_auto_prep/v2/workspace/copy_aside.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
@@ -100,7 +99,7 @@ void main() {
       expect(saver.state, isA<SaveConflict>());
       expect(onDisk(), contains('Theirs'));
       expect(session.commentAt(const NodePath.root()), contains('Mine'));
-      expect(await saveCopy(session, saver, 'Main draft'), isA<CopySaved>());
+      expect(await session.saveCopy('Main draft'), isA<CopySaved>());
       expect(
         File(
           p.join(p.dirname(chapter.path), 'Main draft.pgn'),

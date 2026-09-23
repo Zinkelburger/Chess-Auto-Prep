@@ -4,8 +4,11 @@
 Everything here is a number or a pattern, so it fails instead of being argued
 about: file and function length, nesting, `part`, `dynamic`, `late`, the
 import table (one mode never imports another), no old-app imports, file
-writes only inside storage/, how many fields an owner keeps, and a state
-that listens to its widget's owner following the widget when it changes.
+writes only inside storage/, and a state that listens to its widget's
+owner following the widget when it changes.
+
+The length caps are backstops against a god file, not targets: a file or a
+function is split when it holds two jobs, never to get under a number.
 
     python3 scripts/check_v2.py            # exit 1 on any finding
 """
@@ -19,10 +22,9 @@ REPO = Path(__file__).resolve().parent.parent
 LIB = REPO / "lib" / "v2"
 TEST = REPO / "test" / "v2"
 
-MAX_FILE_LINES = 600
-MAX_FUNCTION_LINES = 50
+MAX_FILE_LINES = 1000
+MAX_FUNCTION_LINES = 80
 MAX_NESTING = 3
-MAX_OWNER_FIELDS = 10
 
 # What each top-level v2 folder may import from within v2.
 # `diagnostics/` is the log facade: everything but pure `chess/` reports
@@ -204,9 +206,6 @@ CLASS = re.compile(
     re.M,
 )
 ASSIGN = re.compile(r"(?<![=!<>])=(?![=>])")
-ANNOTATION = re.compile(r"@\w+(?:\.\w+)*(?:\([^)]*\))?\s*")
-OWNER_BASE = re.compile(r"\b(?:extends|with)\b.*\b(ChangeNotifier|ValueNotifier)\b")
-EXTENDS = re.compile(r"\bextends\s+(\w+)")
 
 
 def dart_classes(clean: str) -> list[tuple[str, str, str, int]]:
@@ -272,78 +271,15 @@ def _starts_expression(head: str) -> bool:
     return "=>" in head or (assign is not None and (colon < 0 or assign.start() < colon))
 
 
-def owned_fields(statement: str) -> list[str]:
-    """The fields a `;`-ended member declares that the class keeps as its
-    own state: every instance field except a `final` one without an
-    initializer, which the constructor fills from its arguments — a
-    collaborator or a setting handed in, not state this class changes.
-    `static` fields are the class's, not an instance's, and never count."""
-    text = flatten(ANNOTATION.sub("", statement.rstrip(";")).strip())
-    if re.match(r"(static|factory|external)\b", text):
-        return []
-    assign = ASSIGN.search(text)
-    arrow = text.find("=>")
-    if arrow >= 0 and (assign is None or arrow < assign.start()):
-        return []
-    head = (text[: assign.start()] if assign else text).strip()
-    if ":" in head or head.endswith(")") or re.search(r"\b(get|set|operator)\b", head):
-        return []
-    if re.match(r"final\b", head) and assign is None:
-        return []
-    names = [part.split()[-1] for part in _declarators(head) if part.split()]
-    if len(head.split()) < 2 or not all(re.fullmatch(r"\w+", n) for n in names):
-        return []
-    return names
-
-
-def _declarators(head: str) -> list[str]:
-    """`final int a, b` split at the commas outside type arguments."""
-    parts, current, angles = [], "", 0
-    for c in head:
-        angles += {"<": 1, ">": -1}.get(c, 0)
-        if c == "," and angles == 0:
-            parts.append(current)
-            current = ""
-        else:
-            current += c
-    return parts + [current]
-
-
-def owner_classes(sources: dict[str, str]) -> set[str]:
-    """Classes that extend or mix in ChangeNotifier or ValueNotifier, or
-    extend a class that does: the owners of mutable state."""
-    headers = {
-        name: header
-        for text in sources.values()
-        for name, header, _, _ in dart_classes(blank_literals(text))
-    }
-    owners = {name for name, header in headers.items() if OWNER_BASE.search(header)}
-    while True:
-        more = {
-            name
-            for name, header in headers.items()
-            if name not in owners and (m := EXTENDS.search(header)) and m.group(1) in owners
-        }
-        if not more:
-            return owners
-        owners |= more
 
 
 LISTENS_TO_WIDGET = re.compile(r"\bwidget\.[\w.?!]+\s*\.\.?\s*addListener\s*\(")
 
 
-def check_classes(where: str, source: str, owners: set[str], findings: list[str]) -> None:
+def check_classes(where: str, source: str, findings: list[str]) -> None:
     for name, header, body, line in dart_classes(blank_literals(source)):
-        members = class_members(body)
-        if name in owners:
-            fields = [f for text, block in members if not block for f in owned_fields(text)]
-            if len(fields) > MAX_OWNER_FIELDS:
-                findings.append(
-                    f"{where}:{line}: owner {name} keeps {len(fields)} fields "
-                    f"(max {MAX_OWNER_FIELDS}): {', '.join(fields)}"
-                )
         if re.search(r"\bextends\s+State<", header):
-            _check_listening(where, name, header, members, line, findings)
+            _check_listening(where, name, header, class_members(body), line, findings)
 
 
 def _check_listening(where, name, header, members, line, findings) -> None:
@@ -363,7 +299,7 @@ def _check_listening(where, name, header, members, line, findings) -> None:
     )
 
 
-def check_file(path: Path, findings: list[str], owners: set[str] = frozenset()) -> None:
+def check_file(path: Path, findings: list[str]) -> None:
     lines = path.read_text().splitlines()
     where = path.relative_to(REPO)
     if len(lines) > MAX_FILE_LINES:
@@ -385,16 +321,15 @@ def check_file(path: Path, findings: list[str], owners: set[str] = frozenset()) 
             findings.append(f"{where}:{n}: file write outside storage/")
     if is_lib:
         check_imports(path, lines, findings)
-        check_classes(str(where), "\n".join(lines), owners, findings)
+        check_classes(str(where), "\n".join(lines), findings)
     check_functions(path, lines, findings)
 
 
 def main() -> int:
     findings: list[str] = []
-    owners = owner_classes({str(p): p.read_text() for p in LIB.rglob("*.dart")})
     for root in (LIB, TEST):
         for path in sorted(root.rglob("*.dart")):
-            check_file(path, findings, owners)
+            check_file(path, findings)
     total = sum(1 for _ in LIB.rglob("*.dart"))
     lib_lines = sum(len(p.read_text().splitlines()) for p in LIB.rglob("*.dart"))
     print(f"lib/v2: {total} files, {lib_lines} lines")

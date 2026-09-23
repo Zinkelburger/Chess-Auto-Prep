@@ -1,4 +1,3 @@
-import 'package:chess_auto_prep/v2/workspace/copy_aside.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart' show Opened;
@@ -65,9 +64,7 @@ void main() {
   test(
     'can still be written somewhere else, and that copy is editable',
     () async {
-      final copy =
-          await saveCopy(fixture.session, fixture.saver, 'Converted')
-              as CopySaved;
+      final copy = await fixture.session.saveCopy('Converted') as CopySaved;
       expect(copy.nowEditing, isTrue);
       expect(fixture.session.readOnly, isNull);
       expect(fixture.saver.state, isA<Saved>());

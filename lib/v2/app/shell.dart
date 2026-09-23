@@ -4,30 +4,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:multi_split_view/multi_split_view.dart';
 
-import '../features/library/chapter_outline.dart';
-import '../features/library/library.dart';
 import '../features/library/library_panel.dart';
 import '../features/library/outline_panel.dart';
 import '../features/my_games/book_pane.dart';
-import '../features/my_games/game_book.dart';
 import '../features/my_games/my_games_panel.dart';
-import '../features/pgn_viewer/pgn_viewer.dart';
 import '../features/pgn_viewer/pgn_viewer_panel.dart';
 import '../features/study/quiz_menu.dart';
-import '../features/study/studies.dart';
 import '../features/settings/setting_rows.dart';
 import '../features/settings/settings_dialog.dart';
 import '../features/study/study_panel.dart';
 import '../chess/tactics/puzzle.dart';
-import '../features/tactics/my_games.dart';
 import '../features/tactics/my_games_block.dart';
 import '../features/tactics/puzzle_pane.dart';
-import '../features/tactics/puzzle_trainer.dart';
 import '../features/tactics/tactics_panel.dart';
-import '../features/tactics/tactics_set.dart';
 import '../features/trainer/train_pane.dart';
 import '../features/trainer/trainer.dart';
-import '../storage/settings_store.dart';
 import '../ui/app_action.dart';
 import '../ui/choice_dialog.dart';
 import '../ui/error_bar.dart';
@@ -36,19 +27,11 @@ import '../ui/pane_tabs.dart';
 import '../ui/theme.dart';
 import '../workspace/copy_name_dialog.dart';
 import '../workspace/board_claim.dart';
-import '../workspace/document_saver.dart';
-import '../workspace/document_session.dart';
 import '../workspace/session_results.dart';
-import '../workspace/engine_analysis.dart';
-import '../workspace/repertoire_tree.dart';
 import '../workspace/tree_pane.dart';
-import '../workspace/explorer.dart';
-import '../workspace/game_fetcher.dart';
-import '../workspace/gap_hunt.dart';
-import '../workspace/fill_gaps.dart';
-import '../workspace/replies.dart';
 import '../workspace/workspace_keys.dart';
 import '../workspace/workspace_tabs.dart';
+import '../workspace/workspace.dart';
 import '../workspace/workspace_view.dart';
 import 'board_actions.dart';
 import 'generate_doors.dart';
@@ -58,7 +41,6 @@ import 'my_games_doors.dart';
 import 'sitting_in_view.dart';
 import 'top_bar.dart';
 import 'workspace_requests.dart';
-import '../workspace/copy_aside.dart';
 
 /// The window: a top bar with the mode menu and the Actions menu, the
 /// mode's list on the left and the workspace filling the rest. What the
@@ -69,57 +51,17 @@ class Shell extends StatefulWidget {
   const Shell({
     super.key,
     required this.requests,
-    required this.library,
-    required this.studies,
-    required this.viewer,
-    required this.outline,
-    required this.session,
-    required this.saver,
-    required this.analysis,
-    required this.replies,
-    required this.gaps,
-    required this.explorer,
-    required this.tree,
-    required this.games,
-    required this.fill,
-    required this.tactics,
-    required this.lineTrainer,
-    required this.trainer,
-    required this.myGames,
-    required this.book,
-    required this.settings,
+    required this.workspace,
+    required this.documents,
+    required this.training,
     required this.settingRows,
     required this.settingsAlso,
   });
 
   final WorkspaceRequests requests;
-  final Library library;
-  final Studies studies;
-  final PgnViewer viewer;
-  final ChapterOutline outline;
-  final DocumentSession session;
-  final DocumentSaver saver;
-  final EngineAnalysis analysis;
-  final Replies replies;
-  final GapHunt gaps;
-  final Explorer explorer;
-
-  /// The user's own repertoires, looked up by position: the Tree tab.
-  final RepertoireTree tree;
-  final GameFetcher games;
-  final FillGaps fill;
-  final TacticsSet tactics;
-  final PuzzleTrainer trainer;
-
-  /// The usernames and the review that mines their games into the set.
-  final MyGames myGames;
-
-  /// The user's games read against their repertoires: My games.
-  final GameBook book;
-
-  /// The Train tab's owner: the repertoire's lines and the sitting.
-  final Trainer lineTrainer;
-  final SettingsStore settings;
+  final Workspace workspace;
+  final DocumentModes documents;
+  final TrainingModes training;
 
   /// The settings page's rows, as the app wires them, and the one owner
   /// besides the store they are built from: the Lichess account.
@@ -135,7 +77,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   final _editing = ValueNotifier(false);
 
   /// Who holds the board: a lesson first, then the Tree tab's free board.
-  late final _claim = FirstClaim([widget.lineTrainer.board, widget.tree.board]);
+  late final _claim = FirstClaim([_train.lines.board, _ws.tree.board]);
 
   /// The reading card's tabs of each mode: which are open and which is up.
   /// Each mode starts with its own — the builder its four, Tactics the
@@ -153,23 +95,23 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
 
   late final _myGames = MyGamesDoors(
     requests: _requests,
-    session: widget.session,
-    book: widget.book,
+    session: _ws.session,
+    book: _train.book,
   );
 
   late final _modeActions = ModeActions(
     requests: _requests,
-    session: widget.session,
-    analysis: widget.analysis,
-    gaps: widget.gaps,
-    fill: widget.fill,
-    viewer: widget.viewer,
-    trainer: widget.trainer,
-    myGames: widget.myGames,
+    session: _ws.session,
+    analysis: _ws.analysis,
+    gaps: _ws.gaps,
+    fill: _ws.fill,
+    viewer: _docs.viewer,
+    trainer: _train.puzzles,
+    myGames: _train.myGames,
   );
 
   late final _sitting = SittingInView(
-    trainer: widget.lineTrainer,
+    trainer: _train.lines,
     requests: _requests,
     trainTabOpen: () => _tabs.open.contains(WorkspaceTab.train),
   );
@@ -198,6 +140,9 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   bool _listShown = true;
 
   WorkspaceRequests get _requests => widget.requests;
+  Workspace get _ws => widget.workspace;
+  DocumentModes get _docs => widget.documents;
+  TrainingModes get _train => widget.training;
 
   @override
   void initState() {
@@ -231,10 +176,10 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   /// operations do not mean the same thing there — so it has no outline,
   /// whichever mode the user switches to.
   bool get _wantsOutline =>
-      widget.session.source != null && widget.session.game == null;
+      _ws.session.source != null && _ws.session.game == null;
 
   @override
-  Listenable listenableOf(Shell widget) => widget.session;
+  Listenable listenableOf(Shell widget) => widget.workspace.session;
 
   /// Puts the outline column in or takes it out when the open chapter
   /// changes what is wanted. The other two panes are left alone, so the
@@ -247,9 +192,9 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   }
 
   late final _generate = GenerateDoors(
-    fill: widget.fill,
-    session: widget.session,
-    settings: widget.settings,
+    fill: _ws.fill,
+    session: _ws.session,
+    settings: _ws.settings,
     requests: _requests,
   );
 
@@ -259,7 +204,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     if (!mounted) return;
     _tabs.show(WorkspaceTab.puzzle);
     unawaited(
-      first == null ? widget.trainer.start() : widget.trainer.show(first),
+      first == null ? _train.puzzles.start() : _train.puzzles.show(first),
     );
   }
 
@@ -267,8 +212,8 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   /// comes back with Analyze or E once an answer is on view.
   void _switchTo(Mode mode) {
     _requests.switchTo(mode);
-    if (mode == Mode.tactics && widget.analysis.enabled) {
-      unawaited(widget.analysis.disable());
+    if (mode == Mode.tactics && _ws.analysis.enabled) {
+      unawaited(_ws.analysis.disable());
     }
   }
 
@@ -277,7 +222,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   void _analyze() {
     if (!mounted) return;
     _tabs.show(WorkspaceTab.moves);
-    unawaited(widget.analysis.enable());
+    unawaited(_ws.analysis.enable());
   }
 
   /// A line the Train tab sent to be read: its chapter on the board at the
@@ -293,17 +238,16 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   /// While the Tree tab is up the board is its free board; otherwise a
   /// move on the board is the puzzle's, or the document's.
   void _boardMove(String uci) =>
-      widget.tree.watching ? widget.tree.play(uci) : widget.trainer.play(uci);
+      _ws.tree.watching ? _ws.tree.play(uci) : _train.puzzles.play(uci);
 
   /// A clicked engine line's moves: onto the free board while the Tree tab
   /// is up, into the document otherwise.
-  void _engineMove(String uci) => widget.tree.watching
-      ? widget.tree.play(uci)
-      : widget.session.playMove(uci);
+  void _engineMove(String uci) =>
+      _ws.tree.watching ? _ws.tree.play(uci) : _ws.session.playMove(uci);
 
   Widget _bookTab(BuildContext context) => BookPane(
-    book: widget.book,
-    session: widget.session,
+    book: _train.book,
+    session: _ws.session,
     onReadBook: _myGames.readBook,
   );
 
@@ -314,8 +258,8 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       _requests.mode != Mode.tactics && _requests.mode != Mode.myGames;
 
   Widget _treeTab(BuildContext context) => TreePane(
-    session: widget.session,
-    tree: widget.tree,
+    session: _ws.session,
+    tree: _ws.tree,
     // The file a move was found in: that file, in the builder, at the
     // position the move leads to.
     onOpen: (place) =>
@@ -325,7 +269,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   /// Space and ↓ are the puzzle's while one is on the board, and the
   /// document's otherwise; in My games ↑ and ↓ walk the list.
   void _space() {
-    if (widget.trainer.up != null) widget.trainer.showSolution();
+    if (_train.puzzles.up != null) _train.puzzles.showSolution();
   }
 
   /// ↓ (1) / ↑ (−1) walk what is in front of the user: the book's games in
@@ -334,11 +278,11 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   void _walk(int by) {
     if (_requests.mode == Mode.myGames) return _myGames.step(by);
     if (_tabs.selected == WorkspaceTab.prep && _generate.step(by)) return;
-    final trainer = widget.trainer;
+    final trainer = _train.puzzles;
     if (trainer.up != null) {
       unawaited(by > 0 ? trainer.next() : trainer.previous());
     } else {
-      by > 0 ? widget.session.nextGame() : widget.session.previousGame();
+      by > 0 ? _ws.session.nextGame() : _ws.session.previousGame();
     }
   }
 
@@ -351,10 +295,10 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   Future<void> _saveCopy() async {
     final name = await showCopyNameDialog(
       context,
-      widget.session.chapter?.name ?? 'Chapter',
+      _ws.session.chapter?.name ?? 'Chapter',
     );
     if (name == null || !mounted) return;
-    final result = await saveCopy(widget.session, widget.saver, name);
+    final result = await _ws.session.saveCopy(name);
     if (!mounted) return;
     _requests.say(switch (result) {
       CopySaved(:final name) => 'Saved a copy as $name',
@@ -369,15 +313,15 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     editing: _editing,
     board: boardActions(
       context,
-      session: widget.session,
+      session: _ws.session,
       requests: _requests,
-      library: widget.library,
-      studies: widget.studies,
+      library: _docs.library,
+      studies: _docs.studies,
     ),
     dialogs: (
       saveCopy: () => unawaited(_saveCopy()),
       generate: () => unawaited(_generate.generate(context, _tabs)),
-      accounts: () => unawaited(editAccounts(context, widget.myGames)),
+      accounts: () => unawaited(editAccounts(context, _train.myGames)),
     ),
   );
 
@@ -401,7 +345,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
 
   Future<void> _settings() => showSettingsDialog(
     context,
-    store: widget.settings,
+    store: _ws.settings,
     groups: widget.settingRows,
     also: widget.settingsAlso,
   );
@@ -409,36 +353,35 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   Map<ShortcutActivator, VoidCallback> get _windowKeys => {
     // ← takes back a move made past the file on the Tree tab's free board
     // before it steps back in the file.
-    const SingleActivator(LogicalKeyboardKey.arrowLeft): widget.tree.back,
-    const SingleActivator(LogicalKeyboardKey.comma, control: true): () =>
-        unawaited(_settings()),
-    const SingleActivator(LogicalKeyboardKey.comma, meta: true): () =>
-        unawaited(_settings()),
-    const SingleActivator(LogicalKeyboardKey.keyB, control: true): _toggleList,
-    const SingleActivator(LogicalKeyboardKey.keyB, meta: true): _toggleList,
-    const SingleActivator(LogicalKeyboardKey.keyO, control: true): () =>
-        unawaited(_requests.openPgnFile()),
-    const SingleActivator(LogicalKeyboardKey.keyO, meta: true): () =>
-        unawaited(_requests.openPgnFile()),
-    const SingleActivator(LogicalKeyboardKey.keyV, control: true): () =>
-        unawaited(_requests.paste()),
-    const SingleActivator(LogicalKeyboardKey.keyV, meta: true): () =>
-        unawaited(_requests.paste()),
-    const SingleActivator(LogicalKeyboardKey.keyN, control: true): () =>
-        unawaited(_requests.newAnalysisBoard()),
-    const SingleActivator(LogicalKeyboardKey.keyN, meta: true): () =>
-        unawaited(_requests.newAnalysisBoard()),
-    const SingleActivator(LogicalKeyboardKey.keyG, control: true): () =>
-        unawaited(_generate.generate(context, _tabs)),
-    const SingleActivator(LogicalKeyboardKey.keyG, meta: true): () =>
-        unawaited(_generate.generate(context, _tabs)),
-    const SingleActivator(LogicalKeyboardKey.keyK, control: true): () =>
-        unawaited(_palette()),
-    const SingleActivator(LogicalKeyboardKey.keyK, meta: true): () =>
-        unawaited(_palette()),
+    const SingleActivator(LogicalKeyboardKey.arrowLeft): _ws.tree.back,
+    ..._command(LogicalKeyboardKey.comma, () => unawaited(_settings())),
+    ..._command(LogicalKeyboardKey.keyB, _toggleList),
+    ..._command(
+      LogicalKeyboardKey.keyO,
+      () => unawaited(_requests.openPgnFile()),
+    ),
+    ..._command(LogicalKeyboardKey.keyV, () => unawaited(_requests.paste())),
+    ..._command(
+      LogicalKeyboardKey.keyN,
+      () => unawaited(_requests.newAnalysisBoard()),
+    ),
+    ..._command(
+      LogicalKeyboardKey.keyG,
+      () => unawaited(_generate.generate(context, _tabs)),
+    ),
+    ..._command(LogicalKeyboardKey.keyK, () => unawaited(_palette())),
     const SingleActivator(LogicalKeyboardKey.space): _space,
     const SingleActivator(LogicalKeyboardKey.arrowDown): () => _walk(1),
     const SingleActivator(LogicalKeyboardKey.arrowUp): () => _walk(-1),
+  };
+
+  /// [key] with Ctrl, and with Cmd for macOS.
+  static Map<ShortcutActivator, VoidCallback> _command(
+    LogicalKeyboardKey key,
+    VoidCallback run,
+  ) => {
+    SingleActivator(key, control: true): run,
+    SingleActivator(key, meta: true): run,
   };
 
   /// The mode's list, with the `«` that hides it in its top right corner:
@@ -447,38 +390,38 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     final toggle = ListToggle(shown: true, onPressed: _toggleList);
     return switch (_requests.mode) {
       Mode.repertoires => ListenableBuilder(
-        listenable: widget.session,
+        listenable: _ws.session,
         builder: (context, _) => LibraryPanel(
-          library: widget.library,
-          selected: widget.session.source,
+          library: _docs.library,
+          selected: _ws.session.source,
           onOpen: (ref) => unawaited(_requests.open(ref)),
           trailing: toggle,
         ),
       ),
       Mode.study => StudyPanel(
-        studies: widget.studies,
-        session: widget.session,
+        studies: _docs.studies,
+        session: _ws.session,
         onOpen: (study, chapter) =>
             unawaited(_requests.open(study, game: chapter)),
         trailing: toggle,
       ),
       Mode.pgnViewer => PgnViewerPanel(
-        viewer: widget.viewer,
+        viewer: _docs.viewer,
         onOpen: (file) => unawaited(_requests.openFile(file)),
         onBrowse: () => unawaited(_requests.browse()),
         trailing: toggle,
       ),
       Mode.tactics => TacticsPanel(
-        set: widget.tactics,
-        trainer: widget.trainer,
-        myGames: widget.myGames,
+        set: _train.tactics,
+        trainer: _train.puzzles,
+        myGames: _train.myGames,
         onPlay: _play,
         trailing: toggle,
       ),
       Mode.myGames => MyGamesPanel(
-        book: widget.book,
-        session: widget.session,
-        accounts: MyGamesBlock(games: widget.myGames),
+        book: _train.book,
+        session: _ws.session,
+        accounts: MyGamesBlock(games: _train.myGames),
         onOpen: _myGames.open,
         trailing: toggle,
       ),
@@ -504,15 +447,15 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
               // What the entries' enabled states read, heard only while the
               // menu is open: the bar itself shows none of it.
               actionsChange: Listenable.merge([
-                widget.session,
-                widget.saver,
-                widget.analysis,
-                widget.gaps,
-                widget.fill,
-                widget.viewer,
-                widget.trainer,
-                widget.myGames,
-                widget.book,
+                _ws.session,
+                _ws.saver,
+                _ws.analysis,
+                _ws.gaps,
+                _ws.fill,
+                _docs.viewer,
+                _train.puzzles,
+                _train.myGames,
+                _train.book,
                 _editing,
                 _tabs,
               ]),
@@ -521,8 +464,8 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
             if (_requests.status case final status?) ErrorBar(status),
             Expanded(
               child: WorkspaceKeys(
-                session: widget.session,
-                analysis: widget.analysis,
+                session: _ws.session,
+                analysis: _ws.analysis,
                 editing: _editing,
                 tabs: _tabs,
                 extra: _windowKeys,
@@ -548,33 +491,25 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   Widget _pane(BuildContext context, Area area) => switch (area.data) {
     _Pane.list => _leftColumn(),
     _Pane.outline => OutlinePanel(
-      outline: widget.outline,
-      library: widget.library,
-      session: widget.session,
+      outline: _docs.outline,
+      library: _docs.library,
+      session: _ws.session,
       onOpen: (ref) => unawaited(_requests.open(ref)),
     ),
     _ => WorkspaceView(
-      session: widget.session,
-      saver: widget.saver,
-      analysis: widget.analysis,
-      replies: widget.replies,
-      gaps: widget.gaps,
-      explorer: widget.explorer,
-      games: widget.games,
-      fill: widget.fill,
+      workspace: _ws,
       tabs: _tabs,
       editing: _editing,
-      settings: widget.settings,
       moveMenu: _requests.mode == Mode.study
-          ? (path) => quizMenuItems(widget.session, path)
+          ? (path) => quizMenuItems(_ws.session, path)
           : null,
       onBoardMove: _boardMove,
-      puzzle: PuzzlePane(trainer: widget.trainer, onAnalyze: _analyze),
+      puzzle: PuzzlePane(trainer: _train.puzzles, onAnalyze: _analyze),
       onExplorerGame: (game) => unawaited(
         _requests.openExplorerGame(
           game,
-          source: widget.explorer.choice.source,
-          ply: widget.explorer.ply,
+          source: _ws.explorer.choice.source,
+          ply: _ws.explorer.ply,
         ),
       ),
       header: _requests.mode != Mode.tactics,
@@ -586,7 +521,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       onFound: _generate.go,
       bookTab: _bookTab,
       trainTab: (_) => TrainPane(
-        trainer: widget.lineTrainer,
+        trainer: _train.lines,
         onRead: (line) => unawaited(_readLine(line)),
         offerBuilder: _requests.mode != Mode.repertoires,
       ),

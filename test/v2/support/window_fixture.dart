@@ -1,6 +1,8 @@
 import 'package:chess_auto_prep/v2/app/exit_guard.dart';
+import 'package:chess_auto_prep/v2/app/mode.dart';
 import 'package:chess_auto_prep/v2/app/shell.dart';
 import 'package:chess_auto_prep/v2/app/window_input.dart';
+import 'package:chess_auto_prep/v2/workspace/workspace.dart';
 import 'package:chess_auto_prep/v2/app/workspace_requests.dart';
 import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/v2/features/library/chapter_outline.dart';
@@ -44,7 +46,6 @@ import 'scripted_store.dart';
 import 'study_fixture.dart';
 import 'tactics_fixture.dart';
 import 'viewer_fixture.dart';
-import 'package:chess_auto_prep/v2/workspace/copy_aside.dart';
 
 /// KID/Main: a Black chapter of two lines.
 final kidMain = ref('KID', 'Main');
@@ -228,7 +229,7 @@ final class WindowFixture {
     saver: saver,
     question: question,
     saveCopy: () async {
-      final written = await copyAside(session, saver, 'Main copy');
+      final written = await session.copyAside('Main copy');
       return written is CopySaved ? written.name : null;
     },
     wait: const Duration(milliseconds: 20),
@@ -244,27 +245,34 @@ final class WindowFixture {
         theme: darkTheme(),
         home: Shell(
           requests: requests,
-          library: library,
-          studies: studies,
-          viewer: viewer,
-          settings: settings,
+          workspace: Workspace(
+            session: session,
+            saver: saver,
+            settings: settings,
+            analysis: analysis,
+            explorer: explorer,
+            games: games,
+            replies: replies.replies,
+            gaps: replies.gaps,
+            shelf: shelf,
+            tree: tree,
+            fill: fill,
+          ),
+          documents: DocumentModes(
+            library: library,
+            outline: outline,
+            studies: studies,
+            viewer: viewer,
+          ),
+          training: TrainingModes(
+            tactics: tactics,
+            puzzles: trainer,
+            lines: lineTrainer,
+            myGames: myGames,
+            book: book,
+          ),
           settingRows: () => const [],
           settingsAlso: settings,
-          outline: outline,
-          session: session,
-          saver: saver,
-          analysis: analysis,
-          replies: replies.replies,
-          gaps: replies.gaps,
-          explorer: explorer,
-          tree: tree,
-          games: games,
-          fill: fill,
-          tactics: tactics,
-          trainer: trainer,
-          lineTrainer: lineTrainer,
-          myGames: myGames,
-          book: book,
         ),
       ),
     );
