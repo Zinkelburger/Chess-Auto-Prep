@@ -19,7 +19,6 @@ class FillLine extends StatelessWidget {
         final theme = Theme.of(context);
         final (words, colour) = _describe(fill.state, theme.colorScheme);
         if (words == null) return const SizedBox.shrink();
-        final running = fill.state is FillRunning;
         return SizedBox(
           height: engineBarHeight,
           child: Row(
@@ -32,15 +31,16 @@ class FillLine extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              if (running)
+              if (fill.state case final FillRunning run) ...[
                 TextButton(
-                  onPressed:
-                      fill.state is FillRunning &&
-                          (fill.state as FillRunning).cancelling
-                      ? null
-                      : fill.cancel,
+                  onPressed: run.stopping ? null : fill.finish,
+                  child: const Text('Finish now'),
+                ),
+                TextButton(
+                  onPressed: run.cancelling ? null : fill.cancel,
                   child: const Text('Cancel'),
-                )
+                ),
+              ]
               else
                 IconButton(
                   tooltip: 'Dismiss',
@@ -61,10 +61,19 @@ class FillLine extends StatelessWidget {
 (String?, Color?) _describe(FillState state, ColorScheme scheme) =>
     switch (state) {
       FillIdle() => (null, null),
-      FillRunning(:final nodes, :final depth, :final of, :final cancelling) => (
-        cancelling
-            ? 'Cancelling…'
-            : 'Searching · depth $depth/$of · $nodes positions',
+      FillRunning(
+        :final nodes,
+        :final depth,
+        :final of,
+        :final cancelling,
+        :final finishing,
+      ) =>
+        (
+          cancelling
+              ? 'Cancelling…'
+              : finishing
+              ? 'Finishing at depth $depth · $nodes positions'
+              : 'Searching · depth $depth/$of · $nodes positions',
         null,
       ),
       FillDone(:final name, :final lines, :final traps, :final folded) => (

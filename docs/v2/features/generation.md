@@ -182,7 +182,7 @@ download or verification pass is silent; nothing under `.cap-generation/` is cle
 ## What was built (2026-09-22)
 - **The dialog** asks `Opponent rating`, `How deep (half-moves)` (default 8, 1–64) and `Cover
   replies met once in`, prefilled from the Replies settings, over the one source line `Engine +
-  human model`, and one filled `Fill`. `Prefer traps` is not offered: trick lines are not built.
+  human model`, and one filled `Fill`. `Prefer traps` came the same evening (below).
 - **The run** starts from the board for the chapter's side. The chapter's own moves are pins: at a
   position the chapter answers, only its moves are enumerated. Stockfish scores every position at
   depth 14, loss window 50 cp, through `eval_cache.db` in the support folder — the old app's file
@@ -207,4 +207,39 @@ download or verification pass is silent; nothing under `.cap-generation/` is cle
   create-only, for a later run; nothing reads it yet.
 - **The Replies tab** at our move shows each candidate's `[%expectimax]` from the open document or
   `not in tree`; nothing is computed while browsing.
-- Not built: trick lines, resuming a kept tree, ChessDB as a source, the old planner route.
+- Not built: resuming a kept tree, ChessDB as a source, the old planner route, the
+  outline's `Tricks` chip (trick lines are built since the evening, see below).
+
+## Analysis board, traps and the Prep tab (2026-09-22, evening)
+The owner asked for lila's analysis board: search from a line without making or opening a
+repertoire, find lines *and* traps, and walk through what was found. Built as:
+
+- **The analysis board** (`workspace.md`) is where a search can start without a file:
+  Actions ▸ `Generate from here…` or Ctrl+G asks the same dialog, titled `Generate from
+  here` with a `Generate` button, and plays for the side at the bottom of the board (flip
+  with F). Nothing on the board is pinned: it is a scratchpad. Nothing is written to disk.
+  On a chapter the entry keeps its name, `Fill gaps from here…`, and Ctrl+G opens it too.
+- **`Prefer traps`** is the dialog's one switch: our moves up to 150 cp worse than the
+  engine's best are tried (50 cp otherwise), so the expectimax value can pick a line whose
+  point is the opponent's likely mistake. The dialog ends `Engine + human model · for White`.
+- **Traps** come from every run, with or without the switch, read off the search tree the
+  run built (`chess/generation/traps.dart`, no extra engine time): at each opponent position
+  on our chosen lines, a reply played at least 20% of the time that loses at least 50 cp
+  against their best reply there, with our answer after it (our chosen move, then their
+  likeliest reply, up to six plies; empty when the search stopped at the mistake). One
+  trap per position after the mistake; ranked by how often it springs from the board times
+  what it loses, capped at 3 pawns. On a chapter run the trap lines are written into the
+  draft after its lines, unless a kept line already walks them.
+- **The Prep tab** (reading card, open by default outside Tactics) lists the last run:
+  `Traps · n` then `Lines · n`. A trap row reads `5...Nxe4? 6.Bxf7+ Kxf7` (the mistake in
+  ink, our answer muted) over `after 1.e4 e5 … · played 34% · loses 1.8 · 1 game in 9`; a
+  line row is its numbered moves over `1 game in 4 · +0.42`. Hovering floats the position,
+  a click puts it on the board, ↑ / ↓ walk the rows while the tab is up. A board run's row
+  is played onto the analysis board (existing moves followed, new ones added as
+  variations) and a trap stops on the mistake, the answer one → away; a chapter run's row
+  opens the draft in the builder there. Before any run the tab says what a search does;
+  its strip control is `Generate…`. A failure is said once, on the fill line.
+- **Finish now** sits beside `Cancel` on the fill line: the search stops after the
+  expansion under way and the tree as it stands is read. The search goes level by level,
+  so an early finish is every line to the depth reached — the way to use a deep search
+  when in a rush (depth 8 at engine depth 14 runs at about a thousand positions a minute).

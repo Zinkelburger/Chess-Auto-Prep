@@ -75,6 +75,19 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
   and the header reads `Off the file: …` with take-back (←) and back-to-the-file; the engine
   follows the free board. Moving in the file or leaving the tab ends it. Owner:
   `workspace/repertoire_tree.dart`, pane `workspace/tree_pane.dart`.
+- **Analysis board** (v2, 2026-09-22) — lila's analysis board: with no file open the
+  workspace is a board kept in memory, headed `Analysis board` over `Not saved`, which is
+  where the window starts. Moves, variations, comments, NAGs, delete / promote and Ctrl+Z
+  (200 steps) work as on a chapter; the engine, Explorer, Replies and Prep follow it, with
+  the side at the bottom as ours. Opening a file sets it aside for the window's life:
+  Actions ▸ `Analysis board` goes back to it. `New analysis board from here` (Ctrl+N)
+  replaces it with the line on the board up to the cursor, from any file, game or the board
+  itself, facing the same way. On the board, Ctrl+V / `Paste PGN or FEN` replaces it with
+  a pasted PGN (first game, variations and comments kept), bare moves or a FEN; `Save to
+  repertoire…` and `Save to study…` ask where, then the chapter name, and write a new
+  chapter (the board's side as its colour). Closing the window forgets it, as on lichess.
+  Owners: `DocumentSession` (`isScratch`, `workspace/kept_board.dart`),
+  `chess/pgn/analysis_board.dart`, `app/board_actions.dart`.
 - **Board editor** — dialog (960×720) or embedded panel. Spare strips above and below the board
   swap with the flip, each `[pointer] K Q R B N P [bin]`; then side to move, Start position, Clear
   board, Flip board, an advanced section (four castling checkboxes, enabled only with king and rook

@@ -177,6 +177,33 @@ void main() {
     expect(found.lines.first.moves.first.move.uci, 'e2e4');
   });
 
+  test('Finish now stops after the expansion under way and keeps what the '
+      'search has so far', () async {
+    await fixture.session.newAnalysisBoard(
+      side: Side.white,
+      root: const Fen(kingAndPawn),
+    );
+    final fill = fillWith(ScriptedEvaluator());
+    // Finish as soon as the first position is answered.
+    void finishEarly() {
+      if (fill.state case FillRunning(:final nodes) when nodes > 1) {
+        fill.finish();
+      }
+    }
+
+    fill.addListener(finishEarly);
+    await fill.start(const FillRequest(elo: 2200, depthPlies: 8, onceIn: 50));
+    fill.removeListener(finishEarly);
+    expect(fill.state, isA<FillDone>(), reason: 'the root was answered');
+    expect(fill.found!.lines, isNotEmpty);
+    expect(
+      fill.found!.lines.every((line) => line.moves.length < 8),
+      isTrue,
+      reason: 'stopped short of the horizon',
+    );
+    expect(releases, 1);
+  });
+
   test('Prefer traps lets moves of ours further from the best be tried', () {
     const plain = FillRequest(elo: 2200, depthPlies: 3, onceIn: 50);
     const trappy = FillRequest(

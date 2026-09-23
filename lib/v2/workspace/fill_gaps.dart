@@ -110,12 +110,33 @@ final class FillRunning extends FillState {
     required this.depth,
     required this.of,
     this.cancelling = false,
+    this.finishing = false,
   });
 
   final int nodes;
   final int depth;
   final int of;
   final bool cancelling;
+
+  /// Asked to stop and keep what it has: the expansion under way is
+  /// finished, then the tree as it stands is read.
+  final bool finishing;
+
+  /// Whether a stop has been asked for, either kind.
+  bool get stopping => cancelling || finishing;
+
+  FillRunning copyWith({
+    int? nodes,
+    int? depth,
+    bool? cancelling,
+    bool? finishing,
+  }) => FillRunning(
+    nodes: nodes ?? this.nodes,
+    depth: depth ?? this.depth,
+    of: of,
+    cancelling: cancelling ?? this.cancelling,
+    finishing: finishing ?? this.finishing,
+  );
 }
 
 /// The run is over and what it found is in [FillGaps.found]. [name] is the
@@ -184,6 +205,7 @@ final class FillGaps extends ChangeNotifier {
   FillFound? _found;
   int? _picked;
   bool _cancelled = false;
+  bool _finishing = false;
   Future<void> Function()? _release;
   bool _disposed = false;
 
@@ -224,6 +246,7 @@ final class FillGaps extends ChangeNotifier {
         ? FillTarget.board(chapter, _session.cursor, _session.orientation)
         : FillTarget.chapter(chapter, source, _session.cursor);
     _cancelled = false;
+    _finishing = false;
     _found = null;
     _picked = null;
     _set(FillRunning(nodes: 1, depth: 0, of: request.depthPlies));
@@ -270,7 +293,7 @@ final class FillGaps extends ChangeNotifier {
       config: config,
       evaluator: tools.evaluator,
       policy: tools.policy,
-      isCancelled: () => _cancelled,
+      isCancelled: () => _cancelled || _finishing,
       onProgress: _progress,
     );
     await _released();
@@ -464,10 +487,20 @@ final class FillGaps extends ChangeNotifier {
   /// back at once so an evaluation in flight comes back empty rather than
   /// being waited for.
   void cancel() {
-    if (_state case FillRunning(:final nodes, :final depth, :final of)) {
+    if (_state case final FillRunning running) {
       _cancelled = true;
-      _set(FillRunning(nodes: nodes, depth: depth, of: of, cancelling: true));
+      _set(running.copyWith(cancelling: true));
       unawaited(_released());
+    }
+  }
+
+  /// Stops the search after the expansion under way and shows what it has
+  /// found so far: the search goes level by level, so what it has is every
+  /// line to the depth it reached. Nothing to do once a stop is asked for.
+  void finish() {
+    if (_state case final FillRunning running when !running.stopping) {
+      _finishing = true;
+      _set(running.copyWith(finishing: true));
     }
   }
 
@@ -483,15 +516,8 @@ final class FillGaps extends ChangeNotifier {
   }
 
   void _progress(SearchProgress progress) {
-    if (_state case FillRunning(:final of, :final cancelling)) {
-      _set(
-        FillRunning(
-          nodes: progress.nodes,
-          depth: progress.depth,
-          of: of,
-          cancelling: cancelling,
-        ),
-      );
+    if (_state case final FillRunning running) {
+      _set(running.copyWith(nodes: progress.nodes, depth: progress.depth));
     }
   }
 

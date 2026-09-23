@@ -42,8 +42,26 @@ class _PrepPaneState extends State<PrepPane> {
   final _preview = ValueNotifier<LinePreview?>(null);
   Timer? _settle;
 
+  /// A row rebuilt or gone from under the pointer never hears it leave, so
+  /// the floated board goes whenever the run's results change.
+  @override
+  void initState() {
+    super.initState();
+    widget.fill.addListener(_leave);
+  }
+
+  @override
+  void didUpdateWidget(PrepPane old) {
+    super.didUpdateWidget(old);
+    if (old.fill != widget.fill) {
+      old.fill.removeListener(_leave);
+      widget.fill.addListener(_leave);
+    }
+  }
+
   @override
   void dispose() {
+    widget.fill.removeListener(_leave);
     _settle?.cancel();
     _preview.dispose();
     super.dispose();
