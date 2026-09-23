@@ -1,5 +1,5 @@
-/// Which database the explorer asks and how it is narrowed: what the gear on
-/// the Explorer tab holds, and what the settings file remembers.
+/// Which database the explorer asks and how it is narrowed: what the top of
+/// the Explorer tab sets, and what the settings file remembers.
 library;
 
 /// The databases the explorer can ask.
@@ -78,15 +78,14 @@ final class ExplorerChoice {
       if (ratings.contains(rating)) rating,
   ];
 
-  /// One line saying what is asked: `Lichess · blitz rapid classical ·
-  /// 2000+`, `TWIC · classical only`, `Masters`.
-  String get summary => switch (source) {
-    ExplorerSource.masters => source.title,
-    ExplorerSource.twic =>
-      classicalOnly ? '${source.title} · classical only' : source.title,
+  /// How the chosen database is narrowed, in a few words:
+  /// `blitz rapid classical · 2000+`, `classical only`, or empty when it is
+  /// not narrowed at all. The database itself is the pressed button.
+  String get narrowing => switch (source) {
+    ExplorerSource.masters => '',
+    ExplorerSource.twic => classicalOnly ? 'classical only' : '',
     ExplorerSource.lichess =>
-      '${source.title} · ${speedsInOrder.map((s) => s.name).join(' ')} · '
-          '${_ratingsSummary()}',
+      '${speedsInOrder.map((s) => s.name).join(' ')} · ${_ratingsSummary()}',
   };
 
   /// `2000+` when the bands run to the top without a hole, else the bands.

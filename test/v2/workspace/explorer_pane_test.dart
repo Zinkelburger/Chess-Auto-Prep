@@ -41,7 +41,7 @@ void main() {
 
   /// The owner is made inside the test body, so its futures run under the
   /// test's clock.
-  Future<void> show(WidgetTester tester, {bool withGear = false}) async {
+  Future<void> show(WidgetTester tester) async {
     explorer = explorerOver(
       fixture.session,
       settings: settings,
@@ -57,7 +57,6 @@ void main() {
         home: Scaffold(
           body: Column(
             children: [
-              if (withGear) ExplorerGear(explorer: explorer),
               Expanded(
                 child: SizedBox(
                   width: 480,
@@ -77,7 +76,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('shows the summary, the moves with their games and shares, a '
+  testWidgets('shows the databases, the moves with their games and shares, a '
       'tick on the one the chapter plays, the totals and the games', (
     tester,
   ) async {
@@ -111,21 +110,19 @@ void main() {
     expect(opened.single.id, 'abcd1234');
   });
 
-  testWidgets('the gear chooses the database; the summary line opens the '
-      'same menu; the chips narrow Lichess', (tester) async {
-    await show(tester, withGear: true);
-    await tester.tap(find.byTooltip('Choose the database'));
-    await tester.pumpAndSettle();
+  testWidgets('the databases sit side by side at the top; Filters unfolds '
+      'the chosen one\'s chips and says what they are set to', (tester) async {
+    await show(tester);
+    expect(find.text('Masters'), findsOneWidget);
     expect(find.text('TWIC'), findsOneWidget);
+    expect(find.text('Filters'), findsNothing, reason: 'Masters has none');
     await tester.tap(find.text('Lichess'));
     await tester.pumpAndSettle();
     expect(settings.value.explorer.source, ExplorerSource.lichess);
-    expect(
-      find.text('Lichess · blitz rapid classical · 2000+'),
-      findsOneWidget,
-    );
     expect(lichess.asked.last.choice.source, ExplorerSource.lichess);
-    await tester.tap(find.text('Lichess · blitz rapid classical · 2000+'));
+    expect(find.text('blitz rapid classical · 2000+'), findsOneWidget);
+    expect(find.text('Speed'), findsNothing, reason: 'folded');
+    await tester.tap(find.text('blitz rapid classical · 2000+'));
     await tester.pumpAndSettle();
     expect(find.text('Speed'), findsOneWidget);
     await tester.tap(find.text('bullet'));
@@ -134,10 +131,21 @@ void main() {
     await tester.tap(find.text('1600'));
     await tester.pumpAndSettle();
     expect(settings.value.explorer.ratings, contains(1600));
+    await tester.tap(find.text('Filters'));
+    await tester.pumpAndSettle();
+    expect(find.text('Speed'), findsNothing);
     expect(
-      find.text('Lichess · bullet blitz rapid classical · 1600 2000 2200 2500'),
+      find.text('bullet blitz rapid classical · 1600 2000 2200 2500'),
       findsOneWidget,
     );
+    await tester.tap(find.text('TWIC'));
+    await tester.pumpAndSettle();
+    expect(settings.value.explorer.source, ExplorerSource.twic);
+    await tester.tap(find.text('Filters'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Classical OTB only'));
+    await tester.pumpAndSettle();
+    expect(settings.value.explorer.classicalOnly, isTrue);
   });
 
   testWidgets('a failure is a sentence with Try again, and the table comes '

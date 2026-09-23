@@ -48,6 +48,12 @@ class PgnViewerPanel extends StatefulWidget {
 class _PgnViewerPanelState extends State<PgnViewerPanel> {
   final _search = TextEditingController();
 
+  /// The chapters folded or unfolded, and which way, for the file in
+  /// [_foldsFor]: by hand, or open because the board went into one. A
+  /// chapter neither touched is open only while the search is narrowing.
+  final _folds = <String, bool>{};
+  ChapterRef? _foldsFor;
+
   @override
   void initState() {
     super.initState();
@@ -136,7 +142,8 @@ class _PgnViewerPanelState extends State<PgnViewerPanel> {
     );
   }
 
-  /// The games that match the search, only the rows on screen built.
+  /// The games that match the search, only the rows on screen built; under
+  /// their chapters when the file has them.
   Widget _rows() {
     final rows = _viewer.visible;
     final current = _viewer.current;
@@ -147,18 +154,150 @@ class _PgnViewerPanelState extends State<PgnViewerPanel> {
             : 'Nothing matches "${_viewer.query}".',
       );
     }
+    final chapters = _viewer.chapters;
+    final items = chapters.isEmpty
+        ? [
+            for (final (index, game) in rows)
+              _gameRow(index, game, current, indented: false),
+          ]
+        : _chapterItems(chapters, current);
     return ListView.builder(
-      itemCount: rows.length,
+      itemCount: items.length,
       itemExtent: listRowHeight,
-      itemBuilder: (context, at) {
-        final (index, game) = rows[at];
-        return _GameRow(
-          index: index,
-          game: game,
-          open: index == current,
-          onOpen: () => _viewer.showGame(index),
+      itemBuilder: (context, at) => items[at],
+    );
+  }
+
+  Widget _gameRow(
+    int index,
+    GameSummary game,
+    int? current, {
+    required bool indented,
+  }) => _GameRow(
+    index: index,
+    game: game,
+    open: index == current,
+    indented: indented,
+    onOpen: () => _viewer.showGame(index),
+  );
+
+  /// A heading per chapter and, under an unfolded one, its games. A chapter
+  /// of one game is that game's row, called by the chapter: a Lichess study
+  /// is usually one game a chapter, and a heading over one row says it twice.
+  List<Widget> _chapterItems(List<ViewerChapter> chapters, int? current) {
+    if (_foldsFor != _viewer.file) {
+      _folds.clear();
+      _foldsFor = _viewer.file;
+    }
+    final searching = _viewer.query.trim().isNotEmpty;
+    final items = <Widget>[];
+    for (final chapter in chapters) {
+      if (chapter.size == 1) {
+        final (index, _) = chapter.games.single;
+        items.add(
+          _ChapterRow(
+            title: chapter.title,
+            count: null,
+            unfolded: null,
+            holdsCurrent: index == current,
+            onTap: () => _viewer.showGame(index),
+          ),
         );
-      },
+        continue;
+      }
+      final holds = chapter.games.any((game) => game.$1 == current);
+      // The chapter the board went into stays open after the board leaves
+      // it: folding it then would move the rows under the pointer.
+      if (holds) _folds.putIfAbsent(chapter.title, () => true);
+      final unfolded = _folds[chapter.title] ?? searching;
+      items.add(
+        _ChapterRow(
+          title: chapter.title,
+          count: chapter.size,
+          unfolded: unfolded,
+          holdsCurrent: holds,
+          onTap: () => setState(() => _folds[chapter.title] = !unfolded),
+        ),
+      );
+      if (!unfolded) continue;
+      for (final (index, game) in chapter.games) {
+        items.add(_gameRow(index, game, current, indented: true));
+      }
+    }
+    return items;
+  }
+}
+
+/// A chapter of the open file, as the builder's outline shows one: its name,
+/// bold and accented while the game on the board is in it, and how many
+/// games it holds. A chapter of several games folds; one of a single game
+/// opens it.
+class _ChapterRow extends StatelessWidget {
+  const _ChapterRow({
+    required this.title,
+    required this.count,
+    required this.unfolded,
+    required this.holdsCurrent,
+    required this.onTap,
+  });
+
+  final String title;
+
+  /// How many games it holds; null for a chapter of one game.
+  final int? count;
+
+  /// Whether its games are listed under it; null when it has none to fold.
+  final bool? unfolded;
+
+  final bool holdsCurrent;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: count == null && holdsCurrent
+          ? theme.colorScheme.surfaceContainerHighest
+          : null,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(Space.xs, 0, Space.m, 0),
+          child: Row(
+            children: [
+              SizedBox(
+                width: IconSize.action + Space.xs,
+                child: switch (unfolded) {
+                  null => null,
+                  final open => Icon(
+                    open ? Icons.expand_more : Icons.chevron_right,
+                    size: IconSize.action,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                },
+              ),
+              Expanded(
+                child: Text(
+                  title,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontWeight: holdsCurrent ? FontWeight.w600 : null,
+                    color: holdsCurrent ? theme.colorScheme.primary : null,
+                  ),
+                ),
+              ),
+              if (count case final games?)
+                Padding(
+                  padding: const EdgeInsets.only(left: Space.s),
+                  child: Text(
+                    games == 1 ? '1 game' : '$games games',
+                    style: theme.textTheme.labelSmall,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -207,6 +346,7 @@ class _GameRow extends StatelessWidget {
     required this.game,
     required this.open,
     required this.onOpen,
+    this.indented = false,
   });
 
   final int index;
@@ -214,6 +354,9 @@ class _GameRow extends StatelessWidget {
 
   /// This is the game on the board.
   final bool open;
+
+  /// It is listed under its chapter's heading.
+  final bool indented;
 
   final VoidCallback onOpen;
 
@@ -225,7 +368,12 @@ class _GameRow extends StatelessWidget {
       child: InkWell(
         onTap: onOpen,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(Space.m, 0, Space.m, 0),
+          padding: EdgeInsets.fromLTRB(
+            indented ? Space.m + IconSize.action : Space.m,
+            0,
+            Space.m,
+            0,
+          ),
           child: Row(
             children: [
               SizedBox(

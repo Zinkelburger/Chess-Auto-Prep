@@ -6,17 +6,15 @@ import '../chess/explorer_answer.dart';
 import '../ui/theme.dart';
 import 'document_session.dart';
 import 'explorer.dart';
-import 'explorer_menu.dart';
+import 'explorer_filters.dart';
 import 'game_fetcher.dart';
 import 'line_preview.dart';
-
-export 'explorer_menu.dart' show ExplorerGear;
 
 /// The Explorer tab of the reading card, lila's opening explorer: what a
 /// database has seen played from the position on the board.
 ///
-/// One muted line says which database and how it is narrowed; clicking it
-/// opens the same menu as the gear at the strip's edge. Under it the table,
+/// At the top the databases side by side, the chosen one pressed, and its
+/// filters folded behind `Filters`. Under them the table,
 /// one row per move, most played first: the move, how many games and what
 /// share, and how they ended as a bar; a tick when the chapter plays the
 /// move here; a totals row to close it. Then the games the database names,
@@ -94,7 +92,7 @@ class _ExplorerPaneState extends State<ExplorerPane> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _Summary(explorer: widget.explorer),
+            ExplorerSourceBar(explorer: widget.explorer),
             Expanded(child: _body(context)),
           ],
         ),
@@ -149,39 +147,6 @@ class _ExplorerPaneState extends State<ExplorerPane> {
     return ListView.builder(
       itemCount: items.length,
       itemBuilder: (context, index) => items[index](context),
-    );
-  }
-}
-
-/// One muted line saying what is asked, and the way to change it.
-class _Summary extends StatelessWidget {
-  const _Summary({required this.explorer});
-
-  final Explorer explorer;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    return ExplorerMenu(
-      explorer: explorer,
-      builder: (context, controller) => InkWell(
-        onTap: controller.isOpen ? controller.close : controller.open,
-        child: SizedBox(
-          height: engineBarHeight,
-          child: Padding(
-            padding: const EdgeInsets.only(left: Space.m),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                explorer.choice.summary,
-                style: text.bodySmall,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

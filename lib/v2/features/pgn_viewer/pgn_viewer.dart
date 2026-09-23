@@ -2,7 +2,10 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import '../../chess/pgn/chapter.dart';
+import '../../chess/pgn/chapter_grouping.dart';
+import '../../chess/pgn/chapter_line.dart';
 import '../../chess/pgn/game_summary.dart';
+import '../../chess/pgn/game_text.dart';
 import '../../storage/chapter_files.dart';
 import '../../storage/pgn_file_import.dart';
 import '../../storage/pgn_file_picker.dart';
@@ -52,6 +55,9 @@ final class PgnViewer extends ChangeNotifier {
   ChapterRef? _file;
   Chapter? _rowsOf;
   List<GameSummary> _rows = const [];
+
+  /// Each game's chapter, when the file has chapters; else null.
+  List<String>? _chapterOf;
   String _query = '';
   int _loads = 0;
   bool _disposed = false;
@@ -81,6 +87,32 @@ final class PgnViewer extends ChangeNotifier {
     return [
       for (final (index, game) in games.indexed)
         if (needle.isEmpty || game.searchText.contains(needle)) (index, game),
+    ];
+  }
+
+  /// The games that match the search under their chapters, in the order
+  /// the chapters first appear: a study or a course read as the builder
+  /// reads it. Empty when the file has no chapters, and the list is flat.
+  List<ViewerChapter> get chapters {
+    final of = _chapterOf;
+    if (file == null || of == null) return const [];
+    final needle = _query.trim().toLowerCase();
+    final grouped = <String, List<(int, GameSummary)>>{};
+    final sizes = <String, int>{};
+    for (final (index, game) in games.indexed) {
+      final title = of[index];
+      sizes[title] = (sizes[title] ?? 0) + 1;
+      final inChapter = grouped.putIfAbsent(title, () => []);
+      if (needle.isEmpty ||
+          game.searchText.contains(needle) ||
+          title.toLowerCase().contains(needle)) {
+        inChapter.add((index, game));
+      }
+    }
+    return [
+      for (final MapEntry(key: title, value: games) in grouped.entries)
+        if (games.isNotEmpty)
+          ViewerChapter(title, games, size: sizes[title] ?? games.length),
     ];
   }
 
@@ -193,13 +225,33 @@ final class PgnViewer extends ChangeNotifier {
     final chapter = _session.chapter;
     if (identical(chapter, _rowsOf)) return;
     _rowsOf = chapter;
-    _rows = chapter == null
-        ? const []
-        : List.unmodifiable([
-            for (final (index, line) in chapter.lines.indexed)
-              summarizeGame(line, index: index),
-          ]);
+    final lines = chapter?.lines ?? const [];
+    final grouping = groupChapters([for (final line in lines) line.tags]);
+    _chapterOf = grouping.hasChapters ? grouping.titles : null;
+    _rows = List.unmodifiable([
+      for (final (index, line) in lines.indexed)
+        _summary(line, index, grouping),
+    ]);
     notifyListeners();
+  }
+
+  /// A game's row. Under a chapter a course's line is called by its own
+  /// title — the header [ChapterGrouping.titleKey] names — rather than
+  /// `Chapter – Line` as its player tags would read.
+  GameSummary _summary(ChapterLine line, int index, ChapterGrouping grouping) {
+    final game = summarizeGame(line, index: index);
+    if (!grouping.hasChapters) return game;
+    final title = tagValue(line.tags, grouping.titleKey)?.trim() ?? '';
+    if (isPlaceholderTitle(title) ||
+        title == grouping.titles[index] ||
+        !game.title.contains(grouping.titles[index])) {
+      return game;
+    }
+    return GameSummary(
+      title: title,
+      result: game.result,
+      setting: game.setting,
+    );
   }
 
   @override
@@ -208,4 +260,16 @@ final class PgnViewer extends ChangeNotifier {
     _session.removeListener(_followTheDocument);
     super.dispose();
   }
+}
+
+/// One chapter of the viewed file: its title and the games in it that match
+/// the search, each with its place in the file.
+final class ViewerChapter {
+  const ViewerChapter(this.title, this.games, {required this.size});
+
+  final String title;
+  final List<(int, GameSummary)> games;
+
+  /// How many games the chapter holds, whatever the search shows of it.
+  final int size;
 }

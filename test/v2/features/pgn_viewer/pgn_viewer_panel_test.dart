@@ -108,4 +108,100 @@ void main() {
     expect(find.text('A1 – B1'), findsOneWidget);
     expect(find.text('A300 – B300'), findsNothing);
   });
+
+  testWidgets('a course lists its lines under foldable chapters, the open '
+      "game's chapter unfolded, each line by its own title", (tester) async {
+    fixture = await viewerOver(courseFile);
+    await fixture.open();
+    await pump(tester);
+    expect(find.text('Italian'), findsOneWidget);
+    expect(find.text('2 games'), findsNWidgets(2));
+    expect(find.text('Main line'), findsOneWidget);
+    expect(find.text('Two Knights'), findsOneWidget);
+    expect(find.text('Sicilian'), findsOneWidget);
+    expect(find.text('Najdorf'), findsNothing, reason: 'folded');
+    await tester.tap(find.text('Sicilian'));
+    await tester.pumpAndSettle();
+    expect(find.text('Najdorf'), findsOneWidget);
+    await tester.tap(find.text('Najdorf'));
+    await tester.pumpAndSettle();
+    expect(fixture.session.game, 2);
+    expect(find.text('Main line'), findsOneWidget, reason: 'stays open');
+    await tester.tap(find.text('Italian'));
+    await tester.pumpAndSettle();
+    expect(find.text('Main line'), findsNothing);
+  });
+
+  testWidgets('a study chapter of one game is that game\'s row', (
+    tester,
+  ) async {
+    fixture = await viewerOver(studyFile);
+    await fixture.open();
+    await pump(tester);
+    expect(find.text('Chapter one'), findsOneWidget);
+    expect(find.text('Chapter two'), findsOneWidget);
+    expect(find.text('1 game'), findsNothing);
+    await tester.tap(find.text('Chapter two'));
+    await tester.pumpAndSettle();
+    expect(fixture.session.game, 1);
+  });
+
+  testWidgets('the search unfolds the chapters it finds lines in', (
+    tester,
+  ) async {
+    fixture = await viewerOver(courseFile);
+    await fixture.open();
+    await pump(tester);
+    await tester.enterText(find.byType(TextField), 'najdorf');
+    await tester.pumpAndSettle();
+    expect(find.text('Sicilian'), findsOneWidget);
+    expect(find.text('Najdorf'), findsOneWidget);
+    expect(find.text('Italian'), findsNothing);
+  });
 }
+
+/// A course export: the chapter in `White`, the line's title in `Black`.
+const courseFile = """
+[Event "Course"]
+[White "Italian"]
+[Black "Main line"]
+[Result "*"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5 *
+
+[Event "Course"]
+[White "Italian"]
+[Black "Two Knights"]
+[Result "*"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 *
+
+[Event "Course"]
+[White "Sicilian"]
+[Black "Najdorf"]
+[Result "*"]
+
+1. e4 c5 2. Nf3 d6 *
+
+[Event "Course"]
+[White "Sicilian"]
+[Black "Dragon"]
+[Result "*"]
+
+1. e4 c5 2. Nf3 g6 *
+""";
+
+/// A Lichess study export: one game a chapter, named in `ChapterName`.
+const studyFile = """
+[Event "My study: Chapter one"]
+[ChapterName "Chapter one"]
+[Result "*"]
+
+1. d4 d5 *
+
+[Event "My study: Chapter two"]
+[ChapterName "Chapter two"]
+[Result "*"]
+
+1. c4 e5 *
+""";

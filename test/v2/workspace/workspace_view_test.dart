@@ -137,10 +137,14 @@ void main() {
       find.text('Black · 2 lines, 1 from another position'),
       findsOneWidget,
     );
-    expect(find.textContaining('c5'), findsOneWidget);
-    expect(find.textContaining('Nc3'), findsOneWidget);
-    expect(find.text('The Sicilian'), findsOneWidget);
+    Finder inMoves(Finder finder) =>
+        find.descendant(of: find.byType(MoveTreeView), matching: finder);
+    expect(inMoves(find.textContaining('c5')), findsOneWidget);
+    expect(inMoves(find.textContaining('Nc3')), findsOneWidget);
+    expect(inMoves(find.text('The Sicilian')), findsOneWidget);
     expect(find.textContaining('[%eval'), findsNothing);
+    // The note under the board already names the first move.
+    expect(find.byTooltip('Play c5 (→)'), findsOneWidget);
     expect(find.byTooltip('Forward (→)'), findsOneWidget);
     expect(find.byTooltip('End (End)'), findsOneWidget);
   });
@@ -307,12 +311,11 @@ void main() {
     ]);
     expect(find.byType(MoveTreeView), findsOneWidget);
     expect(find.text('Next gap'), findsNothing);
-    // The explorer is the third tab, with its gear at the strip's edge.
+    // The explorer is the third tab, its databases along its top.
     await tester.sendKeyEvent(LogicalKeyboardKey.tab);
     await tester.pumpAndSettle();
     expect(tabs.selected, WorkspaceTab.explorer);
     expect(find.byType(ExplorerPane), findsOneWidget);
-    expect(find.byTooltip('Choose the database'), findsOneWidget);
     expect(find.text('Masters'), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyW);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);

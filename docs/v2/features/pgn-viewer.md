@@ -193,6 +193,19 @@ reach the same explorer; the tab bar disappears entirely during solitaire.
   paging remain open questions.
 - **`Tree` and `Database explorer` are one `Explorer` tab** of the reading card (owner, 2026-09-22;
   `workspace.md`). The old `Tree` tab's merged opening tree of the open file is the `This file`
-  source behind the tab's gear, beside `My games`, `Masters`, `Lichess` and `TWIC`; the old app's
+  source in the tab's source row, beside `My games`, `Masters`, `Lichess` and `TWIC`; the old app's
   own note that both tabs "reach the same explorer" is taken at its word. `Collection` and
   `Filter` are unchanged by this.
+
+## Owner decisions (2026-09-22, evening)
+- **A file with chapters lists its games under them**, as the builder reads it: a Lichess study
+  export by `ChapterName`, a course by the player header its chapters are titled in (the rule in
+  `chess/pgn/chapter_grouping.dart`, shared with the repertoire import). A chapter heading shows
+  its name and `N games` and folds; the chapter holding the game on the board opens and stays open
+  when the board leaves it, so the rows never move under the pointer. A chapter of one game is
+  that game's row. Under a chapter a course line is called by its own title (`Najdorf`, not
+  `Sicilian – Najdorf`). Search unfolds the chapters it finds games in. A plain collection stays
+  the flat list.
+- **The start of a game names its first move.** The note under the board shows the game's
+  introduction, then the first move muted with its note; clicking it plays it, as → does. Hidden
+  while a line is being found (puzzles, training).

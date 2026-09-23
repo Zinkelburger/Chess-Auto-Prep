@@ -20,6 +20,7 @@ import 'package:dartchess/dartchess.dart' show Side;
 
 import '../fen.dart';
 import 'chapter.dart';
+import 'chapter_grouping.dart';
 import 'game_text.dart';
 import 'game_tree.dart';
 import 'pgn_reader.dart';
@@ -68,10 +69,6 @@ final class ImportedChapter {
   final String text;
   final int lines;
 }
-
-/// The chapter a game belongs to when a file does not sort its games into
-/// any, and the name of a chapter whose title is empty.
-const defaultChapterTitle = 'Main';
 
 /// Reads [text] as chapters. [created] is written into each heading.
 ImportRead readImport(String text, {required DateTime created}) {
@@ -197,139 +194,22 @@ final class _Grouping {
   final String titleKey;
 }
 
-/// A study export titles every game with `ChapterName`; a course titles a
-/// chapter's games alike in one player header; anything else is one chapter.
+/// The games under their chapter titles, in the order the titles first
+/// appear; see [groupChapters].
 _Grouping _grouping(List<_Game> games) {
-  if (games.any((game) => (game.tag('ChapterName') ?? '').trim().isNotEmpty)) {
-    return _Grouping(
-      _groupedBy(games, (game) => game.tag('ChapterName')?.trim()),
-      chapterKey: 'ChapterName',
-      titleKey: 'Black',
-    );
-  }
-  final chapterKey = _courseChapterKey(games);
-  if (chapterKey != null) {
-    return _Grouping(
-      _groupedBy(games, (game) => _courseTitle(game, chapterKey)),
-      chapterKey: chapterKey,
-      titleKey: _titleKeyFor(chapterKey),
-    );
+  final grouping = groupChapters([for (final game in games) game.read.tags]);
+  final groups = <String, _Group>{};
+  for (final (index, title) in grouping.titles.indexed) {
+    groups
+        .putIfAbsent(title, () => _Group(title, course: grouping.hasChapters))
+        .games
+        .add(games[index]);
   }
   return _Grouping(
-    [_Group(defaultChapterTitle, course: false)..games.addAll(games)],
-    chapterKey: null,
-    titleKey: 'Black',
+    groups.values.toList(),
+    chapterKey: grouping.chapterKey,
+    titleKey: grouping.titleKey,
   );
-}
-
-/// Games sharing a title are one chapter, in the order the titles first
-/// appear; a game with no title goes with the chapter before it, or into
-/// the default one when it comes first.
-List<_Group> _groupedBy(List<_Game> games, String? Function(_Game) titleOf) {
-  final groups = <_Group>[];
-  final byTitle = <String, _Group>{};
-  for (final game in games) {
-    var title = titleOf(game);
-    if (title == null || title.isEmpty) {
-      title = groups.isEmpty ? defaultChapterTitle : groups.last.title;
-    }
-    final group = byTitle.putIfAbsent(title, () {
-      final made = _Group(title!, course: true);
-      groups.add(made);
-      return made;
-    });
-    group.games.add(game);
-  }
-  return groups;
-}
-
-/// The headers a course export has been seen to carry its chapter titles in.
-const _chapterHeaderCandidates = ['White', 'Black', 'Event'];
-
-/// Placeholder values that are never a chapter or line title.
-const _placeholderTitles = {
-  '',
-  '?',
-  'me',
-  'opponent',
-  'white',
-  'black',
-  'n.n.',
-  'repertoire line',
-  'edited line',
-  'training',
-};
-
-/// Which header carries the chapter titles of a chapter-titled export, or
-/// null when none groups the games.
-///
-/// Course exports disagree: most put the chapter in `White` and the
-/// variation title in `Black`; some the reverse; one puts the chapter in
-/// `Event`. The chapter header is the one whose values come in the fewest
-/// contiguous runs — a course lists a chapter's lines together, so its
-/// chapter header changes forty times in a thousand games while a title
-/// header changes on nearly every one. `White` breaks a tie.
-String? _courseChapterKey(List<_Game> games) {
-  String? best;
-  var bestRuns = 1 << 30;
-  for (final key in _chapterHeaderCandidates) {
-    final titles = _chapterTitles(games, key);
-    if (titles == null) continue;
-    final runs = _runs(titles);
-    if (runs < bestRuns) {
-      best = key;
-      bestRuns = runs;
-    }
-  }
-  return best;
-}
-
-/// One title (or null) per game under [key], or null when the file does not
-/// look chapter-titled: more than one title, at least one shared by several
-/// games, and most games titled. That keeps a collection of real games with
-/// player names from turning into one chapter per player.
-List<String?>? _chapterTitles(List<_Game> games, String key) {
-  final counts = <String, int>{};
-  final titles = <String?>[];
-  var titled = 0;
-  for (final game in games) {
-    final title = _courseTitle(game, key);
-    titles.add(title);
-    if (title == null) continue;
-    titled++;
-    counts[title] = (counts[title] ?? 0) + 1;
-  }
-  if (counts.length < 2) return null;
-  if (!counts.values.any((count) => count >= 2)) return null;
-  if (titled * 2 < games.length) return null;
-  return titles;
-}
-
-String? _courseTitle(_Game game, String key) {
-  final title = (game.tag(key) ?? '').trim();
-  if (game.isComplete || _placeholderTitles.contains(title.toLowerCase())) {
-    return null;
-  }
-  return title;
-}
-
-/// The header that titles a line when [chapterKey] carries the chapter: the
-/// other player header, or `White` under an `Event` chapter.
-String _titleKeyFor(String chapterKey) => switch (chapterKey) {
-  'Black' || 'Event' => 'White',
-  _ => 'Black',
-};
-
-int _runs(List<String?> titles) {
-  var runs = 0;
-  String? previous;
-  var first = true;
-  for (final title in titles) {
-    if (first || title != previous) runs++;
-    first = false;
-    previous = title;
-  }
-  return runs;
 }
 
 // ---------------------------------------------------------------------------
@@ -465,7 +345,7 @@ List<PgnHeader> _sidelineTags(
     if (_idHeaders.contains(header.key)) continue;
     final value = header.value.trim();
     if (suffixed.contains(header.key) &&
-        !_placeholderTitles.contains(value.toLowerCase())) {
+        !isPlaceholderTitle(value)) {
       tags.add(PgnTag(header.key, '$value — $label', trailer: header.trailer));
       continue;
     }
