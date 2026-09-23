@@ -46,7 +46,7 @@ final class ScopeReader {
             (
               ref: ref,
               lines: trainingLines(
-                sectionView(file, ref.section, name: ref.name).chapter,
+                sectionView(file, ref.section).chapter,
                 source: ref.path,
               ),
             ),
@@ -56,7 +56,7 @@ final class ScopeReader {
   Future<Chapter?> _read(ChapterRef ref) async {
     switch (await _documents.open(ref)) {
       case Opened(:final text):
-        return readChapter(name: ref.name, text: text);
+        return readChapter(name: ref.fileName, text: text);
       case Absent():
         return null;
       case Unreadable(:final detail):

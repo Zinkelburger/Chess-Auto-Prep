@@ -91,6 +91,35 @@ String? _tagValueIn(String header) {
   return value.isEmpty ? null : value;
 }
 
+/// An edit of a file ready to write: the file after it, what it did to the
+/// file's games, and the chapter of it to show.
+typedef FileEdit = ({Chapter file, GamesArranged games, SectionView shown});
+
+/// [edited], an edit of the whole of [file] placed by [games], with the ids
+/// it would change pinned ([withIdsPinned]), showing [section] — or the
+/// file's first chapter, when the edit left none of that one's games.
+FileEdit fileEdit(
+  Chapter file,
+  Chapter edited,
+  GamesArranged games,
+  String? section,
+) {
+  final pinned = withIdsPinned(file, edited, games);
+  return (
+    file: pinned.chapter,
+    games: pinned.games,
+    shown: sectionView(pinned.chapter, sectionAfter(pinned.chapter, section)),
+  );
+}
+
+/// [section] when [file] still has that chapter; otherwise its first — an
+/// edit took the last of the chapter's games, or left the file one chapter,
+/// and what is shown must be a chapter the library lists.
+String? sectionAfter(Chapter file, String? section) {
+  final sections = chapterSections(file.lines);
+  return sections.contains(section) ? section : sections.first;
+}
+
 /// One chapter of a file: the file, the chapter's name in it and where its
 /// games sit.
 final class SectionView {
@@ -128,8 +157,9 @@ final class SectionView {
   bool get isWholeFile => stamp == null && places.length == file.lines.length;
 }
 
-/// The chapter [section] of [file], called [name].
-SectionView sectionView(Chapter file, String? section, {required String name}) {
+/// The chapter [section] of [file], called by its name — or, for the games
+/// that name none, by the file's ([Chapter.name] of [file]).
+SectionView sectionView(Chapter file, String? section) {
   final whole = chapterSections(file.lines).length < 2;
   final places = [
     for (final (index, line) in file.lines.indexed)
@@ -143,7 +173,7 @@ SectionView sectionView(Chapter file, String? section, {required String name}) {
     section: section,
     places: List.unmodifiable(places),
     stamp: whole ? (names.length == 1 ? names.single : null) : section,
-    chapter: withLineIds(renamedChapter(chapter, name), [
+    chapter: withLineIds(renamedChapter(chapter, section ?? file.name), [
       for (final at in places) ids[at],
     ]),
   );

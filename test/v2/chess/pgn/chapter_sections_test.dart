@@ -53,7 +53,7 @@ void main() {
     const one = '[Event "a"]\n[ChapterName "KID"]\n\n1. d4 *\n';
     expect(sectionsInText(one), [null]);
     final file = parseChapter(name: 'Renamed', text: one);
-    final view = sectionView(file, null, name: 'Renamed');
+    final view = sectionView(file, null);
     expect(view.places, [0]);
     expect(view.isWholeFile, isFalse, reason: 'a new line takes the name');
     final other = parseChapter(name: 'x', text: '[Event "b"]\n\n1. e4 *\n');
@@ -65,7 +65,7 @@ void main() {
   });
 
   test('a chapter is its games wherever they sit, trained as the file', () {
-    final view = sectionView(file, 'Open games', name: 'Open games');
+    final view = sectionView(file, 'Open games');
     expect(view.places, [0, 3]);
     expect(view.chapter.lines.map((l) => l.nameAt(0)), ['Ruy', 'Italian']);
     expect(view.chapter.name, 'Open games');
@@ -78,7 +78,7 @@ void main() {
   });
 
   test('an edit of a chapter goes back into its places', () {
-    final view = sectionView(file, 'Open games', name: 'Open games');
+    final view = sectionView(file, 'Open games');
     final edited = renamedLine(view.chapter, game: 1, name: 'Giuoco');
     edited as ChapterEdited;
     final back = spliced(view, edited.chapter, edited.games)!;
@@ -94,7 +94,7 @@ void main() {
   });
 
   test('a deleted game leaves its place; the others keep theirs', () {
-    final view = sectionView(file, 'Open games', name: 'Open games');
+    final view = sectionView(file, 'Open games');
     final edited = lineDeleted(view.chapter, game: 0) as ChapterEdited;
     final back = spliced(view, edited.chapter, edited.games)!;
     expect(back.games.order, [1, 2, 3]);
@@ -104,7 +104,7 @@ void main() {
   });
 
   test('a game added to a chapter goes at the end with its name', () {
-    final view = sectionView(file, 'Sicilian', name: 'Sicilian');
+    final view = sectionView(file, 'Sicilian');
     final other = parseChapter(
       name: 'x',
       text: '[Event "Najdorf"]\n\n1. e4 c5 2. Nf3 *\n',
@@ -126,11 +126,11 @@ void main() {
   });
 
   test('the games with no name are a chapter of their own', () {
-    final view = sectionView(file, null, name: 'Course');
+    final view = sectionView(file, null);
     expect(view.places, [2]);
     expect(view.isWholeFile, isFalse);
     final plain = parseChapter(name: 'p', text: '[Event "a"]\n\n1. e4 *\n');
-    expect(sectionView(plain, null, name: 'p').isWholeFile, isTrue);
+    expect(sectionView(plain, null).isWholeFile, isTrue);
   });
 
   test('a line takes another chapter name, or none, moves untouched', () {
@@ -154,7 +154,7 @@ void main() {
   });
 
   test('a view over the arrangement that composes with others', () {
-    final view = sectionView(file, 'Open games', name: 'Open games');
+    final view = sectionView(file, 'Open games');
     final back = spliced(
       view,
       view.chapter,

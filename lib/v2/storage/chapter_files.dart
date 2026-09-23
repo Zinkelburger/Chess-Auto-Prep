@@ -45,6 +45,11 @@ final class ChapterRef extends DocumentRef {
   @override
   final String? section;
 
+  /// What the file as a whole is called: [name] for a file of one chapter,
+  /// and for a chapter of a course file, the file's name without `.pgn`.
+  String get fileName =>
+      section == null ? name : p.basenameWithoutExtension(path);
+
   /// The file's own chapter: the same file, with no section.
   ChapterRef get wholeFile => section == null ? this : ChapterRef.at(path);
 

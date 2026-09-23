@@ -318,8 +318,8 @@ final class LibraryWrites {
     if (read is! store.Opened) {
       return LibraryFailure('${to.name} could not be read');
     }
-    final file = await readChapter(name: to.name, text: read.text);
-    final view = sectionView(file, to.section, name: to.name);
+    final file = await readChapter(name: to.fileName, text: read.text);
+    final view = sectionView(file, to.section);
     var target = view.chapter;
     var arranged = GamesArranged.of(
       GamesWritten(),
@@ -378,7 +378,7 @@ final class LibraryWrites {
     if (read is! store.Opened) {
       return LibraryFailure('${ref.name} could not be read');
     }
-    final file = await readChapter(name: ref.name, text: read.text);
+    final file = await readChapter(name: ref.fileName, text: read.text);
     switch (edit(file)) {
       case ChapterUnchanged():
         return const LibraryDone();
