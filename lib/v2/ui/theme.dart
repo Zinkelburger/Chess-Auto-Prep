@@ -360,7 +360,6 @@ ThemeData darkTheme() {
     outlinedButtonTheme: OutlinedButtonThemeData(style: _outlined),
     textButtonTheme: TextButtonThemeData(style: _textButton),
     // The snackbar is pale, and the default action colour is paler still.
-    snackBarTheme: const SnackBarThemeData(actionTextColor: _accentFill),
     extensions: const [_board],
   );
 }

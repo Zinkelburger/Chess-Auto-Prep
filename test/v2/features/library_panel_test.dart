@@ -324,7 +324,7 @@ void main() {
     },
   );
 
-  testWidgets('deleted chapters come back where they were, and can be opened', (
+  testWidgets('deleted chapters come back where they were', (
     tester,
   ) async {
     await showDeleted(tester);
@@ -333,10 +333,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(fixture.textAt('/repertoires/KID/Main.pgn'), '// Main\n');
     expect(fixture.textAt(trashed), isNull);
-    expect(find.text('Restored "Main" to KID.'), findsOneWidget);
     expect(find.textContaining('Nothing deleted'), findsOneWidget);
-    await tester.tap(find.text('Open'));
-    expect(opened.single.path, '/repertoires/KID/Main.pgn');
+    expect(find.byType(SnackBar), findsNothing);
   });
 
   testWidgets(

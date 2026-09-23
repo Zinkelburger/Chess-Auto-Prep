@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:chess_auto_prep/v2/features/library/library_messages.dart';
 import 'package:chess_auto_prep/v2/features/library/library_state.dart';
+import 'package:chess_auto_prep/v2/ui/error_bar.dart';
 import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -19,15 +20,27 @@ void main() {
     ], open: main);
     addTearDown(fixture.dispose);
     late BuildContext context;
+    final said = ValueNotifier<({String text, StatusAction? action})?>(null);
+    addTearDown(said.dispose);
     await tester.pumpWidget(
       MaterialApp(
         theme: darkTheme(),
         home: Scaffold(
-          body: Builder(
-            builder: (built) {
-              context = built;
-              return const SizedBox.shrink();
-            },
+          body: StatusScope(
+            say: (text, {action}) => said.value = (text: text, action: action),
+            child: ValueListenableBuilder(
+              valueListenable: said,
+              builder: (built, status, _) {
+                context = built;
+                return status == null
+                    ? const SizedBox.shrink()
+                    : ErrorBar(
+                        status.text,
+                        action: status.action,
+                        onClose: () => said.value = null,
+                      );
+              },
+            ),
           ),
         ),
       ),

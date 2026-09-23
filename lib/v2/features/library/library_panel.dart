@@ -91,7 +91,6 @@ class _LibraryPanelState extends State<LibraryPanel> {
       return DeletedChaptersView(
         library: widget.library,
         onBack: () => _showDeleted(false),
-        onOpen: widget.onOpen,
         trailing: widget.trailing,
       );
     }

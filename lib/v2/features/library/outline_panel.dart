@@ -3,13 +3,13 @@ import 'package:flutter/services.dart';
 
 import '../../storage/chapter_files.dart';
 import '../../ui/choice_dialog.dart';
+import '../../ui/error_bar.dart';
 import '../../ui/name_dialog.dart';
 import '../../ui/row_actions.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
 import '../../workspace/chapter_commands.dart';
 import '../../workspace/document_session.dart';
-import '../../workspace/undo_notice.dart';
 import 'chapter_outline.dart';
 import 'library.dart';
 import 'library_messages.dart';
@@ -102,29 +102,17 @@ class _OutlinePanelState extends State<OutlinePanel> {
     // index names a place in the file rather than a line: renaming by the
     // index alone could put the name on somebody else's line.
     if (widget.outline.nameOf(line.game) != line.name) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'That line changed while you were typing; '
-            'nothing was renamed.',
-          ),
-        ),
-      );
+      StatusScope.of(
+        context,
+      )('That line changed while you were typing; nothing was renamed.');
       return;
     }
     renameLine(widget.session, line.game, name);
   }
 
-  /// Deletes the line and offers the way back, which is the undo the whole
-  /// workspace shares: no question first, because the answer is one click
-  /// away for as long as the notice is up. A delete that did not happen has
-  /// nothing to offer back — Undo there would take back the edit before it.
-  void _delete(OutlineLine line) {
-    final before = widget.session.chapter;
-    final refused = deleteLine(widget.session, line.game);
-    if (refused != null || identical(before, widget.session.chapter)) return;
-    showDeletionNotice(context, widget.session, 'Deleted 1 line.');
-  }
+  /// Deletes the line, with no question first and nothing said after: the
+  /// line is gone from the list, and Ctrl+Z puts it back.
+  void _delete(OutlineLine line) => deleteLine(widget.session, line.game);
 
   /// A plain click goes to the line and drops the selection; Ctrl adds or
   /// removes the line; Shift takes every line between the anchor and it.

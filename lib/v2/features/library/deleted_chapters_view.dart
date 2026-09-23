@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../storage/chapter_files.dart';
+import '../../ui/error_bar.dart';
 import '../../ui/name_dialog.dart';
 import '../../ui/relative_time.dart';
 import '../../ui/theme.dart';
@@ -21,15 +22,11 @@ class DeletedChaptersView extends StatefulWidget {
     super.key,
     required this.library,
     required this.onBack,
-    required this.onOpen,
     this.trailing,
   });
 
   final Library library;
   final VoidCallback onBack;
-
-  /// Opens a chapter once it is back, from the confirmation's `Open`.
-  final ValueChanged<ChapterRef> onOpen;
 
   /// What sits in the toolbar's corner: the host's toggle for the pane.
   final Widget? trailing;
@@ -56,7 +53,7 @@ class _DeletedChaptersViewState extends State<DeletedChaptersView> {
   /// Back under its old name; when a chapter of that name is there again,
   /// the user names this one, since nothing is ever replaced.
   Future<void> _restore(DeletedChapter chapter) async {
-    final messenger = ScaffoldMessenger.of(context);
+    final say = StatusScope.of(context);
     var name = chapter.name;
     var result = await widget.library.restoreChapter(chapter);
     if (result is LibraryNameTaken && mounted) {
@@ -78,18 +75,9 @@ class _DeletedChaptersViewState extends State<DeletedChaptersView> {
       name: name,
       failed: 'Could not restore the chapter.',
     );
-    final restored = ChapterRef.at(chapter.restoredAs(name));
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(message ?? 'Restored "$name" to ${chapter.repertoire}.'),
-        action: result is LibraryDone
-            ? SnackBarAction(
-                label: 'Open',
-                onPressed: () => widget.onOpen(restored),
-              )
-            : null,
-      ),
-    );
+    // A restore that worked says nothing: the chapter leaves this list and
+    // is back in its repertoire.
+    if (message != null) say(message);
   }
 
   @override

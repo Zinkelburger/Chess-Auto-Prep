@@ -14,12 +14,6 @@ import 'chapter_commands.dart';
 import 'comment_blocks.dart';
 import 'document_session.dart';
 import 'line_preview.dart';
-import 'undo_notice.dart';
-
-/// What the move menu says when moves are taken out. The moves are gone from
-/// every line that played them, so the notice names the move rather than a
-/// number of lines.
-String deletedFromHere(String san) => 'Deleted the moves from $san.';
 
 /// The move list, read like a book: the main line as running text, each
 /// comment as a paragraph of its own under the move it is on, each
@@ -76,16 +70,9 @@ class _MoveTreeViewState extends State<MoveTreeView>
     super.dispose();
   }
 
-  /// Takes the moves out and offers the same way back a deleted line does:
-  /// this removes more than a line does, so it may not be the one edit that
-  /// cannot be taken back with one click. A delete that did not happen has
-  /// nothing to offer back — Undo there would take back the edit before it.
-  void _deleteFrom(MoveNode node, NodePath path) {
-    final before = widget.session.chapter;
-    final refused = deleteFrom(widget.session, path);
-    if (refused != null || identical(before, widget.session.chapter)) return;
-    showDeletionNotice(context, widget.session, deletedFromHere(node.san));
-  }
+  /// Takes the moves out. Nothing is said about it: the moves are gone from
+  /// the tree on screen, and Ctrl+Z puts them back.
+  void _deleteFrom(NodePath path) => deleteFrom(widget.session, path);
 
   Widget _comment(String comment, Fen at, NodePath from) => CommentBlocks(
     comment: comment,
@@ -212,7 +199,7 @@ final class _LineBuilder {
 
   /// Asked for the moves under a move to be taken out, so the screen can say
   /// what went and offer it back.
-  final void Function(MoveNode node, NodePath path) onDeleteFrom;
+  final ValueChanged<NodePath> onDeleteFrom;
 
   final _CommentWidget comment;
 
@@ -306,7 +293,7 @@ final class _LineBuilder {
           child: const Text('Make main line'),
         ),
         MenuItemButton(
-          onPressed: () => onDeleteFrom(node, path),
+          onPressed: () => onDeleteFrom(path),
           child: const Text('Delete from here'),
         ),
         ...moveMenu(path),

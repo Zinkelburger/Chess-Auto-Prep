@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../storage/training_records.dart' as records;
+import '../../ui/error_bar.dart';
 import '../../workspace/session_results.dart';
 import 'library_state.dart';
 
@@ -45,11 +46,12 @@ String? _stillPointingAtTheOldName(records.RepointResult result) =>
         'Your training records still point at the old name.',
     };
 
-/// Runs [command] and says what became of it, when there is anything to say.
+/// Runs [command] and says what became of it in the window's status bar,
+/// when there is anything to say.
 ///
-/// The messenger is taken before the await: the row that asked for the change
-/// is rebuilt by the refresh that follows it, and a widget that is gone
-/// cannot be asked for its scaffold.
+/// The bar is taken before the await: the row that asked for the change is
+/// rebuilt by the refresh that follows it, and a widget that is gone cannot
+/// be asked for anything.
 ///
 /// [reload] is offered beside the sentence when the change refused because
 /// the open chapter changed on disk, because telling the user to reload
@@ -62,7 +64,7 @@ Future<LibraryResult> announce(
   required String failed,
   Future<OpenResult> Function()? reload,
 }) async {
-  final messenger = ScaffoldMessenger.of(context);
+  final say = StatusScope.of(context);
   final result = await command;
   final message = libraryMessage(
     result,
@@ -71,16 +73,11 @@ Future<LibraryResult> announce(
     failed: failed,
   );
   if (message == null) return result;
-  messenger.showSnackBar(
-    SnackBar(
-      content: Text(message),
-      action: result is LibraryConflicted && reload != null
-          ? SnackBarAction(
-              label: 'Reload',
-              onPressed: () => unawaited(_reloaded(messenger, reload)),
-            )
-          : null,
-    ),
+  say(
+    message,
+    action: result is LibraryConflicted && reload != null
+        ? (label: 'Reload', onPressed: () => unawaited(_reloaded(say, reload)))
+        : null,
   );
   return result;
 }
@@ -88,11 +85,9 @@ Future<LibraryResult> announce(
 /// Runs [reload] and says why when the chapter could not be read again: a
 /// Reload that fails without a word looks like one that was never pressed.
 Future<void> _reloaded(
-  ScaffoldMessengerState messenger,
+  void Function(String sentence, {StatusAction? action}) say,
   Future<OpenResult> Function() reload,
 ) async {
   final result = await reload();
-  if (result case OpenFailed(:final reason) when messenger.mounted) {
-    messenger.showSnackBar(SnackBar(content: Text(reason)));
-  }
+  if (result case OpenFailed(:final reason)) say(reason);
 }

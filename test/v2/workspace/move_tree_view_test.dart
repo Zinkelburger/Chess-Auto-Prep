@@ -1,4 +1,3 @@
-import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:chess_auto_prep/v2/workspace/move_tree_view.dart';
 import 'package:chess_auto_prep/v2/workspace/session_results.dart';
@@ -82,8 +81,8 @@ void main() {
     );
   });
 
-  testWidgets('deleting from a move takes it off the screen and offers it '
-      'back', (tester) async {
+  testWidgets('deleting from a move takes it off the screen quietly and undo '
+      'puts it back', (tester) async {
     final fixture = await openSession(twoLines);
     addTearDown(fixture.dispose);
     await pumpTree(tester, fixture);
@@ -101,19 +100,17 @@ void main() {
       findsNothing,
     );
     expect(fixture.onDisk, contains('1. d4 d5 *'));
-    expect(find.text('Deleted the moves from c4.'), findsOneWidget);
+    expect(find.byType(SnackBar), findsNothing);
 
-    await tester.tap(find.text('Undo'));
+    await fixture.session.undo();
     await tester.pumpAndSettle();
 
     expect(fixture.onDisk, twoLines);
   });
 
-  testWidgets('a delete that was refused offers nothing back', (tester) async {
+  testWidgets('a delete that was refused says why', (tester) async {
     final fixture = await openSession(brokenSecondLine);
     addTearDown(fixture.dispose);
-    // An edit the notice's Undo would take back in the delete's place.
-    fixture.session.setComment(NodePath.of([0]), 'first');
     await pumpTree(tester, fixture);
 
     await tester.longPress(find.textContaining('e5'));
@@ -122,8 +119,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(fixture.session.refusedEdit, isA<EditNotWritten>());
-    expect(find.text('Deleted the moves from e5.'), findsNothing);
-    expect(find.text('Undo'), findsNothing);
   });
 
   testWidgets('shows the introduction without its machine tokens', (

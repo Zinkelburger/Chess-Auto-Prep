@@ -20,6 +20,7 @@ import '../chess/explorer_answer.dart' show ExplorerGame;
 import '../chess/explorer_choice.dart' show ExplorerSource;
 import '../workspace/game_fetcher.dart';
 import '../workspace/session_results.dart';
+import '../ui/error_bar.dart' show StatusAction;
 import 'exit_guard.dart';
 import 'mode.dart';
 import 'window_input.dart';
@@ -89,6 +90,7 @@ final class WorkspaceRequests extends ChangeNotifier {
 
   var _mode = Mode.repertoires;
   String? _status;
+  StatusAction? _statusAction;
   bool _disposed = false;
 
   /// Counts the requests that put something on the board or take it off,
@@ -100,6 +102,9 @@ final class WorkspaceRequests extends ChangeNotifier {
   /// What the bar under the top bar says; null when it says nothing.
   String? get status => _status;
 
+  /// The button beside [status], when it names a way out.
+  StatusAction? get statusAction => _statusAction;
+
   /// Switching mode swaps the left column and nothing else: the same board,
   /// the same document and the same draft stay where they are.
   void switchTo(Mode mode) {
@@ -108,11 +113,12 @@ final class WorkspaceRequests extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Puts [sentence] in the bar, or clears it: what a command the window
-  /// ran itself (a fill, a copy) came to.
-  void say(String? sentence) {
-    if (_disposed || sentence == _status) return;
+  /// Puts [sentence] in the bar, with [action] beside it, or clears it:
+  /// what a command came to when it did not do what was asked.
+  void say(String? sentence, {StatusAction? action}) {
+    if (_disposed || (sentence == _status && action == _statusAction)) return;
     _status = sentence;
+    _statusAction = sentence == null ? null : action;
     notifyListeners();
   }
 

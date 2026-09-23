@@ -439,9 +439,12 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: ListenableBuilder(
-        listenable: Listenable.merge([_requests, widget.labs.offered]),
-        builder: (context, _) => _window(_view.screen(_screenKeys)),
+      body: StatusScope(
+        say: _requests.say,
+        child: ListenableBuilder(
+          listenable: Listenable.merge([_requests, widget.labs.offered]),
+          builder: (context, _) => _window(_view.screen(_screenKeys)),
+        ),
       ),
     );
   }
@@ -466,7 +469,12 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         actionsChange: Listenable.merge([_view.changes, _editing, _tabs]),
       ),
       const Divider(height: 1),
-      if (_requests.status case final status?) ErrorBar(status),
+      if (_requests.status case final status?)
+        ErrorBar(
+          status,
+          action: _requests.statusAction,
+          onClose: () => _requests.say(null),
+        ),
       Expanded(
         child:
             screen ??

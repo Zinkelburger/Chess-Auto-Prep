@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../../chess/pgn/comment_text.dart';
 import '../../chess/pgn/game_tree.dart';
 import '../../chess/pgn/study.dart';
+import '../../ui/error_bar.dart';
 import '../../storage/chapter_files.dart';
 import '../../ui/confirm_dialog.dart';
 import '../../ui/name_dialog.dart';
@@ -58,11 +59,10 @@ class _StudyPanelState extends State<StudyPanel> {
 
   Studies get _studies => widget.studies;
 
+  /// A change that did not happen says why in the window's status bar.
   void _say(String sentence) {
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(sentence)));
+    StatusScope.of(context)(sentence);
   }
 
   /// Shows what became of a change, and opens what it produced.
@@ -70,14 +70,13 @@ class _StudyPanelState extends State<StudyPanel> {
   /// Nothing happens when this panel is gone: a download that finishes after
   /// the user has left Study mode must not drive the workspace onto the
   /// study it fetched, over whatever they opened instead.
-  void _became(StudyResult result, {String? done}) {
+  void _became(StudyResult result) {
     if (!mounted) return;
     switch (result) {
       case StudyProblem(:final sentence):
         _say(sentence);
       case StudyDone(:final opened):
         if (opened != null) widget.onOpen(opened, 0);
-        if (done != null) _say(done);
     }
   }
 
@@ -99,7 +98,7 @@ class _StudyPanelState extends State<StudyPanel> {
       describe: _studies.linkDescription,
     );
     if (url == null || !mounted) return;
-    _became(await _studies.importFromUrl(url), done: 'Study imported.');
+    _became(await _studies.importFromUrl(url));
   }
 
   Future<void> _deleteStudy(ChapterRef study) async {
@@ -115,7 +114,7 @@ class _StudyPanelState extends State<StudyPanel> {
     _became(await _studies.delete(study));
   }
 
-  Future<void> _copy(Future<String?> pgn, String what) async {
+  Future<void> _copy(Future<String?> pgn) async {
     final text = await pgn;
     if (!mounted) return;
     if (text == null) {
@@ -123,7 +122,6 @@ class _StudyPanelState extends State<StudyPanel> {
       return;
     }
     await Clipboard.setData(ClipboardData(text: text));
-    _say('$what copied to the clipboard.');
   }
 
   Future<void> _newChapter() async {
@@ -192,7 +190,7 @@ class _StudyPanelState extends State<StudyPanel> {
     ),
     move: (by) =>
         _edited(moveStudyChapter(widget.session, index: chapter.index, by: by)),
-    copyPgn: () => _copy(_studies.pgnOfChapter(chapter.index), 'Chapter PGN'),
+    copyPgn: () => _copy(_studies.pgnOfChapter(chapter.index)),
     remove: () => _deleteChapter(chapter),
   );
 
@@ -210,7 +208,7 @@ class _StudyPanelState extends State<StudyPanel> {
             onSearch: _studies.search,
             onNewStudy: _newStudy,
             onImport: _import,
-            onCopyStudy: () => _copy(_studies.pgnOfOpenStudy(), 'Study PGN'),
+            onCopyStudy: () => _copy(_studies.pgnOfOpenStudy()),
             onDeleteStudy: () {
               final open = _studies.open;
               if (open != null) unawaited(_deleteStudy(open));
@@ -250,7 +248,7 @@ class _StudyPanelState extends State<StudyPanel> {
           open: open,
           busy: _studies.busy,
           onOpen: () => widget.onOpen(study, 0),
-          onCopyPgn: () => _copy(_studies.pgnOfOpenStudy(), 'Study PGN'),
+          onCopyPgn: () => _copy(_studies.pgnOfOpenStudy()),
           onDelete: () => _deleteStudy(study),
         ),
       );
