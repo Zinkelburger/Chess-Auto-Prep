@@ -188,7 +188,7 @@ requests handled by `app/`: `WorkspaceRequests` owns them and `Shell` only
 draws its mode and status and maps the lists, the explorer and the keys to
 its commands. Questions it puts to the user come in through an interface
 (`ExitGuard`'s `DraftQuestion`, `WindowInput`), so the flows are tested
-without widgets. The way out of the window (`app/app_exit.dart`) waits for
+without widgets. The way out of the window (`AppExit` in `app/app.dart`) waits for
 the draft, then stops the engines, then closes the log, once however often
 it is asked.
 
@@ -278,13 +278,24 @@ decide it, and the reviewer answers each with a file and line, not an opinion.
   number costs more reading than it saves. The caps were 400/50 until
   2026-09-21 and 600/50 until 2026-09-22; both times commits went in only
   to get under them (a shortened comment, a session split, a `Writes` half).
-- Composition is split by part, as lila wires each module in its own `Env`:
-  `app/basics.dart` (store, settings, session, engines, network),
-  `app/mode_wiring.dart` (document and training modes),
-  `app/workspace_wiring.dart` (the workspace's owners and what keeps them
-  in step). Each builds its owners, connects them and disposes them;
-  `app/app.dart` only orders the parts. A new owner goes in the part it
-  belongs to, never straight into `app.dart` or a new `Shell` parameter.
+- Composition has three layers (ports and adapters; lila's per-module
+  `Env`). `app/environment.dart` is every way out of the app — files,
+  dialogs, sites, engines, Maia, the clock, timings — as one
+  `AppEnvironment`; `.native()` builds the real ones. `app/app_parts.dart`
+  (`AppParts`) puts the app together over any environment in order and
+  disposes it in reverse, calling `app/mode_wiring.dart` and
+  `app/workspace_wiring.dart`, each of which builds its owners and
+  connects them. `app/app.dart` hosts the window over `AppParts`. The
+  window tests build a scripted environment and the same `AppParts`
+  (`test/v2/support/window_fixture.dart`), so they test the real wiring.
+  A new owner goes in the wiring it belongs to; a new way out of the app
+  is a field of `AppEnvironment`.
+- A mode is a `ModeView` (`app/mode_view.dart`): it owns its reading-card
+  tabs and answers for its list, Actions menu, own tab bodies and flags.
+  The shell asks the mode on screen instead of switching on which mode it
+  is; a new mode is a subclass and one arm of `modeViews`.
+  `WorkspaceView` takes one `WorkspaceHooks` value for what the window
+  adds to the workspace.
 - Clear beats clever (Pike). No tricks that need a second reading.
 
 **Can I reason about it?**

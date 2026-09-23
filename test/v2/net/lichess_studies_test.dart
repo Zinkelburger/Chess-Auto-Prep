@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:chess_auto_prep/v2/net/lichess_studies.dart';
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -165,17 +166,24 @@ void main() {
 
   test(
     'when it does not arrive: a connection that never answers times out',
-    () async {
-      final stub = MockClient((_) => Completer<http.Response>().future);
-      final result = await LichessStudyApi(
-        stub,
-        token: () async => null,
-      ).fetch(_link);
-      expect(
-        (result as StudyNotFetched).problem,
-        StudyFetchProblem.unreachable,
-      );
+    () {
+      fakeAsync((time) {
+        final stub = MockClient((_) => Completer<http.Response>().future);
+        StudyFetch? result;
+        unawaited(
+          LichessStudyApi(
+            stub,
+            token: () async => null,
+          ).fetch(_link).then((r) => result = r),
+        );
+        time.elapse(studyDownloadTimeout - const Duration(seconds: 1));
+        expect(result, isNull, reason: 'still waiting before the timeout');
+        time.elapse(const Duration(seconds: 2));
+        expect(
+          (result as StudyNotFetched?)?.problem,
+          StudyFetchProblem.unreachable,
+        );
+      });
     },
-    timeout: const Timeout(Duration(minutes: 1)),
   );
 }
