@@ -149,10 +149,12 @@ void main() {
     expect(gaps.walking, isFalse);
   });
 
-  test('closing the document forgets the walk', () async {
+  test('closing the document walks the analysis board instead', () async {
     await pumpEventQueue();
+    final walked = gaps.walk;
     fixture.session.closed();
-    expect(gaps.walk, isNull);
     expect(gaps.highlighted, isNull);
+    await pumpEventQueue();
+    expect(gaps.walk, isNot(same(walked)));
   });
 }

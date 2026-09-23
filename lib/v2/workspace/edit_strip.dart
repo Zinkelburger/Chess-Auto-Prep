@@ -167,14 +167,18 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
         ),
         const SizedBox(width: Space.s),
         IconButton(
-          onPressed: widget.saver.canUndo ? _undo : null,
+          onPressed: widget.session.canUndo ? _undo : null,
           icon: const Icon(Icons.undo, size: IconSize.action),
           tooltip: 'Undo (Ctrl+Z)',
           visualDensity: VisualDensity.compact,
         ),
         const SizedBox(width: Space.s),
       ],
-      Expanded(child: _SaveLine(state: state)),
+      Expanded(
+        child: widget.session.isScratch
+            ? const _Notice('Not saved')
+            : _SaveLine(state: state),
+      ),
     ],
   );
 }

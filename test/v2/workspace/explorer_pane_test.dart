@@ -167,15 +167,6 @@ void main() {
     expect(find.text('180 · 60%'), findsOneWidget);
   });
 
-  testWidgets('nothing open says so', (tester) async {
-    fixture.session.closed();
-    await show(tester);
-    expect(
-      find.text('Open a chapter or a game to see what is played.'),
-      findsOneWidget,
-    );
-  });
-
   testWidgets('a rating whose bar part is narrow carries no number', (
     tester,
   ) async {

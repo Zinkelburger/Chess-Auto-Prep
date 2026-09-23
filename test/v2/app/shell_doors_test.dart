@@ -22,6 +22,14 @@ void main() {
   tearDown(() => w.dispose());
   Future<void> pump(WidgetTester tester) => w.pumpShell(tester);
 
+  /// The window with a chapter open: while the analysis board is up, Ctrl+V
+  /// pastes onto it instead of importing.
+  Future<void> pumpWithChapter(WidgetTester tester) async {
+    await pump(tester);
+    await tester.tap(inLibrary(find.text('Main')).last);
+    await tester.pumpAndSettle();
+  }
+
   const pasted = '[Event "x"]\n[Result "*"]\n\n1. e4 e5 (1... c5) *\n';
 
   /// What the clipboard answers when the shell asks for text.
@@ -74,7 +82,7 @@ void main() {
 
   testWidgets('Ctrl+V in the builder makes a repertoire of the clipboard and '
       'opens it, asking which side it is for', (tester) async {
-    await pump(tester);
+    await pumpWithChapter(tester);
     clipboardHolds(tester, pasted);
     await pressCtrl(tester, LogicalKeyboardKey.keyV);
     expect(w.session.source?.path, '/repertoires/Pasted repertoire/Main.pgn');
@@ -97,17 +105,44 @@ void main() {
   });
 
   testWidgets('an empty clipboard says so and writes nothing', (tester) async {
-    await pump(tester);
+    await pumpWithChapter(tester);
     clipboardHolds(tester, null);
     await pressCtrl(tester, LogicalKeyboardKey.keyV);
     expect(find.text('Nothing to paste: copy a PGN first.'), findsOneWidget);
-    expect(w.session.source, isNull);
+    expect(w.session.source, kid);
+  });
+
+  testWidgets('Ctrl+V on the analysis board puts the game on it, and Save to '
+      'repertoire is offered', (tester) async {
+    await pump(tester);
+    clipboardHolds(tester, pasted);
+    await pressCtrl(tester, LogicalKeyboardKey.keyV);
+    expect(w.session.isScratch, isTrue);
+    expect(w.session.currentMove?.san, 'e5');
+    expect(w.store.creates, isEmpty);
+    await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
+    expect(find.text('Save to repertoire…'), findsOneWidget);
+    expect(find.text('Save to study…'), findsOneWidget);
+    expect(find.text('Paste PGN or FEN'), findsOneWidget);
+  });
+
+  testWidgets('Ctrl+N makes a new analysis board from the chapter line', (
+    tester,
+  ) async {
+    await pumpWithChapter(tester);
+    w.session.forward();
+    await pressCtrl(tester, LogicalKeyboardKey.keyN);
+    expect(w.session.isScratch, isTrue);
+    expect(w.session.currentMove?.san, 'c5');
+    expect(find.text('Analysis board'), findsWidgets);
+    expect(find.text('Not saved'), findsOneWidget);
   });
 
   testWidgets('a clipboard with no moves is refused in plain English', (
     tester,
   ) async {
-    await pump(tester);
+    await pumpWithChapter(tester);
     clipboardHolds(tester, 'just words');
     await pressCtrl(tester, LogicalKeyboardKey.keyV);
     expect(find.text('That PGN has no moves to train.'), findsOneWidget);

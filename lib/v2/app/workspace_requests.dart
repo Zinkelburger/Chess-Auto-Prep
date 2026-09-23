@@ -2,17 +2,20 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../chess/fen.dart';
 import '../chess/pgn/game_tree.dart' show NodePath;
 import '../chess/pgn/tree_edit.dart' show pathAlong;
 import '../features/library/library.dart';
 import '../features/library/library_messages.dart';
 import '../features/pgn_viewer/pgn_viewer.dart';
 import '../features/study/studies.dart';
+import '../features/study/study_commands.dart';
 import '../storage/chapter_files.dart';
 import '../workspace/chapter_commands.dart';
 import '../workspace/document_session.dart';
 import '../chess/explorer_answer.dart' show ExplorerGame;
 import '../chess/explorer_choice.dart' show ExplorerSource;
+import '../workspace/fill_found.dart';
 import '../workspace/game_fetcher.dart';
 import '../workspace/session_results.dart';
 import 'exit_guard.dart';
@@ -204,6 +207,141 @@ final class WorkspaceRequests extends ChangeNotifier {
     final result = await _library.importText(text, name: Library.pastedName);
     if (_disposed) return const RequestDropped();
     return _imported(result, name: Library.pastedName);
+  }
+
+  /// The analysis board as it was left, in place of the file that is up,
+  /// with the same question about a draft the file never took as opening
+  /// another one asks.
+  Future<RequestResult> analysisBoard() async {
+    if (_session.isScratch) return const RequestDone();
+    final leave = await _leaving.mayLeaveDocument();
+    if (_disposed || leave is! Go) return const RequestDropped();
+    await _session.showAnalysisBoard();
+    _saidCopy(leave);
+    return const RequestDone();
+  }
+
+  /// The item at [index] of what a search found, on the board: for a run
+  /// on the analysis board, played onto it — the moves already there are
+  /// followed, the rest added — and stopped where the item stops; for a run
+  /// on a chapter, the draft it wrote opened there in the builder.
+  Future<RequestResult> showFound(FillFound found, int index) async {
+    final item = found.items[index];
+    final moves = [for (final move in item.moves) move.move];
+    switch (found.origin) {
+      case InDraft(:final draft, :final sans):
+        switchTo(Mode.repertoires);
+        return openAt(draft, [
+          ...sans,
+          for (final move in moves.take(item.stopAfter)) move.san,
+        ]);
+      case OnTheBoard(:final root, :final line):
+        final back = await analysisBoard();
+        if (_disposed || back is! RequestDone) return back;
+        if (_session.tree?.rootFen != root) {
+          await _session.newAnalysisBoard(side: found.side, root: root);
+        }
+        _session.goTo(const NodePath.root());
+        for (final move in line) {
+          _session.playMove(move.uci);
+        }
+        var stop = _session.cursor;
+        for (final (i, move) in moves.indexed) {
+          _session.playMove(move.uci);
+          if (i + 1 == item.stopAfter) stop = _session.cursor;
+        }
+        _session.goTo(stop);
+        return const RequestDone();
+    }
+  }
+
+  /// A new analysis board holding the line on the board up to where the
+  /// user is, from whatever is up — a file, a game, the analysis board
+  /// itself — and facing the same way, so it looks as it did.
+  Future<RequestResult> newAnalysisBoard() async {
+    final tree = _session.tree;
+    final side = _session.orientation;
+    final root = tree?.rootFen ?? Fen.initial;
+    final sans = [
+      if (tree != null)
+        for (final node in tree.lineTo(_session.cursor)) node.san,
+    ];
+    final leave = await _leavingFile();
+    if (_disposed || leave == null) return const RequestDropped();
+    await _session.newAnalysisBoard(side: side, root: root, sans: sans);
+    _saidCopy(leave);
+    return const RequestDone();
+  }
+
+  /// Ctrl+V: the clipboard onto the analysis board while it is up, else a
+  /// new repertoire in the builder; anywhere else it does nothing.
+  Future<RequestResult> paste() async {
+    if (_session.isScratch) return pasteOntoBoard();
+    if (_mode == Mode.repertoires) return pasteRepertoire();
+    return const RequestDropped();
+  }
+
+  /// The clipboard — a PGN, bare moves or a FEN — as a new analysis board.
+  Future<RequestResult> pasteOntoBoard() async {
+    final text = await _input.clipboard() ?? '';
+    if (_disposed) return const RequestDropped();
+    final leave = await _leavingFile();
+    if (_disposed || leave == null) return const RequestDropped();
+    final refusal = await _session.pasteOntoBoard(text);
+    if (_disposed) return const RequestDropped();
+    if (refusal != null) return _refused(refusal);
+    _saidCopy(leave);
+    return const RequestDone();
+  }
+
+  /// The analysis board as a new chapter [name] of [into], then that chapter
+  /// open in the builder. The board stays as it was, to go back to.
+  Future<RequestResult> saveBoardToRepertoire(
+    RepertoireFolder into,
+    String name,
+  ) async {
+    final board = _session.chapter;
+    if (!_session.isScratch || board == null) return const RequestDropped();
+    final result = await _library.saveBoard(into, name, board);
+    if (_disposed) return const RequestDropped();
+    if (result is LibraryAdded) {
+      switchTo(Mode.repertoires);
+      return open(result.first);
+    }
+    final sentence = libraryMessage(
+      result,
+      thing: 'chapter',
+      name: name,
+      failed: 'Could not save the analysis board.',
+    );
+    return sentence == null ? const RequestDropped() : _refused(sentence);
+  }
+
+  /// The analysis board as a new chapter [name] at the end of [study], then
+  /// that chapter open in Study.
+  Future<RequestResult> saveBoardToStudy(ChapterRef study, String name) async {
+    final board = _session.chapter;
+    if (!_session.isScratch || board == null) return const RequestDropped();
+    switchTo(Mode.study);
+    final opened = await open(study, game: 0);
+    if (_disposed || opened is! RequestDone) return opened;
+    final refusal = addStudyChapter(
+      _session,
+      name: name,
+      orientation: board.side,
+      root: board.tree.rootFen,
+      moves: board.tree,
+    );
+    return refusal == null ? const RequestDone() : _refused(refusal);
+  }
+
+  /// The answer to the draft question when a file is up, or [Go] at once
+  /// when the analysis board is: it has no file to ask about. Null when the
+  /// user stayed.
+  Future<Go?> _leavingFile() async {
+    if (_session.isScratch) return const Go();
+    final leave = await _leaving.mayLeaveDocument();
+    return leave is Go ? leave : null;
   }
 
   /// Takes the document off the board, with the same question about a

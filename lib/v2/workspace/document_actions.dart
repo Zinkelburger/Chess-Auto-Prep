@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 
 import '../chess/pgn/chapter.dart';
 import '../ui/app_action.dart';
-import 'document_saver.dart';
 import 'document_session.dart';
 import 'engine_analysis.dart';
 
@@ -14,7 +13,6 @@ import 'engine_analysis.dart';
 /// open, rather than missing, so the menu keeps its shape.
 List<AppAction> documentActions({
   required DocumentSession session,
-  required DocumentSaver saver,
   required EngineAnalysis analysis,
   required ValueNotifier<bool> editing,
   required VoidCallback onSaveCopy,
@@ -30,11 +28,15 @@ List<AppAction> documentActions({
     ),
     AppAction(
       'Undo',
-      when(saver.canUndo, () => unawaited(session.undo())),
+      when(session.canUndo, () => unawaited(session.undo())),
       shortcut: 'Ctrl+Z',
       group: 'Document',
     ),
-    AppAction('Save a copy…', when(open, onSaveCopy), group: 'Document'),
+    AppAction(
+      'Save a copy…',
+      when(session.source != null, onSaveCopy),
+      group: 'Document',
+    ),
     AppAction(
       'Flip board',
       when(open, session.flip),

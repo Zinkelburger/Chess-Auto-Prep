@@ -4,6 +4,7 @@ import '../fen.dart';
 import 'chapter.dart';
 import 'chapter_edit.dart';
 import 'chapter_line.dart';
+import 'game_tree.dart';
 import 'games_written.dart';
 import 'pgn_reader.dart';
 import 'rewrite_gate.dart';
@@ -17,13 +18,15 @@ import 'study.dart';
 /// what the edit declared and nothing else.
 
 /// A new chapter at the end of the study, which is what the file's game
-/// order means by last, and the focus moved onto it.
+/// order means by last, and the focus moved onto it. [moves] are its moves
+/// from [root], when it is made from a board that has some.
 ChapterEdit addChapter(
   Chapter chapter, {
   required String study,
   required String name,
   required Side orientation,
   Fen root = Fen.initial,
+  GameTree? moves,
 }) {
   final text = newStudyChapterText(
     study: study,
@@ -31,6 +34,7 @@ ChapterEdit addChapter(
     orientation: orientation,
     root: root,
     ending: _endingIn(chapter),
+    moves: moves,
   );
   final read = readGame(text);
   if (read.issues.isNotEmpty || read.tree == null) {

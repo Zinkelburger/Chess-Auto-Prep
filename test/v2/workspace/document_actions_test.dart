@@ -31,7 +31,6 @@ void main() {
   List<String> labels(SessionFixture of) => [
     for (final action in documentActions(
       session: of.session,
-      saver: of.saver,
       analysis: analysis,
       editing: editing,
       onSaveCopy: () {},

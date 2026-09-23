@@ -5,12 +5,22 @@ import 'package:chess_auto_prep/v2/app/mode.dart';
 import 'package:chess_auto_prep/v2/app/window_input.dart';
 import 'package:chess_auto_prep/v2/app/workspace_requests.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
+import 'package:chess_auto_prep/v2/chess/pgn/study.dart';
+import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/workspace/explorer.dart';
-import 'package:dartchess/dartchess.dart' show Side;
+import 'package:chess_auto_prep/v2/chess/fen.dart';
+import 'package:chess_auto_prep/v2/chess/generation/draft_lines.dart';
+import 'package:chess_auto_prep/v2/chess/generation/eval.dart';
+import 'package:chess_auto_prep/v2/chess/generation/search_node.dart';
+import 'package:chess_auto_prep/v2/chess/generation/traps.dart';
+import 'package:chess_auto_prep/v2/chess/pgn/tree_edit.dart' show positionOf;
+import 'package:chess_auto_prep/v2/workspace/fill_found.dart';
+import 'package:dartchess/dartchess.dart' show NormalMove, Side;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/scripted_store.dart';
+import '../support/study_fixture.dart';
 import '../support/viewer_fixture.dart';
 import '../support/window_fixture.dart';
 
@@ -321,6 +331,221 @@ void main() {
       w.question.answer = DraftChoice.keepWaiting;
       expect(await openListed(), isA<RequestDropped>());
       expect(w.session.source, kid);
+    });
+  });
+
+  group('the analysis board', () {
+    test('is where the window starts, and Ctrl+V pastes onto it', () async {
+      expect(w.session.isScratch, isTrue);
+      input.clipboardText = '1.e4 c5 2.Nf3';
+      expect(await w.requests.pasteOntoBoard(), isA<RequestDone>());
+      expect(w.session.currentMove?.san, 'Nf3');
+      expect(w.store.creates, isEmpty);
+    });
+
+    test('a paste with no game says why and changes nothing', () async {
+      input.clipboardText = 'no moves here';
+      final result = await w.requests.pasteOntoBoard();
+      expect(result, isA<RequestRefused>());
+      expect(w.requests.status, startsWith('The clipboard holds no game'));
+      expect(w.session.tree!.children, isEmpty);
+    });
+
+    test('a new board from a chapter keeps its line and side', () async {
+      await w.requests.open(kid);
+      w.session
+        ..forward()
+        ..forward();
+      expect(await w.requests.newAnalysisBoard(), isA<RequestDone>());
+      expect(w.session.isScratch, isTrue);
+      expect(w.session.orientation, Side.black);
+      expect(w.session.currentMove?.san, 'Nf3');
+    });
+
+    test('is gone back to as it was left', () async {
+      w.session.playMove('d2d4');
+      await w.requests.open(kid);
+      expect(await w.requests.analysisBoard(), isA<RequestDone>());
+      expect(w.session.currentMove?.san, 'd4');
+    });
+
+    test(
+      'is not left for a chapter over a draft the user stays with',
+      () async {
+        await freezeKid();
+        w.question.answer = DraftChoice.keepWaiting;
+        expect(await w.requests.analysisBoard(), isA<RequestDropped>());
+        expect(w.session.source, kid);
+      },
+    );
+  });
+
+  group('what a search found, on the board', () {
+    /// [ucis] played from [root] as a search writes them.
+    List<DraftMove> played(List<String> ucis, {Fen root = Fen.initial}) {
+      var position = positionOf(root)!;
+      return [
+        for (final uci in ucis)
+          () {
+            final before = Fen(position.fen);
+            final (next, san) = position.makeSan(NormalMove.fromUci(uci));
+            position = next;
+            return DraftMove(
+              move: MoveRef(uci: uci, san: san),
+              before: before.position,
+              after: Fen(next.fen),
+              value: 0.5,
+              ours: before.whiteToMove,
+            );
+          }(),
+      ];
+    }
+
+    FillFound found(FillOrigin origin) {
+      final trap = played(['e2e4', 'f7f6', 'd1h5', 'g7g6']);
+      return FillFound(
+        origin: origin,
+        side: Side.white,
+        traps: [
+          Trap(
+            toTrap: trap.sublist(0, 1),
+            blunder: trap[1],
+            punishment: trap.sublist(2),
+            share: 0.3,
+            lossCp: 200,
+            reach: 1,
+            afterBest: const Eval(0),
+            afterBlunder: const Eval(200),
+          ),
+        ],
+        lines: [
+          DraftLine(moves: played(['e2e4', 'c7c5', 'g1f3']), reach: 0.7),
+        ],
+      );
+    }
+
+    const onBoard = OnTheBoard(root: Fen.initial, line: []);
+
+    test('a trap is played onto the board and stops on the mistake', () async {
+      expect(await w.requests.showFound(found(onBoard), 0), isA<RequestDone>());
+      expect(w.session.currentMove?.san, 'f6');
+      w.session.forward();
+      expect(w.session.currentMove?.san, 'Qh5+', reason: 'the answer follows');
+      expect(w.store.creates, isEmpty);
+    });
+
+    test('a line goes to its end beside what is already there', () async {
+      await w.requests.showFound(found(onBoard), 0);
+      await w.requests.showFound(found(onBoard), 1);
+      expect(w.session.currentMove?.san, 'Nf3');
+      expect(w.session.tree!.children.single.children.map((n) => n.san), [
+        'f6',
+        'c5',
+      ]);
+    });
+
+    test('the moves to where the search began are played first', () async {
+      final fromE4 = FillFound(
+        origin: const OnTheBoard(
+          root: Fen.initial,
+          line: [MoveRef(uci: 'e2e4', san: 'e4')],
+        ),
+        side: Side.white,
+        traps: const [],
+        lines: [
+          DraftLine(
+            moves: played(
+              ['c7c5', 'g1f3'],
+              root: const Fen(
+                'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
+              ),
+            ),
+            reach: 1,
+          ),
+        ],
+      );
+      await w.requests.showFound(fromE4, 0);
+      expect(
+        [for (final n in w.session.tree!.lineTo(w.session.cursor)) n.san],
+        ['e4', 'c5', 'Nf3'],
+      );
+    });
+
+    test('from a chapter it goes back to the board first', () async {
+      await w.requests.open(kid);
+      await w.requests.showFound(found(onBoard), 1);
+      expect(w.session.isScratch, isTrue);
+      expect(w.session.currentMove?.san, 'Nf3');
+    });
+
+    test('a run on a chapter opens its draft in the builder there', () async {
+      w.requests.switchTo(Mode.pgnViewer);
+      final inDraft = FillFound(
+        origin: InDraft(draft: kid, sans: const ['c5']),
+        side: Side.black,
+        traps: const [],
+        lines: [
+          DraftLine(
+            moves: [
+              for (final san in ['Nc3', 'Nc6'])
+                DraftMove(
+                  move: MoveRef(uci: '', san: san),
+                  before: '',
+                  after: Fen.initial,
+                  value: 0.5,
+                  ours: false,
+                ),
+            ],
+            reach: 1,
+          ),
+        ],
+      );
+      expect(await w.requests.showFound(inDraft, 0), isA<RequestDone>());
+      expect(w.requests.mode, Mode.repertoires);
+      expect(w.session.source, kid);
+      expect(w.session.cursor, NodePath.of([0, 1, 0]));
+    });
+  });
+
+  group('keeping the analysis board', () {
+    test(
+      'saved to a repertoire becomes a chapter open in the builder',
+      () async {
+        w.requests.switchTo(Mode.study);
+        w.session
+          ..playMove('e2e4')
+          ..playMove('e7e5');
+        await w.library.refresh();
+        final into = w.library.repertoires.firstWhere((f) => f.name == 'KID');
+        final result = await w.requests.saveBoardToRepertoire(
+          into,
+          'Open game',
+        );
+        expect(result, isA<RequestDone>());
+        expect(w.requests.mode, Mode.repertoires);
+        expect(w.session.source?.path, '/repertoires/KID/Open game.pgn');
+        expect(w.session.chapter!.side, Side.white);
+        expect(w.session.tree!.children.single.san, 'e4');
+        await w.requests.analysisBoard();
+        expect(w.session.currentMove?.san, 'e5', reason: 'the board is kept');
+      },
+    );
+
+    test('saved to a study becomes its last chapter', () async {
+      final study = ChapterRef.at('$studiesRoot/Ideas.pgn');
+      final text = newStudyText(study: 'Ideas', chapter: 'Intro');
+      w.store.documents[study] = Opened(text, scriptedRevision(text));
+      w.session.playMove('d2d4');
+      expect(
+        await w.requests.saveBoardToStudy(study, 'Queen pawn'),
+        isA<RequestDone>(),
+      );
+      expect(w.requests.mode, Mode.study);
+      expect(w.session.source, study);
+      expect(w.session.game, 1);
+      expect(w.session.tree!.children.single.san, 'd4');
+      await pumpEventQueue();
+      expect(w.store.requestedSaves, isNotEmpty);
     });
   });
 

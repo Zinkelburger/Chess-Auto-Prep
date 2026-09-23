@@ -64,13 +64,21 @@ class FillLine extends StatelessWidget {
       FillRunning(:final nodes, :final depth, :final of, :final cancelling) => (
         cancelling
             ? 'Cancelling…'
-            : 'Filling gaps · depth $depth/$of · $nodes positions',
+            : 'Searching · depth $depth/$of · $nodes positions',
         null,
       ),
-      FillDone(:final name, :final lines, :final folded) => (
-        'Proposed ${lines == 1 ? '1 line' : '$lines lines'} in $name'
-            '${folded == 0 ? '' : ' · $folded folded in'}',
+      FillDone(:final name, :final lines, :final traps, :final folded) => (
+        [
+          if (name == null)
+            'Found ${_count(lines, 'line')}'
+          else
+            'Proposed ${_count(lines, 'line')} in $name',
+          if (folded != 0) '$folded folded in',
+          _count(traps, 'trap'),
+        ].join(' · '),
         null,
       ),
       FillFailed(:final reason) => (reason, scheme.error),
     };
+
+String _count(int n, String thing) => n == 1 ? '1 $thing' : '$n ${thing}s';

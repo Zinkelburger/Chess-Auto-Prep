@@ -259,9 +259,9 @@ void main() {
     expect(lichess.asked, hasLength(1));
   });
 
-  test('nothing open is idle', () async {
+  test('closing the file asks about the analysis board instead', () async {
     await start();
     fixture.session.closed();
-    expect(explorer.state, isA<ExplorerIdle>());
+    expect(explorer.state, isNot(isA<ExplorerIdle>()));
   });
 }

@@ -24,6 +24,7 @@ import 'gap_hunt.dart';
 import 'move_note.dart';
 import 'move_tree_view.dart';
 import 'nav_row.dart';
+import 'prep_pane.dart';
 import 'reading_header.dart';
 import 'replies.dart';
 import 'replies_pane.dart';
@@ -56,6 +57,8 @@ class WorkspaceView extends StatelessWidget {
     this.boardClaim,
     this.trainTab,
     this.treeTab,
+    this.onGenerate,
+    this.onFound,
     this.onBoardMove,
     this.onEngineMove,
     this.puzzle,
@@ -102,6 +105,13 @@ class WorkspaceView extends StatelessWidget {
 
   /// The Tree tab's body, which the shell builds: it opens other files.
   final WidgetBuilder? treeTab;
+
+  /// Opens the search dialog: the Prep tab's `Generate…`. Null leaves it
+  /// off.
+  final VoidCallback? onGenerate;
+
+  /// Puts the found item at this index on the board: a Prep tab row.
+  final ValueChanged<int>? onFound;
 
   /// Where a move made on the board goes when not into the document: a
   /// puzzle judges it. Null plays it into the document.
@@ -195,6 +205,9 @@ class WorkspaceView extends StatelessWidget {
               trainTab: trainTab,
               treeTab: treeTab,
               puzzle: puzzle,
+              fill: fill,
+              onGenerate: onGenerate,
+              onFound: onFound,
             ),
           ),
           EditStrip(session: session, saver: saver, editing: editing),
@@ -274,6 +287,9 @@ class _Tabbed extends StatelessWidget {
     required this.trainTab,
     required this.treeTab,
     required this.puzzle,
+    required this.fill,
+    required this.onGenerate,
+    required this.onFound,
   });
 
   final DocumentSession session;
@@ -287,6 +303,9 @@ class _Tabbed extends StatelessWidget {
   final WidgetBuilder? trainTab;
   final WidgetBuilder? treeTab;
   final Widget? puzzle;
+  final FillGaps fill;
+  final VoidCallback? onGenerate;
+  final ValueChanged<int>? onFound;
 
   Widget _body(BuildContext context, WorkspaceTab tab) => switch (tab) {
     WorkspaceTab.moves => MoveTreeView(session: session, moveMenu: moveMenu),
@@ -303,11 +322,19 @@ class _Tabbed extends StatelessWidget {
       onOpenGame: onExplorerGame,
     ),
     WorkspaceTab.tree => treeTab?.call(context) ?? const SizedBox.shrink(),
+    WorkspaceTab.prep => PrepPane(
+      fill: fill,
+      session: session,
+      onGo: onFound ?? _nowhere,
+    ),
     WorkspaceTab.puzzle => puzzle ?? const SizedBox.shrink(),
   };
 
+  static void _nowhere(int index) {}
+
   Widget? _trailing(WorkspaceTab tab) => switch (tab) {
     WorkspaceTab.replies => _NextGap(gaps: gaps),
+    WorkspaceTab.prep => _Generate(fill: fill, onGenerate: onGenerate),
     WorkspaceTab.moves ||
     WorkspaceTab.train ||
     WorkspaceTab.tree ||
@@ -374,6 +401,29 @@ class _NextGap extends StatelessWidget {
           label: const Text('Next gap'),
         );
       },
+    );
+  }
+}
+
+/// The one control the Prep tab owns: the search dialog. Off while a
+/// search runs or nothing on the board can be searched.
+class _Generate extends StatelessWidget {
+  const _Generate({required this.fill, required this.onGenerate});
+
+  final FillGaps fill;
+  final VoidCallback? onGenerate;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: fill,
+      builder: (context, _) => Tooltip(
+        message: 'Search from the board for lines and traps (Ctrl+G)',
+        child: TextButton(
+          onPressed: fill.canStart ? onGenerate : null,
+          child: const Text('Generate…'),
+        ),
+      ),
     );
   }
 }

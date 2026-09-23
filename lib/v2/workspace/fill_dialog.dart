@@ -1,3 +1,4 @@
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -5,18 +6,30 @@ import '../storage/settings.dart';
 import '../ui/theme.dart';
 import 'fill_gaps.dart';
 
-/// Asks what a fill should do — three numbers — and answers the request,
-/// or null when the user backed out. The rating and the cover rule start
-/// from the Replies settings, so a fill prepares for the opponent the table
-/// is already showing.
+/// Asks what a search should do — three numbers and whether to prefer
+/// traps — and answers the request, or null when the user backed out. The
+/// rating and the cover rule start from the Replies settings, so a search
+/// prepares for the opponent the table is already showing. [title] names
+/// what the search is for and [action] its button; [side] is who it plays
+/// for.
 Future<FillRequest?> showFillDialog(
   BuildContext context, {
+  required String title,
+  required String action,
+  required Side side,
   required int elo,
   required int onceIn,
   int depth = 8,
 }) => showDialog<FillRequest>(
   context: context,
-  builder: (context) => _FillDialog(elo: elo, onceIn: onceIn, depth: depth),
+  builder: (context) => _FillDialog(
+    title: title,
+    action: action,
+    side: side,
+    elo: elo,
+    onceIn: onceIn,
+    depth: depth,
+  ),
 );
 
 /// How deep a fill may look: one ply, or as far as the pure search goes.
@@ -25,11 +38,17 @@ const maxFillDepth = 64;
 
 class _FillDialog extends StatefulWidget {
   const _FillDialog({
+    required this.title,
+    required this.action,
+    required this.side,
     required this.elo,
     required this.onceIn,
     required this.depth,
   });
 
+  final String title;
+  final String action;
+  final Side side;
   final int elo;
   final int onceIn;
   final int depth;
@@ -45,6 +64,7 @@ class _FillDialogState extends State<_FillDialog> {
   String? _eloProblem;
   String? _depthProblem;
   String? _onceInProblem;
+  bool _preferTraps = false;
 
   @override
   void dispose() {
@@ -78,9 +98,14 @@ class _FillDialogState extends State<_FillDialog> {
           : null;
     });
     if (elo == null || depth == null || onceIn == null) return;
-    Navigator.of(
-      context,
-    ).pop(FillRequest(elo: elo, depthPlies: depth, onceIn: onceIn));
+    Navigator.of(context).pop(
+      FillRequest(
+        elo: elo,
+        depthPlies: depth,
+        onceIn: onceIn,
+        preferTraps: _preferTraps,
+      ),
+    );
   }
 
   Widget _field(
@@ -101,7 +126,7 @@ class _FillDialogState extends State<_FillDialog> {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     return AlertDialog(
-      title: const Text('Fill gaps from here'),
+      title: Text(widget.title),
       content: SizedBox(
         width: nameDialogWidth,
         child: Column(
@@ -113,8 +138,22 @@ class _FillDialogState extends State<_FillDialog> {
             _field(_depth, 'How deep (half-moves)', _depthProblem),
             const SizedBox(height: Space.m),
             _field(_onceIn, 'Cover replies met once in', _onceInProblem),
-            const SizedBox(height: Space.l),
-            Text('Engine + human model', style: text.labelSmall),
+            const SizedBox(height: Space.s),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Prefer traps'),
+              subtitle: const Text(
+                'Also try moves up to 1.5 pawns worse that set a trap',
+              ),
+              value: _preferTraps,
+              onChanged: (on) => setState(() => _preferTraps = on),
+            ),
+            const SizedBox(height: Space.s),
+            Text(
+              'Engine + human model · for '
+              '${widget.side == Side.white ? 'White' : 'Black'}',
+              style: text.labelSmall,
+            ),
           ],
         ),
       ),
@@ -123,7 +162,7 @@ class _FillDialogState extends State<_FillDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
-        FilledButton(onPressed: _submit, child: const Text('Fill')),
+        FilledButton(onPressed: _submit, child: Text(widget.action)),
       ],
     );
   }

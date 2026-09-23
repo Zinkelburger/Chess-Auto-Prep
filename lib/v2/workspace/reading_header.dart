@@ -55,7 +55,7 @@ class ReadingHeader extends StatelessWidget {
               ),
               const SizedBox(height: Space.xs),
               Text(
-                _summary(chapter),
+                session.isScratch ? 'Not saved' : _summary(chapter),
                 style: text.bodySmall,
                 textAlign: TextAlign.center,
                 overflow: TextOverflow.ellipsis,

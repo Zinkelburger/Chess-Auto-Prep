@@ -54,19 +54,23 @@ final class LibraryWrites {
   /// The `repertoires` folder, absolute: where imports are staged.
   final String _root;
 
-  /// A new chapter file at [ref] with no lines, starting at [rootMoves].
+  /// A new chapter file at [ref] starting at [rootMoves], holding [games]
+  /// — the text of whole games, or nothing for a chapter with no lines.
   Future<LibraryResult> create(
     DocumentRef ref,
     String name,
     Side? side, {
     List<String> rootMoves = const [],
+    String games = '',
   }) async {
-    final text = newChapterText(
-      name: name,
-      side: side,
-      created: DateTime.now(),
-      rootMoves: rootMoves,
-    );
+    final text =
+        newChapterText(
+          name: name,
+          side: side,
+          created: DateTime.now(),
+          rootMoves: rootMoves,
+        ) +
+        games;
     return switch (await _store.create(ref, text)) {
       store.Created() => const LibraryDone(),
       store.Collision() => const LibraryNameTaken(),

@@ -108,7 +108,7 @@ void main() {
     w.store.documents.clear();
     await tester.tap(inLibrary(find.text('Main')).last);
     await tester.pump();
-    expect(w.session.chapter, isNull);
+    expect(w.session.isScratch, isTrue);
     expect(find.text('Main is no longer on disk'), findsOneWidget);
   });
   testWidgets('another chapter is not opened over a frozen document until '
@@ -290,15 +290,16 @@ void main() {
     expect(find.text('Next gap'), findsOneWidget, reason: 'brought up');
   });
 
-  testWidgets('Fill gaps from here is off until a repertoire chapter is open, '
-      'then asks its three numbers', (tester) async {
+  testWidgets('the analysis board generates from here; a chapter fills its '
+      'gaps, asking the same numbers', (tester) async {
     await pump(tester);
     await tester.tap(find.text('Actions'));
     await tester.pumpAndSettle();
-    final off = tester.widget<MenuItemButton>(
-      find.widgetWithText(MenuItemButton, 'Fill gaps from here…'),
+    final onBoard = tester.widget<MenuItemButton>(
+      find.widgetWithText(MenuItemButton, 'Generate from here…'),
     );
-    expect(off.onPressed, isNull);
+    expect(onBoard.onPressed, isNotNull);
+    expect(find.text('Fill gaps from here…'), findsNothing);
     await tester.tap(find.text('Actions'));
     await tester.pumpAndSettle();
     await tester.tap(inLibrary(find.text('Main')).last);

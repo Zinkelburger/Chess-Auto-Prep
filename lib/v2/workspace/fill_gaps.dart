@@ -1,11 +1,9 @@
 import 'dart:async';
-import 'dart:isolate';
 
-import 'package:dartchess/dartchess.dart' show Position, Side;
+import 'package:dartchess/dartchess.dart' show Position;
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
-import '../chess/fen.dart';
 import '../chess/generation/draft_chapter.dart';
 import '../chess/generation/draft_lines.dart';
 import '../chess/generation/search.dart';
@@ -13,23 +11,25 @@ import '../chess/generation/search_config.dart';
 import '../chess/generation/search_node.dart';
 import '../chess/generation/search_result.dart';
 import '../chess/generation/sources.dart';
+import '../chess/generation/traps.dart';
 import '../chess/generation/tree_wire_v4.dart';
-import '../chess/pgn/chapter.dart';
 import '../chess/pgn/chapter_heading.dart';
-import '../chess/pgn/game_tree.dart';
 import '../chess/pgn/tree_edit.dart' show positionOf;
 import '../diagnostics/log.dart';
 import '../storage/chapter_files.dart';
 import '../storage/pgn_document_store.dart' as store;
 import 'document_session.dart';
 import 'engine_analysis.dart';
+import 'fill_found.dart';
+import 'fill_target.dart';
 
-/// What the user asked a fill for: the three knobs of the dialog.
+/// What the user asked a fill for: the knobs of the dialog.
 final class FillRequest {
   const FillRequest({
     required this.elo,
     required this.depthPlies,
     required this.onceIn,
+    this.preferTraps = false,
   });
 
   /// The rating the opponent's replies are predicted for.
@@ -41,6 +41,13 @@ final class FillRequest {
   /// A reply reached less than once in this many games is valued where it
   /// stands and not answered.
   final int onceIn;
+
+  /// Whether moves of ours that the engine likes less are tried too, so a
+  /// line that sets a trap can win on what the opponent is likely to play.
+  final bool preferTraps;
+
+  /// How much a move of ours may lose against our best and still be tried.
+  int get lossLimitCp => preferTraps ? trapLossLimitCp : fillLossLimitCp;
 }
 
 /// The engine depth every fill scores positions at: the old app's default,
@@ -50,6 +57,10 @@ const fillEvalDepth = 14;
 /// The most a move of ours may lose against our best, in centipawns, and
 /// still be prepared: the model's own default.
 const fillLossLimitCp = 50;
+
+/// The same limit with `Prefer traps` on: a move of ours may give up a pawn
+/// and a half when the opponent is likely enough to go wrong after it.
+const trapLossLimitCp = 150;
 
 /// What a fill needs and where it comes from: an engine and the model, or
 /// why there are none.
@@ -107,17 +118,21 @@ final class FillRunning extends FillState {
   final bool cancelling;
 }
 
-/// The draft is written. [name] is the chapter it is in.
+/// The run is over and what it found is in [FillGaps.found]. [name] is the
+/// draft chapter the lines were written to, or null for a run on the
+/// analysis board, which writes nothing.
 final class FillDone extends FillState {
   const FillDone({
     required this.name,
     required this.lines,
+    required this.traps,
     required this.folded,
     required this.alreadyThere,
   });
 
-  final String name;
+  final String? name;
   final int lines;
+  final int traps;
   final int folded;
   final int alreadyThere;
 }
@@ -153,9 +168,6 @@ final class FillGaps extends ChangeNotifier {
        _keepTree = keepTree,
        _clock = clock;
 
-  /// A tree with more nodes than this is cut into lines on another isolate.
-  static const offThreadFrom = 2000;
-
   /// How many draft names are tried before giving up: `X (draft)`,
   /// `X (draft 2)`, … A user with this many drafts of one chapter has
   /// something other than a name clash to sort out.
@@ -169,16 +181,24 @@ final class FillGaps extends ChangeNotifier {
   final DateTime Function() _clock;
 
   FillState _state = const FillIdle();
+  FillFound? _found;
+  int? _picked;
   bool _cancelled = false;
   Future<void> Function()? _release;
   bool _disposed = false;
 
   FillState get state => _state;
 
+  /// What the last finished run found, until the next one starts.
+  FillFound? get found => _found;
+
+  /// Which of [FillFound.items] the user last went to, for ↑ and ↓.
+  int? get picked => _picked;
+
   bool get running => _state is FillRunning;
 
-  /// Whether a fill can start now: a repertoire chapter this app may write
-  /// is open, and no fill is running.
+  /// Whether a fill can start now: a repertoire chapter this app may write,
+  /// or the analysis board, is open, and no fill is running.
   bool get canStart =>
       !running &&
       _session.chapter != null &&
@@ -191,18 +211,25 @@ final class FillGaps extends ChangeNotifier {
     if (running) return 'A fill is already running.';
     final chapter = _session.chapter;
     final source = _session.source;
-    if (chapter == null || source == null || chapter.game != null) {
-      return 'Open a repertoire chapter to fill.';
+    final onBoard = _session.isScratch;
+    if (chapter == null ||
+        chapter.game != null ||
+        (source == null && !onBoard)) {
+      return 'Open a repertoire chapter or the analysis board first.';
     }
     if (_session.readOnly case final reason?) return reason;
     final root = positionOf(_session.fen);
     if (root == null) return 'The position on the board cannot be searched.';
-    final cursor = _session.cursor;
+    final target = source == null
+        ? FillTarget.board(chapter, _session.cursor, _session.orientation)
+        : FillTarget.chapter(chapter, source, _session.cursor);
     _cancelled = false;
+    _found = null;
+    _picked = null;
     _set(FillRunning(nodes: 1, depth: 0, of: request.depthPlies));
-    _analysis.pause('Paused while filling gaps');
+    _analysis.pause('Paused while searching');
     try {
-      await _run(request, chapter, source, cursor, root);
+      await _run(request, target, root);
     } finally {
       _analysis.resume();
     }
@@ -211,15 +238,13 @@ final class FillGaps extends ChangeNotifier {
 
   Future<void> _run(
     FillRequest request,
-    Chapter chapter,
-    ChapterRef source,
-    NodePath cursor,
+    FillTarget target,
     Position root,
   ) async {
     final tools = await _tools(request);
     switch (tools) {
       case FillUnavailable(:final reason):
-        if (!_disposed) _failed('fill ${source.path}', reason);
+        if (!_disposed) _failed('fill ${target.label}', reason);
         return;
       case FillReady():
         break;
@@ -234,10 +259,10 @@ final class FillGaps extends ChangeNotifier {
     }
     _release = tools.release;
     final config = SearchConfig(
-      side: chapter.side,
+      side: target.side,
       horizonPlies: request.depthPlies,
-      lossLimitCp: fillLossLimitCp,
-      pins: chapterPins(chapter),
+      lossLimitCp: request.lossLimitCp,
+      pins: target.pins,
       replyFloor: 1 / request.onceIn,
     );
     final result = await buildSearchTree(
@@ -254,40 +279,76 @@ final class FillGaps extends ChangeNotifier {
       _set(const FillIdle());
       return;
     }
-    final SearchNode tree;
+    final tree = _treeOf(result, target);
+    if (tree == null) return;
+    switch (target) {
+      case BoardTarget():
+        await _shown(target, tree);
+      case ChapterTarget():
+        await _written(request, target, tree, config, result);
+    }
+  }
+
+  /// The tree [result] holds, whole or cut short; null, with the run marked
+  /// failed, when the engine or the model gave up.
+  SearchNode? _treeOf(SearchResult result, FillTarget target) {
     switch (result) {
-      case SearchComplete(tree: final built):
-        tree = built;
-      case SearchIncomplete(tree: final built):
-        tree = built;
+      case SearchComplete(:final tree) || SearchIncomplete(:final tree):
+        return tree;
       case PolicyMissing(:final fen, :final reason):
         _failed(
-          'fill ${source.path}',
+          'fill ${target.label}',
           'The opponent model could not answer at ${fen.value}: $reason',
         );
-        return;
       case EvaluationFailed(:final fen, :final reason):
         _failed(
-          'fill ${source.path}',
+          'fill ${target.label}',
           'The engine could not score ${fen.value}: $reason',
         );
-        return;
     }
-    await _written(request, chapter, source, cursor, tree, config, result);
+    return null;
+  }
+
+  /// A run on the analysis board writes nothing: what it found is kept for
+  /// the Prep tab, which plays a result onto the board when it is asked to.
+  Future<void> _shown(BoardTarget target, SearchNode tree) async {
+    final found = await foundIn(tree, known: const {});
+    if (_disposed) return;
+    final (plan, traps) = found;
+    if (plan.lines == 0 && traps.isEmpty) {
+      _failed('fill ${target.label}', 'The search found no line to show.');
+      return;
+    }
+    _found = FillFound(
+      origin: OnTheBoard(root: target.rootFen, line: target.line),
+      side: target.side,
+      traps: traps,
+      lines: [for (final entry in plan.entries) entry.line],
+    );
+    log.i('fill on the board: ${plan.lines} lines, ${traps.length} traps');
+    _set(
+      FillDone(
+        name: null,
+        lines: plan.lines,
+        traps: traps.length,
+        folded: plan.folded,
+        alreadyThere: 0,
+      ),
+    );
   }
 
   Future<void> _written(
     FillRequest request,
-    Chapter chapter,
-    ChapterRef source,
-    NodePath cursor,
+    ChapterTarget target,
     SearchNode tree,
     SearchConfig config,
     SearchResult result,
   ) async {
+    final chapter = target.chapter;
+    final source = target.source;
     final known = chapterDecisions(chapter);
     final heading = readHeading(chapter.preamble);
-    final prefix = chapter.tree.lineTo(cursor);
+    final prefix = chapter.tree.lineTo(target.cursor);
     final rootFen = chapter.tree.rootFen;
     final rootMoves = heading.rootFen == rootFen
         ? heading.rootMoves
@@ -295,28 +356,40 @@ final class FillGaps extends ChangeNotifier {
     final created = _clock();
     final side = chapter.side;
     final folder = p.dirname(source.path);
-    var draft = await _draftUnder(
+    final (plan, traps) = await foundIn(tree, known: known);
+    if (_disposed) return;
+    final draft = await _draftUnder(
       folder,
       source.name,
-      (name) => _Draft.of(
+      plan,
+      (name) => draftChapterText(
         name: name,
         side: side,
         rootFen: rootFen,
         rootMoves: rootMoves,
         prefix: prefix,
-        tree: tree,
-        known: known,
+        plan: withTraps(plan, traps),
         created: created,
       ),
     );
     if (_disposed) return;
     switch (draft) {
-      case _DraftWritten(:final ref, :final plan):
+      case _DraftWritten(:final ref):
         log.i('fill ${source.path}: ${plan.lines} lines in ${ref.path}');
+        _found = FillFound(
+          origin: InDraft(
+            draft: ref,
+            sans: [for (final move in prefix) move.san],
+          ),
+          side: side,
+          traps: traps,
+          lines: [for (final entry in plan.entries) entry.line],
+        );
         _set(
           FillDone(
             name: ref.name,
             lines: plan.lines,
+            traps: traps.length,
             folded: plan.folded,
             alreadyThere: plan.alreadyThere,
           ),
@@ -327,24 +400,32 @@ final class FillGaps extends ChangeNotifier {
     }
   }
 
+  /// Notes that the user went to the item at [index] of [found]'s items.
+  void pick(int index) {
+    final count = _found?.items.length ?? 0;
+    if (index < 0 || index >= count || index == _picked) return;
+    _picked = index;
+    notifyListeners();
+  }
+
   /// Writes the draft as the first free name beside [chapter]'s file.
   Future<_DraftOutcome> _draftUnder(
     String folder,
     String chapter,
-    Future<_Draft> Function(String name) draft,
+    DraftPlan plan,
+    String Function(String name) draft,
   ) async {
+    if (plan.lines == 0) {
+      return const _DraftRefused(
+        'The search found no line the chapter does not already have.',
+      );
+    }
     for (var n = 1; n <= _names; n++) {
       final name = n == 1 ? '$chapter (draft)' : '$chapter (draft $n)';
       final ref = ChapterRef.at(p.join(folder, '$name.pgn'));
-      final made = await draft(name);
-      if (made.plan.lines == 0) {
-        return const _DraftRefused(
-          'The search found no line the chapter does not already have.',
-        );
-      }
-      switch (await _store.create(ref, made.text)) {
+      switch (await _store.create(ref, draft(name))) {
         case store.Created():
-          return _DraftWritten(ref, made.plan);
+          return _DraftWritten(ref);
         case store.Collision():
           continue;
         case store.IoFailure(:final detail):
@@ -434,62 +515,14 @@ final class FillGaps extends ChangeNotifier {
   }
 }
 
-/// The text of one draft and what went into it.
-final class _Draft {
-  const _Draft(this.text, this.plan);
-
-  final String text;
-  final DraftPlan plan;
-
-  /// Cuts [tree] into lines and writes them as chapter text, on another
-  /// isolate when the tree is big enough to hold the window otherwise.
-  static Future<_Draft> of({
-    required String name,
-    required Side side,
-    required Fen rootFen,
-    required List<String> rootMoves,
-    required List<MoveNode> prefix,
-    required SearchNode tree,
-    required Set<String> known,
-    required DateTime created,
-  }) {
-    _Draft build() {
-      final plan = planDraft(linesOf(tree), known: known);
-      final text = draftChapterText(
-        name: name,
-        side: side,
-        rootFen: rootFen,
-        rootMoves: rootMoves,
-        prefix: prefix,
-        plan: plan,
-        created: created,
-      );
-      return _Draft(text, plan);
-    }
-
-    return _nodesIn(tree) < FillGaps.offThreadFrom
-        ? Future.value(build())
-        : Isolate.run(build);
-  }
-}
-
-int _nodesIn(SearchNode node) => switch (node) {
-  OurNode(:final candidates) =>
-    1 + candidates.fold(0, (sum, c) => sum + _nodesIn(c.child)),
-  OpponentNode(:final replies) =>
-    1 + replies.fold(0, (sum, r) => sum + _nodesIn(r.child)),
-  _ => 1,
-};
-
 sealed class _DraftOutcome {
   const _DraftOutcome();
 }
 
 final class _DraftWritten extends _DraftOutcome {
-  const _DraftWritten(this.ref, this.plan);
+  const _DraftWritten(this.ref);
 
   final ChapterRef ref;
-  final DraftPlan plan;
 }
 
 final class _DraftRefused extends _DraftOutcome {

@@ -6,8 +6,10 @@ import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
+import 'package:chess_auto_prep/v2/workspace/fill_found.dart';
 import 'package:chess_auto_prep/v2/workspace/fill_gaps.dart';
-import 'package:dartchess/dartchess.dart' show Position;
+import 'package:chess_auto_prep/v2/chess/fen.dart';
+import 'package:dartchess/dartchess.dart' show Position, Side;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../chess/generation/scripted_sources.dart';
@@ -119,6 +121,72 @@ void main() {
     expect(releases, 1);
     expect(trees.single, contains('"format": "opening_tree"'));
     expect(trees.single, contains('"eval_depth": 14'));
+  });
+
+  test('a run keeps what it found: the traps on its lines and the lines, '
+      'read in the draft it wrote', () async {
+    final root = positionOf(kingAndPawn);
+    final afterE4 = afterUci(root, 'e2e4');
+    // Kf7 is played three games in ten and hands White two pawns more
+    // than Kd8 does: a trap.
+    final fill = fillWith(
+      ScriptedEvaluator(scores: {afterUci(afterE4, 'e8f7').fen: 200}),
+      policy: const ScriptedPolicy({'e8d8': 0.7, 'e8f7': 0.3}),
+    );
+    await fill.start(request);
+    final done = fill.state as FillDone;
+    expect(done.traps, 1);
+    final found = fill.found!;
+    expect(found.origin, isA<InDraft>());
+    expect((found.origin as InDraft).draft, draft());
+    final trap = found.traps.single;
+    expect(trap.blunder.move.uci, 'e8f7');
+    expect(trap.share, closeTo(0.3, 1e-9));
+    expect(trap.lossCp, 200);
+    expect(found.lines, isNotEmpty);
+    expect(found.items.first, isA<FoundTrap>());
+    expect(found.items.first.stopAfter, 2, reason: 'stops on the mistake');
+    fill.pick(1);
+    expect(fill.picked, 1);
+  });
+
+  test('on the analysis board a run writes nothing and keeps what it found, '
+      'for the side at the bottom of the board', () async {
+    await fixture.session.newAnalysisBoard(
+      side: Side.white,
+      root: const Fen(kingAndPawn),
+    );
+    final afterE4 = afterUci(positionOf(kingAndPawn), 'e2e4');
+    final fill = fillWith(
+      ScriptedEvaluator(scores: {afterUci(afterE4, 'e8f7').fen: 200}),
+      policy: const ScriptedPolicy({'e8d8': 0.7, 'e8f7': 0.3}),
+    );
+    expect(fill.canStart, isTrue);
+    final writes = fixture.store.creates.length;
+    const shallow = FillRequest(elo: 2200, depthPlies: 2, onceIn: 50);
+    expect(await fill.start(shallow), isNull);
+    final done = fill.state as FillDone;
+    expect(done.name, isNull);
+    expect(done.traps, 1);
+    expect(fixture.store.creates, hasLength(writes), reason: 'nothing saved');
+    final found = fill.found!;
+    expect(found.side, Side.white);
+    expect(found.origin, isA<OnTheBoard>());
+    expect((found.origin as OnTheBoard).root, const Fen(kingAndPawn));
+    expect(found.traps.single.blunder.move.uci, 'e8f7');
+    expect(found.lines.first.moves.first.move.uci, 'e2e4');
+  });
+
+  test('Prefer traps lets moves of ours further from the best be tried', () {
+    const plain = FillRequest(elo: 2200, depthPlies: 3, onceIn: 50);
+    const trappy = FillRequest(
+      elo: 2200,
+      depthPlies: 3,
+      onceIn: 50,
+      preferTraps: true,
+    );
+    expect(plain.lossLimitCp, fillLossLimitCp);
+    expect(trappy.lossLimitCp, greaterThan(plain.lossLimitCp));
   });
 
   test('the chapter\'s own moves are pins: the search never plays another '

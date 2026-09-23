@@ -167,9 +167,11 @@ void main() {
     expect(owners.gaps.walk!.gaps, isEmpty);
   });
 
-  test('closing the document empties the table', () async {
+  test('closing the document shows the analysis board\'s replies', () async {
     await pumpEventQueue();
+    final before = replies.table;
     fixture.session.closed();
-    expect(replies.table, isA<RepliesEmpty>());
+    await pumpEventQueue();
+    expect(replies.table, isNot(same(before)));
   });
 }

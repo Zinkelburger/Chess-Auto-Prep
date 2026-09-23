@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import '../chess/fen.dart';
+import '../chess/pgn/analysis_board.dart';
 import '../chess/pgn/chapter.dart';
 import '../chess/pgn/chapter_edit.dart' as edits;
 import '../chess/pgn/chapter_edits.dart' as edits;
@@ -18,6 +19,7 @@ import '../storage/pgn_document_store.dart' as store;
 import 'copy_aside.dart';
 import 'document_saver.dart';
 import 'edit_refused.dart';
+import 'kept_board.dart';
 import 'save_state.dart';
 import 'session_results.dart';
 
@@ -40,13 +42,19 @@ import 'session_results.dart';
 /// the cursor moves into it, so a cursor listener never reads a path the
 /// tree does not have yet.
 final class DocumentSession extends ChangeNotifier {
-  DocumentSession(this._store, this._saver);
+  DocumentSession(this._store, this._saver) {
+    _chapter = _board.chapter;
+  }
 
   final store.PgnDocumentStore _store;
   final DocumentSaver _saver;
   Chapter? _chapter;
-  ChapterRef? _source;
-  String? _readOnly;
+
+  /// The analysis board, up whenever no file is; the window starts on it.
+  final _board = KeptBoard(analysisBoard(side: Side.white));
+
+  /// The file the chapter came from and why it may not be written.
+  ({ChapterRef ref, String? readOnly})? _file;
   final _cursor = ValueNotifier<NodePath>(const NodePath.root());
   EditRefused? _refused;
   NodePath? _shownTo;
@@ -56,6 +64,14 @@ final class DocumentSession extends ChangeNotifier {
 
   Chapter? get chapter => _chapter;
 
+  /// Whether the analysis board is up: a chapter no file holds, whose edits
+  /// stay in memory and are lost with the window.
+  bool get isScratch => _chapter != null && _file == null;
+
+  /// Whether an edit can be taken back now: from the saver's receipts for a
+  /// file, from memory on the analysis board.
+  bool get canUndo => isScratch ? _board.canUndo : _saver.canUndo;
+
   /// Why the last edit did not happen, or null when it did. A game reading
   /// could not finish keeps its own bytes, so an edit that would write it is
   /// refused, and so are words a PGN file cannot hold and every edit to a
@@ -64,12 +80,12 @@ final class DocumentSession extends ChangeNotifier {
   EditRefused? get refusedEdit => _refused;
 
   /// Why this document cannot be written, or null when it can.
-  String? get readOnly => _readOnly;
+  String? get readOnly => _file?.readOnly;
 
   /// The file the chapter was read from, and which game of it is on the
   /// board — null when its games are merged. A repertoire chapter is the
   /// file; a study chapter is one game.
-  ChapterRef? get source => _source;
+  ChapterRef? get source => _file?.ref;
 
   int? get game => _chapter?.game;
   GameTree? get tree => _chapter?.tree;
@@ -116,8 +132,16 @@ final class DocumentSession extends ChangeNotifier {
     if (path != null && !path.startsWith(cursor)) _cursor.value = path;
   }
 
+  /// Turns the board over. The analysis board has no file to say whose it
+  /// is, so there turning it is changing sides: the side at the bottom is
+  /// the one a generation from it prepares for.
   void flip() {
-    _flipped = !_flipped;
+    final chapter = _chapter;
+    if (isScratch && chapter != null) {
+      _chapter = withSide(chapter, chapter.side.opposite);
+    } else {
+      _flipped = !_flipped;
+    }
     notifyListeners();
   }
 
@@ -187,7 +211,7 @@ final class DocumentSession extends ChangeNotifier {
   /// Throws the draft away and takes what is on disk: how a conflict ends
   /// when the user decides the other version wins.
   Future<OpenResult> reloadFromDisk() async {
-    final ref = _source;
+    final ref = source;
     if (ref == null) return const OpenOvertaken();
     return open(ref, game: game);
   }
@@ -196,8 +220,9 @@ final class DocumentSession extends ChangeNotifier {
   /// bytes, so only the name shown and the file saves go to change.
   void relocated(ChapterRef ref) {
     final chapter = _chapter;
-    if (_source == null || chapter == null) return;
-    _source = ref;
+    final file = _file;
+    if (file == null || chapter == null) return;
+    _file = (ref: ref, readOnly: file.readOnly);
     _chapter = renamedChapter(chapter, ref.name);
     _saver.relocated(ref);
     notifyListeners();
@@ -206,14 +231,60 @@ final class DocumentSession extends ChangeNotifier {
   /// The open document was deleted, so the workspace empties rather than
   /// showing a chapter whose file is now in recovery.
   void closed() {
-    if (_source == null) return;
+    if (source == null) return;
     _opens++;
-    _chapter = null;
-    _source = null;
+    _saver.closed();
+    _showBoard();
+  }
+
+  /// Goes back to the analysis board as it was left, once the file that was
+  /// up has its last words written, as opening another file would.
+  Future<void> showAnalysisBoard() async {
+    if (isScratch) return;
+    final ticket = ++_opens;
+    await _saver.flush();
+    if (_disposed || ticket != _opens) return;
+    _saver.closed();
+    _showBoard();
+  }
+
+  /// A new analysis board in place of the old one: [sans] played from
+  /// [root], facing [side], the cursor at the end. The old board is gone,
+  /// as a new analysis board on lichess forgets the last one.
+  Future<void> newAnalysisBoard({
+    required Side side,
+    Fen root = Fen.initial,
+    List<String> sans = const [],
+  }) => _newBoard(analysisBoard(side: side, root: root, sans: sans));
+
+  /// [text] — a PGN, bare moves or a FEN — as a new analysis board facing
+  /// the way the board faces now. Answers why nothing changed, or null.
+  Future<String?> pasteOntoBoard(String text) async {
+    switch (pastedBoard(text, side: orientation)) {
+      case PasteRefused(:final reason):
+        return reason;
+      case PastedBoard(:final chapter):
+        await _newBoard(chapter);
+        return null;
+    }
+  }
+
+  Future<void> _newBoard(Chapter board) async {
+    final ticket = ++_opens;
+    if (!isScratch) await _saver.flush();
+    if (_disposed || ticket != _opens) return;
+    _saver.closed();
+    _board.restart(board);
+    _showBoard();
+  }
+
+  void _showBoard() {
+    _chapter = _board.chapter;
+    _file = null;
     _refused = null;
     _shownTo = null;
-    _saver.closed();
-    _cursor.value = const NodePath.root();
+    _flipped = false;
+    _cursor.value = _board.cursor;
     notifyListeners();
   }
 
@@ -275,12 +346,12 @@ final class DocumentSession extends ChangeNotifier {
       case edits.MoveIllegal():
         return;
       case edits.MoveRefused(:final reason):
-        log.w('move ${_source?.path}', reason);
+        log.w('move ${source?.path}', reason);
         _refused = const LineNotWhole();
         notifyListeners();
         return;
       case edits.MoveNotWritten():
-        log.e('move ${_source?.path}', 'the chapter came back without $uci');
+        log.e('move ${source?.path}', 'the chapter came back without $uci');
         _refused = const MoveLost();
         notifyListeners();
         return;
@@ -306,7 +377,7 @@ final class DocumentSession extends ChangeNotifier {
     final hadRefusal = _refused != null;
     switch (edits.setComment(chapter, at: at, text: text)) {
       case final edits.CommentRefused refusal:
-        log.w('comment ${_source?.path}', refusalDetail(refusal));
+        log.w('comment ${source?.path}', refusalDetail(refusal));
         _refused = refusalOf(refusal);
       case edits.CommentWritten(chapter: final edited, :final written):
         _clearRefusal();
@@ -328,7 +399,7 @@ final class DocumentSession extends ChangeNotifier {
     if (_refuseWhenReadOnly()) return;
     switch (edits.setGlyph(chapter, at: at, nag: nag)) {
       case final edits.CommentRefused refusal:
-        log.w('glyph ${_source?.path}', refusalDetail(refusal));
+        log.w('glyph ${source?.path}', refusalDetail(refusal));
         _refused = refusalOf(refusal);
       case edits.CommentWritten(chapter: final edited, :final written):
         _clearRefusal();
@@ -347,7 +418,7 @@ final class DocumentSession extends ChangeNotifier {
     if (_refuseWhenReadOnly()) return;
     switch (edits.setMarker(chapter, at: at, marker: marker, on: on)) {
       case final edits.CommentRefused refusal:
-        log.w('mark $marker in ${_source?.path}', refusalDetail(refusal));
+        log.w('mark $marker in ${source?.path}', refusalDetail(refusal));
         _refused = refusalOf(refusal);
       case edits.CommentWritten(chapter: final edited, :final written):
         _clearRefusal();
@@ -359,7 +430,7 @@ final class DocumentSession extends ChangeNotifier {
   /// Whether this document opened to read, in which case the edit does not
   /// happen and the screen says why again.
   bool _refuseWhenReadOnly() {
-    final reason = _readOnly;
+    final reason = readOnly;
     if (reason == null) return false;
     _refused = NotEditable(reason);
     notifyListeners();
@@ -369,7 +440,7 @@ final class DocumentSession extends ChangeNotifier {
   /// Forgets the last refusal, except the standing one: a document opened to
   /// read says so until it is closed.
   void _clearRefusal() {
-    final reason = _readOnly;
+    final reason = readOnly;
     _refused = reason == null ? null : NotEditable(reason);
   }
 
@@ -377,7 +448,8 @@ final class DocumentSession extends ChangeNotifier {
   /// back, on the chapter it was on. A refused undo leaves the document and
   /// the history alone and says so.
   Future<UndoResult> undo() async {
-    final ref = _source;
+    if (isScratch) return _undoOnBoard();
+    final ref = source;
     if (ref == null) return const UndoRefused();
     final ticket = _opens;
     final result = await _saver.undo();
@@ -397,18 +469,29 @@ final class DocumentSession extends ChangeNotifier {
     return result;
   }
 
+  /// The analysis board as it was before its last edit.
+  UndoResult _undoOnBoard() {
+    final before = _chapter;
+    final restored = _board.takeBack();
+    if (restored == null || before == null) return const UndoRefused();
+    _chapter = restored;
+    _cursor.value = samePathIn(before.tree, restored.tree, cursor);
+    notifyListeners();
+    return Restored(writeChapter(restored));
+  }
+
   /// Writes the draft beside the original as `<name>.pgn`, replacing
   /// nothing. A copy changes nothing here, so nothing goes stale: whatever
   /// the user opened meanwhile, the answer is about the file they asked for.
   Future<CopyResult> saveCopy(String name) async {
     final written = await copyAside(name);
     if (written is! CopySaved) return written;
-    final ref = _source;
+    final ref = source;
     // A document that can still take words keeps the session; one frozen by
     // a stopped save, or that this app may not write, hands it over, because
     // the copy is the only place those words can go on being edited. A
     // conflicted document keeps it: it can still be reloaded.
-    final frozen = _saver.state is SaveStopped || _readOnly != null;
+    final frozen = _saver.state is SaveStopped || readOnly != null;
     if (ref == null || !frozen) return written;
     final path = p.join(p.dirname(ref.path), written.name);
     final opened = await open(ChapterRef.at(path), game: game);
@@ -419,7 +502,7 @@ final class DocumentSession extends ChangeNotifier {
   /// where it is, which is what the question on the way out asks for: the
   /// user is going somewhere else, so the copy is not what they want open.
   Future<CopyResult> copyAside(String name) async {
-    final ref = _source;
+    final ref = source;
     final chapter = _chapter;
     if (ref == null || chapter == null) {
       return const CopyFailed('there is nothing open to copy');
@@ -433,11 +516,16 @@ final class DocumentSession extends ChangeNotifier {
     Revision revision,
     String? readOnly,
   ) {
+    // The analysis board is put aside as it is, to be gone back to.
+    if (_chapter case final board? when isScratch) {
+      _board
+        ..chapter = board
+        ..cursor = cursor;
+    }
     _chapter = chapter;
-    _source = ref;
+    _file = (ref: ref, readOnly: readOnly);
     _flipped = false;
     _shownTo = null;
-    _readOnly = readOnly;
     _refused = readOnly == null ? null : NotEditable(readOnly);
     _saver.opened(ref, revision, readOnly: readOnly);
     _cursor.value = const NodePath.root();
@@ -449,8 +537,20 @@ final class DocumentSession extends ChangeNotifier {
   /// look like: that would agree with the text, and the store would have
   /// nothing to refuse.
   void _replace(Chapter edited, GamesWritten written) {
+    if (_onBoard(edited)) return;
     _chapter = edited;
     _saver.save(writeChapter(edited), GamesEdited(written));
+  }
+
+  /// Takes [edited] in memory when the analysis board is up, keeping the
+  /// version it replaces for undo; nothing is written anywhere. False when
+  /// a file is up and the edit is the saver's to write.
+  bool _onBoard(Chapter edited) {
+    final before = _chapter;
+    if (!isScratch || before == null) return false;
+    _board.remember(before);
+    _chapter = edited;
+    return true;
   }
 
   OpenFailed _openFailed(ChapterRef ref, String reason) {
@@ -470,19 +570,21 @@ final class DocumentSession extends ChangeNotifier {
   String? apply(edits.ChapterEdit Function(Chapter chapter) edit) {
     final chapter = _chapter;
     if (chapter == null) return 'there is nothing open to edit';
-    if (_refuseWhenReadOnly()) return _readOnly;
+    if (_refuseWhenReadOnly()) return readOnly;
     switch (edit(chapter)) {
       case edits.ChapterUnchanged():
         return null;
       case edits.ChapterEditRefused(:final reason):
-        log.w('edit ${_source?.path}', reason);
+        log.w('edit ${source?.path}', reason);
         _refused = EditNotWritten(reason);
         notifyListeners();
         return reason;
       case edits.ChapterEdited(chapter: final edited, :final games):
         _clearRefusal();
-        _chapter = edited;
-        _saver.save(writeChapter(edited), GamesRearranged(games));
+        if (!_onBoard(edited)) {
+          _chapter = edited;
+          _saver.save(writeChapter(edited), GamesRearranged(games));
+        }
         _cursor.value = samePathIn(chapter.tree, edited.tree, cursor);
     }
     notifyListeners();

@@ -46,12 +46,13 @@ import '../workspace/tree_pane.dart';
 import '../workspace/explorer.dart';
 import '../workspace/game_fetcher.dart';
 import '../workspace/gap_hunt.dart';
-import '../workspace/fill_dialog.dart';
 import '../workspace/fill_gaps.dart';
 import '../workspace/replies.dart';
 import '../workspace/workspace_keys.dart';
 import '../workspace/workspace_tabs.dart';
 import '../workspace/workspace_view.dart';
+import 'board_actions.dart';
+import 'generate_doors.dart';
 import 'mode.dart';
 import 'sitting_in_view.dart';
 import 'top_bar.dart';
@@ -221,18 +222,12 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     _arrange();
   }
 
-  /// The three knobs, then the run; what refused it goes in the bar.
-  Future<void> _fill() async {
-    final s = widget.settings.value;
-    final request = await showFillDialog(
-      context,
-      elo: s.opponentElo,
-      onceIn: s.coverOnceIn,
-    );
-    if (request == null || !mounted) return;
-    final refusal = await widget.fill.start(request);
-    if (refusal != null && mounted) _requests.say(refusal);
-  }
+  late final _generate = GenerateDoors(
+    fill: widget.fill,
+    session: widget.session,
+    settings: widget.settings,
+    requests: _requests,
+  );
 
   /// Starts a sitting, from [first] when the list asked for one, with the
   /// Puzzle tab up.
@@ -301,13 +296,17 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     if (widget.trainer.up != null) widget.trainer.showSolution();
   }
 
-  void _down() => widget.trainer.up == null
-      ? widget.session.nextGame()
-      : unawaited(widget.trainer.next());
-
-  void _up() => widget.trainer.up == null
-      ? widget.session.previousGame()
-      : unawaited(widget.trainer.previous());
+  /// ↓ (1) / ↑ (−1) walk what is in front of the user: the Prep tab's
+  /// rows while it is up, the puzzles in a sitting, else the file's games.
+  void _walk(int by) {
+    if (_tabs.selected == WorkspaceTab.prep && _generate.step(by)) return;
+    final trainer = widget.trainer;
+    if (trainer.up != null) {
+      unawaited(by > 0 ? trainer.next() : trainer.previous());
+    } else {
+      by > 0 ? widget.session.nextGame() : widget.session.previousGame();
+    }
+  }
 
   void _toggleList() {
     if (!mounted) return;
@@ -347,11 +346,18 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
             () => unawaited(_requests.openPgnFile()),
             shortcut: 'Ctrl+O',
           ),
+          ...boardActions(
+            context,
+            session: widget.session,
+            requests: _requests,
+            library: widget.library,
+            studies: widget.studies,
+          ),
           if (_requests.mode == Mode.repertoires)
             AppAction(
               'Paste PGN',
               () => unawaited(_requests.pasteRepertoire()),
-              shortcut: 'Ctrl+V',
+              shortcut: widget.session.isScratch ? null : 'Ctrl+V',
             )
           else
             AppAction(
@@ -362,7 +368,6 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
             ),
           ...documentActions(
             session: widget.session,
-            saver: widget.saver,
             analysis: widget.analysis,
             editing: _editing,
             onSaveCopy: () => unawaited(_saveCopy()),
@@ -381,11 +386,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
               () => setSide(widget.session, chapter.side.opposite),
               group: 'Repertoire',
             ),
-          AppAction(
-            'Fill gaps from here…',
-            widget.fill.canStart ? () => unawaited(_fill()) : null,
-            group: 'Repertoire',
-          ),
+          _generate.action(context, _tabs),
           ...tabActions(_tabs),
         ];
 
@@ -428,19 +429,25 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         unawaited(_requests.openPgnFile()),
     const SingleActivator(LogicalKeyboardKey.keyO, meta: true): () =>
         unawaited(_requests.openPgnFile()),
-    if (_requests.mode == Mode.repertoires) ...{
-      const SingleActivator(LogicalKeyboardKey.keyV, control: true): () =>
-          unawaited(_requests.pasteRepertoire()),
-      const SingleActivator(LogicalKeyboardKey.keyV, meta: true): () =>
-          unawaited(_requests.pasteRepertoire()),
-    },
+    const SingleActivator(LogicalKeyboardKey.keyV, control: true): () =>
+        unawaited(_requests.paste()),
+    const SingleActivator(LogicalKeyboardKey.keyV, meta: true): () =>
+        unawaited(_requests.paste()),
+    const SingleActivator(LogicalKeyboardKey.keyN, control: true): () =>
+        unawaited(_requests.newAnalysisBoard()),
+    const SingleActivator(LogicalKeyboardKey.keyN, meta: true): () =>
+        unawaited(_requests.newAnalysisBoard()),
+    const SingleActivator(LogicalKeyboardKey.keyG, control: true): () =>
+        unawaited(_generate.generate(context, _tabs)),
+    const SingleActivator(LogicalKeyboardKey.keyG, meta: true): () =>
+        unawaited(_generate.generate(context, _tabs)),
     const SingleActivator(LogicalKeyboardKey.keyK, control: true): () =>
         unawaited(_palette()),
     const SingleActivator(LogicalKeyboardKey.keyK, meta: true): () =>
         unawaited(_palette()),
     const SingleActivator(LogicalKeyboardKey.space): _space,
-    const SingleActivator(LogicalKeyboardKey.arrowDown): _down,
-    const SingleActivator(LogicalKeyboardKey.arrowUp): _up,
+    const SingleActivator(LogicalKeyboardKey.arrowDown): () => _walk(1),
+    const SingleActivator(LogicalKeyboardKey.arrowUp): () => _walk(-1),
   };
 
   /// The mode's list, with the `«` that hides it in its top right corner:
@@ -576,6 +583,8 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       boardClaim: _claim,
       onEngineMove: _engineMove,
       treeTab: _treeTab,
+      onGenerate: () => unawaited(_generate.generate(context, _tabs)),
+      onFound: _generate.go,
       trainTab: (_) => TrainPane(
         trainer: widget.lineTrainer,
         onRead: (line) => unawaited(_readLine(line)),

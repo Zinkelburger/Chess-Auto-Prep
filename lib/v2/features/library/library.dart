@@ -4,6 +4,7 @@ import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
+import '../../chess/pgn/chapter.dart';
 import '../../diagnostics/log.dart';
 import '../../storage/chapter_files.dart';
 import '../../storage/document_ref.dart';
@@ -178,6 +179,26 @@ final class Library extends ChangeNotifier {
     final ref = DocumentRef(p.join(into.path, '$name.pgn'));
     final side = await _writes.sideOf(into);
     return _writes.create(ref, name, side, rootMoves: rootMoves);
+  });
+
+  /// [board] — the analysis board — as a new chapter [name] of [into]. It
+  /// keeps the board's side rather than the repertoire's: its lines were
+  /// played for that side, and a chapter for the other one is still worth
+  /// keeping somewhere the user can see it.
+  Future<LibraryResult> saveBoard(
+    RepertoireFolder into,
+    String name,
+    Chapter board,
+  ) => _run('save the analysis board as $name in ${into.name}', () async {
+    final ref = DocumentRef(p.join(into.path, '$name.pgn'));
+    final games = writeChapter(board).substring(board.preamble.length);
+    final result = await _writes.create(ref, name, board.side, games: games);
+    if (result is! LibraryDone) return result;
+    return LibraryAdded(
+      ChapterRef.at(ref.path),
+      chapters: 1,
+      lines: board.gameCount,
+    );
   });
 
   Future<LibraryResult> renameChapter(ChapterRef ref, String name) =>

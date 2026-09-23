@@ -408,12 +408,12 @@ void main() {
     expect(fixture.textAt(open.path), isNull);
   });
 
-  test('deleting the open chapter empties the workspace', () async {
+  test('deleting the open chapter shows the analysis board', () async {
     final open = ref('benko', 'Main');
     fixture = await openLibrary([benko], open: open);
     expect(await fixture.library.deleteChapter(open), isA<LibraryDone>());
     expect(fixture.session.source, isNull);
-    expect(fixture.session.chapter, isNull);
+    expect(fixture.session.isScratch, isTrue);
   });
 
   test('a refresh finishing after dispose stays quiet', () async {

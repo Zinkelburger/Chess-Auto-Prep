@@ -308,6 +308,7 @@ void main() {
       WorkspaceTab.moves,
       WorkspaceTab.explorer,
       WorkspaceTab.tree,
+      WorkspaceTab.prep,
     ]);
     expect(find.byType(MoveTreeView), findsOneWidget);
     expect(find.text('Next gap'), findsNothing);
@@ -320,8 +321,13 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.keyW);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pumpAndSettle();
-    expect(tabs.open, [WorkspaceTab.moves, WorkspaceTab.tree]);
+    expect(tabs.open, [
+      WorkspaceTab.moves,
+      WorkspaceTab.tree,
+      WorkspaceTab.prep,
+    ]);
     tabs.close(WorkspaceTab.tree);
+    tabs.close(WorkspaceTab.prep);
     await tester.pumpAndSettle();
     expect(tabs.open, [WorkspaceTab.moves]);
     expect(find.text('Moves'), findsNothing, reason: 'one tab: no strip');
@@ -331,14 +337,15 @@ void main() {
     expect(find.byTooltip('Close Replies (Ctrl+W)'), findsOneWidget);
   });
 
-  testWidgets('with nothing open it asks for a chapter', (tester) async {
+  testWidgets('with nothing open it is the analysis board', (tester) async {
     final empty = ScriptedDocumentStore();
     saver = DocumentSaver(empty, delay: Duration.zero);
     session = DocumentSession(empty, saver);
     analysis.dispose();
     startAnalysis();
     await pump(tester);
-    expect(find.text('Open a chapter'), findsOneWidget);
+    expect(find.text('Analysis board'), findsOneWidget);
+    expect(find.text('Not saved'), findsOneWidget);
     expect(find.text('No moves'), findsOneWidget);
   });
 }

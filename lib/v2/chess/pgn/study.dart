@@ -3,6 +3,8 @@ import 'package:dartchess/dartchess.dart' show Side;
 import '../fen.dart';
 import 'chapter_line.dart';
 import 'game_text.dart';
+import 'game_tree.dart';
+import 'move_text.dart';
 
 /// The Lichess study export format, which is what a study file in
 /// `Documents/studies/` is: one `.pgn` holding one game per chapter.
@@ -179,13 +181,15 @@ Map<String, String> _studyTags({
 };
 
 /// One chapter as a whole game, for a study being made or a chapter added to
-/// one. `*` is the marker a game nobody finished carries.
+/// one: [moves] when there are any, from [root]. `*` is the marker a game
+/// nobody finished carries.
 String newStudyChapterText({
   required String study,
   required String chapter,
   required Side orientation,
   Fen root = Fen.initial,
   String ending = '\n',
+  GameTree? moves,
 }) {
   final tags = withStudyTags(
     const [],
@@ -201,7 +205,8 @@ String newStudyChapterText({
       ..write(tag.text)
       ..write(tag.trailer);
   }
-  return (buffer..write('$ending*')).toString();
+  final movetext = moves == null ? '*' : writeMoveText(moves, terminator: '*');
+  return (buffer..write('$ending$movetext')).toString();
 }
 
 /// A study file with one empty chapter in it, which is what a new study is.

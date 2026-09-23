@@ -1,4 +1,5 @@
 import 'package:chess_auto_prep/v2/ui/theme.dart';
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:chess_auto_prep/v2/workspace/fill_dialog.dart';
 import 'package:chess_auto_prep/v2/workspace/fill_gaps.dart';
 import 'package:flutter/material.dart';
@@ -12,8 +13,14 @@ void main() {
         theme: darkTheme(),
         home: Builder(
           builder: (context) => TextButton(
-            onPressed: () =>
-                answer = showFillDialog(context, elo: 2200, onceIn: 50),
+            onPressed: () => answer = showFillDialog(
+              context,
+              title: 'Fill gaps from here',
+              action: 'Fill',
+              side: Side.black,
+              elo: 2200,
+              onceIn: 50,
+            ),
             child: const Text('open'),
           ),
         ),
@@ -33,7 +40,7 @@ void main() {
     expect(find.text('2200'), findsOneWidget);
     expect(find.text('8'), findsOneWidget);
     expect(find.text('50'), findsOneWidget);
-    expect(find.text('Engine + human model'), findsOneWidget);
+    expect(find.text('Engine + human model · for Black'), findsOneWidget);
     expect(find.byType(FilledButton), findsOneWidget);
     await tester.tap(find.text('Fill'));
     await tester.pumpAndSettle();
@@ -41,6 +48,19 @@ void main() {
     expect(request?.elo, 2200);
     expect(request?.depthPlies, 8);
     expect(request?.onceIn, 50);
+    expect(request?.preferTraps, isFalse);
+    expect(request?.lossLimitCp, fillLossLimitCp);
+  });
+
+  testWidgets('Prefer traps widens what our moves may cost', (tester) async {
+    final answer = await open(tester);
+    await tester.tap(find.text('Prefer traps'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Fill'));
+    await tester.pumpAndSettle();
+    final request = await answer;
+    expect(request?.preferTraps, isTrue);
+    expect(request?.lossLimitCp, trapLossLimitCp);
   });
 
   testWidgets('a number out of range says its range and keeps the dialog', (

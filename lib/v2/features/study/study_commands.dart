@@ -3,6 +3,7 @@ import 'package:dartchess/dartchess.dart' show Side;
 import '../../chess/fen.dart';
 import '../../chess/pgn/chapter.dart';
 import '../../chess/pgn/chapter_edit.dart';
+import '../../chess/pgn/game_tree.dart';
 import '../../chess/pgn/study.dart';
 import '../../chess/pgn/study_edits.dart';
 import '../../workspace/document_session.dart';
@@ -25,6 +26,7 @@ String? addStudyChapter(
   required String name,
   required Side orientation,
   Fen root = Fen.initial,
+  GameTree? moves,
 }) => _apply(
   session,
   (chapter) => addChapter(
@@ -33,6 +35,7 @@ String? addStudyChapter(
     name: name.isEmpty ? nextChapterName(studyChapters(chapter.lines)) : name,
     orientation: orientation,
     root: root,
+    moves: moves,
   ),
 );
 

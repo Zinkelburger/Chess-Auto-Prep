@@ -147,8 +147,10 @@ final class RepertoireTree extends ChangeNotifier {
   Fen get fen => _off.isEmpty ? _session.fen : _off.last.fen;
 
   /// A move made on the board or clicked in the tree: a step in the file
-  /// when the file plays it here, else a move on the free board.
+  /// when the file plays it here, else a move on the free board. The
+  /// analysis board takes every move itself, so it needs no free board.
   void play(String uci) {
+    if (_session.isScratch) return _session.playMove(uci);
     if (_off.isEmpty) {
       final tree = _session.tree;
       if (tree == null) return;
