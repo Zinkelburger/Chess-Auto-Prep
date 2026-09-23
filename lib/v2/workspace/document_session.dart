@@ -8,6 +8,7 @@ import '../chess/pgn/chapter_edit.dart' as edits;
 import '../chess/pgn/chapter_edits.dart' as edits;
 import '../chess/pgn/comment_edits.dart' as edits;
 import '../chess/pgn/games_written.dart';
+import '../chess/pgn/line_id_pins.dart';
 import '../chess/pgn/game_tree.dart';
 import '../chess/pgn/tree_edit.dart';
 import '../diagnostics/log.dart';
@@ -448,9 +449,20 @@ final class DocumentSession extends ChangeNotifier {
   /// The scope is what the edit reported, never what the text turned out to
   /// look like: that would agree with the text, and the store would have
   /// nothing to refuse.
+  ///
+  /// A game the edit rewrote keeps the id it is trained under ([withIdsPinned]);
+  /// that header lands on a game the edit wrote anyway, so the scope stands.
   void _replace(Chapter edited, GamesWritten written) {
-    _chapter = edited;
-    _saver.save(writeChapter(edited), GamesEdited(written));
+    final before = _chapter;
+    final pinned = before == null
+        ? edited
+        : withIdsPinned(
+            before,
+            edited,
+            GamesArranged.of(written, before: before.lines.length),
+          ).chapter;
+    _chapter = pinned;
+    _saver.save(writeChapter(pinned), GamesEdited(written));
   }
 
   OpenFailed _openFailed(ChapterRef ref, String reason) {
@@ -481,9 +493,13 @@ final class DocumentSession extends ChangeNotifier {
         return reason;
       case edits.ChapterEdited(chapter: final edited, :final games):
         _clearRefusal();
-        _chapter = edited;
-        _saver.save(writeChapter(edited), GamesRearranged(games));
-        _cursor.value = samePathIn(chapter.tree, edited.tree, cursor);
+        final pinned = withIdsPinned(chapter, edited, games);
+        _chapter = pinned.chapter;
+        _saver.save(
+          writeChapter(pinned.chapter),
+          GamesRearranged(pinned.games),
+        );
+        _cursor.value = samePathIn(chapter.tree, pinned.chapter.tree, cursor);
     }
     notifyListeners();
     return null;

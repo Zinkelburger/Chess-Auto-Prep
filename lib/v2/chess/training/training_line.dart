@@ -5,7 +5,7 @@ import '../pgn/chapter.dart';
 import '../pgn/chapter_line.dart';
 import '../pgn/game_text.dart';
 import '../pgn/game_tree.dart';
-import '../pgn/line_id.dart';
+import '../pgn/line_id_pins.dart';
 import '../pgn/tree_edit.dart' show nullMoveSan;
 import 'schedule.dart';
 
@@ -75,32 +75,21 @@ final class TrainingLine {
 /// file's path. A game with no moves, or one nothing could read, is no line
 /// but keeps its place, so the ids of the games after it do not move.
 List<TrainingLine> trainingLines(Chapter chapter, {required String source}) {
-  final games = [
-    for (final (index, line) in chapter.lines.indexed)
-      if (line.tree case final tree? when tree.children.isNotEmpty)
-        (index: index, line: line, moves: _mainLine(tree)),
-  ];
-  final ids = trainingLineIds([
-    for (final game in games)
-      (
-        index: game.index,
-        header: game.line.lineId,
-        sans: [for (final m in game.moves) m.spelling ?? m.san],
-      ),
-  ]);
+  final ids = trainedIds(chapter.lines);
   return [
-    for (final (i, game) in games.indexed)
-      TrainingLine(
-        key: (source: source, id: ids[i]),
-        chapter: chapter.name,
-        name: game.line.nameAt(game.index),
-        side: chapter.side,
-        start: game.line.tree!.rootFen,
-        moves: List.unmodifiable(game.moves),
-        game: game.index,
-        modelGame: _isModelGame(game.line),
-        likelihood: _likelihood(game.line),
-      ),
+    for (final (index, line) in chapter.lines.indexed)
+      if (ids[index] case final id?)
+        TrainingLine(
+          key: (source: source, id: id),
+          chapter: chapter.name,
+          name: line.nameAt(index),
+          side: chapter.side,
+          start: line.tree!.rootFen,
+          moves: List.unmodifiable(_mainLine(line.tree!)),
+          game: index,
+          modelGame: _isModelGame(line),
+          likelihood: _likelihood(line),
+        ),
   ];
 }
 
