@@ -78,6 +78,15 @@ _CONFIDENCE_ORDER = {"exact", "high", "medium", "low", "ambiguous"}
 _TRUSTED_SOURCES = {"uscf_online_event", "self_declared", "manual"}
 
 
+def _text(args: dict, key: str) -> str:
+    """A string argument, stripped. IDs typed as numbers (`uscf_id=15524414`
+    through a shell helper) arrive as ints and are taken as their digits."""
+    value = args.get(key)
+    if value is None or isinstance(value, bool):
+        return ""
+    return str(value).strip()
+
+
 class Registry:
     def __init__(self) -> None:
         self._directory: PlayerDirectory | None = None
@@ -269,6 +278,15 @@ class Registry:
                     },
                     "rating": _i("Corrected rating."),
                     "is_me": _b("Mark as you (clears any previous mark)."),
+                    "aliases": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "Other spellings of the name (Denis Shmeliov for "
+                            "Denys Shmelov); added to any already recorded. "
+                            "player_lookup and people_populate search them all."
+                        ),
+                    },
                 },
                 ["player_id"],
             ),
@@ -432,14 +450,18 @@ class Registry:
 
         register_chesscom_tools(self)
 
+        from .player_lookup import register_people_tools
+
+        register_people_tools(self)
+
     # ── Handlers ───────────────────────────────────────────────────────────
 
     def _directory_search(self, args: dict) -> dict:
         directory = self.directory
-        uscf_id = (args.get("uscf_id") or "").strip()
-        username = (args.get("chesscom_username") or "").strip()
-        name = (args.get("name") or "").strip()
-        query = (args.get("query") or "").strip()
+        uscf_id = _text(args, "uscf_id")
+        username = _text(args, "chesscom_username")
+        name = _text(args, "name")
+        query = _text(args, "query")
 
         if uscf_id:
             hit = directory.by_uscf_id(uscf_id)
@@ -487,7 +509,7 @@ class Registry:
         }
 
     def _uscf_member(self, args: dict) -> dict:
-        uscf_id = (args.get("uscf_id") or "").strip()
+        uscf_id = _text(args, "uscf_id")
         if not uscf_id:
             raise ToolError("uscf_id is required.")
         try:
@@ -518,7 +540,7 @@ class Registry:
             rounds=int(args.get("rounds") or 5),
             accelerated=bool(args.get("accelerated", False)),
             my_name=args.get("my_name"),
-            my_uscf_id=args.get("my_uscf_id"),
+            my_uscf_id=_text(args, "my_uscf_id") or None,
         )
         save_roster(roster)
 
@@ -636,7 +658,7 @@ class Registry:
 
     def _roster_update(self, args: dict) -> dict:
         roster = load_roster()
-        player_id = (args.get("player_id") or "").strip()
+        player_id = _text(args, "player_id")
         entry = roster.find(player_id)
         if entry is None:
             raise ToolError(f'No entrant with id "{player_id}" on the roster.')
@@ -659,13 +681,17 @@ class Registry:
             entry.half_point_byes = [int(r) for r in args["half_point_byes"]]
         if "rating" in args:
             entry.rating = int(args["rating"])
+        for alias in args.get("aliases") or []:
+            alias = str(alias).strip()
+            if alias and alias not in entry.aliases:
+                entry.aliases.append(alias)
 
         save_roster(roster)
         return {"updated": player_id, "entry": entry.to_dict()}
 
     def _identity_propose(self, args: dict) -> dict:
         roster = load_roster()
-        player_id = (args.get("player_id") or "").strip()
+        player_id = _text(args, "player_id")
         entry = roster.find(player_id)
         if entry is None:
             raise ToolError(f'No entrant with id "{player_id}" on the roster.')
@@ -677,8 +703,8 @@ class Registry:
                 "cannot be reviewed by the user."
             )
 
-        chesscom = (args.get("chesscom_username") or "").strip()
-        lichess = (args.get("lichess_username") or "").strip()
+        chesscom = _text(args, "chesscom_username")
+        lichess = _text(args, "lichess_username")
         if not chesscom and not lichess:
             raise ToolError(
                 "Supply chesscom_username and/or lichess_username."
@@ -714,7 +740,7 @@ class Registry:
 
     def _identity_confirm(self, args: dict) -> dict:
         roster = load_roster()
-        player_id = (args.get("player_id") or "").strip()
+        player_id = _text(args, "player_id")
         entry = roster.find(player_id)
         if entry is None:
             raise ToolError(f'No entrant with id "{player_id}" on the roster.')
@@ -750,8 +776,8 @@ class Registry:
 
     def _constraint_add(self, args: dict) -> dict:
         roster = load_roster()
-        a = (args.get("player_a") or "").strip()
-        b = (args.get("player_b") or "").strip()
+        a = _text(args, "player_a")
+        b = _text(args, "player_b")
         if not a or not b:
             raise ToolError("player_a and player_b are required.")
         for player_id in (a, b):

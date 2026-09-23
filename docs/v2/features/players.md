@@ -127,9 +127,11 @@ Chess Auto Prep.`, a table (`# · Name · Rating · USCF ID · Chess.com · Lich
 section per opponent with facts, notes and each prep chapter's movetext (`(no moves yet)`).
 
 ## Data
-- `Documents/opponents/people.json` (`chess-auto-prep/people@1`) — per person: id, name, `uscf_id`,
-  `chesscom`, `lichess` (comma-separated handles), rating, title, notes, `prep_file`, `game_sets` (explicit
-  corpus keys, so a rename does not orphan games), `studies` (path + optional chapter), timestamps; and
+- `Documents/opponents/people.json` (`chess-auto-prep/people@1`) — per person: id, name, `aliases` (other
+  spellings, searched like the name), `uscf_id`, `fide_id`, `chesscom`, `lichess` (comma-separated handles),
+  rating, title, notes, `prep_file`, `game_sets` (explicit corpus keys, so a rename does not orphan games),
+  `studies` (path + optional chapter), timestamps, and the MCP tooling's `lookup` report (status, confirmed
+  accounts, candidates with evidence, OTB identity, next steps), which the app keeps unread; and
   `tournaments/<id>.json` (`chess-auto-prep/tournament@1`) — name, date, rounds, `study`, entries of person
   id, rating, `pairing_prob`, `likely_round`, `prepared`. Files are rewritten atomically per edit; an id is
   minted once and survives a rename.
@@ -141,7 +143,9 @@ section per opponent with facts, notes and each prep chapter's movetext (`(no mo
   named after the group; Study, Trainer and PGN Viewer read the same files, and books come from Tactics.
 - Fetched: chess.com monthly archives and their `/pgn`, the Lichess user-games stream, the US Chess ratings
   API (`ratings-api.uschess.org/api/v1`, unauthenticated, nothing cached). The pasted opponents JSON is
-  what the MCP tooling writes; it never reads these files.
+  what the MCP tooling writes; `people_populate` / `people_upsert` also write `people.json` and
+  a group file directly (`docs/OPPONENT_PREP.md`). A v2 directory should show each person's lookup status and
+  candidates, so an agent-filled field needs no typing and an unconfirmed account is one click from use.
 
 ## Keep / Change / Drop
 Keep — Subtitle and colour toggle

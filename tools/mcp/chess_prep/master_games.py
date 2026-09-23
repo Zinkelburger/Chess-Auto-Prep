@@ -185,6 +185,96 @@ class MasterGamesDb:
         ).fetchall()
         return [_game_dict(r, self._movetext) for r in rows]
 
+    def games_by_fide(self, fide_id: int, limit: int = 50) -> list[dict]:
+        """Every game under one FIDE ID, whatever spelling TWIC used."""
+        rows = self._conn.execute(
+            "SELECT * FROM games WHERE white_fide = ? OR black_fide = ?"
+            " ORDER BY date DESC LIMIT ?",
+            (fide_id, fide_id, limit),
+        ).fetchall()
+        return [_game_dict(r, self._movetext) for r in rows]
+
+    def find_players(self, spellings: list[str]) -> list[dict]:
+        """TWIC identities that any of [spellings] plausibly names.
+
+        Scans the names sharing a surname's first two letters (indexed), then
+        keeps those within the surname edit cap and with a compatible given
+        name, so `Denys Shmelov` finds `Shmeliov,D`. Grouped by FIDE ID when
+        TWIC has one — the key that survives every respelling — with the
+        names seen under it, game count, last date and latest Elo.
+        """
+        from .names import MATCH_GRADES, name_match, surname_candidates
+
+        prefixes = sorted(
+            {s[:2] for name in spellings for s in surname_candidates(name) if len(s) >= 2}
+        )
+        seen: dict[tuple[str, int | None], dict] = {}
+        for prefix in prefixes:
+            like = f"{prefix}%"
+            for side in ("white", "black"):
+                rows = self._conn.execute(
+                    f"SELECT {side} AS name, {side}_fide AS fide, COUNT(*) AS n,"
+                    f" MAX(date) AS last, MIN(date) AS first FROM games"
+                    f" WHERE {side} LIKE ? COLLATE NOCASE GROUP BY 1, 2",
+                    (like,),
+                ).fetchall()
+                for r in rows:
+                    grades = [g for q in spellings if (g := name_match(q, r["name"]))]
+                    if not grades:
+                        continue
+                    grade = min(grades, key=MATCH_GRADES.index)
+                    key = (r["name"], r["fide"] or None)
+                    row = seen.setdefault(
+                        key, {"name": r["name"], "fide": r["fide"] or None,
+                              "games": 0, "first": r["first"], "last": r["last"],
+                              "match": grade}
+                    )
+                    row["games"] += r["n"]
+                    row["first"] = min(row["first"], r["first"])
+                    row["last"] = max(row["last"], r["last"])
+
+        grouped: dict[object, dict] = {}
+        for (name, fide), row in seen.items():
+            key = fide if fide else f"name:{name}"
+            g = grouped.setdefault(
+                key, {"fide_id": fide, "match": row["match"], "names": [],
+                      "games": 0, "first_date": row["first"],
+                      "last_date": row["last"]}
+            )
+            if MATCH_GRADES.index(row["match"]) < MATCH_GRADES.index(g["match"]):
+                g["match"] = row["match"]
+            g["names"].append(name)
+            g["games"] += row["games"]
+            g["first_date"] = min(g["first_date"], row["first"])
+            g["last_date"] = max(g["last_date"], row["last"])
+        out = sorted(
+            grouped.values(),
+            key=lambda g: (MATCH_GRADES.index(g["match"]), -g["games"], g["names"][0]),
+        )
+        for g in out:
+            g["latest_elo"] = self._latest_elo(g)
+        return out
+
+    def _latest_elo(self, identity: dict) -> int | None:
+        if identity["fide_id"]:
+            where, params = "white_fide = ? OR black_fide = ?", (identity["fide_id"],) * 2
+        else:
+            name = identity["names"][0]
+            where, params = "white = ? OR black = ?", (name, name)
+        r = self._conn.execute(
+            f"SELECT white_fide, white, white_elo, black_elo FROM games"
+            f" WHERE {where} ORDER BY date DESC LIMIT 1",
+            params,
+        ).fetchone()
+        if r is None:
+            return None
+        is_white = (
+            r["white_fide"] == identity["fide_id"]
+            if identity["fide_id"]
+            else r["white"] == identity["names"][0]
+        )
+        return r["white_elo"] if is_white else r["black_elo"]
+
 
 def _game_dict(r: sqlite3.Row, movetext: Any) -> dict:
     d = {k: r[k] for k in r.keys()}
@@ -333,14 +423,56 @@ def register_master_games_tools(registry: Any) -> None:
     def master_games(args: dict) -> dict:
         db = _db(args)
         name = (args.get("player") or "").strip()
-        if not name:
-            raise ToolError("Provide player (surname, or 'Surname,Initials').")
-        games = db.games_by_player(name, int(args.get("limit") or 30))
+        fide = args.get("fide_id")
+        limit = int(args.get("limit") or 30)
+        if fide not in (None, ""):
+            games = db.games_by_fide(int(fide), limit)
+            name = name or f"FIDE {fide}"
+        elif name:
+            games = db.games_by_player(name, limit)
+            if not games:
+                # TWIC writes `Surname,Given`, `Surname,G` or, for Chinese
+                # names, `Surname Given`; try each before giving up.
+                from .names import twic_forms
+
+                for form in twic_forms(name):
+                    games = db.games_by_player(form, limit)
+                    if games:
+                        name = form
+                        break
+        else:
+            raise ToolError("Provide player (a name in any order) or fide_id.")
         brief = [
             {k: g[k] for k in ("id", "white", "black", "result", "date", "event", "eco")}
             for g in games
         ]
-        return {"player": name, "count": len(brief), "games": brief}
+        out: dict = {"player": name, "count": len(brief), "games": brief}
+        if not brief and not fide:
+            out["next_step"] = (
+                "No game under that spelling. master_player_search finds "
+                "respellings (Shmelov → Shmeliov) and the FIDE ID to use."
+            )
+        return out
+
+    def master_player_search(args: dict) -> dict:
+        db = _db(args)
+        spellings = [str(args.get("name") or "").strip()]
+        spellings += [str(a).strip() for a in args.get("aliases") or []]
+        spellings = [s for s in spellings if s]
+        if not spellings:
+            raise ToolError("Provide name (and optionally aliases).")
+        found = db.find_players(spellings)
+        return {
+            "spellings": spellings,
+            "count": len(found),
+            "identities": found[: int(args.get("limit") or 10)],
+            "note": (
+                "One row per FIDE ID (names without one are listed alone). "
+                "A surname within one or two letters and a matching initial "
+                "can still be somebody else — compare latest_elo and dates "
+                "with what you know. master_games {fide_id} lists the games."
+            ),
+        }
 
     registry._add(
         "master_status",
@@ -382,15 +514,40 @@ def register_master_games_tools(registry: Any) -> None:
     )
     registry._add(
         "master_games",
-        "Recent master games of a player (surname prefix match on either "
-        "colour), newest first.",
+        "Recent master games of a player, newest first: by FIDE ID (every "
+        "spelling at once), or by name — a surname prefix on either colour, "
+        "then the forms TWIC uses (`Surname,Given`, `Surname,G`, `Surname "
+        "Given`). A miss suggests master_player_search for respellings.",
         _obj(
             {
-                "player": _s("Surname, or 'Surname,Initials' as TWIC writes it"),
+                "player": _s("Name in any order, or 'Surname,Initials' as TWIC writes it"),
+                "fide_id": _i("FIDE ID; overrides player and catches every spelling"),
                 "limit": _i("Max games (default 30)"),
                 "db": _s("Path to master_games.db (default: the app's)"),
             },
-            ["player"],
         ),
         master_games,
+    )
+    registry._add(
+        "master_player_search",
+        "Find a player in the master-games database under any spelling: "
+        "`Denys Shmelov` finds `Shmeliov,D`, `Jianchao Zhou` finds `Zhou "
+        "Jianchao`. Surnames may differ by one letter (two from eight "
+        "letters) and given names must share an initial. Returns one row per "
+        "FIDE ID with the names used, game count, date range and latest Elo "
+        "— pass the fide_id to master_games. Read-only, indexed, instant.",
+        _obj(
+            {
+                "name": _s("The player's name, any order"),
+                "aliases": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Other known spellings (Denis Shmeliov)",
+                },
+                "limit": _i("Max identities (default 10)"),
+                "db": _s("Path to master_games.db (default: the app's)"),
+            },
+            ["name"],
+        ),
+        master_player_search,
     )

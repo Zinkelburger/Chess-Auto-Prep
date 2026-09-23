@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:chess_auto_prep/features/opponents/models/person_record.dart';
@@ -71,6 +72,39 @@ void main() {
       expect(store.searchPeople('janed').map((p) => p.name), ['Jane Doe']);
       expect(store.searchPeople('jane roe'), isEmpty);
       expect(store.searchPeople('').length, 2);
+    });
+
+    test('aliases find a person and survive a save with lookup data', () async {
+      final storage = MemoryOpponentStorage()
+        ..people = jsonEncode({
+          'format': kPeopleFormat,
+          'people': [
+            {
+              'id': 'p1',
+              'name': 'Denys Shmelov',
+              'aliases': ['Denis Shmeliov'],
+              'fide_id': 14115433,
+              'lookup': {'status': 'otb_only', 'games': 57},
+              'game_sets': <String>[],
+              'studies': <Object>[],
+            },
+          ],
+        });
+      final aliased = OpponentStore(storage);
+      await aliased.ensureLoaded();
+      final denys = aliased.person('p1')!;
+      expect(denys.aliases, ['Denis Shmeliov']);
+      expect(denys.fideId, 14115433);
+      expect(aliased.matchPerson(name: 'denis shmeliov')?.id, 'p1');
+      expect(aliased.searchPeople('shmeliov').single.id, 'p1');
+
+      await aliased.savePerson(denys.copyWith(notes: 'Plays the Najdorf'));
+      final saved = jsonDecode(storage.people!) as Map<String, dynamic>;
+      final row = (saved['people'] as List).single as Map<String, dynamic>;
+      expect(row['lookup'], {'status': 'otb_only', 'games': 57});
+      expect(row['aliases'], ['Denis Shmeliov']);
+      expect(row['fide_id'], 14115433);
+      expect(row['notes'], 'Plays the Najdorf');
     });
 
     test('tournaments carry entries and drop a deleted person', () async {

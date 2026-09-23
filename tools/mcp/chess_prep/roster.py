@@ -159,6 +159,9 @@ class RosterEntry:
     #: Output of the last `pairing_simulate`, or None: P(face) split by colour
     #: and round. Kept on the entry so an export can carry it.
     pairing: dict[str, Any] | None = None
+    #: Other spellings of the name (`Denis Shmeliov` for `Denys Shmelov`),
+    #: searched by `player_lookup` and carried into the players directory.
+    aliases: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         out: dict[str, Any] = {"id": self.id, "name": self.name}
@@ -182,6 +185,8 @@ class RosterEntry:
             out["withdrawn"] = True
         if self.pairing:
             out["pairing"] = self.pairing
+        if self.aliases:
+            out["aliases"] = list(self.aliases)
         return out
 
     @classmethod
@@ -203,6 +208,7 @@ class RosterEntry:
             half_point_byes=list(data.get("half_point_byes", [])),
             withdrawn=bool(data.get("withdrawn", False)),
             pairing=data.get("pairing"),
+            aliases=[str(a) for a in data.get("aliases") or []],
         )
 
     @property

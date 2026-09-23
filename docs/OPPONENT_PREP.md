@@ -34,6 +34,12 @@ claude mcp add chess-prep -- python3 /abs/path/to/tools/mcp/chess_prep/__main__.
 | `pairing_simulate` | Monte Carlo → P(face) per entrant, by colour and round |
 | `opponents_export` | Write `opponents.json` for Player Analysis |
 | `roster_export` | The field as CSV, provenance included |
+| `player_lookup` | One person through every source in a fixed order; status, accounts, scored candidates, OTB identity, next steps. Writes nothing |
+| `people_populate` | The whole roster into the app's players directory, plus a group for the event |
+| `people_list` / `people_get` | Read the players directory (aliases, IDs, accounts, lookup status) |
+| `people_upsert` | Add or merge one person; web finds go in as candidates with evidence |
+| `people_confirm` | Promote an approved candidate to an account the app downloads from |
+| `master_player_search` | A player in the master-games database under any spelling, grouped by FIDE ID |
 | `pgn_open` | Load a PGN (course/repertoire/games) as a FEN-keyed opening tree |
 | `pgn_position` | Book moves at a FEN, plus one-ply transpositions into book |
 | `pgn_walk` | Ply-by-ply: in-book / transposition / novelty, with replies |
@@ -96,6 +102,53 @@ chessdb_query {moves: "1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. d4 exd4 5. e5 Ng4 6. O-
 
 `pgn_eval` and the mistake half of `pgn_audit` need a Stockfish binary (`STOCKFISH` or on `PATH`); `chessdb_query` and the reply-gap half of `pgn_audit` need only the network.
 Chessable `Z0` dummy mainlines are promoted the same way as in the app.
+
+### Filling the players directory
+
+The agent's hand-off is the app's own directory, `Documents/opponents/`
+(`people.json` and `tournaments/<id>.json`), so nobody types the field in:
+
+```
+roster_import    {text: "<pasted entry list>", event_name: "Fall Open"}
+roster_update    {player_id: "13433622", aliases: ["Denis Shmeliov"]}
+people_populate  {}                     # → summary: account / candidates / otb_only / not_found
+people_upsert    {name: "Shea Winter", candidates: [{site: "lichess", username: "…", evidence: "<quote>"}]}
+people_confirm   {person_id, site: "chesscom", username: "…"}   # only after the user says yes
+```
+
+`player_lookup` (and so `people_populate`) asks, in order: the players
+directory already on disk; the bundled USCF → chess.com directory; the US
+Chess API, whose spelling of the name (`Will Schiminger`) becomes an alias and
+which says whether the player was ever online-rated; the TWIC master-games
+database under every spelling; and a probe of about eight usernames built from
+each spelling on chess.com and Lichess (one Lichess request covers them all).
+
+**Spellings.** A person row carries `aliases`, and every search takes all of
+them. Names match when the surnames are within an edit cap (none under five
+letters, so Zhou is never Zhu; one to seven letters; two from eight, so
+Shmelov finds Shmeliov) and the given names agree: exactly, closely
+(`Denys`/`Denis`), or by an initial when one side only has an initial
+(`Shmeliov,D`). Two-part names are also read surname-first (`Zhou
+Jianchao`), and then the given name must agree in full. TWIC rows are grouped
+by FIDE ID, which catches every later spelling; a TWIC identity is taken only
+when one fits at the best match grade and its latest Elo is within 300 of the
+known rating. Otherwise the rows are listed as ambiguous.
+
+**Trust.** `chesscom` and `lichess` on a person are the accounts the app
+downloads games from. Only the directory's USCF-event match, an account the
+user confirmed on the roster, or `people_confirm` writes them. A probed
+username counts only when its profile's real name, title or listed rating
+agrees; closed accounts and bare handle matches are listed as rejected. Those
+finds, and anything found by web search, wait in the row's `lookup` block
+(`status`, `confirmed`, `candidates` with evidence, `otb`, `next_steps`) until
+the user approves one. Several accounts per person are normal; each confirm
+adds one. A merge fills blanks and unions lists; it never replaces a name,
+rating, note or account the user typed (a different name becomes an alias).
+
+The app keeps `aliases`, `fide_id` and any key it does not model
+(`PersonRecord.extra`) when it saves. It loads the directory once per run, so
+restart it to see new rows, and do not edit players in an app that was open
+during the write: its next save would replace the file.
 
 ### Finding a chess.com account from rating clues
 
