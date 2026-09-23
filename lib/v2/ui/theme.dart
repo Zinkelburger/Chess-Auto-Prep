@@ -511,6 +511,7 @@ const labReservePiece = 30.0;
 
 /// Each board's own move list: a few moves tall, then it scrolls.
 const labMoveListHeight = 80.0;
+const labMoveRowHeight = 22.0;
 const labMoveNumberWidth = 34.0;
 
 /// The label column of the right panel's rows (`Our team`, `Time`).

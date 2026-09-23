@@ -422,7 +422,9 @@ extension MatchScoreText on MatchScore {
   String get text {
     if (played == 0) return 'No games yet';
     final whole = points.floor();
-    return '${points - whole >= 0.5 ? '$whole½' : '$whole'}/$played';
+    final half = points - whole >= 0.5;
+    final written = half ? (whole == 0 ? '½' : '$whole½') : '$whole';
+    return '$written/$played';
   }
 
   /// A conservative 95% range for the share of the points (Hoeffding): the

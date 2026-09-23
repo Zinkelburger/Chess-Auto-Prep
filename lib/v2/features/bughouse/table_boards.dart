@@ -436,11 +436,43 @@ class BoardMoves extends StatelessWidget {
   );
 }
 
-class _MoveRows extends StatelessWidget {
+/// The move list, kept scrolled so the current move is in view.
+class _MoveRows extends StatefulWidget {
   const _MoveRows({required this.lab, required this.board});
 
   final BughouseLab lab;
   final BoardNumber board;
+
+  @override
+  State<_MoveRows> createState() => _MoveRowsState();
+}
+
+class _MoveRowsState extends State<_MoveRows> {
+  final _scroll = ScrollController();
+
+  BughouseLab get lab => widget.lab;
+  BoardNumber get board => widget.board;
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  /// After the frame, the least scroll that shows the row of the current
+  /// move.
+  void _reveal(int row) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scroll.hasClients) return;
+      final position = _scroll.position;
+      final top = row * labMoveRowHeight;
+      final bottom = top + labMoveRowHeight - position.viewportDimension;
+      final offset = position.pixels.clamp(bottom, top);
+      if (offset != position.pixels) {
+        _scroll.jumpTo(offset.clamp(0, position.maxScrollExtent));
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -457,8 +489,16 @@ class _MoveRows extends StatelessWidget {
     }
     final rows = _pairs(moves);
     final upto = lab.line.upto(board);
+    _reveal(
+      rows
+          .indexWhere(
+            (row) => [row.white, row.black].any((h) => h?.index == upto - 1),
+          )
+          .clamp(0, rows.length - 1),
+    );
     return ListView.builder(
-      reverse: false,
+      controller: _scroll,
+      itemExtent: labMoveRowHeight,
       itemCount: rows.length,
       itemBuilder: (context, i) => Row(
         children: [

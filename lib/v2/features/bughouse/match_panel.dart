@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../chess/bughouse/match.dart';
+import '../../chess/bughouse/table.dart';
 import '../../ui/confirm_dialog.dart';
 import '../../ui/theme.dart';
 import 'bughouse_lab.dart';
@@ -169,6 +170,15 @@ class _Chosen extends StatelessWidget {
     ].join(' · ');
   }
 
+  /// The line the match asks about, or where it starts.
+  String get _opening {
+    final config = match.config;
+    if (config.openingLabel.isNotEmpty) return config.openingLabel;
+    return config.startDualFen == TablePosition.initial.dualFen
+        ? 'From the start'
+        : config.startDualFen;
+  }
+
   Future<void> _delete(BuildContext context) async {
     final sure = await confirmAction(
       context,
@@ -193,9 +203,7 @@ class _Chosen extends StatelessWidget {
           children: [
             Expanded(
               child: Text(
-                match.config.openingLabel.isEmpty
-                    ? match.config.startDualFen
-                    : match.config.openingLabel,
+                _opening,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: muted,

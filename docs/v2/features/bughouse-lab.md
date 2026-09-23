@@ -47,7 +47,15 @@ the left, the question and the tables on the right.
   our team (average rating and unfinished games in the tooltip). Empty: `No archived game reached this
   position.`, `Past the archive, which is indexed to {plies} plies.`, or `No continuations meet the archive
   minimum of {n} games, or this is the end of the indexed line.`
-- **Engine tournament panel** — not built (see Decisions).
+- **Tables | Matches** — a switch at the top of the right-hand side; Matches puts the lab's matches where
+  the chips and tables were.
+- **Matches** — `New match` (while one runs: `Playing game 4 of 10`, `Follow the game being played`,
+  `Stop`); the history, four rows tall, newest first, each with its score and state (`5½/10 · Completed`);
+  then the match chosen: `White on board 1 scored 5½/10 (55% ± 27) · 5W 1D 4L`, what was left out (`1
+  unfinished, not counted`, drawn at the move limit or by both teams sitting), the opening with `Show`,
+  `Resume` for a stopped or failed match with games still to play, `Delete`; and its games, `#`, `White on
+  board 1`, `Black on board 1`, result and ending. Empty: `No matches yet. Set a position up on the boards,
+  then play it out.`
 
 ## Actions
 **Play a move or a drop** — on a board, a table row or an archive row → it joins that board's list after
@@ -72,6 +80,19 @@ team for the zero → the result above the tables; `Stop` keeps what was found a
 new position, clock or question throws the answer away → `{team} has no move here.`
 **Point at a row** — a table, analysis or archive row draws its move as an arrow (a drop: the piece faint on
 its square) on its board; leaving the row takes it away; clicking plays it.
+**Run a match** — `New match` → a dialog: name (the line on the boards), `The boards` / `A dual FEN`,
+`Games` (1–1000, default 10), `Hivemind A thinks (nodes)` and `Hivemind B thinks (nodes)` (50–1,000,000,
+default 800), `Draw after (half-moves)` (default 240), `Swap seats every other game` (on), the three `Time`
+chips → `Play 10 games`. A Hivemind of the match's own plays both teams, the teams asked in turn; for the
+first 8 joint actions a move is drawn from the engine's top 3 within 0.05 of Q of the best, seeded per
+game. A game ends when a team on move has no legal joint action (Hivemind's own rule), at the ply limit
+(a draw), after four joint actions in a row that sit on every board (a draw), or when the engine fails.
+Each game is written as it ends → `That is not a position yet — check the moves or the FEN.`, `Could not
+create the match directory: …`, `Could not save the match: …`, or the engine's reason.
+**Read a run** — click a history row; `Show` puts the opening on the boards, a game row puts that game on
+them at its end, `Follow the game being played` makes the boards follow the live game while the tables
+rest; `Stop` drops the game in flight so `Resume` plays it again; `Delete` asks, then moves the match to
+`.trash` → `Could not delete the match: …`
 **New game / Flip boards** — the start on both boards, the chips kept / the other colour at the bottom.
 **Actions menu** — Analyze, New game, Flip boards, Copy dual FEN, Paste dual FEN.
 
@@ -86,7 +107,12 @@ its square) on its board; leaving the row takes it away; clicking plays it.
   Keyed by FNV-1a of each board's four FEN fields with the reserve in `KQRBNP` order, joined by ` | `.
   Scores are A + B's; a book in the old seat lettering (board 1 Black `B`) is read with `B` and `C` swapped.
 - **FICS archive** — read-only `bughouse_book.db` beside it, same key; results team-relative.
-- **Nothing is written.** The lab is a scratchpad: leaving the mode keeps the table for the session,
+- **Matches** — one folder per match under `Documents/bughouse_matches/<id>/`: `match.json` (version 1, the
+  old app's keys: config with `participants`, `timeStance` ahead/level/behind, `variety`, `seed`; every game
+  with its board-digit UCI moves `1e2e4`, `2P@f7`) and `games.bpgn` (four seat tags, `SetUpDualFEN` for a
+  set-up start, movetext `1A. e4 1B. d4 1a. e5` in the order played). Both apps list and read the same
+  folders; a run either app left `running` reads as stopped. Deleting moves the folder to `.trash`.
+- **Nothing else is written.** The lab is a scratchpad: leaving the mode keeps the table for the session,
   quitting loses it.
 
 ## Keep / Change / Drop
@@ -101,10 +127,15 @@ Keep — Read the score (measured, or assumed when a team has no move; no carrie
 Keep — FICS archive (a toggle under the tables)
 Keep — Point at a row, Play a move or a drop, Step a board, Set a position
 Drop — Score header, Engine settings tab, editable clocks, Use the board clocks, Compare clock scenarios
-Keep — Engine tournament panel (not built yet)
+Keep — Engine tournament panel, as Matches behind the Tables | Matches switch (Change: no crosstable or
+settings block; `A line` start dropped — play it on the boards; stop drops the game in flight; Resume added)
+Keep — Run a match, Read a run
 
 ## Decisions (2026-09-23, made without the owner)
-- The lab stays a scratchpad; nothing is saved but tournament games (tournaments not built yet).
+- The lab stays a scratchpad; nothing is saved but match games.
+- Matches stay inside the lab, on a Hivemind of their own so the tables keep theirs; same folders and
+  format as the old app. `Stop` drops the game in flight rather than keeping it unfinished, so `Resume`
+  (new) replays it; seeds are per game so a resumed match samples as it would have.
 - The desktop lab reads the precomputed Hivemind book, and searches live when the position or clock case is
   not in it. It never writes to the book.
 - The FICS archive stays, shut by default, when the file is on this machine.

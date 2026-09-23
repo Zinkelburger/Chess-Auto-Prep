@@ -51,6 +51,10 @@ void main() {
     expect(score.text, '1½/2');
     expect((score.wins, score.draws, score.adjudicated), (1, 1, 1));
     expect(score.margin, greaterThan(0));
+    final drawn = StoredMatch.fromJson(
+      oldMatch()..['games'] = [(oldMatch()['games']! as List).last],
+    );
+    expect(drawn.openingScore.text, '½/1');
   });
 
   test('a game replays onto the boards as far as it plays', () {
