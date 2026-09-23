@@ -1,20 +1,8 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
 
-import 'package:path/path.dart' as p;
-
-import '../chess/generation/tree_wire_v4.dart' show treeWireVersion;
-import '../diagnostics/log.dart';
 import '../engines/engine_supervisor.dart';
 import '../engines/fixed_depth.dart';
 import '../features/library/library.dart';
-import '../net/lichess_explorer.dart';
-import '../storage/atomic_write.dart';
-import '../storage/chapter_files.dart';
-import '../storage/eval_cache.dart';
-import '../storage/lichess_token.dart';
-import '../storage/master_book.dart';
 import '../workspace/engine_analysis.dart';
 import '../workspace/explorer.dart';
 import '../workspace/explorer_databases.dart';
@@ -28,25 +16,36 @@ import '../workspace/repertoire_shelf.dart';
 import '../workspace/repertoire_tree.dart';
 import '../workspace/reply_model.dart';
 import '../workspace/workspace.dart';
-import 'basics.dart';
+import '../workspace/document_saver.dart';
+import '../workspace/document_session.dart';
+import 'environment.dart';
 
-/// Builds the [Workspace] over the [Basics] and keeps its owners in step
+/// Builds the [Workspace] over the [AppEnvironment] and keeps its owners in step
 /// with the rest of the app: the engine follows the settings, and a change
 /// to the repertoire files makes what was read from them be read again.
 final class WorkspaceWiring {
-  WorkspaceWiring(this._basics, this._library) {
+  WorkspaceWiring(
+    this._env, {
+    required DocumentSession session,
+    required DocumentSaver saver,
+    required Library library,
+  }) : _session = session,
+       _saver = saver,
+       _library = library {
     _library.addListener(_answers.forget);
     _library.addListener(_tree.forget);
     _fill.addListener(_listTheDraft);
   }
 
-  final Basics _basics;
+  final AppEnvironment _env;
+  final DocumentSession _session;
+  final DocumentSaver _saver;
   final Library _library;
 
   late final workspace = Workspace(
-    session: _basics.session,
-    saver: _basics.saver,
-    settings: _basics.settings,
+    session: _session,
+    saver: _saver,
+    settings: _env.settings,
     analysis: _analysis,
     explorer: _explorer,
     games: _games,
@@ -58,68 +57,61 @@ final class WorkspaceWiring {
   );
 
   late final _analysis = EngineAnalysis(
-    _basics.session,
-    _basics.launchEngine,
-    multiPv: _basics.settings.value.engineLines,
+    _session,
+    _env.startEngine,
+    multiPv: _env.settings.value.engineLines,
     elsewhere: _tree.board,
   );
 
-  /// The old app's master database, in the same support folder, read as it
-  /// is: TWIC is listed when the file is there.
-  late final _book = SqliteMasterBook(
-    p.join(_basics.support.path, 'master_games.db'),
-  );
   late final _databases = ExplorerDatabases(
-    lichess: LichessExplorerApi(_basics.client, token: readLichessToken),
-    book: _book,
+    lichess: _env.lichessExplorer,
+    book: _env.masterBook,
   );
   late final _explorer = Explorer(
-    session: _basics.session,
-    settings: _basics.settings,
+    session: _session,
+    settings: _env.settings,
     databases: _databases,
+    debounce: _env.explorerDelay,
   );
   late final _games = GameFetcher(
     databases: _databases,
-    documents: _basics.store,
-    collections: _basics.collections,
+    documents: _env.store,
+    collections: _env.folders.collections,
   );
 
   late final _answers = RepertoireAnswers(
-    files: _basics.chapterFiles,
-    documents: _basics.store,
+    files: _env.chapterFiles,
+    documents: _env.store,
   );
   late final _replyModel = ReplyModel(
-    policy: _basics.maia,
-    settings: _basics.settings,
+    policy: _env.maia,
+    settings: _env.settings,
   );
   late final _gaps = GapHunt(
-    session: _basics.session,
+    session: _session,
     model: _replyModel,
-    settings: _basics.settings,
+    settings: _env.settings,
     answers: _answers,
   );
   late final _replies = Replies(
-    session: _basics.session,
+    session: _session,
     model: _replyModel,
-    settings: _basics.settings,
+    settings: _env.settings,
     gaps: _gaps,
   );
 
   late final _shelf = RepertoireShelf(
-    files: _basics.chapterFiles,
-    documents: _basics.store,
+    files: _env.chapterFiles,
+    documents: _env.store,
   );
-  late final _tree = RepertoireTree(session: _basics.session, shelf: _shelf);
+  late final _tree = RepertoireTree(session: _session, shelf: _shelf);
 
-  /// The engine's verdicts, shared with the old app, opened the first time
-  /// a fill needs them.
-  late final _evalCache = EvalCacheOnDemand(_basics.support);
   late final _fill = FillGaps(
-    session: _basics.session,
+    session: _session,
     analysis: _analysis,
-    documents: _basics.store,
+    documents: _env.store,
     tools: _fillTools,
-    keepTree: _keepTree,
+    keepTree: _env.keepTree,
   );
 
   /// A second Stockfish for the fill, with the pane's threads and table:
@@ -127,42 +119,27 @@ final class WorkspaceWiring {
   /// shared, and quitting this one when the run ends costs nothing the pane
   /// has to rebuild.
   Future<FillToolsResult> _fillTools(FillRequest request) async {
-    return switch (await _basics.launchEngine()) {
+    return switch (await _env.startEngine()) {
       StartFailed(:final reason) => FillUnavailable(reason),
       Started(:final engine) => FillReady(
         evaluator: CachedEvaluator(
           FixedDepthEvaluator(engine, depth: fillEvalDepth),
-          _evalCache.cache,
+          _env.evalCache(),
           depth: fillEvalDepth,
         ),
-        policy: MaiaOpponent(_basics.maia, elo: request.elo),
+        policy: MaiaOpponent(_env.maia, elo: request.elo),
         release: engine.quit,
       ),
     };
   }
 
-  /// The tree beside its chapter, where the old app keeps its own:
-  /// `.cap-generation/<chapter>.pgn/<run>/tree.json`, create-only.
-  Future<void> _keepTree(ChapterRef chapter, String tree) async {
-    final stamp = DateTime.now().toIso8601String().replaceAll(':', '-');
-    final folder = p.join(
-      p.dirname(chapter.path),
-      '.cap-generation',
-      p.basename(chapter.path),
-      'v2-$stamp',
-    );
-    await Directory(folder).create(recursive: true);
-    await replaceFile(p.join(folder, 'tree.json'), utf8.encode(tree));
-    log.i('kept the v$treeWireVersion tree of ${chapter.path} in $folder');
-  }
-
   /// Starts the engine once the settings are read, and from then on has it
   /// follow them.
   Future<void> start() async {
-    final s = _basics.settings.value;
+    final s = _env.settings.value;
     _engineRunsWith = (s.engineCores, s.engineMemoryMb);
     _analysis.setLines(s.engineLines);
-    _basics.settings.addListener(_engineSettings);
+    _env.settings.addListener(_engineSettings);
     await _analysis.enable();
   }
 
@@ -172,7 +149,7 @@ final class WorkspaceWiring {
 
   /// More lines at once, or a new process for new threads or a new table.
   void _engineSettings() {
-    final s = _basics.settings.value;
+    final s = _env.settings.value;
     _analysis.setLines(s.engineLines);
     final wanted = (s.engineCores, s.engineMemoryMb);
     if (_engineRunsWith != wanted) {
@@ -189,18 +166,16 @@ final class WorkspaceWiring {
   }
 
   void dispose() {
-    _basics.settings.removeListener(_engineSettings);
+    _env.settings.removeListener(_engineSettings);
     _library.removeListener(_answers.forget);
     _library.removeListener(_tree.forget);
     _fill.removeListener(_listTheDraft);
     _fill.dispose();
-    _evalCache.close();
     _analysis.dispose();
     _replies.dispose();
     _gaps.dispose();
     _explorer.dispose();
     _tree.dispose();
     _games.dispose();
-    _book.close();
   }
 }

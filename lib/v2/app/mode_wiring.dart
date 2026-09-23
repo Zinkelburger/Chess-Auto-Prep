@@ -1,8 +1,3 @@
-import 'dart:io';
-import 'dart:math';
-
-import 'package:path/path.dart' as p;
-
 import '../chess/tactics/game_ids.dart' show GameSite;
 import '../features/library/chapter_outline.dart';
 import '../features/library/library.dart';
@@ -15,53 +10,47 @@ import '../features/tactics/set_additions.dart';
 import '../features/tactics/tactics_set.dart';
 import '../features/trainer/scope_reader.dart';
 import '../features/trainer/trainer.dart';
-import '../net/lichess_studies.dart';
-import '../net/recent_games.dart';
-import '../storage/chapter_files.dart';
-import '../storage/lichess_token.dart';
 import '../storage/my_accounts.dart';
 import '../storage/my_games_files.dart';
-import '../storage/pgn_file_import.dart';
-import '../storage/pgn_file_picker.dart';
-import '../storage/recent_pgn_files.dart';
-import '../storage/study_files.dart';
-import '../storage/training_store.dart';
 import '../workspace/workspace.dart';
-import 'basics.dart';
+import '../workspace/document_saver.dart';
+import '../workspace/document_session.dart';
+import 'environment.dart';
 import 'mode.dart';
 import 'workspace_requests.dart';
 
-/// The repertoires, the studies and the PGN Viewer over the real folders.
-DocumentModes wireDocumentModes(Basics b) {
+/// The repertoires, the studies and the PGN Viewer.
+DocumentModes wireDocumentModes(
+  AppEnvironment env,
+  DocumentSession session,
+  DocumentSaver saver,
+) {
   final library = Library(
-    files: b.chapterFiles,
-    documents: b.store,
-    saver: b.saver,
-    session: b.session,
-    picker: const NativePgnFilePicker(),
-    root: b.repertoires,
+    files: env.chapterFiles,
+    documents: env.store,
+    saver: saver,
+    session: session,
+    picker: env.libraryPicker,
+    root: env.folders.repertoires,
   );
   return DocumentModes(
     library: library,
-    outline: ChapterOutline(library: library, session: b.session),
+    outline: ChapterOutline(library: library, session: session),
     studies: Studies(
-      files: StudyDirectory(Directory(b.studies)),
-      documents: b.store,
-      session: b.session,
-      saver: b.saver,
-      lichess: LichessStudyApi(b.client, token: readLichessToken),
-      root: b.studies,
+      files: env.studyFiles,
+      documents: env.store,
+      session: session,
+      saver: saver,
+      lichess: env.lichessStudies,
+      root: env.folders.studies,
     ),
     viewer: PgnViewer(
-      recent: PreferencesRecentFiles(),
-      picker: const NativePgnFilePicker(),
-      import: NativePgnFileImport(
-        documents: b.documents.path,
-        into: b.collections,
-      ),
-      settings: b.settings,
-      session: b.session,
-      collections: b.collections,
+      recent: env.recentFiles,
+      picker: env.viewerPicker,
+      import: env.fileImport,
+      settings: env.settings,
+      session: session,
+      collections: env.folders.collections,
     ),
   );
 }
@@ -71,62 +60,56 @@ DocumentModes wireDocumentModes(Basics b) {
 /// username gives the accounts a new map.
 final class TrainingWiring {
   TrainingWiring(
-    Basics b, {
+    AppEnvironment env, {
     required Workspace workspace,
     required Library library,
     required WorkspaceRequests requests,
   }) : _library = library {
+    final session = workspace.session;
     final tactics = TacticsSet(
-      documents: b.store,
-      session: b.session,
-      settings: b.settings,
-      ref: ChapterRef.at(
-        p.join(b.documents.path, 'tactics_sets', 'Default.pgn'),
-      ),
+      documents: env.store,
+      session: session,
+      settings: env.settings,
+      ref: env.folders.tacticsSet,
+      now: env.now,
     );
     // The user's downloaded games, one file per account, shared with the
     // old app.
-    final games = GamesCache(
-      b.store,
-      folder: p.join(b.documents.path, 'games_library'),
-    );
-    final dice = Random();
+    games = GamesCache(env.store, folder: env.folders.gamesLibrary);
     modes = TrainingModes(
       tactics: tactics,
       puzzles: PuzzleTrainer(
         set: tactics,
-        session: b.session,
+        session: session,
         analysis: workspace.analysis,
-        settings: b.settings,
+        settings: env.settings,
         open: (set, game) async =>
             await requests.open(set, game: game) is RequestDone,
+        now: env.now,
       ),
       lines: Trainer(
-        session: b.session,
-        chapters: ScopeReader(files: b.chapterFiles, documents: b.store),
-        files: TrainingStore(b.documents),
+        session: session,
+        chapters: ScopeReader(files: env.chapterFiles, documents: env.store),
+        files: env.progressFiles,
         analysis: workspace.analysis,
-        time: (now: DateTime.now, jitter: () => dice.nextDouble() * 2 - 1),
+        time: (now: env.now, jitter: env.jitter),
       ),
       myGames: MyGames(
-        accounts: PreferencesAccounts(),
-        sites: [
-          LichessGamesApi(b.client, token: readLichessToken),
-          ChesscomGamesApi(b.client),
-        ],
+        accounts: env.accounts,
+        sites: env.gameSites,
         cache: games,
         set: SetAdditions(
-          documents: b.store,
-          session: b.session,
-          saver: b.saver,
+          documents: env.store,
+          session: session,
+          saver: workspace.saver,
           set: tactics,
-          older: () => readOlderAnalyzed(b.documents),
+          older: env.olderAnalyzed,
         ),
         // A Stockfish of its own, with the pane's threads and table.
-        engine: b.launchEngine,
+        engine: env.startEngine,
       ),
       book: GameBook(
-        accounts: PreferencesAccounts(),
+        accounts: env.accounts,
         cache: games,
         shelf: workspace.shelf,
       ),
@@ -137,6 +120,9 @@ final class TrainingWiring {
 
   final Library _library;
   late final TrainingModes modes;
+
+  /// The user's downloaded games, as the review and the book read them.
+  late final GamesCache games;
 
   /// The accounts as the book last heard of them.
   Map<GameSite, Account>? _accountsSeen;
