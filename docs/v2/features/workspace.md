@@ -17,7 +17,7 @@ the mode allows it, a move, comment or annotation written into the document.
 ## Screen
 Reached from every mode with a board: Builder, PGN Viewer, Study, Trainer, Tactics, Player analysis,
 Planner. Wide: board centre, move list and comment above the Engine / Database docks right; under
-960px those docks become tabs. v2 already has board, move list, engine pane (200 ms) and eval bar.
+960px those docks become tabs. v2 already has board, move list and engine pane (200 ms); it has no eval bar.
 
 - **Board** — one bundled SVG piece set, 2px permanent frame, pieces never animate so a pane resize
   cannot slide them. Coordinates are a Display preference (none / inside (default) / outside / every
@@ -28,8 +28,8 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
   highlight, no hover highlight, no premove.
 - **Arrows and circles** — right-drag; same square a circle, else an arrow. Green, Shift red, Alt
   blue, Ctrl yellow; the engine's threat arrow is red.
-- **Eval bar** — none in the old app; the only score is the engine gutter. (v2's is 12px left of the
-  board, filled from White's edge by expected score `1/(1+e^(-0.00368208·cp))`, flips with it.)
+- **Eval bar** — none in the old app; the only score is the engine gutter. v2 had one for a day and
+  removed it on 2026-09-21 (see below): the score lives in the engine gutter here too.
 - **Move list** — mono SAN, mainline and variations styled alike, depth shown by indent clamped
   at 3 levels. Runs break every 24 plies, at annotated moves and at branch points. Comments are
   prose inline in the flow, never a side pane; `[%…]` metrics get their own row. The reader caps the
@@ -73,7 +73,8 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
   repertoire file of the board's side plays (a repertoire of one file counts like any other),
   matched by position so transpositions meet: **Move** · **Lines** through it · **Goes on** (the
   biggest file's continuation) · **Found in** (a click opens that file there). Files are indexed
-  once and re-parsed only when their text changes; the open file is read live. While the tab is up
+  once and re-parsed only when their bytes change; each chapter of a course file is indexed from
+  its own games; the open file is read live. While the tab is up
   the board is a free board: a move the file does not play is shown on the board, never written,
   and the header reads `Off the file: …` with take-back (←) and back-to-the-file; the engine
   follows the free board. Moving in the file or leaving the tab ends it. Owner:
@@ -176,7 +177,7 @@ one king.").
   notation, show legal moves and engine on/off (default on).
 - **Explorer sources** — Lichess masters and player databases over HTTPS: 100 ms minimum gap, 3
   retries, 60/120/240 s backoff on 429, 250 ms leading-edge debounce, no request past ply 50 or after
-  3 empty answers going deeper; cached in memory only (2000 entries, no TTL, no disk). TWIC answers
+  3 empty answers going deeper down one line; cached in memory only (2000 entries, no TTL, no disk). TWIC answers
   from a local SQLite book with no network; ChessDB is a separate dock source over HTTP.
 - **Explorer offline** — decided: the Lichess database stays online-only and its cache stays in
   memory. With no connection the dock says `Could not reach the Lichess database — it needs a

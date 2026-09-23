@@ -71,6 +71,31 @@ void main() {
     }
   });
 
+  test('two launches during the first install share one install', () async {
+    // The lab starting its engine while a match start is still unpacking:
+    // each launch makes its own install.
+    final both = await Future.wait([
+      install.locate(),
+      HivemindInstall(
+        supportDirectory: support,
+        readAsset: bundle.read,
+      ).locate(),
+    ]);
+    expect(both, everyElement(isA<HivemindReady>()));
+    expect(
+      bundle.reads.where((asset) => asset.endsWith('.gz')),
+      hasLength(HivemindInstall.installedNames.length),
+      reason: 'each file unpacked once',
+    );
+    for (final name in HivemindInstall.installedNames) {
+      expect(await installed(name).readAsString(), 'contents of $name');
+    }
+    final left = await Directory(
+      p.join(support.path, 'bughouse'),
+    ).list().map((entry) => p.basename(entry.path)).toList();
+    expect(left.where((name) => name.endsWith('.part')), isEmpty);
+  });
+
   test('a sound install is checked, not written again', () async {
     await install.locate();
     bundle.reads.clear();

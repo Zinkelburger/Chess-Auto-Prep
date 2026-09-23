@@ -127,6 +127,7 @@ final class WorkspaceWiring {
     documents: _env.store,
     tools: _fillTools,
     keepTree: _env.keepTree,
+    clock: _env.now,
   );
 
   /// A second Stockfish for the fill, with the pane's threads and table:

@@ -39,6 +39,7 @@ DocumentModes wireDocumentModes(
     session: session,
     picker: env.libraryPicker,
     root: env.folders.repertoires,
+    now: env.now,
   );
   final filter = FileFilter(session);
   return DocumentModes(
@@ -117,6 +118,7 @@ final class TrainingWiring {
         ),
         // A Stockfish of its own, with the pane's threads and table.
         engine: env.startEngine,
+        now: env.now,
       ),
       book: GameBook(
         accounts: env.accounts,

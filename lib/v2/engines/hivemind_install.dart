@@ -80,7 +80,25 @@ final class HivemindInstall {
   /// The three files, by the names they are installed under.
   static List<String> get installedNames => [_binaryName, _runtimeName, _model];
 
-  Future<HivemindLocation> locate() async {
+  /// The look, and install if needed, in flight for each support folder.
+  ///
+  /// Every launch makes its own [HivemindInstall], and two launches during a
+  /// first install would write one partial file, one renaming it into place
+  /// while the other was still writing it. A launch that finds one in flight
+  /// shares its answer; another process names its partial files after its
+  /// own [pid].
+  static final _locating = <String, Future<HivemindLocation>>{};
+
+  Future<HivemindLocation> locate() {
+    final key = p.normalize(p.absolute(supportDirectory.path));
+    // `remove` hands back this same future, which the callback must not
+    // return: `whenComplete` would wait for it and never finish.
+    return _locating[key] ??= _locate().whenComplete(
+      () => _locating.remove(key)?.ignore(),
+    );
+  }
+
+  Future<HivemindLocation> _locate() async {
     final bytes = await readAsset('$_assets/manifest.json');
     if (bytes == null) {
       return const HivemindMissing('This build has no bughouse engine.');

@@ -418,9 +418,8 @@ final class MyGamesView extends ModeView {
   );
 
   /// The file of the book at [place], in the builder.
-  void _readBook(BookPlace place) => unawaited(
-    _requests.readInBuilder(ChapterRef.at(place.file.path), place.sans),
-  );
+  void _readBook(BookPlace place) =>
+      unawaited(_requests.readInBuilder(place.file.ref, place.sans));
 
   @override
   bool walk(int by) {

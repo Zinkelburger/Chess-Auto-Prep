@@ -207,6 +207,24 @@ void main() {
   );
 
   test(
+    'after the puzzle is put down, walking the set in another mode shows '
+    'its games as games until a puzzle is asked for',
+    () => sitting((async) {
+      begin(async);
+      w.trainer.putDown();
+      final seen = w.trainer.run!.seen.length;
+      w.session.showGame(1);
+      async.flushMicrotasks();
+      expect(w.trainer.up, isNull);
+      expect(w.session.shownTo, isNull, reason: 'nothing hidden in the viewer');
+      expect(w.trainer.run!.seen, hasLength(seen));
+      unawaited(w.trainer.show(w.tactics.at(0)!));
+      async.flushMicrotasks();
+      expect(w.trainer.up?.puzzle.index, 0);
+    }),
+  );
+
+  test(
     'a game of the set that is no puzzle takes the puzzle off the board, '
     'with the reply on its way',
     () => sitting(set: '$tacticsSet\n[Event "Default #6"]\n\n*\n', (async) {

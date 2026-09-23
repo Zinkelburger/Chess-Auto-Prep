@@ -39,7 +39,10 @@ const advanceDelay = Duration(seconds: 3);
 ///
 /// Whatever game of the set comes onto the board while a run is going —
 /// from the list, the next button, the arrow keys — is the puzzle; another
-/// document ends the puzzle on the board but not the run.
+/// document ends the puzzle on the board but not the run. Once the puzzle
+/// has been put down ([putDown]: another mode has the board), a game of the
+/// set arriving is just a game until the list, Play or next/previous asks
+/// for a puzzle again.
 final class PuzzleTrainer extends ChangeNotifier {
   PuzzleTrainer({
     required TacticsSet set,
@@ -68,6 +71,10 @@ final class PuzzleTrainer extends ChangeNotifier {
   PuzzleRun? _run;
   PuzzleUp? _up;
   Timer? _timer;
+
+  /// Set by [putDown] and cleared by the next puzzle asked for, so walking
+  /// the set's games in another mode does not put puzzles up behind it.
+  bool _parked = false;
   bool _disposed = false;
 
   /// The document and game the session had on the board when last heard,
@@ -142,6 +149,7 @@ final class PuzzleTrainer extends ChangeNotifier {
   /// board now, and nothing played on it is judged. A puzzle clicked in the
   /// list comes up in the same run.
   void putDown() {
+    _parked = true;
     if (_up == null) return;
     _cancelTimer();
     _up = null;
@@ -304,6 +312,7 @@ final class PuzzleTrainer extends ChangeNotifier {
   /// the set is open, through the window's door when it is not. The session
   /// says when it got there, and [_documentChanged] takes it from there.
   Future<void> _bringUp(Fen fen) async {
+    _parked = false;
     final puzzle = _set.puzzles.where((p) => p.fen == fen).firstOrNull;
     if (puzzle == null) return;
     if (_set.isOpen && _session.game != null) {
@@ -322,7 +331,7 @@ final class PuzzleTrainer extends ChangeNotifier {
     _showing = showing;
     final game = showing.game;
     final puzzle = _set.isOpen && game != null ? _set.at(game) : null;
-    if (puzzle != null && _run != null) return _putUp(puzzle);
+    if (puzzle != null && _run != null && !_parked) return _putUp(puzzle);
     if (_up == null) return;
     _cancelTimer();
     _up = null;

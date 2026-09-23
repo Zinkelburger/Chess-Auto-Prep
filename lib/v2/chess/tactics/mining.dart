@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:dartchess/dartchess.dart';
 
 import '../fen.dart';
+import '../generation/eval.dart' show winProbSlope;
 import '../pgn/game_text.dart';
 import '../pgn/game_tree.dart';
 import '../pv_text.dart';
@@ -35,7 +36,7 @@ final class Verdict {
 /// cp)) − 1` with the score held within ±1000 first, so a swing between two
 /// won positions (+8 to +15, +9 to a mate) is small rather than a blunder.
 double winningChance(int cp) =>
-    2 / (1 + math.exp(-0.00368208 * cp.clamp(-1000, 1000))) - 1;
+    2 / (1 + math.exp(-winProbSlope * cp.clamp(-1000, 1000))) - 1;
 
 /// How bad a move that took the mover's winning chance down by [drop] was,
 /// or null when it lost too little to count: 0.1 is an inaccuracy, 0.2 a

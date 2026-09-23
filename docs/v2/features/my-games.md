@@ -45,7 +45,7 @@ any of those files reaches, by any move order, so a transposition counts and a g
 and comes back is judged from where it last left. Fewer than two plies in the book is `another
 opening`, not a deviation. The move played from that last position is the verdict.
 **Open a game** — a row → the game on the board, flipped to the user's side, at the move that left
-the book (at the book's last move when it ended). ↑/↓ walk the list, newest first.
+the book (at the book's last move when it ended). ↑/↓ walk the list as the search leaves it, newest first.
 **Open a group** — an Openings row → its newest game, the same way.
 **Show the move** — back to that moment after walking the game.
 **Open in builder** — the file with the most lines through the position, in Repertoire builder, at
