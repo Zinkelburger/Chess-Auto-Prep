@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:chess_auto_prep/v2/chess/pgn/chapter.dart';
+import 'package:chess_auto_prep/v2/chess/pgn/chapter_sections.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/repertoire_import.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
@@ -295,6 +296,35 @@ void main() {
           chapter.lines,
           reason: '$name: ${chapter.title}',
         );
+      }
+    }
+  });
+
+  test('a course is one file: each line names its chapter and its id', () {
+    for (final name in ['chessable_course.pgn', 'lichess_study.pgn']) {
+      final read = imported(fixture(name));
+      final text = courseText(read, created: created);
+      final file = parseChapter(name: 'Course', text: text);
+      expect(file.lines, hasLength(read.lines), reason: name);
+      expect(
+        chapterSections(file.lines),
+        read.chapters.length == 1
+            ? [null]
+            : [for (final c in read.chapters) c.title.trim()],
+        reason: name,
+      );
+      expect(sectionsInText(text), chapterSections(file.lines), reason: name);
+      if (read.chapters.length > 1) {
+        expect(file.lines.every((l) => l.lineId != null), isTrue);
+        expect(file.side, read.side ?? Side.white);
+      }
+      // Each chapter of the file holds the lines its own file would have.
+      for (final chapter in read.chapters) {
+        final view = sectionView(
+          file,
+          read.chapters.length == 1 ? null : chapter.title.trim(),
+        );
+        expect(view.chapter.lines, hasLength(chapter.lines), reason: name);
       }
     }
   });

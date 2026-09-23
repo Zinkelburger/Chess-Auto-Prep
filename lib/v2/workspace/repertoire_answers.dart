@@ -1,6 +1,7 @@
 import 'package:dartchess/dartchess.dart' show Side;
 
 import '../chess/pgn/chapter.dart';
+import '../chess/pgn/chapter_sections.dart';
 import '../diagnostics/log.dart';
 import '../storage/chapter_files.dart';
 import '../storage/pgn_document_store.dart';
@@ -26,8 +27,8 @@ final class RepertoireAnswers {
   final ChapterFiles _files;
   final PgnDocumentStore _documents;
 
-  /// What each chapter file answers, by path, as last read.
-  final _read = <String, _Answered>{};
+  /// What each chapter answers, by chapter, as last read.
+  final _read = <ChapterRef, _Answered>{};
 
   /// Drops what was read; the next question reads the files again.
   void forget() => _read.clear();
@@ -43,9 +44,16 @@ final class RepertoireAnswers {
         .firstOrNull;
     if (folder == null) return const {};
     final answers = <String, String>{};
+    // A course file holds many chapters; it is read once for all of them.
+    final files = <String, Future<Chapter?>>{};
     for (final other in folder.chapters) {
-      if (other.path == chapter.path || other.heading.draft) continue;
-      final answered = _read[other.path] ??= await _answeredIn(other);
+      // By chapter, not by file: the other chapters of a course file are
+      // other chapters.
+      if (other == chapter || other.heading.draft) continue;
+      final answered = _read[other] ??= _answeredIn(
+        other,
+        await (files[other.path] ??= _file(other)),
+      );
       if (answered.side != side) continue;
       for (final position in answered.positions) {
         answers.putIfAbsent(position, () => other.name);
@@ -54,19 +62,24 @@ final class RepertoireAnswers {
     return answers;
   }
 
-  Future<_Answered> _answeredIn(ChapterRef ref) async {
+  _Answered _answeredIn(ChapterRef ref, Chapter? file) {
+    if (file == null) return _Answered.none;
+    final chapter = sectionView(file, ref.section).chapter;
+    return _Answered(
+      chapter.side,
+      answeredPositions(chapter.tree, chapter.side),
+    );
+  }
+
+  Future<Chapter?> _file(ChapterRef ref) async {
     switch (await _documents.open(ref)) {
       case Opened(:final text):
-        final chapter = await readChapter(name: ref.name, text: text);
-        return _Answered(
-          chapter.side,
-          answeredPositions(chapter.tree, chapter.side),
-        );
+        return readChapter(name: ref.fileName, text: text);
       case Absent():
-        return _Answered.none;
+        return null;
       case Unreadable(:final detail):
         log.w('read what ${ref.path} answers', detail);
-        return _Answered.none;
+        return null;
     }
   }
 }

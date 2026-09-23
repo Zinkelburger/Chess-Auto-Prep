@@ -21,8 +21,11 @@ import 'package:dartchess/dartchess.dart' show Side;
 import '../fen.dart';
 import 'chapter.dart';
 import 'chapter_grouping.dart';
+import 'chapter_line.dart';
+import 'chapter_sections.dart';
 import 'game_text.dart';
 import 'game_tree.dart';
+import 'line_id_pins.dart';
 import 'pgn_reader.dart';
 import 'repertoire_side.dart';
 
@@ -120,6 +123,37 @@ ImportRead readImport(String text, {required DateTime created}) {
   if (chapters.isEmpty) return const NothingToImport();
   return ImportedChapters(chapters: chapters, lines: lines, side: side);
 }
+
+/// [read]'s chapters as one course file: one heading, then every chapter's
+/// lines in order, each naming its chapter in `[ChapterName]` and carrying
+/// the `[LineID]` it is trained under, so no later edit or move can change
+/// it. A file of one chapter is that chapter's own text, untagged.
+///
+/// A line whose headers cannot take a tag — nothing this import writes —
+/// goes in as it was, and reads as the file's chapter of unnamed games.
+String courseText(ImportedChapters read, {required DateTime created}) {
+  if (read.chapters.length == 1) return read.chapters.single.text;
+  final lines = <ChapterLine>[];
+  for (final chapter in read.chapters) {
+    for (final line in parseChapter(name: '', text: chapter.text).lines) {
+      lines.add(withSection(line, chapter.title) ?? line);
+    }
+  }
+  final ids = trainedIds(lines);
+  final heading = StringBuffer();
+  if (read.side case final side?) {
+    heading.write('// Color: ${side == Side.white ? 'White' : 'Black'}\n');
+  }
+  heading.write('// Created on ${created.toString().split('.').first}\n\n');
+  return [
+    heading.toString(),
+    for (final (index, line) in lines.indexed)
+      '${_pinned(line, ids[index]).text}\n\n',
+  ].join().replaceFirst(RegExp(r'\n+$'), '\n');
+}
+
+ChapterLine _pinned(ChapterLine line, String? id) =>
+    id == null || line.lineId != null ? line : withIdHeader(line, id) ?? line;
 
 /// The `//` heading the old app writes, then the games. `// Chapter:` names
 /// the course chapter a file is, which the old app's readers group by.

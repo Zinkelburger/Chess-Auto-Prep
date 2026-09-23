@@ -35,6 +35,7 @@ final class Chapter {
     required this.tree,
     this.game,
     this.sideStated = true,
+    this.lineIds,
   });
 
   final String name;
@@ -56,6 +57,12 @@ final class Chapter {
   /// The one game of the file [tree] is, counting from zero, or null when
   /// every game from the same position is merged into it.
   final int? game;
+
+  /// The id each of [lines] is trained under, when the chapter is one part
+  /// of a file (a `SectionView`): an id depends on the game's place in the
+  /// file, which the chapter's own list no longer says. Null when the
+  /// chapter is its whole file and the ids follow from [lines].
+  final List<String?>? lineIds;
 
   /// The games [tree] is about: all of them, or the one [game] names.
   List<ChapterLine> get treeGames {
@@ -277,6 +284,19 @@ Chapter renamedChapter(Chapter chapter, String name) => Chapter(
   lines: chapter.lines,
   tree: chapter.tree,
   game: chapter.game,
+  lineIds: chapter.lineIds,
+);
+
+/// [chapter] trained under [ids], one for each of its lines.
+Chapter withLineIds(Chapter chapter, List<String?> ids) => Chapter(
+  name: chapter.name,
+  side: chapter.side,
+  sideStated: chapter.sideStated,
+  preamble: chapter.preamble,
+  lines: chapter.lines,
+  tree: chapter.tree,
+  game: chapter.game,
+  lineIds: List.unmodifiable(ids),
 );
 
 /// The exact text of the game [chapter] is showing, or null when it shows

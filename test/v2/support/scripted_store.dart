@@ -46,6 +46,11 @@ final class ScriptedDocumentStore implements PgnDocumentStore {
 
   final _waiting = <Completer<void>>[];
 
+  /// The file a ref names: every chapter of a course file is that one file
+  /// on disk, as the real store sees it.
+  DocumentRef _file(DocumentRef ref) =>
+      ref.section == null ? ref : DocumentRef(ref.path);
+
   int get waiting => _waiting.length;
 
   void releaseNext() => _waiting.removeAt(0).complete();
@@ -62,7 +67,7 @@ final class ScriptedDocumentStore implements PgnDocumentStore {
   @override
   Future<DocumentRead> open(DocumentRef ref) async {
     await _turn();
-    return documents[ref] ?? const Absent();
+    return documents[_file(ref)] ?? const Absent();
   }
 
   @override
@@ -70,9 +75,9 @@ final class ScriptedDocumentStore implements PgnDocumentStore {
     await _turn();
     final queued = _next(creates);
     if (queued != null) return queued;
-    if (documents.containsKey(ref)) return const Collision();
+    if (documents.containsKey(_file(ref))) return const Collision();
     final revision = scriptedRevision(text);
-    documents[ref] = Opened(text, revision);
+    documents[_file(ref)] = Opened(text, revision);
     return Created(revision);
   }
 
@@ -92,11 +97,11 @@ final class ScriptedDocumentStore implements PgnDocumentStore {
     }
     final queued = _next(saves);
     if (queued != null) return queued;
-    final before = documents[ref];
+    final before = documents[_file(ref)];
     if (before is! Opened) return const Conflict(null);
     if (before.revision != expected) return Conflict(before.revision);
     final committed = scriptedRevision(text);
-    documents[ref] = Opened(text, committed);
+    documents[_file(ref)] = Opened(text, committed);
     return Saved(
       Receipt(
         committed: committed,
@@ -126,7 +131,7 @@ final class ScriptedDocumentStore implements PgnDocumentStore {
     await _turn();
     final queued = _next(moves);
     if (queued != null) return queued;
-    final current = documents[ref];
+    final current = documents[_file(ref)];
     if (current is! Opened) return const Conflict(null);
     if (current.revision != expected) return Conflict(current.revision);
     if (documents.containsKey(destination)) return const Collision();
@@ -149,7 +154,7 @@ final class ScriptedDocumentStore implements PgnDocumentStore {
     for (final ref in inside) {
       final target = DocumentRef(p.join(to, p.relative(ref.path, from: from)));
       if (documents.containsKey(target)) return const FolderNameTaken();
-      moved[target] = documents[ref]!;
+      moved[target] = documents[_file(ref)]!;
     }
     inside.forEach(documents.remove);
     documents.addAll(moved);
@@ -164,10 +169,10 @@ final class ScriptedDocumentStore implements PgnDocumentStore {
     await _turn();
     final queued = _next(deletes);
     if (queued != null) return queued;
-    final current = documents[ref];
+    final current = documents[_file(ref)];
     if (current is! Opened) return const Conflict(null);
     if (current.revision != expected) return Conflict(current.revision);
-    deleted[ref] = current.text;
+    deleted[_file(ref)] = current.text;
     documents.remove(ref);
     return Deleted('${ref.path}.recovered', training: repoint);
   }

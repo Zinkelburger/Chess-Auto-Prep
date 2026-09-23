@@ -68,7 +68,7 @@ Future<LibraryFixture> openLibrary(
   );
   for (final folder in folders) {
     for (final chapter in folder.chapters) {
-      store.documents[chapter] = Opened(text, scriptedRevision(text));
+      store.documents[chapter.wholeFile] = Opened(text, scriptedRevision(text));
     }
   }
   final saver = DocumentSaver(store, delay: delay);
