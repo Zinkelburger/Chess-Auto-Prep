@@ -11,7 +11,9 @@ import 'document_session.dart';
 export '../chess/game_filter.dart';
 
 /// Which games of the open file pass the filter: the one filter both the
-/// PGN Viewer's game list and the explorer's `This file` read.
+/// PGN Viewer's game list and the explorer's `This file` read. It is also
+/// where `This file` learns what the open file's games are ([lines],
+/// [file]), so the two agree on which games the numbers name.
 ///
 /// The rules being typed ([filter]) apply a moment after the last change
 /// ([delay], the old viewer's 300 ms), so a list of ten thousand games is
@@ -41,6 +43,7 @@ final class FileFilter extends ChangeNotifier {
   List<bool>? _passes;
   int _kept = 0;
   final _values = <String, List<String>>{};
+  List<String>? _headerNames;
 
   /// The rules as they stand, being typed or applied.
   GameFilter get filter => _filter;
@@ -50,6 +53,12 @@ final class FileFilter extends ChangeNotifier {
 
   /// Whether some rule is narrowing the games.
   bool get narrowing => _passes != null;
+
+  /// The open file's games, as the filter last saw them.
+  List<ChapterLine> get lines => _lines;
+
+  /// The open file; null for the analysis board or nothing.
+  ChapterRef? get file => _file;
 
   /// How many games the file has.
   int get total => _lines.length;
@@ -98,14 +107,11 @@ final class FileFilter extends ChangeNotifier {
   );
 
   /// Every header name the file's games use, for the field box.
-  List<String> get fields => _values.putIfAbsent(
-    _fieldNames,
-    () => _sorted([
-      for (final line in _lines)
-        for (final tag in line.tags)
-          if (tag is PgnTag) tag.key,
-    ]),
-  );
+  List<String> get fields => _headerNames ??= _sorted([
+    for (final line in _lines)
+      for (final tag in line.tags)
+        if (tag is PgnTag) tag.key,
+  ]);
 
   void _apply() {
     _pending = null;
@@ -133,10 +139,11 @@ final class FileFilter extends ChangeNotifier {
     final lines = _session.chapter?.lines ?? const <ChapterLine>[];
     final file = _session.source;
     if (sameLines(lines, _lines) && file == _file) return;
-    final another = file != _file || file == null;
+    final another = !sameFile(file, _file);
     _lines = lines;
     _file = file;
     _values.clear();
+    _headerNames = null;
     if (another) {
       _pending?.cancel();
       _pending = null;
@@ -155,9 +162,11 @@ final class FileFilter extends ChangeNotifier {
   }
 }
 
-/// Where [FileFilter.fields] is kept among the values: no header has a
-/// name with a space in it.
-const _fieldNames = 'header names';
+/// Whether a document that was [was] and is now [now] is the same file —
+/// edited, read again or showing another of its games — rather than
+/// another file, a paste onto the analysis board or nothing. The board is
+/// never the same file twice: what is on it was replaced.
+bool sameFile(ChapterRef? now, ChapterRef? was) => now != null && now == was;
 
 /// [values] trimmed, without blanks, `?` or repeats, in order.
 List<String> _sorted(Iterable<String> values) => List.unmodifiable(

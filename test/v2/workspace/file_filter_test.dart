@@ -1,6 +1,8 @@
+import 'package:chess_auto_prep/v2/chess/pgn/analysis_board.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/workspace/file_filter.dart';
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -75,7 +77,7 @@ void main() {
     });
   });
 
-  test('pasting onto the board or closing the file clears the rules', () async {
+  test('closing the file clears the rules', () async {
     fixture = await viewerOver(threeGameFile);
     await fixture.open();
     fixture.filter.apply(byCarlsen);
@@ -83,6 +85,15 @@ void main() {
     fixture.session.closed();
     expect(fixture.filter.applied, GameFilter.none);
     expect(fixture.filter.narrowing, isFalse);
+  });
+
+  test('a paste onto the board clears the rules', () async {
+    fixture = await viewerOver(threeGameFile);
+    await fixture.open();
+    fixture.filter.apply(byCarlsen);
+    await fixture.session.showAnalysisBoard(analysisBoard(side: Side.white));
+    expect(fixture.filter.applied, GameFilter.none);
+    expect(fixture.filter.file, isNull);
   });
 
   test('switching games keeps the rules; the file edited is filtered '

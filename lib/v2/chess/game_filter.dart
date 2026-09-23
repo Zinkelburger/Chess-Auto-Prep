@@ -100,8 +100,8 @@ final class HeaderRule {
       FilterRule.excludes => !have.toLowerCase().contains(want.toLowerCase()),
       FilterRule.equals => have.toLowerCase() == want.toLowerCase(),
       FilterRule.regex => _pattern(want)?.hasMatch(have) ?? false,
-      FilterRule.atLeast => _ordered(have, want) >= 0,
-      FilterRule.atMost => _ordered(have, want) <= 0,
+      FilterRule.atLeast => !_unknown(have) && _ordered(have, want) >= 0,
+      FilterRule.atMost => !_unknown(have) && _ordered(have, want) <= 0,
     };
   }
 
@@ -132,14 +132,17 @@ RegExp? _pattern(String source) {
 
 final _patterns = <String, RegExp?>{};
 
-/// [a] against [b]: as numbers when both are, else as text. A header that
-/// is missing compares as empty text, which is before any date and no
-/// rating, so `≥ 2000` leaves out a game without a rating.
+/// Whether a header says nothing: empty, or `?` / `????.??.??` as PGN
+/// writes an unknown rating or date. Such a game fails both `≥` and `≤`:
+/// an unrated game is neither at least 2200 nor at most 1500.
+bool _unknown(String header) => header.isEmpty || header.startsWith('?');
+
+/// [a] against [b]: as numbers when both are, else as text, which orders
+/// `YYYY.MM.DD` dates.
 int _ordered(String a, String b) {
   final x = num.tryParse(a);
   final y = num.tryParse(b);
   if (x != null && y != null) return x.compareTo(y);
-  if (a.isEmpty) return -1;
   return a.compareTo(b);
 }
 

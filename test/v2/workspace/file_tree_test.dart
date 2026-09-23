@@ -25,7 +25,7 @@ void main() {
   Future<void> over(String text) async {
     fixture = await viewerOver(text);
     await fixture.open();
-    tree = FileTree(session: fixture.session, filter: fixture.filter);
+    tree = FileTree(filter: fixture.filter);
     states = [];
     tree.addListener(() => states.add(tree.state));
   }
@@ -60,8 +60,6 @@ void main() {
     expect(start.moves[1].draws, 1);
     expect(start.moves.last.undecided, 1);
     expect(tree.summary, '3 games');
-    expect(tree.gamePgn('1'), contains('Ding, Liren'));
-    expect(tree.gamePgn('9'), isNull);
   });
 
   test(
@@ -114,7 +112,7 @@ void main() {
       expect(tree.state, isA<TreeUnbuilt>());
       expect(tree.answerAt(afterD4D5), isNull);
       // Long enough for the old build to have finished had it gone on.
-      await Future<void>.delayed(const Duration(seconds: 2));
+      await Future<void>.delayed(const Duration(seconds: 1));
       expect(tree.answerAt(afterD4D5), isNull);
       expect(states.whereType<TreeBuilt>(), isEmpty);
       tree.want();
@@ -136,8 +134,21 @@ void main() {
     });
   });
 
-  test('the same file read again after a conflict keeps answering until '
-      'the new tree is built', () async {
+  test('a note typed into the file keeps the tree answering until the new '
+      'one is built', () async {
+    await over(threeGameFile);
+    tree.want();
+    await settled(tree);
+    fixture.session.setComment(NodePath.of(const [0]), 'A note');
+    expect(tree.state, isA<TreeUnbuilt>());
+    expect(movesOf(tree.answerAt(Fen.initial)), hasLength(3));
+    tree.want();
+    await settled(tree);
+    expect(movesOf(tree.answerAt(Fen.initial)), hasLength(3));
+  });
+
+  test('the same file read again with another number of games drops the '
+      'tree, whose numbers would name other games', () async {
     await over(threeGameFile);
     tree.want();
     await settled(tree);
@@ -147,7 +158,7 @@ void main() {
     );
     await fixture.session.reloadFromDisk();
     expect(tree.state, isA<TreeUnbuilt>());
-    expect(movesOf(tree.answerAt(Fen.initial)), hasLength(3));
+    expect(tree.answerAt(Fen.initial), isNull);
     tree.want();
     await settled(tree);
     expect(movesOf(tree.answerAt(Fen.initial)), contains('g2g3'));

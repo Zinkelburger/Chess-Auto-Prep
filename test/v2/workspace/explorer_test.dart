@@ -351,6 +351,17 @@ void main() {
       expect(myGames.wanted, greaterThan(1));
     });
 
+    test('a rebuild that failed leaves the rows it had, with the failure '
+        'beside them', () async {
+      await choose(ExplorerSource.thisFile);
+      thisFile
+        ..state = const TreeFailed('Could not read the games of this file.')
+        ..answer = startAnswer;
+      thisFile.changed();
+      expect(shown().rows, hasLength(2));
+      expect(explorer.notice, 'Could not read the games of this file.');
+    });
+
     test('an empty tree says why', () async {
       await choose(ExplorerSource.myGames);
       myGames.state = const TreeEmpty('No games of yours are saved yet.');

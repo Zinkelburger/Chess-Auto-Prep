@@ -64,6 +64,31 @@ void main() {
     expect(keeps(until, clubGame), isTrue);
   });
 
+  test('a rating or date the game does not know fails both ≥ and ≤', () {
+    final unknown = headers({'WhiteElo': '?', 'Date': '????.??.??'});
+    for (final rule in [FilterRule.atLeast, FilterRule.atMost]) {
+      expect(
+        keeps(
+          HeaderRule(field: 'WhiteElo', rule: rule, value: '2200'),
+          unknown,
+        ),
+        isFalse,
+      );
+      expect(
+        keeps(HeaderRule(field: 'Date', rule: rule, value: '2020'), unknown),
+        isFalse,
+      );
+      expect(
+        keeps(
+          HeaderRule(field: 'BlackElo', rule: rule, value: '1000'),
+          clubGame,
+        ),
+        isFalse,
+        reason: 'no header at all',
+      );
+    }
+  });
+
   test('a regex that does not compile matches nothing', () {
     const good = HeaderRule(
       field: 'Black',

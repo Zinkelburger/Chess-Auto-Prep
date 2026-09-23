@@ -276,7 +276,13 @@ final class Explorer extends ChangeNotifier {
   void _showLocal(Fen fen, LocalGames games) {
     games.want();
     final state = games.state;
-    _notice = state is TreeBuilt ? state.notice : null;
+    // A rebuild that failed leaves the rows it had, with the failure
+    // beside them and Try again.
+    _notice = switch (state) {
+      TreeBuilt(:final notice) => notice,
+      TreeFailed(:final sentence) => sentence,
+      _ => null,
+    };
     if (games.answerAt(fen) case final answer?) {
       _show(_shown(fen, answer));
       return;
@@ -296,8 +302,9 @@ final class Explorer extends ChangeNotifier {
     if (_choiceNow.source.local) _followTheSession();
   }
 
-  /// Asks the chosen database about [fen]. [kept] is what stays on the
-  /// screen if the answer does not come, with a line saying so.
+  /// Asks the chosen database about [fen]; the games on this machine are
+  /// answered by [_showLocal] and never come here. [kept] is what stays on
+  /// the screen if the answer does not come, with a line saying so.
   Future<void> _ask(Fen fen, {ExplorerState? kept}) async {
     final ticket = ++_ticket;
     final choice = _choiceNow;
@@ -458,7 +465,7 @@ final class ExplorerDatabases {
   final LocalGames thisFile;
 
   /// `My games`: the user's saved games ([MyGamesTree]).
-  final LocalGames myGames;
+  final SavedGames myGames;
 
   /// The tree [source] is answered from, when it is one on this machine.
   LocalGames? local(ExplorerSource source) => switch (source) {
@@ -471,11 +478,9 @@ final class ExplorerDatabases {
   Future<bool> bookAvailable() => _book.available();
 
   /// What [choice] says about [fen], or the sentence saying why there is
-  /// no answer. A network failure names TWIC when the book is here.
+  /// no answer: the online databases and TWIC, not the trees on this
+  /// machine. A network failure names TWIC when the book is here.
   Future<(ExplorerAnswer?, String?)> ask(Fen fen, ExplorerChoice choice) async {
-    if (local(choice.source) case final games?) {
-      return (games.answerAt(fen), null);
-    }
     if (choice.source == ExplorerSource.twic) {
       return switch (await _book.lookup(
         fen,

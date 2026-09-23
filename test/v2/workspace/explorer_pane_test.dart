@@ -52,7 +52,7 @@ void main() {
   Future<void> show(
     WidgetTester tester, {
     LocalGames? thisFile,
-    LocalGames? myGames,
+    SavedGames? myGames,
   }) async {
     explorer = explorerOver(
       fixture.session,
@@ -170,7 +170,7 @@ void main() {
   ) async {
     final filter = FileFilter(fixture.session, delay: Duration.zero);
     addTearDown(filter.dispose);
-    final thisFile = FileTree(session: fixture.session, filter: filter);
+    final thisFile = FileTree(filter: filter);
     addTearDown(thisFile.dispose);
     final saved = ScriptedDocumentStore();
     final cache = GamesCache(saved, folder: '/games_library');

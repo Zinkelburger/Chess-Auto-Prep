@@ -35,9 +35,6 @@ const gamesListed = 100;
 final class OpeningIndex {
   OpeningIndex._(this._moves, this._results, this.games, this.unread);
 
-  /// An index over nothing, for a file that has no games.
-  factory OpeningIndex.empty() => OpeningIndex._({}, Uint8List(0), [], 0);
-
   /// Reads [texts], one game each, and indexes their main lines.
   ///
   /// [ids] names each game for the games list — the database's id — and

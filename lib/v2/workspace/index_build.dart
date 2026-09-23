@@ -25,8 +25,12 @@ final class IndexBuild {
   }) {
     final size = texts.fold(0, (n, text) => n + text.length);
     if (size < readOffThreadFrom) {
-      final done = Completer<OpeningIndex?>()
-        ..complete(OpeningIndex.of(texts, ids: ids));
+      final done = Completer<OpeningIndex?>();
+      try {
+        done.complete(OpeningIndex.of(texts, ids: ids));
+      } on Object catch (error, stack) {
+        done.completeError(error, stack);
+      }
       return IndexBuild._(done);
     }
     final build = IndexBuild._(Completer<OpeningIndex?>());
@@ -35,7 +39,7 @@ final class IndexBuild {
   }
 
   final Completer<OpeningIndex?> _done;
-  final _port = ReceivePort();
+  ReceivePort? _port;
   Isolate? _isolate;
   bool _cancelled = false;
 
@@ -55,7 +59,8 @@ final class IndexBuild {
     List<String>? ids,
     void Function(int done)? onProgress,
   ) async {
-    _port.listen((message) {
+    final port = _port = ReceivePort();
+    port.listen((message) {
       switch (message) {
         case int done:
           onProgress?.call(done);
@@ -71,9 +76,9 @@ final class IndexBuild {
     try {
       final isolate = await Isolate.spawn(
         _index,
-        (_port.sendPort, texts, ids),
-        onError: _port.sendPort,
-        onExit: _port.sendPort,
+        (port.sendPort, texts, ids),
+        onError: port.sendPort,
+        onExit: port.sendPort,
         debugName: 'opening index',
       );
       _isolate = isolate;
@@ -84,12 +89,12 @@ final class IndexBuild {
   }
 
   void _finish(OpeningIndex? index) {
-    _port.close();
+    _port?.close();
     if (!_done.isCompleted) _done.complete(index);
   }
 
   void _fail(Object error, Object? stack) {
-    _port.close();
+    _port?.close();
     if (_done.isCompleted) return;
     _done.completeError(
       error,

@@ -10,8 +10,12 @@ import '../chess/tactics/game_ids.dart';
 /// The old app's games database, `app_games.db` in the support folder:
 /// every game it downloads or imports, in named collections, each game's
 /// verbatim PGN beside its parsed headers. Read only — the old app is its
-/// one writer, and reading takes no lock a writer would wait on: the file
-/// is in WAL mode, where readers and a writer do not block each other.
+/// one writer, and reading takes no lock a writer would wait on: the old
+/// app keeps the file in WAL mode, where readers and a writer do not block
+/// each other. (In the rollback journal a long read would hold off a
+/// commit.) A read never changes the database's bytes; after the old app
+/// closed it cleanly, SQLite may leave empty `-wal` and `-shm` files beside
+/// it, which is how WAL works.
 ///
 /// Schema (the old app's `game_store_schema.dart`, version 2):
 /// `games(id, collection, game_key, white, black, result, date, played_at,

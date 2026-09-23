@@ -69,7 +69,7 @@ final class WorkspaceWiring {
     elsewhere: _tree.board,
   );
 
-  late final _fileTree = FileTree(session: _session, filter: _filter);
+  late final _fileTree = FileTree(filter: _filter);
   late final _myGamesTree = MyGamesTree(
     accounts: _env.accounts,
     cache: _gamesCache,

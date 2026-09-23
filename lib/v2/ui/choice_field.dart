@@ -14,7 +14,9 @@ import 'theme.dart';
 ///
 /// [text] is what it shows. The box follows it when it changes from
 /// outside — a rule removed, a filter cleared — but not while the user is
-/// typing into it, so the caret never jumps.
+/// typing into it, so the caret never jumps. Focused, it selects its text
+/// and offers every option until something is typed; left with words that
+/// chose nothing, it goes back to [text].
 class ChoiceField extends StatefulWidget {
   const ChoiceField({
     super.key,
@@ -43,7 +45,18 @@ class ChoiceField extends StatefulWidget {
 
 class _ChoiceFieldState extends State<ChoiceField> {
   late final _controller = TextEditingController(text: widget.text);
-  final _focus = FocusNode();
+  late final _focus = FocusNode()..addListener(_focusChanged);
+
+  void _focusChanged() {
+    if (_focus.hasFocus) {
+      _controller.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: _controller.text.length,
+      );
+    } else if (_controller.text != widget.text) {
+      _controller.text = widget.text;
+    }
+  }
 
   @override
   void didUpdateWidget(ChoiceField old) {
@@ -61,7 +74,10 @@ class _ChoiceFieldState extends State<ChoiceField> {
   }
 
   Iterable<String> _suggestions(TextEditingValue value) {
-    final typed = value.text.trim().toLowerCase();
+    // What the box already says is not a search: every option is offered.
+    final typed = value.text == widget.text
+        ? ''
+        : value.text.trim().toLowerCase();
     return widget.options
         .where((option) => option.toLowerCase().contains(typed))
         .take(ChoiceField.shown);

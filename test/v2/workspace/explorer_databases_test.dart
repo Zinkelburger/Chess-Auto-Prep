@@ -65,18 +65,9 @@ void main() {
     expect(offlineWithBook, endsWith('TWIC works offline.'));
   });
 
-  test('the games on this machine answer from their trees, and a game of '
-      'My games is its kept PGN', () async {
-    myGames
-      ..answer = startAnswer
-      ..pgns['lichess_abcd1234'] = '[Event "Mine"]\n\n1. e4 1-0\n';
-    final (answer, problem) = await databases.ask(
-      Fen.initial,
-      const ExplorerChoice(source: ExplorerSource.myGames),
-    );
-    expect(answer, same(startAnswer));
-    expect(problem, isNull);
-    expect(lichess.asked, isEmpty);
+  test('a game My games lists is its kept PGN; one of This file is not '
+      'fetched', () async {
+    myGames.pgns['lichess_abcd1234'] = '[Event "Mine"]\n\n1. e4 1-0\n';
     const game = ExplorerGame(
       id: 'lichess_abcd1234',
       white: 'Me',

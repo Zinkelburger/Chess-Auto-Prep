@@ -14,13 +14,12 @@ import '../storage/chapter_files.dart';
 import '../storage/game_store.dart';
 import '../storage/my_accounts.dart';
 import '../storage/my_games_files.dart';
-import 'document_session.dart';
 import 'file_filter.dart';
 import 'index_build.dart';
 
 /// The explorer's two sources on this machine — the open file's games and
-/// the user's own — each an [OpeningIndex] built when the explorer first
-/// shows it and answered from at once after that.
+/// the user's own — each an [OpeningIndex] built the first time the
+/// explorer asks with it chosen, and answered from at once after that.
 
 sealed class TreeState {
   const TreeState();
@@ -78,31 +77,34 @@ abstract interface class LocalGames implements Listenable {
 
   /// Reads the games again at the next [want]: the user's `Try again`.
   void forget();
+}
 
+/// A tree whose listed games are not open anywhere, so opening one needs
+/// its text: `My games`.
+abstract interface class SavedGames implements LocalGames {
   /// The PGN of the game the games list names [id], while it is in the
   /// tree; null otherwise.
   String? gamePgn(String id);
 }
 
 /// `This file`: the games of the document open in the workspace, narrowed
-/// by the viewer's filter — the old PGN Viewer's `Tree` tab.
+/// by the viewer's filter — the old PGN Viewer's `Tree` tab. It follows
+/// the document through the [FileFilter], which reads it first, so the
+/// games the filter numbers are the games the tree numbers.
 ///
-/// Follows the document. Another file, a paste onto the board or the file
-/// closed stops a build still running and drops the tree at once: its
-/// answers are another file's. An edit of the same file builds again and
-/// keeps answering from the tree it had until the new one is there, so a
-/// comment typed into a large file does not blank the table. The filter
-/// narrows the answers without building anything again.
+/// Another file, a paste onto the board or the file closed stops a build
+/// still running and drops the tree at once: its answers are another
+/// file's. An edit of the same file that keeps its number of games — a
+/// comment, a move — builds again and answers from the tree it had until
+/// the new one is there, so a note typed into a large file does not blank
+/// the table; any other change drops it, since its game numbers would name
+/// other games. The filter narrows the answers without building again.
 final class FileTree extends ChangeNotifier implements LocalGames {
-  FileTree({required DocumentSession session, required FileFilter filter})
-    : _session = session,
-      _filter = filter {
-    _session.addListener(_followTheDocument);
-    _filter.addListener(_followTheFilter);
-    _followTheDocument();
+  FileTree({required FileFilter filter}) : _filter = filter {
+    _filter.addListener(_follow);
+    _follow();
   }
 
-  final DocumentSession _session;
   final FileFilter _filter;
 
   TreeState _state = const TreeUnbuilt();
@@ -131,15 +133,8 @@ final class FileTree extends ChangeNotifier implements LocalGames {
 
   @override
   void want() {
-    if (_state is! TreeUnbuilt || _session.chapter == null) return;
+    if (_state is! TreeUnbuilt) return;
     unawaited(_run());
-  }
-
-  @override
-  String? gamePgn(String id) {
-    final index = int.tryParse(id);
-    if (index == null || index < 0 || index >= _lines.length) return null;
-    return _lines[index].text;
   }
 
   @override
@@ -185,23 +180,25 @@ final class FileTree extends ChangeNotifier implements LocalGames {
     notifyListeners();
   }
 
-  /// Switching games reads no new lines and changes nothing here.
-  void _followTheDocument() {
-    final lines = _session.chapter?.lines ?? const <ChapterLine>[];
-    final file = _session.source;
-    if (sameLines(lines, _lines) && file == _file) return;
-    final edited = file != null && file == _file;
+  /// The filter saw another document, or new rules. Switching games reads
+  /// no new lines and changes nothing here.
+  void _follow() {
+    final lines = _filter.lines;
+    final file = _filter.file;
+    if (sameLines(lines, _lines) && file == _file) {
+      if (_filter.applied == _filterSeen) return;
+      _filterSeen = _filter.applied;
+      notifyListeners();
+      return;
+    }
+    final numberedAlike =
+        sameFile(file, _file) && lines.length == _lines.length;
     _lines = lines;
     _file = file;
-    _stop();
-    if (!edited) _index = null;
-    _state = const TreeUnbuilt();
-    notifyListeners();
-  }
-
-  void _followTheFilter() {
-    if (_filter.applied == _filterSeen) return;
     _filterSeen = _filter.applied;
+    _stop();
+    if (!numberedAlike) _index = null;
+    _state = const TreeUnbuilt();
     notifyListeners();
   }
 
@@ -214,8 +211,7 @@ final class FileTree extends ChangeNotifier implements LocalGames {
   void dispose() {
     _disposed = true;
     _stop();
-    _session.removeListener(_followTheDocument);
-    _filter.removeListener(_followTheFilter);
+    _filter.removeListener(_follow);
     super.dispose();
   }
 }
@@ -228,10 +224,10 @@ final class FileTree extends ChangeNotifier implements LocalGames {
 /// than one of them counts once. Newest first, so the games list under the
 /// table starts with the latest.
 ///
-/// Read when the explorer first shows it, and again after [forget] — a
+/// Read the first time the explorer asks, and again after [forget] — a
 /// download or a changed username. A database that cannot be read leaves
 /// the downloaded games in the tree and says so beside them.
-final class MyGamesTree extends ChangeNotifier implements LocalGames {
+final class MyGamesTree extends ChangeNotifier implements SavedGames {
   MyGamesTree({
     required AccountStore accounts,
     required GamesCache cache,
@@ -289,17 +285,18 @@ final class MyGamesTree extends ChangeNotifier implements LocalGames {
     final ticket = ++_reads;
     _state = const TreeReading(0, 0);
     notifyListeners();
-    final MyGamesCorpus corpus;
+    bool gone() => _disposed || ticket != _reads;
+    final MyGamesCorpus? corpus;
     try {
-      corpus = await _gather();
+      corpus = await _gather(gone);
     } on Object catch (error) {
-      if (_disposed || ticket != _reads) return;
+      if (gone()) return;
       log.w('gather your games', error);
       _state = const TreeFailed('Could not read your games.');
       notifyListeners();
       return;
     }
-    if (_disposed || ticket != _reads) return;
+    if (corpus == null || gone()) return;
     if (corpus.texts.isEmpty) {
       _index = null;
       _texts = const {};
@@ -348,22 +345,25 @@ final class MyGamesTree extends ChangeNotifier implements LocalGames {
     notifyListeners();
   }
 
-  /// Every saved game of the accounts, and the database's.
-  Future<MyGamesCorpus> _gather() async {
+  /// Every saved game of the accounts, and the database's; null once
+  /// [gone] says the read was overtaken or the tree disposed.
+  Future<MyGamesCorpus?> _gather(bool Function() gone) async {
     final accounts = await _accounts.read();
+    if (gone()) return null;
     final files = <(GameSite, List<String>)>[];
     for (final MapEntry(key: site, value: account) in accounts.entries) {
       final games = await _cache.all(site, account.username);
+      if (gone()) return null;
       if (games != null) files.add((site, games));
     }
-    final collections = {
+    final stored = await _readStore({
       GameCollections.tactics,
       for (final MapEntry(key: site, value: account) in accounts.entries) ...[
         GameCollections.library(site, account.username),
         ...GameCollections.analysis(site, account.username),
       ],
-    };
-    final stored = await _store.read(collections);
+    });
+    if (gone()) return null;
     String? notice;
     var rows = const <StoredGame>[];
     switch (stored) {
@@ -379,6 +379,16 @@ final class MyGamesTree extends ChangeNotifier implements LocalGames {
             'downloaded games are here.';
     }
     return myGamesCorpus(files: files, stored: rows, notice: notice);
+  }
+
+  /// The database's answer; one that throws is one that could not be
+  /// read, which leaves the downloaded games standing.
+  Future<StoredGamesRead> _readStore(Set<String> collections) async {
+    try {
+      return await _store.read(collections);
+    } on Object catch (error) {
+      return StoredGamesUnreadable('$error');
+    }
   }
 
   void _stop() {

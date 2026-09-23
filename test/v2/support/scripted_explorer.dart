@@ -96,7 +96,7 @@ final class ScriptedBook implements MasterBook {
 
 /// Games on this machine as a tree the test sets: its state, its answer
 /// and its games' PGN. Counts how often it was wanted and forgotten.
-final class ScriptedLocalGames extends ChangeNotifier implements LocalGames {
+final class ScriptedLocalGames extends ChangeNotifier implements SavedGames {
   @override
   TreeState state = const TreeUnbuilt();
 
@@ -136,7 +136,7 @@ Explorer explorerOver(
   ScriptedExplorerApi? lichess,
   ScriptedBook? book,
   LocalGames? thisFile,
-  LocalGames? myGames,
+  SavedGames? myGames,
   Duration debounce = Duration.zero,
 }) => Explorer(
   session: session,
@@ -156,7 +156,7 @@ GameFetcher gamesOver(
   PgnDocumentStore documents, {
   ScriptedExplorerApi? lichess,
   ScriptedBook? book,
-  LocalGames? myGames,
+  SavedGames? myGames,
 }) => GameFetcher(
   databases: ExplorerDatabases(
     lichess: lichess ?? ScriptedExplorerApi(),
