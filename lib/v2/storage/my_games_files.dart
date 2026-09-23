@@ -62,12 +62,8 @@ final class GamesCache {
     String username, {
     required int max,
   }) async {
-    final read = await _store.open(refFor(site, username));
-    if (read is! Opened) return null;
-    final games = [
-      for (final game in splitChapterText(read.text).games) game.text,
-    ];
-    if (games.isEmpty) return null;
+    final games = await all(site, username);
+    if (games == null || games.isEmpty) return null;
     // Stable, so games that do not say when they were played keep the
     // order the file has them in.
     final order = [for (final (i, g) in games.indexed) (i, playedAt(g))]
@@ -76,6 +72,17 @@ final class GamesCache {
         return byTime != 0 ? byTime : a.$1.compareTo(b.$1);
       });
     return [for (final (i, _) in order.take(max)) (index: i, text: games[i])];
+  }
+
+  /// Every game saved for [username], in the order the file has them, or
+  /// null when there is no file or it cannot be read.
+  Future<List<String>?> all(GameSite site, String username) async {
+    final read = await _store.open(refFor(site, username));
+    if (read is Unreadable) {
+      log.w('read the ${site.label} games of $username', read.detail);
+    }
+    if (read is! Opened) return null;
+    return [for (final game in splitChapterText(read.text).games) game.text];
   }
 
   /// Adds the games of [downloaded] the file does not have yet at its end,

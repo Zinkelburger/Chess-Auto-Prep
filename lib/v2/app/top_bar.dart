@@ -60,7 +60,7 @@ class TopBar extends StatelessWidget {
           const Spacer(),
           IconButton(
             icon: const Icon(Icons.settings_outlined, size: IconSize.action),
-            tooltip: 'Settings (Ctrl+,)',
+            tooltip: withKey('Settings', 'Ctrl+,'),
             onPressed: onSettings,
             visualDensity: VisualDensity.compact,
           ),
@@ -241,7 +241,7 @@ class ListToggle extends StatelessWidget {
           : Icons.keyboard_double_arrow_right,
       size: IconSize.action,
     ),
-    tooltip: shown ? 'Hide the list (Ctrl+B)' : 'Show the list (Ctrl+B)',
+    tooltip: withKey(shown ? 'Hide the list' : 'Show the list', 'Ctrl+B'),
     onPressed: onPressed,
     visualDensity: VisualDensity.compact,
   );

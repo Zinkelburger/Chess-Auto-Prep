@@ -99,6 +99,15 @@ final class NodePath {
 
   NodePath get mainChild => child(0);
 
+  /// Where the innermost variation on the way here leaves the line it
+  /// branches from: the move before its first move, or null on the main
+  /// line. For `0/1/0` — the second move's variation, one move in — it is
+  /// `0`, the first move.
+  NodePath? get branchPoint {
+    final last = indexes.lastIndexWhere((index) => index != 0);
+    return last < 0 ? null : NodePath.of(indexes.take(last));
+  }
+
   /// Whether [other] is this path or a move somewhere before it on the way
   /// here: the root leads to every path.
   bool startsWith(NodePath other) =>
@@ -159,6 +168,21 @@ final class GameTree {
   }
 
   Fen fenAt(NodePath path) => nodeAt(path)?.fen ?? rootFen;
+
+  /// The first place along the main line where the position is [fen]'s,
+  /// move counters aside — where a game reached by another move order
+  /// comes to it — or null when the main line never does.
+  NodePath? mainLineTo(Fen fen) {
+    final wanted = fen.position;
+    var path = const NodePath.root();
+    if (rootFen.position == wanted) return path;
+    for (var node = children.firstOrNull; node != null;) {
+      path = path.mainChild;
+      if (node.fen.position == wanted) return path;
+      node = node.children.firstOrNull;
+    }
+    return null;
+  }
 
   /// The last node reached by following main continuations from [path].
   NodePath endOfLineFrom(NodePath path) {

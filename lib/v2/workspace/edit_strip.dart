@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../chess/pgn/comment_edits.dart' show isGlyph;
 import '../chess/pgn/comment_text.dart';
 import '../chess/pgn/game_tree.dart';
+import '../ui/app_action.dart';
 import '../ui/listening_state.dart';
 import '../ui/theme.dart';
 import 'comment_field.dart';
@@ -167,7 +168,7 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
         IconButton(
           onPressed: widget.session.canUndo ? _undo : null,
           icon: const Icon(Icons.undo, size: IconSize.action),
-          tooltip: 'Undo (Ctrl+Z)',
+          tooltip: withKey('Undo', 'Ctrl+Z'),
           visualDensity: VisualDensity.compact,
         ),
         const SizedBox(width: Space.s),

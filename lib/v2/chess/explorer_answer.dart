@@ -13,6 +13,7 @@ final class ExplorerMove {
     required this.white,
     required this.draws,
     required this.black,
+    this.undecided = 0,
   });
 
   final String uci;
@@ -21,7 +22,13 @@ final class ExplorerMove {
   final int draws;
   final int black;
 
-  int get games => white + draws + black;
+  /// Games that say no result — a course line, a game still going (`*`).
+  /// They count as games played but draw no part of the result bar, so a
+  /// file of unfinished lines is not painted as all draws. Only the games
+  /// on this machine have them; the online databases hold finished games.
+  final int undecided;
+
+  int get games => white + draws + black + undecided;
 }
 
 /// One game the database names for the position: lila's top games list.
@@ -82,6 +89,7 @@ final class ExplorerAnswer {
   int get whiteTotal => white ?? moves.fold(0, (n, m) => n + m.white);
   int get drawTotal => draws ?? moves.fold(0, (n, m) => n + m.draws);
   int get blackTotal => black ?? moves.fold(0, (n, m) => n + m.black);
+  int get undecidedTotal => moves.fold(0, (n, m) => n + m.undecided);
 
   /// How many games the position has, as the moves count them: what each
   /// move's share is measured against.

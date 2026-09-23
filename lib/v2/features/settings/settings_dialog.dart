@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../storage/settings_store.dart';
+import '../../ui/app_action.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
 import 'setting_controls.dart';
@@ -173,7 +174,7 @@ class _TitleBar extends StatelessWidget {
         ),
         IconButton(
           icon: const Icon(Icons.close, size: IconSize.action),
-          tooltip: 'Close (Esc)',
+          tooltip: withKey('Close', 'Esc'),
           onPressed: onClose,
           visualDensity: VisualDensity.compact,
         ),

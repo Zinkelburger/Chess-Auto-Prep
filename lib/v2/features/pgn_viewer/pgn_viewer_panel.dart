@@ -5,8 +5,11 @@ import 'package:path/path.dart' as p;
 
 import '../../chess/pgn/game_summary.dart';
 import '../../storage/chapter_files.dart';
+import '../../ui/app_action.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
+import '../../workspace/file_filter.dart';
+import 'game_filter_bar.dart';
 import 'pgn_viewer.dart';
 
 /// Opens a PGN file in the workspace with its first game on the board.
@@ -24,12 +27,16 @@ class PgnViewerPanel extends StatefulWidget {
   const PgnViewerPanel({
     super.key,
     required this.viewer,
+    required this.filter,
     required this.onOpen,
     required this.onBrowse,
     this.trailing,
   });
 
   final PgnViewer viewer;
+
+  /// Which of the file's games the list shows, set under the search box.
+  final FileFilter filter;
 
   /// A file from the recent list.
   final OpenPgnFile onOpen;
@@ -137,6 +144,7 @@ class _PgnViewerPanelState extends State<PgnViewerPanel> {
             onChanged: _viewer.search,
           ),
         ),
+        GameFilterBar(filter: widget.filter),
         Expanded(child: _rows()),
       ],
     );
@@ -147,13 +155,7 @@ class _PgnViewerPanelState extends State<PgnViewerPanel> {
   Widget _rows() {
     final rows = _viewer.visible;
     final current = _viewer.current;
-    if (rows.isEmpty) {
-      return _Message(
-        _viewer.games.isEmpty
-            ? 'No games in this file.'
-            : 'Nothing matches "${_viewer.query}".',
-      );
-    }
+    if (rows.isEmpty) return _nothingShown();
     final chapters = _viewer.chapters;
     final items = chapters.isEmpty
         ? [
@@ -165,6 +167,28 @@ class _PgnViewerPanelState extends State<PgnViewerPanel> {
       itemCount: items.length,
       itemExtent: listRowHeight,
       itemBuilder: (context, at) => items[at],
+    );
+  }
+
+  /// Why the list is empty, and the way back to every game when a filter
+  /// emptied it.
+  Widget _nothingShown() {
+    if (_viewer.games.isEmpty) return const _Message('No games in this file.');
+    if (_viewer.query.trim().isNotEmpty) {
+      return _Message('Nothing matches "${_viewer.query}".');
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _Message('No games match the filter.'),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: Space.m),
+          child: TextButton(
+            onPressed: () => widget.filter.apply(GameFilter.none),
+            child: const Text('Show all games'),
+          ),
+        ),
+      ],
     );
   }
 
@@ -327,7 +351,7 @@ class _Toolbar extends StatelessWidget {
           const SizedBox(width: Space.xs),
           IconButton(
             icon: const Icon(Icons.add, size: IconSize.action),
-            tooltip: 'Open PGN file… (Ctrl+O)',
+            tooltip: withKey('Open PGN file…', 'Ctrl+O'),
             onPressed: onBrowse,
             visualDensity: VisualDensity.compact,
           ),

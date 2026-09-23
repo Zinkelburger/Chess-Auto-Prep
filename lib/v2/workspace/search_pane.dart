@@ -11,6 +11,7 @@ import '../engines/engine_line.dart' show Centipawns;
 import '../storage/chapter_files.dart';
 import '../storage/settings.dart';
 import '../storage/settings_store.dart';
+import '../ui/app_action.dart';
 import '../ui/theme.dart';
 import 'document_session.dart';
 import 'fill_gaps.dart';
@@ -196,7 +197,7 @@ class _SearchPaneState extends State<SearchPane> {
           const Spacer(),
           if (running == null)
             Tooltip(
-              message: 'Search from the board (Ctrl+G)',
+              message: withKey('Search from the board', 'Ctrl+G'),
               child: FilledButton(
                 onPressed: fill.canStart ? () => unawaited(_search()) : null,
                 child: const Text('Search'),

@@ -47,6 +47,20 @@ void main() {
     expect(notifications, before, reason: 'backing off the root does nothing');
   });
 
+  test('Enter steps into the variation at the cursor and Esc back out to '
+      'where it branched', () {
+    expect(session.enterVariation(), isFalse, reason: 'one first move');
+    expect(session.leaveVariation(), isFalse, reason: 'on the main line');
+    session.goTo(NodePath.of([0, 0])); // 2. Nf3, with 2... d6 or 2... Nc6
+    expect(session.enterVariation(), isTrue);
+    expect(session.currentMove?.san, 'Nc6');
+    session.forward();
+    expect(session.currentMove?.san, 'd4');
+    expect(session.leaveVariation(), isTrue);
+    expect(session.cursor, NodePath.of([0, 0]));
+    expect(session.leaveVariation(), isFalse);
+  });
+
   test('goTo ignores paths outside the tree', () {
     session.goTo(NodePath.of([0, 1]));
     expect(session.currentMove?.san, 'Nc3');

@@ -282,11 +282,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Next tab'), findsOneWidget);
     expect(find.text('Ctrl+Tab'), findsOneWidget);
+    // The menu is taller than this window; its last entries scroll in.
+    await tester.ensureVisible(find.text('Close Replies'));
     await tester.tap(find.text('Close Replies'));
     await tester.pumpAndSettle();
     expect(find.text('Replies'), findsNothing);
     await tester.tap(find.text('Actions'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Show Replies'));
     await tester.tap(find.text('Show Replies'));
     await tester.pumpAndSettle();
     expect(find.text('Replies'), findsOneWidget);

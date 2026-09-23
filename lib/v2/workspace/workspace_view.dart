@@ -4,8 +4,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:multi_split_view/multi_split_view.dart';
 
+import '../chess/fen.dart';
 import '../storage/chapter_files.dart';
 import '../storage/settings_store.dart';
+import '../ui/app_action.dart';
 import '../ui/pane_tabs.dart';
 import '../ui/theme.dart';
 import 'board_claim.dart';
@@ -16,6 +18,7 @@ import 'engine_pane.dart';
 import 'explorer.dart';
 import 'explorer_pane.dart';
 import 'game_counter.dart';
+import 'move_field.dart';
 import 'move_note.dart';
 import 'move_tree_view.dart';
 import 'reading_header.dart';
@@ -90,6 +93,7 @@ class WorkspaceView extends StatelessWidget {
     required this.workspace,
     required this.tabs,
     required this.editing,
+    required this.moves,
     this.hooks = const WorkspaceHooks(),
   });
 
@@ -103,6 +107,10 @@ class WorkspaceView extends StatelessWidget {
   /// Whether the edit strip is open. The shell owns it: the Actions menu
   /// and Ctrl+E turn it, and the strip's Done turns it off.
   final ValueNotifier<bool> editing;
+
+  /// The words and focus of the move field under the board. The shell owns
+  /// them: its `/` focuses the field and a lesson types into it.
+  final MoveEntry moves;
 
   /// What the mode on screen and the shell add.
   final WorkspaceHooks hooks;
@@ -128,6 +136,7 @@ class WorkspaceView extends StatelessWidget {
               settings: workspace.settings,
               onMove: hooks.onBoardMove ?? workspace.session.playMove,
               counter: hooks.gameCounter,
+              moves: moves,
               // While part of the game is hidden — a puzzle's answer — the
               // engine would read it out, so it is not shown until the
               // answer is found or shown.
@@ -143,7 +152,7 @@ class WorkspaceView extends StatelessWidget {
           : _ClaimedBoard(
               claim: claim,
               settings: workspace.settings,
-              counter: hooks.gameCounter,
+              moves: moves,
             ),
     ),
   );
@@ -317,34 +326,38 @@ class _UnlessHidden extends StatelessWidget {
   );
 }
 
-/// The room under the board the engine's lines and the counter take: the
-/// engine's switch row and one row per line, the counter's row when there
-/// is one, whether or not the engine is on, so the board keeps its size
-/// as it is turned on and off. A line opened out scrolls in its room.
-double _roomUnder(SettingsStore settings, {required bool counter}) =>
-    (counter ? navRowHeight : 0) +
+/// The room under the board the engine's lines and the row of the move
+/// field and the counter take: the engine's switch row and one row per
+/// line whether or not the engine is on, so the board keeps its size as it
+/// is turned on and off. A line opened out scrolls in its room.
+double _roomUnder(SettingsStore settings) =>
+    navRowHeight +
     Space.s +
     engineBarHeight +
     settings.value.engineLines * engineRowHeight;
 
 /// The largest square board that fits above the engine's lines and the
-/// counter, at the top, and the move's note in what they leave below, when
-/// that is enough to read a few lines in.
+/// row with the move field and the counter, at the top, and the move's note
+/// in what they leave below, when that is enough to read a few lines in.
 class _BoardAndCounter extends StatelessWidget {
   const _BoardAndCounter({
     required this.session,
     required this.settings,
     required this.onMove,
     required this.counter,
+    required this.moves,
     required this.engine,
   });
 
   final DocumentSession session;
   final SettingsStore settings;
+
+  /// Where a move made on the board or typed into the field goes.
   final ValueChanged<String> onMove;
 
   /// Whether the game counter sits under the board.
   final bool counter;
+  final MoveEntry moves;
 
   /// The engine's lines, under the counter.
   final Widget engine;
@@ -353,8 +366,8 @@ class _BoardAndCounter extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final room = _roomUnder(settings, counter: counter);
-        final engineRoom = room - Space.s - (counter ? navRowHeight : 0);
+        final room = _roomUnder(settings);
+        final engineRoom = room - Space.s - navRowHeight;
         final side = min(constraints.maxWidth, constraints.maxHeight - room);
         final below = constraints.maxHeight - side - room - Space.s;
         return Align(
@@ -378,11 +391,26 @@ class _BoardAndCounter extends StatelessWidget {
                   height: engineRoom,
                   child: SingleChildScrollView(child: engine),
                 ),
-                if (counter)
-                  SizedBox(
-                    height: navRowHeight,
-                    child: GameCounter(session: session),
+                SizedBox(
+                  height: navRowHeight,
+                  child: Row(
+                    children: [
+                      ListenableBuilder(
+                        listenable: session.anyChange,
+                        builder: (context, _) => _Typed(
+                          moves: moves,
+                          fen: session.fen,
+                          onMove: onMove,
+                        ),
+                      ),
+                      Expanded(
+                        child: counter
+                            ? GameCounter(session: session)
+                            : const SizedBox.shrink(),
+                      ),
+                    ],
                   ),
+                ),
                 if (below >= moveNoteMinHeight) ...[
                   const SizedBox(height: Space.s),
                   SizedBox(
@@ -400,44 +428,55 @@ class _BoardAndCounter extends StatelessWidget {
   }
 }
 
-/// The board while another owner holds it: its position alone, with the
-/// room the counter, the engine and the note would take left empty, so the board does
-/// not change size as a lesson starts and ends.
+/// The board while another owner holds it: its position and the move
+/// field alone, with the room the engine, the counter and the note would
+/// take left empty, so the board and the field do not move as a lesson
+/// starts and ends.
 class _ClaimedBoard extends StatelessWidget {
   const _ClaimedBoard({
     required this.claim,
     required this.settings,
-    required this.counter,
+    required this.moves,
   });
 
   final BoardClaim claim;
   final SettingsStore settings;
-
-  /// Whether the unclaimed board has the counter under it.
-  final bool counter;
+  final MoveEntry moves;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final side = min(
-          constraints.maxWidth,
-          constraints.maxHeight - _roomUnder(settings, counter: counter),
-        );
+        final room = _roomUnder(settings);
+        final side = min(constraints.maxWidth, constraints.maxHeight - room);
         return Align(
           alignment: Alignment.topCenter,
           child: SizedBox(
             width: side,
-            child: ListenableBuilder(
-              listenable: settings,
-              builder: (context, _) => BoardView(
-                fen: claim.fen,
-                orientation: claim.orientation,
-                lastMove: claim.lastMove,
-                onMove: claim.onMove ?? _still,
-                movable: claim.onMove != null,
-                coordinates: settings.value.boardCoordinates,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ListenableBuilder(
+                  listenable: settings,
+                  builder: (context, _) => BoardView(
+                    fen: claim.fen,
+                    orientation: claim.orientation,
+                    lastMove: claim.lastMove,
+                    onMove: claim.onMove ?? _still,
+                    movable: claim.onMove != null,
+                    coordinates: settings.value.boardCoordinates,
+                  ),
+                ),
+                SizedBox(height: room - navRowHeight),
+                SizedBox(
+                  height: navRowHeight,
+                  child: _Typed(
+                    moves: moves,
+                    fen: claim.fen,
+                    onMove: claim.onMove,
+                  ),
+                ),
+              ],
             ),
           ),
         );
@@ -446,6 +485,23 @@ class _ClaimedBoard extends StatelessWidget {
   }
 
   static void _still(String uci) {}
+}
+
+/// The move field at its width, in the row under the board.
+class _Typed extends StatelessWidget {
+  const _Typed({required this.moves, required this.fen, required this.onMove});
+
+  final MoveEntry moves;
+  final Fen fen;
+  final ValueChanged<String>? onMove;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: moveFieldWidth,
+    child: Center(
+      child: MoveField(entry: moves, fen: fen, onMove: onMove),
+    ),
+  );
 }
 
 /// No claim, ever: the board of a workspace nothing can take over.
@@ -480,15 +536,30 @@ class NavRow extends StatelessWidget {
           return Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _button(Icons.first_page, 'Start (Home)', open, session.toStart),
-              _button(Icons.chevron_left, 'Back (←)', open, session.back),
+              _button(
+                Icons.first_page,
+                withKey('Start', 'Home'),
+                open,
+                session.toStart,
+              ),
+              _button(
+                Icons.chevron_left,
+                withKey('Back', '←'),
+                open,
+                session.back,
+              ),
               _button(
                 Icons.chevron_right,
-                'Forward (→)',
+                withKey('Forward', '→'),
                 open,
                 session.forward,
               ),
-              _button(Icons.last_page, 'End (End)', open, session.toEnd),
+              _button(
+                Icons.last_page,
+                withKey('End', 'End'),
+                open,
+                session.toEnd,
+              ),
             ],
           );
         },

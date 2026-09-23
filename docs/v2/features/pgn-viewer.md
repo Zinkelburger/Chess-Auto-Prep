@@ -114,7 +114,8 @@ and `Export as SCID…` write every game in the current filter (Scid asks for a 
 `Scid export failed: <error>`); `Add to Study` / `Edit study` hands the games to Study.
 **Autoplay** — Space or the counter bar → one move every 1.0 s by default (300 ms before the first;
 speeds 0.5–10 s per move), optionally rolling into the next game; any navigation, game load, tab change
-or panel close stops it.
+or panel close stops it. (v2, 2026-09-23: Space or Actions ▸ `Play through` at the fixed speed; any cursor move or
+another game stops it; no speed setting, no roll into the next game yet.)
 **Keyboard** — ←/→ a move, Home/End ends of line, ↑/↓ previous/next game, Enter focus variation, Escape
 leave (innermost first), F flip, E engine, Space autoplay, F11 fullscreen, Ctrl+V paste.
 
@@ -209,3 +210,23 @@ reach the same explorer; the tab bar disappears entirely during solitaire.
 - **The start of a game names its first move.** The note under the board shows the game's
   introduction, then the first move muted with its note; clicking it plays it, as → does. Hidden
   while a line is being found (puzzles, training).
+
+## Built for step 6c (2026-09-23, not yet seen by the owner)
+- **`This file`** in the Explorer tab's source row is the old `Tree` tab: the main lines of the open
+  file's games to move 25, merged by position so move orders meet, each move with its games and
+  White / draw / Black (a game without a result counts as played but draws no bar), the first 100
+  games under the moves. It follows the viewer's filter without building again; a file past 64 KiB
+  is built on another isolate that opening another file, pasting onto the board or closing kills.
+  The row's end reads `40 games` / `12 of 40 games`. A listed game is put on the board in place,
+  where its own main line reaches the position. Not built: `Include variations`, the tree's own
+  cursor and back button.
+- **`My games`** is every game of the user's on this machine, each once: the downloads in
+  `games_library/` and, read only from the old app's `app_games.db`, the same accounts' library and
+  Player analysis collections and the tactics archive. A database that cannot be read leaves the
+  downloads and says so beside the table. A listed game is kept as a file and opened, as TWIC's.
+- **Filters** are `Filter games` under the search box, not a tab: folded, the applied rules as chips
+  that remove them and `n of N`; unfolded, a Field / Rule / Value block per rule (typeable choice
+  fields suggesting the file's headers and values), `Add rule`, `All` / `Any`, `Clear`. Rules are
+  the old header rules (`contains`, `excludes`, `is`, `regex`, `≥`, `≤`, `Player` on either
+  colour, `;` between names) and apply 300 ms after typing rests; another file clears them. Not
+  built: position and move-sequence filters, the saved slice per path, `Check filters`.

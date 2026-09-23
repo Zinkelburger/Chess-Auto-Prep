@@ -187,8 +187,10 @@ final class TableSearch extends ChangeNotifier {
   /// Why the book could not be read, when it could not.
   String? get bookProblem => _bookProblem;
 
-  /// Starts answering: the mode is on screen.
+  /// Starts answering: the mode is on screen. Picking it again while it is
+  /// on screen changes nothing, a running Analyze included.
   void open() {
+    if (_open) return;
     _open = true;
     _scored = null;
     _labChanged();

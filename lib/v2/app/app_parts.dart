@@ -8,6 +8,7 @@ import '../workspace/document_session.dart';
 import '../workspace/workspace.dart';
 import 'environment.dart';
 import 'exit_guard.dart';
+import 'full_screen.dart';
 import 'mode.dart';
 import 'mode_wiring.dart';
 import 'window_input.dart';
@@ -47,14 +48,26 @@ final class AppParts {
     write: env.writeAccount,
   );
 
+  /// The user's downloaded games, one file per account, shared with the
+  /// old app: the review, the book and the explorer read them.
+  late final gamesCache = GamesCache(
+    env.store,
+    folder: env.folders.gamesLibrary,
+  );
+
   late final DocumentModes documents = wireDocumentModes(env, session, saver);
   late final _workspace = WorkspaceWiring(
     env,
     session: session,
     saver: saver,
     library: documents.library,
+    filter: documents.filter,
+    games: gamesCache,
   );
   Workspace get workspace => _workspace.workspace;
+
+  /// Whether the window fills the screen.
+  late final fullScreen = FullScreen(env.setFullScreen, say: requests.say);
 
   /// The question before the words on screen are left behind.
   late final exit = ExitGuard(
@@ -77,11 +90,9 @@ final class AppParts {
     workspace: workspace,
     library: documents.library,
     requests: requests,
+    games: gamesCache,
   );
   TrainingModes get training => _training.modes;
-
-  /// The user's downloaded games, as the review and the book read them.
-  GamesCache get gamesCache => _training.games;
 
   /// The labs: the Bughouse lab's owners.
   late final labs = wireLabModes(env);

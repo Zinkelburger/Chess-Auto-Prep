@@ -21,12 +21,14 @@ import '../ui/theme.dart';
 import '../workspace/board_claim.dart';
 import '../workspace/copy_name_dialog.dart';
 import '../workspace/fill_gaps.dart';
+import '../workspace/move_field.dart';
 import '../workspace/session_results.dart';
 import '../workspace/tree_pane.dart';
 import '../workspace/workspace.dart';
 import '../workspace/workspace_keys.dart';
 import '../workspace/workspace_tabs.dart';
 import '../workspace/workspace_view.dart';
+import 'full_screen.dart';
 import 'mode_view.dart';
 import 'mode.dart';
 import 'top_bar.dart';
@@ -45,6 +47,7 @@ class Shell extends StatefulWidget {
     required this.documents,
     required this.training,
     required this.labs,
+    required this.fullScreen,
     required this.settingRows,
     required this.settingsAlso,
   });
@@ -54,6 +57,9 @@ class Shell extends StatefulWidget {
   final DocumentModes documents;
   final TrainingModes training;
   final LabModes labs;
+
+  /// Whether the window fills the screen: F11, Esc and the Actions menu.
+  final FullScreen fullScreen;
 
   /// The settings page's rows, as the app wires them, and the one owner
   /// besides the store they are built from: the Lichess account.
@@ -67,6 +73,10 @@ class Shell extends StatefulWidget {
 class _ShellState extends State<Shell> with ListeningState<Shell> {
   /// Whether the edit strip is open. The strip's own Done closes it.
   final _editing = ValueNotifier(false);
+
+  /// The words and the focus of the move field under the board, which `/`
+  /// and a lesson reach as well as the field.
+  final _moves = MoveEntry();
 
   /// Who holds the board: a lesson first, then the Tree tab's free board.
   late final _claim = FirstClaim([_train.lines.board, _ws.tree.board]);
@@ -82,6 +92,17 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   );
 
   ModeView get _view => _views[_requests.mode]!;
+
+  /// The mode on screen as last seen, so the one left can be told; the
+  /// mode changes through the requests, whoever asked.
+  Mode? _shown;
+
+  void _modeMayHaveChanged() {
+    final mode = _requests.mode;
+    if (mode == _shown) return;
+    if (_shown case final left?) _views[left]!.left();
+    _shown = mode;
+  }
 
   /// The reading card's tabs of the mode on screen.
   PaneTabs<WorkspaceTab> get _tabs => _view.tabs;
@@ -129,12 +150,16 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       view.tabs.addListener(_sitting.check);
     }
     _sitting.check();
+    _shown = _requests.mode;
+    _requests.addListener(_modeMayHaveChanged);
   }
 
   @override
   void dispose() {
+    _requests.removeListener(_modeMayHaveChanged);
     _sitting.dispose();
     _editing.dispose();
+    _moves.dispose();
     _claim.dispose();
     for (final view in _views.values) {
       view.dispose();
@@ -177,8 +202,6 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   );
 
   void _switchTo(Mode mode) {
-    if (mode == _requests.mode) return;
-    _view.left();
     _requests.switchTo(mode);
     _view.entered();
   }
@@ -210,6 +233,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       switch (tab) {
         WorkspaceTab.train => TrainPane(
           trainer: _train.lines,
+          moves: _moves,
           onRead: (line) => unawaited(_readLine(line)),
           offerBuilder: _view.offersBuilder,
         ),
@@ -224,11 +248,16 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         _ => null,
       };
 
-  /// Space and ↓ are the puzzle's while one is on the board, and the
-  /// document's otherwise; in My games ↑ and ↓ walk the list.
+  /// Space shows the answer while a puzzle is on the board; otherwise it
+  /// is the mode's: the viewer's autoplay.
   void _space() {
-    if (_train.puzzles.up != null) _train.puzzles.showSolution();
+    if (_train.puzzles.up == null) return _view.space();
+    _train.puzzles.showSolution();
   }
+
+  /// What Esc leaves once the workspace has nothing left: the mode's
+  /// sitting, then full screen.
+  bool _leave() => _view.leave() || widget.fullScreen.leave();
 
   /// ↓ (1) / ↑ (−1) walk what is in front of the user: the mode's own list
   /// when it has one (My games), the puzzles in a sitting, else the file's
@@ -265,7 +294,17 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   }
 
   /// Everything the Actions menu offers now, in the mode on screen.
-  List<AppAction> _actions() => _view.actions((
+  List<AppAction> _actions() => [
+    ..._modeActions(),
+    AppAction(
+      widget.fullScreen.on ? 'Leave full screen' : 'Full screen',
+      widget.fullScreen.toggle,
+      shortcut: 'F11',
+      group: 'Window',
+    ),
+  ];
+
+  List<AppAction> _modeActions() => _view.actions((
     editing: _editing,
     board: () => boardActions(
       context,
@@ -318,6 +357,11 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     ),
     ..._command(LogicalKeyboardKey.keyV, () => unawaited(_requests.paste())),
     ..._command(
+      LogicalKeyboardKey.keyV,
+      () => unawaited(_requests.pasteFen()),
+      shift: true,
+    ),
+    ..._command(
       LogicalKeyboardKey.keyN,
       () => unawaited(_requests.newAnalysisBoard()),
     ),
@@ -327,24 +371,27 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     ),
     ..._command(LogicalKeyboardKey.keyK, () => unawaited(_palette())),
     const SingleActivator(LogicalKeyboardKey.space): _space,
+    const SingleActivator(LogicalKeyboardKey.f11): widget.fullScreen.toggle,
     const SingleActivator(LogicalKeyboardKey.arrowDown): () => _walk(1),
     const SingleActivator(LogicalKeyboardKey.arrowUp): () => _walk(-1),
   };
 
-  /// The window's keys a mode with a screen of its own keeps: the settings
-  /// and the actions typed for. The rest are the workspace's.
+  /// The window's keys a mode with a screen of its own keeps: the settings,
+  /// the actions typed for and full screen. The rest are the workspace's.
   Map<ShortcutActivator, VoidCallback> get _screenKeys => {
+    const SingleActivator(LogicalKeyboardKey.f11): widget.fullScreen.toggle,
     ..._command(LogicalKeyboardKey.comma, () => unawaited(_settings())),
     ..._command(LogicalKeyboardKey.keyK, () => unawaited(_palette())),
   };
 
-  /// [key] with Ctrl, and with Cmd for macOS.
+  /// [key] with Ctrl, and with Cmd for macOS; with Shift too when [shift].
   static Map<ShortcutActivator, VoidCallback> _command(
     LogicalKeyboardKey key,
-    VoidCallback run,
-  ) => {
-    SingleActivator(key, control: true): run,
-    SingleActivator(key, meta: true): run,
+    VoidCallback run, {
+    bool shift = false,
+  }) => {
+    SingleActivator(key, control: true, shift: shift): run,
+    SingleActivator(key, meta: true, shift: shift): run,
   };
 
   /// The mode and the status are the requests'; a change to either redraws
@@ -386,7 +433,9 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
               analysis: _ws.analysis,
               editing: _editing,
               tabs: _tabs,
+              moves: _moves,
               extra: _windowKeys,
+              leave: _leave,
               child: _columns(),
             ),
       ),
@@ -416,6 +465,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       workspace: _ws,
       tabs: _tabs,
       editing: _editing,
+      moves: _moves,
       hooks: WorkspaceHooks(
         header: _view.header,
         gameCounter: _view.gameCounter,

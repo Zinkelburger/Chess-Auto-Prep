@@ -6,6 +6,7 @@ import 'explorer.dart';
 import 'fill_gaps.dart';
 import 'game_fetcher.dart';
 import 'gap_hunt.dart';
+import 'local_games.dart';
 import 'replies.dart';
 import 'repertoire_shelf.dart';
 import 'repertoire_tree.dart';
@@ -31,6 +32,7 @@ final class Workspace {
     required this.shelf,
     required this.tree,
     required this.fill,
+    required this.myGamesTree,
   });
 
   final DocumentSession session;
@@ -51,4 +53,8 @@ final class Workspace {
   /// The user's own repertoires, looked up by position: the Tree tab.
   final RepertoireTree tree;
   final FillGaps fill;
+
+  /// The user's saved games as one opening tree: the explorer's
+  /// `My games`, read again when their games change.
+  final LocalGames myGamesTree;
 }

@@ -3,11 +3,14 @@ import 'dart:async';
 import '../engines/engine_supervisor.dart';
 import '../engines/fixed_depth.dart';
 import '../features/library/library.dart';
+import '../storage/my_games_files.dart';
 import '../workspace/engine_analysis.dart';
 import '../workspace/explorer.dart';
+import '../workspace/file_filter.dart';
 import '../workspace/fill_gaps.dart';
 import '../workspace/game_fetcher.dart';
 import '../workspace/gap_hunt.dart';
+import '../workspace/local_games.dart';
 import '../workspace/replies.dart';
 import '../workspace/repertoire_shelf.dart';
 import '../workspace/repertoire_tree.dart';
@@ -25,9 +28,13 @@ final class WorkspaceWiring {
     required DocumentSession session,
     required DocumentSaver saver,
     required Library library,
+    required FileFilter filter,
+    required GamesCache games,
   }) : _session = session,
        _saver = saver,
-       _library = library {
+       _library = library,
+       _filter = filter,
+       _gamesCache = games {
     _library.addListener(_answers.forget);
     _library.addListener(_tree.forget);
     _fill.addListener(_listTheDraft);
@@ -37,6 +44,8 @@ final class WorkspaceWiring {
   final DocumentSession _session;
   final DocumentSaver _saver;
   final Library _library;
+  final FileFilter _filter;
+  final GamesCache _gamesCache;
 
   late final workspace = Workspace(
     session: _session,
@@ -50,6 +59,7 @@ final class WorkspaceWiring {
     shelf: _shelf,
     tree: _tree,
     fill: _fill,
+    myGamesTree: _myGamesTree,
   );
 
   late final _analysis = EngineAnalysis(
@@ -59,9 +69,17 @@ final class WorkspaceWiring {
     elsewhere: _tree.board,
   );
 
+  late final _fileTree = FileTree(filter: _filter);
+  late final _myGamesTree = MyGamesTree(
+    accounts: _env.accounts,
+    cache: _gamesCache,
+    store: _env.gameStore,
+  );
   late final _databases = ExplorerDatabases(
     lichess: _env.lichessExplorer,
     book: _env.masterBook,
+    thisFile: _fileTree,
+    myGames: _myGamesTree,
   );
   late final _explorer = Explorer(
     session: _session,
@@ -171,6 +189,8 @@ final class WorkspaceWiring {
     _replies.dispose();
     _gaps.dispose();
     _explorer.dispose();
+    _fileTree.dispose();
+    _myGamesTree.dispose();
     _tree.dispose();
     _games.dispose();
   }

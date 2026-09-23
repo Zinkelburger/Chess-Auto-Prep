@@ -205,6 +205,7 @@ void main() {
       import: fixture.import,
       settings: fixture.settings,
       session: fixture.session,
+      filter: fixture.filter,
       collections: '/home/me/Documents/pgn_collections',
     );
     addTearDown(homed.dispose);

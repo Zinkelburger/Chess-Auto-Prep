@@ -88,7 +88,10 @@ final class WindowFixture {
     return written is CopySaved ? written.name : null;
   }
 
-  static AppEnvironment _environment(ScriptedBughouse bughouse) {
+  /// What the window was asked, in order: true for into full screen.
+  final fullScreenAsked = <bool>[];
+
+  AppEnvironment _environment(ScriptedBughouse bughouse) {
     final store = ScriptedDocumentStore()
       ..documents[kidMain] = Opened(
         blackChapter,
@@ -134,6 +137,7 @@ final class WindowFixture {
       ),
       lichessExplorer: lichess,
       masterBook: ScriptedBook(),
+      gameStore: ScriptedGameStore(),
       gameSites: const [],
       // The usernames, in memory: none until a test sets them.
       accounts: MemoryAccounts(),
@@ -145,6 +149,7 @@ final class WindowFixture {
       stopEngines: () async {},
       evalCache: () => throw StateError('no eval cache in this test'),
       keepTree: (_, _) async {},
+      setFullScreen: (on) async => fullScreenAsked.add(on),
       bughouse: bughouse.outside,
       now: () => tacticsToday,
       saveDelay: Duration.zero,
@@ -210,6 +215,7 @@ final class WindowFixture {
           documents: parts.documents,
           training: parts.training,
           labs: parts.labs,
+          fullScreen: parts.fullScreen,
           settingRows: () => const [],
           settingsAlso: settings,
         ),

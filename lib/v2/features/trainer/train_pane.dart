@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../ui/theme.dart';
+import '../../workspace/move_field.dart';
 import 'lesson_view.dart';
 import 'line_list.dart';
 import 'trainer.dart';
@@ -13,11 +14,15 @@ class TrainPane extends StatefulWidget {
   const TrainPane({
     super.key,
     required this.trainer,
+    required this.moves,
     required this.onRead,
     this.offerBuilder = true,
   });
 
   final Trainer trainer;
+
+  /// The move field under the board, which a lesson types a move into.
+  final MoveEntry moves;
 
   /// Sends a line to be read: to the board, the Moves tab or the builder.
   final ValueChanged<LineToRead> onRead;
@@ -43,7 +48,11 @@ class _TrainPaneState extends State<TrainPane> {
       builder: (context, _) {
         final trainer = widget.trainer;
         if (trainer.lesson case final lesson?) {
-          return LessonView(lesson: lesson, trainer: trainer);
+          return LessonView(
+            lesson: lesson,
+            trainer: trainer,
+            moves: widget.moves,
+          );
         }
         return switch (trainer.state) {
           TrainerIdle() ||

@@ -97,10 +97,17 @@ abstract base class ModeView {
   /// it took the key.
   bool walk(int by) => false;
 
+  /// Space, when no puzzle is up: the viewer plays the game forward.
+  void space() {}
+
+  /// Esc, once the workspace has nothing left to leave; whether the mode
+  /// left anything. Tactics ends its sitting.
+  bool leave() => false;
+
   /// Called when the user switches to this mode.
   void entered() {}
 
-  /// Called when the user switches away from it.
+  /// Called when another mode comes on screen instead of this one.
   void left() {}
 
   /// The whole of the window under the top bar, for a mode that is a
@@ -220,11 +227,34 @@ final class ViewerView extends _DocumentModeView {
   final DocumentModes _modes;
 
   @override
-  Listenable get changes => Listenable.merge([super.changes, _modes.viewer]);
+  Listenable get changes =>
+      Listenable.merge([super.changes, _modes.viewer, _modes.autoplay]);
+
+  @override
+  void space() => _modes.autoplay.toggle();
+
+  /// Nothing would be left to stop it by: Space is the viewer's.
+  @override
+  void left() => _modes.autoplay.stop();
+
+  @override
+  List<AppAction> actions(ModeMenu menu) {
+    final autoplay = _modes.autoplay;
+    return [
+      ...super.actions(menu),
+      AppAction(
+        autoplay.playing ? 'Stop playing' : 'Play through',
+        workspace.session.chapter == null ? null : autoplay.toggle,
+        shortcut: 'Space',
+        group: 'Board',
+      ),
+    ];
+  }
 
   @override
   Widget list(Widget toggle) => PgnViewerPanel(
     viewer: _modes.viewer,
+    filter: _modes.filter,
     onOpen: (file) => unawaited(requests.openFile(file)),
     onBrowse: () => unawaited(requests.browse()),
     trailing: toggle,
@@ -294,6 +324,15 @@ final class TacticsView extends ModeView {
   @override
   void entered() {
     if (workspace.analysis.enabled) unawaited(workspace.analysis.disable());
+  }
+
+  /// Esc ends the sitting, as the old app's Esc left the puzzle.
+  @override
+  bool leave() {
+    final puzzles = _training.puzzles;
+    if (puzzles.run == null) return false;
+    puzzles.end();
+    return true;
   }
 
   /// Starts a sitting, from [first] when the list asked for one, with the
@@ -523,6 +562,13 @@ List<AppAction> boardActions(
       () => unawaited(requests.newAnalysisBoard()),
       shortcut: 'Ctrl+N',
     ),
+    // On the board, Paste PGN or FEN below takes a FEN too.
+    if (!scratch)
+      AppAction(
+        'Paste FEN',
+        () => unawaited(requests.pasteFen()),
+        shortcut: 'Ctrl+Shift+V',
+      ),
     if (scratch) ...[
       AppAction(
         'Paste PGN or FEN',

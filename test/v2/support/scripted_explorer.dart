@@ -7,6 +7,8 @@ import 'package:chess_auto_prep/v2/storage/settings_store.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
 import 'package:chess_auto_prep/v2/workspace/explorer.dart';
 import 'package:chess_auto_prep/v2/workspace/game_fetcher.dart';
+import 'package:chess_auto_prep/v2/workspace/local_games.dart';
+import 'package:flutter/foundation.dart';
 
 /// What the masters database says at the start: two moves and one game.
 const startAnswer = ExplorerAnswer(
@@ -92,6 +94,37 @@ final class ScriptedBook implements MasterBook {
   }
 }
 
+/// Games on this machine as a tree the test sets: its state, its answer
+/// and its games' PGN. Counts how often it was wanted and forgotten.
+final class ScriptedLocalGames extends ChangeNotifier implements SavedGames {
+  @override
+  TreeState state = const TreeUnbuilt();
+
+  ExplorerAnswer? answer;
+
+  @override
+  String? summary;
+
+  final pgns = <String, String>{};
+  int wanted = 0;
+  int forgotten = 0;
+
+  /// Tells the explorer something changed, as a built tree would.
+  void changed() => notifyListeners();
+
+  @override
+  void want() => wanted++;
+
+  @override
+  ExplorerAnswer? answerAt(Fen fen) => answer;
+
+  @override
+  void forget() => forgotten++;
+
+  @override
+  String? gamePgn(String id) => pgns[id];
+}
+
 /// Where fetched games are kept in these tests.
 const explorerCollections = '/Documents/pgn_collections';
 
@@ -102,6 +135,8 @@ Explorer explorerOver(
   required SettingsStore settings,
   ScriptedExplorerApi? lichess,
   ScriptedBook? book,
+  LocalGames? thisFile,
+  SavedGames? myGames,
   Duration debounce = Duration.zero,
 }) => Explorer(
   session: session,
@@ -109,6 +144,8 @@ Explorer explorerOver(
   databases: ExplorerDatabases(
     lichess: lichess ?? ScriptedExplorerApi(),
     book: book ?? ScriptedBook(),
+    thisFile: thisFile ?? ScriptedLocalGames(),
+    myGames: myGames ?? ScriptedLocalGames(),
   ),
   debounce: debounce,
 );
@@ -119,11 +156,28 @@ GameFetcher gamesOver(
   PgnDocumentStore documents, {
   ScriptedExplorerApi? lichess,
   ScriptedBook? book,
+  SavedGames? myGames,
 }) => GameFetcher(
   databases: ExplorerDatabases(
     lichess: lichess ?? ScriptedExplorerApi(),
     book: book ?? ScriptedBook(),
+    thisFile: ScriptedLocalGames(),
+    myGames: myGames ?? ScriptedLocalGames(),
   ),
   documents: documents,
   collections: explorerCollections,
 );
+
+/// Waits, on real time, for [tree] to finish what it is doing.
+Future<void> settled(LocalGames tree) async {
+  for (var tries = 0; tries < 1000; tries++) {
+    if (tree.state case TreeBuilt() || TreeEmpty() || TreeFailed()) return;
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+  throw StateError('the tree never finished: ${tree.state}');
+}
+
+/// The moves of [answer], most played first, as UCI.
+List<String> movesOf(ExplorerAnswer? answer) => [
+  for (final move in answer?.moves ?? const <ExplorerMove>[]) move.uci,
+];

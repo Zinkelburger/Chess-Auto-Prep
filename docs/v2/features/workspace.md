@@ -91,6 +91,15 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
   chapter (the board's side as its colour). Closing the window forgets it, as on lichess.
   Owners: `DocumentSession` (`isScratch`, `KeptBoard` in `workspace/document_session.dart`),
   `chess/pgn/analysis_board.dart`, `boardActions` in `app/mode_view.dart`.
+- **Move field** (v2, 2026-09-23) — a small `Type a move` box at the left of the row under
+  the board, on every board the user plays on: a chapter, the analysis board, a puzzle, a Train
+  drill and the Tree tab's free board. SAN or UCI in any case (`nf3`, `g1f3`, `0-0`, `e1h1`,
+  `e8=Q`, `e7e8q`, `Nbd2`, `N1f3`, marks optional) plays the moment it names one legal move that
+  longer words could not turn into another, through the same path as a move on the board; Enter
+  plays the one move the words still leave (a promotion without its piece is a queen); Esc clears
+  it and gives the keys back; words no move is written as turn the box red and nothing else.
+  `/` focuses it; in a drill a move's first letter typed on the lesson goes there by itself.
+  Resolver `chess/typed_move.dart`, field `workspace/move_field.dart`.
 - **Board editor** — dialog (960×720) or embedded panel. Spare strips above and below the board
   swap with the flip, each `[pointer] K Q R B N P [bin]`; then side to move, Start position, Clear
   board, Flip board, an advanced section (four castling checkboxes, enabled only with king and rook
@@ -104,14 +113,15 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
 | ← / → | Back / forward one move (auto-repeats) |
 | Home / End | Start / end of the line |
 | ↑ / ↓ | Previous / next item in front of you (game, chapter, puzzle, finding) |
-| Enter | Focus the current variation; start solitaire on the setup strip |
-| Esc | Leave the innermost thing first; in a text field it only blurs |
-| Space | Play/pause replay; show/hide solution in a trainer |
+| Enter | Focus the current variation; start solitaire on the setup strip (v2: steps into the first variation branching at the cursor; no solitaire yet) |
+| Esc | Leave the innermost thing first; in a text field it only blurs (v2: out of the variation to where it branched, then the edit strip, then a Tactics sitting, then full screen; the move field clears and blurs) |
+| Space | Play/pause replay; show/hide solution in a trainer (v2: autoplay in the PGN Viewer, one move a second, any navigation stops it) |
 | F / E | Flip the board / toggle the engine |
-| F11 | Fullscreen |
-| Ctrl+V, Ctrl+Shift+V | Paste PGN, paste FEN |
+| F11 | Fullscreen (v2: the whole window, every mode; Actions ▸ `Full screen`) |
+| Ctrl+V, Ctrl+Shift+V | Paste PGN, paste FEN (v2: a FEN as a new analysis board from anything open; Actions ▸ `Paste FEN`) |
 | Ctrl+Z | Undo the last repertoire add |
 | Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+W | Next / previous tab of the reading card; close the tab that is up (v2) |
+| / | Focus the move field under the board (v2) |
 | 1–4 | Rate Again / Hard / Good / Easy (trainer only) |
 
 Nothing fires while a text field has focus, and a screen with a live move box swallows every bare

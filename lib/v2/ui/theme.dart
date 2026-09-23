@@ -38,6 +38,17 @@ const nameDialogWidth = 360.0;
 /// list does not grow and shrink under the pointer as the search narrows it.
 const choiceDialogHeight = 280.0;
 
+/// The widest a typeable choice field's suggestions grow.
+const choiceFieldMenuWidth = 280.0;
+
+/// How wide a filter rule's rule box is, beside a field box that takes the
+/// rest of the line.
+const filterRuleWidth = 96.0;
+
+/// The narrowest a filter rule's first line holds both its field and its
+/// rule box; under it the rule goes on a line of its own.
+const filterRuleLineWidth = 260.0;
+
 /// How big an icon is. Icons sit with the text they label, so they follow
 /// the type scale rather than Material's default 24.
 abstract final class IconSize {
@@ -456,12 +467,21 @@ const gameOrdinalWidth = 40.0;
 /// How wide the typeable game number under the board is: four digits.
 const gameNumberWidth = 52.0;
 
+/// The typed-move field under the board: room for `exd8=Q+` and no more,
+/// so the game counter beside it keeps its place on the narrowest board.
+const moveFieldWidth = 96.0;
+
 /// The Explorer tab's table: the move gutter, the games gutter, the header
 /// row over them, and the height of one filter chip. The result bar sits after the
 /// games, no wider than [explorerBarMaxWidth]: a bar across the whole card
 /// is a stripe the eye reads before the moves.
 const explorerMoveWidth = 64.0;
 const explorerGamesWidth = 96.0;
+
+/// The widest the end of the Explorer tab's source row grows — the
+/// filters' summary or what a source on this machine is over — so the
+/// databases keep the rest of the row.
+const explorerTrailingMaxWidth = 220.0;
 const explorerBarMaxWidth = 220.0;
 const explorerBarHeight = 16.0;
 const explorerHeaderHeight = 22.0;

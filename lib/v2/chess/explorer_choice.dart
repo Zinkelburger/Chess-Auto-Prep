@@ -11,13 +11,23 @@ enum ExplorerSource {
   lichess('Lichess'),
 
   /// The master games on this machine, the TWIC import; works offline.
-  twic('TWIC');
+  twic('TWIC'),
+
+  /// The games of the file open in the workspace: the old viewer's `Tree`.
+  thisFile('This file'),
+
+  /// The user's own saved games.
+  myGames('My games');
 
   const ExplorerSource(this.title);
 
   final String title;
 
-  bool get online => this != twic;
+  bool get online => this == masters || this == lichess;
+
+  /// Built from games on this machine and answered from memory: nothing
+  /// to wait for between positions, and nothing to keep between sessions.
+  bool get local => this == thisFile || this == myGames;
 }
 
 /// The time controls the Lichess database is split by, as the API names
@@ -82,7 +92,9 @@ final class ExplorerChoice {
   /// `blitz rapid classical · 2000+`, `classical only`, or empty when it is
   /// not narrowed at all. The database itself is the pressed button.
   String get narrowing => switch (source) {
-    ExplorerSource.masters => '',
+    ExplorerSource.masters ||
+    ExplorerSource.thisFile ||
+    ExplorerSource.myGames => '',
     ExplorerSource.twic => classicalOnly ? 'classical only' : '',
     ExplorerSource.lichess =>
       '${speedsInOrder.map((s) => s.name).join(' ')} · ${_ratingsSummary()}',

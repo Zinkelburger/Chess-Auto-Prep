@@ -4,6 +4,7 @@ import 'package:chess_auto_prep/v2/storage/settings_store.dart';
 import 'package:chess_auto_prep/v2/ui/pane_tabs.dart';
 import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
+import 'package:chess_auto_prep/v2/workspace/comment_field.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
 import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
 import 'package:chess_auto_prep/v2/workspace/explorer.dart';
@@ -11,6 +12,7 @@ import 'package:chess_auto_prep/v2/workspace/game_fetcher.dart';
 import 'package:chess_auto_prep/v2/workspace/gap_hunt.dart';
 import 'package:chess_auto_prep/v2/workspace/explorer_pane.dart';
 import 'package:chess_auto_prep/v2/workspace/fill_gaps.dart';
+import 'package:chess_auto_prep/v2/workspace/move_field.dart';
 import 'package:chess_auto_prep/v2/workspace/move_tree_view.dart';
 import 'package:chess_auto_prep/v2/workspace/replies.dart';
 import 'package:chess_auto_prep/v2/workspace/replies_pane.dart';
@@ -44,8 +46,15 @@ void main() {
   late Explorer explorer;
   late FillGaps fill;
   late ValueNotifier<bool> editing;
+  late MoveEntry moves;
   late PaneTabs<WorkspaceTab> tabs;
   late SettingsStore settings;
+
+  /// The comment's box; the move field under the board is always there.
+  final comment = find.descendant(
+    of: find.byType(CommentField),
+    matching: find.byType(TextField),
+  );
 
   /// The engine stays off; its pane has its own test.
   void startAnalysis() {
@@ -66,6 +75,8 @@ void main() {
       databases: ExplorerDatabases(
         lichess: ScriptedExplorerApi(),
         book: ScriptedBook(),
+        thisFile: ScriptedLocalGames(),
+        myGames: ScriptedLocalGames(),
       ),
       debounce: Duration.zero,
     );
@@ -100,6 +111,7 @@ void main() {
       shelf: shelf,
       tree: tree,
       fill: fill,
+      myGamesTree: ScriptedLocalGames(),
     );
   }
 
@@ -116,10 +128,12 @@ void main() {
             analysis: analysis,
             editing: editing,
             tabs: tabs,
+            moves: moves,
             child: WorkspaceView(
               workspace: workspace(),
               tabs: tabs,
               editing: editing,
+              moves: moves,
             ),
           ),
         ),
@@ -133,6 +147,7 @@ void main() {
     session = fixture.session;
     saver = fixture.saver;
     editing = ValueNotifier(false);
+    moves = MoveEntry();
     tabs = newWorkspaceTabs();
     settings = SettingsStore();
     startAnalysis();
@@ -142,6 +157,7 @@ void main() {
     settings.dispose();
     tabs.dispose();
     editing.dispose();
+    moves.dispose();
     analysis.dispose();
     fixture.dispose();
   });
@@ -170,7 +186,7 @@ void main() {
     tester,
   ) async {
     await pump(tester);
-    expect(find.byType(TextField), findsNothing);
+    expect(comment, findsNothing);
     expect(find.text('Saved'), findsNothing);
     expect(find.byTooltip('Undo (Ctrl+Z)'), findsNothing);
     expect(find.text('Engine'), findsOneWidget, reason: 'off, one row');
@@ -183,11 +199,11 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pumpAndSettle();
     expect(editing.value, isTrue);
-    expect(find.byType(TextField), findsOneWidget);
+    expect(comment, findsOneWidget);
     expect(find.text('Saved'), findsOneWidget);
     await tester.tap(find.text('Done'));
     await tester.pumpAndSettle();
-    expect(find.byType(TextField), findsNothing);
+    expect(comment, findsNothing);
   });
 
   testWidgets('clicking a variation move puts the cursor on it', (
@@ -277,7 +293,7 @@ void main() {
     session.goTo(sicilian);
     session.setComment(sicilian, 'Mine'); // one edit there is to take back
     await tester.pumpAndSettle();
-    final field = find.byType(TextField);
+    final field = comment;
     await tester.tap(field);
     await tester.enterText(field, 'Mine words');
     await tester.pump();
@@ -285,7 +301,9 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     await tester.pump();
     expect(session.cursor, sicilian, reason: 'the arrow moved the caret');
-    final editable = tester.widget<EditableText>(find.byType(EditableText));
+    final editable = tester.widget<EditableText>(
+      find.descendant(of: comment, matching: find.byType(EditableText)),
+    );
     expect(editable.controller.selection.baseOffset, 'Mine words'.length - 1);
 
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);

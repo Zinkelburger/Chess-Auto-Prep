@@ -1,12 +1,20 @@
+import 'package:chess_auto_prep/v2/chess/tactics/game_ids.dart';
 import 'package:chess_auto_prep/v2/net/lichess_explorer.dart';
+import 'package:chess_auto_prep/v2/storage/my_accounts.dart';
+import 'package:chess_auto_prep/v2/storage/my_games_files.dart';
+import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/storage/settings_store.dart';
 import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:chess_auto_prep/v2/workspace/explorer.dart';
 import 'package:chess_auto_prep/v2/workspace/explorer_pane.dart';
+import 'package:chess_auto_prep/v2/workspace/file_filter.dart';
+import 'package:chess_auto_prep/v2/workspace/local_games.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/my_games_fixture.dart';
 import '../support/scripted_explorer.dart';
+import '../support/scripted_store.dart';
 import '../support/session_fixture.dart';
 
 const chapter = '''
@@ -41,12 +49,18 @@ void main() {
 
   /// The owner is made inside the test body, so its futures run under the
   /// test's clock.
-  Future<void> show(WidgetTester tester) async {
+  Future<void> show(
+    WidgetTester tester, {
+    LocalGames? thisFile,
+    SavedGames? myGames,
+  }) async {
     explorer = explorerOver(
       fixture.session,
       settings: settings,
       lichess: lichess,
       book: book,
+      thisFile: thisFile,
+      myGames: myGames,
     );
     addTearDown(explorer.dispose);
     final games = gamesOver(fixture.store, lichess: lichess, book: book);
@@ -59,7 +73,9 @@ void main() {
             children: [
               Expanded(
                 child: SizedBox(
-                  width: 480,
+                  // The test font's letters are square: five databases
+                  // need the room.
+                  width: 800,
                   child: ExplorerPane(
                     session: fixture.session,
                     explorer: explorer,
@@ -146,6 +162,50 @@ void main() {
     await tester.tap(find.text('Classical OTB only'));
     await tester.pumpAndSettle();
     expect(settings.value.explorer.classicalOnly, isTrue);
+  });
+
+  testWidgets('This file is the open file\'s games and My games the '
+      'user\'s saved ones, each with its games under the moves', (
+    tester,
+  ) async {
+    final filter = FileFilter(fixture.session, delay: Duration.zero);
+    addTearDown(filter.dispose);
+    final thisFile = FileTree(filter: filter);
+    addTearDown(thisFile.dispose);
+    final saved = ScriptedDocumentStore();
+    final cache = GamesCache(saved, folder: '/games_library');
+    const mine =
+        '[Event "Rated blitz game"]\n[Site "https://lichess.org/Mine1234"]\n'
+        '[Date "2026.09.01"]\n[White "Me"]\n[Black "Rival"]\n'
+        '[Result "0-1"]\n\n1. d4 d5 0-1\n';
+    saved.documents[cache.refFor(GameSite.lichess, 'Me')] = Opened(
+      mine,
+      scriptedRevision(mine),
+    );
+    final myGames = MyGamesTree(
+      accounts: MemoryAccounts({GameSite.lichess: const Account('Me')}),
+      cache: cache,
+      store: ScriptedGameStore(),
+    );
+    addTearDown(myGames.dispose);
+    await show(tester, thisFile: thisFile, myGames: myGames);
+
+    await tester.tap(find.text('This file'));
+    await tester.pumpAndSettle();
+    expect(find.text('e4'), findsOneWidget);
+    expect(find.text('1 · 100%'), findsOneWidget);
+    expect(find.text('1 game'), findsOneWidget, reason: 'the summary');
+    expect(find.text('Masters'), findsOneWidget, reason: 'the row stays');
+    expect(lichess.asked.map((q) => q.choice.source), [ExplorerSource.masters]);
+
+    await tester.tap(find.text('My games'));
+    await tester.pumpAndSettle();
+    expect(find.text('d4'), findsOneWidget);
+    expect(find.text('e4'), findsNothing);
+    expect(find.text('Me – Rival'), findsOneWidget);
+    expect(find.text('0-1'), findsOneWidget);
+    await tester.tap(find.text('Me – Rival'));
+    expect(opened.single.id, 'lichess_Mine1234');
   });
 
   testWidgets('a failure is a sentence with Try again, and the table comes '
