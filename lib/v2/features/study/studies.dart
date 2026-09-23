@@ -158,28 +158,23 @@ final class Studies extends ChangeNotifier {
 
   /// Recoverable: the file goes to the recovery folder through the store,
   /// which is where a deleted chapter goes too.
-  Future<StudyResult> delete(ChapterRef study) =>
-      _run('delete ${study.path}', () async {
-        final revision = await _revisionOf(study);
-        if (revision == null) {
+  Future<StudyResult> delete(ChapterRef study) => _run(
+    'delete ${study.path}',
+    () => _withRevision(study, (revision) async {
+      switch (await _store.delete(study, expected: revision)) {
+        case store.Deleted():
+          if (_session.source == study) _session.closed();
+          return const StudyDone();
+        case store.Conflict():
           return const StudyProblem(
-            'That study changed on disk. The list has been refreshed; try '
-            'again.',
+            'That study changed on disk while it was open. Reload it, then '
+            'try again.',
           );
-        }
-        switch (await _store.delete(study, expected: revision)) {
-          case store.Deleted():
-            if (_session.source == study) _session.closed();
-            return const StudyDone();
-          case store.Conflict():
-            return const StudyProblem(
-              'That study changed on disk while it was open. Reload it, then '
-              'try again.',
-            );
-          case store.IoFailure(:final detail):
-            return StudyProblem('Could not delete the study: $detail');
-        }
-      });
+        case store.IoFailure(:final detail):
+          return StudyProblem('Could not delete the study: $detail');
+      }
+    }),
+  );
 
   /// The whole open study as PGN, once the draft on screen has reached the
   /// file: copying a study that is a second behind is copying the wrong one.
@@ -243,23 +238,42 @@ final class Studies extends ChangeNotifier {
     };
   }
 
-  /// The revision [study] has now, with the file held still when it is the
-  /// one open, so a delete cannot land between an autosave and its answer.
-  Future<Revision?> _revisionOf(ChapterRef study) async {
-    if (_session.source == study) {
-      return _saver.holdStill((revision) async => revision);
+  /// Runs [write] against the revision [study] has now.
+  ///
+  /// The study open in the workspace is held still by its saver until
+  /// [write] is over, so an autosave cannot land between the revision and
+  /// the write that expects it. Any other is read from disk, which is also
+  /// the check that it is still there.
+  Future<StudyResult> _withRevision(
+    ChapterRef study,
+    Future<StudyResult> Function(Revision revision) write,
+  ) async {
+    if (_session.source == study) return _held(write);
+    switch (await _store.open(study)) {
+      case store.Opened(:final revision):
+        // The user may have opened the study while it was being read, and
+        // from here on its writes belong behind the saver's hold.
+        if (_session.source == study) return _held(write);
+        return write(revision);
+      case store.Absent():
+        return _changedOnDisk;
+      case store.Unreadable(:final detail):
+        log.w('read ${study.path} before changing it', detail);
+        return _changedOnDisk;
     }
-    return switch (await _store.open(study)) {
-      store.Opened(:final revision) => revision,
-      store.Absent() => null,
-      store.Unreadable(:final detail) => _unreadable(study, detail),
-    };
   }
 
-  Revision? _unreadable(ChapterRef study, String detail) {
-    log.w('read ${study.path} before changing it', detail);
-    return null;
-  }
+  /// Runs [write] with the open study held still by its saver. When the
+  /// saver cannot hold it — nothing is open by the time its draft is
+  /// written, or another change holds it — the answer is the one for a
+  /// study gone from disk: the list is read again and the user tries again.
+  Future<StudyResult> _held(
+    Future<StudyResult> Function(Revision revision) write,
+  ) async => await _saver.holdStill(write) ?? _changedOnDisk;
+
+  static const _changedOnDisk = StudyProblem(
+    'That study changed on disk. The list has been refreshed; try again.',
+  );
 
   /// One change at a time, then the folder is listed again: a half-applied
   /// change must be visible, and the disk is the only thing that knows what

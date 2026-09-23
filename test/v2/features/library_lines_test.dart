@@ -111,6 +111,76 @@ void main() {
     expect(here, isNot(contains('[Event "Indian"]')));
   });
 
+  const classical = '''
+// Classical
+// Color: White
+
+[Event "Mar del Plata"]
+[Result "*"]
+
+1. d4 Nf6 2. c4 g6 *
+
+[Event "Petrosian"]
+[Result "*"]
+
+1. d4 Nf6 2. c4 g6 3. Nc3 Bg7 4. e4 d6 5. Nf3 O-O 6. Be2 e5 7. d5 *
+''';
+
+  test('a chapter opened while the lines are written keeps its own', () async {
+    await open();
+    fixture.store.documents[ref('KID', 'Classical')] = Opened(
+      classical,
+      scriptedRevision(classical),
+    );
+    fixture.store.hold = true;
+    final moved = fixture.library.moveLines(
+      games: {1},
+      to: ref('KID', 'Sidelines'),
+    );
+    await pumpEventQueue();
+    // The user clicks another chapter while Sidelines is being read.
+    final opening = fixture.session.open(ref('KID', 'Classical'));
+    await pumpEventQueue();
+    fixture.store.hold = false;
+    fixture.store.releaseLast(); // Classical opens first
+    await opening;
+    fixture.store.releaseAll();
+
+    expect(await moved, isA<LibraryFailure>());
+    await fixture.saver.flush();
+    expect(fixture.textAt('/repertoires/KID/Classical.pgn'), classical);
+    expect(fixture.session.chapter!.lines, hasLength(2));
+    // A duplicate the user can see: the lines are in both chapters.
+    expect(
+      fixture.textAt('/repertoires/KID/Sidelines.pgn'),
+      contains('[Event "Indian"]'),
+    );
+    expect(
+      fixture.textAt('/repertoires/KID/Main.pgn'),
+      contains('[Event "Indian"]'),
+    );
+  });
+
+  test('a chapter edited while the lines are written keeps them', () async {
+    await open();
+    fixture.store.hold = true;
+    final moved = fixture.library.moveLines(
+      games: {1},
+      to: ref('KID', 'Sidelines'),
+    );
+    await pumpEventQueue();
+    fixture.session.playMove('c2c4');
+    await pumpEventQueue();
+    fixture.store.hold = false;
+    fixture.store.releaseAll();
+
+    expect(await moved, isA<LibraryFailure>());
+    await fixture.saver.flush();
+    final here = fixture.textAt('/repertoires/KID/Main.pgn')!;
+    expect(here, contains('[Event "Indian"]'));
+    expect(here, contains('1. c4'));
+  });
+
   test('a target that changed on disk takes nothing and the open chapter '
       'keeps its lines', () async {
     await open();

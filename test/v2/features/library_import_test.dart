@@ -122,9 +122,26 @@ void main() {
   });
 
   test(
-    'a folder that appeared meanwhile is a taken name, and staging goes',
+    'a folder the list does not show is passed over for the next name',
     () async {
       fixture.store.folderMoves.add(const FolderNameTaken());
+      final result = await fixture.library.importText(oneLine, name: 'Fresh');
+      expect(result, isA<LibraryAdded>());
+      expect(
+        p.dirname((result as LibraryAdded).first.path),
+        '/repertoires/Fresh (2)',
+      );
+      expect(fixture.files.stagingRemoved, isEmpty);
+    },
+  );
+
+  test(
+    'a name taken every way it is tried is refused, and staging goes',
+    () async {
+      // More folders in the way than an import tries names.
+      fixture.store.folderMoves.addAll([
+        for (var n = 0; n < 1000; n++) const FolderNameTaken(),
+      ]);
       final result = await fixture.library.importText(oneLine, name: 'Fresh');
       expect(result, isA<LibraryNameTaken>());
       expect(fixture.files.stagingRemoved, hasLength(1));

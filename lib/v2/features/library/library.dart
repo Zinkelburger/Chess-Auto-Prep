@@ -23,6 +23,7 @@ import '../../storage/training_records.dart' as records;
 import '../../ui/file_names.dart';
 import '../../workspace/document_saver.dart';
 import '../../workspace/document_session.dart';
+import '../../workspace/session_results.dart';
 import 'library_state.dart';
 
 export 'library_state.dart';
@@ -50,12 +51,14 @@ final class Library extends ChangeNotifier {
     required DocumentSession session,
     required PgnFilePicker picker,
     required String root,
+    DateTime Function() now = DateTime.now,
   }) : _files = files,
        _store = documents,
        _saver = saver,
        _session = session,
        _picker = picker,
-       _root = root {
+       _root = root,
+       _now = now {
     _session.addListener(_followTheSession);
   }
 
@@ -77,6 +80,9 @@ final class Library extends ChangeNotifier {
 
   /// The `repertoires` folder, absolute.
   final String _root;
+
+  /// What a new chapter's heading says it was created on.
+  final DateTime Function() _now;
 
   LibraryState _state = const LibraryLoading();
   ChapterRef? _showing;
@@ -162,28 +168,38 @@ final class Library extends ChangeNotifier {
     if (path == null || _disposed) return null;
     return _run('import $path', () {
       final name = p.basenameWithoutExtension(path);
-      final folder = _freeName(importedName(name, fallback: importedFallback));
-      return _importFile(path, folder: folder);
+      return _importFile(
+        path,
+        name: importedName(name, fallback: importedFallback),
+      );
     });
   }
 
   /// [text] as a new repertoire called [name], or [name] with ` (2)`,
   /// ` (3)`… when that is taken; [_importText] says what
   /// becomes of its variations and chapters.
-  Future<LibraryResult> importText(String text, {required String name}) =>
-      _run('import $name', () {
-        final folder = _freeName(importedName(name, fallback: name));
-        return _importText(text, folder: folder);
-      });
+  Future<LibraryResult> importText(String text, {required String name}) => _run(
+    'import $name',
+    () => _importText(text, name: importedName(name, fallback: name)),
+  );
 
-  /// [name], or the first of `name (2)`, `name (3)`… that no repertoire in
-  /// the list has, compared without case as [_named] compares.
-  String _freeName(String name) {
-    var candidate = name;
-    for (var n = 2; _named(candidate) != null; n++) {
-      candidate = '$name ($n)';
+  /// How many names an import tries before it says the name is taken.
+  static const _namesTried = 100;
+
+  /// [name], then `name (2)`, `name (3)`…, leaving out every name a
+  /// repertoire in the list has, compared without case as [_named] compares.
+  ///
+  /// The disk can still have one of them: a repertoire whose chapters were
+  /// all deleted keeps its folder, because their recovery copies are in it,
+  /// and the list does not show a folder with no chapter in it. The move into
+  /// place is what finds that out, so an import tries these in turn.
+  List<String> _freeNames(String name) {
+    final names = <String>[];
+    for (var n = 1; names.length < _namesTried; n++) {
+      final candidate = n == 1 ? name : '$name ($n)';
+      if (_named(candidate) == null) names.add(candidate);
     }
-    return candidate;
+    return names;
   }
 
   /// A chapter takes the side of the repertoire it is added to, read from a
@@ -230,7 +246,7 @@ final class Library extends ChangeNotifier {
           return _editFile(
             ref,
             (file) => sectionRenamed(file, section, name),
-            section: name.trim(),
+            renamedTo: name.trim(),
           );
         }
         final to = p.join(p.dirname(ref.path), '$name.pgn');
@@ -320,7 +336,8 @@ final class Library extends ChangeNotifier {
   /// Reads the open chapter from disk again, throwing the draft away. This is
   /// the way out of [LibraryConflicted]: the workspace takes the version that
   /// is on disk, and the change the user asked for can be made against it.
-  Future<void> reloadOpenChapter() => _session.reloadFromDisk();
+  /// The file may be gone by now, which the answer says.
+  Future<OpenResult> reloadOpenChapter() => _session.reloadFromDisk();
 
   /// One change at a time, then the list is read again: a half-applied change
   /// must be visible, and the store is the only thing that knows what landed.
@@ -401,7 +418,7 @@ final class Library extends ChangeNotifier {
         newChapterText(
           name: name,
           side: side,
-          created: DateTime.now(),
+          created: _now(),
           rootMoves: rootMoves,
         ) +
         games;
@@ -424,13 +441,10 @@ final class Library extends ChangeNotifier {
   }
 
   /// What the file at [path] holds, imported as [_importText] imports.
-  Future<LibraryResult> _importFile(
-    String path, {
-    required String folder,
-  }) async {
+  Future<LibraryResult> _importFile(String path, {required String name}) async {
     switch (await _store.open(DocumentRef(path))) {
       case store.Opened(:final text):
-        return _importText(text, folder: folder);
+        return _importText(text, name: name);
       case store.Absent():
         return const LibraryFileUnreadable('the file is not there');
       case store.Unreadable(:final detail):
@@ -438,20 +452,18 @@ final class Library extends ChangeNotifier {
     }
   }
 
-  /// [text] as the repertoire [folder]: its variations become lines, and a
-  /// course's chapters become chapters of one file, each line naming its
-  /// chapter in `[ChapterName]` ([courseText]).
+  /// [text] as the repertoire [name], or the first of [_freeNames] a folder
+  /// can take: its variations become lines, and a course's chapters become
+  /// chapters of one file, each line naming its chapter in `[ChapterName]`
+  /// ([courseText]).
   ///
   /// The file is written into a staging folder the list does not show and
   /// the folder is then renamed into place, so a write that stops half way
   /// never leaves a repertoire half there.
-  Future<LibraryResult> _importText(
-    String text, {
-    required String folder,
-  }) async {
+  Future<LibraryResult> _importText(String text, {required String name}) async {
     // A course of a thousand games is read where the screen does not wait
     // for it; a pasted line is not worth the trip.
-    final created = DateTime.now();
+    final created = _now();
     ({ImportRead read, String? file}) course() {
       final read = readImport(text, created: created);
       return (
@@ -468,11 +480,12 @@ final class Library extends ChangeNotifier {
     if (read is! ImportedChapters || file == null) {
       return const LibraryNothingToImport();
     }
+    final folders = _freeNames(name);
     final staging = p.join(_root, '$stagingPrefix${_stagingId()}');
-    final name = read.chapters.length == 1
+    final fileName = read.chapters.length == 1
         ? chapterFileNames(read.chapters).single
-        : importedName(folder, fallback: 'Course');
-    final ref = DocumentRef(p.join(staging, '$name.pgn'));
+        : importedName(folders.first, fallback: 'Course');
+    final ref = DocumentRef(p.join(staging, '$fileName.pgn'));
     final refused = switch (await _store.create(ref, file)) {
       store.Created() => null,
       store.Collision() => LibraryFailure('${ref.path} was already there'),
@@ -482,26 +495,40 @@ final class Library extends ChangeNotifier {
       await _files.removeStaging(staging);
       return refused;
     }
-    final destination = p.join(_root, folder);
-    switch (await _store.moveFolder(staging, destination)) {
-      case store.FolderMoved():
-        return LibraryAdded(
-          ChapterRef.at(
-            p.join(destination, '$name.pgn'),
-            section: read.chapters.length == 1
-                ? null
-                : read.chapters.first.title.trim(),
-          ),
-          chapters: read.chapters.length,
-          lines: read.lines,
-        );
-      case store.FolderNameTaken():
-        await _files.removeStaging(staging);
-        return const LibraryNameTaken();
-      case store.FolderMoveFailed(:final detail):
-        await _files.removeStaging(staging);
-        return LibraryFailure(detail);
+    return _placed(staging, folders, file: '$fileName.pgn', read: read);
+  }
+
+  /// [staging], holding [file], renamed into place under the first of
+  /// [folders] that no folder on disk has taken.
+  Future<LibraryResult> _placed(
+    String staging,
+    List<String> folders, {
+    required String file,
+    required ImportedChapters read,
+  }) async {
+    for (final folder in folders) {
+      final destination = p.join(_root, folder);
+      switch (await _store.moveFolder(staging, destination)) {
+        case store.FolderMoved():
+          return LibraryAdded(
+            ChapterRef.at(
+              p.join(destination, file),
+              section: read.chapters.length == 1
+                  ? null
+                  : read.chapters.first.title.trim(),
+            ),
+            chapters: read.chapters.length,
+            lines: read.lines,
+          );
+        case store.FolderNameTaken():
+          continue;
+        case store.FolderMoveFailed(:final detail):
+          await _files.removeStaging(staging);
+          return LibraryFailure(detail);
+      }
     }
+    await _files.removeStaging(staging);
+    return const LibraryNameTaken();
   }
 
   String _stagingId() =>
@@ -564,15 +591,21 @@ final class Library extends ChangeNotifier {
   /// so its training rows follow it there and come back with it. A chapter
   /// that refuses stops the delete where it is — the ones already gone are in
   /// recovery — and the folder stays, because the rest is still in it.
+  ///
+  /// A course file is listed once for each chapter it holds and goes to
+  /// recovery once, whole.
   Future<LibraryResult> _deleteFolder(RepertoireFolder folder) async {
     final repointed = <records.RepointResult>[];
+    final removed = <String>{};
     for (final chapter in folder.chapters) {
-      final result = await _remove(chapter);
+      final file = chapter.wholeFile;
+      if (!removed.add(file.path)) continue;
+      final result = await _remove(file);
       if (result case LibraryDone(:final training)) {
         repointed.add(training);
         continue;
       }
-      return LibraryStoppedAt(chapter.name, result);
+      return LibraryStoppedAt(file.name, result);
     }
     await _files.removeIfEmpty(folder.path);
     return LibraryDone(training: foldedRepoint(repointed));
@@ -641,17 +674,36 @@ final class Library extends ChangeNotifier {
       final reason = _session.applyToFile(
         (file) => linesNamed(file, places, to.section),
       );
-      return reason == null ? const LibraryDone() : LibraryFailure(reason);
+      if (reason != null) return LibraryFailure(reason);
+      return _saved();
     }
     final written = await _writtenInto(to, lines, asSidelineOf);
     if (written != null) return written;
+    // [moving] names games of the chapter as it was when the move began. The
+    // user may have opened another chapter or edited this one while [to] was
+    // being written, and those games of it are somebody else's lines.
+    if (_disposed ||
+        _session.source != from ||
+        !identical(_session.chapter, chapter)) {
+      return _notTakenOut(
+        to,
+        from,
+        '${from.name} changed while they were written',
+      );
+    }
     final reason = _session.apply((c) => linesTakenOut(c, games: moving));
-    if (reason == null) return const LibraryDone();
-    return LibraryFailure(
-      'the lines were added to ${to.name} but not taken out of '
-      '${from.name}: $reason',
-    );
+    if (reason != null) return _notTakenOut(to, from, reason);
+    if (await _saved() is LibraryDone) return const LibraryDone();
+    return _notTakenOut(to, from, '${from.name} could not be saved');
   }
+
+  /// The lines went into [to] and are still in [from]: a duplicate the user
+  /// can see, where the other order of the two saves could lose them.
+  LibraryFailure _notTakenOut(ChapterRef to, ChapterRef from, String why) =>
+      LibraryFailure(
+        'the lines were added to ${to.name} but not taken out of '
+        '${from.name}: $why',
+      );
 
   /// One line folded into another of the open chapter, then taken out.
   LibraryResult _foldedHere(Set<int> games, int? host) {
@@ -678,12 +730,21 @@ final class Library extends ChangeNotifier {
     }
     final file = await readChapter(name: to.fileName, text: read.text);
     final view = sectionView(file, to.section);
+    // A line arriving as a game of its own still names the chapter it left.
+    // It takes the name [to]'s games carry, or none, so a chapter file does
+    // not turn into a course file holding a chapter named after the source.
+    final arriving = host == null ? _namedAs(view.stamp, lines) : lines;
+    if (arriving == null) {
+      return const LibraryFailure(
+        'the lines could not be given their chapter name',
+      );
+    }
     var target = view.chapter;
     var arranged = GamesArranged.of(
       GamesWritten(),
       before: target.lines.length,
     );
-    for (final edit in _editsInto(lines, host)) {
+    for (final edit in _editsInto(arriving, host)) {
       switch (edit(target)) {
         case ChapterUnchanged():
           continue;
@@ -721,22 +782,27 @@ final class Library extends ChangeNotifier {
   /// Makes [edit] to the whole file [ref] is in: through the workspace when
   /// that file is open, so the edit lands behind its draft and its undo
   /// covers it; otherwise read, edited and saved against the revision read.
-  /// [section] is what the open chapter is called afterwards, when the edit
-  /// renamed it.
+  /// [renamedTo] is what [ref] is called afterwards, when the edit renamed it.
   Future<LibraryResult> _editFile(
     ChapterRef ref,
     ChapterEdit Function(Chapter file) edit, {
-    String? section,
+    String? renamedTo,
   }) async {
+    // By path: any chapter of the open file is the open file.
     if (_session.source?.path == ref.path) {
-      final reason = _session.applyToFile(edit, section: section);
-      return reason == null ? const LibraryDone() : LibraryFailure(reason);
+      return _editedOpen(ref, edit, renamedTo);
     }
     final read = await _store.open(ref);
     if (read is! store.Opened) {
       return LibraryFailure('${ref.name} could not be read');
     }
     final file = await readChapter(name: ref.fileName, text: read.text);
+    // The user may have opened the file while it was being read. Saved from
+    // here, the edit would change it under the revision the workspace just
+    // took, and the workspace's next save would be refused.
+    if (_session.source?.path == ref.path) {
+      return _editedOpen(ref, edit, renamedTo);
+    }
     switch (edit(file)) {
       case ChapterUnchanged():
         return const LibraryDone();
@@ -755,6 +821,36 @@ final class Library extends ChangeNotifier {
           store.SaveDidNotLand(:final detail) => LibraryFailure(detail),
         };
     }
+  }
+
+  /// [edit] made through the workspace, which has [ref]'s file open. The
+  /// chapter on the board follows a rename only when it is the chapter
+  /// renamed: renaming another chapter of the file leaves it where it is.
+  Future<LibraryResult> _editedOpen(
+    ChapterRef ref,
+    ChapterEdit Function(Chapter file) edit,
+    String? renamedTo,
+  ) async {
+    final reason = _session.applyToFile(
+      edit,
+      section: _session.source == ref ? renamedTo : null,
+    );
+    if (reason != null) return LibraryFailure(reason);
+    return _saved();
+  }
+
+  /// Waits for an edit made through the workspace to reach its file. The
+  /// list is read again after every change, and an edit still on the
+  /// saver's clock would leave it naming what the file held a moment ago:
+  /// a renamed chapter under its old name, one taken out still there.
+  Future<LibraryResult> _saved() async {
+    await _saver.flush();
+    if (_saver.settled) return const LibraryDone();
+    return switch (_saver.state) {
+      SaveConflict() => const LibraryConflicted(),
+      SaveFailed(:final detail) => LibraryFailure(detail),
+      _ => const LibraryFailure('the change is on the board, not in the file'),
+    };
   }
 
   /// The edits that put [lines] into a chapter: one append, or one graft
@@ -809,6 +905,20 @@ final class Library extends ChangeNotifier {
     if (result == null) return const LibraryBusy();
     return result is LibraryStale ? const LibraryConflicted() : result;
   }
+}
+
+/// [lines] each naming [section] as its chapter, or no chapter when it is
+/// null; null when one of them cannot be given the name.
+List<ChapterLine>? _namedAs(String? section, List<ChapterLine> lines) {
+  final named = <ChapterLine>[];
+  for (final line in lines) {
+    final renamed = sectionOf(line) == section
+        ? line
+        : withSection(line, section);
+    if (renamed == null) return null;
+    named.add(renamed);
+  }
+  return named;
 }
 
 /// A file name for each chapter, from its title, no two alike.

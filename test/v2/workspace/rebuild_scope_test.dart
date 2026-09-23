@@ -189,14 +189,14 @@ void main() {
     session.forward();
     session.forward();
     await tester.pump();
-    expect(outline.currentLine.value, 0);
+    expect(outline.isCurrent(0).value, isTrue);
     expect(rebuilt(before, shown<LineRow>(tester, OutlinePanel)), 0);
     expect(told, 0, reason: 'nothing the outline lists changed');
 
     before = shown<LineRow>(tester, OutlinePanel);
     session.goTo(NodePath.of([0, 1]));
     await tester.pump();
-    expect(outline.currentLine.value, 1);
+    expect(outline.isCurrent(1).value, isTrue);
     final after = shown<LineRow>(tester, OutlinePanel);
     expect(rebuilt(before, after), 2);
     expect([for (final row in after) row.current], [false, true]);
@@ -246,9 +246,11 @@ void main() {
         reason: 'the main line stays the first line',
       );
     }
-    expect(outline.currentLine.value, 0);
+    expect(outline.isCurrent(0).value, isTrue);
     session.toStart();
     await tester.pump();
-    expect(outline.currentLine.value, isNull);
+    expect([
+      for (final line in outline.lines) outline.isCurrent(line.game).value,
+    ], everyElement(isFalse));
   });
 }

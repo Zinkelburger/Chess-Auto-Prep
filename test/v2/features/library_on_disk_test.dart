@@ -185,6 +185,56 @@ void main() {
     },
   );
 
+  test('a deleted repertoire takes its course file to recovery once', () async {
+    final folder = Directory(at('repertoires/Course'))
+      ..createSync(recursive: true);
+    File(p.join(folder.path, 'Course.pgn')).writeAsStringSync(
+      '// Color: White\n\n'
+      '[Event "Ruy"]\n[ChapterName "Open games"]\n\n1. e4 e5 2. Nf3 *\n\n'
+      '[Event "Alapin"]\n[ChapterName "Sicilian"]\n\n1. e4 c5 2. c3 *\n',
+    );
+    File(
+      p.join(folder.path, 'Zeta.pgn'),
+    ).writeAsStringSync('// Zeta\n// Color: White\n\n');
+    await library.refresh();
+    expect(named('Course').chapters.map((c) => c.name), [
+      'Open games',
+      'Sicilian',
+      'Zeta',
+    ]);
+
+    expect(await library.deleteRepertoire(named('Course')), isA<LibraryDone>());
+    expect(library.repertoires, isEmpty);
+    expect(
+      (await deletedChapters()).map((c) => c.name),
+      unorderedEquals(['Course', 'Zeta']),
+    );
+  });
+
+  test(
+    'an import named like a deleted repertoire takes the next name',
+    () async {
+      await library.createRepertoire('Sidelines', Side.black);
+      await library.deleteRepertoire(named('Sidelines'));
+      // The folder stays, holding the chapter's recovery copy, and a folder
+      // with no chapter in it is not listed.
+      expect(Directory(at('repertoires/Sidelines')).existsSync(), isTrue);
+      expect(library.repertoires, isEmpty);
+
+      final result = await library.importText(
+        '[Event "x"]\n\n1. e4 e5 *\n',
+        name: 'Sidelines',
+      );
+      expect(result, isA<LibraryAdded>());
+      expect(
+        p.dirname((result as LibraryAdded).first.path),
+        at('repertoires/Sidelines (2)'),
+      );
+      expect(named('Sidelines (2)').chapters, hasLength(1));
+      expect(await deletedChapters(), hasLength(1), reason: 'still restorable');
+    },
+  );
+
   test('a restore never replaces a chapter of the same name', () async {
     await library.createRepertoire('Benoni', Side.black);
     await library.createChapter(named('Benoni'), 'Modern');

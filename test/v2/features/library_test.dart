@@ -77,6 +77,21 @@ void main() {
     expect(text, endsWith('\n\n'));
   });
 
+  test('what the library writes is dated by its own clock', () async {
+    fixture = await openLibrary([kid], now: () => DateTime(2026, 9, 23, 10));
+    await fixture.library.createRepertoire('Benoni', Side.black);
+    const created = '// Created on 2026-09-23 10:00:00\n';
+    expect(fixture.textAt('/repertoires/Benoni/Main.pgn'), contains(created));
+    final imported = await fixture.library.importText(
+      '[Event "Open"]\n\n1. e4 e5 *\n',
+      name: 'Open games',
+    );
+    expect(
+      fixture.textAt((imported as LibraryAdded).first.path),
+      contains(created),
+    );
+  });
+
   test(
     'a repertoire made with no side leaves the question to its chapter',
     () async {

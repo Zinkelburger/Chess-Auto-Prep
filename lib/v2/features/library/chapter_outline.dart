@@ -84,8 +84,8 @@ final class OutlineLine {
 /// It owns the search — the words and the wait after them — and nothing
 /// else: the chapters come from the [Library] and the lines from the
 /// [DocumentSession]. It tells the panel only when what it lists changed,
-/// never for a cursor move or a save: which line the cursor is inside is
-/// [currentLine], which the one row it concerns follows by itself.
+/// never for a cursor move or a save: whether a line is the one the cursor
+/// is inside is [isCurrent], which the one row it concerns follows by itself.
 final class ChapterOutline extends ChangeNotifier {
   ChapterOutline({
     required Library library,
@@ -153,18 +153,16 @@ final class ChapterOutline extends ChangeNotifier {
       if (_matches(line.text)) line,
   ];
 
-  /// The line the cursor is inside, by game, or null when it is on no line's
-  /// moves — at the start, or on a move only another chapter's game plays.
+  /// Whether the line at [game] is the one the cursor is inside, notifying
+  /// only when that changes: what one row listens to, so the cursor going
+  /// from one line to another redraws two rows rather than every row on
+  /// screen. No line is, at the start or on a move only another chapter's
+  /// game plays.
   ///
-  /// Worked out once for each place the cursor goes, not once for each row
-  /// that asks: finding it walks every line's moves, and a book of a
-  /// thousand lines would then cost a thousand walks per row. A step
-  /// forward usually costs one: see [_followTheCursor].
-  ValueListenable<int?> get currentLine => _current;
-
-  /// Whether the line at [game] is [currentLine], notifying only when that
-  /// changes: what one row listens to, so the cursor going from one line to
-  /// another redraws two rows rather than every row on screen.
+  /// Which line that is gets worked out once for each place the cursor goes,
+  /// not once for each row that asks: finding it walks every line's moves,
+  /// and a book of a thousand lines would then cost a thousand walks per
+  /// row. A step forward usually costs one: see [_followTheCursor].
   ValueListenable<bool> isCurrent(int game) => _currentRows.of(game);
 
   /// What the line at [game] is called now, whatever the search is showing,
@@ -210,7 +208,7 @@ final class ChapterOutline extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Keeps [currentLine] on the line the cursor is inside.
+  /// Keeps the current line ([isCurrent]) the one the cursor is inside.
   ///
   /// Going deeper can only narrow which lines play the moves to the cursor,
   /// so a step forward keeps the line it was in whenever that line still

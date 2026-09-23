@@ -50,12 +50,13 @@ final class LibraryFixture {
 ///
 /// [delay] is how long the saver waits after an edit. Zero, unless the test
 /// is about a draft that is still waiting when the library changes the file
-/// underneath it.
+/// underneath it. [now] is the library's clock.
 Future<LibraryFixture> openLibrary(
   List<RepertoireFolder> folders, {
   String text = '// Main\n// Color: White\n\n',
   ChapterRef? open,
   Duration delay = Duration.zero,
+  DateTime Function() now = DateTime.now,
 }) async {
   final store = ScriptedDocumentStore();
   // A folder is empty when the store holds no document inside it, so
@@ -74,7 +75,14 @@ Future<LibraryFixture> openLibrary(
   final saver = DocumentSaver(store, delay: delay);
   final session = DocumentSession(store, saver);
   final picker = ScriptedPicker();
-  final library = libraryOver(files, store, session, saver, picker: picker);
+  final library = libraryOver(
+    files,
+    store,
+    session,
+    saver,
+    picker: picker,
+    now: now,
+  );
   await library.refresh();
   if (open != null) await session.open(open);
   return LibraryFixture._(files, store, picker, saver, session, library);
@@ -89,6 +97,7 @@ Library libraryOver(
   DocumentSaver saver, {
   PgnFilePicker? picker,
   String root = '/repertoires',
+  DateTime Function() now = DateTime.now,
 }) => Library(
   files: files,
   documents: documents,
@@ -96,4 +105,5 @@ Library libraryOver(
   session: session,
   picker: picker ?? ScriptedPicker(),
   root: root,
+  now: now,
 );

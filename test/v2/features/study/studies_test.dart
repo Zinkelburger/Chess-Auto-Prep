@@ -88,6 +88,27 @@ void main() {
     },
   );
 
+  test(
+    'deleting a study: a move played while it goes cannot make it refuse',
+    () async {
+      relist();
+      study.store.hold = true;
+      final deleting = study.studies.delete(study.ref);
+      await pumpEventQueue();
+      study.session.playMove('g1f3');
+      await pumpEventQueue();
+      study.store.hold = false;
+      // A save that went out now would land before the delete.
+      while (study.store.waiting > 0) {
+        study.store.releaseLast();
+        await pumpEventQueue();
+      }
+      expect(await deleting, isA<StudyDone>());
+      expect(study.store.documents.containsKey(study.ref), isFalse);
+      expect(study.session.source, isNull);
+    },
+  );
+
   const downloaded =
       '[Event "Sicilian: Najdorf"]\n[StudyName "Sicilian"]\n'
       '[ChapterName "Najdorf"]\n\n1. e4 c5 *\n';

@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../storage/training_records.dart' as records;
+import '../../workspace/session_results.dart';
 import 'library_state.dart';
 
 /// What to tell the user about [result], or null when the change did what it
@@ -57,7 +60,7 @@ Future<LibraryResult> announce(
   required String thing,
   required String name,
   required String failed,
-  Future<void> Function()? reload,
+  Future<OpenResult> Function()? reload,
 }) async {
   final messenger = ScaffoldMessenger.of(context);
   final result = await command;
@@ -72,9 +75,24 @@ Future<LibraryResult> announce(
     SnackBar(
       content: Text(message),
       action: result is LibraryConflicted && reload != null
-          ? SnackBarAction(label: 'Reload', onPressed: reload)
+          ? SnackBarAction(
+              label: 'Reload',
+              onPressed: () => unawaited(_reloaded(messenger, reload)),
+            )
           : null,
     ),
   );
   return result;
+}
+
+/// Runs [reload] and says why when the chapter could not be read again: a
+/// Reload that fails without a word looks like one that was never pressed.
+Future<void> _reloaded(
+  ScaffoldMessengerState messenger,
+  Future<OpenResult> Function() reload,
+) async {
+  final result = await reload();
+  if (result case OpenFailed(:final reason) when messenger.mounted) {
+    messenger.showSnackBar(SnackBar(content: Text(reason)));
+  }
 }

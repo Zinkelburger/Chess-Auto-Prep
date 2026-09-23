@@ -6,10 +6,13 @@ import 'dart:io';
 import 'package:chess_auto_prep/v2/chess/pgn/chapter_sections.dart';
 import 'package:chess_auto_prep/v2/features/library/library.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
+import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/v2/workspace/document_saver.dart' as saver;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 import '../support/library_fixture.dart';
+import '../support/scripted_store.dart';
 
 const _path = '/repertoires/Course/Course.pgn';
 
@@ -115,6 +118,45 @@ void main() {
     expect(fixture.session.chapter!.lines, hasLength(3));
   });
 
+  /// A chapter file beside the course file, holding [text].
+  ChapterRef besideTheCourse(String name, String text) {
+    final chapter = ChapterRef.at('/repertoires/Course/$name.pgn');
+    fixture.store.documents[chapter] = Opened(text, scriptedRevision(text));
+    return chapter;
+  }
+
+  test('lines moved into a chapter file leave their chapter name', () async {
+    await start(opened: sicilian);
+    final plain = besideTheCourse(
+      'Scotch',
+      '// Scotch\n// Color: White\n\n[Event "Scotch"]\n\n1. e4 e5 2. Nf3 Nc6 '
+          '3. d4 *\n',
+    );
+    final result = await fixture.library.moveLines(games: {0}, to: plain);
+    expect(result, isA<LibraryDone>());
+    final text = fixture.textAt(plain.path)!;
+    expect(text, contains('[Event "Alapin"]'));
+    expect(text, isNot(contains('[ChapterName')));
+    expect(sectionsInText(text), [null], reason: 'still one chapter');
+  });
+
+  test('lines moved into a file of one named chapter take its name', () async {
+    await start(opened: sicilian);
+    final najdorf = besideTheCourse(
+      'Najdorf',
+      '// Color: White\n\n[Event "English Attack"]\n[ChapterName "Najdorf"]\n\n'
+          '1. e4 c5 2. Nf3 d6 *\n',
+    );
+    final result = await fixture.library.moveLines(games: {0}, to: najdorf);
+    expect(result, isA<LibraryDone>());
+    final text = fixture.textAt(najdorf.path)!;
+    expect(
+      text.substring(text.indexOf('[Event "Alapin"]')),
+      contains('[ChapterName "Najdorf"]'),
+    );
+    expect(sectionsInText(text), [null], reason: 'still one chapter');
+  });
+
   test('renaming a chapter rewrites its tag and nothing else', () async {
     await start(opened: sicilian);
     final result = await fixture.library.renameChapter(
@@ -128,6 +170,45 @@ void main() {
     expect(text, isNot(contains('"Sicilian"')));
     expect(fixture.session.source, _chapter('Anti-Sicilians'));
     expect(fixture.session.chapter!.name, 'Anti-Sicilians');
+  });
+
+  test('renaming another chapter of the open file leaves the board', () async {
+    await start(opened: open);
+    final result = await fixture.library.renameChapter(
+      sicilian,
+      'Anti-Sicilians',
+    );
+    expect(result, isA<LibraryDone>());
+    expect(sectionsInText(onDisk()), ['Open games', 'Anti-Sicilians']);
+    expect(fixture.session.source, open);
+    expect(fixture.session.chapter!.lines.map((l) => l.nameAt(0)), [
+      'Ruy',
+      'Italian',
+    ]);
+  });
+
+  test('a rename of a file opened while it was read goes through the '
+      'workspace', () async {
+    await start();
+    fixture.store.hold = true;
+    final renamed = fixture.library.renameChapter(sicilian, 'Anti-Sicilians');
+    await pumpEventQueue();
+    // The user opens the file while the library is reading it.
+    final opening = fixture.session.open(open);
+    await pumpEventQueue();
+    fixture.store.hold = false;
+    fixture.store.releaseLast(); // the workspace reads it first
+    await opening;
+    fixture.store.releaseAll();
+    expect(await renamed, isA<LibraryDone>());
+
+    // The workspace holds the revision the rename wrote, so its own next
+    // save is not refused as a change made on disk.
+    fixture.session.playMove('d2d4');
+    await fixture.saver.flush();
+    expect(fixture.saver.state, isA<saver.Saved>());
+    expect(sectionsInText(onDisk()), ['Open games', 'Anti-Sicilians']);
+    expect(onDisk(), contains('1. d4'));
   });
 
   test('a name the file already has is refused', () async {
