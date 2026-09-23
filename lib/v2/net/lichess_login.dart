@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 
 import '../diagnostics/log.dart';
+import 'lichess_http.dart';
 
 /// Logging into Lichess: the OAuth PKCE flow the old app used, and a typed
 /// personal access token as the way in when a browser is not to hand.
@@ -119,12 +120,14 @@ const _accountUrl = 'https://lichess.org/api/account';
 /// How long a token lives when Lichess does not say.
 const _defaultLife = Duration(days: 365);
 
+/// How long one request to Lichess may take before it counts as lost.
+const _requestTimeout = Duration(seconds: 20);
+
 final class LichessLoginApi implements LichessLogin {
   LichessLoginApi(
     this._client, {
     required Future<bool> Function(Uri) openBrowser,
     this.wait = const Duration(minutes: 5),
-    this.requestTimeout = const Duration(seconds: 20),
     Random? random,
   }) : _openBrowser = openBrowser,
        _random = random ?? Random.secure();
@@ -137,7 +140,6 @@ final class LichessLoginApi implements LichessLogin {
   /// How long the browser may take before the flow gives up.
   final Duration wait;
 
-  final Duration requestTimeout;
   final Random _random;
 
   _Flow? _flow;
@@ -250,6 +252,7 @@ final class LichessLoginApi implements LichessLogin {
       response = await _client
           .post(
             Uri.parse(_tokenUrl),
+            headers: lichessHeaders(),
             body: {
               'grant_type': 'authorization_code',
               'code': code,
@@ -258,7 +261,7 @@ final class LichessLoginApi implements LichessLogin {
               'redirect_uri': redirect,
             },
           )
-          .timeout(requestTimeout);
+          .timeout(_requestTimeout);
     } on Object catch (error) {
       log.w('swap the Lichess code for a token', error);
       return const LoginFailed(LoginProblem.unreachable);
@@ -324,11 +327,8 @@ final class LichessLoginApi implements LichessLogin {
     final http.Response response;
     try {
       response = await _client
-          .get(
-            Uri.parse(_accountUrl),
-            headers: {'Authorization': 'Bearer $token'},
-          )
-          .timeout(requestTimeout);
+          .get(Uri.parse(_accountUrl), headers: lichessHeaders(token: token))
+          .timeout(_requestTimeout);
     } on Object catch (error) {
       log.w('ask Lichess whose token this is', error);
       return const LoginFailed(LoginProblem.unreachable);
@@ -356,8 +356,8 @@ final class LichessLoginApi implements LichessLogin {
   Future<void> revoke(String token) async {
     try {
       final request = http.Request('DELETE', Uri.parse(_tokenUrl))
-        ..headers['Authorization'] = 'Bearer $token';
-      await _client.send(request).timeout(requestTimeout);
+        ..headers.addAll(lichessHeaders(token: token));
+      await _client.send(request).timeout(_requestTimeout);
     } on Object catch (error) {
       log.w('revoke the Lichess token', error);
     }

@@ -5,6 +5,23 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/viewer_fixture.dart';
 
+/// A recent list kept the way the preferences keep it: a read answers the
+/// last list written, whoever wrote it.
+final class _KeptRecentFiles implements RecentFiles {
+  _KeptRecentFiles(this.paths);
+
+  List<String> paths;
+
+  @override
+  Future<RecentFilesRead> load() async => RecentFilesListed(List.of(paths));
+
+  @override
+  Future<bool> save(List<String> paths) async {
+    this.paths = List.of(paths);
+    return true;
+  }
+}
+
 void main() {
   late ViewerFixture fixture;
 
@@ -58,16 +75,75 @@ void main() {
     fixture = await viewerOver(threeGameFile);
     await fixture.open();
     final viewer = fixture.viewer;
-    viewer.nextGame();
+    final session = fixture.session;
+    session.nextGame();
     expect(viewer.current, 1);
-    expect(fixture.session.cursor.isRoot, isTrue);
-    expect(fixture.session.tree?.children.single.san, 'd4');
-    viewer.nextGame();
-    viewer.nextGame();
+    expect(session.cursor.isRoot, isTrue);
+    expect(session.tree?.children.single.san, 'd4');
+    session.nextGame();
+    session.nextGame();
     expect(viewer.current, 2, reason: 'there is no game past the last');
-    viewer.previousGame();
+    session.previousGame();
     expect(viewer.current, 1);
-    expect(fixture.session.source, fixture.ref);
+    expect(session.source, fixture.ref);
+  });
+
+  test('moving to another game is told to the list, which marks it', () async {
+    fixture = await viewerOver(threeGameFile);
+    await fixture.open();
+    var told = 0;
+    fixture.viewer.addListener(() => told++);
+    fixture.session.nextGame();
+    expect(told, greaterThan(0));
+    expect(fixture.viewer.current, 1);
+    expect(fixture.viewer.games.length, 3);
+  });
+
+  test('a file opened before the recent list was read adds to the list '
+      'rather than replacing it', () async {
+    fixture = await viewerOver(
+      threeGameFile,
+      recent: const RecentFilesListed(['/Documents/pgn_collections/old.pgn']),
+    );
+    await fixture.open();
+    final kept = [fixture.ref.path, '/Documents/pgn_collections/old.pgn'];
+    expect(fixture.recent.saved.single, kept);
+    expect(fixture.viewer.recent, kept);
+  });
+
+  test('a recent list that cannot be read is not written over', () async {
+    fixture = await viewerOver(
+      threeGameFile,
+      recent: const RecentFilesUnreadable('no preferences'),
+    );
+    await fixture.open();
+    expect(fixture.recent.saved, isEmpty);
+    expect(fixture.viewer.recentProblem, 'The recent files could not be read.');
+    expect(fixture.viewer.recent, [fixture.ref.path], reason: 'still shown');
+  });
+
+  test('two files opened one straight after the other both stay', () async {
+    fixture = await viewerOver(threeGameFile);
+    final kept = _KeptRecentFiles(['/Documents/pgn_collections/old.pgn']);
+    final viewer = PgnViewer(
+      recent: kept,
+      picker: fixture.picker,
+      import: fixture.import,
+      settings: fixture.settings,
+      session: fixture.session,
+      filter: fixture.filter,
+      collections: collectionsRoot,
+    );
+    addTearDown(viewer.dispose);
+    final other = collectionRef('other');
+    await Future.wait([viewer.opened(fixture.ref), viewer.opened(other)]);
+    final expected = [
+      other.path,
+      fixture.ref.path,
+      '/Documents/pgn_collections/old.pgn',
+    ];
+    expect(kept.paths, expected);
+    expect(viewer.recent, expected);
   });
 
   test('the search narrows the games and keeps their file positions', () async {

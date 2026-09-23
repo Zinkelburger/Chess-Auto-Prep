@@ -59,15 +59,20 @@ final class PgnViewer extends ChangeNotifier {
 
   List<String> _recent = const [];
   String? _recentProblem;
+
+  /// Reads and writes of the recent list take turns: the list is shared
+  /// with the old app and kept by read, change, write, and two of those
+  /// overlapping would each write over what the other added.
+  Future<void> _recentTurn = Future.value();
   ChapterRef? _file;
   Chapter? _rowsOf;
+  List<ChapterLine>? _rowsLines;
   List<GameSummary> _rows = const [];
 
   /// Each game's chapter, when the file has chapters; else null.
   List<String>? _chapterOf;
   String _query = '';
   GameFilter _filterSeen = GameFilter.none;
-  int _loads = 0;
   bool _disposed = false;
 
   /// The files opened before, newest first, as absolute paths.
@@ -146,21 +151,19 @@ final class PgnViewer extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Reads the recent list again. A load overtaken by a newer one discards
-  /// its answer.
-  Future<void> loadRecent() async {
-    final ticket = ++_loads;
+  /// Reads the recent list again, after any read or write already asked for.
+  Future<void> loadRecent() => _inTurn(() async {
     final read = await _recentFiles.load();
-    if (_disposed || ticket != _loads) return;
+    if (_disposed) return;
     switch (read) {
       case RecentFilesListed(:final paths):
         _recent = List.unmodifiable(paths);
         _recentProblem = null;
       case RecentFilesUnreadable():
-        _recentProblem = 'The recent files could not be read.';
+        _recentProblem = _unreadable;
     }
     notifyListeners();
-  }
+  });
 
   /// Asks the desktop for a file, starting beside the open one, else beside
   /// the last one, else in the collections folder, and answers the file to
@@ -198,18 +201,53 @@ final class PgnViewer extends ChangeNotifier {
   /// [ref] is now the viewer's file: it goes to the top of the recent list,
   /// which is then kept. Called once the workspace has it open, so a file
   /// that could not be read is not remembered as one that was.
-  Future<void> opened(ChapterRef ref) async {
+  Future<void> opened(ChapterRef ref) {
     _file = ref;
     _query = '';
-    _recent = List.unmodifiable(
-      [ref.path, ..._recent.where((path) => path != ref.path)].take(maxRecent),
-    );
+    _recent = _first(ref.path, _recent);
     notifyListeners();
+    return _inTurn(() => _remember(ref.path));
+  }
+
+  /// Puts [path] first in the list as it is kept now, not as this viewer
+  /// last read it: the viewer may not have read it at all — the list
+  /// column hidden, or its read still on the way — and writing what is on
+  /// screen would replace the old app's list with one file. A list that
+  /// cannot be read is left as it is.
+  Future<void> _remember(String path) async {
+    final read = await _recentFiles.load();
+    if (_disposed) return;
+    switch (read) {
+      case RecentFilesUnreadable():
+        _recentProblem = _unreadable;
+        notifyListeners();
+        return;
+      case RecentFilesListed(:final paths):
+        _recent = _first(path, paths);
+        notifyListeners();
+    }
     final kept = await _recentFiles.save(_recent);
     if (_disposed) return;
     _recentProblem = kept ? null : 'The recent files list was not saved.';
     notifyListeners();
   }
+
+  /// Runs [job] after every read and write of the recent list asked for
+  /// before it. A job that fails still answers its caller with the error
+  /// and leaves the turn to the next.
+  Future<void> _inTurn(Future<void> Function() job) {
+    final run = _recentTurn.then((_) => job());
+    _recentTurn = run.then((_) {}, onError: (Object _) {});
+    return run;
+  }
+
+  static const _unreadable = 'The recent files could not be read.';
+
+  /// [paths] with [path] at the top, once, as many as the list keeps.
+  static List<String> _first(String path, List<String> paths) =>
+      List.unmodifiable(
+        [path, ...paths.where((other) => other != path)].take(maxRecent),
+      );
 
   /// The viewer's file was closed, so the list of games goes with it.
   void closed() {
@@ -220,30 +258,30 @@ final class PgnViewer extends ChangeNotifier {
 
   void showGame(int index) => _session.showGame(index);
 
-  void nextGame() {
-    final at = current;
-    if (at != null) showGame(at + 1);
-  }
-
-  void previousGame() {
-    final at = current;
-    if (at != null) showGame(at - 1);
-  }
-
-  /// The rows follow the document: a new chapter value means the games may
-  /// have changed, so they are summarised again, once, for every reader.
+  /// The rows follow the document. A new chapter value is told to the
+  /// list, which shows which game is on the board; the games are
+  /// summarised again, once for every reader, only when the chapter holds
+  /// another list of them, which a move to another game of the file need
+  /// not.
   void _followTheDocument() {
     final chapter = _session.chapter;
     if (identical(chapter, _rowsOf)) return;
     _rowsOf = chapter;
-    final lines = chapter?.lines ?? const [];
+    final lines = chapter?.lines;
+    if (!identical(lines, _rowsLines)) {
+      _rowsLines = lines;
+      _summarise(lines ?? const []);
+    }
+    notifyListeners();
+  }
+
+  void _summarise(List<ChapterLine> lines) {
     final grouping = groupChapters([for (final line in lines) line.tags]);
     _chapterOf = grouping.hasChapters ? grouping.titles : null;
     _rows = List.unmodifiable([
       for (final (index, line) in lines.indexed)
         _summary(line, index, grouping),
     ]);
-    notifyListeners();
   }
 
   /// A game's row. Under a chapter a course's line is called by its own

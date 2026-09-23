@@ -88,7 +88,10 @@ final class UciEngine implements Engine, EngineProcess {
     int? depth,
   ) async {
     if (previous != null && !await _stopped(previous)) return search.finish();
-    if (_exited.isCompleted) return search.finish();
+    // A killed engine can take a while to be seen exiting, and what it
+    // printed before the kill is still in the pipe: a search begun on it
+    // would be sent to a dead process and handed the old search's lines.
+    if (_unresponsive || _exited.isCompleted) return search.finish();
     if (search.isDone) return; // stopped before it began
     _current = search;
     _send('setoption name MultiPV value $multiPv');
@@ -152,6 +155,8 @@ final class UciEngine implements Engine, EngineProcess {
   }
 
   void _onLine(String line) {
+    // Once killed, the rest of the pipe is the dead search's last words.
+    if (_unresponsive) return;
     final awaited = _awaited;
     if (awaited != null && line == awaited.token) {
       _awaited = null;

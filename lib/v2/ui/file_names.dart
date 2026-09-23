@@ -27,7 +27,9 @@ final _deviceName = RegExp(
 String? nameProblem(String name) {
   final trimmed = name.trim();
   if (trimmed.isEmpty) return 'Please enter a name.';
-  // Untrimmed: a trailing space survives the dialog but not every filesystem.
+  // Untrimmed: the name dialog trims what it answers, but a name can reach
+  // an owner from a download or another mode with a space still at its end,
+  // which not every filesystem keeps.
   if (name.endsWith(' ')) return 'Names cannot end with a dot or space.';
   if (trimmed == '.' || trimmed == '..') return 'That name is reserved.';
   // A folder whose name starts with a dot is hidden, by this app's own

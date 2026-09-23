@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import '../chess/pgn/game_text.dart';
 import '../chess/tactics/game_ids.dart';
 import '../diagnostics/log.dart';
+import 'lichess_http.dart';
 
 /// The user's own recent games, from Lichess or Chess.com, as PGN texts,
 /// newest first. No login: a Lichess token, when the user has connected
@@ -42,9 +43,6 @@ abstract interface class RecentGames {
   /// The newest [max] games [username] played.
   Future<GamesFetch> recent(String username, {required int max});
 }
-
-/// Who is asking, as both sites want to know.
-const gamesUserAgent = 'ChessAutoPrep (+https://chessautoprep.com)';
 
 /// How long one request may take before it counts as not arriving.
 const gamesTimeout = Duration(seconds: 60);
@@ -91,12 +89,10 @@ final class LichessGamesApi implements RecentGames {
         'perfType': 'ultraBullet,bullet,blitz,rapid,classical,correspondence',
       },
     );
-    final token = await _token();
-    final headers = {
-      'Accept': 'application/x-chess-pgn',
-      'User-Agent': gamesUserAgent,
-      if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
-    };
+    final headers = lichessHeaders(
+      token: await _token(),
+      accept: 'application/x-chess-pgn',
+    );
     for (var attempt = 0; ; attempt++) {
       final answer = await _once(_client, url, headers);
       final last = attempt >= lichessRetries;
@@ -125,7 +121,7 @@ final class ChesscomGamesApi implements RecentGames {
   final http.Client _client;
   final Wait _wait;
 
-  static const _headers = {'User-Agent': gamesUserAgent};
+  static const _headers = {'User-Agent': appUserAgent};
 
   @override
   GameSite get site => GameSite.chesscom;

@@ -49,14 +49,6 @@ void main() {
     expect(const MateIn(3).forWhite(whiteToMove: true), const MateIn(3));
   });
 
-  test('expected score is even at zero and saturates at mate', () {
-    expect(const Centipawns(0).expected, 0.5);
-    expect(const Centipawns(300).expected, greaterThan(0.7));
-    expect(const Centipawns(-300).expected, lessThan(0.3));
-    expect(const MateIn(1).expected, 1);
-    expect(const MateIn(-1).expected, 0);
-  });
-
   test('a score with no moves after it is still a score', () {
     // What Stockfish says about a board that is already checkmate, before
     // it answers `bestmove (none)`.
@@ -68,7 +60,6 @@ void main() {
     final stalemate = parseInfoLine('info depth 0 score cp 0')!;
     expect(stalemate.score, const Centipawns(0));
     expect(stalemate.pv, isEmpty);
-    expect(stalemate.score.expected, 0.5);
   });
 
   test('a mate on the board is a loss for the side to move', () {
@@ -76,8 +67,8 @@ void main() {
     // side the score is about is the side that has been mated.
     const mated = MateIn(0);
 
-    expect(mated.expected, 0);
-    expect(mated.negated.expected, 1, reason: 'the other side gave the mate');
+    expect(mated.mating, isFalse);
+    expect(mated.negated, _mating, reason: 'the other side gave it');
     // A mate that has happened has no distance to print, either way round.
     expect(mated.text, '#');
     expect(mated.negated.text, '#');
@@ -85,10 +76,13 @@ void main() {
     expect(mated.negated.negated, mated);
   });
 
-  test('the bar shows the mating side, whichever side was mated', () {
-    // Black to move and mated: from White's side the bar is full.
-    expect(const MateIn(0).forWhite(whiteToMove: false).expected, 1);
-    // White to move and mated: from White's side the bar is empty.
-    expect(const MateIn(0).forWhite(whiteToMove: true).expected, 0);
+  test("from White's side, a mate on the board is the mating side's", () {
+    // Black to move and mated: White gave the mate.
+    expect(const MateIn(0).forWhite(whiteToMove: false), _mating);
+    // White to move and mated: White is the side that was mated.
+    expect(const MateIn(0).forWhite(whiteToMove: true), isNot(_mating));
   });
 }
+
+/// A mate given by the side the score is about.
+final _mating = isA<MateIn>().having((mate) => mate.mating, 'mating', isTrue);

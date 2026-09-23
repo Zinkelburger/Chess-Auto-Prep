@@ -132,17 +132,18 @@ void main() {
     expect(state.status, isA<SignedOut>());
   });
 
-  test(
-    'logging out when the preferences will not forget still signs out',
-    () async {
-      saved = someone();
-      final state = owner();
-      await state.load();
-      writeFails = true;
-      await state.logOut();
-      expect(state.status, isA<SignedOut>());
-    },
-  );
+  test('logging out when the preferences will not forget still signs out, '
+      'and says the account may be back next time', () async {
+    saved = someone();
+    final state = owner();
+    await state.load();
+    writeFails = true;
+    await state.logOut();
+    expect(state.status, isA<SignedOut>());
+    expect(login.revoked, ['lip_secret']);
+    expect(state.problem, contains('could not be removed'));
+    expect(state.problem, contains('next time'));
+  });
 
   test('every change notifies once', () async {
     final state = owner();

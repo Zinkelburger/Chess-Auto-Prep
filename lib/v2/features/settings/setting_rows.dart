@@ -109,6 +109,11 @@ final class AccountSetting extends SettingControl {
 
 /// The page's rows, from the settings as they are now. Built again on every
 /// change, so a row always shows the value the store holds.
+///
+/// A row changes the settings as the store holds them when the change
+/// lands, not as they were when the rows were built: two changes can land
+/// before the next build — a typed number taken as the field loses focus
+/// to a click on another row — and the second must not undo the first.
 List<SettingGroup> settingGroups({
   required SettingsStore store,
   required int coresAvailable,
@@ -116,7 +121,8 @@ List<SettingGroup> settingGroups({
   required VoidCallback openLogFolder,
 }) {
   final s = store.value;
-  void set(Settings next) => store.update(next);
+  void change(Settings Function(Settings now) edit) =>
+      store.update(edit(store.value));
   return [
     SettingGroup('Look', [
       SettingRow(
@@ -124,7 +130,8 @@ List<SettingGroup> settingGroups({
         ChoiceSetting(
           options: const [(true, 'Show'), (false, 'Hide')],
           value: s.boardCoordinates,
-          onChanged: (on) => set(s.copyWith(boardCoordinates: on)),
+          onChanged: (on) =>
+              change((now) => now.copyWith(boardCoordinates: on)),
         ),
       ),
     ]),
@@ -135,7 +142,7 @@ List<SettingGroup> settingGroups({
           value: s.engineCores,
           min: 1,
           max: coresAvailable,
-          onChanged: (n) => set(s.copyWith(engineCores: n)),
+          onChanged: (n) => change((now) => now.copyWith(engineCores: n)),
         ),
         hint: 'of $coresAvailable on this computer',
       ),
@@ -147,7 +154,7 @@ List<SettingGroup> settingGroups({
           max: Settings.maxMemoryMb,
           step: 64,
           unit: 'MB',
-          onChanged: (n) => set(s.copyWith(engineMemoryMb: n)),
+          onChanged: (n) => change((now) => now.copyWith(engineMemoryMb: n)),
         ),
       ),
       SettingRow(
@@ -156,7 +163,7 @@ List<SettingGroup> settingGroups({
           value: s.engineLines,
           min: 1,
           max: Settings.maxLines,
-          onChanged: (n) => set(s.copyWith(engineLines: n)),
+          onChanged: (n) => change((now) => now.copyWith(engineLines: n)),
         ),
       ),
     ]),
@@ -168,7 +175,7 @@ List<SettingGroup> settingGroups({
           min: Settings.minElo,
           max: Settings.maxElo,
           step: 100,
-          onChanged: (n) => set(s.copyWith(opponentElo: n)),
+          onChanged: (n) => change((now) => now.copyWith(opponentElo: n)),
         ),
         hint: 'their replies are predicted for this Elo',
       ),
@@ -180,7 +187,7 @@ List<SettingGroup> settingGroups({
           max: Settings.maxCoverOnceIn,
           step: 5,
           unit: 'games',
-          onChanged: (n) => set(s.copyWith(coverOnceIn: n)),
+          onChanged: (n) => change((now) => now.copyWith(coverOnceIn: n)),
         ),
         hint: 'rarer replies are not counted as gaps',
       ),
@@ -190,7 +197,8 @@ List<SettingGroup> settingGroups({
         'Copy files from outside Documents when opened',
         ToggleSetting(
           value: s.copyFilesIntoDocuments,
-          onChanged: (on) => set(s.copyWith(copyFilesIntoDocuments: on)),
+          onChanged: (on) =>
+              change((now) => now.copyWith(copyFilesIntoDocuments: on)),
         ),
         hint: 'into Documents/pgn_collections, so they can be edited',
       ),

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../diagnostics/log.dart';
+import 'lichess_http.dart';
 
 /// Downloading a Lichess study as PGN.
 ///
@@ -156,7 +157,7 @@ final class LichessStudyApi implements LichessStudies {
     final http.Response response;
     try {
       response = await _client
-          .get(url, headers: await _headers())
+          .get(url, headers: lichessHeaders(token: await _token()))
           .timeout(studyDownloadTimeout);
     } on Object catch (error) {
       log.w('download the Lichess study ${link.studyId}', error);
@@ -191,13 +192,6 @@ final class LichessStudyApi implements LichessStudies {
     401 || 403 => StudyFetchProblem.rejected,
     _ => StudyFetchProblem.http,
   };
-
-  Future<Map<String, String>> _headers() async {
-    final token = await _token();
-    return {
-      if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
-    };
-  }
 
   /// Ids are checked before they get here, so encoding them is
   /// belt-and-braces; it costs nothing and keeps each one a single path

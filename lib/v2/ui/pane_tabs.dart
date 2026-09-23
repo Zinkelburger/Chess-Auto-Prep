@@ -74,15 +74,6 @@ class PaneTabs<K extends Object> extends ChangeNotifier {
   /// The one that is up.
   K get selected => _selected;
 
-  PaneTab<K> get current => tabOf(_selected);
-
-  /// The tabs that are not open, in their offered order: what a menu can
-  /// offer to show.
-  List<PaneTab<K>> get closed => [
-    for (final tab in tabs)
-      if (!_open.contains(tab.id)) tab,
-  ];
-
   PaneTab<K> tabOf(K id) => tabs.firstWhere((tab) => tab.id == id);
 
   bool isOpen(K id) => _open.contains(id);
@@ -96,15 +87,6 @@ class PaneTabs<K extends Object> extends ChangeNotifier {
     if (!wasOpen) _open.add(id);
     if (wasOpen && _selected == id) return;
     _selected = id;
-    notifyListeners();
-  }
-
-  /// Opens [id] at the right end without bringing it up, for something
-  /// that should be there when the user looks but must not take the
-  /// screen from what they are reading.
-  void openInBackground(K id) {
-    if (!_known(id) || _open.contains(id)) return;
-    _open.add(id);
     notifyListeners();
   }
 

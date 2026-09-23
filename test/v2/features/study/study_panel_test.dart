@@ -7,6 +7,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/study_fixture.dart';
 
+/// About as wide as the list pane opens.
+const _panelWidth = 300.0;
+
 void main() {
   late StudyFixture study;
   late List<(ChapterRef, int)> opened;
@@ -24,7 +27,7 @@ void main() {
         theme: darkTheme(),
         home: Scaffold(
           body: SizedBox(
-            width: libraryPanelWidth,
+            width: _panelWidth,
             child: StudyPanel(
               studies: study.studies,
               session: study.session,

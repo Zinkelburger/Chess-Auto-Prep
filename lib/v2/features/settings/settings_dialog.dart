@@ -112,6 +112,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
           name: group.name,
           selected: _query.isEmpty && index == _selected,
           onTap: () {
+            if (!mounted) return;
             _search.clear();
             setState(() {
               _query = '';

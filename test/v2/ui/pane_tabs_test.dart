@@ -16,7 +16,7 @@ void main() {
       final tabs = PaneTabs(all, open: ['graph', 'replies', 'nonsense']);
       expect(tabs.open, ['moves', 'graph', 'replies']);
       expect(tabs.selected, 'moves');
-      expect(tabs.closed, [explorer]);
+      expect(tabs.isOpen('explorer'), isFalse);
     });
 
     test('show opens at the right end and brings up; close goes left', () {
@@ -46,12 +46,6 @@ void main() {
         ..close('replies');
       expect(tabs.selected, 'explorer');
       expect(tabs.open, ['moves', 'explorer']);
-    });
-
-    test('openInBackground opens without bringing up', () {
-      final tabs = PaneTabs(all)..openInBackground('graph');
-      expect(tabs.open, ['moves', 'graph']);
-      expect(tabs.selected, 'moves');
     });
   });
 

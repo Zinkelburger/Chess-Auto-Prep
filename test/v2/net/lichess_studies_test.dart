@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:chess_auto_prep/v2/net/lichess_http.dart';
 import 'package:chess_auto_prep/v2/net/lichess_studies.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -88,10 +89,12 @@ void main() {
     expect((await stub.api.fetch(_link) as StudyFetched).pgn, '{é}');
   });
 
-  test('downloading: signs the request when the user has a token', () async {
+  test('downloading: signs the request when the user has a token, and says '
+      'who is asking', () async {
     final stub = client((_) => http.Response('x', 200), token: 'secret-token');
     await stub.api.fetch(_link);
     expect(stub.asked.single.headers['Authorization'], 'Bearer secret-token');
+    expect(stub.asked.single.headers['User-Agent'], appUserAgent);
   });
 
   test('downloading: sends no header when the user is not signed in', () async {

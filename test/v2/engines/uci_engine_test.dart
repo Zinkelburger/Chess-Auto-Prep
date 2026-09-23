@@ -15,6 +15,10 @@ final class FakeProcess implements UciProcess {
   bool killed = false;
   bool _gone = false;
 
+  /// Whether the pipe closes the moment the kill lands. A real process's
+  /// exit is only seen once what it printed before has been read.
+  bool pipeClosesOnKill = true;
+
   @override
   int get pid => 4242;
 
@@ -27,7 +31,7 @@ final class FakeProcess implements UciProcess {
   @override
   Future<void> kill() async {
     killed = true;
-    exit(137);
+    if (pipeClosesOnKill) exit(137);
   }
 
   void say(String line) => _out.add(line);
@@ -218,6 +222,54 @@ void main() {
         isNot(contains('position fen ${after1e4.value}')),
         reason: 'nothing is asked of an engine that has gone',
       );
+    });
+  });
+
+  test('a killed engine is asked nothing more, and what it printed before '
+      'the kill reaches no later search', () {
+    fakeAsync((async) {
+      const afterE5 = Fen(
+        'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
+      );
+      final process = FakeProcess()..pipeClosesOnKill = false;
+      final starting = UciEngine.start(process);
+      async.flushMicrotasks();
+      process.answerHandshake();
+      async.flushMicrotasks();
+      late UciEngine engine;
+      unawaited(starting.then((e) => engine = e));
+      async.flushMicrotasks();
+
+      engine.analyse(Fen.initial, multiPv: 1).lines.listen(null);
+      async.flushMicrotasks();
+      engine.analyse(after1e4, multiPv: 1).lines.listen(null);
+      final third = engine.analyse(afterE5, multiPv: 1);
+      final thirdLines = <EngineLine>[];
+      var thirdDone = false;
+      third.lines.listen(thirdLines.add, onDone: () => thirdDone = true);
+      async.flushMicrotasks();
+
+      // No answer to stop: the engine is killed, but its pipe is still
+      // draining what it printed before.
+      async.elapse(const Duration(seconds: 30));
+      expect(process.killed, isTrue);
+      process.say('info depth 30 score cp 40 pv e2e4');
+      process.say('bestmove e2e4');
+      async.flushMicrotasks();
+
+      expect(thirdDone, isTrue);
+      expect(thirdLines, isEmpty);
+      expect(
+        process.sent.where((line) => line.startsWith('go ')),
+        hasLength(1),
+        reason: 'only the first search was ever started',
+      );
+
+      EngineExit? why;
+      unawaited(engine.exited.then((exit) => why = exit));
+      process.exit(137);
+      async.flushMicrotasks();
+      expect(why, EngineExit.unresponsive);
     });
   });
 

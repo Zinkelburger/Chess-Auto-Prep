@@ -240,7 +240,7 @@ class _PgnViewerPanelState extends State<PgnViewerPanel> {
           count: chapter.size,
           unfolded: unfolded,
           holdsCurrent: holds,
-          onTap: () => setState(() => _folds[chapter.title] = !unfolded),
+          onTap: () => _fold(chapter.title, unfolded: !unfolded),
         ),
       );
       if (!unfolded) continue;
@@ -249,6 +249,13 @@ class _PgnViewerPanelState extends State<PgnViewerPanel> {
       }
     }
     return items;
+  }
+
+  /// A chapter folded or unfolded by hand, which it stays while the file is
+  /// open.
+  void _fold(String title, {required bool unfolded}) {
+    if (!mounted) return;
+    setState(() => _folds[title] = unfolded);
   }
 }
 

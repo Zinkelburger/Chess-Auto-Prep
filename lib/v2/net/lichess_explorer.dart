@@ -7,6 +7,7 @@ import '../chess/explorer_answer.dart';
 import '../chess/explorer_choice.dart';
 import '../chess/fen.dart';
 import '../diagnostics/log.dart';
+import 'lichess_http.dart';
 
 /// The Lichess opening explorer: the masters database and the Lichess
 /// players' database, one request per position, and the PGN of a game
@@ -192,7 +193,7 @@ final class LichessExplorerApi implements LichessExplorer {
   /// sooner than [explorerMinimumGap] after the last. Null when every
   /// attempt threw.
   Future<http.Response?> _get(Uri url, String action, {String? accept}) async {
-    final headers = await _headers(accept);
+    final headers = lichessHeaders(token: await _token(), accept: accept);
     for (var attempt = 1; attempt <= explorerAttempts; attempt++) {
       await _keepTheGap();
       try {
@@ -213,14 +214,6 @@ final class LichessExplorerApi implements LichessExplorer {
       if (since < explorerMinimumGap) await _wait(explorerMinimumGap - since);
     }
     _lastRequest = _now();
-  }
-
-  Future<Map<String, String>> _headers(String? accept) async {
-    final token = await _token();
-    return {
-      'Accept': ?accept,
-      if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
-    };
   }
 
   /// Masters lists up to 15 games; the players' database lists four top

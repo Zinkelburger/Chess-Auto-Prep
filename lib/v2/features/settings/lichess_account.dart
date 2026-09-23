@@ -12,8 +12,8 @@ import '../../storage/lichess_token.dart';
 final class LichessAccountState extends ChangeNotifier {
   LichessAccountState({
     required LichessLogin login,
-    Future<LichessAccount?> Function() read = readLichessAccount,
-    Future<bool> Function(LichessAccount?) write = writeLichessAccount,
+    required Future<LichessAccount?> Function() read,
+    required Future<bool> Function(LichessAccount?) write,
   }) : _login = login,
        _read = read,
        _write = write;
@@ -60,16 +60,24 @@ final class LichessAccountState extends ChangeNotifier {
   }
 
   /// Signs out: the token is revoked at Lichess best effort and forgotten
-  /// here whatever Lichess said.
+  /// here whatever Lichess said. When this computer will not forget it,
+  /// the row says so: the next launch would read it back as signed in.
   Future<void> logOut() async {
     final signedIn = _status;
     if (signedIn is! SignedIn) return;
     _set(const SigningOut());
     await _login.revoke(signedIn.account.token);
-    if (!await _write(null)) {
-      log.w('sign out of Lichess', 'the preferences kept the account');
+    if (await _write(null)) {
+      _set(const SignedOut(), problem: null);
+      return;
     }
-    _set(const SignedOut(), problem: null);
+    log.w('sign out of Lichess', 'the preferences kept the account');
+    _set(
+      const SignedOut(),
+      problem:
+          'Logged out, but the account could not be removed from this '
+          'computer; it may show as logged in next time.',
+    );
   }
 
   Future<bool> _took(LoginOutcome outcome) async {

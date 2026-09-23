@@ -12,10 +12,6 @@ abstract final class Space {
   static const xl = 24.0;
 }
 
-/// How wide the list beside the workspace starts out, whichever mode fills
-/// it; the user drags it from there.
-const libraryPanelWidth = 300.0;
-
 /// How wide the chapter outline between the list and the board starts out.
 /// The old app's column is 18% of the window's body clamped to 220–280.
 const outlineColumnWidth = 240.0;

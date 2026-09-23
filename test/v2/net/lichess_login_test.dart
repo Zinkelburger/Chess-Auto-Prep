@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:chess_auto_prep/v2/net/lichess_http.dart';
 import 'package:chess_auto_prep/v2/net/lichess_login.dart';
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
@@ -125,6 +126,11 @@ void main() {
     );
 
     final exchange = seen.firstWhere((r) => r.method == 'POST');
+    expect(exchange.headers['User-Agent'], appUserAgent);
+    expect(
+      exchange.headers['content-type'],
+      startsWith('application/x-www-form-urlencoded'),
+    );
     final body = Uri.splitQueryString(exchange.body);
     expect(body['grant_type'], 'authorization_code');
     expect(body['code'], 'c0de');
@@ -254,6 +260,9 @@ void main() {
     expect(account.username, 'DrNykterstein');
     expect(account.personal, isTrue);
     expect(account.until, isNull);
+    final asked = seen.single;
+    expect(asked.headers['Authorization'], 'Bearer lip_mine');
+    expect(asked.headers['User-Agent'], appUserAgent);
   });
 
   test('a rejected or empty personal token says so', () async {
@@ -275,6 +284,7 @@ void main() {
     final delete = seen.single;
     expect(delete.method, 'DELETE');
     expect(delete.headers['Authorization'], 'Bearer lip_old');
+    expect(delete.headers['User-Agent'], appUserAgent);
     final broken = LichessLoginApi(
       MockClient((_) => throw const SocketException('down')),
       openBrowser: (_) async => true,

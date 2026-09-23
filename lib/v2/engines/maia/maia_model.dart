@@ -61,9 +61,9 @@ final class MaiaModel implements MovePolicy {
   final OrtSession _session;
   final MaiaVocabulary _vocabulary;
 
-  /// Inference waits its turn: the wrapper's worker isolate pairs answers
-  /// with requests by the order they were sent, so two overlapping runs
-  /// could be given each other's numbers.
+  /// Inference waits its turn: one run at a time keeps the model on the
+  /// one thread it was built with, and lets [dispose] release the session
+  /// only once nothing is running on it.
   Future<void> _turn = Future.value();
   bool _disposed = false;
 
@@ -75,11 +75,12 @@ final class MaiaModel implements MovePolicy {
     return answer;
   }
 
-  /// Releases the session. Asking afterwards is answered, not an error.
+  /// Releases the session once the question it may be answering is done.
+  /// Asking afterwards is answered, not an error.
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _session.release();
+    unawaited(_turn.then((_) => _session.release()));
   }
 
   static const String _shutDown = 'The opponent model has been shut down';
@@ -129,28 +130,17 @@ final class MaiaModel implements MovePolicy {
       _ratingShape,
     );
     final options = OrtRunOptions();
-    var outputs = const <OrtValue?>[];
     try {
-      // The native call runs in the wrapper's worker isolate; this one only
-      // does the encoding and the softmax.
-      outputs =
-          await _session.runAsync(options, {
-            'tokens': board,
-            'elo_self': self,
-            'elo_oppo': opponent,
-          }) ??
-          const [];
-      // Output 0 is logits_move [1, 4352]; output 1 is the value head, which
-      // the repertoire builder does not ask about.
-      return outputs.isEmpty ? null : _row(outputs.first?.value);
+      return await _runElsewhere(_session.address, options.address, {
+        'tokens': board.address,
+        'elo_self': self.address,
+        'elo_oppo': opponent.address,
+      });
     } finally {
       board.release();
       self.release();
       opponent.release();
       options.release();
-      for (final output in outputs) {
-        output?.release();
-      }
     }
   }
 
@@ -167,6 +157,38 @@ final class MaiaModel implements MovePolicy {
       numbers.add(cell.toDouble());
     }
     return numbers;
+  }
+}
+
+/// Runs the session at [session] on the tensors at [inputs] in an isolate
+/// of its own and answers the move head, as [MaiaModel._row] reads it.
+///
+/// Not the wrapper's `runAsync`: its one worker isolate never answers a run
+/// that failed, so the question waits for ever and every later one waits
+/// behind it. Here the session, the options and the tensors cross as native
+/// addresses — the wrapper's own worker adopts them the same way — the
+/// outputs are read and released on the far side, and a failure comes back
+/// as the error it is. The encoding and the softmax stay on the caller.
+Future<List<double>?> _runElsewhere(
+  int session,
+  int options,
+  Map<String, int> inputs,
+) => Isolate.run(() => _run(session, options, inputs));
+
+List<double>? _run(int session, int options, Map<String, int> inputs) {
+  final outputs = OrtSession.fromAddress(session)
+      .run(OrtRunOptions.fromAddress(options), {
+        for (final MapEntry(:key, :value) in inputs.entries)
+          key: OrtValueTensor.fromAddress(value),
+      });
+  try {
+    // Output 0 is logits_move [1, 4352]; output 1 is the value head, which
+    // the repertoire builder does not ask about.
+    return outputs.isEmpty ? null : MaiaModel._row(outputs.first?.value);
+  } finally {
+    for (final output in outputs) {
+      output?.release();
+    }
   }
 }
 

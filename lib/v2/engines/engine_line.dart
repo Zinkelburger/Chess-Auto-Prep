@@ -1,5 +1,3 @@
-import 'dart:math';
-
 /// An evaluation as the engine reports it: from the side to move, until
 /// [forWhite] turns it round for display.
 sealed class Score {
@@ -12,10 +10,6 @@ sealed class Score {
 
   /// `+0.35`, `-1.20`, `#3`, `#-3`.
   String get text;
-
-  /// The share of the point the favoured side is expected to score, 0 to
-  /// 1, using Lichess's fit of centipawns to results. A mate is 0 or 1.
-  double get expected;
 }
 
 final class Centipawns extends Score {
@@ -31,11 +25,6 @@ final class Centipawns extends Score {
     final pawns = (value / 100).toStringAsFixed(2);
     return value < 0 ? pawns : '+$pawns';
   }
-
-  /// Lichess's fit of centipawns to results, `2/(1 + exp(-0.00368208 cp))
-  /// - 1` as a margin, rearranged here to the share of the point.
-  @override
-  double get expected => 1 / (1 + exp(-0.00368208 * value));
 
   @override
   bool operator ==(Object other) => other is Centipawns && other.value == value;
@@ -54,8 +43,8 @@ final class Centipawns extends Score {
 ///
 /// A mate that has happened has no distance left to carry its sign, so
 /// [mating] carries it instead. Without that, the mated side and the side
-/// that just mated would be the same score, and the bar would show the
-/// mated side winning.
+/// that just mated would be the same score, and a verdict on a finished
+/// game could not say who won it.
 final class MateIn extends Score {
   /// UCI's `score mate N` for the side to move.
   const MateIn(int moves) : this._(moves, mating: moves > 0);
@@ -72,15 +61,12 @@ final class MateIn extends Score {
   Score get negated => MateIn._(-moves, mating: !mating);
 
   /// `#3`, `#-3`, and a bare `#` for a mate that has already happened: there
-  /// is no distance to print, and the bar beside it says whose mate it is.
+  /// is no distance to print.
   @override
   String get text => switch (moves) {
     0 => '#',
     _ => mating ? '#$moves' : '#-${moves.abs()}',
   };
-
-  @override
-  double get expected => mating ? 1 : 0;
 
   @override
   bool operator ==(Object other) =>
@@ -126,8 +112,8 @@ final class EngineLine {
 /// A score with no moves after it is a line all the same. It is what an
 /// engine says about a position that is already over — Stockfish answers
 /// `info depth 0 score mate 0` and then `bestmove (none)` on a board that is
-/// checkmate, and `score cp 0` on a stalemate — and dropping it is what left
-/// the bar at even money on a finished game.
+/// checkmate, and `score cp 0` on a stalemate — and dropping it would leave
+/// a finished game with no score at all.
 EngineLine? parseInfoLine(String line) {
   final words = line.trim().split(_spaces);
   if (words.first != 'info') return null;

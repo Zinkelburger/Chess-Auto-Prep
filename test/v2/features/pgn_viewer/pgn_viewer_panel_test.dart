@@ -9,6 +9,9 @@ import 'package:chess_auto_prep/v2/workspace/file_filter.dart';
 
 import '../../support/viewer_fixture.dart';
 
+/// About as wide as the list pane opens.
+const _panelWidth = 300.0;
+
 void main() {
   late ViewerFixture fixture;
   late List<ChapterRef> opened;
@@ -24,7 +27,7 @@ void main() {
         theme: darkTheme(),
         home: Scaffold(
           body: SizedBox(
-            width: libraryPanelWidth,
+            width: _panelWidth,
             child: PgnViewerPanel(
               viewer: fixture.viewer,
               filter: fixture.filter,

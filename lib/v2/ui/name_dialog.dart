@@ -3,8 +3,6 @@ import 'package:flutter/material.dart';
 import 'file_names.dart';
 import 'theme.dart';
 
-export 'file_names.dart' show maxNameLength, nameProblem;
-
 /// One more control under the name field, for a dialog that asks for a little
 /// more than a name — the side a new repertoire plays.
 ///
@@ -67,13 +65,18 @@ class _NameDialogState extends State<_NameDialog> {
     super.dispose();
   }
 
+  /// The name is what the field holds without the spaces around it, which
+  /// is what is checked and what is answered: a space typed at either end
+  /// is neither refused nor kept.
   void _submit() {
-    final problem = nameProblem(_field.text);
+    if (!mounted) return;
+    final name = _field.text.trim();
+    final problem = nameProblem(name);
     if (problem != null) {
       setState(() => _problem = problem);
       return;
     }
-    Navigator.of(context).pop(_field.text.trim());
+    Navigator.of(context).pop(name);
   }
 
   void _changed() {
@@ -100,7 +103,9 @@ class _NameDialogState extends State<_NameDialog> {
                 errorText: _problem,
               ),
               onChanged: (_) {
-                if (_problem != null) setState(() => _problem = null);
+                if (mounted && _problem != null) {
+                  setState(() => _problem = null);
+                }
               },
               onSubmitted: (_) => _submit(),
             ),

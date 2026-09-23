@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:chess_auto_prep/v2/net/lichess_http.dart';
 import 'package:chess_auto_prep/v2/net/recent_games.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -40,7 +41,7 @@ ChesscomGamesApi _chesscom(Map<String, http.Response Function()> pages) =>
       MockClient((request) async {
         final page = pages['${request.url}'];
         if (page == null) return http.Response('', 404);
-        expect(request.headers['User-Agent'], gamesUserAgent);
+        expect(request.headers['User-Agent'], appUserAgent);
         return page();
       }),
       wait: (_) async {},
@@ -71,7 +72,7 @@ void main() {
       expect(request.url.queryParameters['perfType'], contains('blitz'));
       expect(request.headers['Authorization'], 'Bearer tok');
       expect(request.headers['Accept'], 'application/x-chess-pgn');
-      expect(request.headers['User-Agent'], gamesUserAgent);
+      expect(request.headers['User-Agent'], appUserAgent);
     });
 
     test('no token, no Authorization header', () async {
