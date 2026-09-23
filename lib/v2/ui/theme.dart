@@ -441,6 +441,10 @@ const gameOrdinalWidth = 40.0;
 /// How wide the typeable game number under the board is: four digits.
 const gameNumberWidth = 52.0;
 
+/// The typed-move field under the board: room for `exd8=Q+` and no more,
+/// so the game counter beside it keeps its place on the narrowest board.
+const moveFieldWidth = 96.0;
+
 /// The Explorer tab's table: the move gutter, the games gutter, the header
 /// row over them, and the height of one filter chip. The result bar sits after the
 /// games, no wider than [explorerBarMaxWidth]: a bar across the whole card

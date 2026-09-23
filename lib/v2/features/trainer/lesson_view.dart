@@ -4,8 +4,8 @@ import 'package:flutter/services.dart';
 import '../../chess/pgn/move_label.dart';
 import '../../chess/training/drill.dart';
 import '../../chess/training/schedule.dart';
-import '../../chess/typed_move.dart';
 import '../../ui/theme.dart';
+import '../../workspace/move_field.dart';
 import 'lesson.dart';
 import 'trainer.dart';
 import 'trainer_words.dart';
@@ -14,14 +14,22 @@ import 'trainer_words.dart';
 /// to go, what the lesson wants now, the moves played so far with the note
 /// on the last, the one control the moment needs, and the way out.
 ///
-/// Keys: Space goes on, 1–4 rate, ↓ skips the line, Escape leaves, `/`
-/// goes to the move box — and a move typed while one is asked for goes
-/// there by itself.
+/// Keys: Space goes on, 1–4 rate, ↓ skips the line, Escape leaves — and
+/// a move typed while one is asked for goes into the move field under the
+/// board by itself, which plays it on the lesson's board.
 class LessonView extends StatefulWidget {
-  const LessonView({super.key, required this.lesson, required this.trainer});
+  const LessonView({
+    super.key,
+    required this.lesson,
+    required this.trainer,
+    required this.moves,
+  });
 
   final Lesson lesson;
   final Trainer trainer;
+
+  /// The move field under the board.
+  final MoveEntry moves;
 
   @override
   State<LessonView> createState() => _LessonViewState();
@@ -29,13 +37,14 @@ class LessonView extends StatefulWidget {
 
 class _LessonViewState extends State<LessonView> {
   final _focus = FocusNode(debugLabel: 'lesson');
-  final _box = FocusNode(debugLabel: 'move box');
-  final _typed = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     widget.lesson.addListener(_lessonChanged);
+    // The keys are the lesson's from the start. Autofocus would leave them
+    // with the workspace, which holds the focus already.
+    _focus.requestFocus();
   }
 
   @override
@@ -50,8 +59,6 @@ class _LessonViewState extends State<LessonView> {
   void dispose() {
     widget.lesson.removeListener(_lessonChanged);
     _focus.dispose();
-    _box.dispose();
-    _typed.dispose();
     super.dispose();
   }
 
@@ -59,22 +66,18 @@ class _LessonViewState extends State<LessonView> {
   /// ratings and ↓ are the lesson's, not letters of a move.
   void _lessonChanged() {
     if (!mounted || askingFor(widget.lesson)) return;
-    _typed.clear();
-    if (_box.hasFocus) _focus.requestFocus();
+    final moves = widget.moves;
+    moves.words.clear();
+    if (moves.focus.hasFocus) _focus.requestFocus();
   }
 
   KeyEventResult _key(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     final lesson = widget.lesson;
     final key = event.logicalKey;
-    if (_box.hasFocus) {
-      // Every other key is the box's words.
-      if (key != LogicalKeyboardKey.escape) return KeyEventResult.ignored;
-      _typed.clear();
-      _focus.requestFocus();
+    if (askingFor(lesson) && _typeInField(event)) {
       return KeyEventResult.handled;
     }
-    if (askingFor(lesson) && _typeInBox(event)) return KeyEventResult.handled;
     final rating = _ratingKeys[key];
     if (rating != null) {
       lesson.rate(rating);
@@ -90,13 +93,9 @@ class _LessonViewState extends State<LessonView> {
     return KeyEventResult.handled;
   }
 
-  /// `/` goes to the box; a letter a move is written with goes there too,
-  /// typed, so a move can be typed without going there first.
-  bool _typeInBox(KeyEvent event) {
-    if (event.logicalKey == LogicalKeyboardKey.slash) {
-      _box.requestFocus();
-      return true;
-    }
+  /// A letter a move is written with goes to the move field, typed, so a
+  /// move can be typed without going there first.
+  bool _typeInField(KeyEvent event) {
     final character = event.character;
     final keys = HardwareKeyboard.instance;
     if (character == null ||
@@ -106,13 +105,11 @@ class _LessonViewState extends State<LessonView> {
         keys.isMetaPressed) {
       return false;
     }
-    _box.requestFocus();
-    _typed.text += character;
-    playTyped(widget.lesson, _typed, typing: true);
+    widget.moves.type(character);
     return true;
   }
 
-  static final _moveLetter = RegExp(r'^[a-hA-HKQRNOo0-8x=-]$');
+  static final _moveLetter = RegExp(r'^[a-hA-HKkQqRrNnOo0-8x=-]$');
 
   static final _ratingKeys = {
     LogicalKeyboardKey.digit1: Rating.again,
@@ -125,7 +122,6 @@ class _LessonViewState extends State<LessonView> {
   Widget build(BuildContext context) {
     return Focus(
       focusNode: _focus,
-      autofocus: true,
       onKeyEvent: _key,
       child: GestureDetector(
         behavior: HitTestBehavior.translucent,
@@ -141,15 +137,7 @@ class _LessonViewState extends State<LessonView> {
             ),
             child: widget.lesson.state is SittingOver
                 ? _Over(lesson: widget.lesson, trainer: widget.trainer)
-                : _OnLine(
-                    lesson: widget.lesson,
-                    trainer: widget.trainer,
-                    box: MoveBox(
-                      lesson: widget.lesson,
-                      controller: _typed,
-                      focusNode: _box,
-                    ),
-                  ),
+                : _OnLine(lesson: widget.lesson, trainer: widget.trainer),
           ),
         ),
       ),
@@ -158,15 +146,10 @@ class _LessonViewState extends State<LessonView> {
 }
 
 class _OnLine extends StatelessWidget {
-  const _OnLine({
-    required this.lesson,
-    required this.trainer,
-    required this.box,
-  });
+  const _OnLine({required this.lesson, required this.trainer});
 
   final Lesson lesson;
   final Trainer trainer;
-  final Widget box;
 
   @override
   Widget build(BuildContext context) {
@@ -193,8 +176,6 @@ class _OnLine extends StatelessWidget {
               color: Theme.of(context).colorScheme.error,
             ),
           ),
-        const SizedBox(height: Space.s),
-        box,
         const SizedBox(height: Space.s),
         _Control(lesson: lesson),
         const Divider(height: Space.l),
@@ -399,83 +380,3 @@ class _Over extends StatelessWidget {
 /// Whether [lesson] is waiting for the user's move.
 bool askingFor(Lesson lesson) =>
     lesson.state is Drilling && lesson.drill.stage is Asking;
-
-/// Plays the move [words] name, if the lesson is asking and they name
-/// exactly one, and clears them. Whether a move was played. While the user
-/// is still [typing], words that could go on to name another move wait.
-bool playTyped(
-  Lesson lesson,
-  TextEditingController words, {
-  required bool typing,
-}) {
-  if (!askingFor(lesson)) return false;
-  final fen = lesson.drill.fen;
-  final uci = typing
-      ? typedMoveSoFar(fen, words.text)
-      : typedMove(fen, words.text);
-  if (uci == null) return false;
-  words.clear();
-  lesson.play(uci);
-  return true;
-}
-
-/// The move typed rather than played: SAN or UCI, played as soon as the
-/// words name exactly one legal move and cannot go on to name another, with
-/// no Enter needed; `O-O` waits for Enter while `O-O-O` is legal too. Enter
-/// on words that name none says so.
-///
-/// The lesson view owns the words and the focus, so it can send a key typed
-/// on the lesson into the box and take the focus back once the lesson stops
-/// asking.
-class MoveBox extends StatefulWidget {
-  const MoveBox({
-    super.key,
-    required this.lesson,
-    required this.controller,
-    required this.focusNode,
-  });
-
-  final Lesson lesson;
-  final TextEditingController controller;
-  final FocusNode focusNode;
-
-  @override
-  State<MoveBox> createState() => _MoveBoxState();
-}
-
-class _MoveBoxState extends State<MoveBox> {
-  /// Enter was pressed on words that name no move here.
-  var _refused = false;
-
-  void _changed(String _) {
-    playTyped(widget.lesson, widget.controller, typing: true);
-    if (_refused) setState(() => _refused = false);
-  }
-
-  void _submitted(String text) {
-    if (playTyped(widget.lesson, widget.controller, typing: false)) return;
-    setState(() => _refused = text.trim().isNotEmpty);
-    widget.focusNode.requestFocus();
-  }
-
-  @override
-  Widget build(BuildContext context) => Tooltip(
-    message: 'Type a move (/)',
-    child: TextField(
-      controller: widget.controller,
-      focusNode: widget.focusNode,
-      readOnly: !askingFor(widget.lesson),
-      onChanged: _changed,
-      onSubmitted: _submitted,
-      autocorrect: false,
-      enableSuggestions: false,
-      style: monoText,
-      decoration: InputDecoration(
-        isDense: true,
-        hintText: 'Type a move…',
-        errorText: _refused ? 'Not a legal move here' : null,
-        border: const OutlineInputBorder(),
-      ),
-    ),
-  );
-}

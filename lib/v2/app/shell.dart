@@ -23,6 +23,7 @@ import '../workspace/copy_name_dialog.dart';
 import '../workspace/document_session.dart';
 import '../workspace/fill_dialog.dart';
 import '../workspace/fill_gaps.dart';
+import '../workspace/move_field.dart';
 import '../workspace/session_results.dart';
 import '../workspace/tree_pane.dart';
 import '../workspace/workspace.dart';
@@ -67,6 +68,10 @@ class Shell extends StatefulWidget {
 class _ShellState extends State<Shell> with ListeningState<Shell> {
   /// Whether the edit strip is open. The strip's own Done closes it.
   final _editing = ValueNotifier(false);
+
+  /// The words and the focus of the move field under the board, which `/`
+  /// and a lesson reach as well as the field.
+  final _moves = MoveEntry();
 
   /// Who holds the board: a lesson first, then the Tree tab's free board.
   late final _claim = FirstClaim([_train.lines.board, _ws.tree.board]);
@@ -134,6 +139,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   void dispose() {
     _sitting.dispose();
     _editing.dispose();
+    _moves.dispose();
     _claim.dispose();
     for (final view in _views.values) {
       view.dispose();
@@ -208,6 +214,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       switch (tab) {
         WorkspaceTab.train => TrainPane(
           trainer: _train.lines,
+          moves: _moves,
           onRead: (line) => unawaited(_readLine(line)),
           offerBuilder: _view.offersBuilder,
         ),
@@ -367,6 +374,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
                 analysis: _ws.analysis,
                 editing: _editing,
                 tabs: _tabs,
+                moves: _moves,
                 extra: _windowKeys,
                 child: _columns(),
               ),
@@ -400,6 +408,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       workspace: _ws,
       tabs: _tabs,
       editing: _editing,
+      moves: _moves,
       hooks: WorkspaceHooks(
         header: _view.header,
         gameCounter: _view.gameCounter,
