@@ -58,7 +58,7 @@ final class AppParts {
   Workspace get workspace => _workspace.workspace;
 
   /// Whether the window fills the screen.
-  late final fullScreen = FullScreen(env.setFullScreen);
+  late final fullScreen = FullScreen(env.setFullScreen, say: requests.say);
 
   /// The question before the words on screen are left behind.
   late final exit = ExitGuard(

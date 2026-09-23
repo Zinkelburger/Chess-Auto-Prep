@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../ui/app_action.dart';
 import '../ui/listening_state.dart';
 import '../ui/theme.dart';
 import 'document_session.dart';
-import '../ui/app_action.dart';
 
 /// `‹ [n] of N ›` under the board: which game of the open file is showing,
 /// with the number typeable to jump. Nothing when the document is not one

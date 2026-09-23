@@ -63,6 +63,7 @@ String? enteredMove(Fen fen, String text) {
   final moves = _spelled(fen);
   if (moves == null) return null;
   final typed = _plain(text);
+  if (typed.isEmpty) return null;
   final named = _firstReading(_names, moves, typed);
   if (named.isNotEmpty) return named.length == 1 ? named.single : null;
   final candidates = _firstReading(_starts, moves, typed);
@@ -123,16 +124,28 @@ typedef _Reading = bool Function(_Spelled move, String typed);
 final List<_Reading> _names = [
   (move, typed) => move.sans.contains(typed),
   (move, typed) => move.ucis.contains(typed.toLowerCase()),
-  (move, typed) =>
-      move.sans.any((san) => san.toLowerCase() == typed.toLowerCase()),
+  (move, typed) => move.sans.any(
+    (san) => _anyCase(san, typed) && san.toLowerCase() == typed.toLowerCase(),
+  ),
 ];
 
 final List<_Reading> _starts = [
   (move, typed) => move.sans.any((san) => san.startsWith(typed)),
   (move, typed) => move.ucis.any((uci) => uci.startsWith(typed.toLowerCase())),
-  (move, typed) =>
-      move.sans.any((san) => san.toLowerCase().startsWith(typed.toLowerCase())),
+  (move, typed) => move.sans.any(
+    (san) =>
+        _anyCase(san, typed) &&
+        san.toLowerCase().startsWith(typed.toLowerCase()),
+  ),
 ];
+
+/// Whether [typed] may be read against [san] in any case: `nf3` is the
+/// knight, but a capital piece letter is a piece, so `Bc4` is never the b
+/// pawn's capture.
+bool _anyCase(String san, String typed) =>
+    typed.isEmpty ||
+    !'KQRBN'.contains(typed[0]) ||
+    san[0] == san[0].toUpperCase();
 
 /// The moves the first reading of [typed] that finds any finds, as UCI.
 List<String> _firstReading(

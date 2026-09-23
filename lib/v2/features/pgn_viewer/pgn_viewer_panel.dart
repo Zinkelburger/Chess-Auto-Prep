@@ -5,10 +5,10 @@ import 'package:path/path.dart' as p;
 
 import '../../chess/pgn/game_summary.dart';
 import '../../storage/chapter_files.dart';
+import '../../ui/app_action.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
 import 'pgn_viewer.dart';
-import '../../ui/app_action.dart';
 
 /// Opens a PGN file in the workspace with its first game on the board.
 typedef OpenPgnFile = void Function(ChapterRef file);

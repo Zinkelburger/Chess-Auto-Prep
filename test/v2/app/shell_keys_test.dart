@@ -4,6 +4,7 @@ import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/features/library/library_panel.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/workspace/comment_field.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -76,6 +77,19 @@ void main() {
     expect(w.session.currentMove?.san, 'd4');
     await key(tester, LogicalKeyboardKey.escape);
     expect(w.session.cursor, NodePath.of([0, 0]));
+  });
+
+  testWidgets('Enter on a focused button is the button\'s', (tester) async {
+    await openKid(tester);
+    w.session.goTo(NodePath.of([0, 0]));
+    await tester.pump();
+    final forward = find.byTooltip('Forward (→)');
+    Focus.of(
+      tester.element(find.descendant(of: forward, matching: find.byType(Icon))),
+    ).requestFocus();
+    await tester.pump();
+    await key(tester, LogicalKeyboardKey.enter);
+    expect(w.session.currentMove?.san, 'd6', reason: 'Forward, not Nc6');
   });
 
   testWidgets('Esc closes the edit strip once out of the variations', (
@@ -154,5 +168,23 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     await tester.pump(const Duration(seconds: 3));
     expect(w.session.currentMove?.san, 'e4', reason: 'the arrow stopped it');
+  });
+
+  testWidgets('autoplay stops when the viewer is left', (tester) async {
+    final games = collectionRef('games');
+    w.store.documents[games] = Opened(
+      threeGameFile,
+      scriptedRevision(threeGameFile),
+    );
+    await w.pumpShell(tester);
+    await w.requests.openFile(games);
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(w.parts.documents.autoplay.playing, isTrue);
+    w.requests.switchTo(Mode.study);
+    await tester.pump(const Duration(seconds: 3));
+    expect(w.parts.documents.autoplay.playing, isFalse);
+    expect(w.session.currentMove?.san, 'e4');
   });
 }

@@ -43,6 +43,15 @@ void main() {
       expect(resolved(busy, 'bc4'), 'b3c4', reason: 'the pawn, as spelled');
     });
 
+    test('a capital piece letter is a piece, never a pawn', () {
+      // Only the pawn can take on c4 here.
+      const pawnOnly = Fen('4k3/8/8/8/2p5/1P6/8/4K3 w - - 0 1');
+      expect(resolved(pawnOnly, 'bc4'), 'b3c4');
+      expect(readTypedMove(pawnOnly, 'Bc4'), isA<NoMatch>());
+      expect(resolved(start, 'NF3'), 'g1f3', reason: 'still a knight');
+      expect(resolved(start, 'E4'), 'e2e4', reason: 'E is no piece');
+    });
+
     test('a disambiguation the position does not need', () {
       expect(resolved(start, 'Ngf3'), 'g1f3');
       expect(resolved(start, 'N1f3'), 'g1f3');
@@ -130,6 +139,11 @@ void main() {
       expect(enteredMove(start, 'N'), isNull);
       expect(enteredMove(knights, 'Nd2'), isNull, reason: 'which knight?');
       expect(enteredMove(start, ''), isNull);
+      expect(
+        enteredMove(const Fen('7k/8/8/8/8/8/8/K6R b - - 0 1'), '+'),
+        isNull,
+        reason: 'one legal move, but nothing typed',
+      );
       expect(enteredMove(start, 'e5'), isNull);
     });
   });

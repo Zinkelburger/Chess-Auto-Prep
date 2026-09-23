@@ -1,9 +1,9 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
+import 'app_action.dart';
 import 'listening_state.dart';
 import 'theme.dart';
-import 'app_action.dart';
 
 /// One thing a pane can show, by an identity that never changes — an enum
 /// value, so the pane's body can switch over every tab — what the tab is

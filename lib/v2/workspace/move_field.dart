@@ -3,8 +3,8 @@ import 'package:flutter/services.dart';
 
 import '../chess/fen.dart';
 import '../chess/typed_move.dart';
-import '../ui/theme.dart';
 import '../ui/app_action.dart';
+import '../ui/theme.dart';
 
 /// The typed-move field's words and focus.
 ///
@@ -83,10 +83,19 @@ class _MoveFieldState extends State<MoveField> {
   @override
   void didUpdateWidget(MoveField old) {
     super.didUpdateWidget(old);
-    if (old.entry == widget.entry) return;
-    old.entry.words.removeListener(_changed);
-    _heard = _words.text;
-    _words.addListener(_changed);
+    if (old.entry != widget.entry) {
+      old.entry.words.removeListener(_changed);
+      _heard = _words.text;
+      _words.addListener(_changed);
+    }
+    // Words typed for another position mean nothing in this one.
+    if (old.fen != widget.fen) _words.clear();
+    // A board that stops taking moves gives the keys back.
+    final focus = widget.entry.focus;
+    if (widget.onMove == null && focus.hasFocus) {
+      _words.clear();
+      focus.unfocus(disposition: UnfocusDisposition.previouslyFocusedChild);
+    }
   }
 
   @override

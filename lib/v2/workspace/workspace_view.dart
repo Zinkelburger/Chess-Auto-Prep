@@ -6,6 +6,7 @@ import 'package:multi_split_view/multi_split_view.dart';
 
 import '../chess/fen.dart';
 import '../storage/settings_store.dart';
+import '../ui/app_action.dart';
 import '../ui/pane_tabs.dart';
 import '../ui/theme.dart';
 import 'board_claim.dart';
@@ -26,7 +27,6 @@ import 'reading_header.dart';
 import 'replies_pane.dart';
 import 'workspace.dart';
 import 'workspace_tabs.dart';
-import '../ui/app_action.dart';
 
 /// What the window around the workspace adds to it: the mode's own tabs
 /// and right-click menu, where a move goes when it is not the document's,

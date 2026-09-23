@@ -4,12 +4,12 @@ import 'package:flutter/services.dart';
 import '../../chess/pgn/move_label.dart';
 import '../../chess/training/drill.dart';
 import '../../chess/training/schedule.dart';
+import '../../ui/app_action.dart';
 import '../../ui/theme.dart';
 import '../../workspace/move_field.dart';
 import 'lesson.dart';
 import 'trainer.dart';
 import 'trainer_words.dart';
-import '../../ui/app_action.dart';
 
 /// The Train tab while a sitting runs: the line and how far the sitting has
 /// to go, what the lesson wants now, the moves played so far with the note
@@ -67,9 +67,7 @@ class _LessonViewState extends State<LessonView> {
   /// ratings and ↓ are the lesson's, not letters of a move.
   void _lessonChanged() {
     if (!mounted || askingFor(widget.lesson)) return;
-    final moves = widget.moves;
-    moves.words.clear();
-    if (moves.focus.hasFocus) _focus.requestFocus();
+    if (widget.moves.focus.hasFocus) _focus.requestFocus();
   }
 
   KeyEventResult _key(FocusNode node, KeyEvent event) {

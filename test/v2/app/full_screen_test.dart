@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('asks the desktop in order and leaves only what it entered', () async {
     final asked = <bool>[];
-    final screen = FullScreen((on) async => asked.add(on));
+    final screen = FullScreen((on) async => asked.add(on), say: (_) {});
     expect(screen.leave(), isFalse, reason: 'not in full screen');
     screen.toggle();
     screen.toggle();
@@ -15,19 +15,16 @@ void main() {
     expect(asked, [true, false, true, false]);
   });
 
-  test('a desktop that refuses does not stop the next request', () async {
-    final asked = <bool>[];
-    var refuse = true;
-    final screen = FullScreen((on) async {
-      if (refuse) {
-        refuse = false;
-        throw StateError('no window');
-      }
-      asked.add(on);
-    });
+  test('a desktop that refuses is said, and the window is as it was', () async {
+    final said = <String>[];
+    final screen = FullScreen(
+      (on) async => throw StateError('no window'),
+      say: said.add,
+    );
     screen.toggle();
-    screen.leave();
     await pumpEventQueue();
-    expect(asked, [false]);
+    expect(screen.on, isFalse);
+    expect(said.single, startsWith('Could not fill the screen'));
+    expect(screen.leave(), isFalse, reason: 'Esc goes on to others');
   });
 }

@@ -4,11 +4,11 @@ import '../chess/fen.dart';
 import '../chess/pgn/comment_text.dart';
 import '../chess/pgn/game_tree.dart';
 import '../chess/pgn/move_label.dart';
+import '../ui/app_action.dart';
 import '../ui/theme.dart';
 import 'comment_blocks.dart';
 import 'document_session.dart';
 import 'line_preview.dart';
-import '../ui/app_action.dart';
 
 /// The move on the board and what the file says about it, under the board
 /// where the eye already is, as Lichess shows it: `14. Nf5!  Good move`

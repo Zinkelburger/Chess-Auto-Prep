@@ -92,6 +92,17 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
 
   ModeView get _view => _views[_requests.mode]!;
 
+  /// The mode on screen as last seen, so the one left can be told; the
+  /// mode changes through the requests, whoever asked.
+  Mode? _shown;
+
+  void _modeMayHaveChanged() {
+    final mode = _requests.mode;
+    if (mode == _shown) return;
+    if (_shown case final left?) _views[left]!.left();
+    _shown = mode;
+  }
+
   /// The reading card's tabs of the mode on screen.
   PaneTabs<WorkspaceTab> get _tabs => _view.tabs;
 
@@ -138,10 +149,13 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       view.tabs.addListener(_sitting.check);
     }
     _sitting.check();
+    _shown = _requests.mode;
+    _requests.addListener(_modeMayHaveChanged);
   }
 
   @override
   void dispose() {
+    _requests.removeListener(_modeMayHaveChanged);
     _sitting.dispose();
     _editing.dispose();
     _moves.dispose();

@@ -105,6 +105,9 @@ abstract base class ModeView {
   /// Called when the user switches to this mode.
   void entered() {}
 
+  /// Called when another mode comes on screen instead of this one.
+  void left() {}
+
   void dispose() => tabs.dispose();
 
   /// What can be done to the document on the board, in every mode that
@@ -222,6 +225,10 @@ final class ViewerView extends _DocumentModeView {
 
   @override
   void space() => _modes.autoplay.toggle();
+
+  /// Nothing would be left to stop it by: Space is the viewer's.
+  @override
+  void left() => _modes.autoplay.stop();
 
   @override
   List<AppAction> actions(ModeMenu menu) {
@@ -470,11 +477,13 @@ List<AppAction> boardActions(
       () => unawaited(requests.newAnalysisBoard()),
       shortcut: 'Ctrl+N',
     ),
-    AppAction(
-      'Paste FEN',
-      () => unawaited(requests.pasteFen()),
-      shortcut: 'Ctrl+Shift+V',
-    ),
+    // On the board, Paste PGN or FEN below takes a FEN too.
+    if (!scratch)
+      AppAction(
+        'Paste FEN',
+        () => unawaited(requests.pasteFen()),
+        shortcut: 'Ctrl+Shift+V',
+      ),
     if (scratch) ...[
       AppAction(
         'Paste PGN or FEN',

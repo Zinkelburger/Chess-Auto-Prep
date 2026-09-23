@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../chess/pgn/comment_edits.dart' show isGlyph;
 import '../chess/pgn/comment_text.dart';
 import '../chess/pgn/game_tree.dart';
+import '../ui/app_action.dart';
 import '../ui/listening_state.dart';
 import '../ui/theme.dart';
 import 'comment_field.dart';
@@ -10,7 +11,6 @@ import 'copy_name_dialog.dart';
 import 'document_saver.dart';
 import 'document_session.dart';
 import 'session_results.dart';
-import '../ui/app_action.dart';
 
 /// Everything about changing the document, under the moves: Done, Undo, the
 /// save state, the six glyphs and the note on the move the board is on.

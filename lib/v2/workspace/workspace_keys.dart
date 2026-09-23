@@ -76,14 +76,19 @@ class WorkspaceKeys extends StatelessWidget {
   }
 
   /// Keys that only now and then have something to do. When they have
-  /// nothing, the key goes on to whoever else wants it: Enter to a button
-  /// with the focus, Esc to a dialog.
+  /// nothing, the key goes on to whoever else wants it. A held Esc leaves
+  /// one thing, not the whole ladder.
   Map<ShortcutActivator, bool Function()> get _whenThere => {
-    const SingleActivator(LogicalKeyboardKey.enter): session.enterVariation,
-    const SingleActivator(LogicalKeyboardKey.numpadEnter):
-        session.enterVariation,
-    const SingleActivator(LogicalKeyboardKey.escape): _escape,
+    const SingleActivator(LogicalKeyboardKey.escape, includeRepeats: false):
+        _escape,
   };
+
+  /// Enter is the variation's only while the workspace itself has the
+  /// focus: a focused button, menu entry or lesson has its own use for it.
+  static const _enter = [
+    SingleActivator(LogicalKeyboardKey.enter),
+    SingleActivator(LogicalKeyboardKey.numpadEnter),
+  ];
 
   Map<ShortcutActivator, VoidCallback> get _bindings => {
     const SingleActivator(LogicalKeyboardKey.arrowLeft): session.back,
@@ -107,7 +112,8 @@ class WorkspaceKeys extends StatelessWidget {
         tabs.closeCurrent,
     const SingleActivator(LogicalKeyboardKey.keyW, meta: true):
         tabs.closeCurrent,
-    const SingleActivator(LogicalKeyboardKey.slash): moves.focus.requestFocus,
+    // A character, not a key: `/` is Shift+7 on some keyboards.
+    const CharacterActivator('/'): moves.focus.requestFocus,
     ...extra,
   };
 
@@ -118,6 +124,13 @@ class WorkspaceKeys extends StatelessWidget {
   /// handled and the field would never see it.
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
     if (_typing) return KeyEventResult.ignored;
+    final keys = HardwareKeyboard.instance;
+    if (_enter.any((enter) => enter.accepts(event, keys))) {
+      final ours = FocusManager.instance.primaryFocus == node;
+      return ours && session.enterVariation()
+          ? KeyEventResult.handled
+          : KeyEventResult.ignored;
+    }
     for (final MapEntry(key: activator, value: run) in _whenThere.entries) {
       if (activator.accepts(event, HardwareKeyboard.instance)) {
         return run() ? KeyEventResult.handled : KeyEventResult.ignored;

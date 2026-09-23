@@ -71,8 +71,8 @@ Pasted pastedBoard(String text, {required Side side}) {
   if (trimmed.isEmpty) {
     return const PasteRefused('Nothing to paste: copy a PGN or FEN first.');
   }
-  if (_asFen(trimmed) case final fen?) {
-    return PastedBoard(analysisBoard(side: side, root: fen));
+  if (pastedPosition(trimmed, side: side) case final PastedBoard board) {
+    return board;
   }
   final games = splitChapterText(trimmed).games;
   // A file is cut into games at their `[Event` lines, so moves pasted with

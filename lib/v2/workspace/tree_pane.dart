@@ -4,11 +4,11 @@ import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
 
 import '../chess/pgn/move_label.dart' show numberedMoves;
+import '../ui/app_action.dart';
 import '../ui/theme.dart';
 import 'repertoire_tree.dart';
 import 'document_session.dart';
 import 'line_preview.dart';
-import '../ui/app_action.dart';
 
 /// The Tree tab of the reading card: the user's own repertoires as an
 /// opening explorer. For the position on the board, every move any of the
