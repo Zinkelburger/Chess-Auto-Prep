@@ -161,6 +161,16 @@ class Build(unittest.TestCase):
         self.assertIn("Somebody, Else", kept)
         self.assertNotIn("Zhou", kept)
 
+        exported = Path(self.tmp.name) / "export"
+        out = arc.export(self.root, exported, jobs=1)
+        self.assertEqual((out["compressed"], out["files"]), (1, 1))
+        self.assertIn("licenses/by-sa/4.0", (exported / "README.md").read_text())
+        self.assertEqual(arc.export(self.root, exported, jobs=1)["compressed"], 0, "unchanged months are skipped")
+
+        restored = Path(self.tmp.name) / "restored"
+        self.assertEqual(arc.restore(exported, restored, import_db=False), 1)
+        self.assertEqual((restored / "months" / "2025-09.pgn").read_text(), kept)
+
 
 if __name__ == "__main__":
     unittest.main()

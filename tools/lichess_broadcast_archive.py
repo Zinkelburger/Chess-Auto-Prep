@@ -11,6 +11,8 @@ as the collection `lichess-official`:
     python3 tools/lichess_broadcast_archive.py fetch            # download new months
     python3 tools/lichess_broadcast_archive.py build            # filter, then import
     python3 tools/lichess_broadcast_archive.py status
+    python3 tools/lichess_broadcast_archive.py export           # xz copy into the repo
+    python3 tools/lichess_broadcast_archive.py restore          # rebuild from that copy
 
 `build` writes `months/<YYYY-MM>.pgn` (comments stripped) and a manifest,
 then builds `lichess-official.db` with the app's importer
@@ -27,7 +29,13 @@ A game is dropped when:
   write `Zhou Jianchao`, `Zhou, Jianchao` and `Shmeliov,D` for one person,
   and dates differ (the downloads only carry `UTCDate`).
 
-Needs the `zstd` command. Downloads are cached under
+`export` writes the kept month files, xz-compressed, to
+`scripts/data/broadcasts/lichess-official/` (about 100 MB, committed), so the
+archive survives losing both the Documents copy and the download cache;
+`restore` unpacks that copy and rebuilds the database. Both use only the
+standard library.
+
+`fetch` and `build` need the `zstd` command. Downloads are cached under
 `~/.cache/chess-prep/lichess-broadcast-db/` and never fetched twice.
 """
 
@@ -36,6 +44,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import lzma
 import os
 import re
 import sqlite3
@@ -339,6 +348,92 @@ def import_months(root: Path) -> None:
     )
 
 
+REPO = Path(__file__).resolve().parent.parent
+EXPORT_DIR = REPO / "scripts" / "data" / "broadcasts" / COLLECTION
+
+_README = """# Lichess official broadcasts, filtered
+
+Every official Lichess broadcast game from {first} to {last} that TWIC and the
+curated collections do not already hold: {kept:,} games, one xz-compressed PGN
+per month. Built by `tools/lichess_broadcast_archive.py`; see
+`docs/BROADCAST_GAMES.md`.
+
+Rebuild the queryable database from this copy:
+
+    python3 tools/lichess_broadcast_archive.py restore
+
+Source: the Lichess broadcast database, https://database.lichess.org/#broadcasts.
+Broadcast games are released under the Creative Commons Attribution-ShareAlike
+4.0 license (https://creativecommons.org/licenses/by-sa/4.0/); this filtered
+copy (comments removed, duplicates and variants dropped) is shared under the
+same license.
+"""
+
+
+def _xz_one(job: tuple[str, str]) -> str:
+    src, dest = job
+    tmp = dest + ".tmp"
+    with open(src, "rb") as fin, lzma.open(tmp, "wb", preset=9 | lzma.PRESET_EXTREME) as fout:
+        while chunk := fin.read(1 << 20):
+            fout.write(chunk)
+    os.replace(tmp, dest)
+    return Path(dest).name
+
+
+def export(root: Path, dest: Path, jobs: int) -> dict:
+    """xz every month file whose compressed copy is missing or older."""
+    manifest_path = root / "manifest.json"
+    if not manifest_path.exists():
+        raise SystemExit("nothing built yet; run build first")
+    manifest = json.loads(manifest_path.read_text())
+    (dest / "months").mkdir(parents=True, exist_ok=True)
+    work = []
+    for src in sorted((root / "months").glob("*.pgn")):
+        out = dest / "months" / (src.name + ".xz")
+        if not out.exists() or out.stat().st_mtime < src.stat().st_mtime:
+            work.append((str(src), str(out)))
+    wanted = {src.name + ".xz" for src in (root / "months").glob("*.pgn")}
+    for stale in (dest / "months").glob("*.pgn.xz"):
+        if stale.name not in wanted:
+            stale.unlink()
+    if work:
+        from concurrent.futures import ProcessPoolExecutor
+
+        with ProcessPoolExecutor(max_workers=max(1, jobs)) as pool:
+            for name in pool.map(_xz_one, work):
+                print(f"compressed {name}", file=sys.stderr)
+    public = {k: v for k, v in manifest.items() if k != "dedupe_against"}
+    public["dedupe_against"] = [Path(p).name for p in manifest.get("dedupe_against", {})]
+    (dest / "manifest.json").write_text(json.dumps(public, indent=1) + "\n", encoding="utf-8")
+    months = sorted(manifest["months"])
+    (dest / "README.md").write_text(
+        _README.format(first=months[0], last=months[-1], kept=manifest["totals"]["kept"]),
+        encoding="utf-8",
+    )
+    size = sum(p.stat().st_size for p in (dest / "months").glob("*.pgn.xz"))
+    return {"compressed": len(work), "files": len(wanted), "megabytes": round(size / 1e6, 1)}
+
+
+def restore(source: Path, root: Path, import_db: bool) -> int:
+    """Unpack the committed copy into the collection and rebuild the database."""
+    files = sorted((source / "months").glob("*.pgn.xz"))
+    if not files:
+        raise SystemExit(f"no exported months under {source}")
+    (root / "months").mkdir(parents=True, exist_ok=True)
+    for xz in files:
+        out = root / "months" / xz.name[: -len(".xz")]
+        tmp = out.with_suffix(".pgn.tmp")
+        with lzma.open(xz, "rb") as fin, tmp.open("wb") as fout:
+            while chunk := fin.read(1 << 20):
+                fout.write(chunk)
+        os.replace(tmp, out)
+    if (source / "manifest.json").exists():
+        (root / "manifest.json").write_text((source / "manifest.json").read_text(), encoding="utf-8")
+    if import_db:
+        import_months(root)
+    return len(files)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--out", help="collection directory (default Documents/lichess_broadcasts/lichess-official)")
@@ -350,6 +445,12 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--to", dest="months_to", help="last month YYYY-MM")
     p_build.add_argument("--no-import", action="store_true", help="write month files only")
     sub.add_parser("status", help="print the manifest totals")
+    p_export = sub.add_parser("export", help="xz the kept months into the repo copy")
+    p_export.add_argument("--to", default=str(EXPORT_DIR), help="destination (default scripts/data/broadcasts/lichess-official)")
+    p_export.add_argument("--jobs", type=int, default=4, help="parallel compressors (default 4)")
+    p_restore = sub.add_parser("restore", help="rebuild the collection from the repo copy")
+    p_restore.add_argument("--from", dest="source", default=str(EXPORT_DIR), help="exported copy to restore")
+    p_restore.add_argument("--no-import", action="store_true", help="unpack month files only")
     args = parser.parse_args(argv)
     root = collection_dir(COLLECTION, args.out)
 
@@ -368,6 +469,13 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         manifest = build(root, zsts, import_db=not args.no_import)
         print(json.dumps(manifest["totals"]))
+        return 0
+    if args.command == "export":
+        print(json.dumps(export(root, Path(args.to), args.jobs)))
+        return 0
+    if args.command == "restore":
+        n = restore(Path(args.source), root, import_db=not args.no_import)
+        print(f"restored {n} months into {root}")
         return 0
     path = root / "manifest.json"
     if not path.exists():

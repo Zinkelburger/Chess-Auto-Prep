@@ -168,7 +168,21 @@ earlier month and White shares a name part with it (`Zhou Jianchao`,
 `Zhou, Jianchao`), so a lookup never counts a game twice. Build the curated
 collections first: `build` reads whatever `*/<name>.db` exist beside it.
 Re-run both commands monthly; `build` refilters every cached month from
-scratch. The archive is regenerable and not committed.
+scratch.
+
+A compressed copy is committed so the archive survives losing both the
+Documents copy and the download cache:
+
+```
+python3 tools/lichess_broadcast_archive.py export    # after build: xz months into scripts/data/broadcasts/lichess-official/
+python3 tools/lichess_broadcast_archive.py restore   # unpack that copy and rebuild lichess-official.db
+```
+
+The copy is one `months/<YYYY-MM>.pgn.xz` per month (about 100 MB in all,
+no file near GitHub's limits), the manifest and a README carrying the
+CC BY-SA 4.0 attribution the Lichess broadcast database requires. `export`
+recompresses only months whose PGN changed; `restore` needs only the
+standard library.
 
 Community broadcasts are not in the downloads. `us-community` collects the
 operators found so far:
