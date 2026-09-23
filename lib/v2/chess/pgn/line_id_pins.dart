@@ -22,6 +22,8 @@ import 'chapter_line.dart';
 import 'game_text.dart';
 import 'game_tree.dart';
 import 'games_written.dart';
+import 'pgn_reader.dart';
+import 'tree_edit.dart';
 
 /// The id each game of [lines] is trained under, in file order; null for a
 /// game with no moves or one nothing could read, which is no line but keeps
@@ -38,6 +40,34 @@ List<String?> trainedIds(List<ChapterLine> lines) {
     ids[game.index] = claimed[i];
   }
   return ids;
+}
+
+/// Every id a game of [chapter] is known by: the id header it carries, and
+/// the id it is trained under, which for a game with no header is worked
+/// out from its moves and its place (see [trainingLineIds]).
+///
+/// A line added to the chapter must be given none of them. Two games under
+/// one id share one review history, and when the game that claimed the id
+/// first goes, the other one takes its schedule over.
+Set<String> idsInUse(Chapter chapter) => {
+  for (final line in chapter.lines) ?line.lineId,
+  ...(chapter.lineIds ?? trainedIds(chapter.lines)).nonNulls,
+};
+
+/// [line], arriving at [place] among a file's games, carrying an id none of
+/// [taken] is: its own when that one is free, else a new one from
+/// [newLineId]. The id it keeps or gets joins [taken], so no later line can
+/// be given it too. A line with no id header is left as it is: arriving
+/// after every game already there, it takes no id from any of them. Null
+/// when its id header cannot be rewritten ([withIdHeader]).
+ChapterLine? withFreeId(ChapterLine line, int place, Set<String> taken) {
+  final id = line.lineId;
+  final tree = line.tree;
+  if (id == null || tree == null || taken.add(id)) return line;
+  final fresh = newLineId(mainlineSans(tree), place, taken);
+  final written = withIdHeader(line, fresh);
+  if (written != null) taken.add(fresh);
+  return written;
 }
 
 /// The main line's moves as the file spells them, which is what an id is
@@ -104,8 +134,7 @@ List<String> mainLineSpellings(GameTree tree) {
 
 /// [line] with its id header holding [id], or with `[LineID]` added after
 /// its last tag when it has none, its moves' text untouched. Null when
-/// nothing here can make that change: the line's text does not begin with
-/// the headers it carries.
+/// nothing here can make that change.
 ///
 /// Which header the id comes from is [ChapterLine.lineId]'s to say — files
 /// in the wild spell the key five ways — so the header is found by the value
@@ -131,21 +160,22 @@ ChapterLine? withIdHeader(ChapterLine line, String id) {
     tags = [...line.tags]..[at] = PgnTag(was.key, id, trailer: was.trailer);
   }
   final written = withHeaders(line, tags);
-  return written?.lineId == id ? written : null;
+  return written.lineId == id ? written : null;
 }
 
-/// [line] carrying [tags] in place of its own, its moves' text untouched, or
-/// null when its text does not begin with the headers it carries.
-ChapterLine? withHeaders(ChapterLine line, List<PgnHeader> tags) {
-  final moves = movesOf(line);
-  if (moves == null) return null;
+/// [line] carrying [tags] in place of its own, its moves' text untouched.
+///
+/// The header block is written as [tags] say, so whitespace the file had
+/// between two of its tags, which no header keeps, is not written again —
+/// as a game written again through the rewrite gate does not write it.
+ChapterLine withHeaders(ChapterLine line, List<PgnHeader> tags) {
   // A game with no headers at all has nothing between them and its moves;
   // the first header needs a line of its own.
   final separator = line.tags.isEmpty ? '\n' : line.separator;
   return ChapterLine(
     tags: List.unmodifiable(tags),
     tree: line.tree,
-    text: '${headerText(tags)}$separator$moves',
+    text: '${headerText(tags)}$separator${movesOf(line)}',
     trailer: line.trailer,
     terminator: line.terminator,
     separator: separator,
@@ -154,13 +184,10 @@ ChapterLine? withHeaders(ChapterLine line, List<PgnHeader> tags) {
 }
 
 /// The line's movetext exactly as the file has it: its own bytes past the
-/// headers and the whitespace after them.
-String? movesOf(ChapterLine line) {
-  final prefix = '${headerText(line.tags)}${line.separator}';
-  return line.text.startsWith(prefix)
-      ? line.text.substring(prefix.length)
-      : null;
-}
+/// headers and the whitespace after them, found where reading the game
+/// found them ([movetextStart]).
+String movesOf(ChapterLine line) =>
+    line.text.substring(movetextStart(line.text));
 
 /// [tags] as the file writes them, each followed by its own whitespace.
 String headerText(List<PgnHeader> tags) {

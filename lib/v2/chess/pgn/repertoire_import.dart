@@ -91,13 +91,15 @@ ImportRead readImport(String text, {required DateTime created}) {
   for (final group in grouping.groups) {
     final written = _Lines(grouping.titleKey);
     for (final game in group.games) {
-      if (!game.hasMoves && game.read.tree != null) continue;
-      if (game.read.tree == null) {
-        // Nothing could read it, so nothing here can rewrite it: it goes in
-        // as its own bytes, and the chapter says so when it opens.
+      if (!game.read.rewritable) {
+        // Reading could not take it whole, so lines written from what it
+        // did read would lose the rest — a move, a comment, the whole game
+        // when its position is not one: it goes in as its own bytes, and the
+        // chapter says what is wrong with it when it opens.
         written.keep(game.text);
         continue;
       }
+      if (!game.hasMoves) continue;
       final whole = group.modelGames || game.isComplete;
       for (final line in whole ? [game.text] : _expanded(game, grouping)) {
         written.keep(line);

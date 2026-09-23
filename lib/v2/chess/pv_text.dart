@@ -1,6 +1,7 @@
 import 'package:dartchess/dartchess.dart';
 
 import 'fen.dart';
+import 'pgn/tree_edit.dart' show positionOf;
 
 /// One move of an engine line as it is shown: numbered SAN, the UCI it
 /// came from, and the position it leaves behind.
@@ -30,7 +31,7 @@ final class PvMove {
 /// another position. A FEN that is not a position at all has no line, the
 /// same lenient reading [Fen] itself gives one.
 List<PvMove> pvMoves(Fen start, List<String> uciMoves) {
-  final from = _positionOf(start);
+  final from = positionOf(start);
   if (from == null) return const [];
   var position = from;
   final moves = <PvMove>[];
@@ -54,14 +55,6 @@ List<PvMove> pvMoves(Fen start, List<String> uciMoves) {
 /// The same line as one string: `5... Nf6 6. Nc3 O-O`.
 String pvText(Fen start, List<String> uciMoves) =>
     pvMoves(start, uciMoves).map((move) => move.text).join(' ');
-
-Position? _positionOf(Fen fen) {
-  try {
-    return Chess.fromSetup(Setup.parseFen(fen.value));
-  } on Exception {
-    return null;
-  }
-}
 
 String _label(Position before, {required bool first}) {
   if (before.turn == Side.white) return '${before.fullmoves}.';

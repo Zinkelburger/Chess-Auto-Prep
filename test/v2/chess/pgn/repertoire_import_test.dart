@@ -281,6 +281,28 @@ void main() {
     expect(chapter.lines[0].text, contains('[FEN "not a position"]'));
   });
 
+  test('a game not read whole is kept as its bytes, variations and all', () {
+    const hurt =
+        '[Event "Hurt"]\n[Result "*"]\n\n'
+        '1. e4 e5 (1... c5 2. Nf3) 2. Nf3 Qq9 Nc6 *';
+    final read = imported('$hurt\n\n[Event "y"]\n\n1. d4 d5 *\n');
+    final chapter = chapterOf(read.chapters.single);
+    expect(chapter.lines, hasLength(2));
+    expect(chapter.lines[0].text, hurt);
+    expect(chapter.protectedGames, 1);
+    expect(read.lines, 2);
+  });
+
+  test('a game none of whose moves could be played is kept too', () {
+    const longhand = '[Event "Longhand"]\n[Result "*"]\n\n1. e2-e4 e7-e5 *';
+    final read = imported('$longhand\n\n[Event "y"]\n\n1. d4 d5 *\n');
+    final chapter = chapterOf(read.chapters.single);
+    expect(chapter.lines.map((line) => line.text), [
+      longhand,
+      '[Event "y"]\n\n1. d4 d5 *',
+    ]);
+  });
+
   test('every written chapter reads back as itself', () {
     for (final name in [
       'chessable_course.pgn',

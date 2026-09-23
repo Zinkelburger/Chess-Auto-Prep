@@ -30,6 +30,9 @@ import 'tree_edit.dart';
 ///
 /// Deleting from a move works the same way round: every game that plays it is
 /// cut short there, and a game with nothing left is taken out of the file.
+///
+/// A study chapter or a game of the PGN Viewer is one game, not a merge, and
+/// is edited where the cursor is (see [_inTheOneGame]).
 
 /// [chapter] without the move at [at] and everything under it.
 ///
@@ -38,6 +41,12 @@ import 'tree_edit.dart';
 ChapterEdit movesDeleted(Chapter chapter, {required NodePath at}) {
   final sans = _sansTo(chapter, at);
   if (sans == null) return const ChapterUnchanged();
+  if (chapter.game != null) {
+    return _inTheOneGame(
+      chapter,
+      (tree) => withChildRemoved(tree, at.parent, at.indexes.last),
+    );
+  }
   final lines = <ChapterLine>[];
   final order = <int?>[];
   final written = <int>{};
@@ -79,6 +88,14 @@ ChapterEdit movesDeleted(Chapter chapter, {required NodePath at}) {
 ChapterEdit variationPromoted(Chapter chapter, {required NodePath at}) {
   final sans = _sansTo(chapter, at);
   if (sans == null) return const ChapterUnchanged();
+  if (chapter.game != null) {
+    final index = at.indexes.last;
+    if (index == 0) return const ChapterUnchanged();
+    return _inTheOneGame(
+      chapter,
+      (tree) => withChildFirst(tree, at.parent, index),
+    );
+  }
   return _firstAtEach(chapter, [sans]);
 }
 
@@ -87,9 +104,61 @@ ChapterEdit variationPromoted(Chapter chapter, {required NodePath at}) {
 ChapterEdit madeMainLine(Chapter chapter, {required NodePath at}) {
   final sans = _sansTo(chapter, at);
   if (sans == null) return const ChapterUnchanged();
+  if (chapter.game != null) {
+    if (at.indexes.every((index) => index == 0)) {
+      return const ChapterUnchanged();
+    }
+    return _inTheOneGame(chapter, (tree) => _mainLineThrough(tree, at));
+  }
   return _firstAtEach(chapter, [
     for (var depth = 1; depth <= sans.length; depth++) sans.sublist(0, depth),
   ]);
+}
+
+/// [tree] with each step of [at] made the first of its siblings, from the
+/// first move down. Every step above one has been made first by then, so
+/// its parent is the main line that far: `0/2/1` promotes child 2 of the
+/// first move, then child 1 of `0/0`.
+GameTree _mainLineThrough(GameTree tree, NodePath at) {
+  var out = tree;
+  for (final (depth, index) in at.indexes.indexed) {
+    out = withChildFirst(out, NodePath.of(List.filled(depth, 0)), index);
+  }
+  return out;
+}
+
+/// [chapter]'s one game put through [edit], for a chapter that shows one
+/// game of its file rather than every game merged.
+///
+/// That game is the tree on screen, taken unmerged, so the path the cursor
+/// is on is the path in the game. A game can play one move twice — `1... e5`
+/// on the main line and again as a variation beside it — and a path turned
+/// into move names and back finds the first of the two, which would delete
+/// or promote the main line when the user was in the variation.
+ChapterEdit _inTheOneGame(
+  Chapter chapter,
+  GameTree Function(GameTree tree) edit,
+) {
+  final index = chapter.game;
+  if (index == null || index < 0 || index >= chapter.lines.length) {
+    return const ChapterUnchanged();
+  }
+  final line = chapter.lines[index];
+  final tree = chapter.writableTree(line);
+  if (tree == null) return const ChapterEditRefused(lineNotWholeReason);
+  final result = rewritten(line, edit(tree));
+  if (result case LineRefused(:final reason)) {
+    return ChapterEditRefused(reason);
+  }
+  final lines = [...chapter.lines];
+  lines[index] = (result as LineRewritten).line;
+  return ChapterEdited(
+    withLines(chapter, lines),
+    GamesArranged.of(
+      GamesWritten(rewritten: {index}),
+      before: chapter.lines.length,
+    ),
+  );
 }
 
 /// Each of [steps] made the first move at its point, in turn, as one edit.

@@ -147,6 +147,9 @@ CommentResult _edited(
 }) {
   final sans = [for (final node in chapter.tree.lineTo(at)) node.san];
   if (sans.isEmpty) return _unchanged(chapter);
+  if (chapter.game case final game?) {
+    return _inTheOneGame(chapter, game, at, change);
+  }
   if (_playedByAPartialGame(chapter, sans)) return const GameNotWhole();
   final lines = [...chapter.lines];
   final written = <int>{};
@@ -168,6 +171,39 @@ CommentResult _edited(
     withLines(chapter, lines),
     written: GamesWritten(rewritten: written),
   );
+}
+
+/// The move at [at] of the one game [chapter] shows, [game], put through
+/// [change].
+///
+/// A study chapter or a game of the PGN Viewer is that game's own tree,
+/// unmerged, so [at] is the move's own place in it. Its name is not enough:
+/// a game can play one move twice, on the main line and again as a variation
+/// beside it, and the note belongs on the one the user is on.
+CommentResult _inTheOneGame(
+  Chapter chapter,
+  int game,
+  NodePath at,
+  MoveNode Function(MoveNode node) change,
+) {
+  if (game < 0 || game >= chapter.lines.length) return _unchanged(chapter);
+  final line = chapter.lines[game];
+  final tree = chapter.writableTree(line);
+  if (tree == null) return const GameNotWhole();
+  final node = tree.nodeAt(at);
+  final changed = node == null ? null : change(node);
+  if (changed == null || identical(changed, node)) return _unchanged(chapter);
+  switch (rewritten(line, withNodeChanged(tree, at, (_) => changed))) {
+    case LineRefused(:final reason):
+      return CommentUnwritable(reason);
+    case LineRewritten(line: final written):
+      final lines = [...chapter.lines];
+      lines[game] = written;
+      return CommentWritten(
+        withLines(chapter, lines),
+        written: GamesWritten(rewritten: {game}),
+      );
+  }
 }
 
 /// The games an annotation on [sans] belongs in: every game that already

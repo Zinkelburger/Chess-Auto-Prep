@@ -26,7 +26,9 @@ import 'chapter_line.dart';
 import 'game_text.dart';
 import 'games_written.dart';
 import 'line_id_pins.dart';
+import 'pgn_lexer.dart';
 import 'pgn_reader.dart';
+import 'pgn_token.dart';
 
 /// The tag a game names its chapter in.
 const chapterNameTag = 'ChapterName';
@@ -64,14 +66,7 @@ List<String?> sectionsInText(String text) {
   final seen = <String?>{};
   var named = false;
   for (final game in splitChapterText(text).games) {
-    String? section;
-    for (final line in game.text.split('\n')) {
-      final header = line.trim();
-      if (!header.startsWith('[')) break;
-      if (!header.startsWith('[$chapterNameTag ')) continue;
-      section = _tagValueIn(header);
-      break;
-    }
+    final section = _sectionNamedIn(game.text);
     if (section != null) named = true;
     if (seen.add(section)) found.add(section);
   }
@@ -79,16 +74,18 @@ List<String?> sectionsInText(String text) {
   return found;
 }
 
-String? _tagValueIn(String header) {
-  final open = header.indexOf('"');
-  final close = header.lastIndexOf('"');
-  if (open < 0 || close <= open) return null;
-  final value = header
-      .substring(open + 1, close)
-      .replaceAll(r'\"', '"')
-      .replaceAll(r'\\', r'\')
-      .trim();
-  return value.isEmpty ? null : value;
+/// The chapter the game [text] names, read as [sectionOf] reads it: from
+/// the tags the lexer finds in its header block, where two tags can share a
+/// line and a value ends at the first quote no backslash escapes. A listing
+/// that read the lines some other way would name chapters the file does not
+/// open as.
+String? _sectionNamedIn(String text) {
+  for (final token in lexHeader(text)) {
+    if (token is! TagToken || token.key != chapterNameTag) continue;
+    final name = token.value.trim();
+    return name.isEmpty ? null : name;
+  }
+  return null;
 }
 
 /// An edit of a file ready to write: the file after it, what it did to the
@@ -202,7 +199,12 @@ SectionView sectionView(Chapter file, String? section) {
 /// added goes at the end of the file carrying the chapter's name. Every
 /// other game of the file keeps its place and its bytes.
 ///
-/// Null when a game the edit added cannot be given the chapter's name.
+/// A game the edit added also gets an id no game of the file is known by
+/// ([withFreeId]): the edit could only see its own chapter's ids, and a game
+/// of another chapter may already be trained under the one it chose.
+///
+/// Null when a game the edit added cannot be given the chapter's name or an
+/// id of its own.
 ({Chapter file, GamesArranged games})? spliced(
   SectionView view,
   Chapter edited,
@@ -213,11 +215,15 @@ SectionView sectionView(Chapter file, String? section) {
   final order = <int?>[];
   final lines = <ChapterLine>[];
   var next = 0;
+  Set<String>? taken;
   ChapterLine? named(int at) {
     final line = edited.lines[at];
-    final from = games.order[at];
-    if (from != null || sectionOf(line) == view.stamp) return line;
-    return withSection(line, view.stamp);
+    if (games.order[at] != null) return line;
+    final stamped = sectionOf(line) == view.stamp
+        ? line
+        : withSection(line, view.stamp);
+    if (stamped == null) return null;
+    return withFreeId(stamped, lines.length, taken ??= idsInUse(file));
   }
 
   void add(int at) {
@@ -293,8 +299,8 @@ List<ChapterLine> _spaced(Chapter file, List<ChapterLine> lines) {
 }
 
 /// [line] naming [section] as its chapter — or naming none when it is
-/// null — with its moves' text untouched. Null when its text does not begin
-/// with the headers it carries, or when the tag would not read back.
+/// null — with its moves' text untouched. Null when the tag would not read
+/// back.
 ChapterLine? withSection(ChapterLine line, String? section) {
   final at = line.tags.indexWhere(
     (header) => header is PgnTag && header.key == chapterNameTag,
@@ -315,7 +321,6 @@ ChapterLine? withSection(ChapterLine line, String? section) {
       ..[at] = PgnTag(chapterNameTag, section, trailer: was.trailer);
   }
   final written = withHeaders(line, tags);
-  if (written == null) return null;
   final back = readGame(written.text);
   final name = tagValue(back.tags, chapterNameTag)?.trim();
   final read = name == null || name.isEmpty ? null : name;

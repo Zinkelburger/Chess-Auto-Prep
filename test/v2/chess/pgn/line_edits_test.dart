@@ -111,6 +111,22 @@ void main() {
     expect(after.chapter.preamble, '// Color: Black\n// Imported\n\n');
   });
 
+  test('a file that starts with a byte-order mark keeps it first', () {
+    for (final text in [
+      '\uFEFF[Event "One"]\n\n1. e4 *\n',
+      '\uFEFF// Color: White\n\n[Event "One"]\n\n1. e4 *\n',
+    ]) {
+      final before = parseChapter(name: 'Marked', text: text);
+
+      final after = edited(sideSet(before, Side.black));
+
+      final written = writeChapter(after.chapter);
+      expect(written, startsWith('\uFEFF// Color: Black\n'), reason: text);
+      expect(written.lastIndexOf('\uFEFF'), 0, reason: 'one mark, first');
+      expect(parseChapter(name: 'Marked', text: written).side, Side.black);
+    }
+  });
+
   test('setting the side it already has writes nothing', () {
     expect(sideSet(white(), Side.white), isA<ChapterUnchanged>());
   });

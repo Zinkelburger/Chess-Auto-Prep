@@ -153,6 +153,29 @@ void main() {
     ]);
   });
 
+  test('the names read off the text are the names the games carry', () {
+    const tricky = r'''
+[Event "a"] [ChapterName "Two on a line"]
+
+1. e4 *
+
+[Event "b"]
+[ChapterName "Moves beside it"] 1. d4 {a "quoted" word} *
+
+[Event "c"]
+[ChapterName "Escaped \"quote\" and slash \\"]
+
+1. c4 *
+''';
+    final lines = parseChapter(name: 'Tricky', text: tricky).lines;
+    expect(sectionsInText(tricky), [
+      'Two on a line',
+      'Moves beside it',
+      r'Escaped "quote" and slash \',
+    ]);
+    expect(sectionsInText(tricky), chapterSections(lines));
+  });
+
   test('a view over the arrangement that composes with others', () {
     final view = sectionView(file, 'Open games');
     final back = spliced(

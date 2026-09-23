@@ -6,7 +6,6 @@ import 'games_written.dart';
 import 'line_id_pins.dart';
 import 'move_text.dart';
 import 'rewrite_gate.dart';
-import 'tree_edit.dart';
 import 'tree_merge.dart';
 
 /// Moving whole lines between chapters: taking them out of one file, adding
@@ -26,8 +25,8 @@ const _unreadableReason = 'a line nothing could read cannot be moved';
 /// moves would sit in the file where the chapter's tree cannot show them.
 const _rootReason = 'that line starts from another position';
 
-/// A line whose text does not begin with the headers it carries, which
-/// nothing this app reads produces and nothing here rewrites.
+/// A line whose id header cannot be rewritten ([withIdHeader]): another of
+/// its tags holds the same value, so which one is the id cannot be told.
 const _headersReason = "a line's moves could not be told from its headers";
 
 /// [chapter] without the games at [games].
@@ -88,7 +87,8 @@ int? _stillShowing(Chapter chapter, List<int> order) {
 /// own bytes — because a line is a game and a game is the persistent unit.
 /// The one header this may rewrite is the id: two games sharing one id mix
 /// their review histories and let a delete land on the wrong game, so a line
-/// whose id the chapter already has gets a fresh one from [newLineId].
+/// whose id a game of the chapter is already known by — as its header or as
+/// the id it is trained under — gets a fresh one from [newLineId].
 ///
 /// Refused when a line plays from another position than the chapter's. A
 /// chapter with no games yet has no position of its own, so the first lines
@@ -131,34 +131,19 @@ String? _rootRefusal(Chapter chapter, List<ChapterLine> lines) {
   return null;
 }
 
-/// [lines] with an id of their own wherever [chapter] already has the one
-/// they carry, or null when such a line's moves cannot be told from its
-/// headers.
+/// [lines] with an id of their own wherever a game of [chapter] is already
+/// known by the one they carry, or null when such a line's id header cannot
+/// be rewritten.
 List<ChapterLine>? _withOwnIds(Chapter chapter, List<ChapterLine> lines) {
-  final taken = _takenIds(chapter);
+  final taken = idsInUse(chapter);
   final out = <ChapterLine>[];
   for (final (offset, line) in lines.indexed) {
-    final id = line.lineId;
-    final tree = line.tree;
-    // A line with no id of its own clashes with nothing; the old app derives
-    // one for it from its moves when it needs one.
-    if (id == null || tree == null || taken.add(id)) {
-      out.add(line);
-      continue;
-    }
-    final at = chapter.lines.length + offset;
-    final fresh = newLineId(mainlineSans(tree), at, taken);
-    final written = withIdHeader(line, fresh);
+    final written = withFreeId(line, chapter.lines.length + offset, taken);
     if (written == null) return null;
-    taken.add(fresh);
     out.add(written);
   }
   return out;
 }
-
-Set<String> _takenIds(Chapter chapter) => {
-  for (final line in chapter.lines) ?line.lineId,
-};
 
 /// [chapter]'s games with [added] after them, each starting its own
 /// `[Event ` line.

@@ -2,6 +2,7 @@ import 'package:dartchess/dartchess.dart';
 
 import '../fen.dart';
 import '../pv_text.dart';
+import 'tree_edit.dart';
 
 /// A comment laid out for reading: blocks top to bottom.
 ///
@@ -352,7 +353,7 @@ _MoveWord _moveWord(
 /// The UCI moves of the longest prefix of [run] that plays from [anchor]
 /// with the numbering the words carry.
 List<String> _legalPrefix(_Anchor anchor, List<_MoveWord> run) {
-  final start = _positionOf(anchor.fen);
+  final start = positionOf(anchor.fen);
   if (start == null) return const [];
   var position = start;
   final ucis = <String>[];
@@ -366,21 +367,17 @@ List<String> _legalPrefix(_Anchor anchor, List<_MoveWord> run) {
   return ucis;
 }
 
-Position? _positionOf(Fen fen) {
-  try {
-    return Chess.fromSetup(Setup.parseFen(fen.value));
-  } on Exception {
-    return null;
-  }
-}
-
 /// [text] as a diagram when it is a six-field FEN dartchess accepts.
+///
+/// Every throw is caught, as [positionOf] catches them: the board parser
+/// answers some malformed boards with a bare error rather than an
+/// exception, and a comment's words must not take the note pane down.
 Fen? _validFen(String text) {
   if (text.split(' ').length != 6) return null;
   try {
     Setup.parseFen(text);
     return Fen(text);
-  } on Exception {
+  } on Object {
     return null;
   }
 }
@@ -447,13 +444,14 @@ final _bareFen = RegExp(
   r'(?:-|[a-h][36]) \d+ \d+',
 );
 
-/// `5.` or `5...` on its own, the move being the next word.
-final _number = RegExp(r'^(\d+)(\.{3}|\.)$');
+/// `5.` or `5...` on its own, the move being the next word. A move number
+/// has at most four digits, which also keeps the number an int can hold.
+final _number = RegExp(r'^(\d{1,4})(\.{3}|\.)$');
 
 /// One move word: optional number and dots, the SAN, then check, mate,
 /// judgement and evaluation glyphs, then any punctuation glued after it.
 final _move = RegExp(
-  r'^(?:(\d+)(\.{3}|\.))?'
+  r'^(?:(\d{1,4})(\.{3}|\.))?'
   r'(O-O-O|O-O|(?:[KQRBN][a-h1-8]?x?[a-h][1-8]|[a-h]x[a-h][1-8]|[a-h][1-8])'
   r'(?:=[QRBN])?)'
   r'[+#]?[!?]{0,2}(?:[-+=]{1,2}|±|∓|⩲|⩱)?'

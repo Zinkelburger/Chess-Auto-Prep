@@ -35,6 +35,8 @@ void main() {
     expect(pvText(const Fen('not a position'), ['e2e4']), '');
     // Enough fields to parse, but no kings: a setup, not a chess position.
     expect(pvText(const Fen('8/8/8/8/8/8/8/8 w - - 0 1'), ['e2e4']), '');
+    // A board the parser answers with an error rather than an exception.
+    expect(pvText(const Fen('8/8/8/8/8/8/8/.N w - - 0 1'), ['e2e4']), '');
   });
 
   test('uses SAN detail: captures, castling, checks', () {

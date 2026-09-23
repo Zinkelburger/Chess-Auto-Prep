@@ -3,6 +3,7 @@ import 'package:dartchess/dartchess.dart' show Move, Side;
 
 import '../fen.dart';
 import 'chapter.dart';
+import 'chapter_grouping.dart';
 import 'chapter_line.dart';
 import 'game_text.dart';
 import 'game_tree.dart';
@@ -106,11 +107,14 @@ AddMoveResult addMove(
   }
   // Merging keeps the order of the moves a chapter already had and puts the
   // ones only the edited game plays after them, so a move no sibling matched
-  // is the last child of the node it was played from. There is nowhere else
-  // in the merged tree for it to be — and if it is not there, the chapter
-  // the edit produced is not one anybody may save.
+  // is the last child of the node it was played from, as it is in one game's
+  // own tree. There is nowhere else for it to be — and if it is not there,
+  // the chapter the edit produced is not one anybody may save. The moves on
+  // the way are read by their places, not looked up by name: one game can
+  // play a move twice, and a lookup by name finds the first of the two.
   final path = at.child(siblings.length);
-  if (pathOfSans(edited.chapter.tree, [...prefix, node.san]) != path) {
+  final there = [for (final step in edited.chapter.tree.lineTo(path)) step.san];
+  if (!const ListEquality<String>().equals(there, [...prefix, node.san])) {
     return MoveNotWritten(uci);
   }
   return MoveAdded(
@@ -265,33 +269,19 @@ List<PgnTag> _newTags(
     ],
     PgnTag(
       'LineID',
-      newLineId(mainlineSans(tree), chapter.lines.length, _takenIds(chapter)),
+      newLineId(mainlineSans(tree), chapter.lines.length, idsInUse(chapter)),
     ),
   ]);
 }
 
-/// Header values that name nobody, so a branch label on them would read as
-/// a title where there is none.
-const _placeholders = {
-  '',
-  '?',
-  'me',
-  'opponent',
-  'training',
-  'white',
-  'black',
-  'n.n.',
-  'repertoire line',
-  'edited line',
-};
-
 /// A branch is named after the game it left and the move it left on —
 /// `Sicilian: Repertoire for Black — 3.Nc3` — so a chapter's line list
-/// still reads as one chapter.
+/// still reads as one chapter. A game whose name names nobody gives the
+/// branch no title to carry on.
 String _title(Chapter chapter, List<String> prefix, MoveNode branch) {
   final parent = _lineThrough(chapter, prefix);
   final title = parent == null ? '' : tagValue(parent.tags, 'Event')?.trim();
-  if (title == null || _placeholders.contains(title.toLowerCase())) {
+  if (title == null || isPlaceholderTitle(title)) {
     return 'Repertoire Line';
   }
   final label = moveNumberLabel(branch, startsLine: true);
@@ -303,15 +293,6 @@ ChapterLine? _lineThrough(Chapter chapter, List<String> sans) =>
       final tree = chapter.treeInChapter(line);
       return tree != null && pathOfSans(tree, sans) != null;
     });
-
-Set<String> _takenIds(Chapter chapter) {
-  final ids = <String>{};
-  for (final line in chapter.lines) {
-    final id = line.lineId;
-    if (id != null) ids.add(id);
-  }
-  return ids;
-}
 
 /// [line] with a blank line after it, so the game appended next starts its
 /// own `[Event ` line.

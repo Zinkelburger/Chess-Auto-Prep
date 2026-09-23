@@ -227,6 +227,27 @@ void main() {
     );
   });
 
+  test('a board the FEN parser throws an error on is words, not a crash', () {
+    // `.` counts as minus two squares, and the board parser answers with an
+    // error rather than an exception.
+    final blocks = layoutComment(
+      'See @@StartFEN@@8/8/8/8/8/8/8/.N w - - 0 1@@EndFEN@@ here',
+      at: Fen.initial,
+    );
+    expect(blocks.whereType<Diagram>(), isEmpty);
+    expect(blocks, isNotEmpty);
+  });
+
+  test('a number too long to be a move number is words', () {
+    final blocks = layoutComment(
+      'Not 123456789012345678901.e4 but 1.e4',
+      at: Fen.initial,
+    );
+    final spans = (blocks.single as Paragraph).spans;
+    expect((spans.first as Words).text, 'Not 123456789012345678901.e4 but ');
+    expect((spans.last as MoveRun).moves.single.san, 'e4');
+  });
+
   test('mojibake is read as the punctuation it was', () {
     final blocks = layoutComment(
       'Whiteâ€™s â€œplanâ€ â€“ done',

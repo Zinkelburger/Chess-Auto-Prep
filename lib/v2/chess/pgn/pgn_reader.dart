@@ -123,6 +123,19 @@ PgnIssue _unreadablePosition(
   return UnreadablePosition(line: place.line, column: place.column);
 }
 
+/// Where the moves of the game [text] start: past its header block and the
+/// whitespace after it, which [GameRead.tags] and [GameRead.separator] hold
+/// between them.
+///
+/// The header is read as [readGame] reads it, not matched against headers
+/// written out again: a blank line between two tags, or a tag indented by a
+/// space, belongs to no header, so the written headers would not be the
+/// start of the text though the moves are all there.
+int movetextStart(String text) {
+  final headers = lexHeader(text);
+  return _headerEnd(headers) + _separator(text, headers).length;
+}
+
 /// The whitespace between the header block and the movetext.
 ///
 /// Read off the text rather than off the first move token: a game ending in
@@ -130,14 +143,17 @@ PgnIssue _unreadablePosition(
 /// keeps nothing of, and taking the gap up to it would give a game that
 /// writes one way the first time and another way the second.
 String _separator(String text, List<PgnToken> headers) {
-  final start = switch (headers.lastOrNull) {
-    TagToken(:final end) => end,
-    HeaderLineToken(:final end) => end,
-    _ => 0,
-  };
+  final start = _headerEnd(headers);
   var end = start;
   while (end < text.length && isGameWhitespace(text.codeUnitAt(end))) {
     end++;
   }
   return text.substring(start, end);
 }
+
+/// Just past the last of [headers] and the whitespace after it on its line.
+int _headerEnd(List<PgnToken> headers) => switch (headers.lastOrNull) {
+  TagToken(:final end) => end,
+  HeaderLineToken(:final end) => end,
+  _ => 0,
+};

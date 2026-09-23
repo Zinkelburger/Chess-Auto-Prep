@@ -32,11 +32,18 @@ Position? positionOf(Fen fen) {
 /// spellings of one move cannot become two children. Callers that start from
 /// text parse it with [positionOf] first; a move is a move however it was
 /// written down.
+///
+/// The UCI is the one reading the move's SAN gives, too: castling is king to
+/// rook (`e1h1`), which is how the reader stores `O-O`, even when it came as
+/// king to destination (`e1g1`) — a king dropped on g1, a typed `O-O`, an
+/// engine's line. The rewrite gate compares each move with the text read
+/// back, so a castle kept as `e1g1` would be refused as another move.
 MoveNode? moveNode(Fen fen, Move move) {
   final position = positionOf(fen);
   if (position == null || !position.isLegal(move)) return null;
-  final (next, san) = position.makeSan(move);
-  return MoveNode(san: san, uci: move.uci, fen: Fen(next.fen));
+  final played = move is NormalMove ? position.normalizeMove(move) : move;
+  final (next, san) = position.makeSan(played);
+  return MoveNode(san: san, uci: played.uci, fen: Fen(next.fen));
 }
 
 /// A ply where nobody moved, played from [position]: the node and the

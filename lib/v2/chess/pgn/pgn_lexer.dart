@@ -22,6 +22,20 @@ List<PgnToken> lexGame(String text) {
   return tokens;
 }
 
+/// The header block of one game's text: the tokens [lexGame] gives before
+/// the first one that is neither a tag nor a header line, found without
+/// reading any of the moves.
+List<PgnToken> lexHeader(String text) {
+  final scan = _Scan(text);
+  final tokens = <PgnToken>[];
+  while (scan.i < text.length) {
+    final token = scan.next();
+    if (!scan.header) break;
+    if (token != null) tokens.add(token);
+  }
+  return tokens;
+}
+
 /// Games spell a ply where nobody moved four ways. `0000` is why move
 /// numbers are read before words: `10000.` is move ten thousand, not a null
 /// move with a dot after it.

@@ -85,6 +85,48 @@ void main() {
     expect(movesOf(written), movesOf(line));
   });
 
+  test('an id header goes on a line with a blank line between its tags', () {
+    const game = '[Event "Spaced"]\n\n[Result "*"]\n\n1. d4 *';
+    final line = parseChapter(name: 'Spaced', text: game).lines.single;
+    final written = withIdHeader(line, 'x')!;
+    expect(
+      written.text,
+      '[Event "Spaced"]\n[Result "*"]\n[LineID "x"]\n\n1. d4 *',
+    );
+    expect(movesOf(written), '1. d4 *');
+  });
+
+  test('an id header goes on a line whose tags are indented', () {
+    const game = '  [Event "Indented"]\n  [Result "*"]\n\n1. d4 *';
+    final line = parseChapter(name: 'Indented', text: game).lines.single;
+    expect(movesOf(line), '1. d4 *');
+    expect(withIdHeader(line, 'x')?.lineId, 'x');
+  });
+
+  test('a game moved up keeps its id though its tags have space between', () {
+    const spaced = '''
+// Color: White
+
+[Event "Ruy"]
+
+1. e4 e5 2. Nf3 *
+
+[Event "Italian"]
+
+[Result "*"]
+
+1. e4 c5 *
+''';
+    final before = parseChapter(name: 'Spaced', text: spaced);
+    final ids = trainedIds(before.lines);
+    final edited = lineDeleted(before, game: 0) as ChapterEdited;
+    final after = withIdsPinned(before, edited.chapter, edited.games);
+    expect(after.chapter.lines.single.lineId, ids[1]);
+    expect(trainedIds(after.chapter.lines), [ids[1]]);
+    expect(movesOf(after.chapter.lines.single), '1. e4 c5 *');
+    expect(after.games.rewritten, {1});
+  });
+
   test('a long line keeps its id wherever it goes, so it is not pinned', () {
     final long = parseChapter(
       name: 'Open games',

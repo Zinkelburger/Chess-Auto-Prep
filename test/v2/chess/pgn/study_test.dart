@@ -1,5 +1,6 @@
 import 'package:chess_auto_prep/v2/chess/fen.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/chapter.dart';
+import 'package:chess_auto_prep/v2/chess/pgn/chapter_line.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/study.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
@@ -87,6 +88,28 @@ void main() {
       expect(missing.tree.rootFen, Fen.initial);
     },
   );
+
+  test('one game as the chapter: another game shown shares the games', () {
+    final first = parseChapter(
+      name: 'Endgames',
+      text: twoChapterStudy,
+      game: 0,
+    );
+    for (final game in [1, 0, 7]) {
+      final shown = withGame(first, game);
+      final built = withLines(first, first.lines, game: game);
+      expect(identical(shown.lines, first.lines), isTrue, reason: '$game');
+      expect(shown.name, built.name);
+      expect(shown.side, built.side, reason: '$game');
+      expect(shown.sideStated, built.sideStated);
+      expect(shown.preamble, built.preamble);
+      expect(sameLines(shown.lines, built.lines), isTrue);
+      expect(identical(shown.tree, built.tree), isTrue, reason: '$game');
+      expect(shown.game, built.game);
+      expect(shown.lineIds, built.lineIds);
+    }
+    expect(withGame(first, 1).side, Side.black);
+  });
 
   test('writing a chapter: writes the six tags the study owns', () {
     final text = newStudyChapterText(

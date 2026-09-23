@@ -6,7 +6,7 @@ import 'package:chess_auto_prep/v2/chess/pgn/game_text.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/move_text.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/tree_edit.dart';
-import 'package:dartchess/dartchess.dart' show Side;
+import 'package:dartchess/dartchess.dart' show Move, Side;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';
@@ -201,6 +201,57 @@ void main() {
     });
   });
 
+  group('castling made king to destination, as the board and engines do', () {
+    // After 1. a3 a6 both sides may castle either way.
+    final end = NodePath.of([0, 0]);
+
+    test('is the move reading O-O gives', () {
+      final study = parseChapter(name: 'Castles', text: castlingGame, game: 0);
+      final castled = moveNode(study.tree.fenAt(end), Move.parse('e1g1')!);
+      final read = parseChapter(
+        name: 'Castles',
+        text: castlingGame.replaceFirst('a6 *', 'a6 2. O-O *'),
+      ).tree.nodeAt(end.mainChild);
+      expect(castled?.san, 'O-O');
+      expect(castled?.uci, read?.uci);
+      expect(castled?.fen, read?.fen);
+    });
+
+    test('extends a study game, either way round', () {
+      final study = parseChapter(name: 'Castles', text: castlingGame, game: 0);
+      for (final (uci, san) in [('e1g1', 'O-O'), ('e1c1', 'O-O-O')]) {
+        final result = addMove(study, at: end, uci: uci);
+        expect(result, isA<MoveAdded>(), reason: uci);
+        final after = (result as MoveAdded).chapter;
+        expect(after.lines.single.text, endsWith('1. a3 a6 2. $san *'));
+        expect(result.written.rewritten, {0});
+        expect(after.tree.nodeAt(result.path)?.san, san);
+      }
+    });
+
+    test('becomes a variation in a study game, as any move does', () {
+      final study = parseChapter(name: 'Castles', text: castlingGame, game: 0);
+      final result = addMove(study, at: NodePath.of([0]), uci: 'e8g8');
+      expect(result, isA<MoveAdded>());
+      final text = (result as MoveAdded).chapter.lines.single.text;
+      expect(text, endsWith('1. a3 a6 (1... O-O) *'));
+    });
+
+    test('extends the repertoire line it ends, and writes no second game', () {
+      final chapter = parseChapter(
+        name: 'Castles',
+        text: '// Color: White\n\n$castlingGame',
+      );
+      final result = addMove(chapter, at: end, uci: 'e1g1') as MoveAdded;
+      expect(result.chapter.lines, hasLength(1));
+      expect(result.written.rewritten, {0});
+      expect(result.written.appended, 0);
+      expect(result.chapter.lines.single.text, endsWith('2. O-O *'));
+      final byRook = addMove(chapter, at: end, uci: 'e1h1') as MoveAdded;
+      expect(writeChapter(result.chapter), writeChapter(byRook.chapter));
+    });
+  });
+
   test('a chapter that comes back without the move says so', () {
     // A tree claiming a move no game of it can replay: writing the branch
     // would give a game that does not hold the move the user just played,
@@ -234,6 +285,16 @@ void main() {
     expect(writeChapter(before), blackChapter);
   });
 }
+
+/// One game from a position where either side may castle either way.
+const castlingGame = '''
+[Event "Castles"]
+[FEN "r3k2r/pppppppp/8/8/8/8/PPPPPPPP/R3K2R w KQkq - 0 1"]
+[SetUp "1"]
+[Result "*"]
+
+1. a3 a6 *
+''';
 
 /// Two lines through a ply where nobody moved, which Chessable writes as a
 /// waiting move and every replay has to be able to play.

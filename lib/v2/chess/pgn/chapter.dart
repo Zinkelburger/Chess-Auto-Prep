@@ -173,7 +173,7 @@ Chapter parseChapter({required String name, required String text, int? game}) {
   return _built(
     name: name,
     preamble: document.preamble,
-    lines: lines,
+    lines: List.unmodifiable(lines),
     game: game,
   );
 }
@@ -193,8 +193,23 @@ Chapter withLines(
 }) => _built(
   name: chapter.name,
   preamble: preamble ?? chapter.preamble,
-  lines: lines,
+  lines: List.unmodifiable(lines),
   game: game ?? chapter.game,
+);
+
+/// [chapter] showing its game at [game], over the very same games.
+///
+/// Walking a file's games one after another changes which one is on the
+/// board, not what the file holds, so the list is shared rather than copied
+/// as [withLines] copies it: whoever keeps a result worked out from the
+/// games — every game summarised for a list — can tell by identity that
+/// they are still the ones it read.
+Chapter withGame(Chapter chapter, int game) => _built(
+  name: chapter.name,
+  preamble: chapter.preamble,
+  lines: chapter.lines,
+  game: game,
+  lineIds: chapter.lineIds,
 );
 
 /// [lines] with the whitespace between games kept where the file had it.
@@ -223,11 +238,14 @@ List<ChapterLine> spacedAsBefore(Chapter chapter, List<ChapterLine> lines) {
 /// folds two siblings that play the same move into one, which is right for a
 /// repertoire built from separate games and wrong for one game, where the
 /// path the file wrote is the path the cursor walks.
+///
+/// [lines] is kept as it is given, so it has to be a list nobody can change.
 Chapter _built({
   required String name,
   required String preamble,
   required List<ChapterLine> lines,
   required int? game,
+  List<String?>? lineIds,
 }) {
   final focused = game != null && game >= 0 && game < lines.length
       ? lines[game]
@@ -238,11 +256,12 @@ Chapter _built({
     side: focused == null ? stated ?? Side.white : studyOrientation(focused),
     sideStated: focused != null || stated != null,
     preamble: preamble,
-    lines: List.unmodifiable(lines),
+    lines: lines,
     tree: game == null
         ? mergeLines(lines, orElseFrom: readHeading(preamble).rootFen)
         : focused?.tree ?? const GameTree(rootFen: Fen.initial),
     game: game,
+    lineIds: lineIds,
   );
 }
 
@@ -318,7 +337,7 @@ Chapter showingGame(Chapter chapter, String? text) {
   if (text == null || chapter.game == null) return chapter;
   final at = chapter.lines.indexWhere((line) => line.text == text);
   if (at < 0 || at == chapter.game) return chapter;
-  return withLines(chapter, chapter.lines, game: at);
+  return withGame(chapter, at);
 }
 
 /// [chapter] played from the other side of the board.
@@ -339,16 +358,22 @@ Chapter withSide(Chapter chapter, Side side) => Chapter(
 /// where it was, and one that has none — an imported PGN, a chapter an older
 /// build wrote — gains it above whatever the preamble already said, which is
 /// where [chapterSide] looks for it.
+///
+/// A byte-order mark the file starts with stays the first thing in it: it
+/// belongs to the file, not to the line after it, and one written after
+/// the colour line would be a stray character in the heading.
 String preambleWithSide(String preamble, Side side) {
   final wanted = '// Color: ${side == Side.white ? 'White' : 'Black'}';
-  final lines = preamble.split('\n');
+  final mark = preamble.startsWith('\uFEFF') ? '\uFEFF' : '';
+  final rest = preamble.substring(mark.length);
+  final lines = rest.split('\n');
   final at = lines.indexWhere((line) => line.trim().startsWith('// Color:'));
-  if (at < 0) return '$wanted\n$preamble';
+  if (at < 0) return '$mark$wanted\n$rest';
   // A file written on Windows ends that line with a carriage return, and the
   // line beside it keeps one: replacing the words is not a reason to change
   // how the heading ends its lines.
   lines[at] = lines[at].endsWith('\r') ? '$wanted\r' : wanted;
-  return lines.join('\n');
+  return '$mark${lines.join('\n')}';
 }
 
 /// A chapter file with no games yet: the `//` preamble and nothing else.
