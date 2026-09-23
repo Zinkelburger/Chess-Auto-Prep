@@ -7,6 +7,7 @@ import '../../ui/theme.dart';
 import 'deleted_chapters_view.dart';
 import 'library.dart';
 import 'library_messages.dart';
+import 'library_state.dart';
 import 'repertoire_tile.dart';
 
 /// The repertoires, searchable, each opening to its chapters. Tapping a

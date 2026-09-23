@@ -92,15 +92,7 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
     if (name == null || !mounted) return;
     final result = await widget.session.saveCopy(name);
     if (!mounted) return;
-    setState(
-      () => _notice = switch (result) {
-        CopySaved(name: final name, nowEditing: true) =>
-          'Saved a copy as $name. Now editing the copy.',
-        CopySaved(:final name) => 'Saved a copy as $name',
-        CopyNameTaken() => 'That name is taken. Nothing was replaced.',
-        CopyFailed(:final detail) => 'Could not save a copy: $detail',
-      },
-    );
+    setState(() => _notice = copySaid(result));
   }
 
   @override

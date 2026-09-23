@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../chess/game_filter.dart';
 import '../../ui/choice_field.dart';
 import '../../ui/theme.dart';
 import '../../workspace/file_filter.dart';

@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:chess_auto_prep/v2/features/library/library.dart';
+import 'package:chess_auto_prep/v2/features/library/library_state.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:flutter_test/flutter_test.dart';

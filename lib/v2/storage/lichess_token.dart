@@ -6,7 +6,8 @@ import '../diagnostics/log.dart';
 ///
 /// The same SharedPreferences keys the old app writes when the user signs
 /// in, so both apps see one account and `v2` never asks the user to sign in
-/// again. The token is only ever handed to the client that puts it in an
+/// again — one app at a time, since the preferences are written whole from
+/// each process's cache (see `my_accounts.dart`). The token is only ever handed to the client that puts it in an
 /// `Authorization` header; it is never logged, and a failure here says only
 /// that the keys could not be read.
 const lichessTokenKey = 'lichess_access_token';

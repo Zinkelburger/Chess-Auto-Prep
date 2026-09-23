@@ -1,5 +1,6 @@
 // The outline column itself: what a user sees in it and what their clicks
 // do. The owners are scripted, so no file is read or written.
+import 'package:chess_auto_prep/v2/chess/pgn/chapter_heading.dart';
 import 'package:chess_auto_prep/v2/features/library/chapter_outline.dart';
 import 'package:chess_auto_prep/v2/workspace/chapter_commands.dart';
 import 'package:chess_auto_prep/v2/features/library/outline_panel.dart';

@@ -65,6 +65,60 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets('leaving the tab with moves on the free board gives the board '
+      'back to the file once the frame is done', (tester) async {
+    final tree = RepertoireTree(
+      session: fixture.session,
+      shelf: RepertoireShelf(
+        files: ScriptedFiles(
+          listing: Repertoires([
+            folder('e4', ['Italian']),
+          ]),
+        ),
+        documents: fixture.store,
+      ),
+    );
+    addTearDown(tree.dispose);
+    var tab = true;
+    late StateSetter setTab;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: darkTheme(),
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) {
+              setTab = setState;
+              return Column(
+                children: [
+                  ValueListenableBuilder(
+                    valueListenable: tree.board,
+                    builder: (context, claim, _) =>
+                        Text(claim == null ? 'the file' : 'the free board'),
+                  ),
+                  if (tab)
+                    SizedBox(
+                      width: 600,
+                      height: 400,
+                      child: TreePane(session: fixture.session, tree: tree),
+                    ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    tree.play('d2d4');
+    await tester.pump();
+    expect(find.text('the free board'), findsOneWidget);
+    setTab(() => tab = false);
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    await tester.pump();
+    expect(find.text('the file'), findsOneWidget);
+  });
+
   testWidgets('the floated board goes when the rows change under the '
       'pointer, and the row now there floats its own', (tester) async {
     await show(tester);

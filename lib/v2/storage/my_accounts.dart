@@ -7,10 +7,13 @@ import '../diagnostics/log.dart';
 /// last came down.
 ///
 /// The same SharedPreferences keys the old app keeps them under, so a
-/// username typed in either app is the one both download for. The old app
-/// writes a key only when the user saves a name or a download lands, and
-/// preferences write one key at a time, so the two apps never half-write a
-/// value; the last save wins, as it would within one app.
+/// username typed in either app is the one both download for. The two apps
+/// must not run at once on one profile: the preferences plugin reads the
+/// whole file once per process and writes its whole cached map on every
+/// save, so each app's next save would put back the values it started
+/// with, the other app's changes lost. The desktop runner keeps one
+/// instance per session, which is what prevents that; forcing a second
+/// one (`CHESS_AUTO_PREP_NEW_INSTANCE=1`) on the real profile is not safe.
 const _usernameKeys = {
   GameSite.lichess: 'lichess_username',
   GameSite.chesscom: 'chesscom_username',

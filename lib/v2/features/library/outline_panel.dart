@@ -13,6 +13,7 @@ import '../../workspace/undo_notice.dart';
 import 'chapter_outline.dart';
 import 'library.dart';
 import 'library_messages.dart';
+import 'library_state.dart';
 import 'new_chapter_dialog.dart';
 
 /// The chapters of the open repertoire and, under the open one, its lines.

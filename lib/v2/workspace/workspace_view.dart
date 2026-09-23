@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:multi_split_view/multi_split_view.dart';
 
+import '../chess/explorer_answer.dart';
 import '../chess/fen.dart';
 import '../storage/chapter_files.dart';
 import '../storage/settings_store.dart';
@@ -15,7 +16,6 @@ import 'board_view.dart';
 import 'document_session.dart';
 import 'edit_strip.dart';
 import 'engine_pane.dart';
-import 'explorer.dart';
 import 'explorer_pane.dart';
 import 'game_counter.dart';
 import 'move_field.dart';
@@ -267,11 +267,17 @@ class _Tabbed extends StatelessWidget {
       replies: workspace.replies,
       gaps: workspace.gaps,
     ),
-    WorkspaceTab.explorer => ExplorerPane(
+    // At a puzzle the table would tick the answer, or list it as the only
+    // move with This file, so it goes while the answer is hidden, as the
+    // engine pane does.
+    WorkspaceTab.explorer => _UnlessHidden(
       session: workspace.session,
-      explorer: workspace.explorer,
-      games: workspace.games,
-      onOpenGame: hooks.onExplorerGame,
+      child: ExplorerPane(
+        session: workspace.session,
+        explorer: workspace.explorer,
+        games: workspace.games,
+        onOpenGame: hooks.onExplorerGame,
+      ),
     ),
     WorkspaceTab.tree => _supplied(context, tab),
     WorkspaceTab.search => SearchPane(

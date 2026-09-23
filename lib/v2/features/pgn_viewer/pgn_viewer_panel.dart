@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
+import '../../chess/game_filter.dart';
 import '../../chess/pgn/game_summary.dart';
 import '../../storage/chapter_files.dart';
 import '../../ui/app_action.dart';

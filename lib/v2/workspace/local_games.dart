@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 
 import '../chess/explorer_answer.dart';
 import '../chess/fen.dart';
+import '../chess/game_filter.dart';
 import '../chess/opening_index.dart';
 import '../chess/pgn/chapter_line.dart';
 import '../chess/tactics/game_ids.dart';

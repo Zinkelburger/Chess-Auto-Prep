@@ -337,10 +337,7 @@ final class DocumentSession extends ChangeNotifier {
     // The words handed over are in the chapter now, so it is read again.
     if (!_isAnotherGame(index)) return;
     final chapter = _chapter!;
-    _shown = (
-      chapter: withLines(chapter, chapter.lines, game: index),
-      view: null,
-    );
+    _shown = (chapter: withGame(chapter, index), view: null);
     _shownTo = null;
     _clearRefusal();
     _cursor.value = const NodePath.root();
@@ -864,7 +861,7 @@ Chapter _gameAfterUndo(Chapter file, String? showing) {
   final game = shown.game;
   final last = shown.lines.length - 1;
   if (game == null || game <= last || last < 0) return shown;
-  return withLines(shown, shown.lines, game: last);
+  return withGame(shown, last);
 }
 
 /// The chapter [view] of a course [file], the version an undo put back —

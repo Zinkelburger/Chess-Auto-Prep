@@ -3,6 +3,7 @@ import 'package:chess_auto_prep/v2/chess/tactics/game_ids.dart';
 import 'package:chess_auto_prep/v2/features/tactics/my_games.dart';
 import 'package:chess_auto_prep/v2/workspace/comment_field.dart';
 import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
+import 'package:chess_auto_prep/v2/workspace/explorer_pane.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -143,6 +144,48 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Solution: e5 Nf3 Nc6'), findsOneWidget);
     expect(find.byType(CommentField), findsNothing);
+  });
+
+  testWidgets('the Explorer tab is empty while the answer is hidden', (
+    tester,
+  ) async {
+    await toTactics(tester);
+    await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Show Explorer'));
+    await tester.tap(find.text('Show Explorer'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ExplorerPane), findsOneWidget);
+    await tester.tap(find.text('Play (4)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Explorer'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byType(ExplorerPane),
+      findsNothing,
+      reason:
+          'it would tick '
+          'the answer',
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pumpAndSettle();
+    expect(find.byType(ExplorerPane), findsOneWidget);
+  });
+
+  testWidgets('Ctrl+G starts no search in Tactics, which has no Search tab '
+      'to show it in', (tester) async {
+    await toTactics(tester);
+    await tester.tap(find.text('Play (4)'));
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pumpAndSettle();
+    expect(w.session.shownTo, isNull, reason: 'a search could start here');
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(w.fill.running, isFalse);
+    expect(w.analysis.paused, isFalse);
   });
 
   testWidgets('with no username the column asks for one; saving it offers '

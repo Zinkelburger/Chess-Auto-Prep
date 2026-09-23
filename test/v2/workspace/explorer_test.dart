@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:chess_auto_prep/v2/chess/explorer_answer.dart';
+import 'package:chess_auto_prep/v2/chess/explorer_choice.dart';
 import 'package:chess_auto_prep/v2/chess/fen.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/net/lichess_explorer.dart';

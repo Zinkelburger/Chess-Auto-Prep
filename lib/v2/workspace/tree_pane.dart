@@ -67,7 +67,10 @@ class _TreePaneState extends State<TreePane> {
   @override
   void dispose() {
     widget.tree.removeListener(_leave);
-    widget.tree.unwatch();
+    // Ending the free board tells the board's builders, which may not be
+    // marked dirty while the framework is unmounting this pane: the tab is
+    // let go once the frame is done instead.
+    scheduleMicrotask(widget.tree.unwatch);
     _settle?.cancel();
     _preview.dispose();
     super.dispose();

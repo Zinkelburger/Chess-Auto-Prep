@@ -1,5 +1,17 @@
 import 'package:flutter/material.dart';
 
+import 'session_results.dart';
+
+/// What a Save a copy came to, in the words every place that offers one
+/// (the edit strip, the Actions menu, the question on the way out) shows.
+String copySaid(CopyResult result) => switch (result) {
+  CopySaved(:final name, nowEditing: true) =>
+    'Saved a copy as $name. Now editing the copy.',
+  CopySaved(:final name) => 'Saved a copy as $name',
+  CopyNameTaken() => 'That name is taken. Nothing was replaced.',
+  CopyFailed(:final detail) => 'Could not save a copy: $detail',
+};
+
 /// Asks what to call the copy. Returns null when the user backs out.
 Future<String?> showCopyNameDialog(BuildContext context, String suggestion) =>
     showDialog<String>(

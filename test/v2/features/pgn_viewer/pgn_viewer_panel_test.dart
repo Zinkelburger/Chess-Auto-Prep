@@ -1,11 +1,10 @@
+import 'package:chess_auto_prep/v2/chess/game_filter.dart';
 import 'package:chess_auto_prep/v2/features/pgn_viewer/pgn_viewer_panel.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/recent_pgn_files.dart';
 import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:chess_auto_prep/v2/workspace/file_filter.dart';
 
 import '../../support/viewer_fixture.dart';
 

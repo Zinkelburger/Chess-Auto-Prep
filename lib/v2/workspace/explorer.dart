@@ -16,9 +16,6 @@ import 'document_session.dart';
 import 'gap_walk.dart' show indexOfReply;
 import 'local_games.dart';
 
-export '../chess/explorer_answer.dart' show ExplorerGame;
-export '../chess/explorer_choice.dart';
-
 /// One move of the table: what the database counted, spelled for the
 /// position on the board, and whether the chapter plays it here.
 final class ExplorerRow {

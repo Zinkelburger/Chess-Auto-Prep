@@ -123,6 +123,34 @@ void main() {
     expect(owners.gaps.walking, isFalse);
   });
 
+  test('another game at the same position is marked from its own moves, '
+      'not the last game\'s', () async {
+    const games = '''
+[Event "One"]
+[Result "*"]
+
+1. e4 e5 *
+
+[Event "Two"]
+[Result "*"]
+
+1. d4 d5 *
+''';
+    final ref = chapterRef('Viewer', 'Games');
+    fixture.store.documents[ref] = Opened(games, scriptedRevision(games));
+    await fixture.session.open(ref, game: 0);
+    await pumpEventQueue();
+    Map<String, ReplyRow> byMove() => {
+      for (final row in (replies.table as RepliesShown).rows) row.san: row,
+    };
+    expect(byMove()['e4']!.inRepertoire, isTrue);
+    expect(byMove()['d4']!.inRepertoire, isFalse);
+    fixture.session.showGame(1);
+    await pumpEventQueue();
+    expect(byMove()['e4']!.inRepertoire, isFalse);
+    expect(byMove()['d4']!.inRepertoire, isTrue);
+  });
+
   test('the model is asked once per position and rating', () async {
     await pumpEventQueue();
     fixture.session.forward();

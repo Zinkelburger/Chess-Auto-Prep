@@ -583,12 +583,13 @@ final class SearchDoor {
   final SettingsStore settings;
   final WorkspaceRequests requests;
 
-  /// What refused the search goes in the bar.
+  /// What refused the search goes in the bar. A mode without a Search tab
+  /// (Tactics, My games) starts nothing: the search would run where it
+  /// cannot be seen or stopped, with the engine pane paused for it.
   Future<void> search(PaneTabs<WorkspaceTab> tabs) async {
     if (!fill.canStart) return;
-    if (tabs.tabs.any((tab) => tab.id == WorkspaceTab.search)) {
-      tabs.show(WorkspaceTab.search);
-    }
+    if (!tabs.tabs.any((tab) => tab.id == WorkspaceTab.search)) return;
+    tabs.show(WorkspaceTab.search);
     final s = settings.value;
     final refusal = await fill.start(
       FillRequest(

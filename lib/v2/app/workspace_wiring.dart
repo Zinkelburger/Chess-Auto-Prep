@@ -3,6 +3,7 @@ import 'dart:async';
 import '../engines/engine_supervisor.dart';
 import '../engines/fixed_depth.dart';
 import '../features/library/library.dart';
+import '../features/library/library_state.dart';
 import '../storage/my_games_files.dart';
 import '../workspace/engine_analysis.dart';
 import '../workspace/explorer.dart';

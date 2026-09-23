@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../chess/explorer_choice.dart';
 import '../ui/theme.dart';
 import 'explorer.dart';
 

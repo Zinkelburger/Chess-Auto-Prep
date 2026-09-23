@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
+import '../../chess/game_filter.dart';
 import '../../chess/pgn/chapter.dart';
 import '../../chess/pgn/chapter_grouping.dart';
 import '../../chess/pgn/chapter_line.dart';

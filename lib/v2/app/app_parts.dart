@@ -3,6 +3,7 @@ import 'dart:async';
 import '../features/settings/lichess_account.dart';
 import '../storage/my_games_files.dart';
 import '../storage/settings_store.dart';
+import '../workspace/copy_name_dialog.dart';
 import '../workspace/document_saver.dart';
 import '../workspace/document_session.dart';
 import '../workspace/session_results.dart';

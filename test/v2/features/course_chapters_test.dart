@@ -4,7 +4,7 @@
 import 'dart:io';
 
 import 'package:chess_auto_prep/v2/chess/pgn/chapter_sections.dart';
-import 'package:chess_auto_prep/v2/features/library/library.dart';
+import 'package:chess_auto_prep/v2/features/library/library_state.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/workspace/document_saver.dart' as saver;

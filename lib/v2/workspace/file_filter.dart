@@ -8,8 +8,6 @@ import '../chess/pgn/game_text.dart';
 import '../storage/chapter_files.dart';
 import 'document_session.dart';
 
-export '../chess/game_filter.dart';
-
 /// Which games of the open file pass the filter: the one filter both the
 /// PGN Viewer's game list and the explorer's `This file` read. It is also
 /// where `This file` learns what the open file's games are ([lines],

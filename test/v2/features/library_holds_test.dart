@@ -5,7 +5,7 @@
 import 'dart:async';
 
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
-import 'package:chess_auto_prep/v2/features/library/library.dart';
+import 'package:chess_auto_prep/v2/features/library/library_state.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 

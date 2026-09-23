@@ -9,10 +9,12 @@ import '../chess/pgn/game_tree.dart' show NodePath;
 import '../chess/pgn/tree_edit.dart' show pathAlong;
 import '../features/library/library.dart';
 import '../features/library/library_messages.dart';
+import '../features/library/library_state.dart';
 import '../features/pgn_viewer/pgn_viewer.dart';
 import '../features/study/study_commands.dart';
 import '../storage/chapter_files.dart';
 import '../workspace/chapter_commands.dart';
+import '../workspace/copy_name_dialog.dart';
 import '../workspace/document_session.dart';
 import '../chess/explorer_answer.dart' show ExplorerGame;
 import '../chess/explorer_choice.dart' show ExplorerSource;
@@ -46,13 +48,6 @@ final class RequestRefused extends RequestResult {
 final class RequestDropped extends RequestResult {
   const RequestDropped();
 }
-
-/// What came of a copy of the words on screen, as the bar says it.
-String copySaid(CopyResult result) => switch (result) {
-  CopySaved(:final name) => 'Saved a copy as $name',
-  CopyNameTaken() => 'That name is taken. Nothing was replaced.',
-  CopyFailed(:final detail) => 'Could not save a copy: $detail',
-};
 
 /// The window's cross-mode requests: which mode fills the left column, the
 /// one line the status bar says, and every way a document comes onto the
@@ -273,7 +268,7 @@ final class WorkspaceRequests extends ChangeNotifier {
     if (_session.isScratch) return const RequestDone();
     final leave = await _leaving.mayLeaveDocument();
     if (_overtaken(ticket) || leave is! Go) return const RequestDropped();
-    await _session.showAnalysisBoard();
+    if (!await _session.showAnalysisBoard()) return const RequestDropped();
     _saidCopy(leave);
     return const RequestDone();
   }
@@ -292,9 +287,10 @@ final class WorkspaceRequests extends ChangeNotifier {
     ];
     final leave = await _leavingFile();
     if (_overtaken(ticket) || leave == null) return const RequestDropped();
-    await _session.showAnalysisBoard(
+    final shown = await _session.showAnalysisBoard(
       boards.analysisBoard(side: side, root: root, sans: sans),
     );
+    if (!shown) return const RequestDropped();
     _saidCopy(leave);
     return const RequestDone();
   }
@@ -332,8 +328,9 @@ final class WorkspaceRequests extends ChangeNotifier {
     }
     final leave = await _leavingFile();
     if (_overtaken(ticket) || leave == null) return const RequestDropped();
-    await _session.showAnalysisBoard(pasted.chapter);
-    if (_disposed) return const RequestDropped();
+    if (!await _session.showAnalysisBoard(pasted.chapter)) {
+      return const RequestDropped();
+    }
     _saidCopy(leave);
     return const RequestDone();
   }

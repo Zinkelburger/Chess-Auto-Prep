@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../chess/fen.dart';
 import '../chess/generation/draft_lines.dart' show expectimaxIn;
+import '../chess/pgn/game_tree.dart' show GameTree;
 import '../chess/pgn/move_label.dart';
 import '../chess/pgn/tree_edit.dart';
 import '../diagnostics/log.dart';
@@ -92,6 +93,15 @@ final class RepliesFailed extends RepliesState {
   final String reason;
 }
 
+/// The position, the numbers and the document a Replies table is for.
+typedef _TableKey = ({
+  Fen fen,
+  int elo,
+  int onceIn,
+  GapWalk? walk,
+  GameTree? tree,
+});
+
 /// The Replies table: what the opponent model expects at the position on
 /// the board, each move marked with whether the chapter plays it, whether
 /// another chapter answers it and whether it is a gap.
@@ -129,7 +139,11 @@ final class Replies extends ChangeNotifier {
   RepliesState _table = const RepliesEmpty();
 
   /// What the table on screen was asked for.
-  ({Fen fen, int elo, int onceIn, GapWalk? walk})? _tableFor;
+  /// What the table on screen was worked out for. The tree is part of it:
+  /// the ticks and stored values come from the document, so another game at
+  /// the same position (a viewer file's next game, a study's next chapter)
+  /// or an edit marks the rows again from the shares already asked.
+  _TableKey? _tableFor;
 
   /// Bumped for every ask and on dispose: an answer that finds it moved on
   /// was overtaken.
@@ -155,6 +169,7 @@ final class Replies extends ChangeNotifier {
       elo: s.opponentElo,
       onceIn: s.coverOnceIn,
       walk: _gaps.walk,
+      tree: _session.tree,
     );
     if (wanted == _tableFor) return;
     unawaited(_retable(wanted));
@@ -162,9 +177,7 @@ final class Replies extends ChangeNotifier {
 
   /// Tells the pane before it waits, so a table for another position never
   /// stays on screen while the model is asked.
-  Future<void> _retable(
-    ({Fen fen, int elo, int onceIn, GapWalk? walk}) wanted,
-  ) async {
+  Future<void> _retable(_TableKey wanted) async {
     final ticket = ++_ticket;
     _tableFor = wanted;
     _table = const RepliesPending();

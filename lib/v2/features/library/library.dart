@@ -26,8 +26,6 @@ import '../../workspace/document_session.dart';
 import '../../workspace/session_results.dart';
 import 'library_state.dart';
 
-export 'library_state.dart';
-
 /// The user's repertoires: the list, the search over it, and the one change
 /// at a time that adds, renames, moves or removes one.
 ///

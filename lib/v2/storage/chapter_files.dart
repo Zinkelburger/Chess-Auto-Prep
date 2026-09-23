@@ -9,8 +9,6 @@ import '../diagnostics/log.dart';
 import 'document_ref.dart';
 import 'document_relocation.dart' show recoveryFolder;
 
-export '../chess/pgn/chapter_heading.dart' show ChapterHeading;
-
 /// One chapter on disk: a file, or the games of a file that name one
 /// chapter by tag ([section]), plus what the lists show about it without
 /// opening it — its two names and its heading. The store takes it as the

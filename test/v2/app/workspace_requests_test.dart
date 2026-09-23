@@ -4,11 +4,12 @@ import 'package:chess_auto_prep/v2/app/exit_guard.dart';
 import 'package:chess_auto_prep/v2/app/mode.dart';
 import 'package:chess_auto_prep/v2/app/window_input.dart';
 import 'package:chess_auto_prep/v2/app/workspace_requests.dart';
+import 'package:chess_auto_prep/v2/chess/explorer_answer.dart';
+import 'package:chess_auto_prep/v2/chess/explorer_choice.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/study.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
-import 'package:chess_auto_prep/v2/workspace/explorer.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 
