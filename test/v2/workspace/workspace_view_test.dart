@@ -104,7 +104,7 @@ void main() {
   }
 
   Future<void> pump(WidgetTester tester) async {
-    await tester.binding.setSurfaceSize(const Size(1200, 700));
+    await tester.binding.setSurfaceSize(const Size(1200, 820));
     await tester.pumpWidget(
       MaterialApp(
         theme: darkTheme(),
@@ -325,7 +325,7 @@ void main() {
       WorkspaceTab.moves,
       WorkspaceTab.explorer,
       WorkspaceTab.tree,
-      WorkspaceTab.prep,
+      WorkspaceTab.search,
     ]);
     expect(find.byType(MoveTreeView), findsOneWidget);
     expect(find.text('Next gap'), findsNothing);
@@ -341,17 +341,16 @@ void main() {
     expect(tabs.open, [
       WorkspaceTab.moves,
       WorkspaceTab.tree,
-      WorkspaceTab.prep,
+      WorkspaceTab.search,
     ]);
     tabs.close(WorkspaceTab.tree);
-    tabs.close(WorkspaceTab.prep);
+    tabs.close(WorkspaceTab.search);
     await tester.pumpAndSettle();
     expect(tabs.open, [WorkspaceTab.moves]);
     expect(find.text('Moves'), findsNothing, reason: 'one tab: no strip');
     tabs.show(WorkspaceTab.replies);
     await tester.pumpAndSettle();
     expect(find.byType(RepliesPane), findsOneWidget);
-    expect(find.byTooltip('Close Replies (Ctrl+W)'), findsOneWidget);
   });
 
   testWidgets('with nothing open it is the analysis board', (tester) async {

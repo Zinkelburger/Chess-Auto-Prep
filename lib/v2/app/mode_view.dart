@@ -36,7 +36,7 @@ import 'workspace_requests.dart';
 /// context. The Actions menu only points at them.
 typedef ShellDialogs = ({
   VoidCallback saveCopy,
-  VoidCallback generate,
+  VoidCallback search,
   VoidCallback accounts,
 });
 
@@ -163,8 +163,8 @@ abstract base class _DocumentModeView extends ModeView {
           group: 'Repertoire',
         ),
       AppAction(
-        session.isScratch ? 'Generate from here…' : 'Fill gaps from here…',
-        workspace.fill.canStart ? dialogs.generate : null,
+        'Search from here',
+        workspace.fill.canStart ? dialogs.search : null,
         shortcut: 'Ctrl+G',
         group: session.isScratch ? 'Analysis' : 'Repertoire',
       ),

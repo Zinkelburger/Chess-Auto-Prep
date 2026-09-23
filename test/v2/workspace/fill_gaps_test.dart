@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:chess_auto_prep/v2/chess/pgn/analysis_board.dart';
 import 'package:chess_auto_prep/v2/chess/generation/eval.dart';
+import 'package:chess_auto_prep/v2/chess/generation/search_node.dart';
 import 'package:chess_auto_prep/v2/chess/generation/sources.dart';
 import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
@@ -96,91 +97,98 @@ void main() {
     _ => fail('$ref was not written'),
   };
 
-  test('a run writes a draft chapter beside the one on the board, its lines '
-      'carrying their values, and never touches the chapter', () async {
+  /// The search on White's e4 scored a pawn better than anything else, so
+  /// the best line starts with the chapter's own move.
+  Map<String, int> e4Best() => {
+    afterUci(positionOf(kingAndPawn), 'e2e4').fen: -100,
+  };
+
+  test('a run keeps its tree for the Search tab and writes nothing', () async {
     final trees = <String>[];
     final fill = fillWith(
-      ScriptedEvaluator(),
+      ScriptedEvaluator(scores: e4Best()),
       keepTree: (ref, tree) async => trees.add(tree),
     );
     expect(fill.canStart, isTrue);
     expect(await fill.start(request), isNull);
-    expect(fill.state, isA<FillDone>());
     final done = fill.state as FillDone;
-    expect(done.name, 'Main (draft)');
-    expect(done.lines, 1);
-    final text = textOf(draft());
-    expect(text, startsWith('// Main (draft)\n// Draft\n// Color: White\n'));
-    expect(text, contains('[FEN "$kingAndPawn"]'));
-    // Our pinned e4, their one reply, and the move the search chose after
-    // it: a line the chapter does not have yet.
-    expect(text, contains('1. e4 {[%cumProb 100.0%] [%expectimax'));
-    expect(text, contains('Kd8 {[%expectimax'));
-    expect(text, contains('2. '));
+    expect(done.complete, isTrue);
+    expect(done.depth, 3);
+    expect(done.nodes, greaterThan(1));
+    final found = fill.found!;
+    expect(found.side, Side.white);
+    final root = found.tree as OurNode;
+    expect(root.chosen.move.san, 'e4');
+    expect(fixture.store.documents.keys, [fixture.ref], reason: 'no draft');
     expect(fixture.onDisk, chapter, reason: 'the chapter is not written');
     expect(releases, 1);
     expect(trees.single, contains('"format": "opening_tree"'));
     expect(trees.single, contains('"eval_depth": 14'));
+    expect(fill.canMakeLines, isTrue);
   });
 
-  test('a run keeps what it found: the traps on its lines and the lines, '
-      'read in the draft it wrote', () async {
-    final root = positionOf(kingAndPawn);
-    final afterE4 = afterUci(root, 'e2e4');
-    // Kf7 is played three games in ten and hands White two pawns more
-    // than Kd8 does: a trap.
-    final fill = fillWith(
-      ScriptedEvaluator(scores: {afterUci(afterE4, 'e8f7').fen: 200}),
-      policy: const ScriptedPolicy({'e8d8': 0.7, 'e8f7': 0.3}),
-    );
+  test('the tree is read at the position on the board: by the moves from '
+      'the document root, and nowhere off the search', () async {
+    final fill = fillWith(ScriptedEvaluator(scores: e4Best()));
     await fill.start(request);
-    final done = fill.state as FillDone;
-    expect(done.traps, 1);
     final found = fill.found!;
-    expect(found.origin, isA<InDraft>());
-    expect((found.origin as InDraft).draft, draft());
-    final trap = found.traps.single;
-    expect(trap.blunder.move.uci, 'e8f7');
-    expect(trap.share, closeTo(0.3, 1e-9));
-    expect(trap.lossCp, 200);
-    expect(found.lines, isNotEmpty);
-    expect(found.items.first, isA<FoundTrap>());
-    expect(found.items.first.stopAfter, 2, reason: 'stops on the mistake');
-    fill.pick(1);
-    expect(fill.picked, 1);
+    const root = Fen(kingAndPawn);
+    expect(found.at(root, const []), isA<OurNode>());
+    expect(found.at(root, const ['e4']), isA<OpponentNode>());
+    expect(found.at(root, const ['e4', 'Kd8']), isA<OurNode>());
+    expect(found.at(root, const ['e4', 'Kf8']), isNull, reason: 'not played');
+    expect(found.at(Fen.initial, const []), isNull, reason: 'another root');
   });
 
-  test('on the analysis board a run writes nothing and keeps what it found, '
+  test('the tree so far is shown while the search runs', () async {
+    final fill = fillWith(ScriptedEvaluator(scores: e4Best()));
+    final shown = <SearchNode>[];
+    fill.addListener(() {
+      if (fill.running && fill.found != null) shown.add(fill.found!.tree);
+    });
+    await fill.start(request);
+    expect(shown, isNotEmpty);
+    expect(shown.first, isA<OurNode>(), reason: 'the root was answered first');
+  });
+
+  test('lines are written only when asked: a draft chapter beside the one '
+      'the search started on, its moves carrying their values', () async {
+    final fill = fillWith(ScriptedEvaluator(scores: e4Best()));
+    await fill.start(request);
+    expect(fill.lines, isNull);
+    await fill.makeLines();
+    final written = fill.lines as LinesWritten;
+    expect(written.draft, draft());
+    expect(written.lines, greaterThan(0));
+    final text = textOf(draft());
+    expect(text, startsWith('// Main (draft)\n// Draft\n// Color: White\n'));
+    expect(text, contains('[FEN "$kingAndPawn"]'));
+    expect(text, contains('[%expectimax'));
+    expect(fixture.onDisk, chapter, reason: 'the chapter is not written');
+    expect(fill.canMakeLines, isFalse, reason: 'once per run');
+  });
+
+  test('on the analysis board a run writes nothing and cannot become lines, '
       'for the side at the bottom of the board', () async {
     await fixture.session.showAnalysisBoard(
-      analysisBoard(side: Side.white, root: const Fen(kingAndPawn)),
+      analysisBoard(side: Side.black, root: const Fen(kingAndPawn)),
     );
-    final afterE4 = afterUci(positionOf(kingAndPawn), 'e2e4');
     final fill = fillWith(
-      ScriptedEvaluator(scores: {afterUci(afterE4, 'e8f7').fen: 200}),
-      policy: const ScriptedPolicy({'e8d8': 0.7, 'e8f7': 0.3}),
+      ScriptedEvaluator(),
+      policy: const ScriptedPolicy({'e2e4': 1}),
     );
     expect(fill.canStart, isTrue);
     final writes = fixture.store.creates.length;
     const shallow = FillRequest(elo: 2200, depthPlies: 2, onceIn: 50);
     expect(await fill.start(shallow), isNull);
-    final done = fill.state as FillDone;
-    expect(done.name, isNull);
-    expect(done.traps, 1);
+    expect(fill.state, isA<FillDone>());
     expect(fixture.store.creates, hasLength(writes), reason: 'nothing saved');
-    final found = fill.found!;
-    expect(found.side, Side.white);
-    expect(found.origin, isA<OnTheBoard>());
-    expect((found.origin as OnTheBoard).root, const Fen(kingAndPawn));
-    expect(found.traps.single.blunder.move.uci, 'e8f7');
-    expect(found.lines.first.moves.first.move.uci, 'e2e4');
+    expect(fill.found!.side, Side.black);
+    expect(fill.canMakeLines, isFalse);
   });
 
   test('Finish now stops after the expansion under way and keeps what the '
       'search has so far', () async {
-    await fixture.session.showAnalysisBoard(
-      analysisBoard(side: Side.white, root: const Fen(kingAndPawn)),
-    );
     final fill = fillWith(ScriptedEvaluator());
     // Finish as soon as the first position is answered.
     void finishEarly() {
@@ -192,36 +200,20 @@ void main() {
     fill.addListener(finishEarly);
     await fill.start(const FillRequest(elo: 2200, depthPlies: 8, onceIn: 50));
     fill.removeListener(finishEarly);
-    expect(fill.state, isA<FillDone>(), reason: 'the root was answered');
-    expect(fill.found!.lines, isNotEmpty);
-    expect(
-      fill.found!.lines.every((line) => line.moves.length < 8),
-      isTrue,
-      reason: 'stopped short of the horizon',
-    );
+    final done = fill.state as FillDone;
+    expect(done.complete, isFalse);
+    expect(done.depth, lessThan(8));
+    expect(fill.found!.tree, isA<OurNode>(), reason: 'the root was answered');
     expect(releases, 1);
   });
 
-  test('Prefer traps lets moves of ours further from the best be tried', () {
-    const plain = FillRequest(elo: 2200, depthPlies: 3, onceIn: 50);
-    const trappy = FillRequest(
-      elo: 2200,
-      depthPlies: 3,
-      onceIn: 50,
-      preferTraps: true,
-    );
-    expect(plain.lossLimitCp, fillLossLimitCp);
-    expect(trappy.lossLimitCp, greaterThan(plain.lossLimitCp));
-  });
-
-  test('the chapter\'s own moves are pins: the search never plays another '
-      'move where the chapter already has one', () async {
+  test('every move of ours is searched, the chapter\'s or not', () async {
     final evaluator = ScriptedEvaluator();
     final fill = fillWith(evaluator);
     await fill.start(request);
     final root = positionOf(kingAndPawn);
     expect(evaluator.asked, contains(afterUci(root, 'e2e4').fen));
-    expect(evaluator.asked, isNot(contains(afterUci(root, 'e2e3').fen)));
+    expect(evaluator.asked, contains(afterUci(root, 'e2e3').fen));
   });
 
   test('the engine pane is paused for the run and follows the board again '
@@ -246,7 +238,7 @@ void main() {
     final run = fill.start(request);
     await pumpEventQueue();
     expect(fill.canStart, isFalse);
-    expect(await fill.start(request), 'A fill is already running.');
+    expect(await fill.start(request), 'A search is already running.');
     gate.release();
     await run;
   });
@@ -291,8 +283,6 @@ void main() {
         ),
       );
       expect(analysis.paused, isFalse);
-      fill.dismiss();
-      expect(fill.state, isA<FillIdle>());
     },
   );
 
@@ -351,22 +341,24 @@ void main() {
 
   test('a draft name already taken gets the next number', () async {
     fixture.store.documents[draft()] = Opened('old', scriptedRevision('old'));
-    final fill = fillWith(ScriptedEvaluator());
+    final fill = fillWith(ScriptedEvaluator(scores: e4Best()));
     await fill.start(request);
-    expect((fill.state as FillDone).name, 'Main (draft 2)');
+    await fill.makeLines();
+    expect((fill.lines as LinesWritten).draft, draft('Main (draft 2)'));
     expect(textOf(draft('Main (draft 2)')), contains('// Draft'));
     expect(textOf(draft()), 'old');
   });
 
   test(
-    'a search that proposes nothing new is a failure, not an empty draft',
+    'lines that propose nothing new are a failure, not an empty draft',
     () async {
-      // Horizon one: only our pinned e4, which the chapter already plays.
-      final fill = fillWith(ScriptedEvaluator());
+      // Horizon one: the best move is e4, which the chapter already plays.
+      final fill = fillWith(ScriptedEvaluator(scores: e4Best()));
       await fill.start(const FillRequest(elo: 2200, depthPlies: 1, onceIn: 50));
+      await fill.makeLines();
       expect(
-        fill.state,
-        isA<FillFailed>().having(
+        fill.lines,
+        isA<LinesFailed>().having(
           (f) => f.reason,
           'reason',
           contains('already'),
@@ -377,14 +369,15 @@ void main() {
   );
 
   test(
-    'a store that refuses the draft is a failure named on the card',
+    'a store that refuses the draft is a failure named in the tab',
     () async {
       fixture.store.creates.add(const IoFailure('disk full'));
-      final fill = fillWith(ScriptedEvaluator());
+      final fill = fillWith(ScriptedEvaluator(scores: e4Best()));
       await fill.start(request);
+      await fill.makeLines();
       expect(
-        fill.state,
-        isA<FillFailed>().having(
+        fill.lines,
+        isA<LinesFailed>().having(
           (f) => f.reason,
           'reason',
           contains('disk full'),
@@ -393,18 +386,25 @@ void main() {
     },
   );
 
-  test('a document this app may not write cannot be filled', () async {
+  test('a document this app may not write is searched but cannot become '
+      'lines', () async {
     final readOnly = await openSession(chapter, readOnly: 'outside Documents');
     addTearDown(readOnly.dispose);
     final fill = FillGaps(
       session: readOnly.session,
       analysis: analysis,
       documents: readOnly.store,
-      tools: (_) async => const FillUnavailable('never asked'),
+      tools: (_) async => FillReady(
+        evaluator: ScriptedEvaluator(),
+        policy: const ScriptedPolicy({'e8d8': 1}),
+        release: () async {},
+      ),
     );
     addTearDown(fill.dispose);
-    expect(fill.canStart, isFalse);
-    expect(await fill.start(request), 'outside Documents');
+    expect(fill.canStart, isTrue);
+    expect(await fill.start(request), isNull);
+    expect(fill.state, isA<FillDone>());
+    expect(fill.canMakeLines, isFalse);
   });
 
   test('progress is the nodes and the depth of the run so far', () async {
@@ -419,7 +419,7 @@ void main() {
     expect(seen.last.nodes, greaterThan(1));
   });
 
-  test('the fill starts from the board, not the chapter root', () async {
+  test('the search starts from the board, not the chapter root', () async {
     fixture.session.forward();
     fixture.session.forward();
     final evaluator = ScriptedEvaluator();
@@ -427,8 +427,13 @@ void main() {
     await fill.start(const FillRequest(elo: 2200, depthPlies: 1, onceIn: 50));
     final board = positionOf(fixture.session.fen.value);
     expect(evaluator.asked.first, board.fen);
-    // The line is written from the chapter's root through the moves to the
-    // board, so it can be dropped into the chapter.
+    expect(
+      fill.found!.at(const Fen(kingAndPawn), const ['e4', 'Kd8']),
+      isA<OurNode>(),
+    );
+    // The lines are written from the chapter's root through the moves to
+    // the board, so they can be dropped into the chapter.
+    await fill.makeLines();
     expect(textOf(draft()), contains('1. e4 Kd8 2. '));
   });
 }

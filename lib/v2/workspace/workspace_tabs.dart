@@ -3,7 +3,7 @@ import '../ui/pane_tabs.dart';
 
 /// The tabs of the reading card: the moves, which are always there, the
 /// trainer, the opponent's replies, the explorer, the tree of the user's
-/// own repertoires, what the last search from the board found, the puzzle
+/// own repertoires, the search from the board and its values, the puzzle
 /// being solved, and what the user's book says about one of their games. A new thing the card can show is a new value here, and the
 /// compiler then asks for its arm in the card's body; the strip, the keys
 /// and the Actions menu know nothing about which tabs there are.
@@ -13,7 +13,7 @@ enum WorkspaceTab {
   replies('Replies'),
   explorer('Explorer'),
   tree('Tree'),
-  prep('Prep'),
+  search('Search'),
   puzzle('Puzzle'),
   book('Book');
 
@@ -43,16 +43,16 @@ PaneTabs<WorkspaceTab> newWorkspaceTabs() => PaneTabs(
     WorkspaceTab.replies,
     WorkspaceTab.explorer,
     WorkspaceTab.tree,
-    WorkspaceTab.prep,
+    WorkspaceTab.search,
   ],
 );
 
 /// The card's tabs as the PGN Viewer and Study start: the moves, the
-/// explorer, the tree and Prep, where a search from the board is started.
+/// explorer, the tree and Search, where a search from the board is started.
 /// The repertoire's tabs can be shown from the Actions menu.
 PaneTabs<WorkspaceTab> readingTabs() => PaneTabs(
   _documentTabs,
-  open: const [WorkspaceTab.explorer, WorkspaceTab.tree, WorkspaceTab.prep],
+  open: const [WorkspaceTab.explorer, WorkspaceTab.tree, WorkspaceTab.search],
 );
 
 /// The card's tabs in Tactics: the puzzle first and always there, the game

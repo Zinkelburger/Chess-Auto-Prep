@@ -20,8 +20,6 @@ import '../ui/pane_tabs.dart';
 import '../ui/theme.dart';
 import '../workspace/board_claim.dart';
 import '../workspace/copy_name_dialog.dart';
-import '../workspace/document_session.dart';
-import '../workspace/fill_dialog.dart';
 import '../workspace/fill_gaps.dart';
 import '../workspace/session_results.dart';
 import '../workspace/tree_pane.dart';
@@ -169,9 +167,8 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     _arrange();
   }
 
-  late final _generate = GenerateDoors(
+  late final _search = SearchDoor(
     fill: _ws.fill,
-    session: _ws.session,
     settings: _ws.settings,
     requests: _requests,
   );
@@ -229,11 +226,10 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   }
 
   /// ↓ (1) / ↑ (−1) walk what is in front of the user: the mode's own list
-  /// when it has one (My games), the Prep tab's rows while it is up, the
-  /// puzzles in a sitting, else the file's games.
+  /// when it has one (My games), the puzzles in a sitting, else the file's
+  /// games.
   void _walk(int by) {
     if (_view.walk(by)) return;
-    if (_tabs.selected == WorkspaceTab.prep && _generate.step(by)) return;
     final trainer = _train.puzzles;
     if (trainer.up != null) {
       unawaited(by > 0 ? trainer.next() : trainer.previous());
@@ -275,7 +271,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     ),
     dialogs: (
       saveCopy: () => unawaited(_saveCopy()),
-      generate: () => unawaited(_generate.generate(context, _tabs)),
+      search: () => unawaited(_search.search(_tabs)),
       accounts: () => unawaited(editAccounts(context, _train.myGames)),
     ),
   ));
@@ -322,7 +318,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     ),
     ..._command(
       LogicalKeyboardKey.keyG,
-      () => unawaited(_generate.generate(context, _tabs)),
+      () => unawaited(_search.search(_tabs)),
     ),
     ..._command(LogicalKeyboardKey.keyK, () => unawaited(_palette())),
     const SingleActivator(LogicalKeyboardKey.space): _space,
@@ -415,8 +411,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
             ply: _ws.explorer.ply,
           ),
         ),
-        onGenerate: () => unawaited(_generate.generate(context, _tabs)),
-        onFound: _generate.go,
+        onOpenChapter: (ref) => unawaited(_requests.readInBuilder(ref, [])),
       ),
     ),
   };
@@ -471,65 +466,34 @@ final class SittingInView {
   }
 }
 
-/// The ways into a search from the board and back to what it found: the
-/// dialog behind the Actions entry, Ctrl+G and the Prep tab's `Generate…`,
-/// and ↑ / ↓ over the Prep tab's rows. On the analysis board the search is `Generate from
-/// here…` and plays for the side at the bottom of the board; on a chapter
-/// it is `Fill gaps from here…` and plays for the chapter's side.
-final class GenerateDoors {
-  GenerateDoors({
+/// The way into a search from outside the Search tab — the Actions entry
+/// and Ctrl+G: the tab comes up and the search starts with the numbers it
+/// last had, the Replies tab's rating and cover rule and the tab's depth.
+final class SearchDoor {
+  SearchDoor({
     required this.fill,
-    required this.session,
     required this.settings,
     required this.requests,
   });
 
   final FillGaps fill;
-  final DocumentSession session;
   final SettingsStore settings;
   final WorkspaceRequests requests;
 
-  /// The dialog, then the run with the Prep tab up to watch it; what
-  /// refused it goes in the bar.
-  Future<void> generate(
-    BuildContext context,
-    PaneTabs<WorkspaceTab> tabs,
-  ) async {
+  /// What refused the search goes in the bar.
+  Future<void> search(PaneTabs<WorkspaceTab> tabs) async {
     if (!fill.canStart) return;
-    final s = settings.value;
-    final onBoard = session.isScratch;
-    final request = await showFillDialog(
-      context,
-      title: onBoard ? 'Generate from here' : 'Fill gaps from here',
-      action: onBoard ? 'Generate' : 'Fill',
-      side: session.orientation,
-      elo: s.opponentElo,
-      onceIn: s.coverOnceIn,
-    );
-    if (request == null || !context.mounted) return;
-    if (tabs.tabs.any((tab) => tab.id == WorkspaceTab.prep)) {
-      tabs.show(WorkspaceTab.prep);
+    if (tabs.tabs.any((tab) => tab.id == WorkspaceTab.search)) {
+      tabs.show(WorkspaceTab.search);
     }
-    final refusal = await fill.start(request);
+    final s = settings.value;
+    final refusal = await fill.start(
+      FillRequest(
+        elo: s.opponentElo,
+        depthPlies: fill.depth,
+        onceIn: s.coverOnceIn,
+      ),
+    );
     if (refusal != null) requests.say(refusal);
-  }
-
-  /// Puts the found item at [index] on the board.
-  void go(int index) {
-    final found = fill.found;
-    if (found == null || index < 0 || index >= found.items.length) return;
-    fill.pick(index);
-    unawaited(requests.showFound(found, index));
-  }
-
-  /// The next (or, with [by] −1, the previous) found item; the first one
-  /// when none has been gone to yet. Answers whether there was one to take
-  /// the key, so ↑ / ↓ keep their other meanings when there is not.
-  bool step(int by) {
-    final count = fill.found?.items.length ?? 0;
-    if (count == 0) return false;
-    final picked = fill.picked;
-    go(picked == null ? 0 : (picked + by).clamp(0, count - 1));
-    return true;
   }
 }
