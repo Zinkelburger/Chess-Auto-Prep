@@ -9,6 +9,7 @@ import '../../workspace/move_field.dart';
 import 'lesson.dart';
 import 'trainer.dart';
 import 'trainer_words.dart';
+import '../../ui/app_action.dart';
 
 /// The Train tab while a sitting runs: the line and how far the sitting has
 /// to go, what the lesson wants now, the moves played so far with the note
@@ -249,7 +250,7 @@ class _Control extends StatelessWidget {
       Drilling() when lesson.drill.stage is Showing => Align(
         alignment: Alignment.centerLeft,
         child: Tooltip(
-          message: 'Next (Space)',
+          message: withKey('Next', 'Space'),
           child: FilledButton(
             onPressed: lesson.next,
             child: const Text('Next'),
@@ -297,7 +298,7 @@ class _Ratings extends StatelessWidget {
         children: [
           for (final (i, rating) in Rating.values.indexed)
             Tooltip(
-              message: '${ratingLabel(rating, lesson.review)} (${i + 1})',
+              message: withKey(ratingLabel(rating, lesson.review), '${i + 1}'),
               child: OutlinedButton(
                 onPressed: () => lesson.rate(rating),
                 child: Text(ratingLabel(rating, lesson.review)),
@@ -319,13 +320,13 @@ class _Footer extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     children: [
       Tooltip(
-        message: 'Skip this line (↓)',
+        message: withKey('Skip this line', '↓'),
         child: TextButton(onPressed: lesson.skip, child: const Text('Skip')),
       ),
       TextButton(onPressed: lesson.restart, child: const Text('Restart line')),
       const Spacer(),
       Tooltip(
-        message: 'Back to lines (Esc)',
+        message: withKey('Back to lines', 'Esc'),
         child: TextButton(
           onPressed: trainer.leave,
           child: const Text('Back to lines'),

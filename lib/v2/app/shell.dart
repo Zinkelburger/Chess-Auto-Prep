@@ -30,6 +30,7 @@ import '../workspace/workspace.dart';
 import '../workspace/workspace_keys.dart';
 import '../workspace/workspace_tabs.dart';
 import '../workspace/workspace_view.dart';
+import 'full_screen.dart';
 import 'mode_view.dart';
 import 'mode.dart';
 import 'top_bar.dart';
@@ -47,6 +48,7 @@ class Shell extends StatefulWidget {
     required this.workspace,
     required this.documents,
     required this.training,
+    required this.fullScreen,
     required this.settingRows,
     required this.settingsAlso,
   });
@@ -55,6 +57,9 @@ class Shell extends StatefulWidget {
   final Workspace workspace;
   final DocumentModes documents;
   final TrainingModes training;
+
+  /// Whether the window fills the screen: F11, Esc and the Actions menu.
+  final FullScreen fullScreen;
 
   /// The settings page's rows, as the app wires them, and the one owner
   /// besides the store they are built from: the Lichess account.
@@ -229,11 +234,16 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         _ => null,
       };
 
-  /// Space and ↓ are the puzzle's while one is on the board, and the
-  /// document's otherwise; in My games ↑ and ↓ walk the list.
+  /// Space shows the answer while a puzzle is on the board; otherwise it
+  /// is the mode's: the viewer's autoplay.
   void _space() {
-    if (_train.puzzles.up != null) _train.puzzles.showSolution();
+    if (_train.puzzles.up == null) return _view.space();
+    _train.puzzles.showSolution();
   }
+
+  /// What Esc leaves once the workspace has nothing left: the mode's
+  /// sitting, then full screen.
+  bool _leave() => _view.leave() || widget.fullScreen.leave();
 
   /// ↓ (1) / ↑ (−1) walk what is in front of the user: the mode's own list
   /// when it has one (My games), the Prep tab's rows while it is up, the
@@ -271,7 +281,17 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   }
 
   /// Everything the Actions menu offers now, in the mode on screen.
-  List<AppAction> _actions() => _view.actions((
+  List<AppAction> _actions() => [
+    ..._modeActions(),
+    AppAction(
+      widget.fullScreen.on ? 'Leave full screen' : 'Full screen',
+      widget.fullScreen.toggle,
+      shortcut: 'F11',
+      group: 'Window',
+    ),
+  ];
+
+  List<AppAction> _modeActions() => _view.actions((
     editing: _editing,
     board: () => boardActions(
       context,
@@ -324,6 +344,11 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     ),
     ..._command(LogicalKeyboardKey.keyV, () => unawaited(_requests.paste())),
     ..._command(
+      LogicalKeyboardKey.keyV,
+      () => unawaited(_requests.pasteFen()),
+      shift: true,
+    ),
+    ..._command(
       LogicalKeyboardKey.keyN,
       () => unawaited(_requests.newAnalysisBoard()),
     ),
@@ -333,17 +358,19 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     ),
     ..._command(LogicalKeyboardKey.keyK, () => unawaited(_palette())),
     const SingleActivator(LogicalKeyboardKey.space): _space,
+    const SingleActivator(LogicalKeyboardKey.f11): widget.fullScreen.toggle,
     const SingleActivator(LogicalKeyboardKey.arrowDown): () => _walk(1),
     const SingleActivator(LogicalKeyboardKey.arrowUp): () => _walk(-1),
   };
 
-  /// [key] with Ctrl, and with Cmd for macOS.
+  /// [key] with Ctrl, and with Cmd for macOS; with Shift too when [shift].
   static Map<ShortcutActivator, VoidCallback> _command(
     LogicalKeyboardKey key,
-    VoidCallback run,
-  ) => {
-    SingleActivator(key, control: true): run,
-    SingleActivator(key, meta: true): run,
+    VoidCallback run, {
+    bool shift = false,
+  }) => {
+    SingleActivator(key, control: true, shift: shift): run,
+    SingleActivator(key, meta: true, shift: shift): run,
   };
 
   /// The mode and the status are the requests'; a change to either redraws
@@ -376,6 +403,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
                 tabs: _tabs,
                 moves: _moves,
                 extra: _windowKeys,
+                leave: _leave,
                 child: _columns(),
               ),
             ),

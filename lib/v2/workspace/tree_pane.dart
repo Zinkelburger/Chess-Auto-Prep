@@ -8,6 +8,7 @@ import '../ui/theme.dart';
 import 'repertoire_tree.dart';
 import 'document_session.dart';
 import 'line_preview.dart';
+import '../ui/app_action.dart';
 
 /// The Tree tab of the reading card: the user's own repertoires as an
 /// opening explorer. For the position on the board, every move any of the
@@ -169,7 +170,7 @@ class _Summary extends StatelessWidget {
           ),
           if (off.isNotEmpty) ...[
             IconButton(
-              tooltip: 'Take back (←)',
+              tooltip: withKey('Take back', '←'),
               iconSize: IconSize.menu,
               visualDensity: VisualDensity.compact,
               onPressed: tree.back,

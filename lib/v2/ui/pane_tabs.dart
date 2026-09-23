@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'listening_state.dart';
 import 'theme.dart';
+import 'app_action.dart';
 
 /// One thing a pane can show, by an identity that never changes — an enum
 /// value, so the pane's body can switch over every tab — what the tab is
@@ -409,9 +410,10 @@ class _TabState extends State<_Tab> {
     maintainState: true,
     child: IconButton(
       onPressed: widget.onClose,
-      tooltip: widget.selected && widget.closeShortcut != null
-          ? 'Close ${widget.tab.title} (${widget.closeShortcut})'
-          : 'Close ${widget.tab.title}',
+      tooltip: withKey(
+        'Close ${widget.tab.title}',
+        widget.selected ? widget.closeShortcut : null,
+      ),
       icon: const Icon(Icons.close, size: IconSize.menu),
       color: scheme.onSurfaceVariant,
       padding: EdgeInsets.zero,

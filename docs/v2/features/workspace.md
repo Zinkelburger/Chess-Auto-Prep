@@ -110,12 +110,12 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
 | ← / → | Back / forward one move (auto-repeats) |
 | Home / End | Start / end of the line |
 | ↑ / ↓ | Previous / next item in front of you (game, chapter, puzzle, finding) |
-| Enter | Focus the current variation; start solitaire on the setup strip |
-| Esc | Leave the innermost thing first; in a text field it only blurs |
-| Space | Play/pause replay; show/hide solution in a trainer |
+| Enter | Focus the current variation; start solitaire on the setup strip (v2: steps into the first variation branching at the cursor; no solitaire yet) |
+| Esc | Leave the innermost thing first; in a text field it only blurs (v2: out of the variation to where it branched, then the edit strip, then a Tactics sitting, then full screen; the move field clears and blurs) |
+| Space | Play/pause replay; show/hide solution in a trainer (v2: autoplay in the PGN Viewer, one move a second, any navigation stops it) |
 | F / E | Flip the board / toggle the engine |
-| F11 | Fullscreen |
-| Ctrl+V, Ctrl+Shift+V | Paste PGN, paste FEN |
+| F11 | Fullscreen (v2: the whole window, every mode; Actions ▸ `Full screen`) |
+| Ctrl+V, Ctrl+Shift+V | Paste PGN, paste FEN (v2: a FEN as a new analysis board from anything open; Actions ▸ `Paste FEN`) |
 | Ctrl+Z | Undo the last repertoire add |
 | Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+W | Next / previous tab of the reading card; close the tab that is up (v2) |
 | / | Focus the move field under the board (v2) |

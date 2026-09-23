@@ -114,7 +114,8 @@ and `Export as SCID…` write every game in the current filter (Scid asks for a 
 `Scid export failed: <error>`); `Add to Study` / `Edit study` hands the games to Study.
 **Autoplay** — Space or the counter bar → one move every 1.0 s by default (300 ms before the first;
 speeds 0.5–10 s per move), optionally rolling into the next game; any navigation, game load, tab change
-or panel close stops it.
+or panel close stops it. (v2, 2026-09-23: Space or Actions ▸ `Play through` at the fixed speed; any cursor move or
+another game stops it; no speed setting, no roll into the next game yet.)
 **Keyboard** — ←/→ a move, Home/End ends of line, ↑/↓ previous/next game, Enter focus variation, Escape
 leave (innermost first), F flip, E engine, Space autoplay, F11 fullscreen, Ctrl+V paste.
 

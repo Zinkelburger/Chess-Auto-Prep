@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../ui/listening_state.dart';
 import '../ui/theme.dart';
 import 'document_session.dart';
+import '../ui/app_action.dart';
 
 /// `‹ [n] of N ›` under the board: which game of the open file is showing,
 /// with the number typeable to jump. Nothing when the document is not one
@@ -74,7 +75,7 @@ class _GameCounterState extends State<GameCounter>
           children: [
             IconButton(
               icon: const Icon(Icons.chevron_left, size: IconSize.action),
-              tooltip: 'Previous game (↑)',
+              tooltip: withKey('Previous game', '↑'),
               onPressed: at > 0 ? widget.session.previousGame : null,
               visualDensity: VisualDensity.compact,
             ),
@@ -83,7 +84,7 @@ class _GameCounterState extends State<GameCounter>
             Text('of $total', style: text.bodySmall),
             IconButton(
               icon: const Icon(Icons.chevron_right, size: IconSize.action),
-              tooltip: 'Next game (↓)',
+              tooltip: withKey('Next game', '↓'),
               onPressed: at + 1 < total ? widget.session.nextGame : null,
               visualDensity: VisualDensity.compact,
             ),

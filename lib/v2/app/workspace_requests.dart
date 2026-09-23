@@ -310,17 +310,30 @@ final class WorkspaceRequests extends ChangeNotifier {
   }
 
   /// The clipboard — a PGN, bare moves or a FEN — as a new analysis board.
-  Future<RequestResult> pasteOntoBoard() async {
+  Future<RequestResult> pasteOntoBoard() => _pasteAsBoard(boards.pastedBoard);
+
+  /// Ctrl+Shift+V: a FEN on the clipboard as a new analysis board, from
+  /// whatever is up.
+  Future<RequestResult> pasteFen() => _pasteAsBoard(boards.pastedPosition);
+
+  /// The clipboard read by [read] and, when it holds what [read] takes, put
+  /// up as the analysis board — with the question about a file's draft
+  /// asked only then, so a clipboard that holds nothing costs nothing.
+  Future<RequestResult> _pasteAsBoard(
+    boards.Pasted Function(String text, {required Side side}) read,
+  ) async {
     final text = await _input.clipboard() ?? '';
     if (_disposed) return const RequestDropped();
-    final leave = await _leavingFile();
-    if (_disposed || leave == null) return const RequestDropped();
-    switch (boards.pastedBoard(text, side: _session.orientation)) {
+    final boards.PastedBoard pasted;
+    switch (read(text, side: _session.orientation)) {
       case boards.PasteRefused(:final reason):
         return _refused(reason);
-      case boards.PastedBoard(:final chapter):
-        await _session.showAnalysisBoard(chapter);
+      case final boards.PastedBoard board:
+        pasted = board;
     }
+    final leave = await _leavingFile();
+    if (_disposed || leave == null) return const RequestDropped();
+    await _session.showAnalysisBoard(pasted.chapter);
     if (_disposed) return const RequestDropped();
     _saidCopy(leave);
     return const RequestDone();

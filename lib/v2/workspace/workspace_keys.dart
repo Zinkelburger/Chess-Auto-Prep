@@ -11,9 +11,10 @@ import 'move_field.dart';
 /// The keys of the workspace, wherever the focus is under [child]: the line
 /// (← → Home End PgUp PgDn), the games of the file (↑ ↓), the board (F), the
 /// engine (E), the edit strip (Ctrl+E), the last edit (Ctrl+Z), the card's
-/// tabs (Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+W) and the move field under the
-/// board (/), plus whatever the shell adds in [extra] for the window
-/// itself.
+/// tabs (Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+W), the move field under the
+/// board (/), and the variations (Enter into the one at the cursor, Esc
+/// back out), plus whatever the shell adds in [extra] and [leave] for the
+/// window itself.
 ///
 /// It encloses every column that works on the document, not the board
 /// alone: a click on a row's `⋯` menu leaves the focus on that button, and
@@ -28,6 +29,7 @@ class WorkspaceKeys extends StatelessWidget {
     required this.tabs,
     required this.moves,
     this.extra = const {},
+    this.leave = _nothingToLeave,
     required this.child,
   });
 
@@ -43,7 +45,13 @@ class WorkspaceKeys extends StatelessWidget {
   /// actions, opening a file.
   final Map<ShortcutActivator, VoidCallback> extra;
 
+  /// What Esc leaves once the workspace has nothing left to leave: the
+  /// mode's sitting, full screen. Whether it left anything.
+  final bool Function() leave;
+
   final Widget child;
+
+  static bool _nothingToLeave() => false;
 
   void _undo() => unawaited(session.undo());
 
@@ -55,6 +63,27 @@ class WorkspaceKeys extends StatelessWidget {
   }
 
   void _edit() => editing.value = !editing.value;
+
+  /// Esc leaves the innermost thing the user is in: the variation, then
+  /// the edit strip, then whatever the window adds.
+  bool _escape() {
+    if (session.leaveVariation()) return true;
+    if (editing.value) {
+      editing.value = false;
+      return true;
+    }
+    return leave();
+  }
+
+  /// Keys that only now and then have something to do. When they have
+  /// nothing, the key goes on to whoever else wants it: Enter to a button
+  /// with the focus, Esc to a dialog.
+  Map<ShortcutActivator, bool Function()> get _whenThere => {
+    const SingleActivator(LogicalKeyboardKey.enter): session.enterVariation,
+    const SingleActivator(LogicalKeyboardKey.numpadEnter):
+        session.enterVariation,
+    const SingleActivator(LogicalKeyboardKey.escape): _escape,
+  };
 
   Map<ShortcutActivator, VoidCallback> get _bindings => {
     const SingleActivator(LogicalKeyboardKey.arrowLeft): session.back,
@@ -89,6 +118,11 @@ class WorkspaceKeys extends StatelessWidget {
   /// handled and the field would never see it.
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
     if (_typing) return KeyEventResult.ignored;
+    for (final MapEntry(key: activator, value: run) in _whenThere.entries) {
+      if (activator.accepts(event, HardwareKeyboard.instance)) {
+        return run() ? KeyEventResult.handled : KeyEventResult.ignored;
+      }
+    }
     for (final MapEntry(key: activator, value: run) in _bindings.entries) {
       if (activator.accepts(event, HardwareKeyboard.instance)) {
         run();

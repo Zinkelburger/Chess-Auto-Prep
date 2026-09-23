@@ -2,6 +2,7 @@ import '../chess/tactics/game_ids.dart' show GameSite;
 import '../features/library/chapter_outline.dart';
 import '../features/library/library.dart';
 import '../features/my_games/game_book.dart';
+import '../features/pgn_viewer/auto_play.dart';
 import '../features/pgn_viewer/pgn_viewer.dart';
 import '../features/study/studies.dart';
 import '../features/tactics/my_games.dart';
@@ -51,6 +52,7 @@ DocumentModes wireDocumentModes(
       session: session,
       collections: env.folders.collections,
     ),
+    autoplay: AutoPlay(session),
   );
 }
 

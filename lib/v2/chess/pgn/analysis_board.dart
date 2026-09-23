@@ -102,6 +102,14 @@ Pasted pastedBoard(String text, {required Side side}) {
   return PastedBoard(_chapterOf(side, game));
 }
 
+/// [text] as an analysis board at the position it holds, played from
+/// [side], when it is one FEN and nothing else: what Ctrl+Shift+V pastes.
+Pasted pastedPosition(String text, {required Side side}) {
+  final fen = _asFen(text.trim());
+  if (fen == null) return const PasteRefused('The clipboard holds no FEN.');
+  return PastedBoard(analysisBoard(side: side, root: fen));
+}
+
 /// [text] as a position when it is one FEN and nothing else.
 Fen? _asFen(String text) {
   if (!text.contains('/') || text.contains('\n')) return null;

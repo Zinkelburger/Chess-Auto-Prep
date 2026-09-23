@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:url_launcher/url_launcher.dart';
+import 'package:window_manager/window_manager.dart';
 
 import '../chess/fen.dart';
 import '../chess/generation/tree_wire_v4.dart' show treeWireVersion;
@@ -82,6 +83,7 @@ final class AppEnvironment {
     required this.stopEngines,
     required this.evalCache,
     required this.keepTree,
+    required this.setFullScreen,
     this.now = DateTime.now,
     this.jitter = _noJitter,
     this.saveDelay = const Duration(seconds: 1),
@@ -149,6 +151,7 @@ final class AppEnvironment {
       stopEngines: engines.dispose,
       evalCache: () => evalCache.cache,
       keepTree: _keepTreeBeside,
+      setFullScreen: _setFullScreen,
       jitter: () => dice.nextDouble() * 2 - 1,
       close: () {
         evalCache.close();
@@ -209,6 +212,9 @@ final class AppEnvironment {
   /// Keeps a fill's search tree beside its chapter.
   final Future<void> Function(ChapterRef chapter, String tree) keepTree;
 
+  /// Puts the window in or out of full screen.
+  final Future<void> Function(bool on) setFullScreen;
+
   /// The clock the tactics set and the trainer schedule by.
   final DateTime Function() now;
 
@@ -251,6 +257,13 @@ Future<void> _keepTreeBeside(ChapterRef chapter, String tree) async {
   await Directory(folder).create(recursive: true);
   await replaceFile(p.join(folder, 'tree.json'), utf8.encode(tree));
   log.i('kept the v$treeWireVersion tree of ${chapter.path} in $folder');
+}
+
+/// The window in or out of full screen. The window plugin wants its
+/// handshake before the first call; it is cheap and harmless to repeat.
+Future<void> _setFullScreen(bool on) async {
+  await windowManager.ensureInitialized();
+  await windowManager.setFullScreen(on);
 }
 
 /// Shows [folder] in the desktop's file manager. A desktop that will not

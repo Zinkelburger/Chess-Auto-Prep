@@ -81,7 +81,10 @@ final class WindowFixture {
     return written is CopySaved ? written.name : null;
   }
 
-  static AppEnvironment _environment() {
+  /// What the window was asked, in order: true for into full screen.
+  final fullScreenAsked = <bool>[];
+
+  AppEnvironment _environment() {
     final store = ScriptedDocumentStore()
       ..documents[kidMain] = Opened(
         blackChapter,
@@ -138,6 +141,7 @@ final class WindowFixture {
       stopEngines: () async {},
       evalCache: () => throw StateError('no eval cache in this test'),
       keepTree: (_, _) async {},
+      setFullScreen: (on) async => fullScreenAsked.add(on),
       now: () => tacticsToday,
       saveDelay: Duration.zero,
       explorerDelay: Duration.zero,
@@ -197,6 +201,7 @@ final class WindowFixture {
           workspace: parts.workspace,
           documents: parts.documents,
           training: parts.training,
+          fullScreen: parts.fullScreen,
           settingRows: () => const [],
           settingsAlso: settings,
         ),

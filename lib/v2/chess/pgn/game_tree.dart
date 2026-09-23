@@ -99,6 +99,15 @@ final class NodePath {
 
   NodePath get mainChild => child(0);
 
+  /// Where the innermost variation on the way here leaves the line it
+  /// branches from: the move before its first move, or null on the main
+  /// line. For `0/1/0` — the second move's variation, one move in — it is
+  /// `0`, the first move.
+  NodePath? get branchPoint {
+    final last = indexes.lastIndexWhere((index) => index != 0);
+    return last < 0 ? null : NodePath.of(indexes.take(last));
+  }
+
   /// Whether [other] is this path or a move somewhere before it on the way
   /// here: the root leads to every path.
   bool startsWith(NodePath other) =>

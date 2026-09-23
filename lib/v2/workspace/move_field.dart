@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../chess/fen.dart';
 import '../chess/typed_move.dart';
 import '../ui/theme.dart';
+import '../ui/app_action.dart';
 
 /// The typed-move field's words and focus.
 ///
@@ -137,7 +138,7 @@ class _MoveFieldState extends State<MoveField> {
       skipTraversal: true,
       onKeyEvent: _key,
       child: Tooltip(
-        message: 'Type a move (/)',
+        message: withKey('Type a move', '/'),
         child: ValueListenableBuilder(
           valueListenable: _words,
           builder: (context, value, _) {

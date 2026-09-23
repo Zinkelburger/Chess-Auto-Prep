@@ -10,6 +10,7 @@ import 'copy_name_dialog.dart';
 import 'document_saver.dart';
 import 'document_session.dart';
 import 'session_results.dart';
+import '../ui/app_action.dart';
 
 /// Everything about changing the document, under the moves: Done, Undo, the
 /// save state, the six glyphs and the note on the move the board is on.
@@ -167,7 +168,7 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
         IconButton(
           onPressed: widget.session.canUndo ? _undo : null,
           icon: const Icon(Icons.undo, size: IconSize.action),
-          tooltip: 'Undo (Ctrl+Z)',
+          tooltip: withKey('Undo', 'Ctrl+Z'),
           visualDensity: VisualDensity.compact,
         ),
         const SizedBox(width: Space.s),

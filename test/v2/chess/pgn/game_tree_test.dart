@@ -21,6 +21,14 @@ void main() {
       expect(path.parent, NodePath.of([0]));
       expect(const NodePath.root().parent.isRoot, isTrue);
     });
+
+    test('knows where the variation it is in branches off', () {
+      expect(NodePath.of([0, 0, 0]).branchPoint, isNull, reason: 'main line');
+      expect(const NodePath.root().branchPoint, isNull);
+      expect(NodePath.of([0, 1]).branchPoint, NodePath.of([0]));
+      expect(NodePath.of([0, 1, 0, 0]).branchPoint, NodePath.of([0]));
+      expect(NodePath.of([0, 2, 1, 0]).branchPoint, NodePath.of([0, 2]));
+    });
   });
 
   group('GameTree', () {

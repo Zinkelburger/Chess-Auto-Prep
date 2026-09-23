@@ -8,6 +8,7 @@ import '../ui/theme.dart';
 import 'comment_blocks.dart';
 import 'document_session.dart';
 import 'line_preview.dart';
+import '../ui/app_action.dart';
 
 /// The move on the board and what the file says about it, under the board
 /// where the eye already is, as Lichess shows it: `14. Nf5!  Good move`
@@ -175,7 +176,7 @@ class _MoveRow extends StatelessWidget {
           : Align(
               alignment: Alignment.centerLeft,
               child: Tooltip(
-                message: 'Play ${move.san} (→)',
+                message: withKey('Play ${move.san}', '→'),
                 child: InkWell(
                   onTap: onTap,
                   borderRadius: BorderRadius.circular(Space.xs),

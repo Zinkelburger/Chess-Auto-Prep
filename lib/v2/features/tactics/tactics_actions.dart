@@ -101,6 +101,6 @@ List<AppAction> puzzleActions(PuzzleTrainer trainer) {
       shortcut: '↑',
       group: 'Tactics',
     ),
-    AppAction('End session', trainer.end, group: 'Tactics'),
+    AppAction('End session', trainer.end, shortcut: 'Esc', group: 'Tactics'),
   ];
 }

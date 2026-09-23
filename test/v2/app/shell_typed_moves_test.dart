@@ -56,6 +56,7 @@ void main() {
     testWidgets('/ goes to the field, and a new move is played into the '
         'chapter the moment it is named', (tester) async {
       await openKid(tester);
+      expect(find.byTooltip('Type a move (/)'), findsOneWidget);
       expect(fieldHasFocus(tester), isFalse);
       await key(tester, LogicalKeyboardKey.slash);
       expect(fieldHasFocus(tester), isTrue);

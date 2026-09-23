@@ -5,6 +5,7 @@ import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
 import 'setting_controls.dart';
 import 'setting_rows.dart';
+import '../../ui/app_action.dart';
 
 /// Opens the settings over the workspace. Every change has already
 /// happened by the time it closes; Esc is the only way out.
@@ -173,7 +174,7 @@ class _TitleBar extends StatelessWidget {
         ),
         IconButton(
           icon: const Icon(Icons.close, size: IconSize.action),
-          tooltip: 'Close (Esc)',
+          tooltip: withKey('Close', 'Esc'),
           onPressed: onClose,
           visualDensity: VisualDensity.compact,
         ),

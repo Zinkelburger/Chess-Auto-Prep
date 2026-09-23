@@ -8,6 +8,7 @@ import '../../storage/chapter_files.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
 import 'pgn_viewer.dart';
+import '../../ui/app_action.dart';
 
 /// Opens a PGN file in the workspace with its first game on the board.
 typedef OpenPgnFile = void Function(ChapterRef file);
@@ -327,7 +328,7 @@ class _Toolbar extends StatelessWidget {
           const SizedBox(width: Space.xs),
           IconButton(
             icon: const Icon(Icons.add, size: IconSize.action),
-            tooltip: 'Open PGN file… (Ctrl+O)',
+            tooltip: withKey('Open PGN file…', 'Ctrl+O'),
             onPressed: onBrowse,
             visualDensity: VisualDensity.compact,
           ),

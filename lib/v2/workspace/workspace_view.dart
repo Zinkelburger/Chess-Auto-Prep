@@ -26,6 +26,7 @@ import 'reading_header.dart';
 import 'replies_pane.dart';
 import 'workspace.dart';
 import 'workspace_tabs.dart';
+import '../ui/app_action.dart';
 
 /// What the window around the workspace adds to it: the mode's own tabs
 /// and right-click menu, where a move goes when it is not the document's,
@@ -391,7 +392,7 @@ class _Generate extends StatelessWidget {
     return ListenableBuilder(
       listenable: fill,
       builder: (context, _) => Tooltip(
-        message: 'Search from the board for lines and traps (Ctrl+G)',
+        message: withKey('Search from the board for lines and traps', 'Ctrl+G'),
         child: TextButton(
           onPressed: fill.canStart ? onGenerate : null,
           child: const Text('Generate…'),
@@ -595,15 +596,30 @@ class NavRow extends StatelessWidget {
           return Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _button(Icons.first_page, 'Start (Home)', open, session.toStart),
-              _button(Icons.chevron_left, 'Back (←)', open, session.back),
+              _button(
+                Icons.first_page,
+                withKey('Start', 'Home'),
+                open,
+                session.toStart,
+              ),
+              _button(
+                Icons.chevron_left,
+                withKey('Back', '←'),
+                open,
+                session.back,
+              ),
               _button(
                 Icons.chevron_right,
-                'Forward (→)',
+                withKey('Forward', '→'),
                 open,
                 session.forward,
               ),
-              _button(Icons.last_page, 'End (End)', open, session.toEnd),
+              _button(
+                Icons.last_page,
+                withKey('End', 'End'),
+                open,
+                session.toEnd,
+              ),
             ],
           );
         },
