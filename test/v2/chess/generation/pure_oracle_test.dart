@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:chess_auto_prep/v2/chess/fen.dart';
 import 'package:chess_auto_prep/v2/chess/generation/eval.dart';
-import 'package:chess_auto_prep/v2/chess/generation/move_admission.dart';
+import 'package:chess_auto_prep/v2/chess/generation/search.dart';
 import 'package:chess_auto_prep/v2/chess/generation/search_node.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';

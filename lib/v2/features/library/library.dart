@@ -23,7 +23,6 @@ import '../../storage/training_records.dart' as records;
 import '../../ui/file_names.dart';
 import '../../workspace/document_saver.dart';
 import '../../workspace/document_session.dart';
-import 'library_report.dart';
 import 'library_state.dart';
 
 export 'library_state.dart';

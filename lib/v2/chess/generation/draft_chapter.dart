@@ -5,7 +5,7 @@ import '../pgn/chapter.dart';
 import '../pgn/chapter_heading.dart';
 import '../pgn/game_text.dart';
 import '../pgn/game_tree.dart';
-import '../pgn/line_id.dart';
+import '../pgn/line_id_pins.dart';
 import '../pgn/tree_edit.dart';
 import 'draft_lines.dart';
 

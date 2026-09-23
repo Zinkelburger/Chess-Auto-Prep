@@ -7,7 +7,7 @@ import 'chapter_line.dart';
 import 'game_text.dart';
 import 'game_tree.dart';
 import 'games_written.dart';
-import 'line_id.dart';
+import 'line_id_pins.dart';
 import 'move_label.dart';
 import 'rewrite_gate.dart';
 import 'tree_edit.dart';

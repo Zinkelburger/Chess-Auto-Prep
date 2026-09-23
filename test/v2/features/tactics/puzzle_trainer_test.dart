@@ -4,7 +4,6 @@ import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/chess/tactics/puzzle_queue.dart';
 import 'package:chess_auto_prep/v2/chess/tactics/puzzle_run.dart';
 import 'package:chess_auto_prep/v2/features/tactics/puzzle_trainer.dart';
-import 'package:chess_auto_prep/v2/features/tactics/puzzle_up.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';

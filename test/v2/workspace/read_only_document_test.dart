@@ -1,9 +1,8 @@
 import 'package:chess_auto_prep/v2/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart' show Opened;
-import 'package:chess_auto_prep/v2/workspace/session_results.dart';
-import 'package:chess_auto_prep/v2/workspace/edit_refused.dart';
 import 'package:chess_auto_prep/v2/workspace/save_state.dart';
+import 'package:chess_auto_prep/v2/workspace/session_results.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/fixtures.dart';

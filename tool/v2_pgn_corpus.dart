@@ -19,7 +19,7 @@ import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/pgn_reader.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/rewrite_gate.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/tree_edit.dart';
-import 'package:chess_auto_prep/v2/storage/document_text.dart';
+import 'package:chess_auto_prep/v2/storage/pgn_file_store.dart';
 import 'package:dartchess/dartchess.dart' show NormalMove, Position;
 
 /// What one file's games came to.
