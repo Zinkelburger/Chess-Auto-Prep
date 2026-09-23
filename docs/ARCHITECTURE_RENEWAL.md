@@ -126,6 +126,8 @@ more parameter on every layer.
 | `Explorer` | The explorer query for the cursor position, its state and the session's answers (`ExplorerAnswers`, asked through `ExplorerDatabases`) | Anything about the document; a listed game being kept as a file (`GameFetcher`) |
 | `Replies` / `GapHunt` | The Maia table for the cursor position / the walk over the open chapter and the gap `Next gap` marked; both ask one `ReplyModel` cache | A copy of the tree or cursor |
 | `WorkspaceLayout` | Which panel is open and the split sizes | Data |
+| `FileFilter` | The game filter's rules for the open file and which of its games pass them; cleared when another file is opened, pasted or closed | The games themselves |
+| `FileTree` / `MyGamesTree` | The explorer's `This file` and `My games` trees, built off the UI isolate and dropped when their file changes | The document, the cursor |
 | `WorkspaceRequests` (`app/workspace_requests.dart`) | The mode, the status line, and every cross-mode request that puts a document on the board or takes it off (a list's click, Open/Import/Paste, an explorer game, Close file), each answering a sealed `RequestResult`; the leave question goes through `ExitGuard`, the side question and the clipboard through `WindowInput` | The document, panel state, dialogs |
 | A panel's owner (`GenerationRun`, `TrainingSession`, `HoleHunt`, …) | That tool's state, keyed to a document revision | A second copy of the tree or cursor |
 

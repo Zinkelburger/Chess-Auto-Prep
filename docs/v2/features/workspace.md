@@ -255,8 +255,9 @@ Quirks worth a verdict:
   The old policy is kept with one change: a 429 shuts the door for a minute, then two, then four,
   and until it opens every position is answered `Lichess is rate-limiting requests.` at once, so
   the tab never waits a minute inside one request. Lichess now answers 401 to the explorer without
-  a token; signed out the tab says so and names the Settings row. `This file` and `My games` wait
-  for step 6c.
+  a token; signed out the tab says so and names the Settings row. `This file` (the open file's
+  games merged by position, narrowed by the viewer's game filter) and `My games` (downloaded games
+  plus the same accounts' games in the old app's `app_games.db`) were built 2026-09-23 in step 6c.
 - **The settings gear sits at the right end of the top bar**, the old app's place, and is the one
   way in besides Ctrl+,; the mode menu lists modes only.
 - **No eval bar** (question 1; the viewer's decision of 2026-09-21). **One move list** for reading
