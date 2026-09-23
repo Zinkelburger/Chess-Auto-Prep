@@ -24,6 +24,7 @@ import '../net/lichess_studies.dart';
 import '../net/recent_games.dart';
 import '../storage/atomic_write.dart';
 import '../storage/bughouse_books.dart';
+import '../storage/bughouse_matches.dart';
 import '../storage/chapter_files.dart';
 import '../storage/eval_cache.dart';
 import '../storage/lichess_token.dart';
@@ -49,13 +50,14 @@ typedef AppFolders = ({
 });
 
 /// What the Bughouse lab reaches outside the app: whether this build has
-/// the engine at all, how to start it on so many cores, and the two books
-/// the Python tools build.
+/// the engine at all, how to start it on so many cores, the two books the
+/// Python tools build, and the matches under `Documents/bughouse_matches`.
 typedef BughouseOutside = ({
   Future<bool> Function() bundled,
   Future<HivemindStart> Function({required int cores}) launch,
   HivemindBook hivemindBook,
   FicsBook ficsBook,
+  MatchStore matches,
 });
 
 /// Starts a Stockfish with these threads and this table.
@@ -183,6 +185,7 @@ final class AppEnvironment {
             launchHivemind(support: support, engines: engines, cores: cores),
         hivemindBook: hivemindBook,
         ficsBook: ficsBook,
+        matches: MatchFolder(p.join(documents.path, 'bughouse_matches')),
       ),
       jitter: () => dice.nextDouble() * 2 - 1,
       close: () {

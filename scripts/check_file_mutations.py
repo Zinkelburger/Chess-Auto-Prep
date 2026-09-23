@@ -57,6 +57,12 @@ APPROVED: dict[str, tuple[int, str]] = {
         "rename into place, removal of its own leftover .part and of an "
         "hour-old one a killed install left",
     ),
+    "lib/v2/storage/bughouse_matches.dart": (
+        1,
+        "v2 bughouse matches: a deleted match's folder is renamed into "
+        "bughouse_matches/.trash, the old app's quarantine; writes go "
+        "through atomic_write",
+    ),
     "lib/v2/storage/atomic_write.dart": (4, "v2 atomic publication: staged temporary, rename into place, sweep of interrupted writes"),
     "lib/v2/storage/document_relocation.dart": (1, "v2 rename, move and quarantine-delete: revision-checked and backed up; the one direct mutation takes back an empty folder a refused move created"),
     "lib/v2/storage/pgn_file_store.dart": (2, "no filesystem mutation of its own: two calls into DocumentRelocation that the pattern above matches by method name"),

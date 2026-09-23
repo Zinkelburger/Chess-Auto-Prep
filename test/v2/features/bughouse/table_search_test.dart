@@ -142,10 +142,9 @@ void main() {
       outside.startFailure = 'This build has no bughouse engine.';
       search.open();
       await pumpEventQueue();
-      expect(
-        (search.scores as ScoresFailed).reason,
-        'This build has no bughouse engine.',
-      );
+      final trouble = (search.scores as ScoresFailed).trouble;
+      expect(trouble, isA<EngineNotStarted>());
+      expect(trouble.reason, 'This build has no bughouse engine.');
       lab.play(BoardNumber.one, 'e2e4');
       await pumpEventQueue();
       expect(outside.starts, 1);
@@ -162,10 +161,9 @@ void main() {
     await pumpEventQueue();
     outside.engine.crash();
     await pumpEventQueue();
-    expect(
-      (search.scores as ScoresFailed).reason,
-      'Analysis failed: The bughouse engine stopped.',
-    );
+    final trouble = (search.scores as ScoresFailed).trouble;
+    expect(trouble, isA<SearchFailed>());
+    expect(trouble.reason, 'The bughouse engine stopped.');
   });
 
   group('Analyze', () {
@@ -241,12 +239,33 @@ void main() {
     });
   });
 
-  test('leaving the mode stops the engine’s work', () async {
+  test('leaving the mode quits the engine; coming back starts one', () async {
     outside.engine.hold = true;
     search.open();
     await pumpEventQueue();
-    final stops = outside.engine.stops;
     search.close();
-    expect(outside.engine.stops, stops + 1);
+    await outside.engine.exited;
+    expect(outside.starts, 1);
+    search.open();
+    await pumpEventQueue();
+    // The scripted engine has gone, so the next start hands back a dead
+    // one; what matters is that another was asked for.
+    expect(outside.starts, 2);
+  });
+
+  test('a failed Analyze gives the engine back to the tables', () async {
+    search.open();
+    await pumpEventQueue();
+    lab.play(BoardNumber.one, 'e2e4');
+    lab.setTeam(Team.cd);
+    outside.engine.answer = (_) => const HivemindFailed('it broke');
+    await search.analyze();
+    expect(search.analysis, isA<AnalysisFailed>());
+    outside.engine.answer = firstMoves;
+    await pumpEventQueue();
+    expect(search.scores, isA<ScoresFailed>());
+    lab.play(BoardNumber.one, 'e7e5');
+    await pumpEventQueue();
+    expect((search.scores as ScoresSearched).finished, isTrue);
   });
 }

@@ -177,6 +177,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   );
 
   void _switchTo(Mode mode) {
+    if (mode == _requests.mode) return;
     _view.left();
     _requests.switchTo(mode);
     _view.entered();

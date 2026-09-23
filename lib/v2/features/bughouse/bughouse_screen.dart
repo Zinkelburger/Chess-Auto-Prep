@@ -8,6 +8,8 @@ import 'archive_moves.dart';
 import 'board_setup.dart';
 import 'bughouse_lab.dart';
 import 'lab_panel.dart';
+import 'match_panel.dart';
+import 'matches.dart';
 import 'table_boards.dart';
 import 'table_search.dart';
 
@@ -24,12 +26,14 @@ class BughouseScreen extends StatelessWidget {
     required this.lab,
     required this.search,
     required this.archive,
+    required this.matches,
     this.windowKeys = const {},
   });
 
   final BughouseLab lab;
   final TableSearch search;
   final ArchiveMoves archive;
+  final Matches matches;
 
   /// The window's own keys, which the shell binds in every mode.
   final Map<ShortcutActivator, VoidCallback> windowKeys;
@@ -70,7 +74,14 @@ class BughouseScreen extends StatelessWidget {
                 ),
                 const SizedBox(width: labColumnGap),
                 Expanded(
-                  child: LabPanel(lab: lab, search: search, archive: archive),
+                  child: _RightPanel(
+                    tables: LabPanel(
+                      lab: lab,
+                      search: search,
+                      archive: archive,
+                    ),
+                    matches: MatchPanel(matches: matches, lab: lab),
+                  ),
                 ),
               ],
             );
@@ -81,9 +92,46 @@ class BughouseScreen extends StatelessWidget {
   }
 }
 
+/// The right-hand side: the tables, or the matches in their place.
+class _RightPanel extends StatefulWidget {
+  const _RightPanel({required this.tables, required this.matches});
+
+  final Widget tables;
+  final Widget matches;
+
+  @override
+  State<_RightPanel> createState() => _RightPanelState();
+}
+
+class _RightPanelState extends State<_RightPanel> {
+  bool _matches = false;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      SegmentedButton<bool>(
+        segments: const [
+          ButtonSegment(value: false, label: Text('Tables')),
+          ButtonSegment(value: true, label: Text('Matches')),
+        ],
+        selected: {_matches},
+        showSelectedIcon: false,
+        style: const ButtonStyle(visualDensity: VisualDensity.compact),
+        onSelectionChanged: (picked) =>
+            setState(() => _matches = picked.single),
+      ),
+      const SizedBox(height: Space.s),
+      Expanded(child: _matches ? widget.matches : widget.tables),
+    ],
+  );
+}
+
 /// The lab's keys, and the window's, wherever the focus is inside it —
-/// unless the user is typing, when the keys are the text box's.
-class _LabKeys extends StatelessWidget {
+/// unless the user is typing, when the keys are the text box's. A click
+/// anywhere in the lab takes the focus back from a box left behind, so the
+/// arrows step the boards again.
+class _LabKeys extends StatefulWidget {
   const _LabKeys({
     required this.lab,
     required this.windowKeys,
@@ -94,6 +142,21 @@ class _LabKeys extends StatelessWidget {
   final Map<ShortcutActivator, VoidCallback> windowKeys;
   final Widget child;
 
+  @override
+  State<_LabKeys> createState() => _LabKeysState();
+}
+
+class _LabKeysState extends State<_LabKeys> {
+  final _focus = FocusNode(debugLabel: 'Bughouse lab');
+
+  BughouseLab get lab => widget.lab;
+
+  @override
+  void dispose() {
+    _focus.dispose();
+    super.dispose();
+  }
+
   Map<ShortcutActivator, VoidCallback> get _bindings => {
     const SingleActivator(LogicalKeyboardKey.arrowLeft): () => lab.step(-1),
     const SingleActivator(LogicalKeyboardKey.arrowRight): () => lab.step(1),
@@ -101,7 +164,7 @@ class _LabKeys extends StatelessWidget {
     const SingleActivator(LogicalKeyboardKey.end): lab.toEnd,
     const SingleActivator(LogicalKeyboardKey.escape): () =>
         lab.preview.value = null,
-    ...windowKeys,
+    ...widget.windowKeys,
   };
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
@@ -122,6 +185,13 @@ class _LabKeys extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) =>
-      Focus(autofocus: true, onKeyEvent: _onKey, child: child);
+  Widget build(BuildContext context) => Listener(
+    onPointerDown: (_) => _focus.requestFocus(),
+    child: Focus(
+      focusNode: _focus,
+      autofocus: true,
+      onKeyEvent: _onKey,
+      child: widget.child,
+    ),
+  );
 }

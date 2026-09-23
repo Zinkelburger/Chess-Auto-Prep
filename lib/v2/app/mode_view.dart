@@ -425,20 +425,33 @@ final class BughouseView extends ModeView {
         lab: _labs.lab,
         search: _labs.search,
         archive: _labs.archive,
+        matches: _labs.matches,
         windowKeys: windowKeys,
       );
 
   @override
-  Listenable get changes => Listenable.merge([_labs.lab, _labs.search]);
+  Listenable get changes =>
+      Listenable.merge([_labs.lab, _labs.search, _labs.matches]);
 
   @override
   void entered() {
+    // Stockfish would follow a board nobody sees, on the cores Hivemind is
+    // using.
+    final analysis = workspace.analysis;
+    if (!analysis.paused) analysis.pause(_pauseReason);
     _labs.search.open();
     unawaited(_labs.archive.open());
+    unawaited(_labs.matches.load());
   }
 
   @override
-  void left() => _labs.search.close();
+  void left() {
+    _labs.search.close();
+    final analysis = workspace.analysis;
+    if (analysis.pausedFor == _pauseReason) analysis.resume();
+  }
+
+  static const _pauseReason = 'Paused while the Bughouse lab is open';
 
   @override
   List<AppAction> actions(ModeMenu menu) {

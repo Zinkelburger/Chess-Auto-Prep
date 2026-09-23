@@ -533,7 +533,7 @@ class _MoveToken extends StatelessWidget {
         onTap: onTap,
         child: Container(
           padding: moveTokenPadding,
-          color: current ? scheme.primary.withValues(alpha: 0.18) : null,
+          color: current ? scheme.surfaceContainerHighest : null,
           child: Text(
             move.san,
             style: monoText.copyWith(

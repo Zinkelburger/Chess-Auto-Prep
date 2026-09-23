@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "id": "e4-d5",
+  "createdAt": "2026-09-04T12:00:00.000",
+  "finishedAt": "2026-09-04T12:10:00.000",
+  "status": "completed",
+  "config": {
+    "name": "e4 d5",
+    "startDualFen": "rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR[] w KQkq - 0 2|rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1",
+    "openingLabel": "1. e4 d5",
+    "participants": [
+      {
+        "name": "Hivemind A",
+        "budget": {
+          "nodes": 800
+        }
+      },
+      {
+        "name": "Hivemind B",
+        "budget": {
+          "movetimeMs": 1000
+        }
+      }
+    ],
+    "games": 2,
+    "alternateSeats": true,
+    "timeStance": "ahead",
+    "maxPlies": 240,
+    "hashMb": 256,
+    "batchSize": 8,
+    "variety": {
+      "plies": 8,
+      "window": 0.05,
+      "lines": 3
+    },
+    "seed": 12345
+  },
+  "games": [
+    {
+      "number": 1,
+      "whiteIndex": 0,
+      "blackIndex": 1,
+      "whiteName": "Hivemind A",
+      "blackName": "Hivemind B",
+      "result": "whiteWins",
+      "termination": "checkmate",
+      "detail": "board 1",
+      "moves": [
+        "1e4d5",
+        "2d2d4",
+        "1d8d5"
+      ],
+      "startedAt": "2026-09-04T12:00:01.000",
+      "durationMs": 5000
+    },
+    {
+      "number": 2,
+      "whiteIndex": 1,
+      "blackIndex": 0,
+      "whiteName": "Hivemind B",
+      "blackName": "Hivemind A",
+      "result": "draw",
+      "termination": "maxMoves",
+      "detail": "",
+      "moves": [
+        "2e2e4"
+      ],
+      "startedAt": "2026-09-04T12:05:00.000",
+      "durationMs": 100
+    }
+  ]
+}

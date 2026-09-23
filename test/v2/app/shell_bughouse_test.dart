@@ -214,6 +214,49 @@ void main() {
     expect(w.lab.line.of(BoardNumber.two).single.san, 'd4');
   });
 
+  testWidgets('a match is asked for, played, and its games opened', (
+    tester,
+  ) async {
+    startInBook();
+    await toLab(tester);
+    await tester.tap(find.text('Matches'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'No matches yet. Set a position up on the boards, then play it out.',
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('New match'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, '10'), '1');
+    await tester.enterText(find.widgetWithText(TextField, '240'), '20');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Play 1 game'));
+    await tester.pumpAndSettle();
+    final match = w.bughouse.matches.saved.values.single;
+    expect(match.games, hasLength(1));
+    expect(find.textContaining('White on board 1 scored'), findsOneWidget);
+    await tester.tap(find.text('Hivemind A').last);
+    await tester.pumpAndSettle();
+    expect(w.lab.line.moves, hasLength(20));
+  });
+
+  testWidgets('a match directory that cannot be made is said', (tester) async {
+    w.bughouse.matches.failCreate = 'Permission denied';
+    await toLab(tester);
+    await tester.tap(find.text('Matches'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New match'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Play 10 games'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Could not create the match directory: Permission denied'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('the arrow keys step the board last played on', (tester) async {
     startInBook();
     await toLab(tester);

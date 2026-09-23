@@ -115,6 +115,14 @@ final class TablePosition {
     ];
   }
 
+  /// The legal move on [board] written [san] (checks and annotations
+  /// ignored), or null: what an archive's SAN is on the boards.
+  TableMove? moveBySan(BoardNumber board, String san) {
+    String bare(String text) => text.replaceAll(RegExp('[+#!?]'), '');
+    final wanted = bare(san);
+    return legalMoves(board).where((m) => bare(m.san) == wanted).firstOrNull;
+  }
+
   /// [uci] played on [board], with any capture sent across; null when it is
   /// not a legal move there. Accepts castling either way, `e1g1` or `e1h1`.
   ({TablePosition after, TableMove move})? play(BoardNumber board, String uci) {

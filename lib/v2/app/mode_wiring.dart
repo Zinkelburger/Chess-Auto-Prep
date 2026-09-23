@@ -1,6 +1,7 @@
 import '../chess/tactics/game_ids.dart' show GameSite;
 import '../features/bughouse/archive_moves.dart';
 import '../features/bughouse/bughouse_lab.dart';
+import '../features/bughouse/matches.dart';
 import '../features/bughouse/table_search.dart';
 import '../features/library/chapter_outline.dart';
 import '../features/library/library.dart';
@@ -146,13 +147,22 @@ final class TrainingWiring {
 /// The Bughouse lab over the environment's engine and books.
 LabModes wireLabModes(AppEnvironment env) {
   final lab = BughouseLab();
+  final search = TableSearch(
+    lab: lab,
+    book: env.bughouse.hivemindBook,
+    startEngine: env.startHivemind,
+  );
   return LabModes(
     lab: lab,
-    search: TableSearch(
-      lab: lab,
-      book: env.bughouse.hivemindBook,
-      startEngine: env.startHivemind,
-    ),
+    search: search,
     archive: ArchiveMoves(lab: lab, book: env.bughouse.ficsBook),
+    // A Hivemind of its own for each run, so the tables keep theirs.
+    matches: Matches(
+      store: env.bughouse.matches,
+      startEngine: env.startHivemind,
+      lab: lab,
+      tables: search,
+      now: env.now,
+    ),
   );
 }

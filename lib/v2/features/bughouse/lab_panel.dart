@@ -204,14 +204,14 @@ class _StatusLine extends StatelessWidget {
   final TableSearch search;
 
   (String, bool) get _said {
-    if (lab.problem case final problem?) return (problem, true);
+    if (lab.problem case final problem?) return (_refused(problem), true);
     switch (search.analysis) {
       case AnalysisRunning(:final team):
         return team == lab.team
             ? ('Hivemind is searching for ${team.label}…', false)
             : ('Comparing ${team.label}…', false);
-      case AnalysisFailed(:final reason):
-        return (reason, true);
+      case AnalysisFailed(:final trouble):
+        return (_trouble(trouble), true);
       case AnalysisNoMove(:final team):
         return ('${team.label} has no move here.', false);
       case AnalysisIdle() || AnalysisDone():
@@ -227,9 +227,25 @@ class _StatusLine extends StatelessWidget {
         finished
             ? ('Not in the book · Hivemind scored the likeliest moves.', false)
             : ('Not in the book · searching $done of $total…', false),
-      ScoresFailed(:final reason) => (reason, true),
+      ScoresFailed(:final trouble) => (_trouble(trouble), true),
     };
   }
+
+  static String _refused(TableRefusal refusal) => switch (refusal) {
+    DropRefused() => 'That drop is not legal.',
+    NotOnMove(:final side, :final board) =>
+      'It is not ${side.name}’s turn on ${board.label.toLowerCase()}.',
+    MoveRefused(:final uci) => '$uci is not legal here.',
+    LineMisfits() => 'That line no longer fits the position.',
+    StepRefused(:final move) =>
+      'Can’t step there: ${move.san} on ${move.board.label.toLowerCase()} '
+          'would have no piece to drop.',
+  };
+
+  static String _trouble(EngineTrouble trouble) => switch (trouble) {
+    EngineNotStarted(:final reason) => reason,
+    SearchFailed(:final reason) => 'Analysis failed: $reason',
+  };
 
   @override
   Widget build(BuildContext context) {

@@ -5,7 +5,9 @@ import 'package:chess_auto_prep/v2/chess/bughouse/hivemind.dart';
 import 'package:chess_auto_prep/v2/chess/bughouse/table.dart';
 import 'package:chess_auto_prep/v2/engines/engine.dart';
 import 'package:chess_auto_prep/v2/engines/hivemind_engine.dart';
+import 'package:chess_auto_prep/v2/chess/bughouse/match.dart';
 import 'package:chess_auto_prep/v2/storage/bughouse_books.dart';
+import 'package:chess_auto_prep/v2/storage/bughouse_matches.dart';
 
 /// A Hivemind the test drives. Each search answers [answer] — by default a
 /// few lines of the searched team's first legal moves — at once, or when
@@ -57,6 +59,8 @@ final class ScriptedHivemind implements Hivemind {
 
   @override
   Future<EngineExit> get exited => _exited.future;
+
+  bool get gone => _exited.isCompleted;
 
   @override
   Future<void> quit() async => crash();
@@ -117,12 +121,54 @@ final class ScriptedFicsBook implements FicsBook {
       : const FicsAbsent();
 }
 
+/// The matches in memory, as the folder keeps them; [failCreate] makes the
+/// next create fail as a folder that cannot be made does.
+final class ScriptedMatchStore implements MatchStore {
+  final saved = <String, StoredMatch>{};
+  final deleted = <String>[];
+  String? failCreate;
+
+  @override
+  Future<List<StoredMatch>> list() async =>
+      [...saved.values]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+  @override
+  Future<MatchCreate> create(MatchConfig config, DateTime now) async {
+    if (failCreate case final detail?) return MatchCreateFailed(detail);
+    final id = 'match-${saved.length + 1}';
+    final match = StoredMatch(
+      id: id,
+      config: config,
+      createdAt: now,
+      status: MatchStatus.pending,
+    );
+    saved[id] = match;
+    return MatchCreated(match);
+  }
+
+  @override
+  Future<MatchWriteProblem> save(StoredMatch match) async {
+    saved[match.id] = match;
+    return null;
+  }
+
+  @override
+  Future<MatchWriteProblem> delete(String id) async {
+    saved.remove(id);
+    deleted.add(id);
+    return null;
+  }
+}
+
 /// The lab's outside world for a window test: the engine bundled, one
 /// scripted engine, a book and an archive the test fills.
 final class ScriptedBughouse {
-  final engine = ScriptedHivemind();
+  /// The engine the last start handed out; a start after it went away
+  /// hands out a new one that answers the same way.
+  ScriptedHivemind engine = ScriptedHivemind();
   final book = ScriptedHivemindBook();
   final archive = ScriptedFicsBook();
+  final matches = ScriptedMatchStore();
   bool bundled = true;
   String? startFailure;
   int starts = 0;
@@ -132,11 +178,14 @@ final class ScriptedBughouse {
     launch: ({required cores}) async {
       starts++;
       final failure = startFailure;
-      return failure == null
-          ? HivemindStarted(engine)
-          : HivemindStartFailed(failure);
+      if (failure != null) return HivemindStartFailed(failure);
+      if (engine.gone) {
+        engine = ScriptedHivemind()..answer = engine.answer;
+      }
+      return HivemindStarted(engine);
     },
     hivemindBook: book,
     ficsBook: archive,
+    matches: matches,
   );
 }

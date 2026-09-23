@@ -166,8 +166,9 @@ enum ZeroSource {
   /// Both teams were searched here, so the offset cancels exactly.
   measured('Zero is measured here, from both teams’ searches.'),
 
-  /// A team had no move to search, so the level-table offset stands in.
-  assumed('Zero is assumed: one team had no move to search here.');
+  /// The other team was not searched — it had no move, or the search was
+  /// stopped first — so the level table's offset stands in.
+  assumed('Zero is assumed: the other team was not searched here.');
 
   const ZeroSource(this.note);
 

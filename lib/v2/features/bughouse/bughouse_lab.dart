@@ -22,7 +22,7 @@ final class BughouseLab extends ChangeNotifier {
   MustMove _mustMove = MustMove.either;
   Duration _budget = searchBudgets.first;
   bool _flipped = false;
-  String? _problem;
+  TableRefusal? _problem;
   Map<BoardNumber, String> _setupProblems = const {};
 
   /// The move a table row, an analysis row or an archive row is pointing
@@ -42,8 +42,8 @@ final class BughouseLab extends ChangeNotifier {
   Duration get budget => _budget;
   bool get flipped => _flipped;
 
-  /// Why the last move, step or position was refused, for the status line.
-  String? get problem => _problem;
+  /// Why the last move or step was refused, for the status line.
+  TableRefusal? get problem => _problem;
 
   /// What is wrong in each board's setup boxes after `Set position`.
   Map<BoardNumber, String> get setupProblems => _setupProblems;
@@ -66,6 +66,16 @@ final class BughouseLab extends ChangeNotifier {
     _show(played.after, focus: board);
   }
 
+  /// [line] on the boards, every move of it played, as a match's game is
+  /// shown; a line that does not replay is not shown.
+  void showLine(TableLine line) {
+    if (line.replay() case LineReplayed(:final position)) {
+      _line = line;
+      _setupProblems = const {};
+      _show(position, focus: _focus);
+    }
+  }
+
   /// Both halves of an engine's joint action, board 1 first; a sitting
   /// board keeps its moves.
   void playJoint(JointMove joint) {
@@ -76,7 +86,7 @@ final class BughouseLab extends ChangeNotifier {
       if (uci == null) continue;
       final played = lineMove(position, board, uci);
       if (played == null) {
-        _refuse('That line no longer fits the position.');
+        _refuse(const LineMisfits());
         return;
       }
       line = line.played(played.move);
@@ -96,10 +106,7 @@ final class BughouseLab extends ChangeNotifier {
         _show(position, focus: board);
       case LineBroken(:final move):
         _focus = board;
-        _refuse(
-          'Can’t step there: ${move.san} on ${move.board.label.toLowerCase()} '
-          'would have no piece to drop.',
-        );
+        _refuse(StepRefused(move));
     }
   }
 
@@ -164,7 +171,7 @@ final class BughouseLab extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _refuse(String problem) {
+  void _refuse(TableRefusal problem) {
     _problem = problem;
     notifyListeners();
   }
@@ -174,20 +181,17 @@ final class BughouseLab extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Why [uci] cannot be played on [board], in the lab's words.
-  String _illegal(BoardNumber board, String uci) {
-    final side = _position.turn(board);
-    if (uci.contains('@')) return 'That drop is not legal.';
-    final from = uci.length >= 2 ? uci.substring(0, 2) : uci;
-    final piece = _position
-        .board(board)
-        .board
-        .pieceAt(Square.parse(from) ?? Square.a1);
-    if (piece != null && piece.color != side) {
-      return 'It is not ${piece.color.name}’s turn on '
-          '${board.label.toLowerCase()}.';
+  /// Why [uci] cannot be played on [board].
+  TableRefusal _illegal(BoardNumber board, String uci) {
+    if (uci.contains('@')) return const DropRefused();
+    final from = Square.parse(uci.length >= 2 ? uci.substring(0, 2) : '');
+    final piece = from == null
+        ? null
+        : _position.board(board).board.pieceAt(from);
+    if (piece != null && piece.color != _position.turn(board)) {
+      return NotOnMove(piece.color, board);
     }
-    return '$uci is not legal here.';
+    return MoveRefused(uci);
   }
 
   @override
@@ -195,6 +199,43 @@ final class BughouseLab extends ChangeNotifier {
     preview.dispose();
     super.dispose();
   }
+}
+
+/// Why a move or a step was not made.
+sealed class TableRefusal {
+  const TableRefusal();
+}
+
+/// A reserve piece put where it may not go.
+final class DropRefused extends TableRefusal {
+  const DropRefused();
+}
+
+/// A [side] piece moved on [board] while the other side is on move there.
+final class NotOnMove extends TableRefusal {
+  const NotOnMove(this.side, this.board);
+
+  final Side side;
+  final BoardNumber board;
+}
+
+final class MoveRefused extends TableRefusal {
+  const MoveRefused(this.uci);
+
+  final String uci;
+}
+
+/// An engine's joint action from a table no longer on the boards.
+final class LineMisfits extends TableRefusal {
+  const LineMisfits();
+}
+
+/// A step that would leave [move], on the other board, without the piece
+/// it dropped.
+final class StepRefused extends TableRefusal {
+  const StepRefused(this.move);
+
+  final LineMove move;
 }
 
 /// A move being pointed at: on one board, or a joint action over both.

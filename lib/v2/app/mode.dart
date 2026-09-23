@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
 
+import '../diagnostics/log.dart';
 import '../features/bughouse/archive_moves.dart';
 import '../features/bughouse/bughouse_lab.dart';
+import '../features/bughouse/matches.dart';
 import '../features/bughouse/table_search.dart';
 import '../features/library/chapter_outline.dart';
 import '../features/library/library.dart';
@@ -87,26 +89,39 @@ final class TrainingModes {
 
 /// The owners behind the labs, the modes with a screen of their own: the
 /// Bughouse lab's table, what Hivemind and its book say about it, and the
-/// FICS archive. [offered] says whether this build has the engine, which
+/// FICS archive, and the matches. [offered] says whether this build has the engine, which
 /// is what puts the lab in the mode menu at all.
 final class LabModes {
-  LabModes({required this.lab, required this.search, required this.archive});
+  LabModes({
+    required this.lab,
+    required this.search,
+    required this.archive,
+    required this.matches,
+  });
 
   final BughouseLab lab;
   final TableSearch search;
   final ArchiveMoves archive;
+
+  /// Hivemind against itself from the table on the boards.
+  final Matches matches;
   final offered = ValueNotifier(false);
   bool _disposed = false;
 
   /// Asks whether the build carries the engine, and offers the lab if so.
   Future<void> offer(Future<bool> Function() bundled) async {
-    final yes = await bundled();
-    if (!_disposed) offered.value = yes;
+    try {
+      final yes = await bundled();
+      if (!_disposed) offered.value = yes;
+    } on Object catch (error) {
+      log.w('ask whether this build has the bughouse engine', error);
+    }
   }
 
   void dispose() {
     _disposed = true;
     offered.dispose();
+    matches.dispose();
     archive.dispose();
     search.dispose();
     lab.dispose();

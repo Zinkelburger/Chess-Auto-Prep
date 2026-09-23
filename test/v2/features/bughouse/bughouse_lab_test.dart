@@ -31,9 +31,10 @@ void main() {
 
   test('an illegal drop, or a move out of turn, is refused in words', () {
     lab.play(BoardNumber.two, 'N@e5');
-    expect(lab.problem, 'That drop is not legal.');
+    expect(lab.problem, isA<DropRefused>());
     lab.play(BoardNumber.one, 'e7e5');
-    expect(lab.problem, 'It is not black’s turn on board 1.');
+    final notOnMove = lab.problem as NotOnMove;
+    expect((notOnMove.side, notOnMove.board), (Side.black, BoardNumber.one));
     // The next move that plays clears it.
     lab.play(BoardNumber.one, 'e2e4');
     expect(lab.problem, isNull);
@@ -47,10 +48,7 @@ void main() {
     expect(lab.line.upto(BoardNumber.one), 3);
     lab.go(BoardNumber.two, 2);
     lab.go(BoardNumber.one, 2);
-    expect(
-      lab.problem,
-      contains('P@d5 on board 2 would have no piece to drop'),
-    );
+    expect((lab.problem as StepRefused).move.san, 'P@d5');
     expect(lab.line.upto(BoardNumber.one), 3);
     expect(lab.focus, BoardNumber.one);
   });
@@ -70,7 +68,7 @@ void main() {
     lab.playJoint(const JointMove('e2e4', 'd2d4'));
     expect(lab.line.moves.map((m) => m.san), ['e4', 'd4']);
     lab.playJoint(const JointMove(null, 'e2e4'));
-    expect(lab.problem, 'That line no longer fits the position.');
+    expect(lab.problem, isA<LineMisfits>());
     expect(lab.line.moves.length, 2);
   });
 

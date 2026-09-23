@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../chess/bughouse/table.dart';
 import '../../storage/bughouse_books.dart';
 import '../../ui/theme.dart';
+import '../../workspace/explorer_pane.dart' show ResultBar;
 import 'archive_moves.dart';
 import 'bughouse_lab.dart';
 import 'table_search.dart';
@@ -282,11 +283,10 @@ class _ArchiveRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final position = lab.position;
     final seat = Seat.of(move.board, move.mover);
-    final uci = _uciOf(position, move);
+    final uci = position.moveBySan(move.board, move.san)?.uci;
     final ours = lab.team == Team.ab;
     final won = ours ? move.abWins : move.cdWins;
     final lost = ours ? move.cdWins : move.abWins;
-    final decided = move.games - move.unknown;
     return Tooltip(
       message: move.averageElo == null
           ? '${move.unknown} unfinished'
@@ -314,75 +314,17 @@ class _ArchiveRow extends StatelessWidget {
             ),
             const SizedBox(width: Space.m),
             Expanded(
-              child: _ResultBar(
-                won: won,
-                drawn: move.draws,
-                lost: lost,
-                total: decided,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxWidth: explorerBarMaxWidth,
+                  ),
+                  child: ResultBar(white: won, draws: move.draws, black: lost),
+                ),
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  /// The archive writes SAN; the boards want UCI.
-  static String? _uciOf(TablePosition position, FicsMove move) {
-    String bare(String san) => san.replaceAll(RegExp('[+#!?]'), '');
-    final san = bare(move.san);
-    return position
-        .legalMoves(move.board)
-        .where((m) => bare(m.san) == san)
-        .firstOrNull
-        ?.uci;
-  }
-}
-
-/// Won, drawn and lost as one bar, our team's wins first, each part with
-/// its share when there is room for it.
-class _ResultBar extends StatelessWidget {
-  const _ResultBar({
-    required this.won,
-    required this.drawn,
-    required this.lost,
-    required this.total,
-  });
-
-  final int won;
-  final int drawn;
-  final int lost;
-  final int total;
-
-  @override
-  Widget build(BuildContext context) {
-    if (total <= 0) return const SizedBox.shrink();
-    Widget part(int count, Color fill, Color ink) => Expanded(
-      flex: count,
-      child: Container(
-        color: fill,
-        alignment: Alignment.center,
-        child: count * 100 ~/ total >= 12
-            ? Text(
-                '${count * 100 ~/ total}%',
-                style: resultBarText.copyWith(color: ink),
-                maxLines: 1,
-              )
-            : null,
-      ),
-    );
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: explorerBarMaxWidth),
-        child: SizedBox(
-          height: explorerBarHeight,
-          child: Row(
-            children: [
-              if (won > 0) part(won, resultBarWhite, resultBarWhiteInk),
-              if (drawn > 0) part(drawn, resultBarDraw, resultBarDrawInk),
-              if (lost > 0) part(lost, resultBarBlack, resultBarBlackInk),
-            ],
-          ),
         ),
       ),
     );
