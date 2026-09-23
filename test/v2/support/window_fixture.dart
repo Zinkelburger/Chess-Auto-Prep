@@ -22,6 +22,7 @@ import 'package:chess_auto_prep/v2/workspace/document_session.dart';
 import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
 import 'package:chess_auto_prep/v2/features/trainer/scope_reader.dart';
 import 'package:chess_auto_prep/v2/features/trainer/trainer.dart';
+import 'package:chess_auto_prep/v2/workspace/repertoire_shelf.dart';
 import 'package:chess_auto_prep/v2/workspace/repertoire_tree.dart';
 import 'package:chess_auto_prep/v2/workspace/explorer.dart';
 import 'package:chess_auto_prep/v2/workspace/fill_gaps.dart';
@@ -201,8 +202,7 @@ final class WindowFixture {
     games = gamesOver(store, lichess: lichess);
     tree = RepertoireTree(
       session: session,
-      files: chapterFiles,
-      documents: store,
+      shelf: RepertoireShelf(files: chapterFiles, documents: store),
     );
     lineTrainer = Trainer(
       session: session,

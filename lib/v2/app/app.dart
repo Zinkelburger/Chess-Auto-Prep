@@ -47,6 +47,7 @@ import '../workspace/document_saver.dart';
 import '../workspace/document_session.dart';
 import '../workspace/session_results.dart';
 import '../workspace/engine_analysis.dart';
+import '../workspace/repertoire_shelf.dart';
 import '../workspace/repertoire_tree.dart';
 import '../workspace/explorer.dart';
 import '../workspace/explorer_databases.dart';
@@ -190,11 +191,11 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     settings: _settings,
     databases: _databases,
   );
-  late final _tree = RepertoireTree(
-    session: _session,
-    files: _chapterFiles,
-    documents: _store,
-  );
+
+  /// Every repertoire file, indexed by position once until it changes:
+  /// the Tree tab and the book check read the same one.
+  late final _shelf = RepertoireShelf(files: _chapterFiles, documents: _store);
+  late final _tree = RepertoireTree(session: _session, shelf: _shelf);
   late final _games = GameFetcher(
     databases: _databases,
     documents: _store,

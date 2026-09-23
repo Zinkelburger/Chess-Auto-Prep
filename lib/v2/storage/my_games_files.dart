@@ -15,6 +15,14 @@ import 'pgn_document_store.dart';
 
 /// The files the review of the user's games shares with the old app.
 
+/// How many of an account's newest saved games the book check reads, and
+/// how many a download asks for while fewer than that are saved: the old
+/// app's `Games per site to check against my repertoires`.
+const bookCheckWindow = 200;
+
+/// A saved game and where it is in its file, counting from zero.
+typedef CachedGame = ({int index, String text});
+
 /// The user's downloaded games, one PGN per site and username under
 /// `Documents/games_library/` — `lichess_bob.pgn`, `chesscom_bob.pgn` —
 /// with a `.fetched` file beside it saying when they came down. The old
@@ -43,6 +51,17 @@ final class GamesCache {
     String username, {
     required int max,
   }) async {
+    final games = await newest(site, username, max: max);
+    return games == null ? null : [for (final game in games) game.text];
+  }
+
+  /// The same games with where each is in the file, counting from zero, so
+  /// one can be opened there.
+  Future<List<CachedGame>?> newest(
+    GameSite site,
+    String username, {
+    required int max,
+  }) async {
     final read = await _store.open(refFor(site, username));
     if (read is! Opened) return null;
     final games = [
@@ -56,7 +75,7 @@ final class GamesCache {
         final byTime = b.$2.compareTo(a.$2);
         return byTime != 0 ? byTime : a.$1.compareTo(b.$1);
       });
-    return [for (final (i, _) in order.take(max)) games[i]];
+    return [for (final (i, _) in order.take(max)) (index: i, text: games[i])];
   }
 
   /// Adds the games of [downloaded] the file does not have yet at its end,

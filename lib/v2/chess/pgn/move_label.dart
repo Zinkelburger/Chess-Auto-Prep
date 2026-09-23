@@ -42,3 +42,17 @@ String numberedMoves(Iterable<MoveNode> moves) => [
   for (final (i, move) in moves.indexed)
     '${moveNumberLabel(move, startsLine: i == 0)}${move.san}',
 ].join(' ');
+
+/// How the main line goes on after [node], numbered, for [plies] plies, with
+/// an ellipsis when it goes further: `4.Ba4 Nf6 5.O-O …`.
+String continuation(MoveNode node, {required int plies}) {
+  final words = <String>[];
+  var next = node.children;
+  while (next.isNotEmpty && words.length < plies) {
+    final move = next.first;
+    words.add('${moveNumberLabel(move, startsLine: words.isEmpty)}${move.san}');
+    next = move.children;
+  }
+  if (next.isNotEmpty) words.add('…');
+  return words.join(' ');
+}

@@ -275,7 +275,8 @@ final class MyGames extends ChangeNotifier {
   ) async {
     final site = source.site;
     final List<String> texts;
-    switch (await source.recent(username, max: reviewWindow)) {
+    final max = await _toAskFor(site, username);
+    switch (await source.recent(username, max: max)) {
       case GamesFetched(:final games):
         final when = DateTime.now();
         await _cache.keep(site, username, games, when);
@@ -292,6 +293,17 @@ final class MyGames extends ChangeNotifier {
       for (final text in texts)
         (site: site, username: username, id: gameIdIn(text), text: text),
     ];
+  }
+
+  /// The review looks at the newest [reviewWindow] games, and the book check
+  /// reads the newest [bookCheckWindow] saved ones: until that many are
+  /// saved, a download asks for that many, and after that only for what a
+  /// review needs.
+  Future<int> _toAskFor(GameSite site, String username) async {
+    final saved = await _cache.newest(site, username, max: bookCheckWindow);
+    return (saved?.length ?? 0) < bookCheckWindow
+        ? bookCheckWindow
+        : reviewWindow;
   }
 
   /// Takes the games either app has reviewed since they were queued off the
