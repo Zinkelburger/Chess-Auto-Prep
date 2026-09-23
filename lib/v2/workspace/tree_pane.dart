@@ -44,23 +44,29 @@ class _TreePaneState extends State<TreePane> {
   final _preview = ValueNotifier<LinePreview?>(null);
   Timer? _settle;
 
+  /// A row rebuilt or gone from under the pointer never hears it leave, so
+  /// the floated board goes whenever the rows do.
   @override
   void initState() {
     super.initState();
     widget.tree.watch();
+    widget.tree.addListener(_leave);
   }
 
   @override
   void didUpdateWidget(TreePane old) {
     super.didUpdateWidget(old);
     if (old.tree != widget.tree) {
+      old.tree.removeListener(_leave);
       old.tree.unwatch();
       widget.tree.watch();
+      widget.tree.addListener(_leave);
     }
   }
 
   @override
   void dispose() {
+    widget.tree.removeListener(_leave);
     widget.tree.unwatch();
     _settle?.cancel();
     _preview.dispose();

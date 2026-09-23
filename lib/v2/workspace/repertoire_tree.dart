@@ -92,10 +92,11 @@ final class TreeNothing extends TreeState {
 /// plays. Positions are matched without the move counters, so a
 /// transposition finds the lines the other move order wrote.
 ///
-/// Each file is read and indexed once and kept until its text changes:
-/// [forget] marks them to be read again, and only a file whose text is not
-/// what was indexed is parsed again. The file on the board is taken from
-/// the session instead, as it stands, so a move just added shows at once.
+/// Each file is read and indexed once and kept until its bytes change:
+/// [forget] marks them to be read again, and only a file whose bytes are
+/// not what was indexed is parsed again. The file on the board is taken
+/// from the session instead, as it stands, so a move just added shows at
+/// once.
 ///
 /// While the Tree tab is up the board is a free board: a move the file on
 /// it does not play is not written into it but played on [board], past the
@@ -188,7 +189,7 @@ final class RepertoireTree extends ChangeNotifier {
             onMove: play,
             lastMove: _off.last.uci,
           );
-    if (_watching > 0 && !_shelf.stale) _showHere();
+    _refresh();
   }
 
   /// The side whose repertoires are shown: the one the board is seen from.
@@ -199,12 +200,12 @@ final class RepertoireTree extends ChangeNotifier {
       .where((ref) => (_liveFor(ref) ?? _shelf.indexOf(ref))?.side == side)
       .length;
 
-  /// The files changed on disk: they are read again the next time the
-  /// board moves, and only the ones whose text changed are parsed again.
+  /// The files changed on disk: they are read again now if a pane is up,
+  /// else when one comes up, and only the ones whose bytes changed are
+  /// parsed again. The board stays where it is, free board and all.
   void forget() {
     _shelf.forget();
-    _board = null;
-    _followTheBoard();
+    _refresh();
   }
 
   /// A pane showing the tree says so while it is up: the files are read
@@ -241,9 +242,16 @@ final class RepertoireTree extends ChangeNotifier {
           !identical(seen.tree, board.tree) ||
           seen.at != board.at;
       if (moved) _off.clear();
-      _offChanged();
-      if (!_shelf.stale) return;
+      return _offChanged();
     }
+    _refresh();
+  }
+
+  /// The rows for the position now, once the files are read: a reader that
+  /// gave up, or another that told the shelf the files changed, leaves it
+  /// stale, and then it is read again first.
+  void _refresh() {
+    if (_disposed || _watching == 0) return;
     if (_shelf.stale) {
       unawaited(_readThenShow());
     } else {
@@ -265,7 +273,12 @@ final class RepertoireTree extends ChangeNotifier {
     if (_session.source != ref || chapter == null || tree == null) return null;
     if (chapter.game != null) return null;
     final live = _live;
-    if (live != null && identical(live.tree, tree)) return live.index;
+    // Playing the chapter from the other side keeps its tree.
+    if (live != null &&
+        identical(live.tree, tree) &&
+        live.index.side == chapter.side) {
+      return live.index;
+    }
     final index = RepertoireIndex.of(tree, chapter.side);
     _live = (tree: tree, index: index);
     return index;

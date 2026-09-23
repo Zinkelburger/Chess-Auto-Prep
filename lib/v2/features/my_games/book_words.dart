@@ -20,6 +20,14 @@ String verdictLine(CheckedGame checked) => switch (checked.verdict) {
     'Book ended after ${checked.game.moves[ply - 1].label}',
 };
 
+/// Whether a search for [query], trimmed and in lower case, finds
+/// [checked]: by its opponent or date, or by what its row says about its
+/// book, move included.
+bool matchesSearch(CheckedGame checked, String query) => [
+  checked.game.searchText,
+  verdictLine(checked).toLowerCase(),
+].any((text) => text.contains(query));
+
 /// A row's short form of the verdict: the move it is about, when there is
 /// one, and a few words — `6.f3` `left book` — so a narrow column still
 /// shows the move.

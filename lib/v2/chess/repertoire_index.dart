@@ -15,7 +15,8 @@ final class IndexedMove {
 
   int _lines = 0;
 
-  /// The lines of the file through it: the ends of lines below it.
+  /// The lines of the file through it, by every move order that plays it
+  /// here: the ends of lines below it.
   int get lines => _lines;
 }
 
@@ -31,6 +32,12 @@ final class IndexedMove {
 /// start (`e2e4`), after 1.e4 (`e7e5`), after 1...e5 (`g1f3`) and after
 /// 2.Nf3, with no moves — and [into] of the last is 2.Nf3 with the sans
 /// `[e4, e5, Nf3]`.
+///
+/// A move's [IndexedMove.lines] counts the lines under every place the
+/// file plays it from the position: with `1.d4 Nf6 2.c4 e6 3.Nc3` and
+/// `1.c4 Nf6 2.d4 e6 3.Nc3`, 3.Nc3 is two lines. A place inside another
+/// place of the same move — a line that repeats the position and plays the
+/// move again — holds lines already counted there, and adds none.
 final class RepertoireIndex {
   RepertoireIndex._(this.side, this._moves, this._into);
 
@@ -38,21 +45,26 @@ final class RepertoireIndex {
     final moves = <String, Map<String, IndexedMove>>{};
     final into = <String, IndexedMove>{};
     final sans = <String>[];
+    // The moves the line being walked is already under, by position.
+    final under = <String>{};
     int visit(Fen fen, List<MoveNode> children) {
-      final here = moves[fen.position] ??= {};
+      final position = fen.position;
+      final here = moves[position] ??= {};
       if (children.isEmpty) return 1;
       var total = 0;
       for (final child in children) {
         sans.add(child.san);
         // The first place the file plays the move is where it is read, so
         // it is claimed before the line under it is walked.
-        final first = here.containsKey(child.uci)
-            ? null
-            : here[child.uci] = IndexedMove(child, List.unmodifiable(sans));
-        if (first != null) into.putIfAbsent(child.fen.position, () => first);
+        final move = here[child.uci] ??= _claimed(child, sans, into);
+        final key = '$position ${child.uci}';
+        final outermost = under.add(key);
         final lines = visit(child.fen, child.children);
+        if (outermost) {
+          under.remove(key);
+          move._lines += lines;
+        }
         sans.removeLast();
-        first?._lines = lines;
         total += lines;
       }
       return total;
@@ -75,4 +87,16 @@ final class RepertoireIndex {
   /// The move that first brings the file to [position]; null for the
   /// file's start and for a position it never reaches.
   IndexedMove? into(String position) => _into[position];
+}
+
+/// [child] as the move first read at its position, which also first brings
+/// the file to the position after it unless another move already did.
+IndexedMove _claimed(
+  MoveNode child,
+  List<String> sans,
+  Map<String, IndexedMove> into,
+) {
+  final move = IndexedMove(child, List.unmodifiable(sans));
+  into.putIfAbsent(child.fen.position, () => move);
+  return move;
 }

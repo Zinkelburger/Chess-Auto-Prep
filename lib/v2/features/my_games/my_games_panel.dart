@@ -15,8 +15,8 @@ enum _View { games, openings }
 /// games, each with what their book says about it, or the places the games
 /// keep leaving the book. Clicking either opens the game at that moment.
 ///
-/// The panel keeps which view is up and what was typed into the search
-/// box; everything else is the book's.
+/// The panel keeps which view is up; everything else is the book's,
+/// including the search, since ↑ and ↓ walk the games it finds.
 class MyGamesPanel extends StatefulWidget {
   const MyGamesPanel({
     super.key,
@@ -48,12 +48,14 @@ class MyGamesPanel extends StatefulWidget {
 
 class _MyGamesPanelState extends State<MyGamesPanel> {
   final _search = TextEditingController();
-  String _query = '';
   _View _view = _View.games;
 
   @override
   void initState() {
     super.initState();
+    // A column built again, after another mode, shows the search the list
+    // is still narrowed by.
+    _search.text = widget.book.query;
     widget.book.watch();
   }
 
@@ -62,6 +64,7 @@ class _MyGamesPanelState extends State<MyGamesPanel> {
     super.didUpdateWidget(old);
     if (old.book != widget.book) {
       old.book.unwatch();
+      _search.text = widget.book.query;
       widget.book.watch();
     }
   }
@@ -71,10 +74,6 @@ class _MyGamesPanelState extends State<MyGamesPanel> {
     widget.book.unwatch();
     _search.dispose();
     super.dispose();
-  }
-
-  void _searched(String query) {
-    if (mounted) setState(() => _query = query.trim().toLowerCase());
   }
 
   void _show(_View view) {
@@ -130,7 +129,7 @@ class _MyGamesPanelState extends State<MyGamesPanel> {
       ),
       Expanded(
         child: switch (_view) {
-          _View.games => _games(checked.games),
+          _View.games => _games(checked),
           _View.openings => _Openings(checked: checked, onOpen: widget.onOpen),
         },
       ),
@@ -141,13 +140,10 @@ class _MyGamesPanelState extends State<MyGamesPanel> {
       widget.session.source == checked.file &&
       widget.session.game == checked.game.index;
 
-  Widget _games(List<CheckedGame> games) {
-    final shown = _query.isEmpty
-        ? games
-        : [
-            for (final checked in games)
-              if (_matches(checked)) checked,
-          ];
+  Widget _games(BookChecked checked) {
+    final all = checked.games.length;
+    final query = widget.book.query;
+    final shown = widget.book.shown;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -156,17 +152,17 @@ class _MyGamesPanelState extends State<MyGamesPanel> {
           child: SearchField(
             controller: _search,
             hint: 'Search by opponent, date or move',
-            onChanged: _searched,
+            onChanged: widget.book.search,
           ),
         ),
         _CountLine(
-          words: _query.isEmpty
-              ? '${games.length} games, newest first'
-              : '${shown.length} of ${games.length} games',
+          words: query.isEmpty
+              ? '$all games, newest first'
+              : '${shown.length} of $all games',
         ),
         Expanded(
           child: shown.isEmpty
-              ? _Message('Nothing matches "$_query".')
+              ? _Message('Nothing matches "$query".')
               : ListView.builder(
                   itemCount: shown.length,
                   itemExtent: puzzleRowHeight,
@@ -180,11 +176,6 @@ class _MyGamesPanelState extends State<MyGamesPanel> {
       ],
     );
   }
-
-  bool _matches(CheckedGame checked) => [
-    checked.game.searchText,
-    verdictLine(checked).toLowerCase(),
-  ].any((text) => text.contains(_query));
 }
 
 /// The panel's name and the host's toggle in the corner.

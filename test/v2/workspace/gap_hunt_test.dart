@@ -1,6 +1,8 @@
 import 'package:chess_auto_prep/v2/chess/fen.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/engines/maia/move_policy.dart';
+import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
+import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/storage/settings.dart';
 import 'package:chess_auto_prep/v2/storage/settings_store.dart';
 import 'package:chess_auto_prep/v2/workspace/gap_hunt.dart';
@@ -35,6 +37,16 @@ const twoGames = '''
 1. d4 d5 *
 ''';
 
+/// Another White chapter of the repertoire: it too leaves 1...c5 open.
+const other = '''
+// Color: White
+
+[Event "Other"]
+[Result "*"]
+
+1. e4 e5 2. Nc3 *
+''';
+
 /// A model that plays 1. e4 for White and splits Black's replies; it has no
 /// opinion anywhere else, so the walk stops after 2. Nf3.
 final class TwoPositions implements MovePolicy {
@@ -62,21 +74,20 @@ void main() {
   late SessionFixture fixture;
   late SettingsStore settings;
   late TwoPositions policy;
+  late ScriptedFiles files;
   late GapHunt gaps;
 
   GapHunt hunt() => GapHunt(
     session: fixture.session,
     model: ReplyModel(policy: policy, settings: settings),
     settings: settings,
-    answers: RepertoireAnswers(
-      files: ScriptedFiles(),
-      documents: ScriptedDocumentStore(),
-    ),
+    answers: RepertoireAnswers(files: files, documents: fixture.store),
   );
 
   setUp(() async {
     fixture = await openSession(chapter);
     policy = TwoPositions();
+    files = ScriptedFiles();
     settings = SettingsStore(
       initial: const Settings(opponentElo: 2000, coverOnceIn: 5),
     );
@@ -146,6 +157,49 @@ void main() {
     await pumpEventQueue();
     expect(gaps.walk, isNull);
     expect(gaps.walking, isFalse);
+  });
+
+  test('another chapter never shows the walk of the one before', () async {
+    await pumpEventQueue();
+    gaps.nextGap();
+    expect(gaps.walk, isNotNull);
+    final ref = chapterRef('KID', 'Other');
+    fixture.store.documents[ref] = Opened(other, scriptedRevision(other));
+    // What the rest of the repertoire answers is still being read.
+    files.hold = true;
+    await fixture.session.open(ref);
+    expect(gaps.walk, isNull);
+    expect(gaps.walking, isTrue);
+    expect(gaps.highlighted, isNull);
+    gaps.nextGap();
+    expect(fixture.session.cursor, const NodePath.root());
+    files
+      ..hold = false
+      ..releaseAll();
+    await pumpEventQueue();
+    expect(gaps.walk!.gaps.whereType<MissingReply>().single.san, 'c5');
+  });
+
+  test('the chapter left behind is read again: what it now answers is not '
+      'a gap in the next one', () async {
+    final main = fixture.ref;
+    final ref = chapterRef('KID', 'Other');
+    fixture.store.documents[ref] = Opened(other, scriptedRevision(other));
+    files.listing = Repertoires([
+      folder('KID', ['Main', 'Other']),
+    ]);
+    await pumpEventQueue();
+    await fixture.session.open(ref);
+    await pumpEventQueue();
+    expect(gaps.walk!.gaps.whereType<MissingReply>().single.san, 'c5');
+    // Back in Main, 1...c5 gets an answer.
+    await fixture.session.open(main);
+    fixture.session.forward();
+    fixture.session.playMove('c7c5');
+    fixture.session.playMove('c2c3');
+    await fixture.session.open(ref);
+    await pumpEventQueue();
+    expect(gaps.walk!.gaps.whereType<MissingReply>(), isEmpty);
   });
 
   test('closing the document walks the analysis board instead', () async {

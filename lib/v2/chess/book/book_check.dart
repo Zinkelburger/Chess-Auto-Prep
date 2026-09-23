@@ -4,12 +4,22 @@ import '../pgn/move_label.dart' show numberedMoves;
 import '../repertoire_index.dart';
 import 'played_game.dart';
 
-/// One repertoire file the book check reads: where it is, what it is
-/// called and what it plays.
+/// One repertoire chapter the book check reads: the file it is in, which
+/// of the file's chapters it is, what it is called and what it plays.
 final class BookFile {
-  const BookFile({required this.path, required this.name, required this.index});
+  const BookFile({
+    required this.path,
+    required this.name,
+    required this.index,
+    this.section,
+  });
 
   final String path;
+
+  /// The `[ChapterName]` its games carry when it is one chapter of a course
+  /// file; null when it is the whole file.
+  final String? section;
+
   final String name;
   final RepertoireIndex index;
 }

@@ -78,6 +78,21 @@ void main() {
     expect(w.session.cursor.indexes, hasLength(6));
   });
 
+  testWidgets('the arrows walk only the games the search finds', (
+    tester,
+  ) async {
+    await toMyGames(tester);
+    w.book.search('09.21');
+    await tester.pumpAndSettle();
+    expect(find.text('1 of 2 games'), findsOneWidget);
+    await tester.tap(find.text('2...e6 left book', findRichText: true));
+    await tester.pumpAndSettle();
+    expect(w.session.game, 1);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(w.session.game, 1, reason: 'the other game is not in the list');
+  });
+
   testWidgets('Open in builder reads the book where the game left it', (
     tester,
   ) async {

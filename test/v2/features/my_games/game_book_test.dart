@@ -2,10 +2,12 @@ import 'package:chess_auto_prep/v2/chess/book/book_check.dart';
 import 'package:chess_auto_prep/v2/chess/tactics/game_ids.dart';
 import 'package:chess_auto_prep/v2/features/my_games/book_words.dart';
 import 'package:chess_auto_prep/v2/features/my_games/game_book.dart';
+import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/book_fixture.dart';
+import '../../support/scripted_files.dart';
 import '../../support/scripted_store.dart';
 
 void main() {
@@ -75,6 +77,60 @@ void main() {
       fixture.book.step(fixture.gamesFile, checked.games.first.game.index, -1),
       isNull,
     );
+  });
+
+  test('the search narrows the list, and a step walks only the games it '
+      'finds', () async {
+    final checked = await watched();
+    fixture.book.search(' NC3 ');
+    expect(fixture.book.query, 'nc3');
+    final shown = fixture.book.shown;
+    expect([for (final c in shown) c.game.date], ['2026.09.20', '2026.09.18']);
+    final file = fixture.gamesFile;
+    expect(fixture.book.step(file, shown.first.game.index, 1), shown.last);
+    expect(fixture.book.step(file, shown.last.game.index, 1), isNull);
+    // From a game the search hides, a step goes to the nearest one it finds
+    // that way.
+    final hidden = checked.games[2];
+    expect(fixture.book.step(file, hidden.game.index, -1), shown.first);
+    expect(fixture.book.step(file, hidden.game.index, 1), shown.last);
+    fixture.book.search('');
+    expect(fixture.book.shown, checked.games);
+  });
+
+  test('a course file\'s chapter is read as its own book, and opens as '
+      'that chapter', () async {
+    const course =
+        '// Color: White\n\n'
+        '[Event "Sicilian"]\n[ChapterName "Open"]\n[Result "*"]\n\n'
+        '1. e4 c5 2. Nf3 d6 3. d4 *\n\n'
+        '[Event "Sicilian"]\n[ChapterName "Alapin"]\n[Result "*"]\n\n'
+        '1. e4 c5 2. c3 d5 *\n';
+    fixture.store.documents[sicilianRef] = Opened(
+      course,
+      scriptedRevision(course),
+    );
+    final open = ChapterRef.at(sicilianRef.path, section: 'Open');
+    final alapin = ChapterRef.at(sicilianRef.path, section: 'Alapin');
+    fixture.files.listing = Repertoires([
+      RepertoireFolder(
+        name: 'e4',
+        path: '/repertoires/e4',
+        modified: DateTime(2026),
+        chapters: [open, alapin],
+      ),
+      folder('Najdorf', ['Main']),
+    ]);
+    final checked = await watched();
+    // 2.Nc3 left both chapters, each of them one line through 1...c5.
+    final left = checked.games[1].verdict as LeftBook;
+    final byMove = {for (final move in left.book) move.label: move};
+    expect(byMove.keys, unorderedEquals(['2.Nf3', '2.c3']));
+    expect(byMove['2.Nf3']!.lines, 1);
+    expect(byMove['2.Nf3']!.file.ref, open);
+    expect(byMove['2.c3']!.lines, 1);
+    expect(byMove['2.c3']!.file.ref, alapin);
+    expect(byMove['2.c3']!.place.file.name, 'Alapin');
   });
 
   test('reads again when new games are saved while it is watched', () async {

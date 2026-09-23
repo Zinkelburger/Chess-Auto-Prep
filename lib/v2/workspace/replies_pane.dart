@@ -45,8 +45,26 @@ class _RepliesPaneState extends State<RepliesPane> {
   final _preview = ValueNotifier<LinePreview?>(null);
   Timer? _settle;
 
+  /// A row rebuilt or gone from under the pointer never hears it leave, so
+  /// the floated board goes whenever the table does.
+  @override
+  void initState() {
+    super.initState();
+    widget.replies.addListener(_leave);
+  }
+
+  @override
+  void didUpdateWidget(RepliesPane old) {
+    super.didUpdateWidget(old);
+    if (old.replies != widget.replies) {
+      old.replies.removeListener(_leave);
+      widget.replies.addListener(_leave);
+    }
+  }
+
   @override
   void dispose() {
+    widget.replies.removeListener(_leave);
     _settle?.cancel();
     _preview.dispose();
     super.dispose();
@@ -157,10 +175,18 @@ class _Status extends StatelessWidget {
     final rating = '$who · ${replies.elo}';
     final walk = gaps.walk;
     if (gaps.walking && walk == null) return '$rating · finding gaps…';
-    if (walk == null) return rating;
+    // Where the model could not answer, the replies are unknown rather than
+    // covered: a model that answered nothing found nothing, and one that
+    // missed some positions cannot say how much the chapter covers.
+    if (walk == null ||
+        (walk.positionsAsked > 0 &&
+            walk.positionsUnanswered == walk.positionsAsked)) {
+      return rating;
+    }
     final found = walk.gaps.length;
-    final covered = (walk.covered * 100).round();
     final counted = found == 1 ? '1 gap' : '$found gaps';
+    if (walk.positionsUnanswered > 0) return '$rating · $counted';
+    final covered = (walk.covered * 100).round();
     return '$rating · $counted · $covered% covered';
   }
 

@@ -62,7 +62,9 @@ final class GapHunt extends ChangeNotifier {
   int _ticket = 0;
 
   /// The last finished walk over the open chapter, or null before the
-  /// first one finishes. Stale while [walking], and says so.
+  /// first one over it finishes. While [walking] after an edit it is the
+  /// walk before the edit, and says so; another chapter never shows this
+  /// one's.
   GapWalk? get walk => _walk;
 
   bool get walking => _walking;
@@ -98,10 +100,15 @@ final class GapHunt extends ChangeNotifier {
       changed = true;
     }
     if (_session.source != _source) {
-      // The chapter that was open may have been edited; what it answers is
-      // read again the next time another chapter is walked.
+      // The chapter that was open may have been edited; what its file
+      // answers is read again the next time another chapter is walked.
+      if (_source case final left?) _answers.forgetFile(left.path);
       _source = _session.source;
-      _answers.forget();
+      // Its gaps are places in its tree, not in this one's.
+      _walk = null;
+      _highlighted = null;
+      _gapIndex = -1;
+      changed = true;
     }
     final s = _settings.value;
     final seen = _walkedFor;
@@ -198,7 +205,8 @@ final class GapHunt extends ChangeNotifier {
 /// file says. The other chapters are read from disk and their positions
 /// kept until [forget]: the library says when its files change, and the
 /// chapter that was just open may have been edited, so a change of chapter
-/// forgets too. Draft chapters do not count; a proposal is not an answer.
+/// forgets that chapter's file ([forgetFile]). Draft chapters do not count;
+/// a proposal is not an answer.
 final class RepertoireAnswers {
   RepertoireAnswers({
     required ChapterFiles files,
@@ -214,6 +222,11 @@ final class RepertoireAnswers {
 
   /// Drops what was read; the next question reads the files again.
   void forget() => _read.clear();
+
+  /// Drops what was read from the file at [path], every chapter of it; the
+  /// other files stay as they were read.
+  void forgetFile(String path) =>
+      _read.removeWhere((chapter, _) => chapter.path == path);
 
   /// The positions the chapters of [chapter]'s repertoire other than itself
   /// answer from [side], each naming the first chapter, in folder order,

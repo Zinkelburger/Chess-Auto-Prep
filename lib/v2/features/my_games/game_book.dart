@@ -11,6 +11,7 @@ import '../../storage/chapter_files.dart';
 import '../../storage/my_accounts.dart';
 import '../../storage/my_games_files.dart';
 import '../../workspace/repertoire_shelf.dart';
+import 'book_words.dart' show matchesSearch;
 
 /// One of the user's games and what their books say about it.
 final class CheckedGame {
@@ -86,6 +87,10 @@ final class BookChecked extends BookState {
 /// reads the games and the books again, and so does a download or a change
 /// to the repertoires while it is open. A later read overtakes an earlier
 /// one, whose result is dropped.
+///
+/// The search over the list is the book's too ([search]): the list shows
+/// the games it finds and ↑ and ↓ walk them, so the keys never open a game
+/// the list is hiding.
 final class GameBook extends ChangeNotifier {
   GameBook({
     required AccountStore accounts,
@@ -100,11 +105,34 @@ final class GameBook extends ChangeNotifier {
   final RepertoireShelf _shelf;
 
   BookState _state = const BookReading();
+  String _query = '';
   int _reads = 0;
   int _watching = 0;
   bool _disposed = false;
 
   BookState get state => _state;
+
+  /// What the list is narrowed to, trimmed and in lower case; empty while
+  /// it shows every game.
+  String get query => _query;
+
+  /// Narrows the list to the games a search for [words] finds.
+  void search(String words) {
+    final query = words.trim().toLowerCase();
+    if (query == _query) return;
+    _query = query;
+    notifyListeners();
+  }
+
+  /// The checked games the search finds, newest first: every game while
+  /// nothing is typed, and none before the games are read.
+  List<CheckedGame> get shown => switch (_state) {
+    BookChecked(:final games) => [
+      for (final checked in games)
+        if (_found(checked)) checked,
+    ],
+    _ => const [],
+  };
 
   /// The checked game [file] holds at [game], or null when it is not one.
   CheckedGame? find(ChapterRef? file, int? game) {
@@ -116,15 +144,27 @@ final class GameBook extends ChangeNotifier {
     return null;
   }
 
-  /// The game [by] places after the one [file] holds at [game] in the list,
-  /// newest first; null past either end or when that is not a checked game.
+  /// The game [by] places after the one [file] holds at [game] among the
+  /// games the search finds, newest first, counted from where that game
+  /// sits in the list even when the search hides it; null past either end
+  /// or when that is not a checked game.
   CheckedGame? step(ChapterRef? file, int? game, int by) {
     final state = _state;
     final here = find(file, game);
     if (state is! BookChecked || here == null) return null;
-    final at = state.games.indexOf(here) + by;
-    return at < 0 || at >= state.games.length ? null : state.games[at];
+    final games = state.games;
+    var at = games.indexOf(here);
+    var left = by.abs();
+    while (left > 0) {
+      at += by.sign;
+      if (at < 0 || at >= games.length) return null;
+      if (_found(games[at])) left--;
+    }
+    return games[at];
   }
+
+  bool _found(CheckedGame checked) =>
+      _query.isEmpty || matchesSearch(checked, _query);
 
   /// A pane showing the book is up: read the games and the books now, and
   /// again whenever either changes while it is.
@@ -172,7 +212,12 @@ final class GameBook extends ChangeNotifier {
     final books = [
       for (final ref in _shelf.refs)
         if (_shelf.indexOf(ref) case final index?)
-          BookFile(path: ref.path, name: ref.name, index: index),
+          BookFile(
+            path: ref.path,
+            section: ref.section,
+            name: ref.name,
+            index: index,
+          ),
     ];
     final games = [
       for (final (file, site, game) in played)
@@ -212,6 +257,12 @@ final class GameBook extends ChangeNotifier {
     _disposed = true;
     super.dispose();
   }
+}
+
+/// The chapter a book file is, to open it at a [BookPlace]: a chapter of a
+/// course file is its games in that file, not the whole file.
+extension BookFileRef on BookFile {
+  ChapterRef get ref => ChapterRef.at(path, section: section);
 }
 
 /// [saved] read as [username]'s games, the ones that are not theirs left

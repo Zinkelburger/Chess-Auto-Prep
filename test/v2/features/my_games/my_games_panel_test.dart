@@ -82,6 +82,19 @@ void main() {
     expect(find.text('Nothing matches "nobody".'), findsOneWidget);
   });
 
+  testWidgets('the search is the book\'s, so the column built again still '
+      'shows it', (tester) async {
+    await pumpPanel(tester);
+    await tester.enterText(find.byType(TextField), 'NC3');
+    await tester.pumpAndSettle();
+    expect(fixture.book.query, 'nc3');
+    expect(fixture.book.shown, hasLength(2));
+    await pump(tester, const SizedBox.shrink());
+    await pumpPanel(tester);
+    expect(find.text('2 of 5 games'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'nc3'), findsOneWidget);
+  });
+
   testWidgets('Openings groups the ways the games left the book', (
     tester,
   ) async {

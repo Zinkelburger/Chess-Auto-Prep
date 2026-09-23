@@ -1,9 +1,12 @@
 import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
+import 'package:chess_auto_prep/v2/storage/document_ref.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
+import 'package:chess_auto_prep/v2/workspace/chapter_commands.dart';
 import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
 import 'package:chess_auto_prep/v2/workspace/repertoire_shelf.dart';
 import 'package:chess_auto_prep/v2/workspace/repertoire_tree.dart';
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/scripted_files.dart';
@@ -66,9 +69,40 @@ const sicilian = '''
 1. e4 c5 2. Nf3 d6 *
 ''';
 
+/// A course file of two chapters by tag: the Scotch, one line, and the
+/// Ruy, three.
+const course = '''
+// Color: White
+
+[Event "Scotch"]
+[ChapterName "Scotch"]
+[Result "*"]
+
+1. e4 e5 2. Nf3 Nc6 3. d4 exd4 *
+
+[Event "Ruy"]
+[ChapterName "Ruy"]
+[Result "*"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O *
+
+[Event "Ruy"]
+[ChapterName "Ruy"]
+[Result "*"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bb5 Nf6 4. O-O *
+
+[Event "Ruy"]
+[ChapterName "Ruy"]
+[Result "*"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bb5 f5 4. Nc3 *
+''';
+
 void main() {
   late SessionFixture fixture;
   late ScriptedFiles files;
+  late RepertoireShelf shelf;
   late RepertoireTree tree;
 
   setUp(() async {
@@ -88,10 +122,8 @@ void main() {
     put('e4', 'Ruy', ruy);
     put('Knights', 'Knights', scotchOrder);
     put('Sicilian', 'Najdorf', sicilian);
-    tree = RepertoireTree(
-      session: fixture.session,
-      shelf: RepertoireShelf(files: files, documents: fixture.store),
-    )..watch();
+    shelf = RepertoireShelf(files: files, documents: fixture.store);
+    tree = RepertoireTree(session: fixture.session, shelf: shelf)..watch();
     await pumpEventQueue();
   });
 
@@ -130,6 +162,70 @@ void main() {
     expect(shown[2].names, ['Knights']);
     expect(shown[2].places.single.sans, ['Nf3', 'Nc6', 'e4', 'e5', 'd4']);
     expect(tree.fileCount, 3);
+  });
+
+  test('the chapters of a course file are counted apart, each by its own '
+      'lines', () async {
+    const path = '/repertoires/Course/Course.pgn';
+    fixture.store.documents[const DocumentRef(path)] = Opened(
+      course,
+      scriptedRevision(course),
+    );
+    files.listing = Repertoires([
+      folder('e4', ['Italian']),
+      RepertoireFolder(
+        name: 'Course',
+        path: '/repertoires/Course',
+        modified: DateTime(2026),
+        chapters: [
+          ChapterRef.at(path, section: 'Scotch'),
+          ChapterRef.at(path, section: 'Ruy'),
+        ],
+      ),
+    ]);
+    tree.forget();
+    walk(['e4', 'e5', 'Nf3', 'Nc6']);
+    await pumpEventQueue();
+    final shown = rows();
+    expect([for (final row in shown) row.san], ['Bb5', 'Bc4', 'd4']);
+    expect([for (final row in shown) row.lines], [3, 2, 1]);
+    expect(shown[0].names, ['Ruy']);
+    expect(shown[0].places.single.ref, ChapterRef.at(path, section: 'Ruy'));
+    expect(shown[2].names, ['Scotch']);
+    expect(tree.fileCount, 3);
+  });
+
+  test('playing the chapter from the other side files it under that '
+      'side', () async {
+    setSide(fixture.session, Side.black);
+    await pumpEventQueue();
+    // The Italian, Black's now, plays 1.e4 beside the Najdorf.
+    expect(rows().single.san, 'e4');
+    expect(rows().single.lines, 3);
+    expect(rows().single.names, ['Italian', 'Najdorf']);
+    expect(tree.fileCount, 2);
+  });
+
+  test('files read again keep the moves on the free board', () async {
+    walk(['e4', 'e5', 'Nf3', 'Nc6']);
+    tree.play('f1b5');
+    await pumpEventQueue();
+    tree.forget();
+    await pumpEventQueue();
+    expect([for (final move in tree.offFile) move.san], ['Bb5']);
+    expect(tree.board.value?.lastMove, 'f1b5');
+    expect([for (final row in rows()) row.san], ['a6', 'Nf6', 'f5']);
+  });
+
+  test('a move on the free board reads the files first when another reader '
+      'said they changed', () async {
+    walk(['e4', 'e5', 'Nf3', 'Nc6']);
+    await pumpEventQueue();
+    // The book check reads the same shelf, and tells it, not the tree.
+    shelf.forget();
+    tree.play('f1b5');
+    await pumpEventQueue();
+    expect([for (final row in rows()) row.san], ['a6', 'Nf6', 'f5']);
   });
 
   test('a flipped board shows the other side\'s files', () async {
