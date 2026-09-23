@@ -81,21 +81,18 @@ void main() {
   });
 
   test(
-    'an imported study is a folder of chapter files, with no staging left',
+    'an imported study is one course file of chapters, with no staging left',
     () async {
       const study =
           '[Event "S: A"]\n[ChapterName "A"]\n\n1. e4 e5 (1... c5) *\n\n'
           '[Event "S: B"]\n[ChapterName "B"]\n\n1. d4 d5 *\n';
       final result = await library.importText(study, name: 'Study');
       expect(result, isA<LibraryAdded>());
+      final first = (result as LibraryAdded).first;
+      expect(first.path, at('repertoires/Study/Study.pgn'));
+      expect(first.section, 'A');
       expect(
-        (result as LibraryAdded).first.path,
-        at('repertoires/Study/A.pgn'),
-      );
-      expect(exists('repertoires/Study/A.pgn'), isTrue);
-      expect(exists('repertoires/Study/B.pgn'), isTrue);
-      expect(
-        File(at('repertoires/Study/A.pgn')).readAsStringSync(),
+        File(at('repertoires/Study/Study.pgn')).readAsStringSync(),
         contains('1. e4 c5 *'),
       );
       expect(
@@ -155,6 +152,61 @@ void main() {
     // The rows followed the chapter into recovery, so restoring it restores
     // its schedule with it.
     expect(reviews(), contains('.cap-pgn-history'));
+  });
+
+  Future<List<DeletedChapter>> deletedChapters() async =>
+      (await library.deleted() as DeletedChapters).chapters;
+
+  test(
+    'a deleted repertoire comes back chapter by chapter, rows and all',
+    () async {
+      await library.createRepertoire('Sidelines', Side.black);
+      await library.createChapter(named('Sidelines'), 'Modern');
+      trainOn('repertoires/Sidelines/Modern.pgn');
+      await library.deleteRepertoire(named('Sidelines'));
+      final gone = await deletedChapters();
+      expect(gone.map((c) => c.name), unorderedEquals(['Main', 'Modern']));
+      expect(gone.every((c) => c.repertoire == 'Sidelines'), isTrue);
+
+      for (final chapter in gone) {
+        expect(await library.restoreChapter(chapter), isA<LibraryDone>());
+      }
+      expect(named('Sidelines').chapters.map((c) => c.name), [
+        'Main',
+        'Modern',
+      ]);
+      expect(
+        File(at('repertoires/Sidelines/Modern.pgn')).readAsStringSync(),
+        startsWith('// Modern\n'),
+      );
+      expect(reviews(), contains(at('repertoires/Sidelines/Modern.pgn')));
+      expect(reviews(), isNot(contains('.cap-pgn-history')));
+      expect(await deletedChapters(), isEmpty);
+    },
+  );
+
+  test('a restore never replaces a chapter of the same name', () async {
+    await library.createRepertoire('Benoni', Side.black);
+    await library.createChapter(named('Benoni'), 'Modern');
+    await library.deleteChapter(chapter('Benoni', 'Modern'));
+    await library.createChapter(named('Benoni'), 'Modern');
+    File(at('repertoires/Benoni/Modern.pgn')).writeAsStringSync('// New\n');
+    final gone = (await deletedChapters()).single;
+
+    expect(await library.restoreChapter(gone), isA<LibraryNameTaken>());
+    expect(
+      File(at('repertoires/Benoni/Modern.pgn')).readAsStringSync(),
+      '// New\n',
+    );
+    expect(
+      await library.restoreChapter(gone, name: 'Modern (restored)'),
+      isA<LibraryDone>(),
+    );
+    expect(
+      File(at('repertoires/Benoni/Modern (restored).pgn')).readAsStringSync(),
+      startsWith('// Modern\n'),
+    );
+    expect(await deletedChapters(), isEmpty);
   });
 
   /// A repertoire as generation leaves it: two chapters, the raw-game sidecar

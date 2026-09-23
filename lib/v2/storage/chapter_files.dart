@@ -4,35 +4,62 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import '../chess/pgn/chapter_heading.dart';
+import '../chess/pgn/chapter_sections.dart';
 import '../diagnostics/log.dart';
+import 'deleted_chapters.dart';
 import 'document_ref.dart';
 
 export '../chess/pgn/chapter_heading.dart' show ChapterHeading;
+export 'deleted_chapters.dart'
+    show DeletedChapter, DeletedChapters, DeletedListing, DeletedUnreadable;
 
-/// One chapter file on disk: a document, plus what the lists show about it
-/// without opening it — its two names and its heading. The store takes it as
-/// the [DocumentRef] it is, and two refs to one path are equal whatever
-/// their headings say, because the path is the identity.
+/// One chapter on disk: a file, or the games of a file that name one
+/// chapter by tag ([section]), plus what the lists show about it without
+/// opening it — its two names and its heading. The store takes it as the
+/// [DocumentRef] it is, and two refs to one chapter are equal whatever their
+/// headings say, because the path and the section are the identity.
 final class ChapterRef extends DocumentRef {
   const ChapterRef({
     required this.repertoire,
     required this.name,
     required String path,
     this.heading = ChapterHeading.none,
+    this.section,
   }) : super(path);
 
   /// The chapter a file path names: the file without `.pgn`, in the folder
-  /// whose name is the repertoire's. One rule, so a listing and a move cannot
-  /// disagree about what a path means.
+  /// whose name is the repertoire's — or, with [section], the games of that
+  /// file that carry that `[ChapterName]`, called by it. One rule, so a
+  /// listing and a move cannot disagree about what a path means.
   factory ChapterRef.at(
     String path, {
     ChapterHeading heading = ChapterHeading.none,
+    String? section,
   }) => ChapterRef(
     repertoire: p.basename(p.dirname(path)),
-    name: p.basenameWithoutExtension(path),
+    name: section ?? p.basenameWithoutExtension(path),
     path: path,
     heading: heading,
+    section: section,
   );
+
+  /// The `[ChapterName]` its games carry, or null for the games of the file
+  /// that carry none — every game, in a file of one chapter.
+  @override
+  final String? section;
+
+  /// What the file as a whole is called: [name] for a file of one chapter,
+  /// and for a chapter of a course file, the file's name without `.pgn`.
+  String get fileName =>
+      section == null ? name : p.basenameWithoutExtension(path);
+
+  /// The file's own chapter: the same file, with no section.
+  ChapterRef get wholeFile => section == null ? this : ChapterRef.at(path);
+
+  /// The same chapter in the file at [path], which is where it went when its
+  /// file was renamed or moved.
+  ChapterRef inFile(String path) =>
+      ChapterRef.at(path, heading: heading, section: section);
 
   /// Where the chapter starts and whether it is a draft, read off the top
   /// of the file when the folder was listed. A ref made from a path alone
@@ -120,6 +147,10 @@ final class RepertoiresUnreadable extends RepertoireListing {
 abstract interface class ChapterFiles {
   Future<RepertoireListing> list();
 
+  /// The chapters deleted from every repertoire and still in recovery,
+  /// which is what a restore can bring back.
+  Future<DeletedListing> deleted();
+
   /// Takes away a repertoire folder whose chapters have all been deleted, so
   /// deleting a repertoire leaves nothing behind in the user's Documents.
   ///
@@ -148,6 +179,12 @@ final class ChapterDirectory implements ChapterFiles {
   /// The `repertoires` directory itself.
   final Directory root;
 
+  /// The chapter names each file was last found to hold, with the size and
+  /// time it had then: a course is one file of thousands of games, and the
+  /// library is listed again after every write.
+  final _sections =
+      <String, ({int size, DateTime modified, List<String?> names})>{};
+
   @override
   Future<RepertoireListing> list() async {
     if (!await root.exists()) return const Repertoires([]);
@@ -163,6 +200,9 @@ final class ChapterDirectory implements ChapterFiles {
       return RepertoiresUnreadable(_detail(e));
     }
   }
+
+  @override
+  Future<DeletedListing> deleted() => listDeleted(root);
 
   @override
   Future<void> removeIfEmpty(String folder) async {
@@ -221,21 +261,58 @@ final class ChapterDirectory implements ChapterFiles {
   }
 
   Future<RepertoireFolder> _read(Directory folder, String name) async {
-    final chapters = <ChapterRef>[];
+    final files = <File>[];
     var modified = (await folder.stat()).modified;
     await for (final file in folder.list()) {
       if (file is! File || !_isChapter(file.path)) continue;
-      chapters.add(ChapterRef.at(file.path, heading: await _headingOf(file)));
-      final touched = (await file.stat()).modified;
-      if (touched.isAfter(modified)) modified = touched;
+      files.add(file);
     }
-    chapters.sort(_byChapterName);
+    files.sort(_byFileName);
+    final chapters = <ChapterRef>[];
+    for (final file in files) {
+      final stat = await file.stat();
+      if (stat.modified.isAfter(modified)) modified = stat.modified;
+      final heading = await _headingOf(file);
+      // A file's chapters are listed in the order the file gives them.
+      for (final section in await _sectionsOf(file, stat)) {
+        chapters.add(
+          ChapterRef.at(file.path, heading: heading, section: section),
+        );
+      }
+    }
     return RepertoireFolder(
       name: name,
       path: folder.path,
       modified: modified,
       chapters: List.unmodifiable(chapters),
     );
+  }
+}
+
+extension on ChapterDirectory {
+  /// The chapter names [file] holds, from the cache while the file is as it
+  /// was. A file that cannot be read lists as one chapter; opening it is
+  /// where the user is told why.
+  Future<List<String?>> _sectionsOf(File file, FileStat stat) async {
+    final known = _sections[file.path];
+    if (known != null &&
+        known.size == stat.size &&
+        known.modified == stat.modified) {
+      return known.names;
+    }
+    List<String?> names = const [null];
+    try {
+      final text = utf8.decode(await file.readAsBytes(), allowMalformed: true);
+      if (text.contains('[$chapterNameTag ')) names = sectionsInText(text);
+    } on FileSystemException catch (error) {
+      log.w('read the chapters of ${file.path}', error);
+    }
+    _sections[file.path] = (
+      size: stat.size,
+      modified: stat.modified,
+      names: names,
+    );
+    return names;
   }
 }
 
@@ -269,5 +346,7 @@ String _detail(FileSystemException e) => e.osError?.message ?? e.message;
 int _byName(RepertoireFolder a, RepertoireFolder b) =>
     a.name.toLowerCase().compareTo(b.name.toLowerCase());
 
-int _byChapterName(ChapterRef a, ChapterRef b) =>
-    a.name.toLowerCase().compareTo(b.name.toLowerCase());
+int _byFileName(File a, File b) => p
+    .basenameWithoutExtension(a.path)
+    .toLowerCase()
+    .compareTo(p.basenameWithoutExtension(b.path).toLowerCase());

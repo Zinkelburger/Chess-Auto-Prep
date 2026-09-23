@@ -110,6 +110,43 @@ void main() {
     expect(empty.existsSync(), isFalse);
     expect(Directory(p.join(root.path, 'Gone')).existsSync(), isTrue);
   });
+
+  Future<List<DeletedChapter>> deleted() async =>
+      ((await ChapterDirectory(root).deleted()) as DeletedChapters).chapters;
+
+  test(
+    'deleted chapters are read off their recovery names, newest first',
+    () async {
+      await put('KID/.cap-pgn-history/1000000-a1-Main.pgn', '*');
+      await put('KID/.cap-pgn-history/3000000-ff-Sämisch 5.f3.pgn', '*');
+      await put('Gone/.cap-pgn-history/2000000-0c-Only.pgn', '*');
+      final chapters = await deleted();
+      expect(chapters.map((c) => c.name), ['Sämisch 5.f3', 'Only', 'Main']);
+      final newest = chapters.first;
+      expect(newest.repertoire, 'KID');
+      expect(newest.deletedAt, DateTime.fromMicrosecondsSinceEpoch(3000000));
+      expect(newest.restoredAs(), p.join(root.path, 'KID', 'Sämisch 5.f3.pgn'));
+      expect(newest.restoredAs('Other'), p.join(root.path, 'KID', 'Other.pgn'));
+    },
+  );
+
+  test(
+    'kept versions, sidecars and stray files are not deleted chapters',
+    () async {
+      await put('KID/.cap-pgn-history/1-2-Main.pgn', '*');
+      await put('KID/.cap-pgn-history/abcdef.bytes', '*');
+      await put('KID/.cap-pgn-history/3-4-Main_raw_games.pgn', '*');
+      await put('KID/.cap-pgn-history/notes.pgn', '*');
+      await put('KID/.cap-pgn-history/x-4-Main.pgn', '*');
+      await put('.import-1/.cap-pgn-history/5-6-Main.pgn', '*');
+      expect((await deleted()).map((c) => c.name), ['Main']);
+    },
+  );
+
+  test('no repertoires folder means nothing deleted', () async {
+    final files = ChapterDirectory(Directory(p.join(root.path, 'none')));
+    expect(((await files.deleted()) as DeletedChapters).chapters, isEmpty);
+  });
 }
 
 final Object _needsAPlainUser =

@@ -6,6 +6,7 @@ import '../chess/fen.dart';
 import '../chess/pgn/chapter.dart';
 import '../chess/pgn/chapter_edit.dart' as edits;
 import '../chess/pgn/chapter_edits.dart' as edits;
+import '../chess/pgn/chapter_sections.dart';
 import '../chess/pgn/comment_edits.dart' as edits;
 import '../chess/pgn/games_written.dart';
 import '../chess/pgn/game_tree.dart';
@@ -13,10 +14,10 @@ import '../chess/pgn/tree_edit.dart';
 import '../diagnostics/log.dart';
 import '../storage/chapter_files.dart';
 import '../storage/document_ref.dart';
-import '../storage/edit_scope.dart';
 import '../storage/pgn_document_store.dart' as store;
 import 'copy_aside.dart';
 import 'document_saver.dart';
+import 'edit_landing.dart';
 import 'edit_refused.dart';
 import 'save_state.dart';
 import 'session_results.dart';
@@ -44,7 +45,15 @@ final class DocumentSession extends ChangeNotifier {
 
   final store.PgnDocumentStore _store;
   final DocumentSaver _saver;
-  Chapter? _chapter;
+
+  /// The chapter on the board, and — when it is one of several a file holds
+  /// by tag — the file and where its games sit in it; the view is null when
+  /// the chapter is the whole file. Edits are made to the chapter and, with
+  /// a view, put back into the file. One field, so the two cannot disagree.
+  ({Chapter chapter, SectionView? view})? _shown;
+
+  Chapter? get _chapter => _shown?.chapter;
+  SectionView? get _view => _shown?.view;
   ChapterRef? _source;
   String? _readOnly;
   final _cursor = ValueNotifier<NodePath>(const NodePath.root());
@@ -165,7 +174,7 @@ final class DocumentSession extends ChangeNotifier {
     switch (read) {
       case store.Opened(:final text, :final revision, :final readOnly):
         final chapter = await readChapter(
-          name: ref.name,
+          name: ref.fileName,
           text: text,
           game: game,
         );
@@ -175,7 +184,11 @@ final class DocumentSession extends ChangeNotifier {
         if (game != null && game >= chapter.lines.length) {
           return _openFailed(ref, '${ref.name} has no chapter ${game + 1}');
         }
-        _show(chapter, ref, revision, readOnly);
+        final view = game == null ? _viewOf(chapter, ref) : null;
+        if (view != null && view.places.isEmpty) {
+          return _openFailed(ref, '${ref.name} is no longer in its file');
+        }
+        _show(view?.chapter ?? chapter, ref, revision, readOnly, view: view);
         return const DocumentOpened();
       case store.Absent():
         return _openFailed(ref, '${ref.name} is no longer on disk');
@@ -193,13 +206,18 @@ final class DocumentSession extends ChangeNotifier {
   }
 
   /// The open document was renamed or moved: the same file with the same
-  /// bytes, so only the name shown and the file saves go to change.
+  /// bytes, so only the name shown and the file saves go to change. A file
+  /// moved takes the chapter of it that is open along.
   void relocated(ChapterRef ref) {
     final chapter = _chapter;
-    if (_source == null || chapter == null) return;
-    _source = ref;
-    _chapter = renamedChapter(chapter, ref.name);
-    _saver.relocated(ref);
+    final source = _source;
+    if (source == null || chapter == null) return;
+    final moved = ref.section == null && source.section != null
+        ? source.inFile(ref.path)
+        : ref;
+    _source = moved;
+    _shown = (chapter: renamedChapter(chapter, moved.name), view: _view);
+    _saver.relocated(moved);
     notifyListeners();
   }
 
@@ -208,7 +226,7 @@ final class DocumentSession extends ChangeNotifier {
   void closed() {
     if (_source == null) return;
     _opens++;
-    _chapter = null;
+    _shown = null;
     _source = null;
     _refused = null;
     _shownTo = null;
@@ -229,7 +247,10 @@ final class DocumentSession extends ChangeNotifier {
     if (chapter == null || chapter.game == null) return;
     if (index < 0 || index >= chapter.lines.length) return;
     if (index == chapter.game) return;
-    _chapter = withLines(chapter, chapter.lines, game: index);
+    _shown = (
+      chapter: withLines(chapter, chapter.lines, game: index),
+      view: null,
+    );
     _shownTo = null;
     _clearRefusal();
     _cursor.value = const NodePath.root();
@@ -384,11 +405,16 @@ final class DocumentSession extends ChangeNotifier {
     if (_disposed || ticket != _opens) return const UndoRefused();
     if (result case Restored(:final text)) {
       final showing = showingGameText(_chapter);
-      final read = await readChapter(name: ref.name, text: text, game: game);
+      final read = await readChapter(
+        name: ref.fileName,
+        text: text,
+        game: game,
+      );
       if (_disposed || ticket != _opens) return const UndoRefused();
-      final restored = showingGame(read, showing);
+      final view = game == null ? _viewOf(read, ref) : null;
+      final restored = view?.chapter ?? showingGame(read, showing);
       final before = _chapter?.tree;
-      _chapter = restored;
+      _shown = (chapter: restored, view: view);
       _cursor.value = before == null
           ? const NodePath.root()
           : samePathIn(before, restored.tree, cursor);
@@ -431,9 +457,10 @@ final class DocumentSession extends ChangeNotifier {
     Chapter chapter,
     ChapterRef ref,
     Revision revision,
-    String? readOnly,
-  ) {
-    _chapter = chapter;
+    String? readOnly, {
+    SectionView? view,
+  }) {
+    _shown = (chapter: chapter, view: view);
     _source = ref;
     _flipped = false;
     _shownTo = null;
@@ -449,8 +476,16 @@ final class DocumentSession extends ChangeNotifier {
   /// look like: that would agree with the text, and the store would have
   /// nothing to refuse.
   void _replace(Chapter edited, GamesWritten written) {
-    _chapter = edited;
-    _saver.save(writeChapter(edited), GamesEdited(written));
+    final before = _chapter!;
+    _land(
+      landing(
+        before,
+        _view,
+        edited,
+        GamesArranged.of(written, before: before.lines.length),
+        written: written,
+      ),
+    );
   }
 
   OpenFailed _openFailed(ChapterRef ref, String reason) {
@@ -475,17 +510,82 @@ final class DocumentSession extends ChangeNotifier {
       case edits.ChapterUnchanged():
         return null;
       case edits.ChapterEditRefused(:final reason):
-        log.w('edit ${_source?.path}', reason);
-        _refused = EditNotWritten(reason);
-        notifyListeners();
-        return reason;
+        return _editRefused(reason);
       case edits.ChapterEdited(chapter: final edited, :final games):
+        final reason = _land(landing(chapter, _view, edited, games));
+        if (reason != null) return reason;
         _clearRefusal();
-        _chapter = edited;
-        _saver.save(writeChapter(edited), GamesRearranged(games));
-        _cursor.value = samePathIn(chapter.tree, edited.tree, cursor);
+        _cursor.value = samePathIn(chapter.tree, _chapter!.tree, cursor);
     }
     notifyListeners();
+    return null;
+  }
+
+  /// Where the games at [games] of the open chapter sit in its file: the
+  /// same indexes when the chapter is the whole file.
+  Set<int> placesInFile(Set<int> games) {
+    final view = _view;
+    if (view == null) return games;
+    return {
+      for (final game in games)
+        if (game >= 0 && game < view.places.length) view.places[game],
+    };
+  }
+
+  /// Makes [edit] to the whole file the open chapter is in — a course
+  /// file's chapters named, renamed, taken out — through the one path every
+  /// edit takes. [section] is the chapter to show after it, when the edit
+  /// renamed the open one. Answers why it did not happen, or null.
+  String? applyToFile(
+    edits.ChapterEdit Function(Chapter file) edit, {
+    String? section,
+  }) {
+    final view = _view;
+    if (view == null) return apply(edit);
+    if (_refuseWhenReadOnly()) return _readOnly;
+    switch (edit(view.file)) {
+      case edits.ChapterUnchanged():
+        return null;
+      case edits.ChapterEditRefused(:final reason):
+        return _editRefused(reason);
+      case edits.ChapterEdited(chapter: final edited, :final games):
+        _clearRefusal();
+        final before = view.chapter.tree;
+        _land(fileLanding(view.file, edited, games, section ?? view.section));
+        _cursor.value = samePathIn(before, _chapter!.tree, cursor);
+    }
+    notifyListeners();
+    return null;
+  }
+
+  String _editRefused(String reason) {
+    log.w('edit ${_source?.path}', reason);
+    _refused = EditNotWritten(reason);
+    notifyListeners();
+    return reason;
+  }
+
+  /// The chapter [ref] names in [file]: null when it is the whole file,
+  /// which is every file whose games name no chapter.
+  SectionView? _viewOf(Chapter file, ChapterRef ref) {
+    final view = sectionView(file, ref.section);
+    return view.isWholeFile ? null : view;
+  }
+
+  /// Writes [landed] and shows what it says to show, following a course
+  /// file's chapter to the one shown. Answers why nothing was written, or
+  /// null.
+  String? _land(Landing? landed) {
+    if (landed == null) {
+      return _editRefused('a new line could not be given its chapter name');
+    }
+    _saver.save(landed.text, landed.scope);
+    _shown = (chapter: landed.chapter, view: landed.view);
+    final source = _source!;
+    final view = landed.view;
+    if (view == null || view.section == source.section) return null;
+    _source = ChapterRef.at(source.path, section: view.section);
+    _saver.relocated(_source!);
     return null;
   }
 

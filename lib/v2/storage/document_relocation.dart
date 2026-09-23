@@ -315,7 +315,7 @@ final class DocumentRelocation {
       hash: revision.contentHash,
     );
     if (refused != null) return refused;
-    final trash = Directory(p.join(p.dirname(ref.path), _recoveryFolder));
+    final trash = Directory(p.join(p.dirname(ref.path), recoveryFolder));
     final stamp = DateTime.now().microsecondsSinceEpoch;
     final token = Random.secure().nextInt(1 << 32).toRadixString(16);
     final target = p.join(trash.path, '$stamp-$token-${p.basename(ref.path)}');
@@ -365,8 +365,9 @@ final class DocumentRelocation {
   }
 }
 
-/// The old app's chapter quarantine folder; both apps delete into it.
-const _recoveryFolder = '.cap-pgn-history';
+/// The old app's chapter quarantine folder beside each chapter; both apps
+/// delete into it, and `deleted_chapters.dart` lists what is in it.
+const recoveryFolder = '.cap-pgn-history';
 
 const _unlistable = 'the folder could not be read';
 

@@ -4,6 +4,7 @@ import '../../storage/chapter_files.dart';
 import '../../ui/name_dialog.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
+import 'deleted_chapters_view.dart';
 import 'library.dart';
 import 'library_messages.dart';
 import 'repertoire_tile.dart';
@@ -39,6 +40,14 @@ class _LibraryPanelState extends State<LibraryPanel> {
   /// Which repertoires are open, by folder path. View state: it belongs to
   /// nobody but this panel, and a rename closing a row is no loss.
   final _expanded = <String>{};
+
+  /// The deleted chapters are showing in place of the list.
+  bool _showingDeleted = false;
+
+  void _showDeleted(bool showing) {
+    if (!mounted) return;
+    setState(() => _showingDeleted = showing);
+  }
 
   @override
   void dispose() {
@@ -77,6 +86,14 @@ class _LibraryPanelState extends State<LibraryPanel> {
 
   @override
   Widget build(BuildContext context) {
+    if (_showingDeleted) {
+      return DeletedChaptersView(
+        library: widget.library,
+        onBack: () => _showDeleted(false),
+        onOpen: widget.onOpen,
+        trailing: widget.trailing,
+      );
+    }
     return ListenableBuilder(
       listenable: widget.library,
       builder: (context, _) => Column(
@@ -90,6 +107,7 @@ class _LibraryPanelState extends State<LibraryPanel> {
             trailing: widget.trailing,
           ),
           Expanded(child: _body(context)),
+          _DeletedLink(onPressed: () => _showDeleted(true)),
         ],
       ),
     );
@@ -193,6 +211,29 @@ class _Toolbar extends StatelessWidget {
             onChanged: onSearch,
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The way to the deleted chapters, under the list where it is out of the
+/// way until the user wants something back.
+class _DeletedLink extends StatelessWidget {
+  const _DeletedLink({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(Space.xs),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          onPressed: onPressed,
+          icon: const Icon(Icons.restore_from_trash, size: IconSize.action),
+          label: const Text('Deleted chapters'),
+        ),
       ),
     );
   }
