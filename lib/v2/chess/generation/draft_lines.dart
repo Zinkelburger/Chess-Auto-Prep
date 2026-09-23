@@ -7,10 +7,9 @@ import 'search_node.dart';
 
 /// The lines a finished search proposes, as the draft chapter writes them.
 ///
-/// The search's own export (`export.dart`) is the whole policy: our one move
-/// at every position and every reply the model gave any weight, nothing
-/// folded, nothing dropped. A draft is for a person to read and accept line
-/// by line, so it is cut the other way: one game per line the search
+/// The search tree is the whole policy: our one move at every position and
+/// every reply the model gave any weight. A draft is for a person to read and
+/// accept line by line, so it is cut down: one game per line the search
 /// actually answered, most reached first, near-copies of a kept line folded
 /// into it as a sideline, lines the chapter already has left out, and at
 /// most [DraftPlan.cap] of them. Every move carries what the search thought
