@@ -307,7 +307,7 @@ void main() {
   });
 
   group('reading a chapter', () {
-    test('a chapter\'s decisions and pins are read off its tree, castling in '
+    test('a chapter\'s decisions are read off its tree, castling in '
         'both spellings', () async {
       final chapter = await readChapter(
         name: 'Main',
@@ -319,9 +319,6 @@ void main() {
       expect(decisions, contains('${Fen.initial.position}|e2e4'));
       expect(decisions.where((d) => d.endsWith('|e1g1')), hasLength(1));
       expect(decisions.where((d) => d.endsWith('|e1h1')), hasLength(1));
-      final pins = chapterPins(chapter);
-      expect(pins[Fen.initial.position], {'e2e4'});
-      expect(pins.values.expand((v) => v), isNot(contains('e7e5')));
     });
   });
 

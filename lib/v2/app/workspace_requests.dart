@@ -17,7 +17,6 @@ import '../workspace/chapter_commands.dart';
 import '../workspace/document_session.dart';
 import '../chess/explorer_answer.dart' show ExplorerGame;
 import '../chess/explorer_choice.dart' show ExplorerSource;
-import '../workspace/fill_gaps.dart';
 import '../workspace/game_fetcher.dart';
 import '../workspace/session_results.dart';
 import 'exit_guard.dart';
@@ -243,42 +242,6 @@ final class WorkspaceRequests extends ChangeNotifier {
     await _session.showAnalysisBoard();
     _saidCopy(leave);
     return const RequestDone();
-  }
-
-  /// The item at [index] of what a search found, on the board: for a run
-  /// on the analysis board, played onto it — the moves already there are
-  /// followed, the rest added — and stopped where the item stops; for a run
-  /// on a chapter, the draft it wrote opened there in the builder.
-  Future<RequestResult> showFound(FillFound found, int index) async {
-    final item = found.items[index];
-    final moves = [for (final move in item.moves) move.move];
-    switch (found.origin) {
-      case InDraft(:final draft, :final sans):
-        switchTo(Mode.repertoires);
-        return openAt(draft, [
-          ...sans,
-          for (final move in moves.take(item.stopAfter)) move.san,
-        ]);
-      case OnTheBoard(:final root, :final line):
-        final back = await analysisBoard();
-        if (_disposed || back is! RequestDone) return back;
-        if (_session.tree?.rootFen != root) {
-          await _session.showAnalysisBoard(
-            boards.analysisBoard(side: found.side, root: root),
-          );
-        }
-        _session.goTo(const NodePath.root());
-        for (final move in line) {
-          _session.playMove(move.uci);
-        }
-        var stop = _session.cursor;
-        for (final (i, move) in moves.indexed) {
-          _session.playMove(move.uci);
-          if (i + 1 == item.stopAfter) stop = _session.cursor;
-        }
-        _session.goTo(stop);
-        return const RequestDone();
-    }
   }
 
   /// A new analysis board holding the line on the board up to where the

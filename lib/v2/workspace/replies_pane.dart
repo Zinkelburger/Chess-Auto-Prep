@@ -14,9 +14,10 @@ import 'replies.dart';
 ///
 /// One row per move, most likely first: the share in a gutter, the move,
 /// and a tick when the chapter already plays it. At our own move a column
-/// after the move holds what a fill said the move is worth, read off the
+/// after the move holds what a search said the move is worth, read off the
 /// document's `[%expectimax]` tokens, or `not in tree` where no run
-/// reached it; nothing is worked out while browsing. A reply the opponent plays
+/// reached it, and is left out where none did; nothing is worked out while
+/// browsing. A reply the opponent plays
 /// often enough and the chapter does not answer is a gap and its row says
 /// so; the gap Next took the user to is the tinted row. Clicking a row plays
 /// the move, which at the opponent's move adds their reply and puts the
@@ -113,6 +114,9 @@ class _RepliesPaneState extends State<RepliesPane> {
   }
 
   Widget _rows(List<ReplyRow> rows, {required bool ourMove}) {
+    // The values a search wrote into the document; the column is left out
+    // where none did, rather than saying so on every row.
+    final valued = ourMove && rows.any((row) => row.expectimax != null);
     final marked = switch (widget.gaps.highlighted) {
       MissingReply(:final uci) => uci,
       _ => null,
@@ -125,7 +129,7 @@ class _RepliesPaneState extends State<RepliesPane> {
           key: ValueKey(row.uci),
           row: row,
           marked: row.uci == marked,
-          ourMove: ourMove,
+          valued: valued,
           onHover: (anchor) => _hover(row, anchor),
           onLeave: _leave,
           onTap: () => _play(row),
@@ -136,7 +140,8 @@ class _RepliesPaneState extends State<RepliesPane> {
 }
 
 /// One line above the rows: whose move, the rating, and how the chapter is
-/// doing — the gaps left and the share of games it answers.
+/// doing — the gaps left and the share of games it answers — with the way
+/// to the next gap at its end, off while there is none.
 class _Status extends StatelessWidget {
   const _Status({required this.replies, required this.gaps});
 
@@ -163,9 +168,9 @@ class _Status extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     return SizedBox(
-      height: engineBarHeight,
+      height: repliesStatusHeight,
       child: Padding(
-        padding: const EdgeInsets.only(left: Space.m),
+        padding: const EdgeInsets.symmetric(horizontal: Space.m),
         child: Row(
           children: [
             Expanded(
@@ -175,6 +180,13 @@ class _Status extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
+            ),
+            OutlinedButton.icon(
+              onPressed: (gaps.walk?.gaps ?? const []).isEmpty
+                  ? null
+                  : gaps.nextGap,
+              icon: const Icon(Icons.skip_next, size: IconSize.action),
+              label: const Text('Next gap'),
             ),
           ],
         ),
@@ -188,7 +200,7 @@ class _ReplyRow extends StatelessWidget {
     super.key,
     required this.row,
     required this.marked,
-    required this.ourMove,
+    required this.valued,
     required this.onHover,
     required this.onLeave,
     required this.onTap,
@@ -199,7 +211,8 @@ class _ReplyRow extends StatelessWidget {
   /// This is the gap Next took the user to.
   final bool marked;
 
-  final bool ourMove;
+  /// Whether the row has a column for the value a search wrote.
+  final bool valued;
   final ValueChanged<Offset> onHover;
   final VoidCallback onLeave;
   final VoidCallback onTap;
@@ -245,7 +258,7 @@ class _ReplyRow extends StatelessWidget {
                     style: monoText.copyWith(color: scheme.onSurface),
                   ),
                 ),
-                if (ourMove) _expectimax(theme),
+                if (valued) _expectimax(theme),
                 _mark(theme),
                 const SizedBox(width: Space.m),
               ],
@@ -256,7 +269,7 @@ class _ReplyRow extends StatelessWidget {
     );
   }
 
-  /// What the fill made of the move, or that none reached it.
+  /// What a search made of the move, or that none reached it.
   Widget _expectimax(ThemeData theme) {
     final scheme = theme.colorScheme;
     final value = row.expectimax;

@@ -94,37 +94,28 @@ void main() {
       expect(find.text('Replies'), findsOneWidget);
     });
 
-    testWidgets('the trailing control sits at the right edge', (tester) async {
-      await pumpStrip(
-        tester,
-        open: ['replies'],
-        trailing: const Text('Next gap'),
+    testWidgets('the tabs share the width, whatever their words', (
+      tester,
+    ) async {
+      await pumpStrip(tester, open: ['replies', 'explorer']);
+      Size sizeOf(String label) => tester.getSize(
+        find
+            .ancestor(of: find.text(label), matching: find.byType(InkWell))
+            .first,
       );
-      expect(
-        tester.getTopRight(find.text('Next gap')).dx,
-        greaterThan(tester.getTopRight(find.text('Replies')).dx),
-      );
+      expect(sizeOf('Moves').width, sizeOf('Explorer').width);
+      expect(sizeOf('Moves').height, greaterThanOrEqualTo(paneTabHeight - 8));
+      await expectSameWidthUnderPointer(tester, 'Replies');
     });
   });
 
   group('PaneTabStrip closing', () {
-    testWidgets('a click brings a tab up; its × and Ctrl+W close it', (
-      tester,
-    ) async {
+    testWidgets('a click brings a tab up, with no × on any', (tester) async {
       final tabs = await pumpStrip(tester, open: ['replies', 'explorer']);
       await tester.tap(find.text('Explorer'));
       await tester.pumpAndSettle();
       expect(tabs.selected, 'explorer');
-      expect(find.byTooltip('Close Explorer (Ctrl+W)'), findsOneWidget);
-      // The pinned tab has no ×; a tab that is not up does not draw its
-      // × but holds the room for it, so nothing shifts under the pointer.
-      expect(find.byTooltip('Close Moves'), findsNothing);
-      expect(find.byTooltip('Close Replies'), findsOneWidget);
-      await expectSameWidthUnderPointer(tester, 'Replies');
-      await tester.tap(find.byTooltip('Close Explorer (Ctrl+W)'));
-      await tester.pumpAndSettle();
-      expect(tabs.open, ['moves', 'replies']);
-      expect(tabs.selected, 'replies');
+      expect(find.byIcon(Icons.close), findsNothing);
     });
 
     testWidgets('a middle click closes a tab', (tester) async {
@@ -165,7 +156,6 @@ void main() {
 Future<PaneTabs<String>> pumpStrip(
   WidgetTester tester, {
   List<String> open = const [],
-  Widget? trailing,
 }) async {
   final tabs = PaneTabs(all, open: open);
   addTearDown(tabs.dispose);
@@ -173,15 +163,7 @@ Future<PaneTabs<String>> pumpStrip(
     MaterialApp(
       theme: darkTheme(),
       home: Scaffold(
-        body: Column(
-          children: [
-            PaneTabStrip(
-              tabs: tabs,
-              trailing: trailing,
-              closeShortcut: 'Ctrl+W',
-            ),
-          ],
-        ),
+        body: Column(children: [PaneTabStrip(tabs: tabs)]),
       ),
     ),
   );

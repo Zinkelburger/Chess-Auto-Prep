@@ -1,6 +1,6 @@
 # Generation
 
-Status: corrected by the owner (2026-09-21: decisions below; built 2026-09-22 as `Fill gaps from here…`, see the last section)
+Status: corrected by the owner (2026-09-21: decisions below; built 2026-09-22 as `Fill gaps from here…`; since 2026-09-23 the Search tab, see the last section)
 Old code (oracle only): `lib/features/generate/`, `lib/features/generation/`, `lib/features/planner/`,
 `lib/widgets/generation/`, `lib/widgets/repertoire_generation_tab.dart`, `lib/widgets/layout/jobs_panel.dart`,
 `lib/core/generation_session_controller.dart`, `lib/services/tree_build_service.dart`
@@ -243,3 +243,37 @@ repertoire, find lines *and* traps, and walk through what was found. Built as:
   expansion under way and the tree as it stands is read. The search goes level by level,
   so an early finish is every line to the depth reached — the way to use a deep search
   when in a rush (depth 8 at engine depth 14 runs at about a thousand positions a minute).
+
+## The Search tab: values, not lines (owner, 2026-09-23)
+The owner found the Prep flow confusing ("why is it so confusing?"): a dialog, `Generate`,
+`Finish now` and `Cancel` as text links, a `Prefer traps` switch, and results that went
+straight to lines and traps. Their rule: *a search gets the evals; once there are evals, lines
+are trivial — do not go straight to lines*. Supersedes the two sections above where they differ.
+
+- **Search is a tab**, `Search` (was `Prep`), with no dialog. On top: `Opponent` (the Replies
+  rating, written back to settings), `Depth` (half-moves, default 8, kept for the window's
+  life), `Skip under 1 in` (the cover rule, also shared) and one filled `Search` button, which
+  becomes `Stop` while the search runs. Actions ▸ `Search from here` and Ctrl+G bring the tab
+  up and start it with the same numbers, anywhere a position is on the board and not hidden —
+  a read-only file or a game included, since nothing is written.
+- **No `Prefer traps`, no pins.** The loss window is always 50 cp; every legal move of ours
+  inside it is searched, the chapter's or not.
+- **The table follows the board.** Under a status line (`Searching for White · depth 3 of 8 ·
+  406 positions`, then `Searched …` or `Stopped at depth 3 …`), the position on the board is
+  looked up in the search tree by the moves from the document's root. At our move: `Your move ·
+  Expectimax · Engine`, best first. At theirs: `Their reply · Played · Expectimax · Engine`,
+  most played first, a reply losing ≥ 50 cp against their best reply marked `?` (a trap).
+  Values are White-relative, as the engine pane's; a move not expanded yet reads `…` in the
+  Expectimax column. A click plays the move (into the chapter, as the Explorer's do), a hover
+  floats the position. Off the tree: `This position is not in the search.` with `Go to where it
+  started` when that line is still in the document.
+- **Live.** The search hands the tree out at each new level and every two seconds within one
+  (`SearchSnapshot` in `chess/generation/search.dart`), so the first row of values appears as
+  soon as the root's moves are scored. `Stop` keeps what it has; nothing else stops a run.
+- **Lines are asked for.** After a search on a writable repertoire chapter, for the chapter's
+  side, the tab's foot offers `Make lines`, which writes the `<chapter> (draft)` chapter as
+  before (diversity bar, traps after the lines, what the chapter plays left out) and then says
+  `8 lines in Main (draft)` with `Open`. The v4 tree is still kept under `.cap-generation/`.
+- Gone: `fill_dialog.dart`, `prep_pane.dart`, the fill line above the tabs, `showFound`, ↑/↓
+  over Prep rows, `FillRequest.preferTraps`, `trapLossLimitCp`.
+
