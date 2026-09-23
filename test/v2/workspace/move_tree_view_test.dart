@@ -156,4 +156,29 @@ void main() {
       findsNothing,
     );
   });
+
+  testWidgets('another game of the file starts at the top of the list', (
+    tester,
+  ) async {
+    // Two games, each with a long note on every move, so the list scrolls.
+    final note = List.filled(40, 'words').join(' ');
+    String game(String event) =>
+        '[Event "$event"]\n[Result "*"]\n\n'
+        '1. e4 {$note} e5 {$note} 2. Nf3 {$note} Nc6 {$note} '
+        '3. Bb5 {$note} a6 {$note} 4. Ba4 {$note} Nf6 {$note} *\n';
+    final fixture = await openSession('${game('One')}\n${game('Two')}');
+    addTearDown(fixture.dispose);
+    await fixture.session.open(fixture.ref, game: 0);
+    await pumpTree(tester, fixture);
+
+    final list = find.byType(Scrollable).first;
+    ScrollPosition position() => tester.state<ScrollableState>(list).position;
+    position().jumpTo(position().maxScrollExtent);
+    await tester.pump();
+    expect(position().pixels, greaterThan(0));
+
+    fixture.session.showGame(1);
+    await tester.pumpAndSettle();
+    expect(position().pixels, 0);
+  });
 }

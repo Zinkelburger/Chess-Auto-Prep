@@ -152,6 +152,9 @@ class _MoveTreeViewState extends State<MoveTreeView>
       preview: preview,
       orientation: side,
       child: SingleChildScrollView(
+        // Another game starts at the top: the scroll offset belongs to the
+        // game it was scrolled in, and an edit keeps it.
+        key: ValueKey((widget.session.source, widget.session.game)),
         padding: const EdgeInsets.fromLTRB(
           readingCardInset,
           Space.s,
