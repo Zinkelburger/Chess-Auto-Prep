@@ -9,6 +9,7 @@ import '../diagnostics/log.dart';
 import '../storage/document_ref.dart';
 import '../storage/edit_scope.dart';
 import '../storage/pgn_document_store.dart' as store;
+import '../ui/file_names.dart';
 import 'session_results.dart';
 
 typedef _Target = ({DocumentRef ref, Revision revision});
@@ -91,7 +92,17 @@ final class DocumentSaver extends ChangeNotifier {
   /// [SaveClock.flush]. Closing the window, losing focus and opening another
   /// document wait for this, so an edit made a moment before is not cut off.
   /// Whether the words arrived is [settled].
-  Future<void> flush() => _clock.flush();
+  ///
+  /// A draft the disk refused goes out again first, as a new edit's would:
+  /// whoever flushes needs the file now, and nothing else writes it before
+  /// the next edit. It is tried once per flush, never on a timer of its own.
+  Future<void> flush() {
+    if (_state is SaveFailed && !_pending.isEmpty) {
+      _set(const Unsaved());
+      _start();
+    }
+    return _clock.flush();
+  }
 
   /// Runs [action] against the revision the file has now, with the file held
   /// still: the draft waiting on the clock is written first, and a save asked
@@ -188,7 +199,7 @@ final class DocumentSaver extends ChangeNotifier {
     // edit; see [SaveStopped] and [SaveConflict] for what happens to the
     // others.
     if (result is store.IoFailure) _pending.returned(draft);
-    _adopt(result, target.ref);
+    _adopt(result, target.ref, draft.scope);
     await _write();
   }
 
@@ -227,11 +238,12 @@ final class DocumentSaver extends ChangeNotifier {
     }
   }
 
-  void _adopt(store.SaveResult result, DocumentRef ref) {
+  /// What the store's answer to a write under [scope] means for the file.
+  void _adopt(store.SaveResult result, DocumentRef ref, EditScope scope) {
     switch (result) {
       case store.Saved(:final receipt):
         _target = (ref: ref, revision: receipt.committed);
-        _undo.keep(receipt);
+        _undo.keep(receipt, scope);
         _set(const Saved());
       case store.Conflict():
         // The store logs what it could not do; a conflict is not a failure
@@ -284,7 +296,7 @@ final class DocumentSaver extends ChangeNotifier {
     return undoing;
   }
 
-  Future<UndoResult> _undoTo(store.Receipt entry, _Target target) async {
+  Future<UndoResult> _undoTo(KeptSave entry, _Target target) async {
     final resting = _state;
     _writing = true;
     _set(const Saving());
@@ -293,8 +305,8 @@ final class DocumentSaver extends ChangeNotifier {
     // from: there is no edit here whose games could be named.
     final result = await _put(
       target.ref,
-      entry.before,
-      entry.committed,
+      entry.receipt.before,
+      entry.receipt.committed,
       const RestoredVersion(),
     );
     _writing = false;
@@ -314,12 +326,16 @@ final class DocumentSaver extends ChangeNotifier {
     if (result is store.Saved && !_pending.isEmpty) {
       // Typed over: the entry stays where it is, the draft goes out on top
       // of the version just written, and the receipt the draft brings back
-      // makes that version the next step back.
+      // makes that version the next step back. The draft was worked out on
+      // the version the undo took away, so against the file it also changes
+      // the games the undone edit changed, and says so.
+      final typed = _pending.take()!;
+      _pending.typed(typed.text, scopeOfBoth(entry.scope, typed.scope));
       _catchUp(result, target.ref);
       await _write();
       return const UndoRefused();
     }
-    final outcome = _undone(result, entry, target.ref, resting);
+    final outcome = _undone(result, entry.receipt, target.ref, resting);
     await _write();
     return outcome;
   }
@@ -391,12 +407,19 @@ final class DocumentSaver extends ChangeNotifier {
   /// save the store stopped, a file this app may not write, a conflict the
   /// user does not want to lose their draft to. It replaces nothing: the
   /// name being taken is a result, never permission to overwrite.
+  ///
+  /// [name] is what the user typed, and a chapter's own name suggests it, so
+  /// it can hold anything: what a file cannot be called is replaced
+  /// ([importedName]), and the copy is always one file beside the original,
+  /// never a folder of its own. The answer names the file written.
   Future<CopyResult> copyAside(
     Chapter chapter, {
     required DocumentRef beside,
     required String name,
   }) async {
-    final file = p.extension(name) == '.pgn' ? name : '$name.pgn';
+    final base = p.extension(name) == '.pgn' ? p.withoutExtension(name) : name;
+    final original = p.basenameWithoutExtension(beside.path);
+    final file = '${importedName(base, fallback: '$original copy')}.pgn';
     final target = DocumentRef(p.join(p.dirname(beside.path), file));
     return switch (await _store.create(target, writeChapter(chapter))) {
       store.Created() => CopySaved(file),
@@ -533,12 +556,14 @@ final class SaveQueue {
 
   /// A draft the store did not take, coming back. Words typed while it was
   /// out are newer and win, and they take this draft's scope with them: the
-  /// file still holds the version both of them were typed over.
+  /// file still holds the version both of them were typed over. The draft
+  /// coming back is the earlier edit, and the words waiting were worked out
+  /// on what it made, so it goes first.
   void returned(Draft draft) {
     final waiting = _waiting;
     _waiting = waiting == null
         ? draft
-        : (text: waiting.text, scope: scopeOfBoth(waiting.scope, draft.scope));
+        : (text: waiting.text, scope: scopeOfBoth(draft.scope, waiting.scope));
   }
 
   /// The draft to write now, and the queue is empty again; null when nothing
@@ -554,6 +579,12 @@ final class SaveQueue {
   void clear() => _waiting = null;
 }
 
+/// A save that can be taken back: the store's receipt for it, and the scope
+/// it was written under — which games of the version the receipt says it
+/// replaced the save changed. Kept in memory with the receipt, for as long
+/// as the receipt is.
+typedef KeptSave = ({store.Receipt receipt, EditScope scope});
+
 /// The saves of one document that can still be taken back.
 ///
 /// A receipt is the store's own record of a write: the version it replaced
@@ -565,39 +596,44 @@ final class UndoHistory {
   /// versions themselves are kept in Support by the store.
   static const depth = 20;
 
-  final _entries = <store.Receipt>[];
+  final _entries = <KeptSave>[];
 
   bool get isEmpty => _entries.isEmpty;
 
   /// The save the next undo takes back, or null when there is none.
-  store.Receipt? get newest => _entries.lastOrNull;
+  KeptSave? get newest => _entries.lastOrNull;
 
   /// The history of the document that was open. A new document takes none of
   /// it: the file those receipts name is not the one being written now.
   void clear() => _entries.clear();
 
-  void keep(store.Receipt receipt) {
-    _entries.add(receipt);
+  /// [receipt] is the store's answer to a save made under [scope].
+  void keep(store.Receipt receipt, EditScope scope) {
+    _entries.add((receipt: receipt, scope: scope));
     if (_entries.length > depth) _entries.removeAt(0);
   }
 
   /// [undone] has been taken back by writing [written].
   ///
   /// The entry below it holds content that is on disk again, but as the file
-  /// the undo wrote, so it is pointed at that revision. An entry whose
-  /// revision was not the one the undone save replaced is left alone:
-  /// something else wrote in between, and undoing to it would throw that
-  /// away.
+  /// the undo wrote, so it is pointed at that revision; what that save
+  /// changed is what it always was. An entry whose revision was not the one
+  /// the undone save replaced is left alone: something else wrote in
+  /// between, and undoing to it would throw that away.
   void tookBack(store.Receipt undone, store.Receipt written) {
     _entries.removeLast();
     final previous = _entries.lastOrNull;
-    if (previous == null || previous.committed != undone.beforeRevision) {
+    if (previous == null ||
+        previous.receipt.committed != undone.beforeRevision) {
       return;
     }
-    _entries[_entries.length - 1] = store.Receipt(
-      committed: written.committed,
-      before: previous.before,
-      beforeRevision: previous.beforeRevision,
+    _entries[_entries.length - 1] = (
+      receipt: store.Receipt(
+        committed: written.committed,
+        before: previous.receipt.before,
+        beforeRevision: previous.receipt.beforeRevision,
+      ),
+      scope: previous.scope,
     );
   }
 }
@@ -674,7 +710,7 @@ extension WordsIn on SaveState {
       this is! DocumentReadOnly;
 
   /// Whether a write may go out now: a failed file is written again with the
-  /// next edit, and [takesWords] covers the rest.
+  /// next edit or the next flush, and [takesWords] covers the rest.
   bool get writable => takesWords && this is! SaveFailed;
 }
 

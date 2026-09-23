@@ -1,5 +1,7 @@
+import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:chess_auto_prep/v2/workspace/move_tree_view.dart';
+import 'package:chess_auto_prep/v2/workspace/session_results.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -26,6 +28,22 @@ Future<void> pumpTree(WidgetTester tester, SessionFixture fixture) async {
   );
   await tester.pump();
 }
+
+/// Two lines from 1. e4 e5, the second holding a move no reader can play,
+/// so it is not read whole and no edit may write it.
+const brokenSecondLine = '''
+// Color: White
+
+[Event "Fine"]
+[Result "*"]
+
+1. e4 e5 2. Nf3 *
+
+[Event "Broken"]
+[Result "*"]
+
+1. e4 e5 2. Qq9 *
+''';
 
 /// Two lines from 1. d4, the second of them a branch at the first move.
 const twoLines = '''
@@ -89,6 +107,23 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(fixture.onDisk, twoLines);
+  });
+
+  testWidgets('a delete that was refused offers nothing back', (tester) async {
+    final fixture = await openSession(brokenSecondLine);
+    addTearDown(fixture.dispose);
+    // An edit the notice's Undo would take back in the delete's place.
+    fixture.session.setComment(NodePath.of([0]), 'first');
+    await pumpTree(tester, fixture);
+
+    await tester.longPress(find.textContaining('e5'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete from here'));
+    await tester.pumpAndSettle();
+
+    expect(fixture.session.refusedEdit, isA<EditNotWritten>());
+    expect(find.text('Deleted the moves from e5.'), findsNothing);
+    expect(find.text('Undo'), findsNothing);
   });
 
   testWidgets('shows the introduction without its machine tokens', (

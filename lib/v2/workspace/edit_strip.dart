@@ -15,12 +15,12 @@ import 'session_results.dart';
 /// Everything about changing the document, under the moves: Done, Undo, the
 /// save state, the six glyphs and the note on the move the board is on.
 ///
-/// It exists while [editing] is on, and otherwise only when there is
-/// trouble to report — a save that failed, a file that changed on disk, a
-/// file this app may not write, an edit that was refused — because reading
-/// a file is not editing it and needs none of this on screen. Trouble shows
-/// the state line, the ways out and the reason; the glyphs and the field
-/// wait for editing.
+/// It exists while [editing] is on and the whole game is on view, and
+/// otherwise only when there is trouble to report — a save that failed, a
+/// file that changed on disk, a file this app may not write, an edit that
+/// was refused — because reading a file is not editing it and needs none of
+/// this on screen. Trouble shows the state line, the ways out and the
+/// reason; the glyphs and the field wait for editing.
 class EditStrip extends StatefulWidget {
   const EditStrip({
     super.key,
@@ -112,7 +112,12 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
         widget.editing,
       ]),
       builder: (context, _) {
-        final editing = widget.editing.value && widget.session.chapter != null;
+        // While part of the game is hidden — a puzzle's answer — the note
+        // on the start and the moves' glyphs would give it away.
+        final editing =
+            widget.editing.value &&
+            widget.session.chapter != null &&
+            widget.session.shownTo == null;
         final state = widget.saver.state;
         final refusal = widget.session.refusedEdit;
         final trouble = _trouble(state) || refusal != null || _notice != null;
@@ -157,12 +162,15 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
   Widget _stateRow(bool editing, SaveState state) => Row(
     children: [
       if (editing) ...[
-        FilledButton.tonal(
-          onPressed: () => widget.editing.value = false,
-          style: secondaryButtonStyle.merge(
-            FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+        Tooltip(
+          message: withKey('Done editing', 'Ctrl+E'),
+          child: FilledButton.tonal(
+            onPressed: () => widget.editing.value = false,
+            style: secondaryButtonStyle.merge(
+              FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+            ),
+            child: const Text('Done'),
           ),
-          child: const Text('Done'),
         ),
         const SizedBox(width: Space.s),
         IconButton(

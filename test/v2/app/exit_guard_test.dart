@@ -25,6 +25,12 @@ void main() {
   void edit(String words) =>
       fixture.session.setComment(NodePath.of([0]), words);
 
+  /// A disk that stays full: the edit's save fails, and so does every try a
+  /// flush of the guard's makes after it.
+  void diskFull() => fixture.store.saves.addAll(
+    List.filled(4, const IoFailure('No space left on device')),
+  );
+
   ExitGuard guardWith(_Question question) =>
       ExitGuard(saver: fixture.saver, question: question, wait: moment);
 
@@ -44,7 +50,7 @@ void main() {
   });
 
   test('a question about leaving does not answer one about closing', () async {
-    fixture.store.saves.add(const IoFailure('No space left on device'));
+    diskFull();
     edit('one');
     await pumpEventQueue();
     final question = _Question(answer: DraftChoice.closeAnyway, waits: true);
@@ -64,7 +70,7 @@ void main() {
   test(
     'staying on a document does not refuse a close without asking',
     () async {
-      fixture.store.saves.add(const IoFailure('No space left on device'));
+      diskFull();
       edit('one');
       await pumpEventQueue();
       final question = _Question(answer: DraftChoice.keepWaiting, waits: true);
@@ -105,7 +111,7 @@ void main() {
   });
 
   test('a save that failed is not taken for a save', () async {
-    fixture.store.saves.add(const IoFailure('No space left on device'));
+    diskFull();
     edit('one');
     await pumpEventQueue();
     final question = _Question();
@@ -173,7 +179,7 @@ void main() {
 
   test('a copy saved on the way out is named in the answer, for every '
       'caller asking at once', () async {
-    fixture.store.saves.add(const IoFailure('No space left on device'));
+    diskFull();
     edit('one');
     await pumpEventQueue();
     final question = _Question(answer: DraftChoice.saveACopy);
@@ -191,7 +197,7 @@ void main() {
   });
 
   test('a copy that was not written keeps the user where they are', () async {
-    fixture.store.saves.add(const IoFailure('No space left on device'));
+    diskFull();
     edit('one');
     await pumpEventQueue();
     final guard = ExitGuard(

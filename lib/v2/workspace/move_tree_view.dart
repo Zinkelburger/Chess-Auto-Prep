@@ -78,9 +78,12 @@ class _MoveTreeViewState extends State<MoveTreeView>
 
   /// Takes the moves out and offers the same way back a deleted line does:
   /// this removes more than a line does, so it may not be the one edit that
-  /// cannot be taken back with one click.
+  /// cannot be taken back with one click. A delete that did not happen has
+  /// nothing to offer back — Undo there would take back the edit before it.
   void _deleteFrom(MoveNode node, NodePath path) {
-    deleteFrom(widget.session, path);
+    final before = widget.session.chapter;
+    final refused = deleteFrom(widget.session, path);
+    if (refused != null || identical(before, widget.session.chapter)) return;
     showDeletionNotice(context, widget.session, deletedFromHere(node.san));
   }
 

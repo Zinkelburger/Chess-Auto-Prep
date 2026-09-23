@@ -63,6 +63,25 @@ void main() {
     expect(find.byType(TextField), findsNothing);
   });
 
+  testWidgets('Done says the key that does the same', (tester) async {
+    await pump(tester);
+    expect(find.byTooltip('Done editing (Ctrl+E)'), findsOneWidget);
+  });
+
+  testWidgets('while part of the game is hidden there is no note and no '
+      'glyph to edit', (tester) async {
+    await pump(tester);
+    // A puzzle hides the answer, and the note on its start often gives it.
+    fixture.session.showOnlyTo(NodePath.of([0]));
+    await tester.pump();
+    expect(find.byType(TextField), findsNothing);
+    expect(find.text('!?'), findsNothing);
+
+    fixture.session.showOnlyTo(null);
+    await tester.pump();
+    expect(find.byType(TextField), findsOneWidget);
+  });
+
   testWidgets('a glyph goes on the move on the board and comes off again', (
     tester,
   ) async {

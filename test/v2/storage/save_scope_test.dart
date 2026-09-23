@@ -261,6 +261,40 @@ void main() {
     },
   );
 
+  test('a byte-order mark right before the first game is the file\'s, and '
+      'every game can still be edited', () async {
+    // No heading: the mark is followed at once by the first `[Event`, which
+    // the reader, taking the mark as blank, reads as the first game.
+    final ref = fixture.ref('KID/Main.pgn');
+    final text = '\uFEFF${gameOf(1, '1. d4')}\n\n${gameOf(2, '1. e4')}\n';
+    await Directory(p.dirname(ref.path)).create(recursive: true);
+    await File(ref.path).writeAsBytes(utf8.encode(text));
+    final revision = await fixture.revisionOf(ref);
+    final opened = await fixture.store.open(ref) as Opened;
+    expect(opened.readOnly, isNull);
+
+    final first = await fixture.store.save(
+      ref,
+      opened.text.replaceFirst('1. d4 *', '1. d4 Nf6 *'),
+      expected: revision,
+      scope: GamesEdited(GamesWritten(rewritten: {0})),
+    );
+    expect(first, isA<Saved>());
+    final second = await fixture.store.save(
+      ref,
+      opened.text
+          .replaceFirst('1. d4 *', '1. d4 Nf6 *')
+          .replaceFirst('1. e4 *', '1. e4 e5 *'),
+      expected: (first as Saved).receipt.committed,
+      scope: GamesEdited(GamesWritten(rewritten: {1})),
+    );
+
+    expect(second, isA<Saved>());
+    final bytes = await File(ref.path).readAsBytes();
+    expect(bytes.take(3), [0xEF, 0xBB, 0xBF]);
+    expect(utf8.decode(bytes), contains('1. e4 e5 *'));
+  });
+
   test('two byte-order marks stay two', () async {
     // The decoder eats one, so one goes back on; a file written with two is
     // a file with two, and giving one back would leave every scoped save

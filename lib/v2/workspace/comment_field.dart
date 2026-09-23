@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../chess/pgn/comment_text.dart';
 import '../chess/pgn/game_tree.dart';
+import '../storage/chapter_files.dart' show ChapterRef;
 import '../ui/listening_state.dart';
 import '../ui/theme.dart';
 import 'document_session.dart';
@@ -13,10 +14,11 @@ import 'document_session.dart';
 /// It shows the words only: the engine's evaluation, its line and the clock
 /// are the move's, not the reader's, and the session puts them back when it
 /// writes. The field commits when it loses the focus, on Ctrl+Enter, when
-/// the cursor leaves the node it is editing, and when the field goes away.
-/// What it writes goes to that node, the one it was given the words for, and
-/// never to wherever the cursor has reached by then, so words typed under
-/// one move cannot land on another.
+/// the cursor leaves the node it is editing, when the session is about to
+/// put up another document or game, and when the field goes away. What it
+/// writes goes to that node, the one it was given the words for, and never
+/// to wherever the cursor has reached by then, so words typed under one move
+/// cannot land on another — nor in another document.
 class CommentField extends StatefulWidget {
   const CommentField({super.key, required this.session});
 
@@ -31,9 +33,16 @@ class _CommentFieldState extends State<CommentField>
   final _controller = TextEditingController();
   final _focus = FocusNode();
 
-  /// The node the field is editing, and the text it was given for it.
+  /// The node the field is editing, the document that node is in, and the
+  /// text it was given for it.
   NodePath? _at;
+  _Document? _in;
   String _given = '';
+
+  /// While the field hands its words to the session. The session answers by
+  /// notifying — the note taken, or refused — and that answer must not start
+  /// a second commit of the same words, which a refusal would answer again.
+  bool _committing = false;
 
   /// The note follows the cursor and the words on the move it is on.
   @override
@@ -43,6 +52,7 @@ class _CommentFieldState extends State<CommentField>
   void initState() {
     super.initState();
     _focus.addListener(_onFocusChanged);
+    widget.session.leaving.addListener(_commitBeforeLeaving);
     changed();
   }
 
@@ -51,6 +61,8 @@ class _CommentFieldState extends State<CommentField>
   @override
   void didUpdateWidget(CommentField old) {
     if (old.session != widget.session) {
+      old.session.leaving.removeListener(_commitBeforeLeaving);
+      widget.session.leaving.addListener(_commitBeforeLeaving);
       _commit(old.session);
       _at = null;
     }
@@ -62,6 +74,7 @@ class _CommentFieldState extends State<CommentField>
     // Words typed into the field are the user's whether or not they left it
     // first, so the field going away writes them like any other commit.
     stopListening();
+    widget.session.leaving.removeListener(_commitBeforeLeaving);
     _focus.removeListener(_onFocusChanged);
     _commit();
     _focus.dispose();
@@ -73,17 +86,25 @@ class _CommentFieldState extends State<CommentField>
     if (!_focus.hasFocus) _commit();
   }
 
+  /// Another document or game is going up while the words are still in the
+  /// field — a puzzle moving on, a download landing — so they go into the
+  /// one they were typed for while it is still the session's.
+  void _commitBeforeLeaving() => _commit();
+
   /// Takes the text of the node the cursor is on now, keeping what the user
   /// typed for the one it was on before.
   @override
   void changed() {
+    if (_committing) return;
     final session = widget.session;
     final at = session.chapter == null ? null : session.cursor;
     final text = _textFor(at);
-    if (at == _at && _shows(text)) return;
+    final here = _documentOf(session);
+    if (at == _at && here == _in && _shows(text)) return;
     if (at != _at) _commit();
     setState(() {
       _at = at;
+      _in = here;
       _given = text;
       _controller.text = text;
     });
@@ -101,11 +122,25 @@ class _CommentFieldState extends State<CommentField>
       at == null ? '' : displayComment(widget.session.commentAt(at) ?? '');
 
   void _commit([DocumentSession? into]) {
+    final session = into ?? widget.session;
     final at = _at;
     final text = _controller.text;
-    if (at == null || text == _given) return;
-    _given = text;
-    (into ?? widget.session).setComment(at, text);
+    // A path means another move in another document, so words typed for
+    // one never go into the next: the session asked for them before it
+    // left ([DocumentSession.leaving]).
+    if (at == null || text == _given || _documentOf(session) != _in) return;
+    _committing = true;
+    try {
+      session.setComment(at, text);
+    } finally {
+      _committing = false;
+    }
+    // Words the session refused are still the user's: until it takes them
+    // the field goes on showing them, to be put right, and the strip says
+    // why.
+    if (displayComment(session.commentAt(at) ?? '') == displayComment(text)) {
+      _given = text;
+    }
   }
 
   /// The note the file wrote before the move the field is on, if it had one.
@@ -161,3 +196,10 @@ class _CommentFieldState extends State<CommentField>
     );
   }
 }
+
+/// The document a path of the session's is a path into: the file and, for
+/// one shown a game at a time, the game.
+typedef _Document = ({ChapterRef? source, int? game});
+
+_Document _documentOf(DocumentSession session) =>
+    (source: session.source, game: session.game);

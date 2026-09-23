@@ -285,6 +285,50 @@ void main() {
     );
   });
 
+  test('a flush writes a failed draft again, once each time', () async {
+    // The other app held the file past its timeout, twice.
+    fixture.store.saves.addAll(const [
+      IoFailure('the file is held by another writer'),
+      IoFailure('the file is held by another writer'),
+    ]);
+    edit('one');
+    await pumpEventQueue();
+    expect(saver.state, isA<SaveFailed>());
+
+    await saver.flush();
+    expect(fixture.store.requestedSaves, hasLength(2), reason: 'tried again');
+    expect(saver.state, isA<SaveFailed>());
+    expect(saver.settled, isFalse);
+
+    await saver.flush();
+    expect(fixture.store.requestedSaves, hasLength(3));
+    expect(saver.state, isA<Saved>());
+    expect(saver.settled, isTrue);
+    expect(fixture.onDisk, contains('{one [%eval 0.30]}'));
+  });
+
+  test(
+    'a copy is one file beside the original, whatever its name holds',
+    () async {
+      // A course chapter's name suggests the copy's, and can hold a slash.
+      const written = {
+        '6.Be3/6.f3 copy': '6.Be3_6.f3 copy.pgn',
+        '../../elsewhere': '_.._elsewhere.pgn',
+        'What? Notes: 2': 'What_ Notes_ 2.pgn',
+        'Main draft.pgn': 'Main draft.pgn',
+        '..': 'Main copy.pgn',
+      };
+      for (final MapEntry(key: typed, value: file) in written.entries) {
+        final copied = await session.saveCopy(typed) as CopySaved;
+        expect(copied.name, file);
+        expect(
+          fixture.store.documents.keys.map((ref) => ref.path),
+          contains('/repertoires/KID/$file'),
+        );
+      }
+    },
+  );
+
   test('a copy refused while another chapter opened still says so', () async {
     final other = chapterRef('KID', 'Other');
     fixture.store.documents[other] = Opened(

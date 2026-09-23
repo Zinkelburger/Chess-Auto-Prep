@@ -1,10 +1,21 @@
+import 'dart:convert';
+
+import 'package:chess_auto_prep/v2/chess/pgn/chapter.dart'
+    show readOffThreadFrom;
+import 'package:chess_auto_prep/v2/chess/pgn/chapter_sections.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
+import 'package:chess_auto_prep/v2/chess/pgn/study_edits.dart';
+import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
+import 'package:chess_auto_prep/v2/storage/edit_scope.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart'
     show Conflict, Opened, RestoreRefused;
 import 'package:chess_auto_prep/v2/workspace/document_saver.dart';
 import 'package:chess_auto_prep/v2/workspace/document_session.dart';
+import 'package:chess_auto_prep/v2/workspace/session_results.dart';
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/big_chapter.dart';
 import '../support/fixtures.dart';
 import '../support/scripted_store.dart';
 import '../support/session_fixture.dart';
@@ -170,7 +181,179 @@ void main() {
     expect(session.commentAt(sicilian), 'The Sicilian [%eval 0.30]');
     expect(fixture.onDisk, contains('{The Sicilian [%eval 0.30]}'));
   });
+
+  test('words typed during an undo of an edit to another line say they '
+      'change that line too', () async {
+    session.setComment(NodePath.of([0, 1]), 'the closed line'); // line 2
+    await pumpEventQueue();
+    fixture.store.hold = true;
+    final undoing = session.undo();
+    await pumpEventQueue();
+    session.setComment(NodePath.of([0, 0]), 'typed meanwhile'); // line 1
+    fixture.store.releaseAll(); // the undo's write
+    await pumpEventQueue();
+    fixture.store.releaseAll(); // the words behind it
+    expect(await undoing, isA<UndoRefused>(), reason: 'the newer words won');
+
+    // They were typed over the version the undo took away, so against the
+    // version it put back they change both lines, and the save says so.
+    final save = fixture.store.requestedSaves.last;
+    expect(
+      changeOutsideScope(
+        previous: utf8.encode(blackChapter),
+        next: utf8.encode(save.text),
+        scope: save.scope,
+      ),
+      isNull,
+    );
+    expect(fixture.onDisk, contains('{the closed line}'));
+    expect(fixture.onDisk, contains('{typed meanwhile}'));
+  });
+
+  test('an edit made while an undo reads a large chapter back is refused, '
+      'and the undo shows what it put back', () async {
+    // Large enough to be read on another isolate, which is what leaves
+    // time to edit between the file going back and the screen following.
+    final book = bigChapter(games: 700);
+    expect(book.length, greaterThan(readOffThreadFrom));
+    final local = await openSession(book, name: 'Book');
+    addTearDown(local.dispose);
+    final first = NodePath.of([0]);
+    local.session.setComment(first, 'B');
+    await pumpEventQueue();
+
+    final undoing = local.session.undo();
+    await Future<void>.delayed(Duration.zero);
+    expect(local.saver.state, isA<Saved>(), reason: 'the file is back');
+    expect(local.session.commentAt(first), 'B', reason: 'and still being read');
+    local.session.setComment(first, 'typed while it was read');
+    expect(local.session.refusedEdit, isA<EditNotWritten>());
+
+    expect(await undoing, isA<Restored>());
+    await pumpEventQueue();
+    expect(local.session.commentAt(first), isNull);
+    expect(local.session.refusedEdit, isNull);
+    expect(local.onDisk, book);
+    expect(
+      local.store.requestedSaves,
+      hasLength(2),
+      reason: 'the edit and the undo; nothing was written over the undo',
+    );
+  });
+
+  group('an undo of an edit that moved the board', () {
+    test('shows a renamed chapter under its old name again', () async {
+      const path = '/repertoires/Course/Course.pgn';
+      final alapin = ChapterRef.at(path, section: 'Sicilian');
+      final store = ScriptedDocumentStore()
+        ..documents[ChapterRef.at(path)] = Opened(
+          _course,
+          scriptedRevision(_course),
+        );
+      final saver = DocumentSaver(store, delay: Duration.zero);
+      final local = DocumentSession(store, saver);
+      addTearDown(() {
+        local.dispose();
+        saver.dispose();
+      });
+      await local.open(alapin);
+      expect(
+        local.applyToFile(
+          (file) => sectionRenamed(file, 'Sicilian', 'Anti'),
+          section: 'Anti',
+        ),
+        isNull,
+      );
+      await pumpEventQueue();
+      expect(local.source, ChapterRef.at(path, section: 'Anti'));
+
+      expect(await local.undo(), isA<Restored>());
+
+      expect(local.source, alapin);
+      expect(local.chapter!.name, 'Sicilian');
+      expect(local.chapter!.lines, hasLength(1));
+      // What is played now goes into the chapter's own game, and no game is
+      // written under the name the undo took away.
+      local.toEnd();
+      local.playMove('d7d5');
+      await pumpEventQueue();
+      final text = (store.documents[ChapterRef.at(path)]! as Opened).text;
+      expect(text, contains('1. e4 c5 2. c3 d5 *'));
+      expect(text, isNot(contains('Anti')));
+    });
+
+    test('leaves a study on its last chapter when the one it showed was the '
+        'one taken back', () async {
+      final local = await openSession(_study, name: 'Openings');
+      addTearDown(local.dispose);
+      await local.session.open(local.ref, game: 1);
+      expect(
+        local.session.apply(
+          (c) => addChapter(
+            c,
+            study: 'Openings',
+            name: 'Delta',
+            orientation: Side.white,
+          ),
+        ),
+        isNull,
+      );
+      await pumpEventQueue();
+      expect(local.session.game, 3);
+
+      expect(await local.session.undo(), isA<Restored>());
+
+      expect(local.session.gameCount, 3);
+      expect(local.session.game, 2);
+      expect(local.session.tree!.children.single.san, 'c4');
+      local.session.toEnd();
+      local.session.playMove('e7e5');
+      await pumpEventQueue();
+      expect(local.onDisk, contains('1. c4 e5 *'));
+    });
+  });
 }
+
+/// Three games of one file in two chapters named by tag.
+const _course = '''
+// Color: White
+
+[Event "Ruy"]
+[ChapterName "Open games"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bb5 *
+
+[Event "Alapin"]
+[ChapterName "Sicilian"]
+
+1. e4 c5 2. c3 *
+
+[Event "Italian"]
+[ChapterName "Open games"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bc4 *
+''';
+
+/// A study of three chapters, each one game.
+const _study = '''
+[Event "Openings: Alpha"]
+[StudyName "Openings"]
+[ChapterName "Alpha"]
+
+1. e4 *
+
+[Event "Openings: Beta"]
+[StudyName "Openings"]
+[ChapterName "Beta"]
+
+1. d4 *
+
+[Event "Openings: Gamma"]
+[StudyName "Openings"]
+[ChapterName "Gamma"]
+
+1. c4 *
+''';
 
 /// A chapter where `e4` is the first move listed and `d4` the second.
 const _listedEarlyThenLate = '''

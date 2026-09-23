@@ -139,6 +139,26 @@ void main() {
       }, reason: 'but the refused write still names the games it touched');
     });
 
+    test('a removal that comes back goes first, under the words typed on '
+        'what it made', () {
+      // Game 3 of five taken out and refused by the disk; while it was out,
+      // the fourth game left — the file's fifth — was commented.
+      final queue = SaveQueue()
+        ..typed(
+          'removed',
+          GamesRearranged(GamesArranged(order: const [0, 1, 3, 4], before: 5)),
+        );
+      final refused = queue.take()!;
+      queue.typed('commented', games({3}));
+      queue.returned(refused);
+      final draft = queue.take()!;
+      expect(draft.text, 'commented');
+      final arranged = (draft.scope as GamesRearranged).arranged;
+      expect(arranged.order, [0, 1, 3, 4]);
+      expect(arranged.rewritten, {4}, reason: "the file's fifth game");
+      expect(arranged.before, 5);
+    });
+
     test('clearing forgets the draft', () {
       final queue = SaveQueue()..typed('words', games({0}));
       queue.clear();
@@ -152,13 +172,13 @@ void main() {
       final history = UndoHistory();
       expect(history.isEmpty, isTrue);
       for (var i = 0; i <= UndoHistory.depth; i++) {
-        history.keep(saved('v$i', 'v${i + 1}'));
+        history.keep(saved('v$i', 'v${i + 1}'), games({0}));
       }
-      expect(history.newest?.before, 'v${UndoHistory.depth}');
+      expect(history.newest?.receipt.before, 'v${UndoHistory.depth}');
       // The first receipt went when the one past the depth came in.
       var steps = 0;
       while (!history.isEmpty) {
-        history.tookBack(history.newest!, saved('', ''));
+        history.tookBack(history.newest!.receipt, saved('', ''));
         steps++;
       }
       expect(steps, UndoHistory.depth);
@@ -171,18 +191,21 @@ void main() {
       // now expect that new revision or the next undo would be refused as a
       // conflict.
       final history = UndoHistory()
-        ..keep(saved('A', 'B'))
-        ..keep(saved('B', 'C'));
+        ..keep(saved('A', 'B'), games({0}))
+        ..keep(saved('B', 'C'), games({1}));
       final restored = Receipt(
         committed: Revision('B-again'),
         before: 'C',
         beforeRevision: scriptedRevision('C'),
       );
-      history.tookBack(history.newest!, restored);
+      history.tookBack(history.newest!.receipt, restored);
       final next = history.newest!;
-      expect(next.before, 'A');
-      expect(next.beforeRevision, scriptedRevision('A'));
-      expect(next.committed, Revision('B-again'));
+      expect(next.receipt.before, 'A');
+      expect(next.receipt.beforeRevision, scriptedRevision('A'));
+      expect(next.receipt.committed, Revision('B-again'));
+      expect(rewrittenBy(next.scope), {
+        0,
+      }, reason: 'what the save changed is what it always was');
     });
 
     test('a receipt that does not chain to the one taken back is left '
@@ -191,15 +214,15 @@ void main() {
       // names a revision the undo did not put back; it stays as it is and
       // will be refused as the conflict it is.
       final history = UndoHistory()
-        ..keep(saved('A', 'B'))
-        ..keep(saved('X', 'C'));
-      history.tookBack(history.newest!, saved('C', 'X'));
+        ..keep(saved('A', 'B'), games({0}))
+        ..keep(saved('X', 'C'), games({0}));
+      history.tookBack(history.newest!.receipt, saved('C', 'X'));
       expect(history.newest, isNotNull);
-      expect(history.newest!.committed, scriptedRevision('B'));
+      expect(history.newest!.receipt.committed, scriptedRevision('B'));
     });
 
     test('clearing forgets everything', () {
-      final history = UndoHistory()..keep(saved('A', 'B'));
+      final history = UndoHistory()..keep(saved('A', 'B'), games({0}));
       history.clear();
       expect(history.isEmpty, isTrue);
       expect(history.newest, isNull);

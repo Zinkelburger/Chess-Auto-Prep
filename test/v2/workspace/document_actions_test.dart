@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/v2/workspace/document_actions.dart';
 import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
@@ -50,6 +51,13 @@ void main() {
     ]);
     editing.value = true;
     expect(labels(fixture).first, 'Done editing');
+  });
+
+  test('the engine cannot be turned on while part of the game is hidden', () {
+    fixture.session.showOnlyTo(NodePath.of([0]));
+    expect(labels(fixture), contains('Engine on (off)'));
+    fixture.session.showOnlyTo(null);
+    expect(labels(fixture), contains('Engine on'));
   });
 
   test('the text copied for a merged chapter is the whole file', () {

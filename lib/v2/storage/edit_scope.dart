@@ -90,16 +90,22 @@ EditScope scopeOfBoth(EditScope first, EditScope second) {
   }
   final before = _arrangementOf(first, whenKeptAll: _gamesBefore(second));
   if (before == null) return const WholeDocument();
-  final after = _arrangementOf(second, whenKeptAll: before.order.length);
+  // The second edit started from what the first left, so one that kept
+  // every game where it was started from that many; the games it added
+  // come after them.
+  final after = second is GamesEdited
+      ? GamesArranged.of(second.written, before: before.order.length)
+      : _arrangementOf(second, whenKeptAll: null);
   if (after == null) return const WholeDocument();
   final both = composedArrangement(before, after);
   return both == null ? const WholeDocument() : GamesRearranged(both);
 }
 
-/// [scope] as an arrangement, taking the games it started from to be
-/// [whenKeptAll] when the scope is one that kept them all where they were.
-/// Null when the scope says nothing about games, or when the count does not
-/// come out.
+/// [scope] as an arrangement. A scope that kept every game where it was
+/// does not say how many there were, so [whenKeptAll] says how many it
+/// left, and the ones it added are taken off that to find how many it
+/// started from. Null when the scope says nothing about games, or when the
+/// count does not come out.
 GamesArranged? _arrangementOf(EditScope scope, {required int? whenKeptAll}) {
   switch (scope) {
     case GamesRearranged(:final arranged):
@@ -174,8 +180,9 @@ String? _arrangedHeading(
   GamesArranged edit,
 ) {
   if (edit.heading) return _headingBeyondTheSide(previous, next, before, after);
-  if (after.heading != before.heading ||
-      !_same(previous, (0, before.heading), next, (0, before.heading))) {
+  // The same rule as a save that kept every game: a chapter that had none
+  // may gain the line end its first game needs to start a line of its own.
+  if (!_headingKept(before, after, previous, next)) {
     return 'the chapter heading would change but the edit did not touch it';
   }
   return null;
@@ -200,13 +207,19 @@ String? _headingBeyondTheSide(
 }
 
 /// The heading without its `// Color:` line and a tactics set's
-/// analysed-games line, which is the part a heading edit may not touch.
-String _besideTheSide(List<int> bytes, int heading) => [
-  for (final line in latin1.decode(bytes.sublist(0, heading)).split('\n'))
-    if (!line.trim().startsWith('// Color:') &&
-        !line.startsWith(analyzedGamesPrefix))
-      line,
-].join('\n');
+/// analysed-games line, which is the part a heading edit may not touch. A
+/// byte-order mark at the start is kept apart, as [_cut] keeps it: the
+/// reader reads the line after it as it reads any other.
+String _besideTheSide(List<int> bytes, int heading) {
+  final mark = _startsWithMark(bytes) ? 3 : 0;
+  return [
+    if (mark > 0) '\uFEFF',
+    for (final line in latin1.decoder.convert(bytes, mark, heading).split('\n'))
+      if (!line.trim().startsWith('// Color:') &&
+          !line.startsWith(analyzedGamesPrefix))
+        line,
+  ].join('\n');
+}
 
 String? _arrangedGames(
   _Cut before,
@@ -288,18 +301,32 @@ typedef _Cut = ({int heading, List<(int, int)> games});
 /// is the same offset in the bytes. The splitter only ever looks for ASCII —
 /// `[Event`, braces, line ends — and no byte of a UTF-8 sequence is ASCII,
 /// so it finds the same games whichever way the bytes were meant to be read.
+///
+/// The one exception is a byte-order mark at the very start: the reader
+/// decodes it and takes it as blank, so a first game right after it is a
+/// game, where its three bytes would hide that game's `[Event` from the
+/// splitter here. It is the file's, not the first game's, so it goes into
+/// the heading, as the reader puts it into the preamble.
 _Cut _cut(List<int> bytes) {
-  final document = splitChapterText(latin1.decode(bytes));
+  final mark = _startsWithMark(bytes) ? 3 : 0;
+  final document = splitChapterText(latin1.decoder.convert(bytes, mark));
   final games = <(int, int)>[];
   // The preamble and the games, each with the whitespace after it, are the
   // whole text in order, so one running offset places them all.
-  var at = document.preamble.length;
+  var at = mark + document.preamble.length;
   for (final game in document.games) {
     games.add((at, at + game.text.length));
     at += game.text.length + game.trailer.length;
   }
-  return (heading: document.preamble.length, games: games);
+  return (heading: mark + document.preamble.length, games: games);
 }
+
+/// Whether [bytes] start with the UTF-8 byte-order mark, EF BB BF.
+bool _startsWithMark(List<int> bytes) =>
+    bytes.length >= 3 &&
+    bytes[0] == 0xEF &&
+    bytes[1] == 0xBB &&
+    bytes[2] == 0xBF;
 
 bool _same(List<int> a, (int, int) inA, List<int> b, (int, int) inB) {
   final length = inA.$2 - inA.$1;

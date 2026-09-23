@@ -11,28 +11,30 @@ import 'document_session.dart';
 /// from `chess/pgn/line_edits.dart` and `branch_edits.dart` handed to [DocumentSession.apply],
 /// and a method that only passes a call on is a layer the session does not
 /// need. A study's chapter operations are the same shape, in
-/// `features/study/study_commands.dart`.
+/// `features/study/study_commands.dart`. Each answers what [DocumentSession.apply]
+/// does: why the edit did not happen, or null when it did or had nothing to
+/// change.
 
 /// Renames the line at [game] — its `[Event]` tag, and nothing else.
-void renameLine(DocumentSession session, int game, String name) =>
+String? renameLine(DocumentSession session, int game, String name) =>
     session.apply((c) => edits.renamedLine(c, game: game, name: name));
 
 /// Takes the line at [game] out of the file. Undo puts it back.
-void deleteLine(DocumentSession session, int game) =>
+String? deleteLine(DocumentSession session, int game) =>
     session.apply((c) => edits.lineDeleted(c, game: game));
 
 /// Plays the chapter from [side]: the `// Color:` line, and the board.
-void setSide(DocumentSession session, Side side) =>
+String? setSide(DocumentSession session, Side side) =>
     session.apply((c) => edits.sideSet(c, side));
 
 /// Takes the move at [at] out of the chapter, and everything under it.
-void deleteFrom(DocumentSession session, NodePath at) =>
+String? deleteFrom(DocumentSession session, NodePath at) =>
     session.apply((c) => edits.movesDeleted(c, at: at));
 
 /// Makes the move at [at] the first of the moves that share its parent.
-void promoteVariation(DocumentSession session, NodePath at) =>
+String? promoteVariation(DocumentSession session, NodePath at) =>
     session.apply((c) => edits.variationPromoted(c, at: at));
 
 /// Makes the move at [at] part of the main line from the first move on.
-void makeMainLine(DocumentSession session, NodePath at) =>
+String? makeMainLine(DocumentSession session, NodePath at) =>
     session.apply((c) => edits.madeMainLine(c, at: at));

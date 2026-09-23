@@ -116,15 +116,19 @@ class _OutlinePanelState extends State<OutlinePanel> {
 
   /// Deletes the line and offers the way back, which is the undo the whole
   /// workspace shares: no question first, because the answer is one click
-  /// away for as long as the notice is up.
+  /// away for as long as the notice is up. A delete that did not happen has
+  /// nothing to offer back — Undo there would take back the edit before it.
   void _delete(OutlineLine line) {
-    deleteLine(widget.session, line.game);
+    final before = widget.session.chapter;
+    final refused = deleteLine(widget.session, line.game);
+    if (refused != null || identical(before, widget.session.chapter)) return;
     showDeletionNotice(context, widget.session, 'Deleted 1 line.');
   }
 
   /// A plain click goes to the line and drops the selection; Ctrl adds or
   /// removes the line; Shift takes every line between the anchor and it.
   void _pick(OutlineLine line) {
+    if (!mounted) return;
     final keys = HardwareKeyboard.instance;
     final toggle = keys.isControlPressed || keys.isMetaPressed;
     setState(() {
@@ -181,6 +185,7 @@ class _OutlinePanelState extends State<OutlinePanel> {
   }
 
   Future<void> _move(LineDrag drag, ChapterRef to, {int? asSidelineOf}) async {
+    if (!mounted) return;
     setState(() => _selected = {});
     final result = await widget.library.moveLines(
       games: drag.games,
@@ -260,7 +265,7 @@ class _OutlinePanelState extends State<OutlinePanel> {
     ];
   }
 
-  /// The row follows whether it is [ChapterOutline.currentLine] by itself,
+  /// The row follows whether it is [ChapterOutline.isCurrent] by itself,
   /// so the cursor going from one line to another redraws those two rows
   /// and not the list.
   Widget _lineRow(OutlineLine line, ChapterRef open) => ValueListenableBuilder(

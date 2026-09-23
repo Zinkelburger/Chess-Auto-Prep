@@ -4,12 +4,14 @@ import 'package:chess_auto_prep/v2/features/library/chapter_outline.dart';
 import 'package:chess_auto_prep/v2/workspace/chapter_commands.dart';
 import 'package:chess_auto_prep/v2/features/library/outline_panel.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
+import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart' show Opened;
 import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/library_fixture.dart';
 import '../support/scripted_files.dart';
+import '../support/scripted_store.dart';
 
 const twoLines = '''
 // Book
@@ -265,6 +267,26 @@ void main() {
 
     expect(find.text('Indian'), findsOneWidget);
     expect(fixture.textAt(main.path), twoLines);
+  });
+
+  testWidgets('a delete that was refused offers nothing back', (tester) async {
+    await show(tester);
+    fixture.store.documents[main] = Opened(
+      twoLines,
+      scriptedRevision(twoLines),
+      readOnly: 'it is not UTF-8',
+    );
+    await fixture.session.open(main);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Actions').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete line'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Indian'), findsOneWidget);
+    expect(find.text('Deleted 1 line.'), findsNothing);
+    expect(find.text('Undo'), findsNothing);
   });
 
   testWidgets('the next edit takes the offer of undo away', (tester) async {

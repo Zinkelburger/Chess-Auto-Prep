@@ -43,10 +43,16 @@ List<AppAction> documentActions({
       shortcut: 'F',
       group: 'Board',
     ),
+    // Off at any time, on only while the whole game is on view, as E is:
+    // the engine would read a hidden puzzle answer out.
     AppAction(
       analysis.enabled ? 'Engine off' : 'Engine on',
-      () =>
-          unawaited(analysis.enabled ? analysis.disable() : analysis.enable()),
+      when(
+        analysis.enabled || session.shownTo == null,
+        () => unawaited(
+          analysis.enabled ? analysis.disable() : analysis.enable(),
+        ),
+      ),
       shortcut: 'E',
       group: 'Board',
     ),
