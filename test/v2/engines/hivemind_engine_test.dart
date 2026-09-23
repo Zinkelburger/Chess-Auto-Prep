@@ -210,11 +210,14 @@ void main() {
       final process = AnsweringProcess(silent: true);
       HivemindProcess? engine;
       var done = false;
-      HivemindProcess.start(process, patience: const Duration(seconds: 5)).then(
-        (e) {
+      unawaited(
+        HivemindProcess.start(
+          process,
+          patience: const Duration(seconds: 5),
+        ).then((e) {
           engine = e;
           done = true;
-        },
+        }),
       );
       time.elapse(const Duration(seconds: 6));
       expect(done, isTrue);

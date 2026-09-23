@@ -57,8 +57,8 @@ final class HivemindFound extends HivemindLookup {
 }
 
 /// The book is there but has not scored this position.
-final class HivemindMissing extends HivemindLookup {
-  const HivemindMissing();
+final class HivemindNotFound extends HivemindLookup {
+  const HivemindNotFound();
 }
 
 /// No book on this machine.
@@ -108,7 +108,7 @@ final class SqliteHivemindBook implements HivemindBook {
       key,
     ]);
     if (status.isEmpty || status.first['status'] != 'done') {
-      return const HivemindMissing();
+      return const HivemindNotFound();
     }
     final relabel = !_seatsRelabelled(db);
     final moves = <(BoardNumber, String), BookMoveScores>{};

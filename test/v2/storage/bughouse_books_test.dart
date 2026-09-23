@@ -131,8 +131,8 @@ void main() {
 
     test('a queued or unknown position is a miss', () async {
       final book = SqliteHivemindBook([hivemindBook()]);
-      expect(await book.lookup(afterLine('A:e4 B:d4')), isA<HivemindMissing>());
-      expect(await book.lookup(TablePosition.initial), isA<HivemindMissing>());
+      expect(await book.lookup(afterLine('A:e4 B:d4')), isA<HivemindNotFound>());
+      expect(await book.lookup(TablePosition.initial), isA<HivemindNotFound>());
       book.close();
     });
 

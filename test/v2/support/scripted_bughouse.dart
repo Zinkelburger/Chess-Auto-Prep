@@ -94,7 +94,7 @@ final class ScriptedHivemindBook implements HivemindBook {
   @override
   Future<HivemindLookup> lookup(TablePosition position) async {
     lookups++;
-    return positions[position.bookKey] ?? const HivemindMissing();
+    return positions[position.bookKey] ?? const HivemindNotFound();
   }
 }
 
