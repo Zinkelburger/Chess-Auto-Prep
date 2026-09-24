@@ -21,6 +21,8 @@ which of several objectively equal moves scores best against a human.
 `chesscom_*` tools find and describe chess.com accounts from rating clues
 ("blitz 2701 on June 13"), reconstructing rating history from cached game
 archives; `chesscom_search` is a background job like the builds.
+`chessgames_*` tools download chessgames.com collections as PGN, paced by a
+background job because the site bans fast callers.
 """
 
 from __future__ import annotations
@@ -449,6 +451,10 @@ class Registry:
         from .chesscom import register_chesscom_tools
 
         register_chesscom_tools(self)
+
+        from .chessgames import register_chessgames_tools
+
+        register_chessgames_tools(self)
 
         from .player_lookup import register_people_tools
 
