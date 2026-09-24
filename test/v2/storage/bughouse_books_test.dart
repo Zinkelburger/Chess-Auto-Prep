@@ -160,13 +160,78 @@ void main() {
       damaged.close();
     });
 
-    test('is never written', () async {
-      final path = hivemindBook();
-      final before = await File(path).readAsBytes();
-      final book = SqliteHivemindBook([path]);
+    HivemindEntry entry(TablePosition position, ClockCase clock) => (
+      position: position,
+      line: 'A:e4',
+      ply: 1,
+      clock: clock,
+      picks: {
+        Team.cd: (
+          best: 'C e5',
+          score: const TableScore(score: -0.2),
+          pv: 'C e5 · A Nf3',
+          offset: 0.5,
+        ),
+      },
+      moves: {
+        (BoardNumber.one, 'e7e5'): (
+          score: const TableScore(score: -0.2),
+          pv: 'C e5 · A Nf3',
+        ),
+        (BoardNumber.two, 'e2e4'): (
+          score: const TableScore(mate: 3),
+          pv: 'D e4',
+        ),
+      },
+      nodes: 1500,
+      childNodes: 200,
+      took: const Duration(seconds: 3),
+    );
+
+    test('takes a clock the engine scored, beside the builder’s', () async {
+      final book = SqliteHivemindBook([hivemindBook(relabelled: true)]);
       await book.lookup(afterLine('A:e4'));
+      await book.save(entry(afterLine('A:e4'), ClockCase.cdMaySit));
+      final found = await book.lookup(afterLine('A:e4')) as HivemindFound;
+      final e5 = found.moves[(BoardNumber.one, 'e7e5')]!;
+      expect(e5[ClockCase.even]!.score.score, -0.12);
+      expect(e5[ClockCase.cdMaySit]!.pv, 'C e5 · A Nf3');
+      expect(
+        found.moves[(BoardNumber.two, 'e2e4')]![ClockCase.cdMaySit]!.score.mate,
+        3,
+      );
       book.close();
-      expect(await File(path).readAsBytes(), before);
+    });
+
+    test('starts a book in the builder’s shape when there is none', () async {
+      final path = p.join(dir.path, 'new', 'hivemind_book.db');
+      final book = SqliteHivemindBook([path]);
+      final table = afterLine('A:e4');
+      await book.save(entry(table, ClockCase.even));
+      final found = await book.lookup(table) as HivemindFound;
+      // New lettering, so C stays C.
+      expect(
+        found.moves[(BoardNumber.one, 'e7e5')]![ClockCase.even]!.pv,
+        'C e5 · A Nf3',
+      );
+      book.close();
+      final db = sqlite3.open(path);
+      final row = db.select('SELECT * FROM position').single;
+      expect(row['status'], 'done');
+      expect(row['line'], 'A:e4');
+      expect(row['fen'], table.dualFen);
+      expect(
+        db
+            .select("SELECT move, seat, child FROM move WHERE uci = 'e7e5'")
+            .single,
+        {
+          'move': 'A:e5',
+          'seat': 'C',
+          'child': table.play(BoardNumber.one, 'e7e5')!.after.bookKey,
+        },
+      );
+      expect(db.select('SELECT team FROM pick').single['team'], 'CD');
+      db.close();
     });
   });
 

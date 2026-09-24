@@ -9,11 +9,12 @@ import '../chess/bughouse/table.dart';
 import '../diagnostics/log.dart';
 
 /// The two bughouse books the Python tools build under
-/// `~/.local/share/chess-prep/bughouse-db/`, read only and never written:
+/// `~/.local/share/chess-prep/bughouse-db/`:
 ///
 /// - `hivemind_book.db` (`tools/bughouse_db/hivemind_book.py`): every legal
 ///   move of a position on both boards, scored by Hivemind for each clock
-///   case, with its principal variation.
+///   case, with its principal variation. The lab's engine adds the
+///   positions it scores, in the builder's own rows.
 /// - `bughouse_book.db` (`tools/bughouse_db/index.py`): what 21 years of
 ///   FICS games played from a position, with team results.
 ///
@@ -75,11 +76,47 @@ final class HivemindUnreadable extends HivemindLookup {
   final String detail;
 }
 
+/// One position the lab's engine scored for one clock case, as the builder
+/// stores one: each team's own pick and every legal move's score, A + B's
+/// side. [line] is the board-tagged SAN that reached it (`A:e4 B:d4`),
+/// empty for a table set up by hand.
+typedef HivemindEntry = ({
+  TablePosition position,
+  String line,
+  int ply,
+  ClockCase clock,
+  Map<Team, ({String best, TableScore score, String pv, double offset})> picks,
+  Map<(BoardNumber, String), ({TableScore score, String pv})> moves,
+  int nodes,
+  int childNodes,
+  Duration took,
+});
+
 /// SQLite is a real boundary: [SqliteHivemindBook] in the app, a scripted
 /// book in tests.
 abstract interface class HivemindBook {
   Future<HivemindLookup> lookup(TablePosition position);
+
+  /// Adds [entry], replacing what the book had for its position and clock.
+  Future<void> save(HivemindEntry entry);
 }
+
+/// `tools/bughouse_db/hivemind_book.py`'s tables, for a book the lab starts.
+const _hivemindSchema = '''
+CREATE TABLE IF NOT EXISTS position(pos INTEGER PRIMARY KEY, fen TEXT NOT NULL,
+  line TEXT NOT NULL, ply INTEGER NOT NULL, priority REAL NOT NULL,
+  status TEXT NOT NULL, nodes INTEGER, child_nodes INTEGER, seconds REAL,
+  done_at TEXT);
+CREATE INDEX IF NOT EXISTS position_queue ON position(status, priority);
+CREATE TABLE IF NOT EXISTS pick(pos INTEGER NOT NULL, clock TEXT NOT NULL,
+  team TEXT NOT NULL, best TEXT, score REAL, mate INTEGER, pv TEXT,
+  offset REAL, PRIMARY KEY(pos, clock, team)) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS move(pos INTEGER NOT NULL, move TEXT NOT NULL,
+  seat TEXT NOT NULL, uci TEXT NOT NULL, clock TEXT NOT NULL, score REAL,
+  mate INTEGER, pv TEXT, child INTEGER NOT NULL,
+  PRIMARY KEY(pos, move, clock)) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+''';
 
 final class SqliteHivemindBook implements HivemindBook {
   SqliteHivemindBook(this.places);
@@ -146,6 +183,95 @@ final class SqliteHivemindBook implements HivemindBook {
   /// lettering in `meta` when it rewrites one.
   bool _seatsRelabelled(Database db) =>
       db.select("SELECT 1 FROM meta WHERE key = 'seats'").isNotEmpty;
+
+  @override
+  Future<void> save(HivemindEntry entry) async {
+    final path = _file.path ?? _existing(places) ?? places.first;
+    final fresh = !File(path).existsSync();
+    try {
+      if (fresh) Directory(p.dirname(path)).createSync(recursive: true);
+      final db = sqlite3.open(path, mode: OpenMode.readWriteCreate);
+      try {
+        db.execute('PRAGMA busy_timeout = 10000');
+        if (fresh) {
+          db
+            ..execute('PRAGMA journal_mode = WAL')
+            ..execute(_hivemindSchema)
+            ..execute("INSERT INTO meta VALUES('seats', 'AB/CD')");
+        }
+        _write(db, entry);
+      } finally {
+        db.close();
+      }
+    } on Object catch (error) {
+      log.w('save to the Hivemind book at $path', error);
+    }
+  }
+
+  void _write(Database db, HivemindEntry entry) {
+    final position = entry.position;
+    final key = position.bookKey;
+    final clock = entry.clock.bookName;
+    db.execute('BEGIN IMMEDIATE');
+    try {
+      db.execute(
+        'INSERT INTO position(pos, fen, line, ply, priority, status, nodes, '
+        "child_nodes, seconds, done_at) VALUES(?, ?, ?, ?, 0, 'done', ?, ?, ?, "
+        "datetime('now')) ON CONFLICT(pos) DO UPDATE SET status = 'done', "
+        'nodes = excluded.nodes, child_nodes = excluded.child_nodes, '
+        'seconds = excluded.seconds, done_at = excluded.done_at',
+        [
+          key,
+          position.dualFen,
+          entry.line,
+          entry.ply,
+          entry.nodes,
+          entry.childNodes,
+          entry.took.inMilliseconds / 1000,
+        ],
+      );
+      for (final MapEntry(key: team, value: pick) in entry.picks.entries) {
+        db.execute(
+          'INSERT OR REPLACE INTO pick VALUES(?, ?, ?, ?, ?, ?, ?, ?)',
+          [
+            key,
+            clock,
+            team == Team.ab ? 'AB' : 'CD',
+            pick.best,
+            pick.score.score,
+            pick.score.mate,
+            pick.pv,
+            pick.offset,
+          ],
+        );
+      }
+      for (final MapEntry(key: (board, uci), :value) in entry.moves.entries) {
+        final played = position.play(board, uci);
+        if (played == null) continue;
+        db.execute(
+          'INSERT OR REPLACE INTO move VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [
+            key,
+            '${board == BoardNumber.one ? 'A' : 'B'}:${played.move.san}',
+            position.mover(board).letter,
+            uci,
+            clock,
+            value.score.score,
+            value.score.mate,
+            value.pv,
+            played.after.bookKey,
+          ],
+        );
+      }
+      db.execute('COMMIT');
+    } on Object {
+      db.execute('ROLLBACK');
+      rethrow;
+    }
+  }
+
+  static String? _existing(List<String> places) =>
+      places.where((place) => File(place).existsSync()).firstOrNull;
 
   void close() => _file.close();
 }

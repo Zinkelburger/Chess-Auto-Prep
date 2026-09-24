@@ -151,7 +151,9 @@ void main() {
   test(
     'the boards follow the game being played, and the tables rest',
     () async {
-      tables.open();
+      tables
+        ..open()
+        ..toggleEngine();
       await pumpEventQueue();
       forMatches.engine.hold = true;
       final starting = matches.start(twoGames());

@@ -1,5 +1,6 @@
 import 'package:chess_auto_prep/v2/chess/bughouse/hivemind.dart';
 import 'package:chess_auto_prep/v2/chess/bughouse/table.dart';
+import 'package:chess_auto_prep/v2/features/bughouse/lab_panel.dart';
 import 'package:chess_auto_prep/v2/storage/bughouse_books.dart';
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart' show Role, Side, Square;
@@ -66,9 +67,6 @@ void main() {
     await toLab(tester);
     expect(find.text('Player A'), findsOneWidget);
     expect(find.text('Player D'), findsOneWidget);
-    expect(find.text('Move: Player A'), findsOneWidget);
-    expect(find.text('Move: Player D'), findsOneWidget);
-    expect(find.text('From the Hivemind book.'), findsOneWidget);
     expect(find.text('+0.21'), findsOneWidget);
     // Board 2's mover is D, of C + D: A + B's −0.40 reads +0.40 for D.
     expect(find.text('+0.40'), findsOneWidget);
@@ -79,15 +77,14 @@ void main() {
     expect(w.bughouse.starts, 0);
   });
 
-  testWidgets('a position the book lacks is searched by the engine', (
-    tester,
-  ) async {
+  testWidgets('a position the book lacks is scored by the engine when it is '
+      'on, and added to the book', (tester) async {
     await toLab(tester);
-    expect(
-      find.text('Not in the book · Hivemind scored the likeliest moves.'),
-      findsOneWidget,
-    );
+    expect(w.bughouse.starts, 0);
+    await tester.tap(find.byTooltip('Toggle engine (E)'));
+    await tester.pumpAndSettle();
     expect(w.bughouse.engine.asked, isNotEmpty);
+    expect(w.bughouse.book.saved, hasLength(1));
   });
 
   testWidgets('a table row plays its move; a reserve piece drops on a square', (
@@ -157,19 +154,23 @@ void main() {
     await toLab(tester);
     await tester.tap(find.byTooltip('Toggle engine (E)'));
     await tester.pumpAndSettle();
-    expect(find.text('A + B'), findsOneWidget);
-    expect(find.text('C + D'), findsOneWidget);
+    final lines = find.byType(EngineLinesBlock);
+    expect(lines, findsOneWidget);
     expect(find.text('0.00'), findsWidgets);
-    await tester.tap(find.text('A Na3'));
+    await tester.tap(
+      find.descendant(of: lines, matching: find.text('Na3')).first,
+    );
     await tester.pumpAndSettle();
     expect(w.lab.line.moves, hasLength(1));
   });
 
-  testWidgets('an engine that will not start is said in the status line', (
+  testWidgets('an engine that will not start is said beside its switch', (
     tester,
   ) async {
     w.bughouse.startFailure = 'This build has no bughouse engine.';
     await toLab(tester);
+    await tester.tap(find.byTooltip('Toggle engine (E)'));
+    await tester.pumpAndSettle();
     final status = tester.widget<Text>(
       find.text('This build has no bughouse engine.'),
     );
@@ -256,6 +257,8 @@ void main() {
     tester,
   ) async {
     await toLab(tester);
+    await tester.tap(find.byTooltip('Toggle engine (E)'));
+    await tester.pumpAndSettle();
     expect(w.analysis.pausedFor, isNotNull);
     expect(w.bughouse.engine.gone, isFalse);
     await tester.tap(find.text('Bughouse lab').first);

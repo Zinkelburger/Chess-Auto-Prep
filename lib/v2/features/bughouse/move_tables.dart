@@ -84,9 +84,9 @@ class _MoveTable extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(board.label, style: const TextStyle(fontWeight: FontWeight.w600)),
         Container(
           height: labTableRowHeight,
+          padding: const EdgeInsets.symmetric(horizontal: Space.xs),
           decoration: BoxDecoration(
             border: Border(bottom: BorderSide(color: scheme.outline)),
           ),
@@ -94,8 +94,8 @@ class _MoveTable extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  'Move: Player ${position.mover(board).letter}',
-                  style: TextStyle(color: scheme.onSurface),
+                  position.mover(board).letter,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
               ),
               Tooltip(

@@ -36,7 +36,7 @@ void main() {
       lab: lab,
       book: outside.book,
       startEngine: () => outside.outside.launch(cores: 2),
-      depth: (ownNodes: 50, childNodes: 20, topMoves: 2),
+      depth: (ownNodes: 50, childNodes: 20),
       passes: const [Duration(seconds: 1)],
     );
     archive = ArchiveMoves(lab: lab, book: outside.archive);
@@ -84,15 +84,21 @@ void main() {
     }
   });
 
-  testWidgets('the switch shows both teams’ lines', (tester) async {
+  testWidgets('the switch shows a column for each seat', (tester) async {
     await pump(tester);
     await tester.tap(find.byType(Switch));
     await tester.pumpAndSettle();
-    expect(find.text('A + B'), findsOneWidget);
-    expect(find.text('C + D'), findsOneWidget);
+    final lines = find.byType(EngineLinesBlock);
+    for (final seat in ['A', 'B', 'C', 'D']) {
+      expect(
+        find.descendant(of: lines, matching: find.text(seat)),
+        findsOneWidget,
+        reason: seat,
+      );
+    }
     await tester.tap(find.byType(Switch));
     await tester.pumpAndSettle();
-    expect(find.text('A + B'), findsNothing);
+    expect(lines, findsNothing);
   });
 
   testWidgets('the FICS archive lists each board’s moves under its table', (

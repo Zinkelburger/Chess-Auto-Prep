@@ -100,6 +100,12 @@ final class ScriptedHivemindBook implements HivemindBook {
     lookups++;
     return positions[position.bookKey] ?? const HivemindNotFound();
   }
+
+  /// What the engine added, in order.
+  final saved = <HivemindEntry>[];
+
+  @override
+  Future<void> save(HivemindEntry entry) async => saved.add(entry);
 }
 
 /// The FICS archive, from a map of positions by key; none by default.

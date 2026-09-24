@@ -9,10 +9,10 @@ import 'bughouse_lab.dart';
 import 'move_tables.dart';
 import 'table_search.dart';
 
-/// The right-hand side of the lab: the engine switch, the clock, one status
-/// line that never changes height, each team's best lines while the engine
-/// is on, and each board's moves with their scores, the FICS archive's
-/// continuations under each board's table.
+/// The right-hand side of the lab: the clock, the engine (its switch and,
+/// while on, each seat's column of moves), a line for what was refused, and
+/// the database: each board's moves with their scores from the book, the
+/// FICS archive's continuations under each board's table.
 class LabPanel extends StatelessWidget {
   const LabPanel({
     super.key,
@@ -32,12 +32,11 @@ class LabPanel extends StatelessWidget {
       builder: (context, _) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _EngineBar(search: search),
-          const SizedBox(height: Space.xs),
           _TimeChips(lab: lab),
-          _StatusLine(lab: lab, search: search),
+          _EngineBar(search: search),
           if (search.lines case final LinesOn on)
             EngineLinesBlock(lab: lab, on: on),
+          _StatusLine(lab: lab, search: search),
           Expanded(
             child: MoveTables(
               lab: lab,
@@ -62,15 +61,8 @@ class _EngineBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final (String status, Color? colour) = switch (search.lines) {
-      LinesOff() => ('Engine', null),
       LinesStopped(:final trouble) => (_trouble(trouble), scheme.error),
-      LinesOn(:final thinking?, :final lines) => (
-        lines.isEmpty
-            ? 'Hivemind · starting…'
-            : 'Hivemind · thinking ${thinking.inSeconds} s a team',
-        null,
-      ),
-      LinesOn() => ('Hivemind', null),
+      _ => ('Hivemind', null),
     };
     return Row(
       children: [
@@ -147,28 +139,20 @@ String _trouble(EngineTrouble trouble) => switch (trouble) {
   SearchFailed(:final reason) => 'Analysis failed: $reason',
 };
 
-/// One line, always there, saying where the tables' scores come from, or
-/// what was refused; in the error colour only for a failure.
+/// One line that never changes height: what was refused, or why the book
+/// could not be read; empty otherwise.
 class _StatusLine extends StatelessWidget {
   const _StatusLine({required this.lab, required this.search});
 
   final BughouseLab lab;
   final TableSearch search;
 
-  (String, bool) get _said {
-    if (lab.problem case final problem?) return (_refused(problem), true);
+  String get _said {
+    if (lab.problem case final problem?) return _refused(problem);
     if (search.bookProblem case final problem?) {
-      return ('The Hivemind book could not be read: $problem', true);
+      return 'The database could not be read: $problem';
     }
-    return switch (search.scores) {
-      ScoresWaiting() => ('Looking the position up…', false),
-      ScoresFromBook() => ('From the Hivemind book.', false),
-      ScoresSearched(:final done, :final total, :final finished) =>
-        finished
-            ? ('Not in the book · Hivemind scored the likeliest moves.', false)
-            : ('Not in the book · searching $done of $total…', false),
-      ScoresFailed(:final trouble) => (_trouble(trouble), true),
-    };
+    return '';
   }
 
   static String _refused(TableRefusal refusal) => switch (refusal) {
@@ -185,29 +169,27 @@ class _StatusLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final (text, failed) = _said;
     return SizedBox(
       height: labStatusHeight,
       child: Align(
         alignment: Alignment.centerLeft,
         child: Text(
-          text,
+          _said,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: failed ? scheme.error : scheme.onSurfaceVariant,
-          ),
+          style: TextStyle(color: scheme.error),
         ),
       ),
     );
   }
 }
 
-/// While the engine is on: each team's score and its three best joint
-/// actions side by side, each board's half named by the seat that plays
-/// it. The rows are there from the start and fill as a pass ends, so
-/// nothing below moves. Pointing at a row draws it on both boards;
-/// clicking plays it.
+/// While the engine is on: a column per seat, A and B then C and D, each
+/// team's three best joint actions across its two columns with the score
+/// beside them, the team's score in its header. A seat not on move has
+/// nothing in its column. The rows are there from the start and fill as a
+/// pass ends, so nothing below moves. Pointing at a row draws it on both
+/// boards; clicking plays it.
 class EngineLinesBlock extends StatelessWidget {
   const EngineLinesBlock({super.key, required this.lab, required this.on});
 
@@ -216,24 +198,18 @@ class EngineLinesBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      margin: const EdgeInsets.only(bottom: Space.s),
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: scheme.outline)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          for (final team in Team.values) ...[
-            if (team == Team.cd)
-              const Padding(padding: EdgeInsets.symmetric(horizontal: Space.m)),
-            Expanded(
-              child: _TeamLines(lab: lab, on: on, team: team),
-            ),
-          ],
-        ],
-      ),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: _TeamLines(lab: lab, on: on, team: Team.ab),
+        ),
+        // The board tables' gutter, so the halves line up with them.
+        const SizedBox(width: Space.m * 2 + 1),
+        Expanded(
+          child: _TeamLines(lab: lab, on: on, team: Team.cd),
+        ),
+      ],
     );
   }
 }
@@ -251,32 +227,42 @@ class _TeamLines extends StatelessWidget {
     final found = on.lines[team];
     final hasMove = on.position.hasMove(team);
     final score = found?.advantage.forTeam(team);
-    final headline = !hasMove ? 'no move' : score?.text ?? '…';
     final rows = found?.rows ?? const [];
+    final head = TextStyle(
+      fontWeight: FontWeight.w600,
+      color: scheme.onSurface,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SizedBox(
+        Container(
           height: labTableRowHeight,
-          child: Tooltip(
-            message: '${on.zero.note} Hivemind’s scale, not pawns.',
-            waitDuration: previewDelay,
-            child: Row(
-              children: [
-                Text(
-                  team.label,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                const Spacer(),
-                Text(
-                  headline,
-                  style: monoText.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: score == null ? scheme.onSurfaceVariant : null,
+          padding: const EdgeInsets.symmetric(horizontal: Space.xs),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: scheme.outline)),
+          ),
+          child: Row(
+            children: [
+              for (final board in BoardNumber.values)
+                Expanded(
+                  child: Text(
+                    Seat.of(board, team.sideOn(board)).letter,
+                    style: head,
                   ),
                 ),
-              ],
-            ),
+              Tooltip(
+                message: '${on.zero.note} Hivemind’s scale, not pawns.',
+                waitDuration: previewDelay,
+                child: SizedBox(
+                  width: labScoreWidth,
+                  child: Text(
+                    !hasMove ? '' : score?.text ?? '',
+                    textAlign: TextAlign.right,
+                    style: monoText.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
         for (var i = 0; i < 3; i++)
@@ -314,7 +300,6 @@ class _JointRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final halves = teamHalves(position, move, team);
     return MouseRegion(
       onEnter: (_) => lab.preview.value = {
         for (final board in BoardNumber.values) board: ?move.on(board),
@@ -322,29 +307,40 @@ class _JointRow extends StatelessWidget {
       onExit: (_) => lab.preview.value = null,
       child: InkWell(
         onTap: () => lab.playJoint(move),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                [
-                  for (final board in BoardNumber.values) ?halves[board],
-                ].join(' · '),
-                style: monoText,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: Space.xs),
+          child: Row(
+            children: [
+              for (final board in BoardNumber.values)
+                Expanded(
+                  child: Text(
+                    _half(board),
+                    style: monoText,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              SizedBox(
+                width: labScoreWidth,
+                child: Text(
+                  score.text,
+                  style: monoText,
+                  textAlign: TextAlign.right,
+                ),
               ),
-            ),
-            SizedBox(
-              width: labScoreWidth,
-              child: Text(
-                score.text,
-                style: monoText,
-                textAlign: TextAlign.right,
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  /// This team's move on [board], `sits`, or nothing when it is not on
+  /// move there.
+  String _half(BoardNumber board) {
+    if (position.mover(board).team != team) return '';
+    final uci = move.on(board);
+    if (uci == null) return 'sits';
+    return position.play(board, uci)?.move.san ?? uci;
   }
 }

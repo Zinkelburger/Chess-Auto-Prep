@@ -34,7 +34,7 @@ void main() {
       lab: lab,
       book: outside.book,
       startEngine: () => outside.outside.launch(cores: 2),
-      depth: (ownNodes: 50, childNodes: 20, topMoves: 2),
+      depth: (ownNodes: 50, childNodes: 20),
       passes: const [Duration(seconds: 1), Duration(seconds: 2)],
     );
   });
@@ -76,51 +76,99 @@ void main() {
     expect(outside.starts, 0);
   });
 
-  test('a position the book lacks is scored by the engine', () async {
-    search.open();
+  List<HivemindQuestion> nodeSearches() => [
+    for (final q in outside.engine.asked)
+      if (q.budget is NodeBudget) q,
+  ];
+
+  test(
+    'with the engine off nothing is searched; the table is unscored',
+    () async {
+      search.open();
+      await pumpEventQueue();
+      expect(search.scores, isA<ScoresNone>());
+      expect(outside.starts, 0);
+    },
+  );
+
+  test('the engine scores every move of a position the book lacks, and '
+      'adds it to the book', () async {
+    search
+      ..open()
+      ..toggleEngine();
     await pumpEventQueue();
     final scores = search.scores as ScoresSearched;
     expect(scores.finished, isTrue);
-    // Both teams searched for the zero, then two moves a board answered.
-    final asked = outside.engine.asked;
-    expect(asked.take(2).map((q) => q.team), [Team.ab, Team.cd]);
-    expect(asked.first.budget, isA<NodeBudget>());
-    expect(asked.length, 2 + 4);
-    expect(scores.scores.length, 4);
+    // Both teams searched for the zero, then every move of both boards.
+    final searches = nodeSearches();
+    expect(searches.take(2).map((q) => q.team), [Team.ab, Team.cd]);
+    expect(searches.length, 2 + 40);
+    expect(scores.scores.length, 40);
     // The table is read from the mover's side: C + D moves on board 2.
     final two = tableRows(lab.position, BoardNumber.two, scores.scores);
     expect(two.first.score.isEmpty, isFalse);
     expect(two.first.pv, startsWith('D '));
+    final saved = outside.book.saved.single;
+    expect(saved.position, TablePosition.initial);
+    expect(saved.clock, ClockCase.even);
+    expect(saved.moves.length, 40);
+    expect(saved.picks.keys, {Team.ab, Team.cd});
+    expect(saved.line, '');
   });
 
-  test('a clock the book lacks is searched, not shown empty', () async {
+  test('a position in the book for the clock is not scored again', () async {
+    outside.book.positions[TablePosition.initial.bookKey] = startInBook();
+    search
+      ..open()
+      ..toggleEngine();
+    await pumpEventQueue();
+    expect(search.scores, isA<ScoresFromBook>());
+    expect(nodeSearches(), isEmpty);
+    expect(outside.book.saved, isEmpty);
+  });
+
+  test('a clock the book lacks is scored with its team’s bit', () async {
     outside.book.positions[TablePosition.initial.bookKey] = startInBook();
     lab.setClock(ClockCase.cdMaySit);
-    search.open();
+    search
+      ..open()
+      ..toggleEngine();
     await pumpEventQueue();
     expect(search.scores, isA<ScoresSearched>());
-    expect(outside.engine.asked.first.maySit, isFalse);
-    expect(outside.engine.asked[1].maySit, isTrue);
+    expect(nodeSearches().first.maySit, isFalse);
+    expect(nodeSearches()[1].maySit, isTrue);
+    expect(outside.book.saved.single.clock, ClockCase.cdMaySit);
+  });
+
+  test('the line that reached a position is stored with it', () async {
+    search.open();
+    lab.play(BoardNumber.one, 'e2e4');
+    search.toggleEngine();
+    await pumpEventQueue();
+    expect(outside.book.saved.single.line, 'A:e4');
+    expect(outside.book.saved.single.ply, 1);
   });
 
   test('a search made before is remembered', () async {
-    search.open();
+    search
+      ..open()
+      ..toggleEngine();
     await pumpEventQueue();
-    final asked = outside.engine.asked.length;
     lab.play(BoardNumber.one, 'e2e4');
     await pumpEventQueue();
     lab.go(BoardNumber.one, 0);
     await pumpEventQueue();
-    final before = outside.engine.asked.length;
-    expect(before, greaterThan(asked));
+    final before = nodeSearches().length;
     lab.play(BoardNumber.one, 'e2e4');
     await pumpEventQueue();
-    expect(outside.engine.asked.length, before);
+    expect(nodeSearches().length, before);
   });
 
   test('a new position makes the search on the old one stale', () async {
     outside.engine.hold = true;
-    search.open();
+    search
+      ..open()
+      ..toggleEngine();
     await pumpEventQueue();
     lab.play(BoardNumber.one, 'e2e4');
     await pumpEventQueue();
@@ -137,35 +185,36 @@ void main() {
       );
     }
     expect(scores.finished, isTrue);
+    expect(outside.book.saved.single.position, lab.position);
   });
 
-  test(
-    'an engine that will not start says so, until it is switched on',
-    () async {
-      outside.startFailure = 'This build has no bughouse engine.';
-      search.open();
-      await pumpEventQueue();
-      final trouble = (search.scores as ScoresFailed).trouble;
-      expect(trouble, isA<EngineNotStarted>());
-      expect(trouble.reason, 'This build has no bughouse engine.');
-      lab.play(BoardNumber.one, 'e2e4');
-      await pumpEventQueue();
-      expect(outside.starts, 1);
-      outside.startFailure = null;
-      search.toggleEngine();
-      await pumpEventQueue();
-      expect(outside.starts, 2);
-      expect((search.scores as ScoresSearched).finished, isTrue);
-    },
-  );
+  test('an engine that will not start turns the switch off in words, and '
+      'is tried again when switched on', () async {
+    outside.startFailure = 'This build has no bughouse engine.';
+    search
+      ..open()
+      ..toggleEngine();
+    await pumpEventQueue();
+    expect(search.engineOn, isFalse);
+    final trouble = (search.lines as LinesStopped).trouble;
+    expect(trouble, isA<EngineNotStarted>());
+    expect(trouble.reason, 'This build has no bughouse engine.');
+    outside.startFailure = null;
+    search.toggleEngine();
+    await pumpEventQueue();
+    expect(outside.starts, 2);
+    expect((search.scores as ScoresSearched).finished, isTrue);
+  });
 
-  test('an engine that dies mid-search fails the tables in words', () async {
+  test('an engine that dies mid-search stops in words', () async {
     outside.engine.hold = true;
-    search.open();
+    search
+      ..open()
+      ..toggleEngine();
     await pumpEventQueue();
     outside.engine.crash();
     await pumpEventQueue();
-    final trouble = (search.scores as ScoresFailed).trouble;
+    final trouble = (search.lines as LinesStopped).trouble;
     expect(trouble, isA<SearchFailed>());
     expect(trouble.reason, 'The bughouse engine stopped.');
   });
@@ -177,6 +226,7 @@ void main() {
     ];
 
     test('searches both teams in passes that think longer each time', () async {
+      outside.book.positions[TablePosition.initial.bookKey] = startInBook();
       search
         ..open()
         ..toggleEngine();
@@ -198,18 +248,17 @@ void main() {
       expect(passes().every((q) => q.lines == 3), isTrue);
     });
 
-    test('waits for the tables before its first pass', () async {
+    test('scores the table between its first and second pass', () async {
       search
         ..toggleEngine()
         ..open();
       await pumpEventQueue();
-      final asked = outside.engine.asked;
-      final firstPass = asked.indexWhere((q) => q.budget is TimeBudget);
-      expect(firstPass, greaterThan(0));
-      expect(
-        asked.skip(firstPass).where((q) => q.budget is NodeBudget),
-        isEmpty,
-      );
+      final kinds = [
+        for (final q in outside.engine.asked) q.budget is TimeBudget,
+      ];
+      expect(kinds.take(2), [true, true]);
+      expect(kinds.skip(2).take(42).every((pass) => !pass), isTrue);
+      expect(kinds.skip(44), [true, true]);
     });
 
     test('asks with the clock chip', () async {
@@ -267,7 +316,9 @@ void main() {
 
   test('leaving the mode quits the engine; coming back starts one', () async {
     outside.engine.hold = true;
-    search.open();
+    search
+      ..toggleEngine()
+      ..open();
     await pumpEventQueue();
     search.close();
     await outside.engine.exited;
@@ -283,11 +334,14 @@ void main() {
     'an engine that finishes starting after the lab is gone is quit',
     () async {
       final starting = Completer<HivemindStart>();
-      final late = TableSearch(
-        lab: lab,
-        book: outside.book,
-        startEngine: () => starting.future,
-      )..open();
+      final late =
+          TableSearch(
+              lab: lab,
+              book: outside.book,
+              startEngine: () => starting.future,
+            )
+            ..toggleEngine()
+            ..open();
       await pumpEventQueue();
       late.dispose();
       final engine = ScriptedHivemind();

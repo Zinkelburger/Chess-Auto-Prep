@@ -35,14 +35,14 @@ the left, the question and the tables on the right.
   error colour.
 - **Time chips** — `A + B may sit` / `Even` / `C + D may sit`, Even first, each with its one-line tooltip.
   The only question the lab asks.
-- **Status line** — one line, always there: `From the Hivemind book.`, `Not in the book · searching 3 of
-  10…`, `Not in the book · Hivemind scored the likeliest moves.`, or what was refused or failed, in the
-  error colour only then.
-- **Engine lines** — while the switch is on, A + B and C + D side by side: the team and its score (`no
-  move` when it has none), then three rows, each the seat-lettered halves where that team is on move
-  (`A dxe5 · B sits`) and its score. The rows are there from the start and fill as each pass ends. The
-  headline's tooltip says where zero came from.
-- **Move tables** — one per board side by side, a plain rule between them: header `Move: Player D`, then
+- **Engine** — the switch and `Hivemind` (or why it stopped, in the error colour). While on, a column per
+  seat, `A` `B` then `C` `D`: each team's three best joint actions across its two columns (`sits` where
+  it sits, empty where it is not on move) with the score beside them, the team's score in its header.
+  The rows are there from the start and fill as each pass ends; the score's tooltip says where zero
+  came from. No sentences about where scores come from (owner, 2026-09-24).
+- **Status line** — one line under the engine that never changes height, the gap before the tables:
+  empty, or what was refused, or why the database could not be read, in the error colour.
+- **Move tables** — one per board side by side, a plain rule between them: header the mover's letter (`D`) and `Score`, then
   every legal move on that board, drops included, with its score for the chosen `Time`, read from the
   mover's side, best first and bold; unscored moves `—` below by SAN. The score's tooltip is the line after
   the move. The `Score` header's tooltip says it is Hivemind's scale, not pawns.
@@ -71,16 +71,19 @@ drop.` when the other board dropped a piece this step would take back.
 **Set a position** — `Set position` → both boards from the boxes, a new line → the problem under the
 board's boxes: `Player B: A king can’t be in reserve (N is the knight).`, `A FEN has 8 ranks; this has 7.`,
 `That leaves an impossible position.`, `That is not a valid dual FEN.`
-**Read the scores** — the book's when the position is in it, at once for every clock case; otherwise each
-team with a move is searched (400 nodes) for the zero and to rank its moves, then each board's four
-likeliest moves are played and the answering team searched (200 nodes), as the book builder and
-BughouseDB's `Analyze locally` do. Searches are remembered for the session. → `Analysis failed: …`, or the
-reason the engine would not start, which stops the tables asking until `Analyze` is pressed.
+**Read the scores** — the book's when it has the position for the clock, at once. Otherwise the moves read
+`—` until the engine is switched on: then, after its first 1 s pass, it scores the table as the builder
+does — each team with a move searched (1500 nodes) for the zero and to order its moves, then every legal
+move of both boards played, the likeliest first, and the answering team searched (200 nodes) — the table
+filling as it goes, and adds the finished position to the book for that clock (the builder's rows,
+status `done`). About two minutes for an opening position on half of an eight-core desktop. Searches are
+remembered for the session.
 **Read the score** — Hivemind's own scale (`180·tan(1.56·Q)`), re-centred: each team's search of the
 position gives the offset, `(q_A+B + q_C+D) / 2`, taken off in Q; when a team has no move the level-table
 offset stands in. 0.00 is level. The book stores the same scale.
-**Engine switch** — each team with a move searched with its clock bit for 1 s, then 2, 4, 8, 16 and 30 s a
-team, the lines shown as each pass ends; the passes wait for the tables to be scored first. Zero from both
+**Engine switch** — the lab's one Hivemind runs only while it is on. Each team with a move searched with
+its clock bit for 1 s, then (after the table is scored, when the book lacked it) 2, 4, 8, 16 and 30 s a
+team, the lines shown as each pass ends. Zero from both
 teams' searches, or assumed when one has no move. A new position or clock starts again from 1 s; off cuts
 the pass short → the reason in the engine bar, and the switch goes off.
 **Point at a row** — a table, analysis or archive row draws its move as an arrow (a drop: the piece faint on
@@ -116,7 +119,8 @@ moves the match to
   `tools/windows_self_test.ps1` runs it on any Windows PC; `.github/workflows/windows-check.yml` runs it and
   the rest of the Windows checks on Server 2022 and 2025 when the `windows-check` branch is pushed. Hivemind
   runs on half of the machine's cores, 256 MB hash, batch 8. MIT (aminwoo).
-- **Hivemind book** — read-only `hivemind_book.db` (`tools/bughouse_db/hivemind_book.py`), looked for under
+- **Hivemind book** — `hivemind_book.db` (`tools/bughouse_db/hivemind_book.py`), read, and added to by the
+  engine switch in the builder's own rows (a new file gets the builder's schema), looked for under
   `$BUGHOUSE_DB_HOME` alone when set, else `~/.local/share/chess-prep/bughouse-db/`, then the support folder.
   Keyed by FNV-1a of each board's four FEN fields with the reserve in `KQRBNP` order, joined by ` | `.
   Scores are A + B's; a book in the old seat lettering (board 1 Black `B`) is read with `B` and `C` swapped.
@@ -135,7 +139,7 @@ Keep — Seat rows (Change: plain dot and `Player A`, reserve only as held piece
 Keep — Move list (Change: per board, each board steps on its own, from the web page)
 Change — Setup boxes replace the Edit position panel (FEN and reserve per board, pieces outstanding)
 Change — Time chips replace the Board tab (Our team, Must move on and Search dropped 2026-09-23 by the owner)
-Change — Move tables replace the Engine tab's lines (every legal move scored, book or live)
+Change — Move tables replace the Engine tab's lines (every legal move scored, from the book or by the engine into the book)
 Keep — Engine switch (Change 2026-09-23: continuous passes for both teams, like the engine bar elsewhere,
 replacing a one-shot Analyze)
 Keep — Read the score (measured, or assumed when a team has no move; no carried zero)
@@ -151,8 +155,8 @@ Keep — Run a match, Read a run
 - Matches stay inside the lab, on a Hivemind of their own so the tables keep theirs; same folders and
   format as the old app. `Stop` drops the game in flight rather than keeping it unfinished, so `Resume`
   (new) replays it; seeds are per game so a resumed match samples as it would have.
-- The desktop lab reads the precomputed Hivemind book, and searches live when the position or clock case is
-  not in it. It never writes to the book.
+- The desktop lab reads the precomputed Hivemind book; when a position or clock case is not in it, the
+  engine switch scores it and adds it (owner, 2026-09-24: one engine, and it fills the database).
 - The FICS archive stays, shut by default, when the file is on this machine.
 - `Compare clock scenarios` is dropped: the three `Time` chips replace it.
 - No engine settings rows: Hivemind takes half the machine's cores (the Stockfish setting defaults to one,
