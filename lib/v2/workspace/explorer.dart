@@ -165,6 +165,7 @@ final class Explorer extends ChangeNotifier {
 
   /// The databases that can be asked: TWIC only when it is on this machine.
   List<ExplorerSource> get sources => [
+    ExplorerSource.book,
     ExplorerSource.masters,
     ExplorerSource.lichess,
     if (_twic) ExplorerSource.twic,
@@ -194,6 +195,7 @@ final class Explorer extends ChangeNotifier {
       return;
     }
     final choice = _choiceNow;
+    if (choice.source == ExplorerSource.book) return;
     final line = _lineHere();
     // Taken before the book is looked for, while it is still this
     // position's.
@@ -244,7 +246,8 @@ final class Explorer extends ChangeNotifier {
     // A line beside the rows is about the rows it came with; what is shown
     // next says its own.
     _notice = null;
-    if (_session.chapter == null) {
+    // The book is the Book pane's own ([RepertoireTree]): nothing to ask.
+    if (_session.chapter == null || _choiceNow.source == ExplorerSource.book) {
       _show(const ExplorerIdle());
       return;
     }
@@ -558,6 +561,6 @@ final class ExplorerDatabases {
           masters: source == ExplorerSource.masters,
         ),
         ExplorerSource.myGames => myGames.gamePgn(game.id),
-        ExplorerSource.thisFile => null,
+        ExplorerSource.thisFile || ExplorerSource.book => null,
       };
 }

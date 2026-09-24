@@ -9,7 +9,7 @@ import 'game_book.dart';
 
 /// The one line a game's row says about its book.
 String verdictLine(CheckedGame checked) => switch (checked.verdict) {
-  NoBook() => 'No ${sideName(checked.game.side)} repertoire',
+  NoBook() => 'Your book has no ${sideName(checked.game.side)} chapters',
   OtherOpening() => 'Another opening',
   InBookThroughout() => 'In book to the end',
   LeftBook(kind: Deviation.mine, :final played, :final book) =>
@@ -32,7 +32,7 @@ bool matchesSearch(CheckedGame checked, String query) => [
 /// one, and a few words — `6.f3` `left book` — so a narrow column still
 /// shows the move.
 (String, String) verdictTag(CheckedGame checked) => switch (checked.verdict) {
-  NoBook() => ('', 'no ${sideName(checked.game.side)} book'),
+  NoBook() => ('', 'no ${sideName(checked.game.side)} in book'),
   OtherOpening() => ('', 'another opening'),
   InBookThroughout() => ('', 'in book to the end'),
   LeftBook(kind: Deviation.mine, :final played) => (played, 'left book'),

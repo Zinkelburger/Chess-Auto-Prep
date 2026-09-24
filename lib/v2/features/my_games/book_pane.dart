@@ -89,9 +89,9 @@ class _BookPaneState extends State<BookPane> {
   List<Widget> _body(CheckedGame checked) => switch (checked.verdict) {
     NoBook() => [
       _Sentence(
-        'You have no ${sideName(checked.game.side)} repertoire yet. Build '
-        'one in the Repertoire builder and your games as '
-        '${sideName(checked.game.side)} are compared with it.',
+        'Your book has no ${sideName(checked.game.side)} chapters. Add some '
+        'in Books and your games as ${sideName(checked.game.side)} are '
+        'compared with them.',
         inset: false,
       ),
     ],

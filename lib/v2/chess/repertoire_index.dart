@@ -20,7 +20,7 @@ final class IndexedMove {
   int get lines => _lines;
 }
 
-/// What one repertoire file plays, looked up by position: the Tree tab's
+/// What one repertoire file plays, looked up by position: the explorer Book's
 /// rows and the book check's verdicts both read it.
 ///
 /// Positions are keyed without the move counters ([Fen.position]), so a

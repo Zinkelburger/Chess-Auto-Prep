@@ -17,6 +17,10 @@ class TopBar extends StatelessWidget {
     super.key,
     required this.mode,
     required this.onMode,
+    this.backTo,
+    this.forwardTo,
+    this.onBack,
+    this.onForward,
     required this.offered,
     required this.onSettings,
     required this.listShown,
@@ -29,6 +33,13 @@ class TopBar extends StatelessWidget {
 
   final Mode mode;
   final ValueChanged<Mode> onMode;
+
+  /// Where Back and Forward go, named for their tooltips; null hides the
+  /// button, so the pair is there only once there is somewhere to go.
+  final String? backTo;
+  final String? forwardTo;
+  final VoidCallback? onBack;
+  final VoidCallback? onForward;
 
   /// Whether this build can offer [Mode] at all: the Bughouse lab needs its
   /// engine, which a build may not carry. A mode not offered is left out
@@ -61,6 +72,24 @@ class TopBar extends StatelessWidget {
       child: Row(
         children: [
           if (!listShown) ListToggle(shown: false, onPressed: onToggleList),
+          if (backTo != null || forwardTo != null) ...[
+            IconButton(
+              icon: const Icon(Icons.arrow_back, size: IconSize.action),
+              tooltip: backTo == null
+                  ? null
+                  : withKey('Back to $backTo', 'Alt+←'),
+              onPressed: backTo == null ? null : onBack,
+              visualDensity: VisualDensity.compact,
+            ),
+            IconButton(
+              icon: const Icon(Icons.arrow_forward, size: IconSize.action),
+              tooltip: forwardTo == null
+                  ? null
+                  : withKey('Forward to $forwardTo', 'Alt+→'),
+              onPressed: forwardTo == null ? null : onForward,
+              visualDensity: VisualDensity.compact,
+            ),
+          ],
           _ModeMenu(mode: mode, onMode: onMode, offered: offered),
           const SizedBox(width: Space.s),
           _ActionsMenu(actions: actions, changes: actionsChange),
@@ -86,6 +115,7 @@ class TopBar extends StatelessWidget {
 /// the builder are one mode, named for the building (owner, 2026-09-22).
 const _modes = [
   'Repertoire builder',
+  'Books',
   'PGN Viewer',
   'Repertoire trainer',
   'Study',

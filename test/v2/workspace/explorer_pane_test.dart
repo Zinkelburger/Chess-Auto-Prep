@@ -21,6 +21,10 @@ import '../support/my_games_fixture.dart';
 import '../support/scripted_explorer.dart';
 import '../support/scripted_store.dart';
 import '../support/session_fixture.dart';
+import '../support/books_fixture.dart';
+import '../support/scripted_files.dart';
+import 'package:chess_auto_prep/v2/workspace/repertoire_shelf.dart';
+import 'package:chess_auto_prep/v2/workspace/repertoire_tree.dart';
 
 const chapter = '''
 // Color: White
@@ -70,6 +74,15 @@ void main() {
     addTearDown(explorer.dispose);
     final games = gamesOver(fixture.store, lichess: lichess, book: book);
     addTearDown(games.dispose);
+    final books = booksWith();
+    final tree = RepertoireTree(
+      session: fixture.session,
+      shelf: RepertoireShelf(files: ScriptedFiles(), documents: fixture.store),
+      books: books,
+    );
+    addTearDown(tree.dispose);
+    await tester.binding.setSurfaceSize(const Size(1000, 600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(
         theme: darkTheme(),
@@ -78,13 +91,15 @@ void main() {
             children: [
               Expanded(
                 child: SizedBox(
-                  // The test font's letters are square: five databases
-                  // need the room.
-                  width: 800,
+                  // The test font's letters are square: six sources need
+                  // the room.
+                  width: 960,
                   child: ExplorerPane(
                     session: fixture.session,
                     explorer: explorer,
                     games: games,
+                    tree: tree,
+                    books: books,
                     onOpenGame: opened.add,
                   ),
                 ),

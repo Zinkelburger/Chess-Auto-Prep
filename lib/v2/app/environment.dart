@@ -24,6 +24,7 @@ import '../net/lichess_login.dart';
 import '../net/lichess_studies.dart';
 import '../net/recent_games.dart';
 import '../storage/atomic_write.dart';
+import '../storage/book_file.dart';
 import '../storage/bughouse_books.dart';
 import '../storage/bughouse_matches.dart';
 import '../storage/chapter_files.dart';
@@ -102,6 +103,7 @@ final class AppEnvironment {
     required this.evalCache,
     required this.keepTree,
     this.finds = FindsStore.inMemory,
+    BookStore? books,
     required this.setFullScreen,
     required this.bughouse,
     this.now = DateTime.now,
@@ -110,7 +112,7 @@ final class AppEnvironment {
     this.explorerDelay = const Duration(milliseconds: 250),
     this.exitWait = const Duration(seconds: 5),
     this.close = _nothingToClose,
-  });
+  }) : books = books ?? MemoryBooks();
 
   /// The app on this machine: the user's Documents folder and the app's
   /// own [support] folder, the real network, Stockfish and Maia.
@@ -188,6 +190,7 @@ final class AppEnvironment {
       evalCache: () => evalCache.cache,
       keepTree: _keepTreeBeside,
       finds: () => finds.store,
+      books: BookFile(support),
       setFullScreen: _setFullScreen,
       bughouse: (
         bundled: _bughouseBundled,
@@ -265,6 +268,10 @@ final class AppEnvironment {
   /// one is recorded or listed. Called once; the default keeps them in
   /// memory, for a test.
   final FindsStore Function() finds;
+
+  /// The user's books, `books.json` in the support folder; in memory for
+  /// a test.
+  final BookStore books;
 
   /// Keeps a fill's search tree beside its chapter.
   final Future<void> Function(ChapterRef chapter, String tree) keepTree;

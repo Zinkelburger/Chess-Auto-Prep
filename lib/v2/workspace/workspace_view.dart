@@ -23,6 +23,7 @@ import 'move_note.dart';
 import 'move_tree_view.dart';
 import 'reading_header.dart';
 import 'replies_pane.dart';
+import 'repertoire_tree.dart' show TreePlace;
 import 'search_pane.dart';
 import 'workspace.dart';
 import 'workspace_tabs.dart';
@@ -42,7 +43,15 @@ final class WorkspaceHooks {
     this.onEngineMove,
     this.onExplorerGame,
     this.onOpenChapter,
+    this.onOpenPlace,
+    this.onEditBooks,
   });
+
+  /// Opens the chapter a move of the book was found in, where it leads.
+  final ValueChanged<TreePlace>? onOpenPlace;
+
+  /// Shows the Books mode, to edit the books.
+  final VoidCallback? onEditBooks;
 
   /// Asked to open a game the explorer lists, which is the shell's
   /// business: another mode shows it.
@@ -64,7 +73,7 @@ final class WorkspaceHooks {
   final ValueChanged<String>? onBoardMove;
 
   /// Where the moves of a clicked engine line go when not into the
-  /// document: the Tree tab's free board. Null plays them into it.
+  /// document: the explorer Book's free board. Null plays them into it.
   final ValueChanged<String>? onEngineMove;
 
   /// Whether the card is headed with the game's players and the board has
@@ -73,7 +82,7 @@ final class WorkspaceHooks {
   final bool header;
   final bool gameCounter;
 
-  /// The body of a tab the workspace does not draw itself — Train, Tree,
+  /// The body of a tab the workspace does not draw itself — Train,
   /// Puzzle, Book — which the mode on screen or the shell supplies. A tab it
   /// answers null for is empty.
   final Widget? Function(BuildContext context, WorkspaceTab tab)? tabBody;
@@ -276,10 +285,13 @@ class _Tabbed extends StatelessWidget {
         session: workspace.session,
         explorer: workspace.explorer,
         games: workspace.games,
+        tree: workspace.tree,
+        books: workspace.books,
         onOpenGame: hooks.onExplorerGame,
+        onOpenPlace: hooks.onOpenPlace,
+        onEditBooks: hooks.onEditBooks,
       ),
     ),
-    WorkspaceTab.tree => _supplied(context, tab),
     WorkspaceTab.search => SearchPane(
       fill: workspace.fill,
       session: workspace.session,

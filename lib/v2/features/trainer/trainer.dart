@@ -13,14 +13,15 @@ import '../../storage/chapter_files.dart';
 import '../../storage/pgn_document_store.dart';
 import '../../storage/training_store.dart';
 import '../../workspace/board_claim.dart';
+import '../../workspace/books.dart';
 import '../../workspace/document_session.dart';
 import '../../workspace/engine_analysis.dart';
 import 'lesson.dart';
 import 'progress.dart';
 
-/// How much of the repertoire the trainer takes in: the chapter on the
-/// board, or every chapter of its repertoire.
-enum TrainScope { chapter, repertoire }
+/// How much the trainer takes in: the chapter on the board, every chapter
+/// of its repertoire, or every chapter of the book in use.
+enum TrainScope { chapter, repertoire, book }
 
 /// Where a line sent to be read goes: the board alone, the tab staying
 /// where it is; the Moves tab; or the builder.
@@ -31,7 +32,7 @@ enum ReadIn { board, moves, builder }
 typedef LineToRead = ({ChapterRef ref, List<String> sans, ReadIn place});
 
 /// Why there is nothing to train.
-enum NothingToTrain { noChapter, studyChapter }
+enum NothingToTrain { noChapter, studyChapter, noBook, emptyBook }
 
 sealed class TrainerState {
   const TrainerState();
@@ -107,13 +108,21 @@ class Trainer extends ChangeNotifier {
     required ProgressFiles files,
     required EngineAnalysis analysis,
     required TrainerTime time,
-  }) : _session = session,
+    required Books books,
+  }) : _books = books,
+       _session = session,
        _chapters = chapters,
        _files = files,
        _analysis = analysis,
        _time = time {
     _session.addListener(_follow);
+    _books.addListener(_bookChanged);
   }
+
+  final Books _books;
+
+  /// The book in use as the last load saw it.
+  Object? _bookSeen;
 
   final DocumentSession _session;
   final ScopeReader _chapters;
@@ -260,16 +269,32 @@ class Trainer extends ChangeNotifier {
         _session.source != read.ref ||
         chapter?.game != read.chapter?.game) {
       if (_inRepertoire(_session.source)) return _relined();
+      // A book is trained whatever is on the board: another chapter that
+      // is not in it changes nothing.
+      if (_scope == TrainScope.book && _state is TrainerReady) {
+        _read = (ref: _session.source, scope: _scope, chapter: chapter);
+        return;
+      }
       if (_state is! TrainerIdle) unawaited(_load());
       return;
     }
     if (!identical(chapter, read.chapter)) _relined();
   }
 
+  /// Another book is in use, or the one in use was edited: a book being
+  /// trained is read again.
+  void _bookChanged() {
+    if (identical(_books.active, _bookSeen)) return;
+    _bookSeen = _books.active;
+    if (_scope == TrainScope.book && _state is! TrainerIdle) {
+      unawaited(_load(force: true));
+    }
+  }
+
   bool _inRepertoire(ChapterRef? ref) {
     final state = _state;
     return ref != null &&
-        _scope == TrainScope.repertoire &&
+        _scope != TrainScope.chapter &&
         _session.chapter?.game == null &&
         state is TrainerReady &&
         state.chapters.any((c) => c.ref == ref);
@@ -303,6 +328,7 @@ class Trainer extends ChangeNotifier {
     // The sitting was over the progress this replaces; it ends with it, so
     // nothing writes through a copy the files have moved past.
     leave();
+    if (_scope == TrainScope.book) return _loadBook(load, chapter, ref);
     if (chapter == null || ref == null) {
       return _become(const TrainerEmpty(NothingToTrain.noChapter));
     }
@@ -315,6 +341,30 @@ class Trainer extends ChangeNotifier {
         ? [(ref: ref, lines: open)]
         : await _chapters.repertoireOf(ref, open);
     if (load != _loads) return;
+    await _loaded(load, chapters);
+  }
+
+  /// The chapters of the book in use, the one on the board as it stands
+  /// when it is one of them.
+  Future<void> _loadBook(int load, Chapter? chapter, ChapterRef? ref) async {
+    _bookSeen = _books.active;
+    if (_books.active == null) {
+      return _become(const TrainerEmpty(NothingToTrain.noBook));
+    }
+    _become(const TrainerLoading());
+    final open = chapter != null && ref != null && chapter.game == null
+        ? (ref: ref, lines: trainingLines(chapter, source: ref.path))
+        : null;
+    final chapters = await _chapters.chaptersWhere(_books.includes, open);
+    if (load != _loads) return;
+    if (chapters.isEmpty) {
+      return _become(const TrainerEmpty(NothingToTrain.emptyBook));
+    }
+    await _loaded(load, chapters);
+  }
+
+  /// The progress of [chapters], read for the load counted as [load].
+  Future<void> _loaded(int load, List<ChapterLines> chapters) async {
     final read = await _files.read({for (final c in chapters) c.ref.path});
     if (load != _loads) return;
     _become(switch (read) {
@@ -341,6 +391,7 @@ class Trainer extends ChangeNotifier {
     // tells nobody.
     _loads++;
     _session.removeListener(_follow);
+    _books.removeListener(_bookChanged);
     leave();
     final state = _state;
     if (state is TrainerReady) state.progress.dispose();
@@ -394,6 +445,33 @@ final class ScopeReader {
                 source: ref.path,
               ),
             ),
+    ];
+  }
+
+  /// Every chapter of every repertoire that [wanted] takes, in the
+  /// folders' order, with [open] taken as it is on the board rather than
+  /// read again. Drafts and chapters that cannot be read are left out.
+  Future<List<ChapterLines>> chaptersWhere(
+    bool Function(ChapterRef ref) wanted,
+    ChapterLines? open,
+  ) async {
+    final listing = await _files.list();
+    if (listing is! Repertoires) return const [];
+    final files = <String, Future<Chapter?>>{};
+    return [
+      for (final folder in listing.folders)
+        for (final ref in folder.chapters)
+          if (!ref.heading.draft && wanted(ref))
+            if (open != null && ref == open.ref)
+              open
+            else if (await (files[ref.path] ??= _read(ref)) case final file?)
+              (
+                ref: ref,
+                lines: trainingLines(
+                  sectionView(file, ref.section).chapter,
+                  source: ref.path,
+                ),
+              ),
     ];
   }
 

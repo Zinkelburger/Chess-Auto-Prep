@@ -57,7 +57,7 @@ void main() {
       find.text('3...cxd4 book ended', findRichText: true),
       findsOneWidget,
     );
-    for (final tab in ['Book', 'Game', 'Tree']) {
+    for (final tab in ['Book', 'Game', 'Explorer']) {
       expect(find.text(tab), findsOneWidget, reason: tab);
     }
     expect(find.textContaining('Open one of your games'), findsOneWidget);

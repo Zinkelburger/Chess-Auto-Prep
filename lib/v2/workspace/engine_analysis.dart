@@ -71,7 +71,7 @@ final class EngineAnalysis extends ChangeNotifier {
   /// [launch] is asked for an engine each time the analysis is enabled.
   ///
   /// [elsewhere] is a position the board shows in place of the document's
-  /// — the Tree tab's free board — which the engine follows while it is
+  /// — the explorer Book's free board — which the engine follows while it is
   /// there.
   EngineAnalysis(
     this._session,

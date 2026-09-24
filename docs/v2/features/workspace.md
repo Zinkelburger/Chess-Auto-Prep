@@ -50,7 +50,7 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
   the tabs"): the board shrinks to leave the switch row and one row per line, on or off, so it
   never changes size. While a search runs the row reads `Paused while searching`.)
 - **Tab strip and Replies** (v2, 2026-09-21; browser tabs 2026-09-22; big tabs 2026-09-23) —
-  under the card's heading, `Moves | Train | Replies | Explorer | Tree | Search`. Since 2026-09-23
+  under the card's heading, `Moves | Train | Replies | Explorer | Search`. Since 2026-09-23
   the tabs share the strip's width, 40px tall, the one that is up filled (owner: the small
   underlined tabs were "ugly, small and hard to click"); no `×` is drawn and no control sits at
   the strip's end. Fixed identities: `Moves` is pinned, a middle click closes, a drag puts a tab
@@ -68,9 +68,11 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
   repertoire) · **Games** (`1.2k`/`1.2M` plus share, `<1%` under 0.5%) · **White / Draw / Black**
   bar, closed by a `Σ` totals row — no rating, performance or eval column and no sorting. Below it,
   games here (4+4 Lichess, 15 Masters, 12 TWIC).
-- **Tree tab** (v2, 2026-09-22) — the user's own repertoires as an opening explorer, the old
-  PGN viewer's Tree for the whole library. For the board's position, every move any non-draft
-  repertoire file of the board's side plays (a repertoire of one file counts like any other),
+- **Explorer `Book`** (v2, 2026-09-22 as the Tree tab; a source of the Explorer since
+  2026-09-23) — the first source, `Book | Masters | Lichess | TWIC | This file | My games`, with the
+  book chip beside it (see `books.md`). The book in use as an opening explorer; `No book set.`
+  without one. For the board's position, every move any chapter of the book for the board's side
+  plays,
   matched by position so transpositions meet: **Move** · **Lines** through it · **Goes on** (the
   biggest file's continuation) · **Found in** (a click opens that file there). Files are indexed
   once and re-parsed only when their bytes change; each chapter of a course file is indexed from
@@ -94,7 +96,7 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
   `chess/pgn/analysis_board.dart`, `boardActions` in `app/mode_view.dart`.
 - **Move field** (v2, 2026-09-23) — a small `Type a move` box at the left of the row under
   the board, on every board the user plays on: a chapter, the analysis board, a puzzle, a Train
-  drill and the Tree tab's free board. SAN or UCI in any case (`nf3`, `g1f3`, `0-0`, `e1h1`,
+  drill and the explorer Book's free board. SAN or UCI in any case (`nf3`, `g1f3`, `0-0`, `e1h1`,
   `e8=Q`, `e7e8q`, `Nbd2`, `N1f3`, marks optional) plays the moment it names one legal move that
   longer words could not turn into another, through the same path as a move on the board; Enter
   plays the one move the words still leave (a promotion without its piece is a queen); Esc clears

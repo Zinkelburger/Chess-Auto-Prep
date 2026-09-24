@@ -3,13 +3,18 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../chess/explorer_answer.dart';
+import '../chess/explorer_choice.dart';
 import '../ui/listening_state.dart';
 import '../ui/theme.dart';
 import 'document_session.dart';
 import 'explorer.dart';
 import 'explorer_filters.dart';
 import 'game_fetcher.dart';
+import 'book_chip.dart';
+import 'books.dart';
 import 'line_preview.dart';
+import 'repertoire_tree.dart';
+import 'tree_pane.dart';
 
 /// The Explorer tab of the reading card, lila's opening explorer: what a
 /// database has seen played from the position on the board.
@@ -22,14 +27,32 @@ import 'line_preview.dart';
 /// which open in the viewer. Clicking a move plays it, and on a repertoire
 /// chapter that writes it; resting the pointer on one floats the position
 /// after it.
+///
+/// `Book` is the user's own active book instead of a database: the moves
+/// its chapters play here ([TreePane]), with the book's name to switch it
+/// and a way to edit the books.
 class ExplorerPane extends StatefulWidget {
   const ExplorerPane({
     super.key,
     required this.session,
     required this.explorer,
     required this.games,
+    required this.tree,
+    required this.books,
     this.onOpenGame,
+    this.onOpenPlace,
+    this.onEditBooks,
   });
+
+  /// The active book by position, for `Book`.
+  final RepertoireTree tree;
+  final Books books;
+
+  /// Asked to open the chapter a book move was found in, where it leads.
+  final ValueChanged<TreePlace>? onOpenPlace;
+
+  /// Asked to show the Books mode; null hides the pencil.
+  final VoidCallback? onEditBooks;
 
   final DocumentSession session;
   final Explorer explorer;
@@ -103,8 +126,21 @@ class _ExplorerPaneState extends State<ExplorerPane>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            ExplorerSourceBar(explorer: widget.explorer),
-            Expanded(child: _body(context)),
+            ExplorerSourceBar(
+              explorer: widget.explorer,
+              book: widget.onEditBooks == null
+                  ? null
+                  : BookChip(books: widget.books, onEdit: widget.onEditBooks!),
+            ),
+            Expanded(
+              child: widget.explorer.choice.source == ExplorerSource.book
+                  ? TreePane(
+                      session: widget.session,
+                      tree: widget.tree,
+                      onOpen: widget.onOpenPlace,
+                    )
+                  : _body(context),
+            ),
           ],
         ),
       ),

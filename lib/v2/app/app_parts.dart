@@ -3,6 +3,7 @@ import 'dart:async';
 import '../features/settings/lichess_account.dart';
 import '../storage/my_games_files.dart';
 import '../storage/settings_store.dart';
+import '../workspace/books.dart';
 import '../workspace/copy_name_dialog.dart';
 import '../workspace/document_saver.dart';
 import '../workspace/document_session.dart';
@@ -60,7 +61,15 @@ final class AppParts {
     folder: env.folders.gamesLibrary,
   );
 
-  late final DocumentModes documents = wireDocumentModes(env, session, saver);
+  /// The user's books and the one in use.
+  late final books = Books(store: env.books, root: env.folders.repertoires);
+
+  late final DocumentModes documents = wireDocumentModes(
+    env,
+    session,
+    saver,
+    books,
+  );
   late final _workspace = WorkspaceWiring(
     env,
     session: session,
@@ -68,6 +77,7 @@ final class AppParts {
     library: documents.library,
     filter: documents.filter,
     games: gamesCache,
+    books: books,
   );
   Workspace get workspace => _workspace.workspace;
 
@@ -96,6 +106,7 @@ final class AppParts {
     games: workspace.games,
     leaving: exit,
     input: _input,
+    books: books,
   );
 
   /// Whether the window fills the screen.
@@ -120,6 +131,7 @@ final class AppParts {
   Future<void> start() async {
     if (_disposed) return;
     unawaited(documents.library.refresh());
+    unawaited(books.load());
     unawaited(training.myGames.load());
     await settings.load();
     if (_disposed) return;
@@ -140,6 +152,7 @@ final class AppParts {
     _workspace.dispose();
     documents.dispose();
     account.dispose();
+    books.dispose();
     session.dispose();
     saver.dispose();
     // The environment made the settings store, but only the parts listen

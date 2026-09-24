@@ -24,6 +24,8 @@ String emptyReason(NothingToTrain why) => switch (why) {
   NothingToTrain.noChapter => 'Open a repertoire chapter to train it.',
   NothingToTrain.studyChapter =>
     'Study chapters are not trained here. Open a repertoire chapter.',
+  NothingToTrain.noBook => 'No book set.',
+  NothingToTrain.emptyBook => 'Your book has no chapters yet.',
 };
 
 /// The move a lesson is about, numbered as a book prints it: `5.Nf3`.

@@ -1,4 +1,5 @@
 import '../storage/settings_store.dart';
+import 'books.dart';
 import 'document_saver.dart';
 import 'document_session.dart';
 import 'engine_analysis.dart';
@@ -31,6 +32,7 @@ final class Workspace {
     required this.replies,
     required this.gaps,
     required this.shelf,
+    required this.books,
     required this.tree,
     required this.fill,
     required this.finds,
@@ -48,11 +50,15 @@ final class Workspace {
   final Replies replies;
   final GapHunt gaps;
 
-  /// Every repertoire file, indexed by position: the Tree tab and My games
+  /// Every repertoire file, indexed by position: the explorer's Book and My games
   /// read the same one.
   final RepertoireShelf shelf;
 
-  /// The user's own repertoires, looked up by position: the Tree tab.
+  /// The user's books: what the explorer's Book, My games and the trainer
+  /// read the repertoires through.
+  final Books books;
+
+  /// The user's own repertoires, looked up by position: the explorer's Book.
   final RepertoireTree tree;
   final FillGaps fill;
 

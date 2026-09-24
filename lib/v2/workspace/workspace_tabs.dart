@@ -2,8 +2,8 @@ import '../ui/app_action.dart';
 import '../ui/pane_tabs.dart';
 
 /// The tabs of the reading card: the moves, which are always there, the
-/// trainer, the opponent's replies, the explorer, the tree of the user's
-/// own repertoires, the search from the board and its values, the puzzle
+/// trainer, the opponent's replies, the explorer (the user's own book
+/// among its sources), the search from the board and its values, the puzzle
 /// being solved, and what the user's book says about one of their games. A new thing the card can show is a new value here, and the
 /// compiler then asks for its arm in the card's body; the strip, the keys
 /// and the Actions menu know nothing about which tabs there are.
@@ -12,7 +12,6 @@ enum WorkspaceTab {
   train('Train'),
   replies('Replies'),
   explorer('Explorer'),
-  tree('Tree'),
   search('Search'),
   puzzle('Puzzle'),
   book('Book');
@@ -42,17 +41,16 @@ PaneTabs<WorkspaceTab> newWorkspaceTabs() => PaneTabs(
     WorkspaceTab.train,
     WorkspaceTab.replies,
     WorkspaceTab.explorer,
-    WorkspaceTab.tree,
     WorkspaceTab.search,
   ],
 );
 
 /// The card's tabs as the PGN Viewer and Study start: the moves, the
-/// explorer, the tree and Search, where a search from the board is started.
+/// explorer and Search, where a search from the board is started.
 /// The repertoire's tabs can be shown from the Actions menu.
 PaneTabs<WorkspaceTab> readingTabs() => PaneTabs(
   _documentTabs,
-  open: const [WorkspaceTab.explorer, WorkspaceTab.tree, WorkspaceTab.search],
+  open: const [WorkspaceTab.explorer, WorkspaceTab.search],
 );
 
 /// The card's tabs in Tactics: the puzzle first and always there, the game
@@ -68,16 +66,15 @@ PaneTabs<WorkspaceTab> puzzleTabs() => PaneTabs(
 );
 
 /// The card's tabs in My games: the book's verdict on the game first and
-/// always there, the game beside it, and the user's repertoires as a tree
-/// to see what else the book plays. The explorer can be shown when wanted.
+/// always there, the game beside it, and the explorer, whose Book shows
+/// what else the book plays.
 PaneTabs<WorkspaceTab> bookTabs() => PaneTabs(
   const [
     PaneTab(WorkspaceTab.book, 'Book', pinned: true),
     PaneTab(WorkspaceTab.moves, 'Game'),
-    PaneTab(WorkspaceTab.tree, 'Tree'),
     PaneTab(WorkspaceTab.explorer, 'Explorer'),
   ],
-  open: const [WorkspaceTab.moves, WorkspaceTab.tree],
+  open: const [WorkspaceTab.moves, WorkspaceTab.explorer],
 );
 
 /// The card's tabs as a browser's menu has them: each one that can be

@@ -21,6 +21,7 @@ import '../../storage/pgn_document_store.dart' as store;
 import '../../storage/pgn_file_picker.dart';
 import '../../storage/training_records.dart' as records;
 import '../../ui/file_names.dart';
+import '../../workspace/books.dart';
 import '../../workspace/document_saver.dart';
 import '../../workspace/document_session.dart';
 import '../../workspace/session_results.dart';
@@ -49,8 +50,10 @@ final class Library extends ChangeNotifier {
     required DocumentSession session,
     required PgnFilePicker picker,
     required String root,
+    Books? books,
     DateTime Function() now = DateTime.now,
   }) : _files = files,
+       _books = books,
        _store = documents,
        _saver = saver,
        _session = session,
@@ -78,6 +81,10 @@ final class Library extends ChangeNotifier {
 
   /// The `repertoires` folder, absolute.
   final String _root;
+
+  /// The books, which follow a chapter or a repertoire that is renamed or
+  /// moved; none in a test that has no books.
+  final Books? _books;
 
   /// What a new chapter's heading says it was created on.
   final DateTime Function() _now;
@@ -239,13 +246,17 @@ final class Library extends ChangeNotifier {
   /// else. The games of a course file that name no chapter are called after
   /// the file, so renaming them renames the file.
   Future<LibraryResult> renameChapter(ChapterRef ref, String name) =>
-      _run('rename ${ref.path}', () {
+      _run('rename ${ref.path}', () async {
         if (ref.section case final section?) {
-          return _editFile(
+          final result = await _editFile(
             ref,
             (file) => sectionRenamed(file, section, name),
             renamedTo: name.trim(),
           );
+          if (result is LibraryDone) {
+            _books?.renamedSection(ref.path, section, name.trim());
+          }
+          return result;
         }
         final to = p.join(p.dirname(ref.path), '$name.pgn');
         return _relocate(ref, DocumentRef(to));
@@ -541,6 +552,7 @@ final class Library extends ChangeNotifier {
             if (_session.source?.path == ref.path) {
               _session.relocated(ChapterRef.at(to.path));
             }
+            _books?.movedFile(ref.path, to.path);
             return LibraryDone(training: training);
           case store.Collision():
             return const LibraryNameTaken();
@@ -613,6 +625,7 @@ final class Library extends ChangeNotifier {
     switch (await _store.moveFolder(from, to)) {
       case store.FolderMoved(:final training):
         _followedFolder(from, to);
+        _books?.movedFolder(from, to);
         return LibraryDone(training: training);
       case store.FolderNameTaken():
         return const LibraryNameTaken();

@@ -1,9 +1,12 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart'
+    show kBackMouseButton, kForwardMouseButton;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:multi_split_view/multi_split_view.dart';
 
+import '../features/books/books_screen.dart' show newBook;
 import '../features/library/outline_panel.dart';
 import '../features/settings/setting_rows.dart';
 import '../features/settings/settings_dialog.dart';
@@ -19,12 +22,12 @@ import '../ui/listening_state.dart';
 import '../ui/pane_tabs.dart';
 import '../ui/theme.dart';
 import '../workspace/board_claim.dart';
+import '../workspace/book_chip.dart';
 import '../workspace/copy_name_dialog.dart';
 import '../storage/finds_store.dart';
 import '../workspace/fill_gaps.dart';
 import '../workspace/finds_panel.dart';
 import '../workspace/move_field.dart';
-import '../workspace/tree_pane.dart';
 import '../workspace/workspace.dart';
 import '../workspace/workspace_keys.dart';
 import '../workspace/workspace_tabs.dart';
@@ -79,7 +82,8 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   /// and a lesson reach as well as the field.
   final _moves = MoveEntry();
 
-  /// Who holds the board: a lesson first, then the Tree tab's free board.
+  /// Who holds the board: a lesson first, then the explorer Book's free
+  /// board.
   late final _claim = FirstClaim([_train.lines.board, _ws.tree.board]);
 
   /// Each mode's list, tabs, Actions menu and what it adds to the
@@ -225,18 +229,18 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     if (line.place != ReadIn.board) _tabs.show(WorkspaceTab.moves);
   }
 
-  /// While the Tree tab is up the board is its free board; otherwise a
+  /// While the explorer's Book is up the board is its free board; otherwise a
   /// move on the board is the puzzle's, or the document's.
   void _boardMove(String uci) =>
       _ws.tree.watching ? _ws.tree.play(uci) : _train.puzzles.play(uci);
 
-  /// A clicked engine line's moves: onto the free board while the Tree tab
-  /// is up, into the document otherwise.
+  /// A clicked engine line's moves: onto the free board while the explorer's
+  /// Book is up, into the document otherwise.
   void _engineMove(String uci) =>
       _ws.tree.watching ? _ws.tree.play(uci) : _ws.session.playMove(uci);
 
   /// The body of a tab the workspace does not draw: the mode's own first,
-  /// then the Train and Tree tabs every mode that has them shares.
+  /// then the Train tab every mode that has it shares.
   Widget? _tabBody(BuildContext context, WorkspaceTab tab) =>
       _view.tab(context, tab) ??
       switch (tab) {
@@ -245,14 +249,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
           moves: _moves,
           onRead: (line) => unawaited(_readLine(line)),
           offerBuilder: _view.offersBuilder,
-        ),
-        WorkspaceTab.tree => TreePane(
-          session: _ws.session,
-          tree: _ws.tree,
-          // The file a move was found in: that file, in the builder, at the
-          // position the move leads to.
-          onOpen: (place) =>
-              unawaited(_requests.readInBuilder(place.ref, place.sans)),
+          bookChip: BookChip(books: _ws.books, onEdit: _requests.editBooks),
         ),
         _ => null,
       };
@@ -356,6 +353,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       saveCopy: () => unawaited(_saveCopy()),
       search: () => unawaited(_search.search(_tabs)),
       accounts: () => unawaited(editAccounts(context, _train.myGames)),
+      newBook: () => unawaited(newBook(context, _ws.books, say: _requests.say)),
     ),
   ));
 
@@ -385,10 +383,11 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   );
 
   Map<ShortcutActivator, VoidCallback> get _windowKeys => {
-    // ← takes back a move made past the file on the Tree tab's free board
+    // ← takes back a move made past the file on the explorer Book's free board
     // before it steps back in the file.
     const SingleActivator(LogicalKeyboardKey.arrowLeft): _ws.tree.back,
     ..._command(LogicalKeyboardKey.comma, () => unawaited(_settings())),
+    ..._history,
     ..._command(LogicalKeyboardKey.keyB, _toggleList),
     ..._command(LogicalKeyboardKey.keyP, _togglePositions),
     ..._command(
@@ -422,7 +421,24 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
     const SingleActivator(LogicalKeyboardKey.f11): widget.fullScreen.toggle,
     ..._command(LogicalKeyboardKey.comma, () => unawaited(_settings())),
     ..._command(LogicalKeyboardKey.keyK, () => unawaited(_palette())),
+    ..._history,
   };
+
+  /// Alt+← and Alt+→: back to where the last jump came from, and forward
+  /// again.
+  Map<ShortcutActivator, VoidCallback> get _history => {
+    const SingleActivator(LogicalKeyboardKey.arrowLeft, alt: true): _back,
+    const SingleActivator(LogicalKeyboardKey.arrowRight, alt: true): _forward,
+  };
+
+  void _back() => unawaited(_requests.back());
+  void _forward() => unawaited(_requests.forward());
+
+  /// The mouse's own back and forward buttons do what Alt+← and Alt+→ do.
+  void _mouseButton(PointerDownEvent event) {
+    if (event.buttons & kBackMouseButton != 0) _back();
+    if (event.buttons & kForwardMouseButton != 0) _forward();
+  }
 
   /// [key] with Ctrl, and with Cmd for macOS; with Shift too when [shift].
   static Map<ShortcutActivator, VoidCallback> _command(
@@ -439,11 +455,14 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: StatusScope(
-        say: _requests.say,
-        child: ListenableBuilder(
-          listenable: Listenable.merge([_requests, widget.labs.offered]),
-          builder: (context, _) => _window(_view.screen(_screenKeys)),
+      body: Listener(
+        onPointerDown: _mouseButton,
+        child: StatusScope(
+          say: _requests.say,
+          child: ListenableBuilder(
+            listenable: Listenable.merge([_requests, widget.labs.offered]),
+            builder: (context, _) => _window(_view.screen(_screenKeys)),
+          ),
         ),
       ),
     );
@@ -456,6 +475,10 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       TopBar(
         mode: _requests.mode,
         onMode: _requests.switchTo,
+        backTo: _requests.backTo?.label,
+        forwardTo: _requests.forwardTo?.label,
+        onBack: _back,
+        onForward: _forward,
         offered: (mode) => mode != Mode.bughouse || widget.labs.offered.value,
         onSettings: () => unawaited(_settings()),
         // A mode with a screen of its own has no list to show or hide.
@@ -540,6 +563,11 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
           ),
         ),
         onOpenChapter: (ref) => unawaited(_requests.readInBuilder(ref, [])),
+        // The chapter a book move was found in: in the builder, at the
+        // position the move leads to.
+        onOpenPlace: (place) =>
+            unawaited(_requests.readInBuilder(place.ref, place.sans)),
+        onEditBooks: _requests.editBooks,
       ),
     ),
   };

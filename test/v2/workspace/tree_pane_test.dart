@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../support/scripted_files.dart';
 import '../support/session_fixture.dart';
+import '../support/books_fixture.dart';
 
 /// The chapter on the board: two lines of the Italian.
 const italian = '''
@@ -48,6 +49,7 @@ void main() {
         ),
         documents: fixture.store,
       ),
+      books: booksWith({'e4'}),
     );
     addTearDown(tree.dispose);
     await tester.pumpWidget(
@@ -77,6 +79,7 @@ void main() {
         ),
         documents: fixture.store,
       ),
+      books: booksWith({'e4'}),
     );
     addTearDown(tree.dispose);
     var tab = true;

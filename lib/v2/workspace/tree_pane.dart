@@ -10,9 +10,9 @@ import 'repertoire_tree.dart';
 import 'document_session.dart';
 import 'line_preview.dart';
 
-/// The Tree tab of the reading card: the user's own repertoires as an
-/// opening explorer. For the position on the board, every move any of the
-/// side's repertoires plays, most lines first: the move, how many lines go
+/// The explorer's Book: the active book's chapters as an opening
+/// explorer. For the position on the board, every move any of the book's
+/// chapters for the side plays, most lines first: the move, how many lines go
 /// through it, how the biggest of them goes on, and which files hold it.
 ///
 /// While it is up the board is a free board: clicking a move, or playing
@@ -126,7 +126,7 @@ class _TreePaneState extends State<TreePane> {
   }
 
   Widget _body() => switch (widget.tree.state) {
-    TreeReading() => const _Sentence('Reading your repertoires…'),
+    TreeReading() => const _Sentence('Reading your book…'),
     TreeNothing(:final sentence) => _Sentence(sentence),
     TreeShown(:final rows) => ListView.builder(
       itemCount: rows.length + 1,
@@ -146,7 +146,8 @@ class _TreePaneState extends State<TreePane> {
   };
 }
 
-/// One muted line saying whose repertoires are shown and how many files,
+/// One muted line saying which side of the book is shown and how many
+/// chapters,
 /// or, past the file, the moves played off it with the ways back.
 class _Summary extends StatelessWidget {
   const _Summary({required this.tree});
@@ -162,8 +163,8 @@ class _Summary extends StatelessWidget {
     final words = off.isNotEmpty
         ? 'Off the file: ${numberedMoves(off)}'
         : tree.state is TreeReading
-        ? '$side repertoires'
-        : '$side repertoires · $files ${files == 1 ? 'file' : 'files'}';
+        ? side
+        : '$side · $files ${files == 1 ? 'chapter' : 'chapters'}';
     return SizedBox(
       height: engineBarHeight,
       child: Row(

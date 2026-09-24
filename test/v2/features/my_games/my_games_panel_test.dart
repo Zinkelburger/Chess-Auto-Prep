@@ -49,6 +49,7 @@ void main() {
         book: fixture.book,
         session: session,
         accounts: const Text('accounts'),
+        bookChip: const SizedBox.shrink(),
         onOpen: opened.add,
       ),
     );

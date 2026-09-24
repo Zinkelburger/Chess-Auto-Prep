@@ -27,7 +27,7 @@ final class BoardClaim {
 }
 
 /// The first of several owners' claims that holds the board: a lesson
-/// before the Tree tab's free board, say.
+/// before the explorer Book's free board, say.
 final class FirstClaim extends ChangeNotifier
     implements ValueListenable<BoardClaim?> {
   FirstClaim(this._claims) {

@@ -10,6 +10,7 @@ import '../../chess/tactics/game_ids.dart';
 import '../../storage/chapter_files.dart';
 import '../../storage/my_accounts.dart';
 import '../../storage/my_games_files.dart';
+import '../../workspace/books.dart';
 import '../../workspace/repertoire_shelf.dart';
 import 'book_words.dart' show matchesSearch;
 
@@ -59,6 +60,11 @@ final class BookReading extends BookState {
   const BookReading();
 }
 
+/// No book is in use, so there is nothing to check the games against.
+final class BookNotSet extends BookState {
+  const BookNotSet();
+}
+
 /// No username is saved, so there are no games to check.
 final class BookNoAccounts extends BookState {
   const BookNoAccounts();
@@ -79,7 +85,7 @@ final class BookChecked extends BookState {
   ];
 }
 
-/// The user's own games read against their repertoires: for each saved
+/// The user's own games read against the book in use ([Books]): for each saved
 /// game of their accounts, the newest [bookCheckWindow] of each, where it
 /// left the book and how; and across them, the places it keeps happening.
 ///
@@ -96,13 +102,21 @@ final class GameBook extends ChangeNotifier {
     required AccountStore accounts,
     required GamesCache cache,
     required RepertoireShelf shelf,
+    required Books books,
   }) : _accounts = accounts,
        _cache = cache,
-       _shelf = shelf;
+       _shelf = shelf,
+       _books = books {
+    _books.addListener(_bookChanged);
+  }
 
   final AccountStore _accounts;
   final GamesCache _cache;
   final RepertoireShelf _shelf;
+  final Books _books;
+
+  /// The book whose chapters the games were last read against.
+  Object? _bookSeen;
 
   BookState _state = const BookReading();
   String _query = '';
@@ -182,9 +196,19 @@ final class GameBook extends ChangeNotifier {
     if (_watching > 0) unawaited(_read());
   }
 
+  /// Another book is in use, or the one in use was edited.
+  void _bookChanged() {
+    final book = _books.active;
+    if (identical(book, _bookSeen)) return;
+    _bookSeen = book;
+    recheck();
+  }
+
   Future<void> _read() async {
     final ticket = ++_reads;
     bool overtaken() => _disposed || ticket != _reads;
+    _bookSeen = _books.active;
+    if (_books.active == null) return _become(const BookNotSet());
     final accounts = await _accounts.read();
     if (overtaken()) return;
     if (accounts.isEmpty) return _become(const BookNoAccounts());
@@ -211,13 +235,14 @@ final class GameBook extends ChangeNotifier {
   BookChecked _checked(List<(ChapterRef, GameSite, PlayedGame)> played) {
     final books = [
       for (final ref in _shelf.refs)
-        if (_shelf.indexOf(ref) case final index?)
-          BookFile(
-            path: ref.path,
-            section: ref.section,
-            name: ref.name,
-            index: index,
-          ),
+        if (_books.includes(ref))
+          if (_shelf.indexOf(ref) case final index?)
+            BookFile(
+              path: ref.path,
+              section: ref.section,
+              name: ref.name,
+              index: index,
+            ),
     ];
     final games = [
       for (final (file, site, game) in played)
@@ -255,6 +280,7 @@ final class GameBook extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _books.removeListener(_bookChanged);
     super.dispose();
   }
 }

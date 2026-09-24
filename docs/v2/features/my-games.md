@@ -14,7 +14,9 @@ the book ran out. They leave knowing which lines to fix, one click from the file
 
 ## Screen
 Reached from the mode menu (`My games`, after Tactics). Games left, board in the middle, reading
-card right; the card's tabs are `Book` (pinned), `Game`, `Tree`, and `Explorer` from Actions.
+card right; the card's tabs are `Book` (pinned), `Game` and `Explorer`
+(whose `Book` source shows what else the book plays). The book chip (`books.md`) sits under the
+accounts; with no book in use the list says `No book set. Pick the book to compare your games with.`
 
 - **Accounts block** — the same block as the top of the Tactics column: the usernames with
   `Change`, `Get games` / `Pause` / `Resume` and its status line. With no username, only
@@ -39,8 +41,8 @@ card right; the card's tabs are `Book` (pinned), `Game`, `Tree`, and `Explorer` 
 **Get games** — the Tactics download and review (see `tactics.md`). While fewer than 200 of an
 account's games are saved, a download asks for 200; after that for the review's 20.
 **Check** — opening the mode, or a download or a repertoire change while it is open → the newest
-200 saved games of each account are read against every non-draft repertoire of the side the user
-played, the same files the Tree tab reads. A game is in the book up to the last of its positions
+200 saved games of each account are read against the chapters of the book in use for the side the
+user played, the same chapters the explorer's `Book` reads. A game is in the book up to the last of its positions
 any of those files reaches, by any move order, so a transposition counts and a game that leaves
 and comes back is judged from where it last left. Fewer than two plies in the book is `another
 opening`, not a deviation. The move played from that last position is the verdict.
@@ -72,10 +74,8 @@ Keep — Open in builder
 
 Not built from the old app: the Stockfish mistake counts and the moments strip on each game, the
 game-card board thumbnails, per-book verdicts when several files disagree, commentary lines marked
-"not recommended", and a per-colour choice of which repertoires count as the book (every repertoire
-of the side counts, as in the Tree tab). A download is not windowed by time control.
+"not recommended". A download is not windowed by time control.
 
 ## Questions for the owner
 - Should the mistake counts and the moments strip come here from Tactics?
-- Is every repertoire of a side the right book, or should the user pick some?
 - Is 200 games per account the right window?

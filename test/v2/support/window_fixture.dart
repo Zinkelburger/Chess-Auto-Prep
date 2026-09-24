@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:chess_auto_prep/v2/app/environment.dart';
 import 'package:chess_auto_prep/v2/app/app_parts.dart';
 import 'package:chess_auto_prep/v2/app/exit_guard.dart';
@@ -47,6 +49,8 @@ import 'scripted_store.dart';
 import 'study_fixture.dart';
 import 'tactics_fixture.dart';
 import 'viewer_fixture.dart';
+import 'package:chess_auto_prep/v2/storage/book_file.dart';
+import 'package:chess_auto_prep/v2/storage/book_list.dart';
 
 /// KID/Main: a Black chapter of two lines.
 final kidMain = ref('KID', 'Main');
@@ -150,6 +154,15 @@ final class WindowFixture {
       gameSites: const [],
       // The usernames, in memory: none until a test sets them.
       accounts: MemoryAccounts(),
+      // One book in use, with both repertoires in it.
+      books: MemoryBooks(
+        const BookList(
+          books: [
+            Book(id: 'test', name: 'Test book', repertoires: {'benko', 'KID'}),
+          ],
+          active: 'test',
+        ),
+      ),
       progressFiles: ScriptedProgress(),
       olderAnalyzed: () async => {},
       maia: const NoOpinion(),
@@ -215,6 +228,9 @@ final class WindowFixture {
   /// The window over these parts, the library listed and both
   /// repertoires' rows opened, since the chapters are what tests click.
   Future<void> pumpShell(WidgetTester tester) async {
+    // The app reads the books as it starts; the rest of the start (the
+    // engine, the settings file) the tests leave out.
+    unawaited(parts.books.load());
     await tester.binding.setSurfaceSize(const Size(1400, 800));
     await tester.pumpWidget(
       MaterialApp(

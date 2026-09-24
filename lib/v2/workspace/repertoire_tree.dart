@@ -10,6 +10,7 @@ import '../chess/repertoire_index.dart';
 import '../chess/pgn/tree_edit.dart' show moveNode;
 import '../storage/chapter_files.dart';
 import 'board_claim.dart';
+import 'books.dart';
 import 'document_session.dart';
 import 'gap_walk.dart' show indexOfReply;
 import 'repertoire_shelf.dart';
@@ -86,8 +87,8 @@ final class TreeNothing extends TreeState {
 /// from the position on the board, in whichever file, however the board
 /// got there.
 ///
-/// The repertoires are every repertoire of the side the board is shown from; a
-/// repertoire of one file with no chapters is one like any other.
+/// The repertoires are the chapters of the active book ([Books]) for the
+/// side the board is shown from; with no book set there is nothing to show.
 /// Draft chapters are left out, since a proposal is not a line the user
 /// plays. Positions are matched without the move counters, so a
 /// transposition finds the lines the other move order wrote.
@@ -98,7 +99,7 @@ final class TreeNothing extends TreeState {
 /// from the session instead, as it stands, so a move just added shows at
 /// once.
 ///
-/// While the Tree tab is up the board is a free board: a move the file on
+/// While the explorer's Book is up the board is a free board: a move the file on
 /// it does not play is not written into it but played on [board], past the
 /// file's position, and the tree follows it there. Taking those moves back,
 /// moving in the file or leaving the tab gives the board back to the file.
@@ -106,9 +107,12 @@ final class RepertoireTree extends ChangeNotifier {
   RepertoireTree({
     required DocumentSession session,
     required RepertoireShelf shelf,
+    required Books books,
   }) : _session = session,
-       _shelf = shelf {
+       _shelf = shelf,
+       _books = books {
     _session.anyChange.addListener(_followTheBoard);
+    _books.addListener(_refresh);
   }
 
   /// Plies of a line's continuation a row shows.
@@ -118,6 +122,9 @@ final class RepertoireTree extends ChangeNotifier {
 
   /// The files on disk, indexed; shared with the book check.
   final RepertoireShelf _shelf;
+
+  /// Which of the files count: the active book's.
+  final Books _books;
 
   /// The file on the board, indexed from the session's own tree.
   ({GameTree tree, RepertoireIndex index})? _live;
@@ -196,9 +203,15 @@ final class RepertoireTree extends ChangeNotifier {
   Side get side => _session.orientation;
 
   /// How many files the repertoires of [side] are, once read.
-  int get fileCount => _shelf.refs
+  int get fileCount => _inBook
       .where((ref) => (_liveFor(ref) ?? _shelf.indexOf(ref))?.side == side)
       .length;
+
+  /// The name of the book the tree is of, or null while none is set.
+  String? get bookName => _books.active?.name;
+
+  /// The chapters on the shelf that are in the active book.
+  Iterable<ChapterRef> get _inBook => _shelf.refs.where(_books.includes);
 
   /// The files changed on disk: they are read again now if a pane is up,
   /// else when one comes up, and only the ones whose bytes changed are
@@ -290,7 +303,11 @@ final class RepertoireTree extends ChangeNotifier {
     final side = this.side;
     final merged = <String, List<(IndexedMove, ChapterRef)>>{};
     var files = 0;
-    for (final ref in _shelf.refs) {
+    if (_books.active == null) {
+      _show(const TreeNothing('No book set.'));
+      return;
+    }
+    for (final ref in _inBook) {
       final index = _liveFor(ref) ?? _shelf.indexOf(ref);
       if (index == null || index.side != side) continue;
       files++;
@@ -302,11 +319,11 @@ final class RepertoireTree extends ChangeNotifier {
     }
     final name = side == Side.white ? 'White' : 'Black';
     if (files == 0) {
-      _show(TreeNothing('No $name repertoires yet.'));
+      _show(TreeNothing('Your book has no $name chapters.'));
       return;
     }
     if (merged.isEmpty) {
-      _show(TreeNothing('Your $name repertoires have no move here.'));
+      _show(TreeNothing('Your book has no $name move here.'));
       return;
     }
     final tree = _session.tree;
@@ -354,6 +371,7 @@ final class RepertoireTree extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _session.anyChange.removeListener(_followTheBoard);
+    _books.removeListener(_refresh);
     board.dispose();
     super.dispose();
   }

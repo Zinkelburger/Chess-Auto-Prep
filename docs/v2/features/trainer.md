@@ -22,6 +22,9 @@ in all four, idling on the source's first position, oriented to the side the fil
 - **Repertoire crumb** — app-bar title, `Folder › Chapter` (chapter bold) or `Select repertoire`;
   menu: `Choose repertoire…`, `Reload from disk`, `Open in Builder` (`Edit study…` for a study).
   Beside it the Actions menu, the mode switcher and the settings gear.
+- **Scope** (v2) — `Chapter | Repertoire | Book` on the Train tab; `Book` trains every chapter of
+  the book in use (`books.md`), both colours, with nothing open, the book chip under it; `No book
+  set.` / `Your book has no chapters yet.`
 - **Material list** — the shared repertoire library inline when nothing is loaded, plus a `Studies
   — custom tactics` section. Loading: `Reading repertoire…` / `Preparing difficulty order…`; `Retry`.
 - **Browser header** — the chapter or file name, `White repertoire` / `Black repertoire`,

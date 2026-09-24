@@ -36,6 +36,7 @@ import '../support/scripted_store.dart';
 import '../support/scripted_policy.dart';
 import '../support/session_fixture.dart';
 import '../support/viewer_fixture.dart';
+import '../support/books_fixture.dart';
 
 void main() {
   late SessionFixture fixture;
@@ -99,7 +100,8 @@ void main() {
       files: ScriptedFiles(),
       documents: fixture.store,
     );
-    final tree = RepertoireTree(session: session, shelf: shelf);
+    final books = booksWith();
+    final tree = RepertoireTree(session: session, shelf: shelf, books: books);
     addTearDown(tree.dispose);
     return Workspace(
       session: session,
@@ -111,6 +113,7 @@ void main() {
       replies: replies,
       gaps: gaps,
       shelf: shelf,
+      books: books,
       tree: tree,
       fill: fill,
       finds: Finds(store: FindsStore.inMemory),
@@ -345,7 +348,6 @@ void main() {
     expect(tabs.open, [
       WorkspaceTab.moves,
       WorkspaceTab.explorer,
-      WorkspaceTab.tree,
       WorkspaceTab.search,
     ]);
     expect(find.byType(MoveTreeView), findsOneWidget);
@@ -359,12 +361,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.keyW);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pumpAndSettle();
-    expect(tabs.open, [
-      WorkspaceTab.moves,
-      WorkspaceTab.tree,
-      WorkspaceTab.search,
-    ]);
-    tabs.close(WorkspaceTab.tree);
+    expect(tabs.open, [WorkspaceTab.moves, WorkspaceTab.search]);
     tabs.close(WorkspaceTab.search);
     await tester.pumpAndSettle();
     expect(tabs.open, [WorkspaceTab.moves]);

@@ -481,7 +481,7 @@ const explorerBarHeight = 16.0;
 const explorerHeaderHeight = 22.0;
 const explorerChipHeight = 32.0;
 
-/// The Tree tab's table: the lines gutter and the files column; the move
+/// The explorer Book's table: the lines gutter and the files column; the move
 /// gutter is the explorer's, and how the line goes on takes the rest.
 const treeLinesWidth = 56.0;
 const treeFilesWidth = 140.0;
@@ -551,3 +551,9 @@ const labBlackDotRing = Color(0xFF5A5A60);
 /// A move pointed at in a table, or the squares a picked-up reserve piece
 /// can be dropped on: Lichess's pale blue.
 const labHintColor = Color(0x99003088);
+
+/// The Books mode: the list of books, a repertoire's or a chapter's row,
+/// and how far a chapter sits in from its repertoire.
+const booksListWidth = 260.0;
+const bookRowHeight = 36.0;
+const bookChapterIndent = 28.0;

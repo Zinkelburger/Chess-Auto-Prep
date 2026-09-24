@@ -17,9 +17,13 @@ class TrainPane extends StatefulWidget {
     required this.moves,
     required this.onRead,
     this.offerBuilder = true,
+    this.bookChip,
   });
 
   final Trainer trainer;
+
+  /// Which book is trained, shown while the scope is the book.
+  final Widget? bookChip;
 
   /// The move field under the board, which a lesson types a move into.
   final MoveEntry moves;
@@ -57,7 +61,22 @@ class _TrainPaneState extends State<TrainPane> {
         return switch (trainer.state) {
           TrainerIdle() ||
           TrainerLoading() => const _Sentence('Reading training progress…'),
-          TrainerEmpty(:final why) => _Sentence(emptyReason(why)),
+          // The scope stays in reach: a book trains with nothing open.
+          TrainerEmpty(:final why) => Padding(
+            padding: const EdgeInsets.all(Space.m),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TrainScopeButtons(trainer: trainer),
+                if (trainer.scope == TrainScope.book) ?widget.bookChip,
+                const SizedBox(height: Space.s),
+                Text(
+                  emptyReason(why),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
           TrainerFailed(:final failure) => _Failed(
             sentence: progressProblem(
               failure,
@@ -70,6 +89,7 @@ class _TrainPaneState extends State<TrainPane> {
             ready: ready,
             onRead: widget.onRead,
             offerBuilder: widget.offerBuilder,
+            bookChip: widget.bookChip,
           ),
         };
       },

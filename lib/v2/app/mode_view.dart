@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 
 import '../chess/book/book_check.dart' show BookPlace;
 import '../chess/tactics/puzzle.dart';
+import '../features/books/books_screen.dart';
 import '../features/bughouse/bughouse_screen.dart';
 import '../features/library/library.dart';
 import '../features/library/library_panel.dart';
@@ -25,6 +26,7 @@ import '../ui/app_action.dart';
 import '../ui/choice_dialog.dart';
 import '../ui/name_dialog.dart';
 import '../ui/pane_tabs.dart';
+import '../workspace/book_chip.dart';
 import '../workspace/chapter_commands.dart';
 import '../workspace/document_actions.dart';
 import '../workspace/document_session.dart';
@@ -40,6 +42,7 @@ typedef ShellDialogs = ({
   VoidCallback saveCopy,
   VoidCallback search,
   VoidCallback accounts,
+  VoidCallback newBook,
 });
 
 /// What the Actions menu is built from besides the mode: whether the edit
@@ -442,6 +445,7 @@ final class MyGamesView extends ModeView {
     book: _book,
     session: workspace.session,
     accounts: MyGamesBlock(games: _training.myGames),
+    bookChip: BookChip(books: workspace.books, onEdit: _requests.editBooks),
     onOpen: _open,
     trailing: toggle,
   );
@@ -457,6 +461,48 @@ final class MyGamesView extends ModeView {
     ...myGamesActions(_training.myGames, onAccounts: menu.dialogs.accounts),
     ...documentEntries(menu),
     ...tabActions(tabs),
+  ];
+}
+
+/// Books: the user's books and what is in each, a screen of its own. A
+/// chapter opens in the builder.
+final class BooksView extends ModeView {
+  BooksView(Workspace workspace, this._requests, this._modes)
+    : super(workspace, readingTabs());
+
+  final WorkspaceRequests _requests;
+  final DocumentModes _modes;
+
+  @override
+  Widget list(Widget toggle) => const SizedBox.shrink();
+
+  /// The repertoires are listed again: one made since is there to tick.
+  @override
+  void entered() => unawaited(_modes.library.refresh());
+
+  @override
+  Widget screen(Map<ShortcutActivator, VoidCallback> windowKeys) =>
+      CallbackShortcuts(
+        bindings: windowKeys,
+        child: Focus(
+          autofocus: true,
+          child: Builder(
+            builder: (context) => BooksScreen(
+              books: workspace.books,
+              library: _modes.library,
+              onOpenChapter: (ref) =>
+                  unawaited(_requests.readInBuilder(ref, const [])),
+            ),
+          ),
+        ),
+      );
+
+  @override
+  Listenable get changes => workspace.books;
+
+  @override
+  List<AppAction> actions(ModeMenu menu) => [
+    AppAction('New book', menu.dialogs.newBook, group: 'Books'),
   ];
 }
 
@@ -544,6 +590,7 @@ Map<Mode, ModeView> modeViews({
   for (final mode in Mode.values)
     mode: switch (mode) {
       Mode.repertoires => RepertoiresView(workspace, requests, documents),
+      Mode.books => BooksView(workspace, requests, documents),
       Mode.pgnViewer => ViewerView(workspace, requests, documents),
       Mode.study => StudyView(workspace, requests, documents),
       Mode.tactics => TacticsView(workspace, training),

@@ -13,6 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../support/scripted_files.dart';
 import '../support/scripted_store.dart';
 import '../support/session_fixture.dart';
+import '../support/books_fixture.dart';
 
 /// The chapter on the board: the Italian, two lines after 3.Bc4.
 const italian = '''
@@ -124,7 +125,11 @@ void main() {
     put('Knights', 'Knights', scotchOrder);
     put('Sicilian', 'Najdorf', sicilian);
     shelf = RepertoireShelf(files: files, documents: fixture.store);
-    tree = RepertoireTree(session: fixture.session, shelf: shelf)..watch();
+    tree = RepertoireTree(
+      session: fixture.session,
+      shelf: shelf,
+      books: booksWith({'e4', 'Knights', 'Sicilian', 'Course'}),
+    )..watch();
     await pumpEventQueue();
   });
 

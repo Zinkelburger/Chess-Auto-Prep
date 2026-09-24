@@ -4,6 +4,9 @@ library;
 
 /// The databases the explorer can ask.
 enum ExplorerSource {
+  /// The active book: what the user's own chapters play here.
+  book('Book'),
+
   /// Lichess's masters database: titled players, over the board.
   masters('Masters'),
 
@@ -90,6 +93,7 @@ final class ExplorerChoice {
   /// `blitz rapid classical · 2000+`, `classical only`, or empty when it is
   /// not narrowed at all. The database itself is the pressed button.
   String get narrowing => switch (source) {
+    ExplorerSource.book ||
     ExplorerSource.masters ||
     ExplorerSource.thisFile ||
     ExplorerSource.myGames => '',

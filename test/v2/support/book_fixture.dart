@@ -10,6 +10,7 @@ import 'package:chess_auto_prep/v2/workspace/repertoire_shelf.dart';
 import 'my_games_fixture.dart';
 import 'scripted_files.dart';
 import 'scripted_store.dart';
+import 'books_fixture.dart';
 
 /// A White repertoire against the Sicilian: 2.Nf3 and 3.d4.
 const whiteSicilian = '''
@@ -105,7 +106,13 @@ final class BookFixture {
   final accounts = MemoryAccounts({GameSite.lichess: const Account('Me')});
   late final cache = GamesCache(store, folder: '/games_library');
   late final shelf = RepertoireShelf(files: files, documents: store);
-  late final book = GameBook(accounts: accounts, cache: cache, shelf: shelf);
+  final books = booksWith({'e4', 'Najdorf'});
+  late final book = GameBook(
+    accounts: accounts,
+    cache: cache,
+    shelf: shelf,
+    books: books,
+  );
 
   /// Where "Me"'s Lichess games are saved.
   DocumentRef get gamesRef => cache.refFor(GameSite.lichess, 'Me');

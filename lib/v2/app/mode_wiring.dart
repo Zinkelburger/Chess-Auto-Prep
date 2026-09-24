@@ -16,6 +16,7 @@ import '../features/tactics/tactics_set.dart';
 import '../features/trainer/trainer.dart';
 import '../storage/my_accounts.dart';
 import '../storage/my_games_files.dart';
+import '../workspace/books.dart';
 import '../workspace/local_games.dart';
 import '../workspace/workspace.dart';
 import '../workspace/document_saver.dart';
@@ -31,6 +32,7 @@ DocumentModes wireDocumentModes(
   AppEnvironment env,
   DocumentSession session,
   DocumentSaver saver,
+  Books books,
 ) {
   final library = Library(
     files: env.chapterFiles,
@@ -39,6 +41,7 @@ DocumentModes wireDocumentModes(
     session: session,
     picker: env.libraryPicker,
     root: env.folders.repertoires,
+    books: books,
     now: env.now,
   );
   final filter = FileFilter(session);
@@ -104,6 +107,7 @@ final class TrainingWiring {
         files: env.progressFiles,
         analysis: workspace.analysis,
         time: (now: env.now, jitter: env.jitter),
+        books: workspace.books,
       ),
       myGames: MyGames(
         accounts: env.accounts,
@@ -124,6 +128,7 @@ final class TrainingWiring {
         accounts: env.accounts,
         cache: games,
         shelf: workspace.shelf,
+        books: workspace.books,
       ),
     );
     _relisted = NewListings(library, modes.book.recheck);

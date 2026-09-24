@@ -23,9 +23,13 @@ class MyGamesPanel extends StatefulWidget {
     required this.book,
     required this.session,
     required this.accounts,
+    required this.bookChip,
     required this.onOpen,
     this.trailing,
   });
+
+  /// The book the games are read against, to switch or edit.
+  final Widget bookChip;
 
   final GameBook book;
 
@@ -89,12 +93,22 @@ class _MyGamesPanelState extends State<MyGamesPanel> {
         children: [
           _Toolbar(trailing: widget.trailing),
           widget.accounts,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: Space.s),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: widget.bookChip,
+            ),
+          ),
           Expanded(
             child: switch (widget.book.state) {
               BookReading() => const _Message(
                 'Reading your games and repertoires…',
               ),
               BookNoAccounts() => const SizedBox.shrink(),
+              BookNotSet() => const _Message(
+                'No book set. Pick the book to compare your games with.',
+              ),
               BookChecked(:final games) when games.isEmpty => const _Message(
                 'No games saved yet. Get games above to download them.',
               ),

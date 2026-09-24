@@ -9,9 +9,13 @@ import 'explorer.dart';
 /// The filters fold away under it so the table keeps the room; what they
 /// are set to shows beside the button while they are folded.
 class ExplorerSourceBar extends StatefulWidget {
-  const ExplorerSourceBar({super.key, required this.explorer});
+  const ExplorerSourceBar({super.key, required this.explorer, this.book});
 
   final Explorer explorer;
+
+  /// Beside the databases while `Book` is chosen: which book, and the way
+  /// to edit them.
+  final Widget? book;
 
   @override
   State<ExplorerSourceBar> createState() => _ExplorerSourceBarState();
@@ -46,6 +50,13 @@ class _ExplorerSourceBarState extends State<ExplorerSourceBar> {
                 scrollDirection: Axis.horizontal,
                 child: _Sources(explorer: _explorer),
               ),
+              if (choice.source == ExplorerSource.book && widget.book != null)
+                ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxWidth: explorerTrailingMaxWidth,
+                  ),
+                  child: widget.book,
+                ),
               if (summary != null)
                 ConstrainedBox(
                   constraints: const BoxConstraints(
@@ -90,6 +101,7 @@ class _ExplorerSourceBarState extends State<ExplorerSourceBar> {
             child: switch (choice.source) {
               ExplorerSource.lichess => _LichessFilters(explorer: _explorer),
               ExplorerSource.twic => _TwicFilters(explorer: _explorer),
+              ExplorerSource.book ||
               ExplorerSource.masters ||
               ExplorerSource.thisFile ||
               ExplorerSource.myGames => const SizedBox.shrink(),

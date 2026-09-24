@@ -9,7 +9,7 @@ import '../storage/document_ref.dart';
 import '../storage/pgn_document_store.dart';
 
 /// The user's repertoire chapters on disk, each read and indexed once and
-/// again only when its file changes: what the Tree tab and the book check
+/// again only when its file changes: what the explorer's Book and the book check
 /// look positions up in.
 ///
 /// Every repertoire is here, White's and Black's; a reader takes the ones

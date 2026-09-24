@@ -15,6 +15,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/scripted_files.dart';
 import '../../support/scripted_progress.dart';
 import '../../support/session_fixture.dart';
+import '../../support/books_fixture.dart';
 
 const _chapter = '''
 // Color: White
@@ -61,6 +62,7 @@ void main() {
       files: files,
       analysis: analysis,
       time: (now: DateTime.now, jitter: () => 0),
+      books: booksWith(),
     );
     await tester.binding.setSurfaceSize(const Size(700, 700));
     await tester.pumpWidget(

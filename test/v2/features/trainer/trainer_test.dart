@@ -19,6 +19,8 @@ import '../../support/scripted_files.dart';
 import '../../support/scripted_progress.dart';
 import '../../support/scripted_store.dart';
 import '../../support/session_fixture.dart';
+import 'package:chess_auto_prep/v2/storage/book_file.dart';
+import 'package:chess_auto_prep/v2/workspace/books.dart';
 
 /// Two lines for White: the Ruy Lopez and the Italian.
 const _chapter = '''
@@ -74,6 +76,7 @@ void main() {
       files: files,
       analysis: analysis,
       time: (now: () => _now, jitter: () => 0),
+      books: Books(store: MemoryBooks(), root: '/repertoires'),
     );
     addTearDown(trainer.dispose);
     return trainer;
@@ -438,6 +441,7 @@ void main() {
         files: files,
         analysis: analysis,
         time: (now: () => _now, jitter: () => spread += 0.5),
+        books: Books(store: MemoryBooks(), root: '/repertoires'),
       );
       addTearDown(trainer.dispose);
       trainer.show();
@@ -592,6 +596,7 @@ void main() {
         files: files,
         analysis: analysis,
         time: (now: () => _now, jitter: () => 0),
+        books: Books(store: MemoryBooks(), root: '/repertoires'),
       )..show();
       trainer.dispose();
       async.flushMicrotasks();

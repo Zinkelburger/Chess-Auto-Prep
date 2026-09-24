@@ -5,6 +5,7 @@ import '../engines/fixed_depth.dart';
 import '../features/library/library.dart';
 import '../features/library/library_state.dart';
 import '../storage/my_games_files.dart';
+import '../workspace/books.dart';
 import '../workspace/engine_analysis.dart';
 import '../workspace/explorer.dart';
 import '../workspace/file_filter.dart';
@@ -32,7 +33,9 @@ final class WorkspaceWiring {
     required Library library,
     required FileFilter filter,
     required GamesCache games,
+    required Books books,
   }) : _session = session,
+       _books = books,
        _saver = saver,
        _library = library,
        _filter = filter,
@@ -47,6 +50,7 @@ final class WorkspaceWiring {
   final Library _library;
   final FileFilter _filter;
   final GamesCache _gamesCache;
+  final Books _books;
   late final NewListings _relisted;
   bool _disposed = false;
 
@@ -60,6 +64,7 @@ final class WorkspaceWiring {
     replies: _replies,
     gaps: _gaps,
     shelf: _shelf,
+    books: _books,
     tree: _tree,
     fill: _fill,
     finds: _finds,
@@ -122,7 +127,11 @@ final class WorkspaceWiring {
     files: _env.chapterFiles,
     documents: _env.store,
   );
-  late final _tree = RepertoireTree(session: _session, shelf: _shelf);
+  late final _tree = RepertoireTree(
+    session: _session,
+    shelf: _shelf,
+    books: _books,
+  );
 
   late final _fill = FillGaps(
     session: _session,
@@ -181,7 +190,7 @@ final class WorkspaceWiring {
     }
   }
 
-  /// The repertoire files were listed anew: what the gaps and the Tree tab
+  /// The repertoire files were listed anew: what the gaps and the explorer's Book
   /// read from them is read again.
   void _filesChanged() {
     _answers.forget();

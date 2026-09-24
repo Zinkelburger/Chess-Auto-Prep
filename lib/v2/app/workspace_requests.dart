@@ -13,6 +13,7 @@ import '../features/library/library_state.dart';
 import '../features/pgn_viewer/pgn_viewer.dart';
 import '../features/study/study_commands.dart';
 import '../storage/chapter_files.dart';
+import '../workspace/books.dart';
 import '../workspace/chapter_commands.dart';
 import '../workspace/copy_name_dialog.dart';
 import '../workspace/document_session.dart';
@@ -50,6 +51,40 @@ final class RequestDropped extends RequestResult {
   const RequestDropped();
 }
 
+/// Where the user was, for Back and Forward: the mode, and the document on
+/// the board and where in it.
+final class Place {
+  const Place({
+    required this.mode,
+    this.source,
+    this.game,
+    this.cursor = const NodePath.root(),
+    this.scratch = false,
+  });
+
+  final Mode mode;
+
+  /// The document on the board, or null for none or the analysis board.
+  final ChapterRef? source;
+  final int? game;
+  final NodePath cursor;
+
+  /// Whether the analysis board was up.
+  final bool scratch;
+
+  /// `My games`, `Repertoire builder · Najdorf`: what Back's tooltip names.
+  String get label => switch (source) {
+    final source? => '${mode.label} · ${source.name}',
+    null => mode.label,
+  };
+
+  bool sameAs(Place other) =>
+      other.mode == mode &&
+      other.source == source &&
+      other.game == game &&
+      other.scratch == scratch;
+}
+
 /// The window's cross-mode requests: which mode fills the left column, the
 /// one line the status bar says, and every way a document comes onto the
 /// board or leaves it — a list's click, a file from the desktop, the
@@ -71,7 +106,9 @@ final class WorkspaceRequests extends ChangeNotifier {
     required GameFetcher games,
     required ExitGuard leaving,
     required WindowInput input,
-  }) : _session = session,
+    required Books books,
+  }) : _books = books,
+       _session = session,
        _library = library,
        _viewer = viewer,
        _games = games,
@@ -79,6 +116,7 @@ final class WorkspaceRequests extends ChangeNotifier {
        _input = input;
 
   final DocumentSession _session;
+  final Books _books;
   final Library _library;
   final PgnViewer _viewer;
   final GameFetcher _games;
@@ -106,11 +144,75 @@ final class WorkspaceRequests extends ChangeNotifier {
   StatusAction? get statusAction => _statusAction;
 
   /// Switching mode swaps the left column and nothing else: the same board,
-  /// the same document and the same draft stay where they are.
+  /// the same document and the same draft stay where they are. Back comes
+  /// here again.
   void switchTo(Mode mode) {
     if (_disposed || mode == _mode) return;
+    _remember();
     _mode = mode;
     notifyListeners();
+  }
+
+  /// The Books mode, at the active book: where every "Edit books" goes.
+  void editBooks() {
+    if (_books.active case final active?) _books.edit(active);
+    switchTo(Mode.books);
+  }
+
+  /// How many places Back and Forward keep.
+  static const historyLimit = 30;
+
+  final _back = <Place>[];
+  final _forward = <Place>[];
+
+  /// Where Back goes, or null when there is nowhere.
+  Place? get backTo => _back.lastOrNull;
+
+  /// Where Forward goes, or null when there is nowhere.
+  Place? get forwardTo => _forward.lastOrNull;
+
+  Place get _here => Place(
+    mode: _mode,
+    source: _session.isScratch ? null : _session.source,
+    game: _session.game,
+    cursor: _session.cursor,
+    scratch: _session.isScratch,
+  );
+
+  /// Keeps where the user is before a jump takes them elsewhere. Going
+  /// somewhere new forgets the places Forward had.
+  void _remember() {
+    final here = _here;
+    if (_back.lastOrNull case final last? when last.sameAs(here)) {
+      _back.removeLast();
+    }
+    _back.add(here);
+    if (_back.length > historyLimit) _back.removeAt(0);
+    _forward.clear();
+  }
+
+  /// Back to the place before the last jump: its mode, its document and
+  /// where in it. A file gone since is left out and the mode alone comes.
+  Future<RequestResult> back() => _travel(_back, _forward);
+
+  /// Forward again, after Back.
+  Future<RequestResult> forward() => _travel(_forward, _back);
+
+  Future<RequestResult> _travel(List<Place> from, List<Place> to) async {
+    if (_disposed || from.isEmpty) return const RequestDropped();
+    final place = from.removeLast();
+    to.add(_here);
+    _mode = place.mode;
+    notifyListeners();
+    if (place.scratch) {
+      return _session.isScratch ? const RequestDone() : analysisBoard();
+    }
+    final source = place.source;
+    if (source == null) return const RequestDone();
+    final result = await _open(++_asked, source, game: place.game);
+    if (_disposed || result is! RequestDone) return result;
+    _session.goTo(place.cursor);
+    return result;
   }
 
   /// Puts [sentence] in the bar, with [action] beside it, or clears it:
@@ -164,8 +266,14 @@ final class WorkspaceRequests extends ChangeNotifier {
 
   /// [ref] in the Repertoire builder at the position [sans] reach: a file
   /// another mode found a move in.
+  /// Back returns to where the user was, in the builder too.
   Future<RequestResult> readInBuilder(ChapterRef ref, List<String> sans) {
-    switchTo(Mode.repertoires);
+    if (_mode == Mode.repertoires) {
+      _remember();
+      notifyListeners();
+    } else {
+      switchTo(Mode.repertoires);
+    }
     return openAt(ref, sans);
   }
 

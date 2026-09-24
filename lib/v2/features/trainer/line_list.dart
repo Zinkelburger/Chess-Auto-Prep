@@ -29,10 +29,14 @@ class LineList extends StatefulWidget {
     required this.ready,
     required this.onRead,
     required this.offerBuilder,
+    this.bookChip,
   });
 
   final Trainer trainer;
   final TrainerReady ready;
+
+  /// Which book is trained, shown while the scope is the book.
+  final Widget? bookChip;
   final ValueChanged<LineToRead> onRead;
 
   /// Whether a row offers `Open in Builder`: not while the builder is the
@@ -90,6 +94,7 @@ class _LineListState extends State<LineList> {
             _Header(
               trainer: widget.trainer,
               ready: widget.ready,
+              bookChip: widget.bookChip,
               onChange: (write, doing) =>
                   unawaited(_change(write, doing: doing)),
             ),
@@ -277,10 +282,12 @@ class _Header extends StatelessWidget {
   const _Header({
     required this.trainer,
     required this.ready,
+    required this.bookChip,
     required this.onChange,
   });
 
   final Trainer trainer;
+  final Widget? bookChip;
   final TrainerReady ready;
   final void Function(Future<ProgressWrite> write, String doing) onChange;
 
@@ -296,7 +303,19 @@ class _Header extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(children: [_scope(), const Spacer(), _actions(progress)]),
+        Row(
+          children: [
+            // A narrow card scrolls the scope rather than cut it off.
+            Expanded(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: TrainScopeButtons(trainer: trainer),
+              ),
+            ),
+            _actions(progress),
+          ],
+        ),
+        if (trainer.scope == TrainScope.book) ?bookChip,
         const SizedBox(height: Space.s),
         Text(
           '${counts[LineStatus.learned]} learned · '
@@ -324,16 +343,6 @@ class _Header extends StatelessWidget {
       ],
     );
   }
-
-  Widget _scope() => SegmentedButton<TrainScope>(
-    segments: const [
-      ButtonSegment(value: TrainScope.chapter, label: Text('Chapter')),
-      ButtonSegment(value: TrainScope.repertoire, label: Text('Repertoire')),
-    ],
-    selected: {trainer.scope},
-    showSelectedIcon: false,
-    onSelectionChanged: (s) => trainer.setScope(s.single),
-  );
 
   Widget _actions(TrainingProgress progress) => RowActions(
     tooltip: 'Training actions',
@@ -572,5 +581,25 @@ class _Muted extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(vertical: Space.m),
     child: Text(words, style: Theme.of(context).textTheme.bodySmall),
+  );
+}
+
+/// What the trainer takes in: the chapter, its repertoire or the book.
+class TrainScopeButtons extends StatelessWidget {
+  const TrainScopeButtons({super.key, required this.trainer});
+
+  final Trainer trainer;
+
+  @override
+  Widget build(BuildContext context) => SegmentedButton<TrainScope>(
+    segments: const [
+      ButtonSegment(value: TrainScope.chapter, label: Text('Chapter')),
+      ButtonSegment(value: TrainScope.repertoire, label: Text('Repertoire')),
+      ButtonSegment(value: TrainScope.book, label: Text('Book')),
+    ],
+    selected: {trainer.scope},
+    showSelectedIcon: false,
+    style: const ButtonStyle(visualDensity: VisualDensity.compact),
+    onSelectionChanged: (s) => trainer.setScope(s.single),
   );
 }
