@@ -135,7 +135,18 @@ class Trainer extends ChangeNotifier {
     final catalog = _catalog!;
     // A batch can contain an open-chapter save AND a sibling rename. Ignore
     // only batches made entirely of saves the session already supplies.
-    if (!catalog.reloaded &&
+    final source = _session.source;
+    final wholeFile =
+        _session.game == null &&
+        source?.section == null &&
+        catalog.repertoires
+                .expand((folder) => folder.chapters)
+                .where((chapter) => chapter.path == source?.path)
+                .length <=
+            1;
+    // A course save may have changed another section of this same file.
+    if (wholeFile &&
+        !catalog.reloaded &&
         catalog.changes.every(
           (change) =>
               change.kind == DocumentChangeKind.saved &&

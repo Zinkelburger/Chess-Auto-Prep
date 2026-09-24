@@ -12,6 +12,52 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
+    'a sibling section rename refreshes training and nested outline membership',
+    () async {
+      final app = WindowFixture();
+      addTearDown(app.dispose);
+      const path = '/repertoires/KID/Week 1/Course.pgn';
+      const text =
+          '// Color: White\n\n[Event "Italian"]\n[ChapterName "A"]\n\n1. e4 e5 *\n\n'
+          '[Event "Alapin"]\n[ChapterName "B"]\n\n1. e4 c5 *\n';
+      final a = ChapterRef.at(path, section: 'A');
+      final b = ChapterRef.at(path, section: 'B');
+      final c = ChapterRef.at(path, section: 'C');
+      app.store.documents[a.wholeFile] = Opened(text, scriptedRevision(text));
+      void listed(List<ChapterRef> chapters) {
+        app.chapterFiles.listing = Repertoires([
+          RepertoireFolder(
+            name: 'KID',
+            path: '/repertoires/KID',
+            modified: DateTime(2026),
+            chapters: chapters,
+          ),
+        ]);
+      }
+
+      listed([a, b]);
+      await app.library.refresh();
+      await app.session.open(a);
+      expect(app.outline.repertoire?.name, 'KID');
+      expect(app.outline.chapters, hasLength(2));
+      app.lineTrainer.setScope(TrainScope.repertoire);
+      await app.lineTrainer.reload();
+      listed([a, c]);
+      expect(await app.library.renameChapter(b, 'C'), isA<LibraryDone>());
+      await app.saver.flush();
+      await app.parts.catalog.synchronize();
+      await pumpEventQueue();
+      expect(app.session.source, a);
+      expect(
+        (app.lineTrainer.state as TrainerReady).chapters.map(
+          (chapter) => chapter.ref.section,
+        ),
+        ['A', 'C'],
+      );
+    },
+  );
+
+  test(
     'inactive chapter rename and deletion propagate to repertoire training',
     () async {
       final app = WindowFixture();

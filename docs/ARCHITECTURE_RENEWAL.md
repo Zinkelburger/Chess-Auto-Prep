@@ -156,9 +156,9 @@ create/save/move/delete events only after success. `RepertoireCatalog` coalesces
 those events into a committed listing; a change during a read invalidates that
 read, and the next publication retains the whole change batch. Library search
 and busy state do not invalidate the catalog. Books, training and repertoire
-indexes consume it independently. An autosave already represented by the open
-session does not restart a training sitting; a sibling mutation does reload the
-scope. Explicit refresh handles changes made outside this process.
+indexes consume it independently. A whole-file autosave already represented by the open
+session does not restart a training sitting; a sibling mutation or a course
+file save does reload the scope. Explicit refresh handles changes made outside this process.
 
 `AppParts` is the composition root. `WorkspaceRequests` coordinates navigation,
 including dirty-draft decisions and desktop file-open requests; request tickets

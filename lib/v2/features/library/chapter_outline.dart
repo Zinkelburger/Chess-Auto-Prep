@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:path/path.dart' as p;
 
 import '../../chess/pgn/chapter.dart';
 import '../../chess/pgn/game_text.dart';
@@ -126,9 +125,9 @@ final class ChapterOutline extends ChangeNotifier {
   RepertoireFolder? get repertoire {
     final open = _session.source;
     if (open == null) return null;
-    final folder = p.dirname(open.path);
     for (final listed in _library.repertoires) {
-      if (listed.path == folder) return listed;
+      if (listed.chapters.any((chapter) => chapter.path == open.path))
+        return listed;
     }
     return null;
   }
