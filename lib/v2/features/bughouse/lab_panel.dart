@@ -1,20 +1,18 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import '../../chess/bughouse/hivemind.dart';
 import '../../chess/bughouse/table.dart';
+import '../../ui/app_action.dart';
 import '../../ui/theme.dart';
 import 'archive_moves.dart';
 import 'bughouse_lab.dart';
 import 'move_tables.dart';
 import 'table_search.dart';
 
-/// The right-hand side of the lab: the question as chips — our team, a
-/// board that must be moved on, the clock, how long Analyze searches — the
-/// buttons, one status line that never changes height, what Analyze found,
-/// and each board's moves with their scores, the FICS archive under them
-/// while it is open.
+/// The right-hand side of the lab: the engine switch, the clock, one status
+/// line that never changes height, each team's best lines while the engine
+/// is on, and each board's moves with their scores, the FICS archive's
+/// continuations under each board's table.
 class LabPanel extends StatelessWidget {
   const LabPanel({
     super.key,
@@ -34,169 +32,123 @@ class LabPanel extends StatelessWidget {
       builder: (context, _) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _Choice<Team>(
-            label: 'Our team',
-            values: Team.values,
-            chosen: lab.team,
-            name: (team) => team.label,
-            onChosen: lab.setTeam,
-          ),
-          _Choice<MustMove>(
-            label: 'Must move on',
-            values: MustMove.values,
-            chosen: lab.mustMove,
-            name: (rule) => rule.label,
-            onChosen: lab.setMustMove,
-          ),
-          _Choice<ClockCase>(
-            label: 'Time',
-            values: ClockCase.values,
-            chosen: lab.clock,
-            name: (clock) => clock.label,
-            hint: (clock) => clock.hint,
-            onChosen: lab.setClock,
-          ),
-          _Choice<Duration>(
-            label: 'Search',
-            values: searchBudgets,
-            chosen: lab.budget,
-            name: (budget) => '${budget.inSeconds} s',
-            onChosen: lab.setBudget,
-          ),
+          _EngineBar(search: search),
           const SizedBox(height: Space.xs),
-          _Buttons(lab: lab, search: search, archive: archive),
+          _TimeChips(lab: lab),
           _StatusLine(lab: lab, search: search),
-          if (search.analysis case final AnalysisDone done)
-            AnalysisRows(lab: lab, done: done),
+          if (search.lines case final LinesOn on)
+            EngineLinesBlock(lab: lab, on: on),
           Expanded(
-            child: MoveTables(lab: lab, scores: search.scores),
-          ),
-          if (archive.shown)
-            Expanded(
-              child: ArchiveBlock(lab: lab, archive: archive),
+            child: MoveTables(
+              lab: lab,
+              scores: search.scores,
+              archive: archive,
             ),
+          ),
         ],
       ),
     );
   }
 }
 
-/// One question as a row of chips under its label.
-class _Choice<T> extends StatelessWidget {
-  const _Choice({
-    required this.label,
-    required this.values,
-    required this.chosen,
-    required this.name,
-    required this.onChosen,
-    this.hint,
-  });
+/// The engine's switch and what it is doing, as the engine bar reads in
+/// the other modes.
+class _EngineBar extends StatelessWidget {
+  const _EngineBar({required this.search});
 
-  final String label;
-  final List<T> values;
-  final T chosen;
-  final String Function(T value) name;
-  final String Function(T value)? hint;
-  final ValueChanged<T> onChosen;
+  final TableSearch search;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: Space.s),
-      child: Row(
-        children: [
-          SizedBox(
-            width: labLabelWidth,
-            child: Text(
-              label,
-              style: TextStyle(color: scheme.onSurfaceVariant),
-            ),
-          ),
-          Flexible(
-            child: SegmentedButton<T>(
-              segments: [
-                for (final value in values)
-                  ButtonSegment(
-                    value: value,
-                    label: Text(name(value)),
-                    tooltip: hint?.call(value),
-                  ),
-              ],
-              selected: {chosen},
-              showSelectedIcon: false,
-              style: const ButtonStyle(visualDensity: VisualDensity.compact),
-              onSelectionChanged: (picked) => onChosen(picked.single),
-            ),
-          ),
-        ],
+    final (String status, Color? colour) = switch (search.lines) {
+      LinesOff() => ('Engine', null),
+      LinesStopped(:final trouble) => (_trouble(trouble), scheme.error),
+      LinesOn(:final thinking?, :final lines) => (
+        lines.isEmpty
+            ? 'Hivemind · starting…'
+            : 'Hivemind · thinking ${thinking.inSeconds} s a team',
+        null,
       ),
-    );
-  }
-}
-
-class _Buttons extends StatelessWidget {
-  const _Buttons({
-    required this.lab,
-    required this.search,
-    required this.archive,
-  });
-
-  final BughouseLab lab;
-  final TableSearch search;
-  final ArchiveMoves archive;
-
-  @override
-  Widget build(BuildContext context) {
-    final running = search.analysis is AnalysisRunning;
-    // The search's buttons at the left, the table's at the right; a narrow
-    // panel puts the second pair under the first rather than overflow.
-    return Wrap(
-      alignment: WrapAlignment.spaceBetween,
-      runSpacing: Space.s,
+      LinesOn() => ('Hivemind', null),
+    };
+    return Row(
       children: [
-        Wrap(
-          spacing: Space.s,
-          children: [
-            if (running)
-              OutlinedButton(
-                onPressed: search.stopAnalysis,
-                child: const Text('Stop'),
-              )
-            else
-              FilledButton(
-                onPressed: () => unawaited(search.analyze()),
-                child: const Text('Analyze'),
+        SizedBox(
+          height: engineBarHeight,
+          child: FittedBox(
+            child: Tooltip(
+              message: withKey('Toggle engine', 'E'),
+              child: Switch(
+                value: search.engineOn,
+                onChanged: (_) => search.toggleEngine(),
               ),
-            if (archive.available)
-              OutlinedButton(
-                onPressed: archive.toggle,
-                child: Text(
-                  archive.shown ? 'Hide FICS archive' : 'FICS archive',
-                ),
-              ),
-          ],
+            ),
+          ),
         ),
-        Wrap(
-          spacing: Space.s,
-          children: [
-            OutlinedButton(
-              onPressed: lab.flip,
-              child: const Text('Flip boards'),
-            ),
-            OutlinedButton(
-              onPressed: lab.newGame,
-              child: const Text('New game'),
-            ),
-          ],
+        const SizedBox(width: Space.xs),
+        Expanded(
+          child: Text(
+            status,
+            style: TextStyle(color: colour),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );
   }
 }
 
-/// One line, always there, saying what the tables and the engine are
-/// doing, or what was refused; in the error colour only for a failure.
+/// The clock case the scores and the engine answer for, as chips.
+class _TimeChips extends StatelessWidget {
+  const _TimeChips({required this.lab});
+
+  final BughouseLab lab;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Space.xs),
+      child: Row(
+        children: [
+          SizedBox(
+            width: labLabelWidth,
+            child: Text(
+              'Time',
+              style: TextStyle(color: scheme.onSurfaceVariant),
+            ),
+          ),
+          Flexible(
+            child: SegmentedButton<ClockCase>(
+              segments: [
+                for (final clock in ClockCase.values)
+                  ButtonSegment(
+                    value: clock,
+                    label: Text(clock.label),
+                    tooltip: clock.hint,
+                  ),
+              ],
+              selected: {lab.clock},
+              showSelectedIcon: false,
+              style: const ButtonStyle(visualDensity: VisualDensity.compact),
+              onSelectionChanged: (picked) => lab.setClock(picked.single),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _trouble(EngineTrouble trouble) => switch (trouble) {
+  EngineNotStarted(:final reason) => reason,
+  SearchFailed(:final reason) => 'Analysis failed: $reason',
+};
+
+/// One line, always there, saying where the tables' scores come from, or
+/// what was refused; in the error colour only for a failure.
 class _StatusLine extends StatelessWidget {
   const _StatusLine({required this.lab, required this.search});
 
@@ -205,18 +157,6 @@ class _StatusLine extends StatelessWidget {
 
   (String, bool) get _said {
     if (lab.problem case final problem?) return (_refused(problem), true);
-    switch (search.analysis) {
-      case AnalysisRunning(:final team):
-        return team == lab.team
-            ? ('Hivemind is searching for ${team.label}…', false)
-            : ('Comparing ${team.label}…', false);
-      case AnalysisFailed(:final trouble):
-        return (_trouble(trouble), true);
-      case AnalysisNoMove(:final team):
-        return ('${team.label} has no move here.', false);
-      case AnalysisIdle() || AnalysisDone():
-        break;
-    }
     if (search.bookProblem case final problem?) {
       return ('The Hivemind book could not be read: $problem', true);
     }
@@ -242,11 +182,6 @@ class _StatusLine extends StatelessWidget {
           'would have no piece to drop.',
   };
 
-  static String _trouble(EngineTrouble trouble) => switch (trouble) {
-    EngineNotStarted(:final reason) => reason,
-    SearchFailed(:final reason) => 'Analysis failed: $reason',
-  };
-
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -268,50 +203,96 @@ class _StatusLine extends StatelessWidget {
   }
 }
 
-/// What Analyze found: our team's score and up to three joint actions, each
-/// board's half named by the seat that plays it. Pointing at a row draws it
-/// on both boards; clicking plays it.
-class AnalysisRows extends StatelessWidget {
-  const AnalysisRows({super.key, required this.lab, required this.done});
+/// While the engine is on: each team's score and its three best joint
+/// actions side by side, each board's half named by the seat that plays
+/// it. The rows are there from the start and fill as a pass ends, so
+/// nothing below moves. Pointing at a row draws it on both boards;
+/// clicking plays it.
+class EngineLinesBlock extends StatelessWidget {
+  const EngineLinesBlock({super.key, required this.lab, required this.on});
 
   final BughouseLab lab;
-  final AnalysisDone done;
-
-  String get _headline {
-    final score = done.advantage.forTeam(done.team);
-    if (score.mate case final mate?) {
-      return mate > 0
-          ? 'Mate for ${done.team.label}'
-          : 'Mate against ${done.team.label}';
-    }
-    return '${done.team.label}: ${score.text}';
-  }
+  final LinesOn on;
 
   @override
   Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: Space.s),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      margin: const EdgeInsets.only(bottom: Space.s),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: scheme.outline)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Tooltip(
-            message: '${done.zero.note} Hivemind’s scale, not pawns.',
-            child: Text(
-              _headline,
-              style: text.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+          for (final team in Team.values) ...[
+            if (team == Team.cd)
+              const Padding(padding: EdgeInsets.symmetric(horizontal: Space.m)),
+            Expanded(
+              child: _TeamLines(lab: lab, on: on, team: team),
             ),
-          ),
-          for (final (i, row) in done.rows.indexed)
-            _JointRow(
-              lab: lab,
-              done: done,
-              label: i == 0 ? 'Best' : '${i + 1}',
-              move: row.move,
-              score: row.score.forTeam(done.team),
-            ),
+          ],
         ],
       ),
+    );
+  }
+}
+
+class _TeamLines extends StatelessWidget {
+  const _TeamLines({required this.lab, required this.on, required this.team});
+
+  final BughouseLab lab;
+  final LinesOn on;
+  final Team team;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final found = on.lines[team];
+    final hasMove = on.position.hasMove(team);
+    final score = found?.advantage.forTeam(team);
+    final headline = !hasMove ? 'no move' : score?.text ?? '…';
+    final rows = found?.rows ?? const [];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          height: labTableRowHeight,
+          child: Tooltip(
+            message: '${on.zero.note} Hivemind’s scale, not pawns.',
+            waitDuration: previewDelay,
+            child: Row(
+              children: [
+                Text(
+                  team.label,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const Spacer(),
+                Text(
+                  headline,
+                  style: monoText.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: score == null ? scheme.onSurfaceVariant : null,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        for (var i = 0; i < 3; i++)
+          SizedBox(
+            height: labTableRowHeight,
+            child: i < rows.length
+                ? _JointRow(
+                    lab: lab,
+                    position: on.position,
+                    team: team,
+                    move: rows[i].move,
+                    score: rows[i].score.forTeam(team),
+                  )
+                : null,
+          ),
+      ],
     );
   }
 }
@@ -319,22 +300,21 @@ class AnalysisRows extends StatelessWidget {
 class _JointRow extends StatelessWidget {
   const _JointRow({
     required this.lab,
-    required this.done,
-    required this.label,
+    required this.position,
+    required this.team,
     required this.move,
     required this.score,
   });
 
   final BughouseLab lab;
-  final AnalysisDone done;
-  final String label;
+  final TablePosition position;
+  final Team team;
   final JointMove move;
   final TableScore score;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final halves = teamHalves(done.position, move, done.team);
+    final halves = teamHalves(position, move, team);
     return MouseRegion(
       onEnter: (_) => lab.preview.value = {
         for (final board in BoardNumber.values) board: ?move.on(board),
@@ -342,29 +322,27 @@ class _JointRow extends StatelessWidget {
       onExit: (_) => lab.preview.value = null,
       child: InkWell(
         onTap: () => lab.playJoint(move),
-        child: SizedBox(
-          height: labTableRowHeight,
-          child: Row(
-            children: [
-              SizedBox(
-                width: labLabelWidth,
-                child: Text(
-                  label,
-                  style: TextStyle(color: scheme.onSurfaceVariant),
-                ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                [
+                  for (final board in BoardNumber.values) ?halves[board],
+                ].join(' · '),
+                style: monoText,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              for (final board in BoardNumber.values)
-                Expanded(child: Text(halves[board] ?? '', style: monoText)),
-              SizedBox(
-                width: labScoreWidth,
-                child: Text(
-                  score.text,
-                  style: monoText,
-                  textAlign: TextAlign.right,
-                ),
+            ),
+            SizedBox(
+              width: labScoreWidth,
+              child: Text(
+                score.text,
+                style: monoText,
+                textAlign: TextAlign.right,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

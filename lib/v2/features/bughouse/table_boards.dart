@@ -115,6 +115,7 @@ class _BoardColumn extends StatelessWidget {
       position: lab.position,
       board: board,
       side: side,
+      square: size / 8,
       picked: picked,
       onPick: onPick,
     );
@@ -176,14 +177,17 @@ class _BoardColumn extends StatelessWidget {
   }
 }
 
-/// One player beside a board: the turn dot, `Player A`, then the reserve,
-/// each piece they hold with its count. A reserve piece of the player on
-/// move is dragged onto the board, or clicked to pick it up.
+/// One player beside a board: the turn dot, `Player A`, then their reserve
+/// tray, each piece they hold as large as a square of the board with its
+/// count. A reserve piece of the player on move is dragged onto the board,
+/// or clicked to pick it up; the other player's pieces are faint until it
+/// is their turn.
 class _SeatRow extends StatelessWidget {
   const _SeatRow({
     required this.position,
     required this.board,
     required this.side,
+    required this.square,
     required this.picked,
     required this.onPick,
   });
@@ -191,6 +195,9 @@ class _SeatRow extends StatelessWidget {
   final TablePosition position;
   final BoardNumber board;
   final Side side;
+
+  /// A square of the board, the size of a reserve piece.
+  final double square;
   final Role? picked;
   final ValueChanged<Role> onPick;
 
@@ -201,29 +208,45 @@ class _SeatRow extends StatelessWidget {
     final toMove = position.turn(board) == side;
     final pockets = position.board(board).pockets!;
     return SizedBox(
-      height: labSeatHeight,
+      height: square + labSeatPadding,
       child: Row(
         children: [
           _TurnDot(side: side, shown: toMove),
           const SizedBox(width: Space.s),
-          Text(
-            'Player ${seat.letter}',
-            style: TextStyle(
-              color: toMove ? scheme.onSurface : scheme.onSurfaceVariant,
+          SizedBox(
+            width: labSeatLabelWidth,
+            child: Text(
+              'Player ${seat.letter}',
+              style: TextStyle(
+                color: toMove ? scheme.onSurface : scheme.onSurfaceVariant,
+              ),
             ),
           ),
-          const SizedBox(width: Space.s),
-          for (final role in reserveRoles)
-            if (pockets.of(side, role) case final count when count > 0)
-              _ReservePiece(
-                key: ValueKey(('reserve', seat, role)),
-                piece: Piece(color: side, role: role),
-                count: count,
-                seat: seat,
-                live: toMove,
-                picked: toMove && picked == role,
-                onPick: () => onPick(role),
+          Expanded(
+            child: Container(
+              height: square,
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(Space.xs),
               ),
+              child: Row(
+                children: [
+                  for (final role in reserveRoles)
+                    if (pockets.of(side, role) case final count when count > 0)
+                      _ReservePiece(
+                        key: ValueKey(('reserve', seat, role)),
+                        piece: Piece(color: side, role: role),
+                        count: count,
+                        seat: seat,
+                        size: square,
+                        live: toMove,
+                        picked: toMove && picked == role,
+                        onPick: () => onPick(role),
+                      ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -262,6 +285,7 @@ class _ReservePiece extends StatelessWidget {
     required this.piece,
     required this.count,
     required this.seat,
+    required this.size,
     required this.live,
     required this.picked,
     required this.onPick,
@@ -270,6 +294,7 @@ class _ReservePiece extends StatelessWidget {
   final Piece piece;
   final int count;
   final Seat seat;
+  final double size;
 
   /// Whether its player is on move, so it may be dropped now.
   final bool live;
@@ -279,20 +304,35 @@ class _ReservePiece extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final image = PieceWidget(
+    Widget image() => PieceWidget(
       piece: piece,
-      size: labReservePiece,
+      size: size,
       pieceAssets: PieceSet.cburnettAssets,
     );
     final face = Container(
-      padding: const EdgeInsets.only(right: Space.xs),
+      width: size,
+      height: size,
       decoration: BoxDecoration(
         border: Border.all(color: picked ? scheme.primary : Colors.transparent),
         borderRadius: BorderRadius.circular(Space.xs),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [image, Text('$count')],
+      child: Stack(
+        children: [
+          Opacity(opacity: live ? 1 : 0.45, child: image()),
+          if (count > 1)
+            Positioned(
+              right: 0,
+              bottom: 0,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 3),
+                decoration: BoxDecoration(
+                  color: scheme.surface,
+                  borderRadius: BorderRadius.circular(Space.xs),
+                ),
+                child: Text('$count', style: monoText),
+              ),
+            ),
+        ],
       ),
     );
     final label = 'Player ${seat.letter}: $count ${piece.role.name} in reserve';
@@ -302,9 +342,15 @@ class _ReservePiece extends StatelessWidget {
       button: true,
       child: Draggable<Piece>(
         data: piece,
-        feedback: image,
-        childWhenDragging: face,
-        child: InkWell(onTap: onPick, child: face),
+        // Held under the pointer by its middle, as a piece on the board is.
+        dragAnchorStrategy: (draggable, context, position) =>
+            Offset(size / 2, size / 2),
+        feedback: image(),
+        childWhenDragging: Opacity(opacity: 0.3, child: face),
+        child: MouseRegion(
+          cursor: SystemMouseCursors.grab,
+          child: GestureDetector(onTap: onPick, child: face),
+        ),
       ),
     );
   }

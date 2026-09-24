@@ -150,16 +150,17 @@ void main() {
     },
   );
 
-  testWidgets('Analyze shows our team’s score and its joint actions', (
+  testWidgets('the engine switch shows both teams’ lines; a line plays', (
     tester,
   ) async {
     startInBook();
     await toLab(tester);
-    await tester.tap(find.text('Analyze'));
+    await tester.tap(find.byTooltip('Toggle engine (E)'));
     await tester.pumpAndSettle();
-    expect(find.text('A + B: 0.00'), findsOneWidget);
-    expect(find.text('Best'), findsOneWidget);
-    await tester.tap(find.text('Best'));
+    expect(find.text('A + B'), findsOneWidget);
+    expect(find.text('C + D'), findsOneWidget);
+    expect(find.text('0.00'), findsWidgets);
+    await tester.tap(find.text('A Na3'));
     await tester.pumpAndSettle();
     expect(w.lab.line.moves, hasLength(1));
   });
@@ -178,9 +179,8 @@ void main() {
     );
   });
 
-  testWidgets('the FICS archive opens under the tables, results for our team', (
-    tester,
-  ) async {
+  testWidgets('the FICS archive is under each board’s table, results for '
+      'the team that played the move', (tester) async {
     w.bughouse.archive.present = true;
     w.bughouse.archive.positions[TablePosition.initial.bookKey] = (
       games: 1200,
@@ -200,15 +200,10 @@ void main() {
     );
     startInBook();
     await toLab(tester);
-    await tester.tap(find.text('FICS archive'));
-    await tester.pumpAndSettle();
-    expect(
-      find.text('FICS archive · 1200 games here · 2001–2021'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('FICS archive · 1200 games'), findsNWidgets(2));
     expect(find.text('D d4'), findsOneWidget);
-    // Our team, A + B, won 300 of the 1000.
-    expect(find.text('30%'), findsOneWidget);
+    // D's team, C + D, won 600 of the 1000.
+    expect(find.text('60%'), findsOneWidget);
     await tester.tap(find.text('D d4'));
     await tester.pumpAndSettle();
     expect(w.lab.line.of(BoardNumber.two).single.san, 'd4');

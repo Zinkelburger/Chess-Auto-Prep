@@ -505,9 +505,9 @@ const resultBarText = TextStyle(fontFamily: 'SourceCodePro', fontSize: 12);
 const labBoardMin = 200.0;
 const labBoardMax = 480.0;
 
-/// What the left column needs under and over the boards: the seat rows,
-/// the move list and its buttons, the setup boxes and the pieces line.
-const labBoardChrome = 330.0;
+/// What the left column needs under the boards besides the seat rows: the
+/// move list and its buttons, the setup boxes and the pieces line.
+const labBoardChrome = 250.0;
 
 /// The narrowest the right-hand panel may become before the boards shrink.
 const labPanelMinWidth = 540.0;
@@ -516,20 +516,25 @@ const labPanelMinWidth = 540.0;
 const labBoardGap = 20.0;
 const labColumnGap = 28.0;
 
-/// A seat row beside a board: the turn dot, `Player A`, the reserve.
-const labSeatHeight = 40.0;
+/// A seat row beside a board: the turn dot, `Player A`, then the reserve
+/// tray, its pieces as large as the board's squares, and the room around
+/// them.
+const labSeatPadding = 8.0;
+const labSeatLabelWidth = 72.0;
 const labTurnDot = 11.0;
-
-/// A reserve piece in a seat row, and the room its count takes.
-const labReservePiece = 30.0;
 
 /// Each board's own move list: a few moves tall, then it scrolls.
 const labMoveListHeight = 80.0;
 const labMoveRowHeight = 22.0;
 const labMoveNumberWidth = 34.0;
 
-/// The label column of the right panel's rows (`Our team`, `Time`).
-const labLabelWidth = 104.0;
+/// The label column of the right panel's rows (`Time`).
+const labLabelWidth = 64.0;
+
+/// The FICS archive under each board's table: its heading and this many
+/// continuations.
+const labArchiveRows = 6;
+const labArchiveHeight = 40.0 + labArchiveRows * labTableRowHeight;
 
 /// A row of a board's move table, and its score column.
 const labTableRowHeight = 28.0;

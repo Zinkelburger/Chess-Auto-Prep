@@ -68,52 +68,61 @@ final class SearchFailed extends EngineTrouble {
   const SearchFailed(super.reason);
 }
 
-sealed class Analysis {
-  const Analysis();
+/// What the engine switch shows: nothing while it is off; while it is on,
+/// each team's best joint actions from the last pass that finished, and how
+/// long the pass under way thinks for each team.
+sealed class EngineLines {
+  const EngineLines();
 }
 
-final class AnalysisIdle extends Analysis {
-  const AnalysisIdle();
+final class LinesOff extends EngineLines {
+  const LinesOff();
 }
 
-/// Searching for [team]: ours first, then the other team for the zero.
-final class AnalysisRunning extends Analysis {
-  const AnalysisRunning(this.team);
+/// On: [lines] from the last pass over [position] — empty until the first
+/// ends — and [thinking], the pass under way, null once the longest has
+/// finished and the engine rests until the table changes.
+final class LinesOn extends EngineLines {
+  const LinesOn({
+    required this.position,
+    this.lines = const {},
+    this.zero = ZeroSource.assumed,
+    this.thinking,
+  });
 
-  final Team team;
+  final TablePosition position;
+  final Map<Team, TeamLines> lines;
+  final ZeroSource zero;
+  final Duration? thinking;
 }
 
-/// [team] has no move on either board: nothing to ask.
-final class AnalysisNoMove extends Analysis {
-  const AnalysisNoMove(this.team);
-
-  final Team team;
-}
-
-final class AnalysisFailed extends Analysis {
-  const AnalysisFailed(this.trouble);
+/// The engine is on but could not answer; it stays so until switched on
+/// again.
+final class LinesStopped extends EngineLines {
+  const LinesStopped(this.trouble);
 
   final EngineTrouble trouble;
 }
 
-/// What Analyze found for [team] at [position]: its advantage, A + B's
-/// side, where the zero came from, and up to three joint actions with each
-/// one's score.
-final class AnalysisDone extends Analysis {
-  const AnalysisDone({
-    required this.position,
-    required this.team,
-    required this.advantage,
-    required this.zero,
-    required this.rows,
-  });
+/// One team's side of a pass: its advantage, A + B's side, and up to three
+/// joint actions with each one's score. A team with no move on either
+/// board has no lines.
+typedef TeamLines = ({
+  TableScore advantage,
+  List<({JointMove move, TableScore score})> rows,
+});
 
-  final TablePosition position;
-  final Team team;
-  final TableScore advantage;
-  final ZeroSource zero;
-  final List<({JointMove move, TableScore score})> rows;
-}
+/// How long each pass of the engine thinks for each team: Hivemind has no
+/// `go infinite` and keeps nothing between searches, so "on" is passes that
+/// each think longer than the last, up to the longest, which is kept.
+const enginePasses = [
+  Duration(seconds: 1),
+  Duration(seconds: 2),
+  Duration(seconds: 4),
+  Duration(seconds: 8),
+  Duration(seconds: 16),
+  Duration(seconds: 30),
+];
 
 /// How deep the lab's own searches go when the book has no position: a
 /// quarter of the book builder's search of the position (it only has to
@@ -126,12 +135,12 @@ const labFillDepth = (ownNodes: 400, childNodes: 200, topMoves: 4);
 
 /// What Hivemind knows about the lab's table: the per-board tables' scores
 /// from the precomputed book, or from the engine when the book does not
-/// have the position, and the Analyze search.
+/// have the position, and the engine switch's lines.
 ///
 /// One engine answers both, one search at a time, each asked only when the
 /// one before has ended. A new position or clock makes whatever the engine
 /// was doing stale: its search is cut short and its answer dropped, and a
-/// search queued behind it is never asked. Searches already made are
+/// search queued behind it is never asked. Searches the tables made are
 /// remembered for the session, so stepping back to a table searched
 /// before, or switching back to a clock case, costs nothing. The engine is
 /// quit when the mode is left and started again on return.
@@ -141,9 +150,11 @@ final class TableSearch extends ChangeNotifier {
     required HivemindBook book,
     required Future<HivemindStart> Function() startEngine,
     FillDepth depth = labFillDepth,
+    List<Duration> passes = enginePasses,
   }) : _book = book,
        _startEngine = startEngine,
-       _depth = depth {
+       _depth = depth,
+       _passes = passes {
     lab.addListener(_labChanged);
   }
 
@@ -151,21 +162,25 @@ final class TableSearch extends ChangeNotifier {
   final HivemindBook _book;
   final Future<HivemindStart> Function() _startEngine;
   final FillDepth _depth;
+  final List<Duration> _passes;
 
   TableScores _scores = const ScoresWaiting();
-  Analysis _analysis = const AnalysisIdle();
+  EngineLines _lines = const LinesOff();
   String? _bookProblem;
 
-  /// The table the scores are for, and the question Analyze answered: a
-  /// hover or a flip changes neither, a chip changes one.
+  /// The table the scores and the lines are for: a hover or a flip changes
+  /// neither.
   (TablePosition, ClockCase)? _scored;
-  Object? _analysed;
   bool _open = false;
   bool _resting = false;
   bool _disposed = false;
+  bool _engineOn = false;
 
   /// Bumped by everything that makes the engine's work stale.
   int _generation = 0;
+
+  /// Bumped by every start of the switch's passes, so an older run ends.
+  int _run = 0;
 
   Hivemind? _engine;
   Future<HivemindStart>? _starting;
@@ -173,22 +188,32 @@ final class TableSearch extends ChangeNotifier {
   /// The search the engine is on, which the next one waits for.
   Future<void> _busy = Future.value();
 
-  /// Why the engine would not start; the tables stop asking until Analyze
-  /// is pressed again.
+  /// Whether the search the engine is on is one of the switch's passes.
+  bool _passSearching = false;
+
+  /// Done when the tables of the table on screen are filled, or given up:
+  /// the switch's passes wait for it, so a long pass never holds the
+  /// tables up.
+  Future<void> _tablesDone = Future.value();
+
+  /// Why the engine would not start; the tables stop asking until the
+  /// engine is switched on again.
   String? _startFailure;
-  bool _stopAsked = false;
 
   final _bookAnswers = <int, HivemindLookup>{};
   final _searches = <(int, Team, bool, int, int), HivemindSearched>{};
 
   TableScores get scores => _scores;
-  Analysis get analysis => _analysis;
+  EngineLines get lines => _lines;
+
+  /// Whether the engine switch is on.
+  bool get engineOn => _engineOn;
 
   /// Why the book could not be read, when it could not.
   String? get bookProblem => _bookProblem;
 
   /// Starts answering: the mode is on screen. Picking it again while it is
-  /// on screen changes nothing, a running Analyze included.
+  /// on screen changes nothing.
   void open() {
     if (_open) return;
     _open = true;
@@ -196,49 +221,79 @@ final class TableSearch extends ChangeNotifier {
     _labChanged();
   }
 
-  /// The mode is off screen: the engine is quit. What was found stays.
+  /// The mode is off screen: the engine is quit. What was found stays, and
+  /// the switch stays as it was for the return.
   void close() {
     _open = false;
     _generation++;
+    _run++;
     final engine = _engine;
     _engine = null;
     if (engine != null) unawaited(engine.quit());
-    if (_analysis is AnalysisRunning) _set(analysis: const AnalysisIdle());
   }
 
-  /// While the boards follow a match being played, the tables do not ask
-  /// about every position that goes by; they catch up when it ends.
+  /// While the boards follow a match being played, the tables and the
+  /// engine do not ask about every position that goes by; they catch up
+  /// when it ends.
   void rest(bool resting) {
     if (_resting == resting) return;
     _resting = resting;
     if (resting) {
       _generation++;
+      _run++;
       _engine?.stop();
-      if (_analysis is AnalysisRunning) _set(analysis: const AnalysisIdle());
     } else {
       _scored = null;
       _labChanged();
     }
   }
 
-  void _labChanged() {
-    if (!_open || _resting) return;
-    final table = (lab.position, lab.clock);
-    final question = (table, lab.team, lab.mustMove, lab.budget);
-    final running = _analysis is AnalysisRunning;
-    if (_analysed != null && question != _analysed) {
-      _analysed = null;
-      _set(analysis: const AnalysisIdle());
-    }
-    // A running Analyze took the engine from the tables; they take it back.
-    if (table != _scored || (running && _analysed == null)) {
-      _scored = table;
-      unawaited(_refresh());
+  /// The engine switch: on, both teams are searched in passes that think
+  /// longer each time; off, the pass under way is cut short.
+  void toggleEngine() {
+    _engineOn = !_engineOn;
+    _run++;
+    if (_engineOn) {
+      _startFailure = null;
+      if (_scores is ScoresFailed) {
+        _scored = null;
+        _labChanged();
+        return;
+      }
+      _startRun();
+    } else {
+      if (_passSearching) _engine?.stop();
+      _set(lines: const LinesOff());
     }
   }
 
+  void _labChanged() {
+    if (!_open || _resting) return;
+    final table = (lab.position, lab.clock);
+    if (table == _scored) return;
+    _scored = table;
+    unawaited(_refresh());
+    _startRun();
+  }
+
+  /// The switch's passes over the table on screen, from the first.
+  void _startRun() {
+    final run = ++_run;
+    if (!_engineOn || !_open || _resting) return;
+    _set(
+      lines: LinesOn(position: lab.position, thinking: _passes.first),
+    );
+    unawaited(_passesOver(run, _generation));
+  }
+
   /// The tables for the table on screen: the book, else the engine.
-  Future<void> _refresh() async {
+  Future<void> _refresh() {
+    final done = _refreshing();
+    _tablesDone = done.then((_) {}, onError: (Object _) {});
+    return done;
+  }
+
+  Future<void> _refreshing() async {
     final generation = ++_generation;
     _engine?.stop();
     final position = lab.position;
@@ -372,7 +427,7 @@ final class TableSearch extends ChangeNotifier {
       mustMove: MustMove.either,
       lines: shape.lines,
       budget: NodeBudget(shape.nodes),
-    ), generation);
+    ), () => _current(generation));
     switch (asked) {
       case _Stale():
         return null;
@@ -384,119 +439,98 @@ final class TableSearch extends ChangeNotifier {
     }
   }
 
-  /// [question] asked once the engine has ended every search before it.
-  Future<_Asked> _search(HivemindQuestion question, int generation) async {
+  /// [question] asked once the engine has ended every search before it,
+  /// unless it is no longer [wanted] by then.
+  Future<_Asked> _search(
+    HivemindQuestion question,
+    bool Function() wanted, {
+    bool pass = false,
+  }) async {
     final engine = await _acquire();
-    if (!_current(generation)) return const _Stale();
+    if (!wanted()) return const _Stale();
     if (engine == null) {
       return _Troubled(
         EngineNotStarted(_startFailure ?? 'The bughouse engine did not start.'),
       );
     }
     await _busy;
-    if (!_current(generation)) return const _Stale();
+    if (!wanted()) return const _Stale();
     final searching = engine.search(question);
+    _passSearching = pass;
     _busy = searching.then((_) {}, onError: (Object _) {});
-    final answer = await searching;
-    if (!_current(generation)) return const _Stale();
+    final answer = await searching.whenComplete(() => _passSearching = false);
+    if (!wanted()) return const _Stale();
     return switch (answer) {
       HivemindFailed(:final reason) => _Troubled(SearchFailed(reason)),
       final HivemindSearched found => _Answered(found),
     };
   }
 
-  /// Analyze: [BughouseLab.team]'s search for the Search chip's time, with
-  /// its board that must be moved on, then the other team's for the zero.
-  Future<void> analyze() async {
-    if (!_open || _resting) return;
-    final generation = ++_generation;
-    _engine?.stop();
-    _startFailure = null;
-    _stopAsked = false;
+  /// The switch's passes over the table on screen: each team with a move
+  /// searched for the pass's time, the lines shown as each pass ends, until
+  /// the longest pass has been shown or the table changes.
+  Future<void> _passesOver(int run, int generation) async {
+    bool wanted() =>
+        _engineOn && run == _run && _current(generation) && _open && !_resting;
     final position = lab.position;
-    final team = lab.team;
-    _analysed = ((position, lab.clock), team, lab.mustMove, lab.budget);
-    if (!position.hasMove(team)) {
-      _set(analysis: AnalysisNoMove(team));
-      return _resume(generation);
-    }
-    _set(analysis: AnalysisRunning(team));
-    final ours = await _analyse(position, team, lab.mustMove, 3, generation);
-    if (ours == null) return _resume(generation);
-    HivemindSearched? theirs;
-    if (!_stopAsked && position.hasMove(team.other)) {
-      _set(analysis: AnalysisRunning(team.other));
-      theirs = await _analyse(
-        position,
-        team.other,
-        MustMove.either,
-        1,
-        generation,
+    final clock = lab.clock;
+    final teams = Team.values.where(position.hasMove).toList();
+    for (final (i, time) in _passes.indexed) {
+      final found = <Team, HivemindSearched>{};
+      for (final team in teams) {
+        await _tablesDone;
+        final asked = await _search(
+          (
+            position: position,
+            team: team,
+            maySit: clock.maySit(team),
+            mustMove: MustMove.either,
+            lines: 3,
+            budget: TimeBudget(time),
+          ),
+          wanted,
+          pass: true,
+        );
+        switch (asked) {
+          case _Stale():
+            return;
+          case _Troubled(:final trouble):
+            _engineOn = false;
+            _set(lines: LinesStopped(trouble));
+            return;
+          case _Answered(:final answer):
+            found[team] = answer;
+        }
+      }
+      final (:offset, :zero) = _offset(found, clock);
+      _set(
+        lines: LinesOn(
+          position: position,
+          lines: {
+            for (final MapEntry(key: team, value: answer) in found.entries)
+              team: _teamLines(answer, team, offset),
+          },
+          zero: zero,
+          thinking: _passes.elementAtOrNull(i + 1),
+        ),
       );
-      if (theirs == null) return _resume(generation);
-    }
-    _set(analysis: _result(position, team, ours, theirs));
-    await _resume(generation);
-  }
-
-  /// Ends the Analyze search early; what it found so far is kept.
-  void stopAnalysis() {
-    if (_analysis is! AnalysisRunning) return;
-    _stopAsked = true;
-    _engine?.stop();
-  }
-
-  /// One Analyze search; null when it is stale or failed, the failure shown.
-  Future<HivemindSearched?> _analyse(
-    TablePosition position,
-    Team team,
-    MustMove mustMove,
-    int lines,
-    int generation,
-  ) async {
-    final asked = await _search((
-      position: position,
-      team: team,
-      maySit: lab.clock.maySit(team),
-      mustMove: mustMove,
-      lines: lines,
-      budget: TimeBudget(lab.budget),
-    ), generation);
-    switch (asked) {
-      case _Stale():
-        return null;
-      case _Troubled(:final trouble):
-        _set(analysis: AnalysisFailed(trouble));
-        return null;
-      case _Answered(:final answer):
-        return answer;
+      if (teams.isEmpty) return;
     }
   }
 
-  AnalysisDone _result(
-    TablePosition position,
-    Team team,
-    HivemindSearched ours,
-    HivemindSearched? theirs,
-  ) {
-    final (:offset, :zero) = _offset({
-      team: ours,
-      team.other: ?theirs,
-    }, lab.clock);
-    final top = ours.top;
+  /// [answer]'s best joint actions for [team], one row per first action.
+  TeamLines _teamLines(HivemindSearched answer, Team team, double offset) {
+    final top = answer.top;
     final seen = <JointMove>{};
     final rows = [
-      for (final line in ours.lines)
+      for (final line in answer.lines)
         if (line.pv.firstOrNull case final move? when seen.add(move))
           (move: move, score: TableScore.of(line, team, offset)),
     ];
-    return AnalysisDone(
-      position: position,
-      team: team,
+    return (
       advantage: top == null
           ? const TableScore()
           : TableScore.of(top, team, offset),
-      zero: zero,
       rows: rows.take(3).toList(),
     );
   }
@@ -513,11 +547,6 @@ final class TableSearch extends ChangeNotifier {
       return (offset: assumedOffset(clock), zero: ZeroSource.assumed);
     }
     return (offset: (ab + cd) / 2, zero: ZeroSource.measured);
-  }
-
-  /// After Analyze, the tables carry on where they left off.
-  Future<void> _resume(int generation) async {
-    if (_current(generation) && _scores is! ScoresFromBook) await _refresh();
   }
 
   /// The engine, started the first time it is needed and again after it
@@ -550,10 +579,10 @@ final class TableSearch extends ChangeNotifier {
 
   bool _current(int generation) => !_disposed && generation == _generation;
 
-  void _set({TableScores? scores, Analysis? analysis}) {
+  void _set({TableScores? scores, EngineLines? lines}) {
     if (_disposed) return;
     _scores = scores ?? _scores;
-    _analysis = analysis ?? _analysis;
+    _lines = lines ?? _lines;
     notifyListeners();
   }
 
@@ -561,6 +590,7 @@ final class TableSearch extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _generation++;
+    _run++;
     lab.removeListener(_labChanged);
     final engine = _engine;
     if (engine != null) {

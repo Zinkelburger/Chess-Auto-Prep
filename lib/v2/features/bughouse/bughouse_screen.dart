@@ -19,7 +19,8 @@ import 'table_search.dart';
 /// window leaves, between [labBoardMin] and [labBoardMax].
 ///
 /// ← → step the board last moved or stepped on, Home and End go to its
-/// ends; a text box keeps those keys while it has the focus.
+/// ends, E switches the engine; a text box keeps those keys while it has
+/// the focus.
 class BughouseScreen extends StatelessWidget {
   const BughouseScreen({
     super.key,
@@ -39,11 +40,13 @@ class BughouseScreen extends StatelessWidget {
   final Map<ShortcutActivator, VoidCallback> windowKeys;
 
   /// As large as both boards can be side by side beside the panel, and
-  /// under the height the rest of the left column needs.
+  /// under the height the rest of the left column needs: the two seat rows,
+  /// each a square tall and padded, and the chrome under them.
   static double boardSize(BoxConstraints box) {
     final byWidth =
         (box.maxWidth - labPanelMinWidth - labColumnGap - labBoardGap) / 2;
-    final byHeight = box.maxHeight - labBoardChrome;
+    final byHeight =
+        (box.maxHeight - labBoardChrome - 2 * labSeatPadding) / (1 + 2 / 8);
     return math.min(byWidth, byHeight).clamp(labBoardMin, labBoardMax);
   }
 
@@ -51,6 +54,7 @@ class BughouseScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return _LabKeys(
       lab: lab,
+      search: search,
       windowKeys: windowKeys,
       child: Padding(
         padding: const EdgeInsets.all(Space.l),
@@ -134,11 +138,13 @@ class _RightPanelState extends State<_RightPanel> {
 class _LabKeys extends StatefulWidget {
   const _LabKeys({
     required this.lab,
+    required this.search,
     required this.windowKeys,
     required this.child,
   });
 
   final BughouseLab lab;
+  final TableSearch search;
   final Map<ShortcutActivator, VoidCallback> windowKeys;
   final Widget child;
 
@@ -165,6 +171,7 @@ class _LabKeysState extends State<_LabKeys> {
     const SingleActivator(LogicalKeyboardKey.escape): () =>
         lab.preview.value = null,
     ...widget.windowKeys,
+    const SingleActivator(LogicalKeyboardKey.keyE): widget.search.toggleEngine,
   };
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {

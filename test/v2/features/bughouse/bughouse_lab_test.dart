@@ -91,13 +91,12 @@ void main() {
     expect(lab.setupProblems[BoardNumber.one], 'That is not a valid dual FEN.');
   });
 
-  test('our team is at the bottom of board 1 until the boards flip', () {
+  test('A + B is at the bottom of both boards until they flip', () {
     expect(lab.bottom(BoardNumber.one), Side.white);
     expect(lab.bottom(BoardNumber.two), Side.black);
-    lab.setTeam(Team.cd);
-    expect(lab.bottom(BoardNumber.one), Side.black);
     lab.flip();
-    expect(lab.bottom(BoardNumber.one), Side.white);
+    expect(lab.bottom(BoardNumber.one), Side.black);
+    expect(lab.bottom(BoardNumber.two), Side.white);
   });
 
   test('pointing at a move is forgotten when the table moves on', () {

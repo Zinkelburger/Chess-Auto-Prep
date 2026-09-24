@@ -35,6 +35,7 @@ void main() {
       book: outside.book,
       startEngine: () => outside.outside.launch(cores: 2),
       depth: (ownNodes: 50, childNodes: 20, topMoves: 2),
+      passes: const [Duration(seconds: 1), Duration(seconds: 2)],
     );
   });
 
@@ -139,7 +140,7 @@ void main() {
   });
 
   test(
-    'an engine that will not start says so, until Analyze asks again',
+    'an engine that will not start says so, until it is switched on',
     () async {
       outside.startFailure = 'This build has no bughouse engine.';
       search.open();
@@ -151,9 +152,10 @@ void main() {
       await pumpEventQueue();
       expect(outside.starts, 1);
       outside.startFailure = null;
-      await search.analyze();
+      search.toggleEngine();
+      await pumpEventQueue();
       expect(outside.starts, 2);
-      expect(search.analysis, isA<AnalysisNoMove>());
+      expect((search.scores as ScoresSearched).finished, isTrue);
     },
   );
 
@@ -168,76 +170,98 @@ void main() {
     expect(trouble.reason, 'The bughouse engine stopped.');
   });
 
-  group('Analyze', () {
-    test('searches our team, then theirs for the zero', () async {
-      await (search..open()).analyze();
-      final done = search.analysis as AnalysisDone;
-      expect(done.team, Team.ab);
-      expect(done.zero, ZeroSource.measured);
-      expect(done.rows.length, 3);
-      final ours = outside.engine.asked.firstWhere(
-        (q) => q.budget is TimeBudget,
-      );
-      expect(ours.lines, 3);
-      expect((ours.budget as TimeBudget).time, const Duration(seconds: 3));
+  group('The engine switch', () {
+    List<HivemindQuestion> passes() => [
+      for (final q in outside.engine.asked)
+        if (q.budget is TimeBudget) q,
+    ];
+
+    test('searches both teams in passes that think longer each time', () async {
+      search
+        ..open()
+        ..toggleEngine();
+      await pumpEventQueue();
+      final on = search.lines as LinesOn;
+      expect(on.thinking, isNull);
+      expect(on.zero, ZeroSource.measured);
+      expect(on.lines.keys, {Team.ab, Team.cd});
+      expect(on.lines[Team.ab]!.rows.length, 3);
       // A + B's cp −200 against C + D's −200 is level.
-      expect(done.advantage.forTeam(Team.ab).text, '0.00');
+      expect(on.lines[Team.ab]!.advantage.text, '0.00');
+      expect(passes().map((q) => (q.budget as TimeBudget).time), [
+        const Duration(seconds: 1),
+        const Duration(seconds: 1),
+        const Duration(seconds: 2),
+        const Duration(seconds: 2),
+      ]);
+      expect(passes().map((q) => q.team), [Team.ab, Team.cd, Team.ab, Team.cd]);
+      expect(passes().every((q) => q.lines == 3), isTrue);
     });
 
-    test(
-      'asks with the chips: the clock, the board to move on, the time',
-      () async {
-        lab
-          ..setClock(ClockCase.abMaySit)
-          ..setMustMove(MustMove.one)
-          ..setBudget(const Duration(seconds: 10));
-        await (search..open()).analyze();
-        final ours = outside.engine.asked.firstWhere(
-          (q) => q.budget is TimeBudget,
-        );
-        expect(ours.maySit, isTrue);
-        expect(ours.mustMove, MustMove.one);
-        expect((ours.budget as TimeBudget).time, const Duration(seconds: 10));
-        final theirs = outside.engine.asked.lastWhere(
-          (q) => q.budget is TimeBudget,
-        );
-        expect(theirs.team, Team.cd);
-        expect(theirs.maySit, isFalse);
-        expect(theirs.mustMove, MustMove.either);
-      },
-    );
+    test('waits for the tables before its first pass', () async {
+      search
+        ..toggleEngine()
+        ..open();
+      await pumpEventQueue();
+      final asked = outside.engine.asked;
+      final firstPass = asked.indexWhere((q) => q.budget is TimeBudget);
+      expect(firstPass, greaterThan(0));
+      expect(
+        asked.skip(firstPass).where((q) => q.budget is NodeBudget),
+        isEmpty,
+      );
+    });
 
-    test(
-      'stopped early, keeps what it found against the assumed zero',
-      () async {
-        search.open();
-        await pumpEventQueue();
-        outside.engine.hold = true;
-        final analysing = search.analyze();
-        await pumpEventQueue();
-        expect(search.analysis, isA<AnalysisRunning>());
-        search.stopAnalysis();
-        await analysing;
-        final done = search.analysis as AnalysisDone;
-        expect(done.zero, ZeroSource.assumed);
-        expect(
-          outside.engine.asked.where((q) => q.budget is TimeBudget).length,
-          1,
-        );
-      },
-    );
+    test('asks with the clock chip', () async {
+      lab.setClock(ClockCase.abMaySit);
+      search
+        ..open()
+        ..toggleEngine();
+      await pumpEventQueue();
+      expect(passes().first.maySit, isTrue);
+      expect(passes()[1].maySit, isFalse);
+      expect(passes().every((q) => q.mustMove == MustMove.either), isTrue);
+    });
 
-    test('a new position throws the answer away', () async {
+    test('off, the pass under way is cut short and its lines go', () async {
       search.open();
       await pumpEventQueue();
       outside.engine.hold = true;
-      final analysing = search.analyze();
+      search.toggleEngine();
+      await pumpEventQueue();
+      expect(search.lines, isA<LinesOn>());
+      final stops = outside.engine.stops;
+      search.toggleEngine();
+      expect(outside.engine.stops, greaterThan(stops));
+      await pumpEventQueue();
+      expect(search.lines, isA<LinesOff>());
+      expect(passes().length, 1);
+    });
+
+    test('a new position starts the passes again from there', () async {
+      search.open();
+      await pumpEventQueue();
+      outside.engine.hold = true;
+      search.toggleEngine();
       await pumpEventQueue();
       lab.play(BoardNumber.one, 'e2e4');
       outside.engine.hold = false;
       outside.engine.release();
-      await analysing;
-      expect(search.analysis, isA<AnalysisIdle>());
+      await pumpEventQueue();
+      final on = search.lines as LinesOn;
+      expect(on.position, lab.position);
+      expect(on.thinking, isNull);
+    });
+
+    test('an engine that fails turns the switch off in words', () async {
+      search.open();
+      await pumpEventQueue();
+      outside.engine.answer = (_) => const HivemindFailed('it broke');
+      search.toggleEngine();
+      await pumpEventQueue();
+      expect(search.engineOn, isFalse);
+      final stopped = search.lines as LinesStopped;
+      expect(stopped.trouble.reason, 'it broke');
     });
   });
 
@@ -272,20 +296,4 @@ void main() {
       expect(engine.gone, isTrue);
     },
   );
-
-  test('a failed Analyze gives the engine back to the tables', () async {
-    search.open();
-    await pumpEventQueue();
-    lab.play(BoardNumber.one, 'e2e4');
-    lab.setTeam(Team.cd);
-    outside.engine.answer = (_) => const HivemindFailed('it broke');
-    await search.analyze();
-    expect(search.analysis, isA<AnalysisFailed>());
-    outside.engine.answer = firstMoves;
-    await pumpEventQueue();
-    expect(search.scores, isA<ScoresFailed>());
-    lab.play(BoardNumber.one, 'e7e5');
-    await pumpEventQueue();
-    expect((search.scores as ScoresSearched).finished, isTrue);
-  });
 }

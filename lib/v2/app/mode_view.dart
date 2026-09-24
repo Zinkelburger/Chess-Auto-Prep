@@ -556,8 +556,9 @@ final class BughouseView extends ModeView {
     final search = _labs.search;
     return [
       AppAction(
-        'Analyze',
-        () => unawaited(search.analyze()),
+        'Toggle engine',
+        search.toggleEngine,
+        shortcut: 'E',
         group: 'Bughouse',
       ),
       AppAction('New game', lab.newGame, group: 'Bughouse'),

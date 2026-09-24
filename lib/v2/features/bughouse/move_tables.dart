@@ -9,15 +9,41 @@ import 'bughouse_lab.dart';
 import 'table_search.dart';
 
 /// Each board's legal moves with their scores for the chosen clock, a
-/// plain rule between the two. A table is headed by who is on move there
-/// and reads its scores from that player's side, best first; a move not
-/// scored reads `—`. Pointing at a row draws the move on its board;
-/// clicking plays it.
+/// plain rule between the two, and under each what the FICS archive played
+/// on that board when this machine has it. A table is headed by who is on
+/// move there and reads its scores from that player's side, best first; a
+/// move not scored reads `—`. Pointing at a row draws the move on its
+/// board; clicking plays it.
 class MoveTables extends StatelessWidget {
-  const MoveTables({super.key, required this.lab, required this.scores});
+  const MoveTables({
+    super.key,
+    required this.lab,
+    required this.scores,
+    required this.archive,
+  });
 
   final BughouseLab lab;
   final TableScores scores;
+  final ArchiveMoves archive;
+
+  Widget _board(BoardNumber board) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Expanded(
+        child: _MoveTable(
+          key: ValueKey(('moves', board)),
+          lab: lab,
+          board: board,
+          scores: scores,
+        ),
+      ),
+      if (archive.available)
+        SizedBox(
+          height: labArchiveHeight,
+          child: ArchiveBlock(lab: lab, archive: archive, board: board),
+        ),
+    ],
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -25,26 +51,12 @@ class MoveTables extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(
-          child: _MoveTable(
-            key: const ValueKey(('moves', BoardNumber.one)),
-            lab: lab,
-            board: BoardNumber.one,
-            scores: scores,
-          ),
-        ),
+        Expanded(child: _board(BoardNumber.one)),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: Space.m),
           child: VerticalDivider(width: 1, color: scheme.outline),
         ),
-        Expanded(
-          child: _MoveTable(
-            key: const ValueKey(('moves', BoardNumber.two)),
-            lab: lab,
-            board: BoardNumber.two,
-            scores: scores,
-          ),
-        ),
+        Expanded(child: _board(BoardNumber.two)),
       ],
     );
   }
@@ -181,14 +193,20 @@ class _Pointable extends StatelessWidget {
   );
 }
 
-/// What the FICS archive recorded from the table on screen: each
-/// continuation, most played first, with how many games and how they went
-/// for our team, won, drawn and lost.
+/// What the FICS archive recorded on [board] from the table on screen:
+/// each continuation there, most played first, with how many games and how
+/// they went for the team that played it, won, drawn and lost.
 class ArchiveBlock extends StatelessWidget {
-  const ArchiveBlock({super.key, required this.lab, required this.archive});
+  const ArchiveBlock({
+    super.key,
+    required this.lab,
+    required this.archive,
+    required this.board,
+  });
 
   final BughouseLab lab;
   final ArchiveMoves archive;
+  final BoardNumber board;
 
   @override
   Widget build(BuildContext context) {
@@ -200,10 +218,7 @@ class ArchiveBlock extends StatelessWidget {
       ),
       child: switch (archive.lookup) {
         null => const SizedBox.shrink(),
-        FicsAbsent() => _say(
-          context,
-          'No FICS bughouse database on this machine.',
-        ),
+        FicsAbsent() => const SizedBox.shrink(),
         FicsUnreadable(:final detail) => _say(
           context,
           'The FICS archive could not be read: $detail',
@@ -230,9 +245,11 @@ class ArchiveBlock extends StatelessWidget {
     FicsArchive archive,
     FicsPosition position,
   ) {
-    final moves = position.moves.take(12).toList();
-    final heading =
-        'FICS archive · ${position.games} games here · ${archive.years}';
+    final moves = position.moves
+        .where((move) => move.board == board)
+        .take(labArchiveRows)
+        .toList();
+    final heading = 'FICS archive · ${position.games} games';
     if (moves.isEmpty) {
       return _say(context, '$heading\n${_empty(archive, position)}');
     }
@@ -241,10 +258,14 @@ class ArchiveBlock extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(vertical: Space.xs),
-          child: Text(
-            heading,
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+          child: Tooltip(
+            message: archive.years,
+            waitDuration: previewDelay,
+            child: Text(
+              heading,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
         ),
@@ -261,13 +282,12 @@ class ArchiveBlock extends StatelessWidget {
 
   String _empty(FicsArchive archive, FicsPosition position) {
     if (position.games > 0) {
-      return 'No continuations meet the archive minimum of '
-          '${archive.minGames} games, or this is the end of the indexed line.';
+      return 'No move here was played in ${archive.minGames} games or more.';
     }
     final plies = lab.line.applied.length;
     if (identical(lab.line.root, TablePosition.initial) &&
         plies > archive.maxPly) {
-      return 'Past the archive, which is indexed to ${archive.maxPly} plies.';
+      return 'Past the archive’s ${archive.maxPly} plies.';
     }
     return 'No archived game reached this position.';
   }
@@ -284,7 +304,7 @@ class _ArchiveRow extends StatelessWidget {
     final position = lab.position;
     final seat = Seat.of(move.board, move.mover);
     final uci = position.moveBySan(move.board, move.san)?.uci;
-    final ours = lab.team == Team.ab;
+    final ours = seat.team == Team.ab;
     final won = ours ? move.abWins : move.cdWins;
     final lost = ours ? move.cdWins : move.abWins;
     return Tooltip(

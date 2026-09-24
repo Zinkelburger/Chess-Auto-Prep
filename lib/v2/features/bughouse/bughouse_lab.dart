@@ -7,9 +7,8 @@ import '../../chess/bughouse/table_line.dart';
 import '../../chess/bughouse/table_setup.dart';
 
 /// The Bughouse lab's table: the two boards, the line played on them with a
-/// cursor per board, the question the tables and the engine answer — our
-/// team, the clock, a board that must be moved on, how long to search —
-/// and what the user is pointing at.
+/// cursor per board, the clock case the tables and the engine answer, and
+/// what the user is pointing at.
 ///
 /// A scratchpad: nothing here is saved. Leaving the mode keeps the table
 /// for when the user comes back; quitting the app loses it.
@@ -17,10 +16,7 @@ final class BughouseLab extends ChangeNotifier {
   TableLine _line = const TableLine(TablePosition.initial);
   TablePosition _position = TablePosition.initial;
   BoardNumber _focus = BoardNumber.one;
-  Team _team = Team.ab;
   ClockCase _clock = ClockCase.even;
-  MustMove _mustMove = MustMove.either;
-  Duration _budget = searchBudgets.first;
   bool _flipped = false;
   TableRefusal? _problem;
   Map<BoardNumber, String> _setupProblems = const {};
@@ -36,10 +32,7 @@ final class BughouseLab extends ChangeNotifier {
   /// The board the arrow keys and the step buttons act on: the one last
   /// moved or stepped on.
   BoardNumber get focus => _focus;
-  Team get team => _team;
   ClockCase get clock => _clock;
-  MustMove get mustMove => _mustMove;
-  Duration get budget => _budget;
   bool get flipped => _flipped;
 
   /// Why the last move or step was refused, for the status line.
@@ -48,9 +41,9 @@ final class BughouseLab extends ChangeNotifier {
   /// What is wrong in each board's setup boxes after `Set position`.
   Map<BoardNumber, String> get setupProblems => _setupProblems;
 
-  /// The colour at the bottom of [board]: our team's, unless flipped.
+  /// The colour at the bottom of [board]: A + B's, unless flipped.
   Side bottom(BoardNumber board) {
-    final ours = _team.sideOn(board);
+    final ours = Team.ab.sideOn(board);
     return _flipped ? ours.opposite : ours;
   }
 
@@ -117,7 +110,7 @@ final class BughouseLab extends ChangeNotifier {
 
   void toEnd() => go(_focus, _line.of(_focus).length);
 
-  /// A new game from the start; the team and the clock stay.
+  /// A new game from the start; the clock stays.
   void newGame() => _reset(TablePosition.initial);
 
   /// The table from the setup boxes, as a new line from there.
@@ -144,13 +137,7 @@ final class BughouseLab extends ChangeNotifier {
 
   void flip() => _change(() => _flipped = !_flipped);
 
-  void setTeam(Team team) => _change(() => _team = team);
-
   void setClock(ClockCase clock) => _change(() => _clock = clock);
-
-  void setMustMove(MustMove mustMove) => _change(() => _mustMove = mustMove);
-
-  void setBudget(Duration budget) => _change(() => _budget = budget);
 
   /// The board the user is working on, when they click into its half.
   void focusOn(BoardNumber board) {
@@ -240,10 +227,3 @@ final class StepRefused extends TableRefusal {
 
 /// A move being pointed at: on one board, or a joint action over both.
 typedef LabPreview = Map<BoardNumber, String>;
-
-/// The Search chips: how long Analyze thinks for each team.
-const searchBudgets = [
-  Duration(seconds: 3),
-  Duration(seconds: 10),
-  Duration(seconds: 30),
-];

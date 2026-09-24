@@ -183,7 +183,14 @@ final class HivemindInstall {
     );
     final file = File(p.join(archive.path, 'manifest.json'));
     if (!await file.exists()) {
-      return 'This build is missing its Visual C++ runtime.';
+      // A build made without the packaged copy (a developer's `flutter
+      // run`) still has the DLLs the app itself loads beside its exe.
+      log.w(
+        'install the bughouse runtime',
+        'no ${file.path}; copying the app’s',
+      );
+      await _copyAppRuntime(appDirectory, folder);
+      return null;
     }
     final text = await file.readAsString();
     final names = _Manifest.namesIn(text).where(_isRuntimeDll).toList();
@@ -201,6 +208,27 @@ final class HivemindInstall {
       if (problem != null) return problem;
     }
     return null;
+  }
+}
+
+/// Copies each Visual C++ DLL beside the app in [app] into [folder] when
+/// the copy there differs in size. The app has loaded these itself, so they
+/// are the right architecture; a failure is a log line, and the engine then
+/// finds the machine's own runtime, if any.
+Future<void> _copyAppRuntime(Directory app, Directory folder) async {
+  try {
+    await for (final entry in app.list()) {
+      final name = p.basename(entry.path);
+      if (entry is! File || !_isRuntimeDll(name)) continue;
+      final target = File(p.join(folder.path, name));
+      if (await target.exists() &&
+          await target.length() == await entry.length()) {
+        continue;
+      }
+      _place(await entry.readAsBytes(), target.path);
+    }
+  } on FileSystemException catch (error) {
+    log.w('copy the app’s Visual C++ runtime', error);
   }
 }
 
@@ -238,6 +266,13 @@ String? _unpack(Uint8List compressed, _Integrity want, String target) {
   if (payload.length != want.bytes || digest != want.sha256) {
     return 'The bundled ${p.basename(target)} does not match its manifest.';
   }
+  _place(payload, target);
+  return null;
+}
+
+/// Writes [payload] as [target] under a name of this process's own, then
+/// renames it into place, so no reader ever sees half a file.
+void _place(List<int> payload, String target) {
   final partial = File('$target.$pid.part');
   try {
     partial.writeAsBytesSync(payload, flush: true);
@@ -245,7 +280,6 @@ String? _unpack(Uint8List compressed, _Integrity want, String target) {
   } finally {
     if (partial.existsSync()) partial.deleteSync();
   }
-  return null;
 }
 
 typedef _Integrity = ({int bytes, String sha256});

@@ -29,10 +29,12 @@ final class SpawnedProcess implements UciProcess {
     // surfacing as an unhandled error from the sink; `lines` ending is how
     // the engine's exit is noticed.
     _process.stdin.done.ignore();
+    // Not UTF-8 on every platform: a Windows engine writes its paths in the
+    // console's code page, and a decoding error here would go unheard.
     _process.stderr
-        .transform(utf8.decoder)
+        .transform(const Utf8Decoder(allowMalformed: true))
         .transform(const LineSplitter())
-        .listen(_remember);
+        .listen(_remember, onError: (Object _) {});
   }
 
   /// Starts [executable] with [arguments], in [workingDirectory] when given,
@@ -59,6 +61,9 @@ final class SpawnedProcess implements UciProcess {
 
   @override
   int get pid => _process.pid;
+
+  /// How the process ended, once it has.
+  Future<int> get exitCode => _process.exitCode;
 
   /// Bytes that are not UTF-8 read as replacement characters rather than
   /// an error nobody listens for.

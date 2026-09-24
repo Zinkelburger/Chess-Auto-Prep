@@ -104,9 +104,16 @@ final class EngineSupervisor {
     );
     if (engine == null) {
       final said = process.recentErrors.join(' ');
-      log.e('start the bughouse engine', 'no uciok; stderr: $said');
+      final code = await process.exitCode
+          .then<int?>((code) => code)
+          .timeout(const Duration(seconds: 2), onTimeout: () => null);
+      log.e('start the bughouse engine', 'no uciok; exit $code; stderr: $said');
       return HivemindStartFailed(
-        'The bughouse engine did not start. $said'.trim(),
+        [
+          'The bughouse engine did not start.',
+          ?hivemindExitReason(code),
+          said,
+        ].where((part) => part.isNotEmpty).join(' '),
       );
     }
     if (!_keep(engine)) return const HivemindStartFailed('The app is closing.');
@@ -159,6 +166,25 @@ Map<String, String> hivemindEnvironment(
     key: existing == null || existing.isEmpty
         ? directory
         : '$directory:$existing',
+  };
+}
+
+/// What a Windows loader failure means, in words, for an engine that exited
+/// with [code] before it could say anything; null for any other exit.
+String? hivemindExitReason(int? code) {
+  if (code == null) return null;
+  // Windows reports an NTSTATUS as a negative 32-bit exit code.
+  final status = code & 0xFFFFFFFF;
+  return switch (status) {
+    0xC0000135 =>
+      'Windows could not find a library it needs (exit 0xC0000135); '
+          'installing the Microsoft Visual C++ runtime fixes this.',
+    0xC000007B => 'Windows refused to load one of its files (exit 0xC000007B).',
+    0xC000001D =>
+      'This processor lacks an instruction the engine needs '
+          '(exit 0xC000001D).',
+    0xC0000005 => 'The engine crashed as it started (exit 0xC0000005).',
+    _ => null,
   };
 }
 
