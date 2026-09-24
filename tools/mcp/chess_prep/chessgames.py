@@ -94,10 +94,12 @@ def default_out_dir() -> Path:
 def fetch_url(url: str, referer_gid: str | None = None, timeout: int = 30) -> tuple[int, str]:
     """GET [url] with the headers the site's own front-end sends.
 
+    `Accept: */*` matters: a browser-style `text/html` Accept without the rest
+    of a browser makes the WAF answer a 202 challenge page instead.
     Never raises for an HTTP status; a transport failure is status 0."""
     headers = {
         "User-Agent": USER_AGENT,
-        "Accept": "text/plain,text/html,*/*",
+        "Accept": "*/*",
         "Accept-Language": "en-US,en;q=0.9",
         "Origin": SITE,
     }
