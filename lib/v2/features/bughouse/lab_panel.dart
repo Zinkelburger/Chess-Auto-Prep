@@ -157,16 +157,12 @@ class _StatusLine extends StatelessWidget {
 
   (String, bool) get _said {
     if (lab.problem case final problem?) return (_refused(problem), true);
-    if (search.bookProblem case final problem?) {
-      return ('The Hivemind book could not be read: $problem', true);
-    }
     return switch (search.scores) {
-      ScoresWaiting() => ('Looking the position up…', false),
-      ScoresFromBook() => ('From the Hivemind book.', false),
+      ScoresWaiting() => ('Starting Hivemind…', false),
       ScoresSearched(:final done, :final total, :final finished) =>
         finished
-            ? ('Not in the book · Hivemind scored the likeliest moves.', false)
-            : ('Not in the book · searching $done of $total…', false),
+            ? ('Hivemind scored the likeliest moves.', false)
+            : ('Hivemind searching $done of $total…', false),
       ScoresFailed(:final trouble) => (_trouble(trouble), true),
     };
   }

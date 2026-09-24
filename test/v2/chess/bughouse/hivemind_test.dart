@@ -61,11 +61,6 @@ void main() {
     expect(ClockCase.abMaySit.maySit(Team.cd), isFalse);
     expect(ClockCase.even.maySit(Team.ab), isFalse);
     expect(ClockCase.cdMaySit.maySit(Team.cd), isTrue);
-    expect(ClockCase.values.map((c) => c.bookName), [
-      'ahead',
-      'even',
-      'behind',
-    ]);
   });
 
   group('joint moves', () {

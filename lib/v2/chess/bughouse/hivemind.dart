@@ -38,22 +38,17 @@ import 'table.dart';
 enum ClockCase {
   abMaySit(
     'A + B may sit',
-    'ahead',
     'A + B are up on the diagonal clock, so they can wait rather than move',
   ),
-  even('Even', 'even', 'Neither team is up on the clock: both have to move'),
+  even('Even', 'Neither team is up on the clock: both have to move'),
   cdMaySit(
     'C + D may sit',
-    'behind',
     'C + D are up on the diagonal clock, so they can wait rather than move',
   );
 
-  const ClockCase(this.label, this.bookName, this.hint);
+  const ClockCase(this.label, this.hint);
 
   final String label;
-
-  /// The `clock` column of the precomputed book.
-  final String bookName;
   final String hint;
 
   /// The engine's `TimeAdvantage` input for [team] in this case.

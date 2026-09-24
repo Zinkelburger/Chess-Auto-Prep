@@ -34,7 +34,6 @@ void main() {
     outside = ScriptedBughouse();
     search = TableSearch(
       lab: lab,
-      book: outside.book,
       startEngine: () => outside.outside.launch(cores: 2),
       depth: (ownNodes: 50, childNodes: 20, topMoves: 2),
       passes: const [Duration(seconds: 1)],

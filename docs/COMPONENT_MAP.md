@@ -338,7 +338,7 @@ on, is a curiosity no clock produces and lands within about a tenth of a pawn
 of `even`.) One engine, one search at a time, resumable; by default
 it follows the four most-played FICS moves of each position to ply 10.
 `push` uploads it to BughouseDB (`/bughousedb` on the site); the desktop Lab
-does not read it yet. BughouseDB's **Analyze locally** fills a missing position
+does not read it (it always searches live). BughouseDB's **Analyze locally** fills a missing position
 in the visitor's browser more cheaply: 200-node searches of the position, then
 200-node searches after only each board's four most-visited moves; every other
 legal move is stored unscored and shows "—".

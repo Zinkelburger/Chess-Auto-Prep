@@ -6,7 +6,6 @@ import '../../chess/bughouse/hivemind.dart';
 import '../../chess/bughouse/table.dart';
 import '../../diagnostics/log.dart';
 import '../../engines/hivemind_engine.dart';
-import '../../storage/bughouse_books.dart';
 import 'bughouse_lab.dart';
 
 /// Scores by board and move, A + B's side, with the line after each.
@@ -19,21 +18,13 @@ sealed class TableScores {
   ScoreMap get scores => const {};
 }
 
-/// Nothing yet: the book is being read or the engine started.
+/// Nothing yet: the engine is starting.
 final class ScoresWaiting extends TableScores {
   const ScoresWaiting();
 }
 
-/// The precomputed book has the position: every move scored at once.
-final class ScoresFromBook extends TableScores {
-  const ScoresFromBook(this.scores);
-
-  @override
-  final ScoreMap scores;
-}
-
-/// The book does not have it, so the engine is scoring each board's likely
-/// moves: [done] of [total] searches so far.
+/// The engine is scoring each board's likely moves: [done] of [total]
+/// searches so far.
 final class ScoresSearched extends TableScores {
   const ScoresSearched(this.scores, {required this.done, required this.total});
 
@@ -124,18 +115,16 @@ const enginePasses = [
   Duration(seconds: 30),
 ];
 
-/// How deep the lab's own searches go when the book has no position: a
-/// quarter of the book builder's search of the position (it only has to
-/// rank the moves), its search after each move as it is, and the four
-/// likeliest moves per board, as BughouseDB's `Analyze locally`. About ten
-/// seconds on half of an eight-core desktop.
+/// How deep the tables' searches go: a 400-node search of the position (it
+/// only has to rank the moves), a 200-node search after each move, and the
+/// four likeliest moves per board, as BughouseDB's `Analyze locally`. About
+/// ten seconds on half of an eight-core desktop.
 typedef FillDepth = ({int ownNodes, int childNodes, int topMoves});
 
 const labFillDepth = (ownNodes: 400, childNodes: 200, topMoves: 4);
 
-/// What Hivemind knows about the lab's table: the per-board tables' scores
-/// from the precomputed book, or from the engine when the book does not
-/// have the position, and the engine switch's lines.
+/// What Hivemind knows about the lab's table, always searched live: the
+/// per-board tables' scores and the engine switch's lines.
 ///
 /// One engine answers both, one search at a time, each asked only when the
 /// one before has ended. A new position or clock makes whatever the engine
@@ -147,26 +136,22 @@ const labFillDepth = (ownNodes: 400, childNodes: 200, topMoves: 4);
 final class TableSearch extends ChangeNotifier {
   TableSearch({
     required this.lab,
-    required HivemindBook book,
     required Future<HivemindStart> Function() startEngine,
     FillDepth depth = labFillDepth,
     List<Duration> passes = enginePasses,
-  }) : _book = book,
-       _startEngine = startEngine,
+  }) : _startEngine = startEngine,
        _depth = depth,
        _passes = passes {
     lab.addListener(_labChanged);
   }
 
   final BughouseLab lab;
-  final HivemindBook _book;
   final Future<HivemindStart> Function() _startEngine;
   final FillDepth _depth;
   final List<Duration> _passes;
 
   TableScores _scores = const ScoresWaiting();
   EngineLines _lines = const LinesOff();
-  String? _bookProblem;
 
   /// The table the scores and the lines are for: a hover or a flip changes
   /// neither.
@@ -200,7 +185,6 @@ final class TableSearch extends ChangeNotifier {
   /// engine is switched on again.
   String? _startFailure;
 
-  final _bookAnswers = <int, HivemindLookup>{};
   final _searches = <(int, Team, bool, int, int), HivemindSearched>{};
 
   TableScores get scores => _scores;
@@ -208,9 +192,6 @@ final class TableSearch extends ChangeNotifier {
 
   /// Whether the engine switch is on.
   bool get engineOn => _engineOn;
-
-  /// Why the book could not be read, when it could not.
-  String? get bookProblem => _bookProblem;
 
   /// Starts answering: the mode is on screen. Picking it again while it is
   /// on screen changes nothing.
@@ -286,7 +267,7 @@ final class TableSearch extends ChangeNotifier {
     unawaited(_passesOver(run, _generation));
   }
 
-  /// The tables for the table on screen: the book, else the engine.
+  /// The tables for the table on screen, from the engine.
   Future<void> _refresh() {
     final done = _refreshing();
     _tablesDone = done.then((_) {}, onError: (Object _) {});
@@ -298,17 +279,6 @@ final class TableSearch extends ChangeNotifier {
     _engine?.stop();
     final position = lab.position;
     final clock = lab.clock;
-    final key = position.bookKey;
-    final answer = _bookAnswers[key] ??= await _book.lookup(position);
-    if (!_current(generation)) return;
-    _bookProblem = answer is HivemindUnreadable ? answer.detail : null;
-    final fromBook = answer is HivemindFound
-        ? _bookScores(answer, clock)
-        : null;
-    if (fromBook != null) {
-      _set(scores: ScoresFromBook(fromBook));
-      return;
-    }
     if (_startFailure case final reason?) {
       _set(scores: ScoresFailed(EngineNotStarted(reason)));
       return;
@@ -316,17 +286,7 @@ final class TableSearch extends ChangeNotifier {
     await _fill(position, clock, generation);
   }
 
-  /// The book's scores for [clock], or null when it has none for it: a
-  /// book built for one clock case answers the others from the engine.
-  ScoreMap? _bookScores(HivemindFound found, ClockCase clock) {
-    final scores = <(BoardNumber, String), ({TableScore score, String pv})>{
-      for (final MapEntry(:key, :value) in found.moves.entries)
-        key: ?value[clock],
-    };
-    return scores.isEmpty ? null : scores;
-  }
-
-  /// Scores the likeliest moves of each board the way the book does: each
+  /// Scores the likeliest moves of each board: each
   /// team with a move searched once, which gives the zero and ranks its
   /// moves; then each board's top moves played, and the team that answers
   /// searched after each.

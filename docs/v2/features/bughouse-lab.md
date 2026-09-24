@@ -7,8 +7,8 @@ Plan step: 12
 
 ## Purpose
 A bughouse player sets a two-board position up — from the start, by playing, or from a FEN per board —
-and sees every legal move on each board scored for the clock situation they choose: from the precomputed
-Hivemind book when the position is in it, from a live Hivemind search when it is not. They can ask the
+and sees every legal move on each board scored for the clock situation they choose, always by a live
+Hivemind search (the precomputed Hivemind book is not read; decided 2026-09-23). They can ask the
 engine switch on to see each team's best joint actions over both boards, and see what the FICS archive played on
 each board.
 
@@ -35,9 +35,8 @@ the left, the question and the tables on the right.
   error colour.
 - **Time chips** — `A + B may sit` / `Even` / `C + D may sit`, Even first, each with its one-line tooltip.
   The only question the lab asks.
-- **Status line** — one line, always there: `From the Hivemind book.`, `Not in the book · searching 3 of
-  10…`, `Not in the book · Hivemind scored the likeliest moves.`, or what was refused or failed, in the
-  error colour only then.
+- **Status line** — one line, always there: `Starting Hivemind…`, `Hivemind searching 3 of 10…`,
+  `Hivemind scored the likeliest moves.`, or what was refused or failed, in the error colour only then.
 - **Engine lines** — while the switch is on, A + B and C + D side by side: the team and its score (`no
   move` when it has none), then three rows, each the seat-lettered halves where that team is on move
   (`A dxe5 · B sits`) and its score. The rows are there from the start and fill as each pass ends. The
@@ -71,14 +70,13 @@ drop.` when the other board dropped a piece this step would take back.
 **Set a position** — `Set position` → both boards from the boxes, a new line → the problem under the
 board's boxes: `Player B: A king can’t be in reserve (N is the knight).`, `A FEN has 8 ranks; this has 7.`,
 `That leaves an impossible position.`, `That is not a valid dual FEN.`
-**Read the scores** — the book's when the position is in it, at once for every clock case; otherwise each
-team with a move is searched (400 nodes) for the zero and to rank its moves, then each board's four
-likeliest moves are played and the answering team searched (200 nodes), as the book builder and
+**Read the scores** — each team with a move is searched (400 nodes) for the zero and to rank its moves, then each board's four
+likeliest moves are played and the answering team searched (200 nodes), as
 BughouseDB's `Analyze locally` do. Searches are remembered for the session. → `Analysis failed: …`, or the
 reason the engine would not start, which stops the tables asking until `Analyze` is pressed.
 **Read the score** — Hivemind's own scale (`180·tan(1.56·Q)`), re-centred: each team's search of the
 position gives the offset, `(q_A+B + q_C+D) / 2`, taken off in Q; when a team has no move the level-table
-offset stands in. 0.00 is level. The book stores the same scale.
+offset stands in. 0.00 is level.
 **Engine switch** — each team with a move searched with its clock bit for 1 s, then 2, 4, 8, 16 and 30 s a
 team, the lines shown as each pass ends; the passes wait for the tables to be scored first. Zero from both
 teams' searches, or assumed when one has no move. A new position or clock starts again from 1 s; off cuts
@@ -116,11 +114,10 @@ moves the match to
   `tools/windows_self_test.ps1` runs it on any Windows PC; `.github/workflows/windows-check.yml` runs it and
   the rest of the Windows checks on Server 2022 and 2025 when the `windows-check` branch is pushed. Hivemind
   runs on half of the machine's cores, 256 MB hash, batch 8. MIT (aminwoo).
-- **Hivemind book** — read-only `hivemind_book.db` (`tools/bughouse_db/hivemind_book.py`), looked for under
+- **FICS archive** — read-only `bughouse_book.db` (`tools/bughouse_db/index.py`), looked for under
   `$BUGHOUSE_DB_HOME` alone when set, else `~/.local/share/chess-prep/bughouse-db/`, then the support folder.
   Keyed by FNV-1a of each board's four FEN fields with the reserve in `KQRBNP` order, joined by ` | `.
-  Scores are A + B's; a book in the old seat lettering (board 1 Black `B`) is read with `B` and `C` swapped.
-- **FICS archive** — read-only `bughouse_book.db` beside it, same key; results team-relative.
+  Results team-relative.
 - **Matches** — one folder per match under `Documents/bughouse_matches/<id>/`: `match.json` (version 1, the
   old app's keys: config with `participants`, `timeStance` ahead/level/behind, `variety`, `seed`; every game
   with its board-digit UCI moves `1e2e4`, `2P@f7`) and `games.bpgn` (four seat tags, `SetUpDualFEN` for a
@@ -135,7 +132,7 @@ Keep — Seat rows (Change: plain dot and `Player A`, reserve only as held piece
 Keep — Move list (Change: per board, each board steps on its own, from the web page)
 Change — Setup boxes replace the Edit position panel (FEN and reserve per board, pieces outstanding)
 Change — Time chips replace the Board tab (Our team, Must move on and Search dropped 2026-09-23 by the owner)
-Change — Move tables replace the Engine tab's lines (every legal move scored, book or live)
+Change — Move tables replace the Engine tab's lines (every legal move listed, the likeliest scored live)
 Keep — Engine switch (Change 2026-09-23: continuous passes for both teams, like the engine bar elsewhere,
 replacing a one-shot Analyze)
 Keep — Read the score (measured, or assumed when a team has no move; no carried zero)
@@ -151,8 +148,8 @@ Keep — Run a match, Read a run
 - Matches stay inside the lab, on a Hivemind of their own so the tables keep theirs; same folders and
   format as the old app. `Stop` drops the game in flight rather than keeping it unfinished, so `Resume`
   (new) replays it; seeds are per game so a resumed match samples as it would have.
-- The desktop lab reads the precomputed Hivemind book, and searches live when the position or clock case is
-  not in it. It never writes to the book.
+- The desktop lab always searches live; it does not read the precomputed Hivemind book (owner, 2026-09-23:
+  one database, the FICS archive, and a live engine).
 - The FICS archive stays, shut by default, when the file is on this machine.
 - `Compare clock scenarios` is dropped: the three `Time` chips replace it.
 - No engine settings rows: Hivemind takes half the machine's cores (the Stockfish setting defaults to one,
