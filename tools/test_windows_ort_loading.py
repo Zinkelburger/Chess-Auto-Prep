@@ -69,7 +69,9 @@ def main():
         else:
             # Remove unrelated toolchains from the DLL search environment.
             path_key = next((k for k in env if k.lower() == "path"), "PATH")
-            env[path_key] = str(Path(env["SystemRoot"]) / "System32")
+            # A copy of os.environ has Windows' names upper-cased.
+            root = next((v for k, v in env.items() if k.lower() == "systemroot"), r"C:\Windows")
+            env[path_key] = str(Path(root) / "System32")
         command = prefix + [str(exe), "--model", "hivemind.onnx"]
         try:
             # Even though an old basename DLL is present, missing private ORT
