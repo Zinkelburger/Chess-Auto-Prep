@@ -25,6 +25,8 @@ class RepertoireDirectoryMutations {
     this.testHook,
     this.recoverAdditional,
     this.foreignRecoveryNotes,
+    this.compoundRecoveryNotes,
+    this.compoundDocumentsRoot,
     this.trash,
     this.trashAllowedRoot,
     FileMutationService? mutations,
@@ -37,6 +39,11 @@ class RepertoireDirectoryMutations {
 
   /// Existing v2 notes have no completed state: any entry requires v2 recovery.
   final Directory? foreignRecoveryNotes;
+
+  /// Versioned v2 PGN/book operations. Terminal history remains compatible;
+  /// pending or unrecognized metadata requires its owning application's recovery.
+  final Directory? compoundRecoveryNotes;
+  final Directory? compoundDocumentsRoot;
   final Directory? trash;
   final Directory? trashAllowedRoot;
   final Future<void> Function(String from, String to, String operationId)
@@ -50,6 +57,7 @@ class RepertoireDirectoryMutations {
     return withFileOperationLock(
       p.join(canonicalRoot, '.cap-directory-domain'),
       () async {
+        await _refuseCompoundRecovery();
         await _refuseForeignRecovery();
         await _recover();
         await recoverAdditional?.call();
@@ -94,6 +102,90 @@ class RepertoireDirectoryMutations {
       );
     }
   }
+
+  Future<void> _refuseCompoundRecovery() async {
+    final notes = compoundRecoveryNotes;
+    if (notes == null) return;
+    try {
+      final type = await FileSystemEntity.type(notes.path, followLinks: false);
+      if (type == FileSystemEntityType.notFound) return;
+      if (type != FileSystemEntityType.directory) {
+        throw const FormatException(
+          'Compound write storage is not a directory',
+        );
+      }
+      final documents = compoundDocumentsRoot;
+      if (documents == null) {
+        throw const FormatException(
+          'Compound document boundary is unavailable',
+        );
+      }
+      final roots = {p.normalize(p.absolute(documents.path))};
+      if (await documents.exists()) {
+        roots.add(p.normalize(await documents.resolveSymbolicLinks()));
+      }
+      await for (final entry in notes.list(followLinks: false)) {
+        await _checkCompoundHistory(entry, roots);
+      }
+    } on Object catch (error) {
+      throw RepertoireRecoveryRequired(
+        notes.path,
+        error,
+        message:
+            'A compound document operation requires recovery. Reopen v2 '
+            'to resolve it before accessing documents or training. '
+            'Its recovery files have been preserved.',
+      );
+    }
+  }
+
+  Future<void> _checkCompoundHistory(
+    FileSystemEntity entry,
+    Set<String> roots,
+  ) async {
+    final id = p.basenameWithoutExtension(entry.path);
+    if (entry is! File ||
+        p.extension(entry.path) != '.json' ||
+        RegExp(r'^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$').stringMatch(id) != id ||
+        await FileSystemEntity.type(entry.path, followLinks: false) !=
+            FileSystemEntityType.file) {
+      throw FormatException('Unknown compound metadata: ${entry.path}');
+    }
+    final value = jsonDecode(await entry.readAsString());
+    if (value is! Map<String, Object?> ||
+        value.length != _compoundFields.length ||
+        !value.keys.toSet().containsAll(_compoundFields) ||
+        value['version'] is! int ||
+        value['version'] != 1 ||
+        value['id'] != id ||
+        !{'complete', 'cancelled'}.contains(value['state']) ||
+        value['documentBefore'] is! String ||
+        value['documentAfter'] is! String ||
+        (value['booksBefore'] != null && value['booksBefore'] is! String) ||
+        (value['booksAfter'] != null && value['booksAfter'] is! String)) {
+      throw FormatException('Pending or unknown compound operation: $id');
+    }
+    final path = value['documentPath'];
+    if (path is! String ||
+        path.contains('\u0000') ||
+        !p.isAbsolute(path) ||
+        p.normalize(path) != path ||
+        p.extension(path).toLowerCase() != '.pgn' ||
+        !roots.any((root) => p.isWithin(root, path))) {
+      throw FormatException('Invalid compound document path: $id');
+    }
+  }
+
+  static const _compoundFields = {
+    'version',
+    'id',
+    'state',
+    'documentPath',
+    'documentBefore',
+    'documentAfter',
+    'booksBefore',
+    'booksAfter',
+  };
 
   Future<void> recover() => guard(() async {});
 

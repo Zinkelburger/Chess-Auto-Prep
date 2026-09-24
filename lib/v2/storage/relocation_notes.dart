@@ -164,7 +164,11 @@ String newMoveNote() =>
     '${Random.secure().nextInt(1 << 32).toRadixString(16)}';
 
 final class PendingRepoints {
-  const PendingRepoints(this.support, {required this.documents});
+  PendingRepoints(Directory support, {required this.documents})
+    : _configuredSupport = support,
+      support = _supportRoot(support);
+
+  final Directory _configuredSupport;
 
   /// The Support folder itself; the notes are one folder inside it.
   final Directory support;
@@ -306,6 +310,9 @@ final class PendingRepoints {
   }
 
   Future<bool> _checkFolder({bool create = false}) async {
+    if (_supportRoot(_configuredSupport).path != support.path) {
+      throw const RecoveryRequired('The configured Support directory changed.');
+    }
     for (final directory in [support, _folder]) {
       var observed = await observeDirectory(directory.path);
       if (observed.status == _missing) {
@@ -324,6 +331,16 @@ final class PendingRepoints {
 
   String _pathOf(String id) => p.join(_folder.path, '$id.json');
 }
+
+// Resolve configured aliases once, before any asynchronous operation. The
+// pinned directory and its metadata descendants still receive no-follow probes.
+Directory _supportRoot(Directory directory) => Directory(
+  p.normalize(
+    directory.existsSync()
+        ? directory.resolveSymbolicLinksSync()
+        : p.absolute(directory.path),
+  ),
+);
 
 /// Recovery cannot safely finish, so the caller must not read or mutate this
 /// Documents domain until the retained metadata is reconciled.

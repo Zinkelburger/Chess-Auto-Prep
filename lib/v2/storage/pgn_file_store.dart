@@ -11,6 +11,10 @@ import '../chess/pgn/chapter.dart' show readOffThreadFrom;
 import '../diagnostics/log.dart';
 import 'atomic_write.dart';
 import 'backups.dart';
+import 'book_file.dart';
+import 'book_references.dart';
+import 'compound_commit.dart';
+import 'compound_write.dart';
 import 'document_probe.dart';
 import 'document_ref.dart';
 import 'document_relocation.dart';
@@ -19,6 +23,7 @@ import 'mutation_guards.dart';
 import 'pgn_document_store.dart';
 import 'relocation_notes.dart';
 import 'recovery_gate.dart';
+import 'section_reference_check.dart';
 
 /// The documents root as files on disk.
 ///
@@ -52,13 +57,19 @@ final class PgnFileStore implements PgnDocumentStore {
   factory PgnFileStore({
     required Directory documents,
     required Directory support,
+    Future<void> Function(CompoundWriteStep)? compoundHook,
   }) {
     final backups = BackupArchive(Directory(p.join(support.path, 'backups')));
-    final recovery = RecoveryGate(documents: documents, support: support);
+    final recovery = RecoveryGate(
+      documents: documents,
+      support: support,
+      compoundHook: compoundHook,
+    );
     return PgnFileStore._(
       documents,
       backups,
       recovery,
+      BookFile(support, recovery: recovery),
       DocumentRelocation(
         documents: documents,
         backups: backups,
@@ -71,11 +82,15 @@ final class PgnFileStore implements PgnDocumentStore {
     this.documents,
     this._backups,
     this.recovery,
+    this.books,
     this._relocation,
   );
 
   /// Shared with native listings and progress access for this profile.
   final RecoveryGate recovery;
+
+  /// The raw book snapshot participating in this profile’s structural saves.
+  final BookFile books;
 
   /// The folder every document lives under; a ref outside it is refused.
   final Directory documents;
@@ -172,23 +187,35 @@ final class PgnFileStore implements PgnDocumentStore {
     String text, {
     required Revision expected,
     required EditScope scope,
-  }) => _guard(
-    () => lockedForRelocation(
-      documents,
-      ref,
-      [folderOf(ref)],
-      () => _save(ref, text, expected, scope),
-      IoFailure.new,
-    ),
-    IoFailure.new,
-  );
+  }) async {
+    try {
+      final expectedBooks = scope.references == null
+          ? null
+          : await books.expectedText();
+      return await _guard(
+        () => lockedForRelocation(
+          documents,
+          ref,
+          [folderOf(ref), if (_compoundId(scope) != null) recovery.support],
+          () => _save(ref, text, expected, scope, expectedBooks),
+          IoFailure.new,
+        ),
+        IoFailure.new,
+      );
+    } on Object catch (error) {
+      return IoFailure(failureDetail(error));
+    }
+  }
 
   Future<SaveResult> _save(
     DocumentRef ref,
     String text,
     Revision expected,
     EditScope scope,
+    String? expectedBooks,
   ) async {
+    final committed = await _retriedCompound(ref, text, expected, scope);
+    if (committed != null) return committed;
     switch (await probeDocument(ref.path)) {
       case FileMissing():
         return const Conflict(null);
@@ -197,7 +224,7 @@ final class PgnFileStore implements PgnDocumentStore {
         return IoFailure(detail);
       case FileFound(:final bytes, :final revision):
         if (revision != expected) return Conflict(revision);
-        return _replace(ref, text, bytes, revision, scope);
+        return _replace(ref, text, bytes, revision, scope, expectedBooks);
     }
   }
 
@@ -207,8 +234,10 @@ final class PgnFileStore implements PgnDocumentStore {
     Uint8List current,
     Revision revision,
     EditScope scope,
+    String? expectedBooks,
   ) async {
     final prepared = await _prepared(
+      ref.path,
       current,
       revision.contentHash,
       text,
@@ -223,6 +252,9 @@ final class PgnFileStore implements PgnDocumentStore {
         return SaveRefused(detail);
       case _Unchanged(:final before):
         // Nothing to replace, so nothing to keep and nothing to write.
+        if (_compoundId(scope) != null) {
+          return _compound(ref, before, text, scope, expectedBooks);
+        }
         return Saved(_receipt(before, revision, revision));
       case _Ready(:final before, :final bytes, :final hash, :final undeclared):
         if (undeclared) log.w('save ${ref.path}', _undeclared);
@@ -238,6 +270,9 @@ final class PgnFileStore implements PgnDocumentStore {
           hash: revision.contentHash,
         );
         if (unkept != null) return unkept;
+        if (_compoundId(scope) != null) {
+          return _compound(ref, before, text, scope, expectedBooks);
+        }
         try {
           await removeStaleTemporaries(folderOf(ref));
           await replaceFile(ref.path, bytes);
@@ -248,6 +283,122 @@ final class PgnFileStore implements PgnDocumentStore {
         return Saved(_receipt(before, revision, Revision(hash)));
     }
   }
+
+  String? _compoundId(EditScope scope) =>
+      scope.references?.id ??
+      (scope is RestoredVersion && scope.inverse != null
+          ? '${scope.inverse!.id}-undo'
+          : null);
+
+  Future<SaveResult?> _retriedCompound(
+    DocumentRef ref,
+    String text,
+    Revision expected,
+    EditScope scope,
+  ) async {
+    final id = _compoundId(scope);
+    if (id == null) return null;
+    final done = await recovery.compounds.completed(id);
+    if (done == null) return null;
+    if (done.documentPath != await _completedPath(ref) ||
+        done.documentAfter != text ||
+        _textRevision(done.documentBefore) != expected) {
+      return const SaveRefused(
+        'The compound operation id belongs to another edit.',
+      );
+    }
+    return Saved(_compoundReceipt(done));
+  }
+
+  /// A retained receipt identifies the original namespace entry, even after
+  /// somebody moves, removes or replaces its leaf. Only the configured root
+  /// may be an alias; existing parents within it must still be real folders.
+  Future<String> _completedPath(DocumentRef ref) async {
+    final path = ref.path;
+    if (!p.isAbsolute(path) ||
+        p.normalize(path) != path ||
+        path.contains('\u0000')) {
+      throw const RecoveryRequired('The completed document path is invalid.');
+    }
+    final configured = p.normalize(p.absolute(documents.path));
+    final root = await documents.resolveSymbolicLinks();
+    final canonical = p.isWithin(configured, path)
+        ? p.join(root, p.relative(path, from: configured))
+        : path;
+    if (!p.isWithin(root, canonical)) throw const RecoveryRequired(outsideRoot);
+    var parent = root;
+    for (final part in p.split(p.relative(p.dirname(canonical), from: root))) {
+      if (part == '.') continue;
+      parent = p.join(parent, part);
+      final observed = await observeDirectory(parent);
+      if (observed.status == 1) break;
+      if (observed.status != 0) {
+        throw RecoveryRequired(
+          'The completed document parent is unreadable or linked: $parent.',
+        );
+      }
+    }
+    return canonical;
+  }
+
+  Future<SaveResult> _compound(
+    DocumentRef ref,
+    String before,
+    String after,
+    EditScope scope,
+    String? expectedBooks,
+  ) async {
+    final inverse = scope is RestoredVersion ? scope.inverse : null;
+    if (inverse != null &&
+        (inverse.documentPath != await File(ref.path).resolveSymbolicLinks() ||
+            inverse.documentBefore != after ||
+            inverse.documentAfter != before)) {
+      return const RestoreRefused(
+        'This inverse belongs to another document version.',
+      );
+    }
+    if (inverse != null) {
+      final kept = await recovery.compounds.completed(inverse.id);
+      if (kept == null ||
+          kept.documentPath != inverse.documentPath ||
+          kept.documentBefore != inverse.documentBefore ||
+          kept.documentAfter != inverse.documentAfter ||
+          kept.booksBefore != inverse.booksBefore ||
+          kept.booksAfter != inverse.booksAfter) {
+        return const RestoreRefused(
+          'The compound inverse is not a committed receipt from this profile.',
+        );
+      }
+    }
+    final beforeBooks = inverse != null ? inverse.booksAfter : expectedBooks;
+    final afterBooks = inverse != null
+        ? inverse.booksBefore
+        : renameBookReferences(
+            beforeBooks,
+            repertoireRoot: p.join(documents.path, 'repertoires'),
+            changes: scope.references!.changes,
+          );
+    final command = CompoundCommit(
+      id: _compoundId(scope)!,
+      documentPath: ref.path,
+      documentBefore: before,
+      documentAfter: after,
+      booksBefore: beforeBooks,
+      booksAfter: afterBooks,
+    );
+    final committed = await recovery.compounds.commit(command);
+    return Saved(_compoundReceipt(committed));
+  }
+
+  Receipt _compoundReceipt(CompoundCommit command) => Receipt(
+    committed: _textRevision(command.documentAfter),
+    before: command.documentBefore,
+    beforeRevision: _textRevision(command.documentBefore),
+    compound: command,
+  );
+
+  Revision _textRevision(String text) =>
+      Revision(sha256.convert(utf8.encode(text)).toString());
 
   /// Why [hash] is not a version this store kept for [ref], or null when it
   /// is one.
@@ -316,13 +467,16 @@ Future<({Uint8List bytes, String hash})> _encoded(String text) =>
 /// What a save works out before it writes, on another isolate once either
 /// side of the comparison is big enough to be worth the trip.
 Future<_Prepared> _prepared(
+  String documentPath,
   Uint8List current,
   String currentHash,
   String text,
   EditScope scope,
 ) => current.length < readOffThreadFrom && text.length < readOffThreadFrom
-    ? Future.value(_prepare(current, currentHash, text, scope))
-    : Isolate.run(() => _prepare(current, currentHash, text, scope));
+    ? Future.value(_prepare(documentPath, current, currentHash, text, scope))
+    : Isolate.run(
+        () => _prepare(documentPath, current, currentHash, text, scope),
+      );
 
 ({Uint8List bytes, String hash}) _encode(String text) {
   final bytes = utf8.encode(text);
@@ -380,6 +534,7 @@ final class _Ready extends _Prepared {
 
 /// Runs on another isolate: everything about a save that reads every byte.
 _Prepared _prepare(
+  String documentPath,
   Uint8List current,
   String currentHash,
   String text,
@@ -397,6 +552,13 @@ _Prepared _prepare(
     return _NotReplaceable(NotWritable(detail), detail);
   }
   final before = (read as PlainText).text;
+  final referenceProblem = sectionReferenceProblem(
+    documentPath: documentPath,
+    before: before,
+    after: text,
+    scope: scope,
+  );
+  if (referenceProblem != null) return _OutsideScope(referenceProblem);
   final encoded = _encode(text);
   if (encoded.hash == currentHash) return _Unchanged(before);
   final outside = changeOutsideScope(

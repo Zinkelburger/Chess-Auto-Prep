@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import '../chess/pgn/games_written.dart';
+import 'compound_commit.dart';
+import 'reference_change.dart';
 import '../chess/pgn/game_text.dart';
 import '../chess/tactics/analyzed_games.dart';
 
@@ -14,7 +16,10 @@ import '../chess/tactics/analyzed_games.dart';
 /// the save does not happen. A writer with a bug — one that drops a game, or
 /// writes one game's moves into another — then cannot put that on disk.
 sealed class EditScope {
-  const EditScope();
+  const EditScope({this.references});
+
+  /// Essential reference changes committed with these PGN bytes.
+  final ReferenceChanges? references;
 }
 
 /// The save writes the games [written] says the edit wrote and adds the ones
@@ -26,7 +31,7 @@ sealed class EditScope {
 /// whatever the text says, including with a game it should never have
 /// touched.
 final class GamesEdited extends EditScope {
-  const GamesEdited(this.written);
+  const GamesEdited(this.written, {super.references});
 
   final GamesWritten written;
 }
@@ -41,7 +46,7 @@ final class GamesEdited extends EditScope {
 /// would agree with whatever the writer did, which is the one thing the
 /// store is here to refuse.
 final class GamesRearranged extends EditScope {
-  const GamesRearranged(this.arranged);
+  const GamesRearranged(this.arranged, {super.references});
 
   final GamesArranged arranged;
 }
@@ -51,7 +56,7 @@ final class GamesRearranged extends EditScope {
 /// it against, so the store writes what it was given and says in the log
 /// that it did.
 final class WholeDocument extends EditScope {
-  const WholeDocument();
+  const WholeDocument({super.references});
 }
 
 /// The save puts back a version this store recorded, which is what an undo
@@ -60,7 +65,10 @@ final class WholeDocument extends EditScope {
 /// bytes that hash to no version kept for the document are refused, and the
 /// one that is put back is named in the log.
 final class RestoredVersion extends EditScope {
-  const RestoredVersion();
+  const RestoredVersion({this.inverse, super.references});
+
+  /// A compound undo expects both of the original committed participants.
+  final CompoundCommit? inverse;
 }
 
 /// One scope covering both, for two edits whose saves collapsed into one.
@@ -80,6 +88,35 @@ final class RestoredVersion extends EditScope {
 /// the other could have named, so the pair is a whole document, which the
 /// store logs.
 EditScope scopeOfBoth(EditScope first, EditScope second) {
+  final combined = _scopeOfBoth(first, second);
+  final changes = [
+    ...?first.references?.changes,
+    ...?second.references?.changes,
+  ];
+  return changes.isEmpty
+      ? combined
+      : withReferences(combined, ReferenceChanges(changes));
+}
+
+/// Adds reference intent without changing the independently declared PGN scope.
+EditScope withReferences(EditScope scope, ReferenceChanges references) =>
+    switch (scope) {
+      GamesEdited(:final written) => GamesEdited(
+        written,
+        references: references,
+      ),
+      GamesRearranged(:final arranged) => GamesRearranged(
+        arranged,
+        references: references,
+      ),
+      WholeDocument() => WholeDocument(references: references),
+      RestoredVersion(:final inverse) => RestoredVersion(
+        inverse: inverse,
+        references: references,
+      ),
+    };
+
+EditScope _scopeOfBoth(EditScope first, EditScope second) {
   if (first is GamesEdited && second is GamesEdited) {
     return GamesEdited(
       GamesWritten(

@@ -1,4 +1,5 @@
 import 'document_ref.dart';
+import 'compound_commit.dart';
 import 'edit_scope.dart';
 import 'training_records.dart';
 
@@ -97,8 +98,9 @@ final class Unreadable extends DocumentRead {
 
 /// What a completed save replaced, and what it committed.
 ///
-/// This is the whole of undo: `save(receipt.before, expected: receipt.committed)`
-/// puts the previous version back, and returns a receipt of its own. If
+/// Undo saves the before-text against the committed revision. A compound
+/// receipt also supplies the inverse in RestoredVersion so its required book
+/// snapshot is validated and restored together. Each returns a new receipt. If
 /// something else wrote in between, that save is a [Conflict] and the entry
 /// stays where it is — an undo never guesses.
 final class Receipt {
@@ -106,6 +108,7 @@ final class Receipt {
     required this.committed,
     required this.before,
     required this.beforeRevision,
+    this.compound,
   });
 
   /// The revision the file now has.
@@ -115,6 +118,9 @@ final class Receipt {
   final String before;
 
   final Revision beforeRevision;
+
+  /// Required participants for a guarded compound inverse, when present.
+  final CompoundCommit? compound;
 }
 
 sealed class CreateResult {

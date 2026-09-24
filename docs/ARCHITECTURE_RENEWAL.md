@@ -880,7 +880,34 @@ first game that would have changed and writes nothing. Then the version being
 replaced is copied into Support, and only then is the file replaced. A create
 has no previous version, so there is nothing to declare and nothing to compare.
 
-That is the whole of a save. The store does not read the file back after the
+Course-section renames attach explicit `SectionRename` intent to the ordinary
+edit scope. Held edits keep that intent in the draft; discard and draft undo
+write nothing. Keeping the draft commits its PGN and exact `books.json`
+reference snapshot together. The store checks section lineage independently
+of the ordinary game-byte scope and preserves unknown book fields. Book edits
+accepted beforehand settle first; controls wait while references are committing.
+
+This operation uses private version-1 `Support/compound-writes/<id>.json`
+receipts containing canonical document paths and exact before/after content
+(the content itself is the comparison, rather than a separately stored hash).
+The outer shared domain, Documents and distinct participating directory locks
+cover recovery and publication. Prepared receipts cancel without publishing;
+committing receipts finish only participants at their expected before/after
+bytes. Unknown, malformed, unreadable or externally changed participants block
+with retained recovery material. V1 recognizes the envelope and refuses pending
+or unsupported receipts before its own recovery, directing the user to v2.
+
+A completed receipt authenticates the inverse; undo validates both participants
+and journals that inverse as another operation. Failed acknowledgements retain
+the original operation id and exact draft or inverse for explicit retry, while
+new document edits are blocked. Training paths and stable line IDs are unchanged
+by a section rename. Complete receipts currently retain full snapshots and are
+validated on each recovery access; space and scan cost grow with structural
+history. Pruning or compact terminal receipts require a separate compatible
+protocol, not deletion of material still used by retry or undo. These durability
+and coexistence paths have native Linux tests; Windows/macOS remain unverified.
+
+For an ordinary save, the store does not read the file back after the
 rename, and does not read its own backup back before it: a temp-and-rename on
 a local disk does not fail silently, and a check that reads every byte again
 buys nothing the revision check and the kept copy do not already give. What
@@ -1103,7 +1130,7 @@ per batch and use tests and commits as the implementation record.
 | H1 | None | Direct fixes: recursive book selection, gap invalidation, analysis-save errors, partial engine retry, puzzle timer; `books`, workspace wiring, bughouse stores/search, puzzle trainer | Their acceptance sequences above pass through real wiring; failures are visible | Done 2026-09-24: recursive book removal, catalog-driven gap refresh, typed analysis-save failures with exact-entry retry, partial engine retry and puzzle timer cancellation; regression failures reproduced before fixes, independent review, v2 suite and analyze/lint; headless Linux save failure/retry verified against disposable SQLite. Unsaved analysis remains in memory (H2/H5). |
 | H2 | H1 | Accepted ratings and writes outlive reload/dispose; `PendingWrites`, training progress/owner, exit guard | Two overlapping reloads cannot bypass the same pending rating; failed outcomes remain retryable; shutdown is honest | Done 2026-09-24: app-owned training obligations, ordered barriers and exact in-process retry survive reload/dispose; retained book/settings/account/recent-file/copy outcomes; shutdown covers existing dialogs and suspends puzzle timers. Failure-first regressions, independent reviews, 2,155 v2 tests and analyze/lint passed after merging current main. Headless Linux partial training publication survived scope replacement and retried with three history rows exactly once. Persistent crash recovery remains H3; Windows/macOS durability unverified. |
 | H3a | H2 | Existing relocation recovery before affected reads; document guards, training reads, startup; reconcile v1 domain locks/order | Kill during a move, reopen/train from either supported app; no missing or duplicate progress; incompatible access blocks safely | Done 2026-09-24 on Linux: canonical shared domain before affected Documents access; strict v2 notes recover before PGN/training reads and complete scans, foreign receipts refuse without mutation, and UI shows the recovery reason with Retry. Regression-first tests, independent reviews, 2,232 v2 tests, final focused storage/legacy checks and analyze/lint passed. Six real-process tests cover cross-app exclusion, SIGKILL and all four training files recovering once; headless refusal/retry verified. No new metadata format. Windows/macOS recovery guarantees remain unverified; v1 native recovery is still Linux-only. |
-| H3b | H3a | One compound operation for course rename/book references and its inverse; Library, storage, session history | Rename and undo agree across PGN/book state, including crash and external-conflict cases | Not started |
+| H3b | H3a | One compound operation for course rename/book references and its inverse; Library, storage, session history | Rename and undo agree across PGN/book state, including crash and external-conflict cases | In progress 2026-09-24: explicit section-reference changes will travel with held/coalesced drafts; one private versioned two-file receipt will commit PGN and books and validate their inverse. Compatibility refusal and failure/restart regressions precede enabling the write path. |
 | H3c | H3b | Apply the proven operation boundary to supported file/folder moves, delete/restore and multi-file edits | Every existing command has an explicit required read/write set, recovery path and compatible undo behavior | Not started |
 | H4 | H2, H3c | Versioned input snapshots for catalog, shelf, gaps, book comparison and training; targeted invalidation | A late computation cannot replace a newer result; a fresh rebuild equals the displayed committed projection | Not started |
 | H5 | H2, H3c | Generation, mining, downloads, bughouse and engine lifetimes; job-specific checkpoints and truthful completion | Stop/retry/restart neither duplicates saved units nor loses promised results; resources return to baseline | Not started |

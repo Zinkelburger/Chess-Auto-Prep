@@ -16,9 +16,12 @@ import '../chess/pv_text.dart';
 import '../diagnostics/log.dart';
 import '../storage/chapter_files.dart';
 import '../storage/document_ref.dart';
+import '../storage/edit_scope.dart' show withReferences;
+import '../storage/reference_change.dart';
 import '../storage/pgn_document_store.dart' as store;
 import 'comment_line.dart';
 import 'document_saver.dart';
+import 'document_access.dart';
 import 'document_projection.dart';
 import 'document_history.dart';
 import 'session_results.dart';
@@ -49,6 +52,7 @@ final class DocumentSession extends ChangeNotifier {
 
   final store.PgnDocumentStore _store;
   final DocumentSaver _saver;
+  final access = DocumentAccess();
 
   /// The chapter on the board, and — when it is one of several a file holds
   /// by tag — the file and where its games sit in it; the view is null when
@@ -308,9 +312,14 @@ final class DocumentSession extends ChangeNotifier {
     // than the write still on its way.
     await _saver.flush();
     if (_disposed || ticket != _opens) return const OpenOvertaken();
+    await access.settled(ref.path);
+    if (_disposed || ticket != _opens) return const OpenOvertaken();
+    final version = access.versionOf(ref.path);
     final leftAsIs = !_saver.settled;
     final read = await readDocument(_store, ref, game: game);
     if (_disposed || ticket != _opens) return const OpenOvertaken();
+    if (access.versionOf(ref.path) != version)
+      return _opened(ref, game, ticket);
     final DocumentShown shown;
     switch (read) {
       case DocumentUnread(:final reason):
@@ -334,6 +343,8 @@ final class DocumentSession extends ChangeNotifier {
       // read from it.
       if (into == ref.path) return _opened(ref, game, ticket);
     }
+    if (access.versionOf(ref.path) != version)
+      return _opened(ref, game, ticket);
     _show(shown.chapter, ref, shown.revision, shown.readOnly, view: shown.view);
     return const DocumentOpened();
   }
@@ -590,6 +601,11 @@ final class DocumentSession extends ChangeNotifier {
       notifyListeners();
       return reason;
     }
+    if (_saver.referencesPending) {
+      return _editRefused(
+        'the chapter and its references need to finish saving',
+      );
+    }
     if (_restoring) {
       return _editRefused('an undo is still putting the chapter back');
     }
@@ -621,6 +637,16 @@ final class DocumentSession extends ChangeNotifier {
       await _showRestored(_source!, ticket, text);
     }
     return result;
+  }
+
+  /// Retries a failed publication, including restoring the displayed chapter
+  /// when the publication was an undo whose acknowledgement was lost.
+  Future<void> retrySave() async {
+    if (_saver.retryNeedsUndo) {
+      await undo();
+    } else {
+      await _saver.flush();
+    }
   }
 
   /// Whether the document [ref], up when [ticket] was taken, is still the
@@ -773,7 +799,10 @@ final class DocumentSession extends ChangeNotifier {
   /// so the cursor is followed by the moves it was on rather than by its
   /// path, which after a rearrangement would name somebody else's move; an
   /// edit that changed which game is the chapter moves the board with it.
-  String? apply(edits.ChapterEdit Function(Chapter chapter) edit) {
+  String? apply(
+    edits.ChapterEdit Function(Chapter chapter) edit, {
+    ReferenceChanges? references,
+  }) {
     final chapter = _chapter;
     if (chapter == null) return 'there is nothing open to edit';
     if (_editBlocked() case final reason?) return reason;
@@ -784,7 +813,12 @@ final class DocumentSession extends ChangeNotifier {
         return _editRefused(reason);
       case edits.ChapterEdited(chapter: final edited, :final games):
         if (!_onBoard(edited)) {
-          final reason = _land(landing(chapter, _view, edited, games));
+          final reason = _land(
+            _referenceLanding(
+              landing(chapter, _view, edited, games),
+              references,
+            ),
+          );
           if (reason != null) return reason;
         }
         _clearRefusal();
@@ -805,9 +839,10 @@ final class DocumentSession extends ChangeNotifier {
   String? applyToFile(
     edits.ChapterEdit Function(Chapter file) edit, {
     String? section,
+    ReferenceChanges? references,
   }) {
     final view = _view;
-    if (view == null) return apply(edit);
+    if (view == null) return apply(edit, references: references);
     if (_editBlocked() case final reason?) return reason;
     switch (edit(view.file)) {
       case edits.ChapterUnchanged():
@@ -817,12 +852,28 @@ final class DocumentSession extends ChangeNotifier {
       case edits.ChapterEdited(chapter: final edited, :final games):
         _clearRefusal();
         final before = view.chapter.tree;
-        _land(fileLanding(view.file, edited, games, section ?? view.section));
+        final landed = fileLanding(
+          view.file,
+          edited,
+          games,
+          section ?? view.section,
+        );
+        _land(_referenceLanding(landed, references));
         _cursor.value = samePathIn(before, _chapter!.tree, cursor);
     }
     notifyListeners();
     return null;
   }
+
+  Landing? _referenceLanding(Landing? landed, ReferenceChanges? references) =>
+      references == null || landed == null
+      ? landed
+      : (
+          text: landed.text,
+          scope: withReferences(landed.scope, references),
+          chapter: landed.chapter,
+          view: landed.view,
+        );
 
   /// Takes [edited] in memory when the analysis board is up, keeping the
   /// version it replaces for undo; nothing is written anywhere. False when

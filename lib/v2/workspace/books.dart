@@ -8,6 +8,7 @@ import '../storage/book_file.dart';
 import '../storage/book_list.dart';
 import '../storage/chapter_files.dart';
 import '../storage/pending_writes.dart';
+import '../storage/pgn_document_store.dart' as documents;
 
 /// The user's books and the one in use. Every reader of "the book" — the
 /// explorer's Book, My games, the trainer — asks [includes]; the Books
@@ -43,6 +44,17 @@ final class Books extends ChangeNotifier {
   bool _dirty = false;
   bool _disposed = false;
   int _revision = 0;
+  bool _changingReferences = false;
+  Completer<void>? _referenceWrite;
+
+  Future<void> get referencesSettled async {
+    while (_referenceWrite != null) {
+      await _referenceWrite!.future;
+    }
+  }
+
+  /// A structural document save is settling the book snapshot it changes.
+  bool get changingReferences => _changingReferences;
 
   List<Book> get books => _list.books;
 
@@ -60,7 +72,7 @@ final class Books extends ChangeNotifier {
       _list.byId(_editing) ?? active ?? _list.books.firstOrNull;
 
   Future<void> load() async {
-    if (_disposed || _dirty || canRetry) return;
+    if (_disposed || _dirty || canRetry || _changingReferences) return;
     final revision = ++_revision;
     try {
       final list = await _store.read();
@@ -123,10 +135,13 @@ final class Books extends ChangeNotifier {
         book.name.toLowerCase() == name.trim().toLowerCase(),
   );
 
-  void rename(Book book, String name) =>
-      _replace(book.copyWith(name: name.trim()));
+  void rename(Book book, String name) {
+    final current = _list.byId(book.id);
+    if (current != null) _replace(current.copyWith(name: name.trim()));
+  }
 
   void delete(Book book) {
+    if (!_writable) return;
     if (_editing == book.id) _editing = null;
     _save(
       BookList(
@@ -266,7 +281,8 @@ final class Books extends ChangeNotifier {
     ),
   );
 
-  bool get _writable => !_disposed && _loaded && !_unreadable;
+  bool get _writable =>
+      !_disposed && _loaded && !_unreadable && !_changingReferences;
 
   /// Shows [list] at once and writes it. Nothing is written over a file
   /// that could not be read.
@@ -280,6 +296,59 @@ final class Books extends ChangeNotifier {
     _dirty = true;
     _notify();
     unawaited(_persist());
+  }
+
+  /// Serializes an essential reference change with accepted book edits before
+  /// the storage domain is acquired. New book edits wait for the committed
+  /// snapshot; failures preserve the document command for its owner's retry.
+  Future<documents.SaveResult> saveReferences(
+    Future<documents.SaveResult> Function() save,
+  ) async {
+    if (_changingReferences || _disposed) {
+      return const documents.IoFailure(
+        'A book reference change is still pending.',
+      );
+    }
+    _changingReferences = true;
+    final completion = _referenceWrite = Completer<void>();
+    _revision++;
+    _notify();
+    try {
+      await pendingWrites.settleFor(_store);
+      if (!canRetry && (!_loaded || _unreadable)) await _readReferences();
+      if (_unreadable || canRetry) {
+        return const documents.IoFailure(
+          'Save or recover your books before renaming a chapter.',
+        );
+      }
+      final documents.SaveResult result;
+      try {
+        result = await save();
+      } finally {
+        // A lost acknowledgement may leave intent. Read through recovery
+        // before allowing the book snapshot to be edited again.
+        await _readReferences();
+      }
+      return result;
+    } finally {
+      _changingReferences = false;
+      _referenceWrite = null;
+      completion.complete();
+      _notify();
+    }
+  }
+
+  Future<void> _readReferences() async {
+    _loaded = true;
+    try {
+      _list = await _store.read();
+      _problem = null;
+      _unreadable = false;
+    } on Object catch (error) {
+      _unreadable = true;
+      _problem = 'Your book references need recovery: $error';
+      log.w('read committed book references', error);
+    }
   }
 
   /// A failed snapshot stays owned by the app, including after disposal.

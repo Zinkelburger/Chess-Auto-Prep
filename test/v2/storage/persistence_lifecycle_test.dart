@@ -10,6 +10,7 @@ import 'package:chess_auto_prep/v2/chess/training/schedule.dart';
 import 'package:chess_auto_prep/v2/features/trainer/progress.dart';
 import 'package:chess_auto_prep/v2/storage/training_store.dart';
 import 'package:chess_auto_prep/v2/storage/book_file.dart';
+import 'package:chess_auto_prep/v2/storage/recovery_gate.dart';
 import 'package:chess_auto_prep/v2/storage/book_list.dart';
 import 'package:chess_auto_prep/v2/storage/pending_writes.dart';
 import 'package:chess_auto_prep/v2/storage/settings.dart';
@@ -167,8 +168,20 @@ void main() {
     () async {
       final root = await Directory.systemTemp.createTemp('books-contention-');
       addTearDown(() => root.delete(recursive: true));
-      final first = BookFile(root);
-      final second = BookFile(root);
+      final first = BookFile(
+        root,
+        recovery: RecoveryGate(
+          documents: Directory(p.join(root.path, 'Documents')),
+          support: root,
+        ),
+      );
+      final second = BookFile(
+        root,
+        recovery: RecoveryGate(
+          documents: Directory(p.join(root.path, 'Documents')),
+          support: root,
+        ),
+      );
       await Future.wait([first.read(), second.read()]);
       const a = BookList(
         books: [Book(id: 'a', name: 'A')],
@@ -181,11 +194,26 @@ void main() {
         second.write(b).then((_) => true, onError: (Object _) => false),
       ]);
       expect(results.where((saved) => saved), hasLength(1));
-      final disk = await BookFile(root).read();
+      final disk = await BookFile(
+        root,
+        recovery: RecoveryGate(
+          documents: Directory(p.join(root.path, 'Documents')),
+          support: root,
+        ),
+      ).read();
       expect(disk.books.single.id, results.first ? 'a' : 'b');
       await second.read();
       await second.write(b);
-      expect((await BookFile(root).read()).books.single.id, 'b');
+      expect(
+        (await BookFile(
+          root,
+          recovery: RecoveryGate(
+            documents: Directory(p.join(root.path, 'Documents')),
+            support: root,
+          ),
+        ).read()).books.single.id,
+        'b',
+      );
     },
   );
 

@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'book_list.dart';
 import 'atomic_write.dart';
 import 'file_lock.dart';
+import 'recovery_gate.dart';
 
 /// Where the books are kept. The filesystem is a real boundary, so this is
 /// an interface: [BookFile] in the app, [MemoryBooks] in a test.
@@ -19,8 +20,18 @@ abstract interface class BookStore {
 
 /// `books.json` in the app's support folder, written whole and atomically.
 final class BookFile implements BookStore {
-  BookFile(Directory support)
-    : _file = File(p.join(support.path, 'books.json'));
+  BookFile(Directory support, {required RecoveryGate recovery})
+    : _file = File(p.join(support.path, 'books.json')),
+      _recovery = recovery;
+
+  final RecoveryGate _recovery;
+
+  /// Exact optimistic read set, including unknown JSON fields. The document
+  /// adapter captures this before waiting for its compound commit locks.
+  Future<String?> expectedText() async {
+    if (!_read) await read();
+    return _baseline;
+  }
 
   final File _file;
   String? _baseline;
@@ -31,7 +42,9 @@ final class BookFile implements BookStore {
   @override
   Future<BookList> read() async {
     final revision = ++_revision;
-    final text = await _text();
+    final text = await _recovery.run(
+      () => withDirectoryLock(_file.parent, _text),
+    );
     // An admitted writer keeps its original expected bytes. A late read
     // must not rebase that write onto another process's changes.
     if (revision == _revision) {
@@ -48,28 +61,30 @@ final class BookFile implements BookStore {
     final baseline = _baseline;
     final attempted = _attempted;
     final read = _read;
-    await _file.parent.create(recursive: true);
-    await withDirectoryLock(_file.parent, () async {
-      final current = await _text();
-      final next = books.encode();
-      final knownAfter =
-          current == next || (attempted != null && current == attempted);
-      if (!knownAfter &&
-          ((!read && current != null) || (read && current != baseline))) {
-        throw StateError(
-          'Books changed in another instance. Reload before editing.',
-        );
-      }
-      // Keep both possible outcomes until publication is acknowledged. A
-      // coalesced successor can follow the verified prior attempt's bytes,
-      // while an unrelated version still conflicts. Republish to flush again.
-      _baseline = current;
-      _read = true;
-      _attempted = next;
-      await replaceFile(_file.path, utf8.encode(next));
-      _baseline = next;
-      _attempted = null;
-      _revision++;
+    await _recovery.run(() async {
+      await _file.parent.create(recursive: true);
+      await withDirectoryLock(_file.parent, () async {
+        final current = await _text();
+        final next = books.encode();
+        final knownAfter =
+            current == next || (attempted != null && current == attempted);
+        if (!knownAfter &&
+            ((!read && current != null) || (read && current != baseline))) {
+          throw StateError(
+            'Books changed in another instance. Reload before editing.',
+          );
+        }
+        // Keep both possible outcomes until publication is acknowledged. A
+        // coalesced successor can follow the verified prior attempt's bytes,
+        // while an unrelated version still conflicts. Republish to flush again.
+        _baseline = current;
+        _read = true;
+        _attempted = next;
+        await replaceFile(_file.path, utf8.encode(next));
+        _baseline = next;
+        _attempted = null;
+        _revision++;
+      });
     });
   }
 

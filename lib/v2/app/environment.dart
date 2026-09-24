@@ -205,7 +205,7 @@ final class AppEnvironment {
       evalCache: () => evalCache.cache,
       keepTree: _keepTreeBeside,
       finds: () => finds.store,
-      books: BookFile(support),
+      books: documentsStore.books,
       setFullScreen: _setFullScreen,
       bughouse: (
         bundled: _bughouseBundled,

@@ -113,6 +113,10 @@ class IOStorageService implements StorageService {
         foreignRecoveryNotes: Directory(
           p.join((await _supportRoot()).path, 'unfinished-moves'),
         ),
+        compoundRecoveryNotes: Directory(
+          p.join((await _supportRoot()).path, 'compound-writes'),
+        ),
+        compoundDocumentsRoot: await _documentsRoot(),
         recoverAdditional: () async => (await _publications()).recover(),
       );
 

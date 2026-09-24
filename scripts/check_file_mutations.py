@@ -63,6 +63,7 @@ APPROVED: dict[str, tuple[int, str]] = {
         "bughouse_matches/.trash, the old app's quarantine; writes go "
         "through atomic_write",
     ),
+    "lib/v2/storage/compound_write.dart": (1, "v2 guarded compound inverse: remove only the verified books snapshot when restoring its recorded absence; retained intent and directory flush make recovery retryable"),
     "lib/v2/storage/atomic_write.dart": (4, "v2 atomic publication: staged temporary, rename into place, sweep of interrupted writes"),
     "lib/v2/storage/document_relocation.dart": (1, "v2 rename, move and quarantine-delete: revision-checked and backed up; the one direct mutation takes back an empty folder a refused move created"),
     "lib/v2/storage/pgn_file_store.dart": (2, "no filesystem mutation of its own: two calls into DocumentRelocation that the pattern above matches by method name"),

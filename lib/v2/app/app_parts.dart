@@ -51,6 +51,7 @@ final class AppParts {
     env.store,
     delay: env.saveDelay,
     pendingWrites: env.pendingWrites,
+    books: books,
   );
   late final session = DocumentSession(env.store, saver);
   late final account = LichessAccountState(

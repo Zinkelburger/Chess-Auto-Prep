@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../storage/book_list.dart';
 import '../ui/choice_dialog.dart';
+import '../ui/error_bar.dart';
 import '../ui/theme.dart';
 import 'books.dart';
 
@@ -19,6 +20,9 @@ class BookChip extends StatelessWidget {
   final VoidCallback onEdit;
 
   Future<void> _choose(BuildContext context) async {
+    await books.referencesSettled;
+    if (!context.mounted) return;
+    final say = StatusScope.of(context);
     final chosen = await showChoiceDialog<Book>(
       context,
       title: 'Use book',
@@ -27,7 +31,20 @@ class BookChip extends StatelessWidget {
       hint: 'Type a book',
       empty: 'No books yet',
     );
-    if (chosen != null) books.activate(chosen);
+    if (chosen == null) return;
+    await books.referencesSettled;
+    if (!context.mounted) return;
+    final current = books.books
+        .where((book) => book.id == chosen.id)
+        .firstOrNull;
+    if (current == null) {
+      say(books.problem ?? 'That book is no longer available.');
+      return;
+    }
+    books.activate(current);
+    if (books.active?.id != current.id) {
+      say(books.problem ?? 'Could not use the book.');
+    }
   }
 
   @override
@@ -40,14 +57,22 @@ class BookChip extends StatelessWidget {
         children: [
           Flexible(
             child: Tooltip(
-              message: books.books.isEmpty ? 'Make a book' : 'Use another book',
+              message: books.changingReferences
+                  ? 'Updating book chapters…'
+                  : books.books.isEmpty
+                  ? 'Make a book'
+                  : 'Use another book',
               child: TextButton.icon(
-                onPressed: books.books.isEmpty
+                onPressed: books.changingReferences
+                    ? null
+                    : books.books.isEmpty
                     ? onEdit
                     : () => unawaited(_choose(context)),
                 icon: const Icon(Icons.menu_book_outlined, size: IconSize.menu),
                 label: Text(
-                  active?.name ?? 'No book set',
+                  books.changingReferences
+                      ? 'Updating book chapters…'
+                      : active?.name ?? 'No book set',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),

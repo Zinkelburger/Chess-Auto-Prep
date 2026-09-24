@@ -11,9 +11,11 @@ import '../storage/edit_scope.dart';
 import '../storage/pgn_document_store.dart' as store;
 import '../storage/pending_writes.dart';
 import '../ui/file_names.dart';
+import 'books.dart';
 import 'session_results.dart';
 
 typedef _Target = ({DocumentRef ref, Revision revision});
+typedef _UndoWrite = ({KeptSave entry, _Target target, RestoredVersion scope});
 
 /// Keeps one document's file matching the draft the user is editing.
 ///
@@ -28,9 +30,24 @@ final class DocumentSaver extends ChangeNotifier {
     this._store, {
     Duration delay = const Duration(seconds: 1),
     this.pendingWrites,
+    this.books,
   }) : _clock = SaveClock(delay: delay);
 
   final PendingWrites? pendingWrites;
+  final Books? books;
+
+  // A compound publication cannot absorb another edit after an uncertain
+  // acknowledgement. Its exact draft and command id must settle first.
+  bool _committingReferences = false;
+  _UndoWrite? _failedUndo;
+
+  /// A two-file publication must settle before another edit can change its
+  /// exact input. The session checks this before changing its shown chapter.
+  bool get referencesPending => _committingReferences;
+
+  /// An undo retry must also put its restored words back on screen. A plain
+  /// [flush] cannot do that, so the session retries through its undo command.
+  bool get retryNeedsUndo => _failedUndo != null;
   final _copies =
       <
         (DocumentRef, DocumentRef, String),
@@ -66,7 +83,9 @@ final class DocumentSaver extends ChangeNotifier {
   /// window asks this, because [flush] only says that nothing is on its way,
   /// not that anything arrived.
   bool get settled =>
-      (_state is Saved || _state is DocumentReadOnly) && _pending.isEmpty;
+      (_state is Saved || _state is DocumentReadOnly) &&
+      _pending.isEmpty &&
+      !referencesPending;
 
   /// The file being written, for a log line or a sentence about it.
   String? get documentPath => _target?.ref.path;
@@ -85,6 +104,8 @@ final class DocumentSaver extends ChangeNotifier {
     _pending.clear();
     _clock.hurry();
     _undo.clear();
+    _committingReferences = false;
+    _failedUndo = null;
     _set(readOnly == null ? const Saved() : DocumentReadOnly(readOnly));
   }
 
@@ -93,7 +114,10 @@ final class DocumentSaver extends ChangeNotifier {
   /// is remembered here then — the words are on the screen, where Save a
   /// copy can have them — and the state says the document is not [settled].
   void save(String text, EditScope scope) {
-    if (!_state.takesWords) return;
+    if (!takesWords) return;
+    // Ordinary edits can supersede an ordinary failed undo. Compound undo
+    // keeps admission closed until its exact command has been reconciled.
+    _failedUndo = null;
     _pending.typed(text, scope);
     _set(const Unsaved());
     _start();
@@ -168,6 +192,8 @@ final class DocumentSaver extends ChangeNotifier {
     _pending.clear();
     _clock.hurry();
     _undo.clear();
+    _committingReferences = false;
+    _failedUndo = null;
     _set(const Saved());
   }
 
@@ -189,6 +215,8 @@ final class DocumentSaver extends ChangeNotifier {
     if (_hold == _Hold.held || _pending.isEmpty) return;
     final draft = _pending.take()!;
     _writing = true;
+    final wasUncertain = _committingReferences;
+    _committingReferences = draft.scope.references != null;
     _set(const Saving());
     final ticket = _opens;
     final result = await _put(
@@ -206,6 +234,10 @@ final class DocumentSaver extends ChangeNotifier {
       await _write();
       return;
     }
+    if (result is store.Saved ||
+        (!wasUncertain && result is! store.IoFailure)) {
+      _committingReferences = false;
+    }
     // Only a write the disk refused comes back to be tried with the next
     // edit; see [SaveStopped] and [SaveConflict] for what happens to the
     // others.
@@ -215,7 +247,7 @@ final class DocumentSaver extends ChangeNotifier {
   }
 
   /// Whether this saver is still writing this document at all.
-  bool get takesWords => _state.takesWords;
+  bool get takesWords => !_committingReferences && _state.takesWords;
 
   /// The store's answer to one write, with an exception it was not supposed
   /// to throw turned into the failure it is. A throw that got out would
@@ -228,7 +260,14 @@ final class DocumentSaver extends ChangeNotifier {
     EditScope scope,
   ) async {
     try {
-      return await _store.save(ref, text, expected: expected, scope: scope);
+      Future<store.SaveResult> save() =>
+          _store.save(ref, text, expected: expected, scope: scope);
+      final changesReferences =
+          scope.references != null ||
+          (scope is RestoredVersion && scope.inverse != null);
+      return books != null && changesReferences
+          ? await books!.saveReferences(save)
+          : await save();
     } on Object catch (error) {
       log.e('save ${ref.path}', error);
       return store.IoFailure('$error');
@@ -302,14 +341,25 @@ final class DocumentSaver extends ChangeNotifier {
         !_pending.isEmpty) {
       return const UndoRefused();
     }
-    final undoing = _undoTo(entry, target);
+    final write =
+        _failedUndo ??
+        (
+          entry: entry,
+          target: target,
+          scope: RestoredVersion(inverse: entry.receipt.compound),
+        );
+    final undoing = _undoTo(write);
     _clock.waitsFor(undoing);
     return undoing;
   }
 
-  Future<UndoResult> _undoTo(KeptSave entry, _Target target) async {
+  Future<UndoResult> _undoTo(_UndoWrite write) async {
+    final (:entry, :target, :scope) = write;
     final resting = _state;
+    final wasUncertain = _failedUndo != null;
+    final compound = scope.inverse != null;
     _writing = true;
+    _committingReferences = compound;
     _set(const Saving());
     final ticket = _opens;
     // A version this store itself recorded, going back to the file it came
@@ -318,7 +368,7 @@ final class DocumentSaver extends ChangeNotifier {
       target.ref,
       entry.receipt.before,
       entry.receipt.committed,
-      const RestoredVersion(),
+      scope,
     );
     _writing = false;
     if (_disposed) return const UndoRefused();
@@ -328,6 +378,12 @@ final class DocumentSaver extends ChangeNotifier {
       _catchUp(result, target.ref);
       await _write();
       return const UndoRefused();
+    }
+    if (result is store.IoFailure && _pending.isEmpty) _failedUndo = write;
+    if (result is store.Saved ||
+        (!wasUncertain && result is! store.IoFailure)) {
+      _committingReferences = false;
+      _failedUndo = null;
     }
     if (_outOfDate(result, target)) {
       _set(resting);
@@ -683,6 +739,7 @@ final class UndoHistory {
         committed: written.committed,
         before: previous.receipt.before,
         beforeRevision: previous.receipt.beforeRevision,
+        compound: previous.receipt.compound,
       ),
       scope: previous.scope,
     );

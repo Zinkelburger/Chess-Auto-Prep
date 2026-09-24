@@ -18,6 +18,7 @@ import '../../storage/pending_writes.dart';
 import '../../storage/chapter_files.dart';
 import '../../storage/document_ref.dart';
 import '../../storage/edit_scope.dart';
+import '../../storage/reference_change.dart';
 import '../../storage/pgn_document_store.dart' as store;
 import '../../storage/pgn_file_picker.dart';
 import '../../storage/training_records.dart' as records;
@@ -29,21 +30,9 @@ import '../../workspace/document_session.dart';
 import '../../workspace/session_results.dart';
 import 'library_state.dart';
 
-/// The user's repertoires: the list, the search over it, and the one change
-/// at a time that adds, renames, moves or removes one.
-///
-/// A change runs one at a time ([busy]), under a name no other repertoire
-/// has, and the list is read again after each of them, so what the screen
-/// shows is what the disk holds rather than what this owner believes it did.
-///
-/// Every write goes through the document store, because that is what carries
-/// the training records with it: a chapter's reviews, progress and history
-/// are keyed by its path, and the store repoints them inside the same
-/// operation. A chapter changes one file at a time; a repertoire renames as
-/// one folder, so it cannot end up split in two, and deletes chapter by
-/// chapter, because each one is quarantined separately. The chapter open in
-/// the workspace is written only while its saver holds it still, and the
-/// session is told where it went.
+/// The repertoire catalog and one user command at a time. Storage owns
+/// durable references; the session owns open-file drafts and history.
+/// Closed commands retain exact retry inputs and gate competing navigation.
 final class Library extends ChangeNotifier {
   Library({
     required ChapterFiles files,
@@ -250,22 +239,20 @@ final class Library extends ChangeNotifier {
     );
   });
 
-  /// A chapter file is renamed on disk; a chapter of a course file is its
-  /// games' `[ChapterName]`, so renaming it rewrites that tag and nothing
-  /// else. The games of a course file that name no chapter are called after
-  /// the file, so renaming them renames the file.
+  /// Renames a file, or a course section's ChapterName and book references.
   Future<LibraryResult> renameChapter(ChapterRef ref, String name) =>
       _run('rename ${ref.path}', () async {
         if (ref.section case final section?) {
-          final result = await _editFile(
+          final retry = _referenceRetries[(ref.path, section, name.trim())];
+          if (retry != null) return retry();
+          return _editFile(
             ref,
             (file) => sectionRenamed(file, section, name),
             renamedTo: name.trim(),
+            references: ReferenceChanges([
+              SectionRename(path: ref.path, from: section, to: name.trim()),
+            ]),
           );
-          if (result is LibraryDone) {
-            _books?.renamedSection(ref.path, section, name.trim());
-          }
-          return result;
         }
         final to = p.join(p.dirname(ref.path), '$name.pgn');
         return _relocate(ref, DocumentRef(to));
@@ -380,7 +367,7 @@ final class Library extends ChangeNotifier {
   ) async {
     if (_busy) return const LibraryBusy();
     _busy = true;
-    notifyListeners();
+    if (!_disposed) notifyListeners();
     final LibraryResult result;
     try {
       result = await body();
@@ -487,14 +474,8 @@ final class Library extends ChangeNotifier {
     }
   }
 
-  /// [text] as the repertoire [name], or the first of [_freeNames] a folder
-  /// can take: its variations become lines, and a course's chapters become
-  /// chapters of one file, each line naming its chapter in `[ChapterName]`
-  /// ([courseText]).
-  ///
-  /// The file is written into a staging folder the list does not show and
-  /// the folder is then renamed into place, so a write that stops half way
-  /// never leaves a repertoire half there.
+  /// Imports variations as lines and course chapters as named sections.
+  /// A private staging folder becomes visible only after its final rename.
   Future<LibraryResult> _importText(String text, {required String name}) async {
     // A course of a thousand games is read where the screen does not wait
     // for it; a pasted line is not worth the trip.
@@ -820,29 +801,29 @@ final class Library extends ChangeNotifier {
     };
   }
 
-  /// Makes [edit] to the whole file [ref] is in: through the workspace when
-  /// that file is open, so the edit lands behind its draft and its undo
-  /// covers it; otherwise read, edited and saved against the revision read.
-  /// [renamedTo] is what [ref] is called afterwards, when the edit renamed it.
+  /// Edits through the workspace for an open file, otherwise against a fresh
+  /// disk revision. [renamedTo] follows the selected section's new name.
+  final _referenceRetries =
+      <(String, String, String), Future<LibraryResult> Function()>{};
+
   Future<LibraryResult> _editFile(
     ChapterRef ref,
     ChapterEdit Function(Chapter file) edit, {
     String? renamedTo,
+    ReferenceChanges? references,
   }) async {
     // By path: any chapter of the open file is the open file.
     if (_session.source?.path == ref.path) {
-      return _editedOpen(ref, edit, renamedTo);
+      return _editedOpen(ref, edit, renamedTo, references);
     }
     final read = await _store.open(ref);
     if (read is! store.Opened) {
       return LibraryFailure('${ref.name} could not be read');
     }
     final file = await readChapter(name: ref.fileName, text: read.text);
-    // The user may have opened the file while it was being read. Saved from
-    // here, the edit would change it under the revision the workspace just
-    // took, and the workspace's next save would be refused.
+    // An open during this read transfers writing to the workspace.
     if (_session.source?.path == ref.path) {
-      return _editedOpen(ref, edit, renamedTo);
+      return _editedOpen(ref, edit, renamedTo, references);
     }
     switch (edit(file)) {
       case ChapterUnchanged():
@@ -851,41 +832,82 @@ final class Library extends ChangeNotifier {
         return LibraryFailure(reason);
       case ChapterEdited(chapter: final edited, :final games):
         final pinned = withIdsPinned(file, edited, games);
-        return switch (await _store.save(
-          ref,
-          writeChapter(pinned.chapter),
-          expected: read.revision,
-          scope: GamesRearranged(pinned.games),
-        )) {
-          store.Saved() => const LibraryDone(),
-          store.Conflict() => const LibraryStale(),
-          store.SaveDidNotLand(:final detail) => LibraryFailure(detail),
-        };
+        final scope = GamesRearranged(pinned.games, references: references);
+        final text = writeChapter(pinned.chapter);
+        Future<store.SaveResult> save() =>
+            _store.save(ref, text, expected: read.revision, scope: scope);
+        Future<store.SaveResult> coordinated() {
+          if (_session.source?.path == ref.path) {
+            return Future.value(
+              const store.IoFailure(
+                'Close this file before retrying its pending rename.',
+              ),
+            );
+          }
+          return _session.access.changing(
+            ref.path,
+            () => references == null || _books == null
+                ? save()
+                : _books.saveReferences(save),
+          );
+        }
+        if (references == null) return _savedResult(await coordinated());
+        // Exact retries retain the accepted bytes, revision and operation id.
+        final key = (ref.path, ref.section!, renamedTo!);
+        final obligation = pendingWrites?.accept<store.SaveResult>(
+          resource: _store,
+          label: 'Rename ${ref.name}',
+          work: coordinated,
+          problem: (result) => result is store.IoFailure ? result.detail : null,
+        );
+        Future<LibraryResult> retry() async {
+          final result = obligation == null
+              ? await coordinated()
+              : await obligation.run();
+          if (result is! store.IoFailure) _referenceRetries.remove(key);
+          return _savedResult(
+            result,
+            retry: () => _run('retry rename ${ref.path}', retry),
+          );
+        }
+        _referenceRetries[key] = retry;
+        return retry();
     }
   }
 
-  /// [edit] made through the workspace, which has [ref]'s file open. The
-  /// chapter on the board follows a rename only when it is the chapter
-  /// renamed: renaming another chapter of the file leaves it where it is.
+  LibraryResult _savedResult(
+    store.SaveResult result, {
+    Future<LibraryResult> Function()? retry,
+  }) => switch (result) {
+    store.Saved() => const LibraryDone(),
+    store.Conflict() => const LibraryStale(),
+    store.SaveDidNotLand(:final detail) => LibraryFailure(
+      detail,
+      retry: result is store.IoFailure ? retry : null,
+    ),
+  };
+
+  /// The workspace applies the edit; only the renamed section follows its name.
   Future<LibraryResult> _editedOpen(
     ChapterRef ref,
     ChapterEdit Function(Chapter file) edit,
     String? renamedTo,
+    ReferenceChanges? references,
   ) async {
     final reason = _session.applyToFile(
       edit,
       section: _session.source == ref ? renamedTo : null,
+      references: references,
     );
     if (reason != null) return LibraryFailure(reason);
     return _saved();
   }
 
-  /// Waits for an edit made through the workspace to reach its file. The
-  /// list is read again after every change, and an edit still on the
-  /// saver's clock would leave it naming what the file held a moment ago:
-  /// a renamed chapter under its old name, one taken out still there.
+  /// Settles autosave before the catalog reads the changed file; held edits
+  /// remain explicitly drafts until the user keeps them.
   Future<LibraryResult> _saved() async {
     await _saver.flush();
+    if (_session.hasHeldEdits) return const LibraryDone(draft: true);
     if (_saver.settled) return const LibraryDone();
     return switch (_saver.state) {
       SaveConflict() => const LibraryConflicted(),
@@ -894,8 +916,7 @@ final class Library extends ChangeNotifier {
     };
   }
 
-  /// The edits that put [lines] into a chapter: one append, or one graft
-  /// per line into the game at [host].
+  /// Appends [lines], or grafts each into the game at [host].
   List<ChapterEdit Function(Chapter)> _editsInto(
     List<ChapterLine> lines,
     int? host,
@@ -906,13 +927,7 @@ final class Library extends ChangeNotifier {
             (c) => lineGraftedInto(c, host: host, line: line),
         ];
 
-  /// Runs [write] against the revision the chapter has now.
-  ///
-  /// The chapter open in the workspace is held still by its saver for the
-  /// length of the operation, so a rename cannot land between an autosave and
-  /// its answer. Any other chapter is read from disk, which is also the check
-  /// that it is still there — and the whole file, because a revision is a
-  /// hash of the bytes and there is nothing cheaper to read.
+  /// Writes against the current revision, holding the saver for an open file.
   Future<LibraryResult> _withRevision(
     ChapterRef ref,
     Future<LibraryResult> Function(Revision revision) write,
@@ -933,12 +948,8 @@ final class Library extends ChangeNotifier {
     }
   }
 
-  /// Runs [write] with the open chapter held still by its saver.
-  ///
-  /// The revision it writes against is the saver's, so a refusal means the
-  /// file changed under the workspace. Trying again cannot help while the
-  /// workspace still holds the old revision, which is why that is a result of
-  /// its own rather than the retryable [LibraryStale].
+  /// Holds the open file against autosave. A conflict requires reloading the
+  /// workspace's revision, unlike a closed file's retryable [LibraryStale].
   Future<LibraryResult> _held(
     Future<LibraryResult> Function(Revision revision) write,
   ) async {

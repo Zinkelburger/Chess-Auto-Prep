@@ -3,6 +3,9 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import 'file_lock.dart';
+import 'mutation_guards.dart';
+import 'document_ref.dart';
+import 'compound_write.dart';
 import 'foreign_recovery.dart';
 import 'relocation_notes.dart';
 import 'training_records.dart';
@@ -11,15 +14,24 @@ import 'training_records.dart';
 /// The order is domain, Documents, then distinct leaf directories. Callers
 /// must not reenter this gate from an action that already holds it.
 final class RecoveryGate {
-  RecoveryGate({required this.documents, required this.support})
-    : notes = RelocationNotes(
-        notes: PendingRepoints(support, documents: documents),
-        records: TrainingRecords(documents),
-      );
+  RecoveryGate({
+    required this.documents,
+    required this.support,
+    Future<void> Function(CompoundWriteStep)? compoundHook,
+  }) : notes = RelocationNotes(
+         notes: PendingRepoints(support, documents: documents),
+         records: TrainingRecords(documents),
+       ),
+       compounds = CompoundWrites(
+         documents: documents,
+         support: support,
+         testHook: compoundHook,
+       );
 
   final Directory documents;
   final Directory support;
   final RelocationNotes notes;
+  final CompoundWrites compounds;
 
   Future<T> run<T>(Future<T> Function() action) async {
     final root = Directory(p.join(documents.path, 'repertoires'));
@@ -31,7 +43,16 @@ final class RecoveryGate {
         // Never interpret another app's in-flight receipt or let our own
         // recovery rewrite rows while its operation is still unresolved.
         await refuseV1Recovery(documents, support);
-        await withDirectoryLock(documents, notes.finishOwed);
+        await lockedForRelocation(
+          documents,
+          DocumentRef(documents.path),
+          [support],
+          () async {
+            await notes.finishOwed();
+            await compounds.recover();
+          },
+          (detail) => throw RecoveryRequired(detail),
+        );
         return action();
       },
     );

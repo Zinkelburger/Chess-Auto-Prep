@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:chess_auto_prep/v2/storage/book_file.dart';
+import 'package:chess_auto_prep/v2/storage/recovery_gate.dart';
 import 'package:chess_auto_prep/v2/storage/book_list.dart';
 import 'package:chess_auto_prep/v2/storage/file_lock.dart';
 import 'package:chess_auto_prep/v2/storage/pending_writes.dart';
@@ -73,7 +74,13 @@ void main() {
       books: [Book(id: 'b', name: 'Local')],
     );
     await file.writeAsString(original.encode());
-    final store = BookFile(root);
+    final store = BookFile(
+      root,
+      recovery: RecoveryGate(
+        documents: Directory(p.join(root.path, 'Documents')),
+        support: root,
+      ),
+    );
     await store.read();
     await file.writeAsString(outside.encode());
     final acquired = Completer<void>();
@@ -87,9 +94,10 @@ void main() {
     final writing = store
         .write(local)
         .then<Object?>((_) => null, onError: (Object error) => error);
-    await loading;
+    // Reads now share the recovery domain and wait for the writer lock too.
     release.complete();
     await held;
+    await loading;
     expect(await writing, isA<StateError>());
     expect(await file.readAsString(), outside.encode());
   });
@@ -132,7 +140,13 @@ void main() {
         'books-acknowledgement-',
       );
       addTearDown(() => root.delete(recursive: true));
-      final store = BookFile(root);
+      final store = BookFile(
+        root,
+        recovery: RecoveryGate(
+          documents: Directory(p.join(root.path, 'Documents')),
+          support: root,
+        ),
+      );
       await store.read();
       final target = p.join(root.path, 'books.json');
       final obstacle = await Directory(target).create();
@@ -184,7 +198,13 @@ void main() {
         'books-acknowledgement-',
       );
       addTearDown(() => root.delete(recursive: true));
-      final store = BookFile(root);
+      final store = BookFile(
+        root,
+        recovery: RecoveryGate(
+          documents: Directory(p.join(root.path, 'Documents')),
+          support: root,
+        ),
+      );
       await store.read();
       final target = p.join(root.path, 'books.json');
       final obstacle = await Directory(target).create();

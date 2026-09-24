@@ -70,6 +70,8 @@ Future<void> newBook(
   Books books, {
   void Function(String sentence)? say,
 }) async {
+  await books.referencesSettled;
+  if (!context.mounted) return;
   final status = say ?? StatusScope.of(context);
   final name = await showNameDialog(
     context,
@@ -79,6 +81,8 @@ Future<void> newBook(
     confirm: 'Create',
   );
   if (name == null) return;
+  await books.referencesSettled;
+  if (!context.mounted) return;
   if (books.nameTaken(name)) {
     status('A book named "${name.trim()}" already exists.');
     return;
@@ -89,6 +93,8 @@ Future<void> newBook(
 }
 
 Future<void> _rename(BuildContext context, Books books, Book book) async {
+  await books.referencesSettled;
+  if (!context.mounted) return;
   final say = StatusScope.of(context);
   final name = await showNameDialog(
     context,
@@ -97,22 +103,43 @@ Future<void> _rename(BuildContext context, Books books, Book book) async {
     initial: book.name,
     confirm: 'Rename',
   );
-  if (name == null || name.trim() == book.name) return;
-  if (books.nameTaken(name, except: book)) {
+  if (name == null) return;
+  await books.referencesSettled;
+  if (!context.mounted) return;
+  final current = books.books.where((entry) => entry.id == book.id).firstOrNull;
+  if (current == null) {
+    say(books.problem ?? 'That book is no longer available.');
+    return;
+  }
+  if (name.trim() == current.name) return;
+  if (books.nameTaken(name, except: current)) {
     say('A book named "${name.trim()}" already exists.');
     return;
   }
-  books.rename(book, name);
+  books.rename(current, name);
+  if (books.books.where((entry) => entry.id == book.id).firstOrNull?.name !=
+      name.trim()) {
+    say(books.problem ?? 'Could not rename the book.');
+  }
 }
 
 Future<void> _delete(BuildContext context, Books books, Book book) async {
+  await books.referencesSettled;
+  if (!context.mounted) return;
+  final say = StatusScope.of(context);
   final yes = await confirmAction(
     context,
     title: 'Delete book "${book.name}"?',
     message: 'Its repertoires and chapters stay where they are.',
     confirm: 'Delete',
   );
-  if (yes) books.delete(book);
+  if (!yes) return;
+  await books.referencesSettled;
+  if (!context.mounted) return;
+  books.delete(book);
+  if (books.books.any((entry) => entry.id == book.id)) {
+    say(books.problem ?? 'Could not delete the book.');
+  }
 }
 
 class _BookList extends StatelessWidget {
@@ -134,13 +161,23 @@ class _BookList extends StatelessWidget {
             children: [
               Expanded(child: Text('Books', style: theme.textTheme.titleSmall)),
               TextButton.icon(
-                onPressed: () => unawaited(newBook(context, books)),
+                onPressed: books.changingReferences
+                    ? null
+                    : () => unawaited(newBook(context, books)),
                 icon: const Icon(Icons.add, size: IconSize.menu),
                 label: const Text('New book'),
               ),
             ],
           ),
         ),
+        if (books.changingReferences)
+          Padding(
+            padding: const EdgeInsets.all(Space.m),
+            child: Text(
+              'Updating book chapters…',
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
         if (books.problem case final problem?)
           Padding(
             padding: const EdgeInsets.all(Space.m),
@@ -153,7 +190,9 @@ class _BookList extends StatelessWidget {
           ),
         if (books.canRetry && books.problem != null)
           TextButton(
-            onPressed: () => unawaited(books.retry()),
+            onPressed: books.changingReferences
+                ? null
+                : () => unawaited(books.retry()),
             child: const Text('Retry save'),
           ),
         Expanded(
@@ -190,7 +229,7 @@ class _NoBooks extends StatelessWidget {
         Text('No books yet.', style: Theme.of(context).textTheme.bodyMedium),
         const SizedBox(height: Space.m),
         FilledButton(
-          onPressed: books.loaded
+          onPressed: books.loaded && !books.changingReferences
               ? () => unawaited(newBook(context, books))
               : null,
           child: const Text('New book'),
@@ -280,7 +319,9 @@ class _BookEditorState extends State<_BookEditor> {
           of: chapters.length,
           open: open,
           onToggle: () => _toggle(folder),
-          onTick: (inBook) => books.setRepertoire(book, folder, inBook),
+          onTick: books.changingReferences
+              ? null
+              : (inBook) => books.setRepertoire(book, folder, inBook),
         ),
       );
       if (!open) continue;
@@ -290,7 +331,9 @@ class _BookEditorState extends State<_BookEditor> {
             key: ValueKey('${chapter.path}#${chapter.section}'),
             chapter: chapter,
             inBook: books.contains(book, chapter),
-            onTick: (inBook) => books.setChapter(book, folder, chapter, inBook),
+            onTick: books.changingReferences
+                ? null
+                : (inBook) => books.setChapter(book, folder, chapter, inBook),
             onOpen: () => widget.onOpenChapter(chapter),
           ),
         );
@@ -365,23 +408,31 @@ class _BookEditorState extends State<_BookEditor> {
             )
           else
             FilledButton(
-              onPressed: () => books.activate(book),
+              onPressed: books.changingReferences
+                  ? null
+                  : () => books.activate(book),
               child: const Text('Use this book'),
             ),
           RowActions(
             tooltip: 'Book actions',
             children: [
               MenuItemButton(
-                onPressed: () => unawaited(_rename(context, books, book)),
+                onPressed: books.changingReferences
+                    ? null
+                    : () => unawaited(_rename(context, books, book)),
                 child: const Text('Rename…'),
               ),
               if (inUse)
                 MenuItemButton(
-                  onPressed: () => books.activate(null),
+                  onPressed: books.changingReferences
+                      ? null
+                      : () => books.activate(null),
                   child: const Text('Stop using'),
                 ),
               MenuItemButton(
-                onPressed: () => unawaited(_delete(context, books, book)),
+                onPressed: books.changingReferences
+                    ? null
+                    : () => unawaited(_delete(context, books, book)),
                 child: const Text('Delete…'),
               ),
             ],
@@ -412,7 +463,7 @@ class _FolderRow extends StatelessWidget {
   final int of;
   final bool open;
   final VoidCallback onToggle;
-  final ValueChanged<bool> onTick;
+  final ValueChanged<bool>? onTick;
 
   @override
   Widget build(BuildContext context) {
@@ -432,7 +483,9 @@ class _FolderRow extends StatelessWidget {
                 BookShare.none => false,
               },
               // A part-ticked box ticks the rest.
-              onChanged: (_) => onTick(share != BookShare.all),
+              onChanged: onTick == null
+                  ? null
+                  : (_) => onTick!(share != BookShare.all),
             ),
             Icon(
               open ? Icons.expand_more : Icons.chevron_right,
@@ -465,18 +518,23 @@ class _ChapterRow extends StatelessWidget {
 
   final ChapterRef chapter;
   final bool inBook;
-  final ValueChanged<bool> onTick;
+  final ValueChanged<bool>? onTick;
   final VoidCallback onOpen;
 
   @override
   Widget build(BuildContext context) => InkWell(
-    onTap: () => onTick(!inBook),
+    onTap: onTick == null ? null : () => onTick!(!inBook),
     child: SizedBox(
       height: bookRowHeight,
       child: Row(
         children: [
           const SizedBox(width: Space.s + bookChapterIndent),
-          Checkbox(value: inBook, onChanged: (value) => onTick(value ?? false)),
+          Checkbox(
+            value: inBook,
+            onChanged: onTick == null
+                ? null
+                : (value) => onTick!(value ?? false),
+          ),
           const SizedBox(width: Space.xs),
           Expanded(child: Text(chapter.name, overflow: TextOverflow.ellipsis)),
           IconButton(
