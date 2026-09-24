@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
@@ -96,5 +99,8 @@ String gameFileName(ExplorerGame game, ExplorerSource source) {
   final year = game.year == null ? '' : ' ${game.year}';
   final raw = '${game.white} - ${game.black}$year (${source.name} ${game.id})';
   final safe = raw.replaceAll(_unsafeInAName, '_').trim();
-  return safe.length > 100 ? safe.substring(0, 100).trim() : safe;
+  if (safe.length <= 100) return safe;
+  // Hash the unmodified identity: sanitising or truncating an id can collide.
+  final identity = sha256.convert(utf8.encode('${source.name}:${game.id}'));
+  return '${safe.substring(0, 33).trim()} ($identity)';
 }

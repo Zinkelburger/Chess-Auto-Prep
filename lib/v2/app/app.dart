@@ -15,6 +15,8 @@ import 'environment.dart';
 import 'exit_guard.dart';
 import 'shell.dart';
 import 'window_input.dart';
+import 'native_file_requests.dart';
+import '../storage/chapter_files.dart';
 
 /// The app on this machine: [AppParts] over the native environment, the
 /// window's dialogs, and the way out.
@@ -59,10 +61,18 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
 
   late final _quit = AppExit(
     guard: _parts.exit,
+    prepare: _parts.prepareToClose,
     stopEngines: _parts.env.stopEngines,
     closeLog: widget.closeLog,
   );
   late final AppLifecycleListener _lifecycle;
+  late final _desktopFiles = NativeFileRequests(
+    open: (path) async {
+      if (!_quit.closing.value) {
+        await _parts.requests.openFile(ChapterRef.at(path));
+      }
+    },
+  );
 
   /// Writes the words on screen beside the original, under a name the user
   /// gives, and answers what came of it; null when they gave none. The
@@ -101,14 +111,21 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
       onInactive: _flushDraft,
       onHide: _flushDraft,
     );
-    unawaited(_parts.start());
+    unawaited(_start());
+  }
+
+  Future<void> _start() async {
+    await _parts.start();
+    if (mounted) await _desktopFiles.start();
   }
 
   void _flushDraft() => unawaited(_parts.saver.flush());
 
   @override
   void dispose() {
+    _desktopFiles.dispose();
     _lifecycle.dispose();
+    _quit.closing.dispose();
     _parts.dispose();
     super.dispose();
   }
@@ -120,15 +137,22 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
       navigatorKey: _navigator,
       theme: darkTheme(),
       debugShowCheckedModeBanner: false,
-      home: Shell(
-        requests: _parts.requests,
-        workspace: _parts.workspace,
-        documents: _parts.documents,
-        training: _parts.training,
-        labs: _parts.labs,
-        fullScreen: _parts.fullScreen,
-        settingRows: _settingRows,
-        settingsAlso: _parts.account,
+      home: ValueListenableBuilder<bool>(
+        valueListenable: _quit.closing,
+        builder: (context, closing, child) => AbsorbPointer(
+          absorbing: closing,
+          child: ExcludeFocus(excluding: closing, child: child!),
+        ),
+        child: Shell(
+          requests: _parts.requests,
+          workspace: _parts.workspace,
+          documents: _parts.documents,
+          training: _parts.training,
+          labs: _parts.labs,
+          fullScreen: _parts.fullScreen,
+          settingRows: _settingRows,
+          settingsAlso: _parts.account,
+        ),
       ),
     );
   }
@@ -148,12 +172,15 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
 final class AppExit {
   AppExit({
     required ExitGuard guard,
+    this.prepare,
     required Future<void> Function() stopEngines,
     required Future<void> Function() closeLog,
   }) : _guard = guard,
        _stopEngines = stopEngines,
        _closeLog = closeLog;
 
+  final void Function()? prepare;
+  final closing = ValueNotifier(false);
   final ExitGuard _guard;
   final Future<void> Function() _stopEngines;
   final Future<void> Function() _closeLog;
@@ -166,7 +193,10 @@ final class AppExit {
   Future<AppExitResponse> leave() => _leaving ??= _leaveOnce();
 
   Future<AppExitResponse> _leaveOnce() async {
+    closing.value = true;
+    prepare?.call();
     if (!await _draftIsSettled()) {
+      closing.value = false;
       _leaving = null;
       return AppExitResponse.cancel;
     }

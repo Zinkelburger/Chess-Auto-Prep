@@ -209,7 +209,7 @@ final class WorkspaceRequests extends ChangeNotifier {
     }
     final source = place.source;
     if (source == null) return const RequestDone();
-    final result = await _open(++_asked, source, game: place.game);
+    final result = await _open(_nextRequest(), source, game: place.game);
     if (_disposed || result is! RequestDone) return result;
     _session.goTo(place.cursor);
     return result;
@@ -230,18 +230,19 @@ final class WorkspaceRequests extends ChangeNotifier {
   /// When the user answered the draft question by saving a copy, the bar
   /// says where those words went.
   Future<RequestResult> open(ChapterRef ref, {int? game}) =>
-      _open(++_asked, ref, game: game);
+      _open(_nextRequest(), ref, game: game);
 
   /// [open] for the request counted as [ticket], which may have waited for
   /// something else first.
   Future<RequestResult> _open(int ticket, ChapterRef ref, {int? game}) async {
+    if (_overtaken(ticket)) return const RequestDropped();
     if (ref == _session.source && game == _session.game) {
       return const RequestDone();
     }
     final leave = await _leaving.mayLeaveDocument();
     if (_overtaken(ticket) || leave is! Go) return const RequestDropped();
     final result = await _session.open(ref, game: game);
-    if (_disposed) return const RequestDropped();
+    if (_overtaken(ticket)) return const RequestDropped();
     switch (result) {
       case OpenOvertaken():
         return const RequestDropped();
@@ -296,7 +297,7 @@ final class WorkspaceRequests extends ChangeNotifier {
   /// is not, then opened in the viewer. When no copy could be made the
   /// viewer's list says why.
   Future<RequestResult> openFile(ChapterRef ref) async {
-    final ticket = ++_asked;
+    final ticket = _nextRequest();
     final inside = await _viewer.fileFor(ref.path);
     if (_overtaken(ticket) || inside == null) return const RequestDropped();
     return _inViewer(ticket, inside);
@@ -310,7 +311,7 @@ final class WorkspaceRequests extends ChangeNotifier {
 
   /// The desktop's file dialog, then the same door as the recent list.
   Future<RequestResult> browse() async {
-    final ticket = ++_asked;
+    final ticket = _nextRequest();
     final ref = await _viewer.browse();
     if (_overtaken(ticket) || ref == null) return const RequestDropped();
     return _inViewer(ticket, ref);
@@ -324,7 +325,7 @@ final class WorkspaceRequests extends ChangeNotifier {
     required ExplorerSource source,
     required int ply,
   }) async {
-    final ticket = ++_asked;
+    final ticket = _nextRequest();
     if (source == ExplorerSource.thisFile) return _showFileGame(game);
     final kept = await _games.keep(game, source: source, ply: ply);
     if (_overtaken(ticket)) return const RequestDropped();
@@ -357,7 +358,7 @@ final class WorkspaceRequests extends ChangeNotifier {
   /// from the list, and the side is asked when the chapter opens if the
   /// file did not say.
   Future<RequestResult> importFile() async {
-    final ticket = ++_asked;
+    final ticket = _nextRequest();
     final result = await _library.importFile();
     if (_overtaken(ticket) || result == null) return const RequestDropped();
     return _imported(ticket, result, name: 'that file');
@@ -365,7 +366,7 @@ final class WorkspaceRequests extends ChangeNotifier {
 
   /// The clipboard as a new repertoire, the same way.
   Future<RequestResult> pasteRepertoire() async {
-    final ticket = ++_asked;
+    final ticket = _nextRequest();
     final text = (await _input.clipboard())?.trim() ?? '';
     if (_overtaken(ticket)) return const RequestDropped();
     if (text.isEmpty) return _refused('Nothing to paste: copy a PGN first.');
@@ -378,7 +379,7 @@ final class WorkspaceRequests extends ChangeNotifier {
   /// with the same question about a draft the file never took as opening
   /// another one asks.
   Future<RequestResult> analysisBoard() async {
-    final ticket = ++_asked;
+    final ticket = _nextRequest();
     if (_session.isScratch) return const RequestDone();
     final leave = await _leaving.mayLeaveDocument();
     if (_overtaken(ticket) || leave is! Go) return const RequestDropped();
@@ -391,7 +392,7 @@ final class WorkspaceRequests extends ChangeNotifier {
   /// user is, from whatever is up — a file, a game, the analysis board
   /// itself — and facing the same way, so it looks as it did.
   Future<RequestResult> newAnalysisBoard() async {
-    final ticket = ++_asked;
+    final ticket = _nextRequest();
     final tree = _session.tree;
     final side = _session.orientation;
     final root = tree?.rootFen ?? Fen.initial;
@@ -418,7 +419,7 @@ final class WorkspaceRequests extends ChangeNotifier {
     required int ply,
     required Side side,
   }) async {
-    final ticket = ++_asked;
+    final ticket = _nextRequest();
     final leave = await _leavingFile();
     if (_overtaken(ticket) || leave == null) return const RequestDropped();
     final shown = await _session.showAnalysisBoard(
@@ -453,7 +454,7 @@ final class WorkspaceRequests extends ChangeNotifier {
   Future<RequestResult> _pasteAsBoard(
     boards.Pasted Function(String text, {required Side side}) read,
   ) async {
-    final ticket = ++_asked;
+    final ticket = _nextRequest();
     final text = await _input.clipboard() ?? '';
     if (_overtaken(ticket)) return const RequestDropped();
     final boards.PastedBoard pasted;
@@ -478,7 +479,7 @@ final class WorkspaceRequests extends ChangeNotifier {
     RepertoireFolder into,
     String name,
   ) async {
-    final ticket = ++_asked;
+    final ticket = _nextRequest();
     final board = _session.chapter;
     if (!_session.isScratch || board == null) return const RequestDropped();
     final result = await _library.saveBoard(into, name, board);
@@ -526,7 +527,7 @@ final class WorkspaceRequests extends ChangeNotifier {
   /// Takes the document off the board, with the same question about a
   /// draft the file never took as opening another one asks.
   Future<RequestResult> closeFile() async {
-    final ticket = ++_asked;
+    final ticket = _nextRequest();
     if (_session.source == null) return const RequestDropped();
     final leave = await _leaving.mayLeaveDocument();
     if (_overtaken(ticket) || leave is! Go) return const RequestDropped();
@@ -586,8 +587,18 @@ final class WorkspaceRequests extends ChangeNotifier {
     null => null,
   });
 
-  /// Whether the request counted as [ticket] is no longer the latest: a
-  /// later one was made while it waited, or the window went.
+  /// Supersedes navigation already in flight, including a read in the session.
+  void cancelPending() {
+    _asked++;
+    _session.cancelOpening();
+  }
+
+  int _nextRequest() {
+    cancelPending();
+    return _asked;
+  }
+
+  /// Whether a newer intent or disposal overtook this request.
   bool _overtaken(int ticket) => _disposed || ticket != _asked;
 
   RequestRefused _refused(String sentence) {

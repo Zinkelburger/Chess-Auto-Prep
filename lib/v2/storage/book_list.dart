@@ -33,7 +33,9 @@ final class Book {
   /// Whether the chapter [section] of the file at [path] is in the book:
   /// its folder is, the chapter is, or its whole file is.
   bool includes(String path, String? section) =>
-      repertoires.contains(folderOf(path)) ||
+      repertoires.any(
+        (folder) => folder == path || p.posix.isWithin(folder, path),
+      ) ||
       chapters.contains(BookChapter(path, section)) ||
       (section != null && chapters.contains(BookChapter(path, null)));
 

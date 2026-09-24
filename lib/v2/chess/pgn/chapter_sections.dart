@@ -6,11 +6,10 @@
 /// to its chapter wherever it sits in the file, and moving a line to another
 /// chapter is one tag in one file rather than two saves to two files.
 ///
-/// A file holds several chapters only when its games name at least two:
-/// one chapter per name, plus one named after the file for the games that
-/// name none. Any other file is one chapter, named after the file, exactly
-/// as before — including a chapter file an earlier import wrote, whose games
-/// all still carry the study chapter's name.
+/// A tagged chapter keeps its name even when it is the only chapter left.
+/// Identity is (path, section), never the current number of siblings. An
+/// untagged file has one unnamed chapter; older whole-file refs still read a
+/// singleton file, but an explicit name never resolves to a different name.
 ///
 /// A chapter of a tagged file opens as a [SectionView]: its games, taken out
 /// of the file in file order, as a [Chapter] like any other, so every edit
@@ -49,18 +48,18 @@ List<String?> sectionsIn(Iterable<ChapterLine> lines) {
   ];
 }
 
-/// The chapters of a file whose games are [lines]: [sectionsIn] when they
-/// name two or more, else the one chapter that is the whole file (null).
+/// The chapters of a file, retaining named singletons. Empty files have
+/// one unnamed chapter.
 List<String?> chapterSections(Iterable<ChapterLine> lines) {
   final names = sectionsIn(lines);
-  return names.length < 2 ? const [null] : names;
+  return names.isEmpty ? const [null] : names;
 }
 
 /// The chapter names a file's text carries, read off its header lines
 /// without parsing a move: what a library listing needs, for a file of
 /// thousands of games. The same answer as [chapterSections]: in
 /// first-appearance order, null standing for the games with no name, and
-/// just `[null]` for a file of one chapter.
+/// `[null]` for an empty or entirely unnamed file.
 List<String?> sectionsInText(String text) {
   final found = <String?>[];
   final seen = <String?>{};
@@ -70,7 +69,7 @@ List<String?> sectionsInText(String text) {
     if (section != null) named = true;
     if (seen.add(section)) found.add(section);
   }
-  if (found.length < 2 || !named) return const [null];
+  if (found.isEmpty || !named) return const [null];
   return found;
 }
 
@@ -171,7 +170,7 @@ SectionView? partOf(Chapter file, String? section) {
 /// The chapter [section] of [file], called by its name — or, for the games
 /// that name none, by the file's ([Chapter.name] of [file]).
 SectionView sectionView(Chapter file, String? section) {
-  final whole = chapterSections(file.lines).length < 2;
+  final whole = section == null && sectionsIn(file.lines).length < 2;
   final places = [
     for (final (index, line) in file.lines.indexed)
       if (whole || sectionOf(line) == section) index,

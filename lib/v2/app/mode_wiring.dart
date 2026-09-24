@@ -17,6 +17,7 @@ import '../features/trainer/trainer.dart';
 import '../storage/my_accounts.dart';
 import '../storage/my_games_files.dart';
 import '../workspace/books.dart';
+import '../workspace/repertoire_catalog.dart';
 import '../workspace/local_games.dart';
 import '../workspace/workspace.dart';
 import '../workspace/document_saver.dart';
@@ -25,7 +26,6 @@ import '../workspace/file_filter.dart';
 import 'environment.dart';
 import 'mode.dart';
 import 'workspace_requests.dart';
-import 'workspace_wiring.dart';
 
 /// The repertoires, the studies and the PGN Viewer.
 DocumentModes wireDocumentModes(
@@ -33,9 +33,12 @@ DocumentModes wireDocumentModes(
   DocumentSession session,
   DocumentSaver saver,
   Books books,
+  RepertoireCatalog catalog,
 ) {
   final library = Library(
     files: env.chapterFiles,
+    pendingWrites: env.pendingWrites,
+    catalog: catalog,
     documents: env.store,
     saver: saver,
     session: session,
@@ -49,6 +52,7 @@ DocumentModes wireDocumentModes(
     library: library,
     outline: ChapterOutline(library: library, session: session),
     studies: Studies(
+      pendingWrites: env.pendingWrites,
       files: env.studyFiles,
       documents: env.store,
       session: session,
@@ -57,6 +61,7 @@ DocumentModes wireDocumentModes(
       root: env.folders.studies,
     ),
     viewer: PgnViewer(
+      pendingWrites: env.pendingWrites,
       recent: env.recentFiles,
       picker: env.viewerPicker,
       import: env.fileImport,
@@ -78,7 +83,7 @@ final class TrainingWiring {
   TrainingWiring(
     AppEnvironment env, {
     required Workspace workspace,
-    required Library library,
+    required RepertoireCatalog catalog,
     required WorkspaceRequests requests,
     required this.games,
   }) : _myGamesTree = workspace.myGamesTree {
@@ -103,13 +108,20 @@ final class TrainingWiring {
       ),
       lines: Trainer(
         session: session,
-        chapters: ScopeReader(files: env.chapterFiles, documents: env.store),
+        chapters: ScopeReader(
+          files: env.chapterFiles,
+          documents: env.store,
+          catalog: catalog,
+        ),
         files: env.progressFiles,
         analysis: workspace.analysis,
         time: (now: env.now, jitter: env.jitter),
         books: workspace.books,
+        catalog: catalog,
+        pendingWrites: env.pendingWrites,
       ),
       myGames: MyGames(
+        pendingWrites: env.pendingWrites,
         accounts: env.accounts,
         sites: env.gameSites,
         cache: games,
@@ -131,13 +143,14 @@ final class TrainingWiring {
         books: workspace.books,
       ),
     );
-    _relisted = NewListings(library, modes.book.recheck);
+    _catalog = catalog;
+    _catalog.addListener(modes.book.recheck);
     modes.myGames.addListener(_gamesMayHaveChanged);
   }
 
   final LocalGames _myGamesTree;
   late final TrainingModes modes;
-  late final NewListings _relisted;
+  late final RepertoireCatalog _catalog;
 
   /// The user's downloaded games, one file per account, shared with the
   /// old app: what the review, the book and the explorer read.
@@ -155,7 +168,7 @@ final class TrainingWiring {
   }
 
   void dispose() {
-    _relisted.dispose();
+    _catalog.removeListener(modes.book.recheck);
     modes.myGames.removeListener(_gamesMayHaveChanged);
     modes.dispose();
   }
@@ -165,6 +178,7 @@ final class TrainingWiring {
 LabModes wireLabModes(AppEnvironment env) {
   final lab = BughouseLab();
   final search = TableSearch(
+    pendingWrites: env.pendingWrites,
     lab: lab,
     book: env.bughouse.hivemindBook,
     startEngine: env.startHivemind,
@@ -175,6 +189,7 @@ LabModes wireLabModes(AppEnvironment env) {
     archive: ArchiveMoves(lab: lab, book: env.bughouse.ficsBook),
     // A Hivemind of its own for each run, so the tables keep theirs.
     matches: Matches(
+      pendingWrites: env.pendingWrites,
       store: env.bughouse.matches,
       startEngine: env.startHivemind,
       lab: lab,

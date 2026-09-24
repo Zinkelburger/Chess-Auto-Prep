@@ -6,6 +6,7 @@ import '../../chess/bughouse/match.dart';
 import '../../chess/bughouse/table.dart';
 import '../../diagnostics/log.dart';
 import '../../engines/hivemind_engine.dart';
+import '../../storage/pending_writes.dart';
 import '../../storage/bughouse_matches.dart';
 import 'bughouse_lab.dart';
 import 'match_runner.dart';
@@ -24,6 +25,7 @@ import 'table_search.dart';
 final class Matches extends ChangeNotifier {
   Matches({
     required MatchStore store,
+    this.pendingWrites,
     required Future<HivemindStart> Function() startEngine,
     required this.lab,
     required this.tables,
@@ -32,6 +34,8 @@ final class Matches extends ChangeNotifier {
        _startEngine = startEngine,
        _now = now;
 
+  final PendingWrites? pendingWrites;
+  bool _stopAsked = false;
   final MatchStore _store;
   final Future<HivemindStart> Function() _startEngine;
   final BughouseLab lab;
@@ -89,9 +93,14 @@ final class Matches extends ChangeNotifier {
 
   /// A new match from [config], seeded now: its folder first, then the
   /// games. A second press while the first is on its way does nothing.
-  Future<void> start(MatchConfig config) async {
+  Future<void> start(MatchConfig config) =>
+      pendingWrites?.track(this, _start(config), label: 'Matches') ??
+      _start(config);
+
+  Future<void> _start(MatchConfig config) async {
     if (_run != null || _starting) return;
     _starting = true;
+    _stopAsked = false;
     _problem = null;
     try {
       final now = _now();
@@ -113,9 +122,13 @@ final class Matches extends ChangeNotifier {
   /// Goes on with a stopped or failed match from the game it had reached,
   /// as the file on disk has it — the old app may have written it since. A
   /// last game the engine failed in is played again.
-  Future<void> resume(String id) async {
+  Future<void> resume(String id) =>
+      pendingWrites?.track(this, _resume(id), label: 'Matches') ?? _resume(id);
+
+  Future<void> _resume(String id) async {
     if (_run != null || _starting) return;
     _starting = true;
+    _stopAsked = false;
     _problem = null;
     try {
       final onDisk = (await _store.list()).where((m) => m.id == id).firstOrNull;
@@ -134,6 +147,7 @@ final class Matches extends ChangeNotifier {
   /// Stops the match; the game in flight is not kept. Asked while the
   /// engine is still starting, the match stops as soon as it is up.
   void stop() {
+    _stopAsked = true;
     final run = _run;
     if (run == null) return;
     run.stopAsked = true;
@@ -143,7 +157,8 @@ final class Matches extends ChangeNotifier {
   Future<void> _play(StoredMatch match) async {
     final start = match.config.start;
     if (start == null) return _fail(const NotAPosition());
-    final run = _run = _Run(match.id, match.games.length + 1);
+    final run = _run = _Run(match.id, match.games.length + 1)
+      ..stopAsked = _stopAsked;
     var current = match.copyWith(status: MatchStatus.running);
     await _write(current);
     final engine = await _engine();
@@ -216,7 +231,15 @@ final class Matches extends ChangeNotifier {
   /// and the run goes on — the next game writes the whole file again.
   Future<void> _write(StoredMatch match) async {
     _matches = [for (final m in _matches) m.id == match.id ? match : m];
-    final problem = await _store.save(match);
+    final write = _store.save(match);
+    final problem =
+        await (pendingWrites?.track(
+              _store,
+              write,
+              label: 'Match results',
+              problem: (detail) => detail,
+            ) ??
+            write);
     if (_disposed) return;
     if (problem != null) _problem = CannotSave(problem);
     notifyListeners();
@@ -260,7 +283,10 @@ final class Matches extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> delete(String id) async {
+  Future<void> delete(String id) =>
+      pendingWrites?.track(this, _delete(id), label: 'Matches') ?? _delete(id);
+
+  Future<void> _delete(String id) async {
     if (_run?.id == id) return;
     final problem = await _store.delete(id);
     if (_disposed) return;

@@ -64,6 +64,27 @@ void main() {
     expect(lichess.gamesAsked, isEmpty);
   });
 
+  test('long names preserve distinct game identities', () async {
+    ExplorerGame longGame(String id) =>
+        ExplorerGame(id: id, white: 'A' * 80, black: 'B' * 80, result: '*');
+    final first =
+        await games.keep(
+              longGame('one'),
+              source: ExplorerSource.masters,
+              ply: 0,
+            )
+            as GameKept;
+    final second =
+        await games.keep(
+              longGame('two'),
+              source: ExplorerSource.masters,
+              ply: 0,
+            )
+            as GameKept;
+    expect(first.ref.path, isNot(second.ref.path));
+    expect(store.documents, hasLength(2));
+  });
+
   test('a name that cannot be a file name is made one', () {
     const game = ExplorerGame(
       id: '7',

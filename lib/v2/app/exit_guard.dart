@@ -81,11 +81,13 @@ final class ExitGuard {
     required DraftQuestion question,
     Future<String?> Function()? saveCopy,
     this.wait = const Duration(seconds: 5),
+    this.settleFeatures,
   }) : _saver = saver,
        _question = question,
        _saveCopy = saveCopy;
 
   final DocumentSaver _saver;
+  final Future<String?> Function()? settleFeatures;
   final DraftQuestion _question;
 
   /// Writes the words somewhere else and answers the file it wrote, or null
@@ -107,7 +109,30 @@ final class ExitGuard {
   /// click on the close button, or one made while the question is up — every
   /// caller gets that one answer rather than a second dialog and a second
   /// way out.
-  Future<bool> mayClose() async => await _mayGo(_Away.window) is Go;
+  Future<bool> mayClose() async {
+    // Stop the debounce now, but decide about the draft after feature
+    // commands settle: a command already running may edit it while closing.
+    unawaited(_saver.flush());
+    final settle = settleFeatures;
+    if (settle != null) {
+      String? problem;
+      try {
+        problem = await settle().timeout(wait);
+      } on Object catch (error) {
+        problem = 'Some background writes have not finished: $error';
+      }
+      if (problem != null && !await _leaveWithPending(problem)) return false;
+    }
+    return await _mayGo(_Away.window) is Go;
+  }
+
+  Future<bool> _leaveWithPending(String problem) async =>
+      await _question.put((
+        body: '$problem\nKeep the window open to preserve pending changes.',
+        leave: 'Close without saving',
+        offerCopy: false,
+      )) ==
+      DraftChoice.closeAnyway;
 
   /// Whether the workspace may put another document on the screen now.
   ///

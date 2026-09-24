@@ -121,18 +121,10 @@ final class PgnFileStore implements PgnDocumentStore {
     if (documentBackupIdFor(documents, ref) == null) {
       return const IoFailure(outsideRoot);
     }
-    try {
+    return lockedForRelocation(documents, ref, [folderOf(ref)], () async {
       await folderOf(ref).create(recursive: true);
-    } on FileSystemException catch (error) {
-      log.e('create ${ref.path}', error);
-      return IoFailure(failureDetail(error));
-    }
-    return lockedForDocument(
-      folderOf(ref),
-      ref,
-      () => _create(ref, text),
-      IoFailure.new,
-    );
+      return _create(ref, text);
+    }, IoFailure.new);
   }
 
   Future<CreateResult> _create(DocumentRef ref, String text) async {
@@ -155,9 +147,10 @@ final class PgnFileStore implements PgnDocumentStore {
     String text, {
     required Revision expected,
     required EditScope scope,
-  }) => lockedForDocument(
-    folderOf(ref),
+  }) => lockedForRelocation(
+    documents,
     ref,
+    [folderOf(ref)],
     () => _save(ref, text, expected, scope),
     IoFailure.new,
   );

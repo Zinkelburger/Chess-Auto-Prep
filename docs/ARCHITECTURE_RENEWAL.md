@@ -150,6 +150,31 @@ the first's calls is a forwarding layer (rule 3): `Library` and the
 `LibraryWrites` cut from it to pass a ten-field cap were merged back on
 2026-09-22, because every `Library` command was `_writes.x()`.
 
+Committed document changes have a separate owner from an active editor.
+`storage/DocumentRepository` wraps the filesystem adapter and publishes typed
+create/save/move/delete events only after success. `RepertoireCatalog` coalesces
+those events into a committed listing; a change during a read invalidates that
+read, and the next publication retains the whole change batch. Library search
+and busy state do not invalidate the catalog. Books, training and repertoire
+indexes consume it independently. An autosave already represented by the open
+session does not restart a training sitting; a sibling mutation does reload the
+scope. Explicit refresh handles changes made outside this process.
+
+`AppParts` is the composition root. `WorkspaceRequests` coordinates navigation,
+including dirty-draft decisions and desktop file-open requests; request tickets
+cancel superseded opens even when the latest request selects the current file.
+`DocumentSession` owns the active editor, while `document_projection.dart` owns
+file/section projection and `document_history.dart` owns held edits and board
+undo. These helpers have no widget or persistence side effects.
+
+`PendingWrites` belongs to the application, not to a mode. Accepted commands,
+queued reviews, books and settings writes remain tracked after their screen or
+progress owner is disposed. Closing disables new window input, pauses producers,
+flushes the document and drains accepted persistence before stopping engines.
+Failures and timeouts require an explicit close-without-saving choice. Books
+and settings use a directory lock plus a comparison with the loaded file before
+atomic replacement; another instance's edit is reported instead of overwritten.
+
 ## Layout
 
 ```text
@@ -419,10 +444,18 @@ recovery files.
 A repertoire is a folder; a chapter is a `.pgn` in it, or — for a course —
 the games of one file that carry the same `[ChapterName]` (the Lichess study
 export's tag). One rule, `chapterSections` in `chess/pgn/chapter_sections.dart`:
-a file holds several chapters only when its games name two or more, one per
-name plus one named after the file for untagged games. Any other file is one
-chapter named after the file, so chapter files an earlier import wrote, whose
-games all carry the same name, keep the name the user gave the file.
+each named chapter retains `(path, section)` identity even when it is the last
+chapter left. Untagged games form the unnamed section. A stale explicit section
+never opens a different surviving chapter; older whole-file references still
+read a singleton file. Book membership therefore survives sibling deletion.
+
+Listings traverse nested repertoire folders without following symlinks or
+entering hidden recovery/staging folders. Native startup/listing moves legacy
+root-level PGNs to `<name>/Main.pgn` through the guarded document store, carrying
+training references and backups; a collision leaves the original visible.
+Nested backup histories follow folder moves, and nested recovery files can be
+listed and restored. All v2 document mutations take the Documents root before
+leaf locks, so a folder move cannot race a save in a descendant folder.
 
 - **One file, one write path.** A chapter of a course file opens as a
   `SectionView`: its games in file order as an ordinary `Chapter`, so every

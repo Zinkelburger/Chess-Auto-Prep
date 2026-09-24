@@ -10,6 +10,7 @@ import '../../chess/training/sitting.dart';
 import '../../chess/training/training_line.dart';
 import '../../storage/training_rows.dart' show asWritten;
 import '../../storage/training_store.dart';
+import '../../storage/pending_writes.dart';
 
 /// The clock and the dice a trainer runs on, handed in so a test can fix
 /// both: the time now, and a number in −1..1 that spreads an interval.
@@ -28,6 +29,7 @@ class TrainingProgress extends ChangeNotifier {
     required ProgressFiles files,
     required ProgressLoaded loaded,
     required TrainerTime time,
+    this.pendingWrites,
   }) : _files = files,
        _time = time,
        _reviews = {...loaded.reviews},
@@ -36,6 +38,7 @@ class TrainingProgress extends ChangeNotifier {
        _mistakes = [...loaded.mistakes];
 
   final ProgressFiles _files;
+  final PendingWrites? pendingWrites;
   final TrainerTime _time;
   final Map<LineKey, Review> _reviews;
 
@@ -93,7 +96,7 @@ class TrainingProgress extends ChangeNotifier {
         correct: answer.correct,
       );
     }
-    final result = await _files.logAttempt(attempt);
+    final result = await _tracked(_files.logAttempt(attempt), attempt);
     if (result is ProgressWritten && !answer.correct && !_disposed) {
       _mistakes.add(attempt);
       notifyListeners();
@@ -294,8 +297,22 @@ class TrainingProgress extends ChangeNotifier {
   Future<ProgressWrite> _serially(Future<ProgressWrite> Function() write) {
     final done = _writes.then((_) => write());
     _writes = done.then<void>((_) {}, onError: (Object _) {});
-    return done;
+    return _tracked(done, this);
   }
+
+  /// Writes already accepted by this progress owner survive scope changes.
+  Future<void> settle() => _writes;
+
+  Future<ProgressWrite> _tracked(Future<ProgressWrite> work, Object owner) =>
+      pendingWrites?.track(
+        owner,
+        work,
+        label: 'Training progress',
+        problem: (result) => result is ProgressWritten && _unsaved.isEmpty
+            ? null
+            : 'Some progress could not be saved.',
+      ) ??
+      work;
 
   @override
   void dispose() {

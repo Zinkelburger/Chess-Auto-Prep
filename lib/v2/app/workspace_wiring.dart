@@ -2,8 +2,7 @@ import 'dart:async';
 
 import '../engines/engine_supervisor.dart';
 import '../engines/fixed_depth.dart';
-import '../features/library/library.dart';
-import '../features/library/library_state.dart';
+import '../workspace/repertoire_catalog.dart';
 import '../storage/my_games_files.dart';
 import '../workspace/books.dart';
 import '../workspace/engine_analysis.dart';
@@ -30,28 +29,26 @@ final class WorkspaceWiring {
     this._env, {
     required DocumentSession session,
     required DocumentSaver saver,
-    required Library library,
+    required RepertoireCatalog catalog,
     required FileFilter filter,
     required GamesCache games,
     required Books books,
   }) : _session = session,
        _books = books,
        _saver = saver,
-       _library = library,
+       _catalog = catalog,
        _filter = filter,
        _gamesCache = games {
-    _relisted = NewListings(_library, _filesChanged);
-    _fill.addListener(_listTheDraft);
+    _catalog.addListener(_filesChanged);
   }
 
   final AppEnvironment _env;
   final DocumentSession _session;
   final DocumentSaver _saver;
-  final Library _library;
+  final RepertoireCatalog _catalog;
   final FileFilter _filter;
   final GamesCache _gamesCache;
   final Books _books;
-  late final NewListings _relisted;
   bool _disposed = false;
 
   late final workspace = Workspace(
@@ -138,7 +135,11 @@ final class WorkspaceWiring {
     analysis: _analysis,
     documents: _env.store,
     tools: _fillTools,
-    keepTree: _env.keepTree,
+    keepTree: (chapter, tree) => _env.pendingWrites.track(
+      chapter.path,
+      _env.keepTree(chapter, tree),
+      label: 'Search tree',
+    ),
     finds: _finds,
     clock: _env.now,
   );
@@ -197,25 +198,10 @@ final class WorkspaceWiring {
     _tree.forget();
   }
 
-  /// The draft whose chapter the library was last asked to list.
-  LinesWritten? _listed;
-
-  /// A search's lines were written into a draft chapter the library has not
-  /// listed; reading the folders again, once for that draft, is what puts
-  /// it in the list. The fill notifies for its progress and its tree too,
-  /// and those write no file.
-  void _listTheDraft() {
-    final lines = _fill.lines;
-    if (lines is! LinesWritten || identical(lines, _listed)) return;
-    _listed = lines;
-    unawaited(_library.refresh());
-  }
-
   void dispose() {
     _disposed = true;
     _env.settings.removeListener(_engineSettings);
-    _relisted.dispose();
-    _fill.removeListener(_listTheDraft);
+    _catalog.removeListener(_filesChanged);
     _fill.dispose();
     _finds.dispose();
     _analysis.dispose();
@@ -227,29 +213,4 @@ final class WorkspaceWiring {
     _tree.dispose();
     _games.dispose();
   }
-}
-
-/// Runs [_run] each time the library lists the repertoire files anew —
-/// after every change it makes, and every refresh — and not when it
-/// notifies for a search typed into its list or a command starting, which
-/// change nothing that was read from the files.
-final class NewListings {
-  NewListings(this._library, this._run) : _listed = _library.state {
-    _library.addListener(_heard);
-  }
-
-  final Library _library;
-  final void Function() _run;
-
-  /// The listing [_run] last ran for, or the one there was to begin with.
-  LibraryState _listed;
-
-  void _heard() {
-    final state = _library.state;
-    if (identical(state, _listed)) return;
-    _listed = state;
-    _run();
-  }
-
-  void dispose() => _library.removeListener(_heard);
 }

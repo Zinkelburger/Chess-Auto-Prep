@@ -104,20 +104,15 @@ final class WindowFixture {
   /// What the window was asked, in order: true for into full screen.
   final fullScreenAsked = <bool>[];
 
+  late final _store = ScriptedDocumentStore()
+    ..documents[kidMain] = Opened(blackChapter, scriptedRevision(blackChapter))
+    ..documents[benkoMain] = Opened(
+      '// Color: White\n',
+      scriptedRevision('// Color: White\n'),
+    )
+    ..documents[tacticsRef] = Opened(tacticsSet, scriptedRevision(tacticsSet));
+
   AppEnvironment _environment(ScriptedBughouse bughouse) {
-    final store = ScriptedDocumentStore()
-      ..documents[kidMain] = Opened(
-        blackChapter,
-        scriptedRevision(blackChapter),
-      )
-      ..documents[benkoMain] = Opened(
-        '// Color: White\n',
-        scriptedRevision('// Color: White\n'),
-      )
-      ..documents[tacticsRef] = Opened(
-        tacticsSet,
-        scriptedRevision(tacticsSet),
-      );
     final lichess = ScriptedExplorerApi();
     return AppEnvironment(
       folders: (
@@ -127,7 +122,7 @@ final class WindowFixture {
         gamesLibrary: '/games_library',
         tacticsSet: tacticsRef,
       ),
-      store: store,
+      store: _store,
       // In memory unless the test gave a folder; disposed with the rest.
       settings: _settings ?? SettingsStore(),
       // The two repertoires the library lists, each of one chapter.
@@ -184,7 +179,7 @@ final class WindowFixture {
 
   AppEnvironment get _env => parts.env;
 
-  ScriptedDocumentStore get store => _env.store as ScriptedDocumentStore;
+  ScriptedDocumentStore get store => _store;
   ScriptedFiles get chapterFiles => _env.chapterFiles as ScriptedFiles;
   ScriptedStudyFiles get studyFiles => _env.studyFiles as ScriptedStudyFiles;
 

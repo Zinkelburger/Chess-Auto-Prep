@@ -69,27 +69,10 @@ class _ExplorerSourceBarState extends State<ExplorerSourceBar> {
                   constraints: const BoxConstraints(
                     maxWidth: explorerTrailingMaxWidth,
                   ),
-                  child: TextButton(
-                    onPressed: () {
-                      if (!mounted) return;
-                      setState(() => _unfolded = !_unfolded);
-                    },
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            unfolded ? 'Filters' : _folded(choice),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        Icon(
-                          unfolded ? Icons.expand_less : Icons.expand_more,
-                          size: IconSize.menu,
-                        ),
-                      ],
-                    ),
+                  child: _FilterButton(
+                    label: unfolded ? 'Filters' : _folded(choice),
+                    unfolded: unfolded,
+                    onPressed: () => setState(() => _unfolded = !_unfolded),
                   ),
                 ),
             ],
@@ -117,6 +100,34 @@ class _ExplorerSourceBarState extends State<ExplorerSourceBar> {
     final narrowing = choice.narrowing;
     return narrowing.isEmpty ? 'Filters' : narrowing;
   }
+}
+
+class _FilterButton extends StatelessWidget {
+  const _FilterButton({
+    required this.label,
+    required this.unfolded,
+    required this.onPressed,
+  });
+  final String label;
+  final bool unfolded;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => TextButton(
+    onPressed: onPressed,
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Flexible(
+          child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+        ),
+        Icon(
+          unfolded ? Icons.expand_less : Icons.expand_more,
+          size: IconSize.menu,
+        ),
+      ],
+    ),
+  );
 }
 
 /// The databases side by side, the chosen one pressed.

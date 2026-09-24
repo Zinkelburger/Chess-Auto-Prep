@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../diagnostics/log.dart';
 import '../../net/lichess_login.dart';
+import '../../storage/pending_writes.dart';
 import '../../storage/lichess_token.dart';
 
 /// The Lichess account as the settings show it: signed out, waiting for
@@ -12,12 +13,14 @@ import '../../storage/lichess_token.dart';
 final class LichessAccountState extends ChangeNotifier {
   LichessAccountState({
     required LichessLogin login,
+    this.pendingWrites,
     required Future<LichessAccount?> Function() read,
     required Future<bool> Function(LichessAccount?) write,
   }) : _login = login,
        _read = read,
        _write = write;
 
+  final PendingWrites? pendingWrites;
   final LichessLogin _login;
   final Future<LichessAccount?> Function() _read;
   final Future<bool> Function(LichessAccount?) _write;
@@ -38,7 +41,16 @@ final class LichessAccountState extends ChangeNotifier {
   }
 
   /// Runs the browser flow. Refused while one is already waiting.
-  Future<void> logIn() async {
+  Future<void> logIn() =>
+      pendingWrites?.track(
+        this,
+        _logIn(),
+        label: 'Lichess account',
+        problem: (_) => _problem,
+      ) ??
+      _logIn();
+
+  Future<void> _logIn() async {
     if (_status is Connecting) return;
     _set(const Connecting(), problem: null);
     final outcome = await _login.logIn(
@@ -53,7 +65,16 @@ final class LichessAccountState extends ChangeNotifier {
 
   /// Signs in with a personal access token typed into the row. Answers
   /// whether it was taken.
-  Future<bool> useToken(String token) async {
+  Future<bool> useToken(String token) =>
+      pendingWrites?.track(
+        this,
+        _useToken(token),
+        label: 'Lichess account',
+        problem: (_) => _problem,
+      ) ??
+      _useToken(token);
+
+  Future<bool> _useToken(String token) async {
     if (_status is Connecting) return false;
     _set(const Checking(), problem: null);
     return _took(await _login.withToken(token));
@@ -62,7 +83,16 @@ final class LichessAccountState extends ChangeNotifier {
   /// Signs out: the token is revoked at Lichess best effort and forgotten
   /// here whatever Lichess said. When this computer will not forget it,
   /// the row says so: the next launch would read it back as signed in.
-  Future<void> logOut() async {
+  Future<void> logOut() =>
+      pendingWrites?.track(
+        this,
+        _logOut(),
+        label: 'Lichess account',
+        problem: (_) => _problem,
+      ) ??
+      _logOut();
+
+  Future<void> _logOut() async {
     final signedIn = _status;
     if (signedIn is! SignedIn) return;
     _set(const SigningOut());

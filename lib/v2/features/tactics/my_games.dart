@@ -10,6 +10,7 @@ import '../../engines/engine.dart';
 import '../../engines/engine_line.dart';
 import '../../engines/engine_supervisor.dart';
 import '../../net/recent_games.dart';
+import '../../storage/pending_writes.dart';
 import '../../storage/my_accounts.dart';
 import '../../storage/my_games_files.dart';
 import 'set_additions.dart';
@@ -119,6 +120,7 @@ typedef _Queued = ({GameSite site, String username, String id, String text});
 final class MyGames extends ChangeNotifier {
   MyGames({
     required AccountStore accounts,
+    this.pendingWrites,
     required List<RecentGames> sites,
     required GamesCache cache,
     required SetAdditions set,
@@ -131,6 +133,7 @@ final class MyGames extends ChangeNotifier {
        _engine = engine,
        _now = now;
 
+  final PendingWrites? pendingWrites;
   final AccountStore _store;
   final List<RecentGames> _sites;
   final GamesCache _cache;
@@ -179,7 +182,16 @@ final class MyGames extends ChangeNotifier {
   /// Keeps both usernames; a blank one forgets that account. Nothing is
   /// downloaded, and games a paused review left queued are let go: they
   /// may be another account's. Answers whether both were kept.
-  Future<bool> saveUsernames({String? lichess, String? chesscom}) async {
+  Future<bool> saveUsernames({String? lichess, String? chesscom}) =>
+      pendingWrites?.track(
+        _store,
+        _saveUsernames(lichess, chesscom),
+        label: 'Accounts',
+        problem: (kept) => kept ? null : 'Usernames were not saved.',
+      ) ??
+      _saveUsernames(lichess, chesscom);
+
+  Future<bool> _saveUsernames(String? lichess, String? chesscom) async {
     final kept =
         await _store.setUsername(GameSite.lichess, lichess) &
         await _store.setUsername(GameSite.chesscom, chesscom);
@@ -193,7 +205,10 @@ final class MyGames extends ChangeNotifier {
 
   /// Downloads and reviews, or carries on with the games a pause or a
   /// failure left queued.
-  Future<void> start() async {
+  Future<void> start() =>
+      pendingWrites?.track(this, _start(), label: 'Game review') ?? _start();
+
+  Future<void> _start() async {
     if (running) return;
     final (added, notReached) = switch (_status) {
       MyGamesPaused(:final added, :final notReached) => (added, notReached),

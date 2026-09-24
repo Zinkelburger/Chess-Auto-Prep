@@ -59,6 +59,18 @@ void main() {
       expect(w.session.source, isNull);
     });
 
+    test('staying on A cancels a B read that has already started', () async {
+      await w.requests.open(kid);
+      w.store.hold = true;
+      final pending = w.requests.open(benko);
+      await pumpEventQueue();
+      expect(w.store.waiting, greaterThan(0));
+      expect(await w.requests.open(kid), isA<RequestDone>());
+      w.store.releaseAll();
+      expect(await pending, isA<RequestDropped>());
+      expect(w.session.source, kid);
+    });
+
     test('an open a later one overtook drops without a word', () async {
       w.store.hold = true;
       final first = w.requests.open(kid);

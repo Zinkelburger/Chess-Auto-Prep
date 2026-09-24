@@ -39,6 +39,8 @@ import '../storage/pgn_document_store.dart';
 import '../storage/pgn_file_import.dart';
 import '../storage/pgn_file_picker.dart';
 import '../storage/pgn_file_store.dart';
+import '../storage/document_repository.dart';
+import '../storage/pending_writes.dart';
 import '../storage/recent_pgn_files.dart';
 import '../storage/settings_store.dart';
 import '../storage/study_files.dart';
@@ -78,7 +80,7 @@ typedef EngineLauncher =
 final class AppEnvironment {
   AppEnvironment({
     required this.folders,
-    required this.store,
+    required PgnDocumentStore store,
     required this.settings,
     required this.chapterFiles,
     required this.studyFiles,
@@ -112,7 +114,11 @@ final class AppEnvironment {
     this.explorerDelay = const Duration(milliseconds: 250),
     this.exitWait = const Duration(seconds: 5),
     this.close = _nothingToClose,
-  }) : books = books ?? MemoryBooks();
+  }) : store = DocumentRepository(store),
+       books = books ?? MemoryBooks() {
+    settings.pendingWrites = pendingWrites;
+    this.store.pendingWrites = pendingWrites;
+  }
 
   /// The app on this machine: the user's Documents folder and the app's
   /// own [support] folder, the real network, Stockfish and Maia.
@@ -144,6 +150,7 @@ final class AppEnvironment {
         support: support.path,
       ),
     );
+    final documentsStore = PgnFileStore(documents: documents, support: support);
     return AppEnvironment(
       folders: (
         repertoires: repertoires,
@@ -154,9 +161,12 @@ final class AppEnvironment {
           p.join(documents.path, 'tactics_sets', 'Default.pgn'),
         ),
       ),
-      store: PgnFileStore(documents: documents, support: support),
+      store: documentsStore,
       settings: SettingsStore(support: support),
-      chapterFiles: ChapterDirectory(Directory(repertoires)),
+      chapterFiles: ChapterDirectory(
+        Directory(repertoires),
+        documents: documentsStore,
+      ),
       studyFiles: StudyDirectory(Directory(studies)),
       libraryPicker: const NativePgnFilePicker(),
       viewerPicker: const NativePgnFilePicker(),
@@ -214,8 +224,9 @@ final class AppEnvironment {
     );
   }
 
+  final pendingWrites = PendingWrites();
   final AppFolders folders;
-  final PgnDocumentStore store;
+  final DocumentRepository store;
 
   /// The settings, kept in the support folder, or in memory in a test.
   final SettingsStore settings;

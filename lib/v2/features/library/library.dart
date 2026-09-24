@@ -14,6 +14,7 @@ import '../../chess/pgn/line_id_pins.dart';
 import '../../chess/pgn/line_moves.dart';
 import '../../chess/pgn/repertoire_import.dart';
 import '../../diagnostics/log.dart';
+import '../../storage/pending_writes.dart';
 import '../../storage/chapter_files.dart';
 import '../../storage/document_ref.dart';
 import '../../storage/edit_scope.dart';
@@ -22,6 +23,7 @@ import '../../storage/pgn_file_picker.dart';
 import '../../storage/training_records.dart' as records;
 import '../../ui/file_names.dart';
 import '../../workspace/books.dart';
+import '../../workspace/repertoire_catalog.dart';
 import '../../workspace/document_saver.dart';
 import '../../workspace/document_session.dart';
 import '../../workspace/session_results.dart';
@@ -48,11 +50,15 @@ final class Library extends ChangeNotifier {
     required store.PgnDocumentStore documents,
     required DocumentSaver saver,
     required DocumentSession session,
+    this.pendingWrites,
     required PgnFilePicker picker,
     required String root,
     Books? books,
+    RepertoireCatalog? catalog,
     DateTime Function() now = DateTime.now,
-  }) : _files = files,
+  }) : catalog = catalog ?? RepertoireCatalog(files: files, root: root),
+       _ownsCatalog = catalog == null,
+       _files = files,
        _books = books,
        _store = documents,
        _saver = saver,
@@ -61,6 +67,7 @@ final class Library extends ChangeNotifier {
        _root = root,
        _now = now {
     _session.addListener(_followTheSession);
+    this.catalog.addListener(_catalogChanged);
   }
 
   /// The name of the chapter a new repertoire starts with.
@@ -89,10 +96,12 @@ final class Library extends ChangeNotifier {
   /// What a new chapter's heading says it was created on.
   final DateTime Function() _now;
 
+  final RepertoireCatalog catalog;
+  final bool _ownsCatalog;
+
   LibraryState _state = const LibraryLoading();
   ChapterRef? _showing;
   String _query = '';
-  int _refreshes = 0;
   bool _busy = false;
   bool _disposed = false;
 
@@ -139,11 +148,11 @@ final class Library extends ChangeNotifier {
   /// answer, so the list never goes back in time. A list already on screen
   /// stays there while the new one is read: a change the user just made
   /// should not blank the panel it was made in.
-  Future<void> refresh() async {
-    final ticket = ++_refreshes;
-    if (_state is! LibraryLoaded) _set(const LibraryLoading());
-    final listing = await _files.list();
-    if (_disposed || ticket != _refreshes) return;
+  Future<void> refresh() => catalog.refresh();
+
+  void _catalogChanged() {
+    final listing = catalog.listing;
+    if (listing == null) return;
     _set(switch (listing) {
       Repertoires(:final folders, :final unreadable) => LibraryLoaded(
         folders,
@@ -318,6 +327,12 @@ final class Library extends ChangeNotifier {
     // The folder is not in the way of its own new name: on a case-sensitive
     // filesystem `kid` to `KID` is a rename like any other.
     if (_named(name, except: folder) != null) return const LibraryNameTaken();
+    if (folder.chapters.any((c) => c.path == folder.path)) {
+      return _relocate(
+        folder.chapters.first.wholeFile,
+        DocumentRef(p.join(_root, '$name.pgn')),
+      );
+    }
     return _renameFolder(folder, p.join(_root, name));
   });
 
@@ -350,7 +365,16 @@ final class Library extends ChangeNotifier {
 
   /// One change at a time, then the list is read again: a half-applied change
   /// must be visible, and the store is the only thing that knows what landed.
+  final PendingWrites? pendingWrites;
+
   Future<LibraryResult> _run(
+    String action,
+    Future<LibraryResult> Function() body,
+  ) =>
+      pendingWrites?.track(this, _perform(action, body), label: 'Library') ??
+      _perform(action, body);
+
+  Future<LibraryResult> _perform(
     String action,
     Future<LibraryResult> Function() body,
   ) async {
@@ -366,7 +390,7 @@ final class Library extends ChangeNotifier {
     }
     if (_disposed) return result;
     reportLibraryResult(action, result);
-    await refresh();
+    await catalog.synchronize();
     return result;
   }
 
@@ -409,6 +433,8 @@ final class Library extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _session.removeListener(_followTheSession);
+    catalog.removeListener(_catalogChanged);
+    if (_ownsCatalog) catalog.dispose();
     super.dispose();
   }
 
@@ -504,7 +530,13 @@ final class Library extends ChangeNotifier {
       await _files.removeStaging(staging);
       return refused;
     }
-    return _placed(staging, folders, file: '$fileName.pgn', read: read);
+    return _placed(
+      staging,
+      folders,
+      file: '$fileName.pgn',
+      read: read,
+      section: sectionsInText(file).first,
+    );
   }
 
   /// [staging], holding [file], renamed into place under the first of
@@ -514,18 +546,14 @@ final class Library extends ChangeNotifier {
     List<String> folders, {
     required String file,
     required ImportedChapters read,
+    required String? section,
   }) async {
     for (final folder in folders) {
       final destination = p.join(_root, folder);
       switch (await _store.moveFolder(staging, destination)) {
         case store.FolderMoved():
           return LibraryAdded(
-            ChapterRef.at(
-              p.join(destination, file),
-              section: read.chapters.length == 1
-                  ? null
-                  : read.chapters.first.title.trim(),
-            ),
+            ChapterRef.at(p.join(destination, file), section: section),
             chapters: read.chapters.length,
             lines: read.lines,
           );
@@ -617,7 +645,9 @@ final class Library extends ChangeNotifier {
       }
       return LibraryStoppedAt(file.name, result);
     }
-    await _files.removeIfEmpty(folder.path);
+    if (!folder.chapters.any((c) => c.path == folder.path)) {
+      await _files.removeIfEmpty(folder.path);
+    }
     return LibraryDone(training: foldedRepoint(repointed));
   }
 
@@ -913,7 +943,14 @@ final class Library extends ChangeNotifier {
     Future<LibraryResult> Function(Revision revision) write,
   ) async {
     final result = await _saver.holdStill(write);
-    if (result == null) return const LibraryBusy();
+    if (result == null) {
+      if (!_saver.settled) {
+        return const LibraryFailure(
+          'Save or recover the open draft before changing its file.',
+        );
+      }
+      return const LibraryBusy();
+    }
     return result is LibraryStale ? const LibraryConflicted() : result;
   }
 }

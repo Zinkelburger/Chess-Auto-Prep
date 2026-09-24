@@ -6,6 +6,8 @@ import 'package:path/path.dart' as p;
 
 import '../diagnostics/log.dart';
 import 'atomic_write.dart';
+import 'file_lock.dart';
+import 'pending_writes.dart';
 import 'settings.dart';
 
 /// The settings as one value, read once from `settings.json` in the app's
@@ -24,6 +26,9 @@ final class SettingsStore extends ChangeNotifier {
       _value = initial;
 
   final File? _file;
+  PendingWrites? pendingWrites;
+  String? _baseline;
+  bool _loaded = false;
   Settings _value;
   String? _problem;
   bool _disposed = false;
@@ -45,8 +50,10 @@ final class SettingsStore extends ChangeNotifier {
     final file = _file;
     if (file == null) return;
     try {
-      if (!await file.exists()) return;
-      _value = Settings.fromJson(await file.readAsString());
+      _baseline = await file.exists() ? await file.readAsString() : null;
+      _loaded = true;
+      if (_baseline == null) return;
+      _value = Settings.fromJson(_baseline!);
       _problem = null;
     } on Object catch (error) {
       log.w('read ${file.path}', error);
@@ -71,7 +78,14 @@ final class SettingsStore extends ChangeNotifier {
     final file = _file;
     if (file == null) return;
     _dirty = true;
-    await (_writing ??= _writeNewest(file));
+    final writing = _writing ??= _writeNewest(file);
+    await (pendingWrites?.track(
+          this,
+          writing,
+          label: 'Settings',
+          problem: (_) => _problem,
+        ) ??
+        writing);
   }
 
   Future<void> _writeNewest(File file) async {
@@ -89,7 +103,19 @@ final class SettingsStore extends ChangeNotifier {
   Future<void> _write(File file, Settings value) async {
     try {
       await file.parent.create(recursive: true);
-      await replaceFile(file.path, utf8.encode(value.toJson()));
+      await withDirectoryLock(file.parent, () async {
+        final current = await file.exists() ? await file.readAsString() : null;
+        if ((!_loaded && current != null) ||
+            (_loaded && current != _baseline)) {
+          throw StateError(
+            'Settings changed in another instance. Reload before editing.',
+          );
+        }
+        final next = value.toJson();
+        await replaceFile(file.path, utf8.encode(next));
+        _baseline = next;
+        _loaded = true;
+      });
       if (_problem != null) {
         _problem = null;
         _notify();

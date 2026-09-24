@@ -148,16 +148,10 @@ final class DocumentRelocation {
 
   /// Moves a whole folder of documents — a repertoire — in one rename.
   ///
-  /// The locks are the documents root and both folders, as [move] takes
-  /// them. Here the two folders are the repertoires themselves, which is
-  /// where a save of any chapter inside them takes its lock, so a save cannot
-  /// run while the folder under it is being renamed.
-  ///
-  /// The old app also serialises every repertoire operation behind a lock on
-  /// `<repertoires>/.cap-directory-domain`
-  /// (`repertoire_directory_mutations.dart`), which `v2` does not take yet:
-  /// against the old app these locks stop two writers in one folder, not two
-  /// repertoire-wide operations.
+  /// All v2 mutations take the documents root before their leaf folders.
+  /// This also protects nested chapters: locking only the repertoire folder
+  /// would miss a writer holding a lock on one of its descendants. Leaf
+  /// locks remain necessary for interoperability with legacy direct writers.
   ///
   /// The kept versions follow each document inside, because a document's
   /// history is kept under a hash of its path rather than under its folder's;
@@ -238,14 +232,16 @@ final class DocumentRelocation {
     }
   }
 
-  /// The PGN file names directly in [folder], or null when it cannot be
+  /// The relative PGN paths below [folder], or null when it cannot be
   /// listed — which is a reason not to move it at all.
   Future<List<String>?> _documentsIn(String folder) async {
     final names = <String>[];
     try {
-      await for (final entry in Directory(folder).list()) {
+      await for (final entry in Directory(
+        folder,
+      ).list(recursive: true, followLinks: false)) {
         if (entry is File && p.extension(entry.path) == '.pgn') {
-          names.add(p.basename(entry.path));
+          names.add(p.relative(entry.path, from: folder));
         }
       }
     } on FileSystemException catch (error) {

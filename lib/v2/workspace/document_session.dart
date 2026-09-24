@@ -11,16 +11,16 @@ import '../chess/pgn/chapter_sections.dart';
 import '../chess/pgn/comment_edits.dart' as edits;
 import '../chess/pgn/game_tree.dart';
 import '../chess/pgn/games_written.dart';
-import '../chess/pgn/line_id_pins.dart';
 import '../chess/pgn/tree_edit.dart';
 import '../chess/pv_text.dart';
 import '../diagnostics/log.dart';
 import '../storage/chapter_files.dart';
 import '../storage/document_ref.dart';
-import '../storage/edit_scope.dart';
 import '../storage/pgn_document_store.dart' as store;
 import 'comment_line.dart';
 import 'document_saver.dart';
+import 'document_projection.dart';
+import 'document_history.dart';
 import 'session_results.dart';
 
 /// The document open in the workspace, where the user is in it, and the
@@ -89,7 +89,7 @@ final class DocumentSession extends ChangeNotifier {
   bool _disposed = false;
 
   /// Edits to the open file shown but not written; null when there are none.
-  _Held? _held;
+  HeldEdits? _held;
 
   /// Whether an edit to a file is kept in memory rather than written: on in
   /// the PGN Viewer, where moves played on the board are for looking, off
@@ -281,6 +281,12 @@ final class DocumentSession extends ChangeNotifier {
   Future<OpenResult> open(ChapterRef ref, {int? game}) {
     final ticket = ++_opens;
     return _switching(ticket, () => _opened(ref, game, ticket));
+  }
+
+  /// A newer navigation intent supersedes a read even if it stays here.
+  void cancelOpening() {
+    _opens++;
+    _opening = null;
   }
 
   /// Runs [change], which puts another document up, with undo held off
@@ -643,10 +649,10 @@ final class DocumentSession extends ChangeNotifier {
     final view = read.view;
     final shown = view == null
         ? (
-            chapter: _gameAfterUndo(read.file, showingGameText(_chapter)),
+            chapter: gameAfterUndo(read.file, showingGameText(_chapter)),
             view: null,
           )
-        : _chapterAfterUndo(read.file, view, places);
+        : chapterAfterUndo(read.file, view, places);
     final before = _chapter?.tree;
     _shown = shown;
     _follow(shown.view);
@@ -691,7 +697,7 @@ final class DocumentSession extends ChangeNotifier {
     _showHeld(before, held.original);
   }
 
-  void _showHeld(Chapter before, _Shown shown) {
+  void _showHeld(Chapter before, ShownDocument shown) {
     _shown = shown;
     final source = _source;
     if (source != null && shown.view?.section != source.section) {
@@ -846,7 +852,7 @@ final class DocumentSession extends ChangeNotifier {
     if (_held case final held?) {
       held.add(_shown!, landed);
     } else if (_holdsEdits) {
-      _held = _Held(_shown!, landed);
+      _held = HeldEdits(_shown!, landed);
     } else {
       _saver.save(landed.text, landed.scope);
     }
@@ -917,261 +923,4 @@ final class DocumentSession extends ChangeNotifier {
 /// [DocumentSession.leaving]: only the session says when it leaves.
 final class _Leaving extends ChangeNotifier {
   void announce() => notifyListeners();
-}
-
-/// What reading a document for the workspace came to: the chapter to show,
-/// or the sentence saying why there is none.
-sealed class DocumentRead {
-  const DocumentRead();
-}
-
-final class DocumentShown extends DocumentRead {
-  const DocumentShown({
-    required this.chapter,
-    required this.view,
-    required this.revision,
-    required this.readOnly,
-  });
-
-  /// What goes on the board: the file, one game of it, or one chapter of a
-  /// course file.
-  final Chapter chapter;
-
-  /// Where that chapter sits in its file, for one chapter of a course file;
-  /// null when the chapter is the whole file or one game of it.
-  final SectionView? view;
-
-  /// The revision every later save is checked against.
-  final Revision revision;
-
-  /// Why this app may not write the file, or null when it may.
-  final String? readOnly;
-}
-
-final class DocumentUnread extends DocumentRead {
-  const DocumentUnread(this.reason);
-
-  final String reason;
-}
-
-/// Reads [ref] through [documents] as the chapter the workspace shows.
-/// [game] reads one game of the file as the whole document, which is what a
-/// study chapter is; null merges its games, or takes the chapter [ref]
-/// names in a course file.
-Future<DocumentRead> readDocument(
-  store.PgnDocumentStore documents,
-  ChapterRef ref, {
-  int? game,
-}) async {
-  switch (await documents.open(ref)) {
-    case store.Opened(:final text, :final revision, :final readOnly):
-      final (:file, :view) = await readShown(ref, text, game: game);
-      // A chapter the file does not have would otherwise open as every
-      // game merged, which looks like a chapter and is not one.
-      if (game != null && game >= file.lines.length) {
-        return DocumentUnread('${ref.name} has no chapter ${game + 1}');
-      }
-      if (view != null && view.places.isEmpty) {
-        return DocumentUnread('${ref.name} is no longer in its file');
-      }
-      return DocumentShown(
-        chapter: view?.chapter ?? file,
-        view: view,
-        revision: revision,
-        readOnly: readOnly,
-      );
-    case store.Absent():
-      return DocumentUnread('${ref.name} is no longer on disk');
-    case store.Unreadable(:final detail):
-      return DocumentUnread('Could not read ${ref.name}: $detail');
-  }
-}
-
-/// [text], the file [ref] names, as read for the workspace: the whole file
-/// or the one [game] of it, and — for one chapter of a course file — where
-/// that chapter sits in it.
-Future<({Chapter file, SectionView? view})> readShown(
-  ChapterRef ref,
-  String text, {
-  int? game,
-}) async {
-  final file = await readChapter(name: ref.fileName, text: text, game: game);
-  return (file: file, view: game == null ? partOf(file, ref.section) : null);
-}
-
-// An undo meets what [readDocument] refuses to open — a game the file does
-// not have, a chapter no game is called by — whenever it takes back the
-// edit that made them. The version it put back is already the file, so it
-// cannot refuse: it shows the nearest thing to where the user was.
-
-/// [file], the version an undo put back, on the game whose text [showing]
-/// is ([showingGame]); when the file does not hold it, on the game at the
-/// same index, or its last game when the undo took back the one added there.
-Chapter _gameAfterUndo(Chapter file, String? showing) {
-  final shown = showingGame(file, showing);
-  final game = shown.game;
-  final last = shown.lines.length - 1;
-  if (game == null || game <= last || last < 0) return shown;
-  return withGame(shown, last);
-}
-
-/// The chapter [view] of a course [file], the version an undo put back —
-/// unless the undo took back the name its games were given, which leaves no
-/// game called by it. Then it is the chapter those games, at [places] before
-/// the undo, are called now; the file's first when none of them is left.
-({Chapter chapter, SectionView? view}) _chapterAfterUndo(
-  Chapter file,
-  SectionView view,
-  List<int> places,
-) {
-  if (view.places.isNotEmpty) return (chapter: view.chapter, view: view);
-  final kept = [
-    for (final at in places)
-      if (at < file.lines.length) at,
-  ];
-  final named = kept.isEmpty ? view.section : sectionOf(file.lines[kept.first]);
-  final shown = partOf(file, sectionAfter(file, named));
-  return (chapter: shown?.chapter ?? file, view: shown);
-}
-
-/// An edit of the chapter on the board as its file takes it: the file's
-/// text, the scope the store checks that text against, and the chapter to
-/// show afterwards — with its [SectionView] when it is one chapter of a
-/// course file.
-typedef Landing = ({
-  String text,
-  EditScope scope,
-  Chapter chapter,
-  SectionView? view,
-});
-
-/// [edited], an edit of [before] placed by [games], as its file writes it.
-///
-/// A chapter that is its whole file is written as it is, with the ids the
-/// edit would change pinned ([withIdsPinned]); [written], when the edit said
-/// only which games it wrote, is the scope, which the pins do not widen —
-/// they land on games the edit wrote anyway. A chapter of a course file
-/// ([view]) goes back into its file ([spliced]) and the file is written.
-///
-/// Null when a game the edit added could not be given its chapter's name.
-Landing? landing(
-  Chapter before,
-  SectionView? view,
-  Chapter edited,
-  GamesArranged games, {
-  GamesWritten? written,
-}) {
-  if (view == null) {
-    final pinned = withIdsPinned(before, edited, games);
-    return (
-      text: writeChapter(pinned.chapter),
-      scope: written == null
-          ? GamesRearranged(pinned.games)
-          : GamesEdited(written),
-      chapter: pinned.chapter,
-      view: null,
-    );
-  }
-  final back = spliced(view, edited, games);
-  if (back == null) return null;
-  return fileLanding(view.file, back.file, back.games, view.section);
-}
-
-/// [edited], an edit of the whole course [file] placed by [games], showing
-/// its chapter [section] afterwards — or its first, when the edit left none
-/// of that chapter's games.
-Landing fileLanding(
-  Chapter file,
-  Chapter edited,
-  GamesArranged games,
-  String? section,
-) {
-  final edit = fileEdit(file, edited, games, section);
-  return (
-    text: writeChapter(edit.file),
-    scope: GamesRearranged(edit.games),
-    chapter: edit.shown.chapter,
-    view: edit.shown,
-  );
-}
-
-typedef _Shown = ({Chapter chapter, SectionView? view});
-
-/// Edits to a file the [DocumentSession] shows but has not written: the
-/// file as it was before them, the text and scope of all of them together,
-/// and each version they replaced, for undo.
-final class _Held {
-  _Held(this.original, Landing first)
-    : text = first.text,
-      scope = first.scope,
-      _versions = [(shown: original, text: null, scope: null)];
-
-  /// What was on the board before the first edit: the file as on disk.
-  final _Shown original;
-
-  String text;
-  EditScope scope;
-
-  /// The versions the edits replaced, newest last, each with the text and
-  /// scope that had been held up to it (null for the original).
-  final List<({_Shown shown, String? text, EditScope? scope})> _versions;
-
-  bool get isEmpty => _versions.isEmpty;
-
-  /// One more edit, [landed], made to [before].
-  void add(_Shown before, Landing landed) {
-    _versions.add((shown: before, text: text, scope: scope));
-    text = landed.text;
-    scope = scopeOfBoth(scope, landed.scope);
-  }
-
-  /// The version before the last edit, with what was held up to it.
-  _Shown takeBack() {
-    final last = _versions.removeLast();
-    if (last.text case final earlier?) text = earlier;
-    if (last.scope case final earlier?) scope = earlier;
-    return last.shown;
-  }
-}
-
-/// The analysis board as the [DocumentSession] keeps it: its moves, where
-/// the user was on it, and its earlier versions for undo. No file holds any
-/// of this, so it lives as long as the window, and a file opened in its
-/// place leaves it here to go back to.
-///
-/// Only the session touches it; it is a part of the session's state, kept
-/// apart so the session's own fields stay about the document that is up.
-final class KeptBoard {
-  KeptBoard(this.chapter);
-
-  /// How many edits undo can take back.
-  static const undoDepth = 200;
-
-  /// The board as last seen: current while the board is up only after
-  /// [DocumentSession] puts it aside.
-  Chapter chapter;
-
-  NodePath cursor = const NodePath.root();
-
-  /// Earlier versions of the board, newest last.
-  final _undo = <Chapter>[];
-
-  bool get canUndo => _undo.isNotEmpty;
-
-  /// A new board in place of this one, with the cursor at the end of its
-  /// main line and nothing to undo.
-  void restart(Chapter board) {
-    chapter = board;
-    cursor = board.tree.endOfLineFrom(const NodePath.root());
-    _undo.clear();
-  }
-
-  /// [before] is the version an edit just replaced.
-  void remember(Chapter before) {
-    _undo.add(before);
-    if (_undo.length > undoDepth) _undo.removeAt(0);
-  }
-
-  /// The version before the last edit, or null when there is none.
-  Chapter? takeBack() => _undo.isEmpty ? null : _undo.removeLast();
 }

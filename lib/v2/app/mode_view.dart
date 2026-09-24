@@ -489,7 +489,7 @@ final class BooksView extends ModeView {
           child: Builder(
             builder: (context) => BooksScreen(
               books: workspace.books,
-              library: _modes.library,
+              catalog: _modes.library.catalog,
               onOpenChapter: (ref) =>
                   unawaited(_requests.readInBuilder(ref, const [])),
             ),

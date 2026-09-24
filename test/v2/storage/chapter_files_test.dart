@@ -30,8 +30,8 @@ void main() {
     await put('benko/Main.pgn', '*');
     await put('stray.pgn', '*');
     final folders = await list();
-    expect(folders.map((f) => f.name), ['benko', 'KID']);
-    expect(folders.last.chapters.map((c) => c.name), ['aux', 'Main']);
+    expect(folders.map((f) => f.name), ['benko', 'KID', 'stray']);
+    expect(folders[1].chapters.map((c) => c.name), ['aux', 'Main']);
     expect(
       folders.first.chapters.single.path,
       p.join(root.path, 'benko', 'Main.pgn'),

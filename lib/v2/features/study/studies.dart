@@ -5,6 +5,7 @@ import '../../chess/pgn/chapter.dart';
 import '../../chess/pgn/study.dart';
 import '../../diagnostics/log.dart';
 import '../../net/lichess_studies.dart';
+import '../../storage/pending_writes.dart';
 import '../../storage/chapter_files.dart';
 import '../../storage/document_ref.dart';
 import '../../storage/pgn_document_store.dart' as store;
@@ -29,6 +30,7 @@ final class Studies extends ChangeNotifier {
     required StudyFiles files,
     required store.PgnDocumentStore documents,
     required DocumentSession session,
+    this.pendingWrites,
     required DocumentSaver saver,
     required LichessStudies lichess,
     required String root,
@@ -278,7 +280,16 @@ final class Studies extends ChangeNotifier {
   /// One change at a time, then the folder is listed again: a half-applied
   /// change must be visible, and the disk is the only thing that knows what
   /// landed.
+  final PendingWrites? pendingWrites;
+
   Future<StudyResult> _run(
+    String action,
+    Future<StudyResult> Function() body,
+  ) =>
+      pendingWrites?.track(this, _perform(action, body), label: 'Studies') ??
+      _perform(action, body);
+
+  Future<StudyResult> _perform(
     String action,
     Future<StudyResult> Function() body,
   ) async {

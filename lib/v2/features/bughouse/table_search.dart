@@ -6,6 +6,7 @@ import '../../chess/bughouse/hivemind.dart';
 import '../../chess/bughouse/table.dart';
 import '../../diagnostics/log.dart';
 import '../../engines/hivemind_engine.dart';
+import '../../storage/pending_writes.dart';
 import '../../storage/bughouse_books.dart';
 import 'bughouse_lab.dart';
 
@@ -146,6 +147,7 @@ const labFillDepth = (ownNodes: 1500, childNodes: 200);
 final class TableSearch extends ChangeNotifier {
   TableSearch({
     required this.lab,
+    this.pendingWrites,
     required HivemindBook book,
     required Future<HivemindStart> Function() startEngine,
     FillDepth depth = labFillDepth,
@@ -157,6 +159,7 @@ final class TableSearch extends ChangeNotifier {
     lab.addListener(_labChanged);
   }
 
+  final PendingWrites? pendingWrites;
   final BughouseLab lab;
   final HivemindBook _book;
   final Future<HivemindStart> Function() _startEngine;
@@ -380,7 +383,7 @@ final class TableSearch extends ChangeNotifier {
     _filled[(position.bookKey, clock)] = progress();
     final applied = lab.line.applied;
     final fromStart = identical(lab.line.root, TablePosition.initial);
-    await _book.save((
+    final saving = _book.save((
       position: position,
       line: fromStart
           ? applied
@@ -413,6 +416,8 @@ final class TableSearch extends ChangeNotifier {
       childNodes: _depth.childNodes,
       took: watch.elapsed,
     ));
+    await (pendingWrites?.track(_book, saving, label: 'Analysis book') ??
+        saving);
     _bookAnswers.remove(position.bookKey);
     return true;
   }

@@ -132,7 +132,7 @@ final class DocumentSaver extends ChangeNotifier {
       await flush();
       _hold = _Hold.held;
       final target = _target;
-      if (_disposed || target == null) return null;
+      if (_disposed || target == null || !settled) return null;
       return await action(target.revision);
     } finally {
       _hold = _Hold.none;

@@ -11,7 +11,7 @@ import '../../ui/row_actions.dart';
 import '../../ui/search_field.dart';
 import '../../ui/theme.dart';
 import '../../workspace/books.dart';
-import '../library/library.dart';
+import '../../workspace/repertoire_catalog.dart';
 
 /// The Books mode: the user's books on the left, the one picked on the
 /// right with every repertoire and its chapters to tick in or out. A book
@@ -21,21 +21,21 @@ class BooksScreen extends StatelessWidget {
   const BooksScreen({
     super.key,
     required this.books,
-    required this.library,
+    required this.catalog,
     required this.onOpenChapter,
   });
 
   final Books books;
 
   /// The repertoires, as the builder lists them.
-  final Library library;
+  final RepertoireCatalog catalog;
 
   /// Opens a chapter in the builder.
   final ValueChanged<ChapterRef> onOpenChapter;
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: Listenable.merge([books, library]),
+    listenable: Listenable.merge([books, catalog]),
     builder: (context, _) {
       final editing = books.editing;
       return Row(
@@ -53,7 +53,7 @@ class BooksScreen extends StatelessWidget {
                     key: ValueKey(editing.id),
                     books: books,
                     book: editing,
-                    library: library,
+                    catalog: catalog,
                     onOpenChapter: onOpenChapter,
                   ),
           ),
@@ -202,13 +202,13 @@ class _BookEditor extends StatefulWidget {
     super.key,
     required this.books,
     required this.book,
-    required this.library,
+    required this.catalog,
     required this.onOpenChapter,
   });
 
   final Books books;
   final Book book;
-  final Library library;
+  final RepertoireCatalog catalog;
   final ValueChanged<ChapterRef> onOpenChapter;
 
   @override
@@ -222,7 +222,7 @@ class _BookEditorState extends State<_BookEditor> {
   /// The repertoires opened to their chapters, by folder path. Those the
   /// book has in part start open.
   late final _open = <String>{
-    for (final folder in widget.library.repertoires)
+    for (final folder in widget.catalog.repertoires)
       if (widget.books.shareOf(widget.book, folder) == BookShare.some)
         folder.path,
   };
@@ -250,14 +250,11 @@ class _BookEditorState extends State<_BookEditor> {
       if (!chapter.heading.draft) chapter,
   ];
 
-  @override
-  Widget build(BuildContext context) {
+  List<Widget> _rows() {
     final books = widget.books;
     final book = widget.book;
-    final theme = Theme.of(context);
-    final inUse = books.active?.id == book.id;
     final rows = <Widget>[];
-    for (final folder in widget.library.repertoires) {
+    for (final folder in widget.catalog.repertoires) {
       final chapters = _chapters(folder);
       final folderMatches =
           _query.isEmpty || folder.name.toLowerCase().contains(_query);
@@ -294,56 +291,17 @@ class _BookEditorState extends State<_BookEditor> {
         );
       }
     }
+    return rows;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final rows = _rows();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(Space.l, Space.m, Space.s, 0),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  book.name,
-                  style: theme.textTheme.titleMedium,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (inUse)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: Space.m),
-                  child: Text(
-                    'In use',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                )
-              else
-                FilledButton(
-                  onPressed: () => books.activate(book),
-                  child: const Text('Use this book'),
-                ),
-              RowActions(
-                tooltip: 'Book actions',
-                children: [
-                  MenuItemButton(
-                    onPressed: () => unawaited(_rename(context, books, book)),
-                    child: const Text('Rename…'),
-                  ),
-                  if (inUse)
-                    MenuItemButton(
-                      onPressed: () => books.activate(null),
-                      child: const Text('Stop using'),
-                    ),
-                  MenuItemButton(
-                    onPressed: () => unawaited(_delete(context, books, book)),
-                    child: const Text('Delete…'),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
+        _heading(context),
         Padding(
           padding: const EdgeInsets.fromLTRB(
             Space.l,
@@ -362,7 +320,7 @@ class _BookEditorState extends State<_BookEditor> {
               ? Padding(
                   padding: const EdgeInsets.all(Space.l),
                   child: Text(
-                    widget.library.repertoires.isEmpty
+                    widget.catalog.repertoires.isEmpty
                         ? 'No repertoires yet.'
                         : 'Nothing matches "${_search.text.trim()}".',
                     style: theme.textTheme.bodySmall,
@@ -371,6 +329,60 @@ class _BookEditorState extends State<_BookEditor> {
               : ListView(children: rows),
         ),
       ],
+    );
+  }
+
+  Widget _heading(BuildContext context) {
+    final books = widget.books;
+    final book = widget.book;
+    final theme = Theme.of(context);
+    final inUse = books.active?.id == book.id;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Space.l, Space.m, Space.s, 0),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              book.name,
+              style: theme.textTheme.titleMedium,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (inUse)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: Space.m),
+              child: Text(
+                'In use',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            )
+          else
+            FilledButton(
+              onPressed: () => books.activate(book),
+              child: const Text('Use this book'),
+            ),
+          RowActions(
+            tooltip: 'Book actions',
+            children: [
+              MenuItemButton(
+                onPressed: () => unawaited(_rename(context, books, book)),
+                child: const Text('Rename…'),
+              ),
+              if (inUse)
+                MenuItemButton(
+                  onPressed: () => books.activate(null),
+                  child: const Text('Stop using'),
+                ),
+              MenuItemButton(
+                onPressed: () => unawaited(_delete(context, books, book)),
+                child: const Text('Delete…'),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

@@ -80,7 +80,7 @@ void main() {
       await library.moveLines(games: {0}, to: chapter('Open games')),
       isA<LibraryDone>(),
     );
-    // Every game names one chapter now, so the file is one chapter again.
-    expect(chapters().map((c) => c.name), ['Course']);
+    // The surviving chapter keeps its name and its book identity.
+    expect(chapters().map((c) => c.name), ['Open games']);
   });
 }

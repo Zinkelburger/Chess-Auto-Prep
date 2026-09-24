@@ -8,6 +8,7 @@ import '../../chess/pgn/chapter_line.dart';
 import '../../chess/pgn/game_summary.dart';
 import '../../chess/pgn/game_text.dart';
 import '../../storage/chapter_files.dart';
+import '../../storage/pending_writes.dart';
 import '../../storage/pgn_file_import.dart';
 import '../../storage/pgn_file_picker.dart';
 import '../../storage/recent_pgn_files.dart';
@@ -27,6 +28,7 @@ import '../../workspace/file_filter.dart';
 final class PgnViewer extends ChangeNotifier {
   PgnViewer({
     required RecentFiles recent,
+    this.pendingWrites,
     required PgnFilePicker picker,
     required PgnFileImport import,
     required SettingsStore settings,
@@ -47,6 +49,7 @@ final class PgnViewer extends ChangeNotifier {
   /// How many files the list remembers, which is the old app's number.
   static const maxRecent = 10;
 
+  final PendingWrites? pendingWrites;
   final RecentFiles _recentFiles;
   final PgnFilePicker _picker;
   final PgnFileImport _import;
@@ -184,7 +187,11 @@ final class PgnViewer extends ChangeNotifier {
   /// kept. Null, with [recentProblem] saying why, when no copy could be made.
   /// With copying switched off in the settings the file opens where it is,
   /// to read.
-  Future<ChapterRef?> fileFor(String path) async {
+  Future<ChapterRef?> fileFor(String path) =>
+      pendingWrites?.track(_import, _fileFor(path), label: 'PGN import') ??
+      _fileFor(path);
+
+  Future<ChapterRef?> _fileFor(String path) async {
     if (!_settings.value.copyFilesIntoDocuments) return ChapterRef.at(path);
     switch (await _import.insideDocuments(path)) {
       case FileToOpen(path: final inside):
@@ -239,7 +246,13 @@ final class PgnViewer extends ChangeNotifier {
   Future<void> _inTurn(Future<void> Function() job) {
     final run = _recentTurn.then((_) => job());
     _recentTurn = run.then((_) {}, onError: (Object _) {});
-    return run;
+    return pendingWrites?.track(
+          _recentFiles,
+          run,
+          label: 'Recent files',
+          problem: (_) => _recentProblem,
+        ) ??
+        run;
   }
 
   static const _unreadable = 'The recent files could not be read.';

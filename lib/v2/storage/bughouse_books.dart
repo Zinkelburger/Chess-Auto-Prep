@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:path/path.dart' as p;
@@ -187,33 +188,46 @@ final class SqliteHivemindBook implements HivemindBook {
   @override
   Future<void> save(HivemindEntry entry) async {
     final path = _file.path ?? _existing(places) ?? places.first;
-    final fresh = !File(path).existsSync();
     try {
-      if (fresh) Directory(p.dirname(path)).createSync(recursive: true);
-      final db = sqlite3.open(path, mode: OpenMode.readWriteCreate);
-      try {
-        db.execute('PRAGMA busy_timeout = 10000');
-        if (fresh) {
-          db
-            ..execute('PRAGMA journal_mode = WAL')
-            ..execute(_hivemindSchema)
-            ..execute("INSERT INTO meta VALUES('seats', 'AB/CD')");
-        }
-        _write(db, entry);
-      } finally {
-        db.close();
-      }
+      await _saveBook(path, entry);
     } on Object catch (error) {
       log.w('save to the Hivemind book at $path', error);
     }
   }
 
-  void _write(Database db, HivemindEntry entry) {
+  // Isolate.run captures only serializable inputs, never the reader connection.
+  static Future<void> _saveBook(String path, HivemindEntry entry) =>
+      Isolate.run(() {
+        final fresh = !File(path).existsSync();
+        Directory(p.dirname(path)).createSync(recursive: true);
+        final db = sqlite3.open(path);
+        try {
+          db.execute('PRAGMA busy_timeout = 10000');
+          if (fresh) db.execute('PRAGMA journal_mode = WAL');
+          db.execute(_hivemindSchema);
+          _write(db, entry);
+        } finally {
+          db.close();
+        }
+      });
+
+  static void _write(Database db, HivemindEntry entry) {
     final position = entry.position;
     final key = position.bookKey;
     final clock = entry.clock.bookName;
     db.execute('BEGIN IMMEDIATE');
     try {
+      // Keep the database's existing convention. Rewriting a large legacy
+      // book just to cache one position is unnecessary and would hold its
+      // writer lock for the whole database. An empty book starts current.
+      final empty = db.select('SELECT 1 FROM position LIMIT 1').isEmpty;
+      if (empty)
+        db.execute("INSERT OR IGNORE INTO meta VALUES('seats', 'AB/CD')");
+      final legacy = db
+          .select("SELECT 1 FROM meta WHERE key = 'seats'")
+          .isEmpty;
+      String? stored(String? text) =>
+          text == null || !legacy ? text : _swapBandC(text);
       db.execute(
         'INSERT INTO position(pos, fen, line, ply, priority, status, nodes, '
         "child_nodes, seconds, done_at) VALUES(?, ?, ?, ?, 0, 'done', ?, ?, ?, "
@@ -236,11 +250,11 @@ final class SqliteHivemindBook implements HivemindBook {
           [
             key,
             clock,
-            team == Team.ab ? 'AB' : 'CD',
-            pick.best,
+            team == Team.ab ? (legacy ? 'AC' : 'AB') : (legacy ? 'BD' : 'CD'),
+            stored(pick.best),
             pick.score.score,
             pick.score.mate,
-            pick.pv,
+            stored(pick.pv),
             pick.offset,
           ],
         );
@@ -253,12 +267,12 @@ final class SqliteHivemindBook implements HivemindBook {
           [
             key,
             '${board == BoardNumber.one ? 'A' : 'B'}:${played.move.san}',
-            position.mover(board).letter,
+            stored(position.mover(board).letter),
             uci,
             clock,
             value.score.score,
             value.score.mate,
-            value.pv,
+            stored(value.pv),
             played.after.bookKey,
           ],
         );

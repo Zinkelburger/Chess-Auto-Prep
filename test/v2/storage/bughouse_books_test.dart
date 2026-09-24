@@ -203,6 +203,50 @@ void main() {
       book.close();
     });
 
+    test(
+      'writes legacy labels into legacy books without mixing conventions',
+      () async {
+        final path = hivemindBook();
+        final book = SqliteHivemindBook([path]);
+        await book.save(entry(afterLine('A:e4'), ClockCase.cdMaySit));
+        final found = await book.lookup(afterLine('A:e4')) as HivemindFound;
+        final e5 = found.moves[(BoardNumber.one, 'e7e5')]!;
+        expect(e5[ClockCase.even]!.pv, 'B e5 · A Nf3');
+        expect(e5[ClockCase.cdMaySit]!.pv, 'C e5 · A Nf3');
+        await book.save(entry(afterLine('A:e4'), ClockCase.cdMaySit));
+        final again = await book.lookup(afterLine('A:e4')) as HivemindFound;
+        expect(
+          again.moves[(BoardNumber.one, 'e7e5')]![ClockCase.cdMaySit]!.pv,
+          'C e5 · A Nf3',
+        );
+        book.close();
+      },
+    );
+
+    test('a contended writer leaves the UI isolate responsive', () async {
+      final path = hivemindBook(relabelled: true);
+      final lock = sqlite3.open(path)..execute('BEGIN IMMEDIATE');
+      final book = SqliteHivemindBook([path]);
+      var released = false;
+      final release = Future<void>.delayed(
+        const Duration(milliseconds: 100),
+        () {
+          released = true;
+          lock.execute('ROLLBACK');
+          lock.close();
+        },
+      );
+      await book.save(entry(afterLine('A:e4'), ClockCase.cdMaySit));
+      expect(released, isTrue);
+      await release;
+      final found = await book.lookup(afterLine('A:e4')) as HivemindFound;
+      expect(
+        found.moves[(BoardNumber.one, 'e7e5')]!.containsKey(ClockCase.cdMaySit),
+        isTrue,
+      );
+      book.close();
+    });
+
     test('starts a book in the builder’s shape when there is none', () async {
       final path = p.join(dir.path, 'new', 'hivemind_book.db');
       final book = SqliteHivemindBook([path]);

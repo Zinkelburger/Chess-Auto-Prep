@@ -30,23 +30,26 @@ void main() {
     );
   });
 
-  test('an overtaken refresh never replaces a newer one', () async {
-    await start([kid]);
-    final library = fixture.library;
-    fixture.files
-      ..hold = true
-      ..listing = Repertoires([kid]);
-    final first = library.refresh();
-    fixture.files.listing = const Repertoires([]);
-    final second = library.refresh();
-    fixture.files.releaseLast(); // the second refresh answers first
-    await second;
-    expect(library.repertoires, isEmpty);
-    fixture.files.listing = Repertoires([kid]);
-    fixture.files.releaseNext(); // the stale first answer arrives late
-    await first;
-    expect(library.repertoires, isEmpty);
-  });
+  test(
+    'refreshes coalesce and discard the listing invalidated while reading',
+    () async {
+      await start([kid]);
+      final library = fixture.library;
+      fixture.files
+        ..hold = true
+        ..listing = Repertoires([kid]);
+      final first = library.refresh();
+      final second = library.refresh();
+      expect(fixture.files.pendingCalls, 1);
+      fixture.files.releaseNext();
+      await pumpEventQueue();
+      expect(fixture.files.pendingCalls, 1, reason: 'one fresh read follows');
+      fixture.files.listing = const Repertoires([]);
+      fixture.files.releaseNext();
+      await Future.wait([first, second]);
+      expect(library.repertoires, isEmpty);
+    },
+  );
 
   test('an unreadable folder is a typed failure, not an exception', () async {
     await start();

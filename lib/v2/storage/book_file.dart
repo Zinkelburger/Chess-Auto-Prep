@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 
 import 'book_list.dart';
 import 'atomic_write.dart';
+import 'file_lock.dart';
 
 /// Where the books are kept. The filesystem is a real boundary, so this is
 /// an interface: [BookFile] in the app, [MemoryBooks] in a test.
@@ -22,18 +23,35 @@ final class BookFile implements BookStore {
     : _file = File(p.join(support.path, 'books.json'));
 
   final File _file;
+  String? _baseline;
+  bool _read = false;
 
   @override
   Future<BookList> read() async {
-    if (!await _file.exists()) return BookList.empty;
-    return BookList.decode(await _file.readAsString());
+    _baseline = await _text();
+    _read = true;
+    return _baseline == null ? BookList.empty : BookList.decode(_baseline!);
   }
 
   @override
   Future<void> write(BookList books) async {
     await _file.parent.create(recursive: true);
-    await replaceFile(_file.path, utf8.encode(books.encode()));
+    await withDirectoryLock(_file.parent, () async {
+      final current = await _text();
+      if ((!_read && current != null) || (_read && current != _baseline)) {
+        throw StateError(
+          'Books changed in another instance. Reload before editing.',
+        );
+      }
+      final next = books.encode();
+      await replaceFile(_file.path, utf8.encode(next));
+      _baseline = next;
+      _read = true;
+    });
   }
+
+  Future<String?> _text() async =>
+      await _file.exists() ? _file.readAsString() : null;
 }
 
 /// Books kept in memory, for a test.

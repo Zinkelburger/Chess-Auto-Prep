@@ -110,11 +110,11 @@ void main() {
     expect(fixture.session.chapter!.lines.map((l) => l.nameAt(0)), ['Ruy']);
   });
 
-  test('moving every line out shows the file as one chapter', () async {
+  test('moving every line out keeps the surviving chapter identity', () async {
     await start(opened: sicilian);
     await fixture.library.moveLines(games: {0}, to: open);
-    expect(sectionsInText(onDisk()), [null]);
-    expect(fixture.session.source, ChapterRef.at(_path));
+    expect(sectionsInText(onDisk()), ['Open games']);
+    expect(fixture.session.source, open);
     expect(fixture.session.chapter!.lines, hasLength(3));
   });
 
@@ -154,7 +154,7 @@ void main() {
       text.substring(text.indexOf('[Event "Alapin"]')),
       contains('[ChapterName "Najdorf"]'),
     );
-    expect(sectionsInText(text), [null], reason: 'still one chapter');
+    expect(sectionsInText(text), ['Najdorf'], reason: 'still one chapter');
   });
 
   test('renaming a chapter rewrites its tag and nothing else', () async {
@@ -253,7 +253,7 @@ void main() {
     );
     final listing = await ChapterDirectory(dir).list() as Repertoires;
     final chapters = listing.folders.single.chapters;
-    expect(chapters.map((c) => c.name), ['Alone', 'Open games', 'Sicilian']);
-    expect(chapters.map((c) => c.section), [null, 'Open games', 'Sicilian']);
+    expect(chapters.map((c) => c.name), ['KID', 'Open games', 'Sicilian']);
+    expect(chapters.map((c) => c.section), ['KID', 'Open games', 'Sicilian']);
   });
 }

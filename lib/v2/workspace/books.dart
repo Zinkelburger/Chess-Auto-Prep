@@ -6,6 +6,7 @@ import '../diagnostics/log.dart';
 import '../storage/book_file.dart';
 import '../storage/book_list.dart';
 import '../storage/chapter_files.dart';
+import '../storage/pending_writes.dart';
 
 /// The user's books and the one in use. Every reader of "the book" — the
 /// explorer's Book, My games, the trainer — asks [includes]; the Books
@@ -15,11 +16,12 @@ import '../storage/chapter_files.dart';
 /// the newest carried by the next. A file that cannot be read is not taken
 /// for an empty one: [problem] says so and nothing is written over it.
 final class Books extends ChangeNotifier {
-  Books({required BookStore store, required String root})
+  Books({required BookStore store, required String root, this.pendingWrites})
     : _store = store,
       _root = root;
 
   final BookStore _store;
+  final PendingWrites? pendingWrites;
 
   /// The `repertoires` folder, absolute.
   final String _root;
@@ -262,7 +264,13 @@ final class Books extends ChangeNotifier {
     _list = list;
     _notify();
     _dirty = true;
-    _writing ??= _writeNewest();
+    final writing = _writing ??= _writeNewest();
+    pendingWrites?.track(
+      this,
+      writing,
+      label: 'Books',
+      problem: (_) => _problem,
+    );
   }
 
   Future<void> _writeNewest() async {
@@ -277,7 +285,7 @@ final class Books extends ChangeNotifier {
       }
     } on Object catch (error) {
       log.w('write the books', error);
-      _problem = 'Your books could not be saved.';
+      _problem = 'Your books could not be saved: $error';
       _notify();
     } finally {
       _writing = null;

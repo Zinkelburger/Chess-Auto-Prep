@@ -10,10 +10,13 @@ import '../../chess/training/sitting.dart';
 import '../../chess/training/training_line.dart';
 import '../../diagnostics/log.dart';
 import '../../storage/chapter_files.dart';
+import '../../storage/document_repository.dart';
 import '../../storage/pgn_document_store.dart';
 import '../../storage/training_store.dart';
+import '../../storage/pending_writes.dart';
 import '../../workspace/board_claim.dart';
 import '../../workspace/books.dart';
+import '../../workspace/repertoire_catalog.dart';
 import '../../workspace/document_session.dart';
 import '../../workspace/engine_analysis.dart';
 import 'lesson.dart';
@@ -109,7 +112,10 @@ class Trainer extends ChangeNotifier {
     required EngineAnalysis analysis,
     required TrainerTime time,
     required Books books,
-  }) : _books = books,
+    RepertoireCatalog? catalog,
+    this.pendingWrites,
+  }) : _catalog = catalog,
+       _books = books,
        _session = session,
        _chapters = chapters,
        _files = files,
@@ -117,9 +123,27 @@ class Trainer extends ChangeNotifier {
        _time = time {
     _session.addListener(_follow);
     _books.addListener(_bookChanged);
+    _catalog?.addListener(_catalogChanged);
   }
 
+  final RepertoireCatalog? _catalog;
+  final PendingWrites? pendingWrites;
   final Books _books;
+
+  void _catalogChanged() {
+    if (_state is TrainerIdle) return;
+    final catalog = _catalog!;
+    // A batch can contain an open-chapter save AND a sibling rename. Ignore
+    // only batches made entirely of saves the session already supplies.
+    if (!catalog.reloaded &&
+        catalog.changes.every(
+          (change) =>
+              change.kind == DocumentChangeKind.saved &&
+              change.path == _session.source?.path,
+        ))
+      return;
+    unawaited(_load(force: true));
+  }
 
   /// The book in use as the last load saw it.
   Object? _bookSeen;
@@ -327,7 +351,11 @@ class Trainer extends ChangeNotifier {
     final load = ++_loads;
     // The sitting was over the progress this replaces; it ends with it, so
     // nothing writes through a copy the files have moved past.
+    final previous = _state;
     leave();
+    _become(const TrainerLoading());
+    if (previous is TrainerReady) await previous.progress.settle();
+    if (load != _loads) return;
     if (_scope == TrainScope.book) return _loadBook(load, chapter, ref);
     if (chapter == null || ref == null) {
       return _become(const TrainerEmpty(NothingToTrain.noChapter));
@@ -370,7 +398,12 @@ class Trainer extends ChangeNotifier {
     _become(switch (read) {
       ProgressLoaded() => TrainerReady(
         chapters: chapters,
-        progress: TrainingProgress(files: _files, loaded: read, time: _time),
+        progress: TrainingProgress(
+          files: _files,
+          loaded: read,
+          time: _time,
+          pendingWrites: pendingWrites,
+        ),
       ),
       _ => TrainerFailed(read),
     });
@@ -392,6 +425,7 @@ class Trainer extends ChangeNotifier {
     _loads++;
     _session.removeListener(_follow);
     _books.removeListener(_bookChanged);
+    _catalog?.removeListener(_catalogChanged);
     leave();
     final state = _state;
     if (state is TrainerReady) state.progress.dispose();
@@ -408,9 +442,12 @@ final class ScopeReader {
   const ScopeReader({
     required ChapterFiles files,
     required PgnDocumentStore documents,
-  }) : _files = files,
+    RepertoireCatalog? catalog,
+  }) : _catalog = catalog,
+       _files = files,
        _documents = documents;
 
+  final RepertoireCatalog? _catalog;
   final ChapterFiles _files;
   final PgnDocumentStore _documents;
 
@@ -423,7 +460,7 @@ final class ScopeReader {
     ChapterRef open,
     List<TrainingLine> openLines,
   ) async {
-    final listing = await _files.list();
+    final listing = _catalog?.listing ?? await _files.list();
     final folder = listing is Repertoires
         ? listing.folders
               .where((f) => f.chapters.any((c) => c.path == open.path))
@@ -455,7 +492,7 @@ final class ScopeReader {
     bool Function(ChapterRef ref) wanted,
     ChapterLines? open,
   ) async {
-    final listing = await _files.list();
+    final listing = _catalog?.listing ?? await _files.list();
     if (listing is! Repertoires) return const [];
     final files = <String, Future<Chapter?>>{};
     return [

@@ -47,11 +47,9 @@ void main() {
   });
 
   test('a file whose games all carry one name is one chapter too', () {
-    // What an earlier import wrote: a chapter file per study chapter, every
-    // game still naming it. The file's own name, which the user may have
-    // changed, stays the chapter's.
+    // Singleton identity stays named; an older whole-file ref still reads it.
     const one = '[Event "a"]\n[ChapterName "KID"]\n\n1. d4 *\n';
-    expect(sectionsInText(one), [null]);
+    expect(sectionsInText(one), ['KID']);
     final file = parseChapter(name: 'Renamed', text: one);
     final view = sectionView(file, null);
     expect(view.places, [0]);
@@ -61,7 +59,7 @@ void main() {
         linesAddedTo(view.chapter, lines: other.lines) as ChapterEdited;
     final back = spliced(view, edited.chapter, edited.games)!;
     expect(sectionOf(back.file.lines.last), 'KID');
-    expect(sectionsInText(writeChapter(back.file)), [null]);
+    expect(sectionsInText(writeChapter(back.file)), ['KID']);
   });
 
   test('a chapter is its games wherever they sit, trained as the file', () {

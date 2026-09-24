@@ -7,6 +7,7 @@ import '../chess/pgn/chapter_heading.dart';
 import '../chess/pgn/chapter_sections.dart';
 import '../diagnostics/log.dart';
 import 'document_ref.dart';
+import 'pgn_document_store.dart' as store;
 import 'document_relocation.dart' show recoveryFolder;
 
 /// One chapter on disk: a file, or the games of a file that name one
@@ -170,7 +171,10 @@ const stagingPrefix = '.import-';
 /// One folder per repertoire, one `.pgn` per chapter, plus index files and
 /// sidecars the app ignores.
 final class ChapterDirectory implements ChapterFiles {
-  ChapterDirectory(this.root);
+  ChapterDirectory(this.root, {store.PgnDocumentStore? documents})
+    : _documents = documents;
+
+  final store.PgnDocumentStore? _documents;
 
   /// The `repertoires` directory itself.
   final Directory root;
@@ -186,6 +190,7 @@ final class ChapterDirectory implements ChapterFiles {
     if (!await root.exists()) return const Repertoires([]);
     final skipped = <UnreadableFolder>[];
     try {
+      await _migrateFlat();
       final folders = await _scan(skipped);
       folders.sort(_byName);
       return Repertoires(
@@ -225,9 +230,54 @@ final class ChapterDirectory implements ChapterFiles {
     }
   }
 
+  Future<void> _migrateFlat() async {
+    final documents = _documents;
+    if (documents == null) return;
+    await for (final entry in root.list(followLinks: false)) {
+      if (entry is! File ||
+          p.basename(entry.path).startsWith('.') ||
+          !_isChapter(entry.path))
+        continue;
+      final ref = DocumentRef(entry.path);
+      final read = await documents.open(ref);
+      if (read is! store.Opened) continue;
+      final destination = p.join(
+        root.path,
+        p.basenameWithoutExtension(entry.path),
+        'Main.pgn',
+      );
+      final result = await documents.move(
+        ref,
+        DocumentRef(destination),
+        expected: read.revision,
+      );
+      if (result is! store.Moved) log.w('migrate ${entry.path}', '$result');
+    }
+  }
+
   Future<List<RepertoireFolder>> _scan(List<UnreadableFolder> skipped) async {
     final folders = <RepertoireFolder>[];
-    await for (final entry in root.list()) {
+    await for (final entry in root.list(followLinks: false)) {
+      if (p.basename(entry.path).startsWith('.')) continue;
+      if (entry is File && _isChapter(entry.path)) {
+        final stat = await entry.stat();
+        folders.add(
+          RepertoireFolder(
+            name: p.basenameWithoutExtension(entry.path),
+            path: entry.path,
+            modified: stat.modified,
+            chapters: [
+              for (final section in await _sectionsOf(entry, stat))
+                ChapterRef.at(
+                  entry.path,
+                  section: section,
+                  heading: await _headingOf(entry),
+                ),
+            ],
+          ),
+        );
+        continue;
+      }
       if (entry is! Directory) continue;
       final name = p.basename(entry.path);
       if (name.startsWith('.')) continue;
@@ -259,8 +309,7 @@ final class ChapterDirectory implements ChapterFiles {
   Future<RepertoireFolder> _read(Directory folder, String name) async {
     final files = <File>[];
     var modified = (await folder.stat()).modified;
-    await for (final file in folder.list()) {
-      if (file is! File || !_isChapter(file.path)) continue;
+    await for (final file in _chapterFiles(folder)) {
       files.add(file);
     }
     files.sort(_byFileName);
@@ -272,7 +321,13 @@ final class ChapterDirectory implements ChapterFiles {
       // A file's chapters are listed in the order the file gives them.
       for (final section in await _sectionsOf(file, stat)) {
         chapters.add(
-          ChapterRef.at(file.path, heading: heading, section: section),
+          ChapterRef(
+            repertoire: name,
+            name: section ?? p.basenameWithoutExtension(file.path),
+            path: file.path,
+            heading: heading,
+            section: section,
+          ),
         );
       }
     }
@@ -282,6 +337,18 @@ final class ChapterDirectory implements ChapterFiles {
       modified: modified,
       chapters: List.unmodifiable(chapters),
     );
+  }
+}
+
+/// Traverse shelves without following links or visiting recovery/staging data.
+Stream<File> _chapterFiles(Directory folder) async* {
+  await for (final entry in folder.list(followLinks: false)) {
+    if (p.basename(entry.path).startsWith('.')) continue;
+    if (entry is Directory) {
+      yield* _chapterFiles(entry);
+    } else if (entry is File && _isChapter(entry.path)) {
+      yield entry;
+    }
   }
 }
 
@@ -411,11 +478,11 @@ Future<DeletedListing> listDeleted(Directory root) async {
   if (!await root.exists()) return const DeletedChapters([]);
   final found = <DeletedChapter>[];
   try {
-    await for (final entry in root.list()) {
+    await for (final entry in root.list(followLinks: false)) {
       if (entry is! Directory || p.basename(entry.path).startsWith('.')) {
         continue;
       }
-      found.addAll(await _deletedIn(entry.path));
+      found.addAll(await _deletedBelow(entry));
     }
   } on FileSystemException catch (error) {
     log.w('list the deleted chapters under ${root.path}', error);
@@ -423,6 +490,16 @@ Future<DeletedListing> listDeleted(Directory root) async {
   }
   found.sort((a, b) => b.deletedAt.compareTo(a.deletedAt));
   return DeletedChapters(List.unmodifiable(found));
+}
+
+Future<List<DeletedChapter>> _deletedBelow(Directory directory) async {
+  final found = await _deletedIn(directory.path);
+  await for (final entry in directory.list(followLinks: false)) {
+    if (entry is Directory && !p.basename(entry.path).startsWith('.')) {
+      found.addAll(await _deletedBelow(entry));
+    }
+  }
+  return found;
 }
 
 Future<List<DeletedChapter>> _deletedIn(String folder) async {

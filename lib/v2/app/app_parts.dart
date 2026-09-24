@@ -4,6 +4,7 @@ import '../features/settings/lichess_account.dart';
 import '../storage/my_games_files.dart';
 import '../storage/settings_store.dart';
 import '../workspace/books.dart';
+import '../workspace/repertoire_catalog.dart';
 import '../workspace/copy_name_dialog.dart';
 import '../workspace/document_saver.dart';
 import '../workspace/document_session.dart';
@@ -49,6 +50,7 @@ final class AppParts {
   late final saver = DocumentSaver(env.store, delay: env.saveDelay);
   late final session = DocumentSession(env.store, saver);
   late final account = LichessAccountState(
+    pendingWrites: env.pendingWrites,
     login: env.lichessLogin,
     read: env.readAccount,
     write: env.writeAccount,
@@ -62,19 +64,30 @@ final class AppParts {
   );
 
   /// The user's books and the one in use.
-  late final books = Books(store: env.books, root: env.folders.repertoires);
+  late final books = Books(
+    store: env.books,
+    root: env.folders.repertoires,
+    pendingWrites: env.pendingWrites,
+  );
+
+  late final catalog = RepertoireCatalog(
+    files: env.chapterFiles,
+    documents: env.store,
+    root: env.folders.repertoires,
+  );
 
   late final DocumentModes documents = wireDocumentModes(
     env,
     session,
     saver,
     books,
+    catalog,
   );
   late final _workspace = WorkspaceWiring(
     env,
     session: session,
     saver: saver,
-    library: documents.library,
+    catalog: catalog,
     filter: documents.filter,
     games: gamesCache,
     books: books,
@@ -87,6 +100,7 @@ final class AppParts {
     question: _question,
     saveCopy: _copied,
     wait: env.exitWait,
+    settleFeatures: env.pendingWrites.settle,
   );
 
   /// The copy the question on the way out asked for: the name of the file
@@ -114,7 +128,7 @@ final class AppParts {
   late final _training = TrainingWiring(
     env,
     workspace: workspace,
-    library: documents.library,
+    catalog: catalog,
     requests: requests,
     games: gamesCache,
   );
@@ -140,6 +154,18 @@ final class AppParts {
     await _workspace.start();
   }
 
+  /// Stops producers before the exit guard drains accepted durable work.
+  /// Keeping the window open leaves these jobs paused and resumable.
+  void prepareToClose() {
+    requests.cancelPending();
+    workspace.fill.cancel();
+    training.myGames.pause();
+    training.lines.leave();
+    labs.search.close();
+    labs.matches.stop();
+    unawaited(account.cancel());
+  }
+
   /// The parts in the reverse of the order they are declared in, so each
   /// goes before what it was built over; then the environment. A second
   /// call does nothing.
@@ -153,6 +179,8 @@ final class AppParts {
     documents.dispose();
     account.dispose();
     books.dispose();
+    catalog.dispose();
+    env.store.dispose();
     session.dispose();
     saver.dispose();
     // The environment made the settings store, but only the parts listen

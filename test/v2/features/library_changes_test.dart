@@ -1,4 +1,5 @@
 import 'package:chess_auto_prep/v2/chess/pgn/repertoire_import.dart';
+import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/features/library/library.dart';
 import 'package:chess_auto_prep/v2/features/library/library_state.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
@@ -36,6 +37,28 @@ void main() {
     expect(fixture.session.source, isNull);
     expect(fixture.store.deleted.keys, [main]);
   });
+
+  test(
+    'a failed draft save prevents deletion and preserves the words',
+    () async {
+      final main = kid.chapters.last;
+      final library = await start(open: main);
+      fixture.store.saves.addAll(const [
+        IoFailure('disk full'),
+        IoFailure('disk full'),
+      ]);
+      fixture.session.playMove('e2e4');
+      fixture.session.setComment(NodePath.of([0]), 'Keep these words');
+      final result = await library.deleteChapter(main);
+      expect(result, isA<LibraryFailure>());
+      expect(fixture.store.deleted, isEmpty);
+      expect(fixture.session.source, main);
+      expect(
+        fixture.session.chapter!.tree.nodeAt(NodePath.of([0]))!.comment,
+        contains('Keep these words'),
+      );
+    },
+  );
 
   test('a chapter that is no longer on disk is stale, not written', () async {
     final library = await start();
