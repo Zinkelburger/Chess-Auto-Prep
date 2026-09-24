@@ -1,0 +1,241 @@
+# The Windows build: the v2 app, its bughouse engine and Visual C++ runtime
+# checked inside the bundle, the portable zip and the setup, which is
+# installed silently on the runner as a check. Called by release.yml with the
+# tag, and by windows-check.yml with a check name; nothing here publishes.
+
+name: Windows build
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: The tag or check name in the artifact names, e.g. v1.18.0
+        required: true
+        type: string
+
+jobs:
+  build-windows:
+    # The supported client floor is Windows 10. Do not silently move the build
+    # to VS 2026/Server 2025 through windows-latest: v1.15.3 did exactly that,
+    # then shipped runtime files that had never been exercised as a bundle.
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.2
+          channel: stable
+          cache: true
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Fetch the pinned Microsoft VC++ prerequisite
+        shell: pwsh
+        run: |
+          python tools/fetch_vc_redist.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/fetch_vc_redist.py --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $redist = "packaging\windows\prerequisites\VC_redist.x64.exe"
+          $signature = Get-AuthenticodeSignature $redist
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Microsoft') {
+            Write-Host "VC++ prerequisite is not validly signed by Microsoft:"
+            $signature | Format-List
+            exit 1
+          }
+          Get-FileHash $redist -Algorithm SHA256
+          $signature.SignerCertificate | Select-Object Subject, Thumbprint
+
+      - name: Cache Stockfish
+        uses: actions/cache@v6
+        with:
+          path: assets/executables
+          key: stockfish-${{ hashFiles('tools/assets.lock.json') }}-windows
+
+      - name: Fetch Stockfish (Windows)
+        run: |
+          python tools/fetch_assets.py --only stockfish-windows
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/fetch_assets.py --check --only stockfish-windows
+
+      - name: Cache bughouse engine
+        uses: actions/cache@v6
+        with:
+          path: assets/bughouse
+          key: bughouse-${{ hashFiles('tools/assets.lock.json') }}-windows
+
+      - name: Fetch bughouse engine (Windows)
+        run: |
+          python tools/fetch_assets.py --only bughouse-windows
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/fetch_assets.py --check --only bughouse-windows
+
+      # A release must not ship an engine that cannot start. The audit reads
+      # the binaries' imports and insists every one is either part of the OS
+      # or shipped by us; the run loads the network and searches for real.
+      - name: Verify the bughouse engine runs
+        timeout-minutes: 10
+        run: |
+          python tools/test_bughouse_engine.py deps
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/test_bughouse_engine.py run
+
+      - name: Build Windows release
+        run: flutter build windows --release -t lib/main_v2.dart
+
+      # `flutter build` treats a *missing* asset directory as a printed warning
+      # and exits 0, so nothing before this point can tell a build that bundled
+      # the engine from one that quietly did not. Looking inside the artifact is
+      # the only thing that can, and this is the failure it exists for: a green
+      # release whose Bughouse Lab is simply absent.
+      - name: Verify the engine is in the built bundle
+        shell: pwsh
+        run: |
+          $dir = "build/windows/x64/runner/Release/data/flutter_assets/assets/bughouse"
+          $missing = @()
+          foreach ($f in @('hivemind-windows.exe.gz','hivemind_ort.dll.gz','hivemind.onnx.gz','hivemind-windows-source.tar.gz','manifest.json')) {
+            $p = Join-Path $dir $f
+            if (-not (Test-Path $p) -or ((Get-Item $p).Length -eq 0)) { $missing += $f }
+          }
+          if ($missing.Count -gt 0) {
+            Write-Host "Bundle is missing: $($missing -join ', ')"
+            Get-ChildItem $dir -ErrorAction SilentlyContinue
+            exit 1
+          }
+          Get-ChildItem $dir | ForEach-Object { "  $($_.Name)  $($_.Length) bytes" }
+
+      # The four DLLs windows/CMakeLists.txt deploys app-locally. Asserted
+      # rather than assumed for the same reason the asset fetches are: the app
+      # imports these, so a bundle without them does not start at all, and
+      # nothing earlier in this job would have said so. Whether CMake's redist
+      # list carries MSVCP140_1.dll varies by toolchain, and onnxruntime.dll
+      # needs it, so it is named here explicitly.
+      #
+      # The bughouse engine depends on this step twice over: it runs as its
+      # own process out of the support directory, so BughouseBundle copies
+      # these four on from here to sit beside it. A bundle without them leaves
+      # the engine unable to start on any machine that has never installed the
+      # redistributable — and unable to say why, because the Windows loader
+      # stops it before it can print anything.
+      - name: Verify the VC++ runtime is bundled
+        shell: pwsh
+        run: |
+          $bundle = "build/windows/x64/runner/Release"
+          $redist = Get-Content tools\vc_redist.lock.json | ConvertFrom-Json
+          $missing = @()
+          foreach ($dll in @('MSVCP140.dll','MSVCP140_1.dll','VCRUNTIME140.dll','VCRUNTIME140_1.dll')) {
+            if (-not (Test-Path (Join-Path $bundle $dll))) { $missing += $dll }
+          }
+          if ($missing.Count -gt 0) {
+            Write-Host "Bundle is missing: $($missing -join ', ')"
+            Get-ChildItem $bundle -Filter *.dll | Select-Object -ExpandProperty Name
+            exit 1
+          }
+          Write-Host "VC++ runtime bundled:"
+          Get-ChildItem $bundle -Filter *140*.dll | ForEach-Object { "  $($_.Name)  $($_.Length) bytes" }
+
+          # The installer omits these loose files and uses the pinned central
+          # redistributable. Never let a newer compiler silently create an app
+          # that requires exports the pinned prerequisite does not provide.
+          $builtRuntime = (Get-Item (Join-Path $bundle 'MSVCP140.dll')).VersionInfo.FileVersionRaw
+          $prerequisite = [version]$redist.version
+          if ($builtRuntime -gt $prerequisite) {
+            Write-Host "Built runtime $builtRuntime is newer than pinned prerequisite $prerequisite."
+            Write-Host "Update tools/vc_redist.lock.json to a supported Microsoft release."
+            exit 1
+          }
+
+      # The earlier live check runs before Flutter builds and therefore sees
+      # the hosted runner's centrally installed runtime. Re-run with the exact
+      # DLLs from the final app bundle beside Hivemind: that is what the
+      # portable zip installs and what v1.15.3 accidentally left untested.
+      - name: Verify Hivemind with the final portable runtime
+        timeout-minutes: 10
+        run: >-
+          python tools/test_bughouse_engine.py run
+          --install-to "final engine under test"
+          --windows-runtime-from build/windows/x64/runner/Release
+
+      - name: Verify the private engine runtime archive
+        run: python tools/package_bughouse_runtime.py --bundle build/windows/x64/runner/Release --check
+
+      - name: Zip bundle (portable)
+        shell: pwsh
+        run: |
+          Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath chess-auto-prep-${{ inputs.version }}-windows.zip
+
+      # Inno Setup ships on the hosted Windows image; the choco line is a
+      # fallback for when an image update drops it.
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup --no-progress -y
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          }
+          $version = "${{ inputs.version }}".TrimStart("v")
+          $redist = Get-Content tools\vc_redist.lock.json | ConvertFrom-Json
+          & $iscc "/DAppVersion=$version" `
+            "/DVCRedistVersion=$($redist.version)" `
+            "/DVCRedistMajor=$($redist.major)" `
+            "/DVCRedistMinor=$($redist.minor)" `
+            "/DVCRedistBuild=$($redist.build)" `
+            packaging\windows\installer.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          # Compile-time exclusions are easy to get subtly wrong. Install the
+          # finished setup silently on the runner and prove the installed app
+          # uses the central runtime while the separate zip keeps its fallback.
+          $setup = "dist\chess-auto-prep-$version-windows-setup.exe"
+          $installDir = Join-Path $env:RUNNER_TEMP "Chess Auto Prep installer test"
+          New-Item -ItemType Directory -Force $installDir | Out-Null
+          # Simulate an upgrade from the installer that shipped app-local DLLs.
+          Get-ChildItem build/windows/x64/runner/Release -File | Where-Object {
+            $_.Name -match '^(concrt140|msvcp140|vcruntime140).*\.dll$'
+          } | Copy-Item -Destination $installDir
+          if (-not (Test-Path (Join-Path $installDir 'msvcp140.dll'))) {
+            throw 'Upgrade fixture did not contain the old runtime'
+          }
+          # Start-Process -Wait, not `& $setup`: setup.exe is a GUI-subsystem
+          # binary, so PowerShell's call operator returns the moment it is
+          # launched and leaves $LASTEXITCODE stale. The check below then ran
+          # against a directory the installer had not touched yet — which read
+          # as a pass for as long as that directory started out empty.
+          $log = Join-Path $env:RUNNER_TEMP "installer.log"
+          # $installDir has spaces in it, and -ArgumentList joins the array
+          # without quoting anything, so the quotes have to be in the strings.
+          $proc = Start-Process -FilePath (Resolve-Path $setup) -Wait -PassThru -ArgumentList @(
+            '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART',
+            ('/DIR="{0}"' -f $installDir), ('/LOG="{0}"' -f $log)
+          )
+          if ($proc.ExitCode -ne 0) {
+            Write-Host "Installer exited with $($proc.ExitCode):"
+            if (Test-Path $log) { Get-Content $log -Tail 80 }
+            exit $proc.ExitCode
+          }
+          $looseRuntime = Get-ChildItem $installDir -File | Where-Object {
+            $_.Name -match '^(concrt140|msvcp140|vcruntime140).*\.dll$'
+          }
+          if ($looseRuntime) {
+            Write-Host "Installer unexpectedly deployed loose VC++ DLLs:"
+            $looseRuntime | Select-Object -ExpandProperty Name
+            if (Test-Path $log) { Write-Host "--- installer log ---"; Get-Content $log -Tail 80 }
+            exit 1
+          }
+          # Setup must retain the engine's compressed runtime even though it
+          # excludes loose VC++ DLLs from the application's root directory.
+          python tools/package_bughouse_runtime.py --bundle "$installDir" --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Move-Item "dist\chess-auto-prep-$version-windows-setup.exe" "chess-auto-prep-${{ inputs.version }}-windows-setup.exe"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-build
+          path: |
+            chess-auto-prep-${{ inputs.version }}-windows.zip
+            chess-auto-prep-${{ inputs.version }}-windows-setup.exe

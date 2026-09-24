@@ -1,0 +1,165 @@
+# Will the v2 app install and run its bughouse engine on Windows 10 and 11?
+#
+# Runs only when someone pushes the `windows-check` branch on purpose; it
+# publishes nothing. The release's own Windows build makes the setup and the
+# portable zip, then each is tried on a Windows Server 2022 runner (the
+# Windows 10 generation, build 20348) and a Windows Server 2025 runner (the
+# Windows 11 24H2 generation, build 26100):
+#
+#   native   The shipped engine against a deliberately old ONNX Runtime, a
+#            missing and a corrupt private runtime, then a real search from a
+#            Unicode path with an old `onnxruntime.dll` beside it.
+#   first    The v2 app's own install path inside a built desktop app: a fresh
+#            profile with spaces and non-ASCII letters, a real search, a
+#            damaged network repaired on the next start.
+#   clean    The machine's Visual C++ runtime uninstalled, as on a PC that
+#            never had it. The portable zip must still run the engine.
+#   setup    The setup installed silently into a folder with spaces; it puts
+#            the runtime back as a prerequisite. The installed app runs its
+#            `--self-test-bughouse` in the user's real AppData, then again
+#            after the network there is damaged.
+#
+#   git push origin HEAD:windows-check --force
+
+name: Windows check
+
+on:
+  push:
+    branches: [windows-check]
+
+jobs:
+  build:
+    uses: ./.github/workflows/windows-build.yml
+    with:
+      version: v0.0.0-windows-check
+
+  try:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.2
+          channel: stable
+          cache: true
+
+      - name: Which Windows
+        run: |
+          Get-CimInstance Win32_OperatingSystem | Format-List Caption, Version, BuildNumber
+          Get-CimInstance Win32_Processor | Format-List Name, NumberOfLogicalProcessors
+
+      - name: Fetch the engine
+        run: |
+          python tools/fetch_assets.py --only bughouse-windows
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/fetch_assets.py --only stockfish-windows
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/fetch_assets.py --check --only bughouse-windows
+
+      - name: native — private ONNX Runtime loading
+        timeout-minutes: 10
+        run: python tools/test_windows_ort_loading.py
+
+      - name: Decline file associations in the disposable test account
+        run: |
+          New-Item -Path HKCU:\Software\ChessAutoPrep -Force | Out-Null
+          New-ItemProperty -Path HKCU:\Software\ChessAutoPrep `
+            -Name FileAssociationChoice -Value no -PropertyType String -Force | Out-Null
+
+      - name: first — v2 install, search and repair in a built app
+        timeout-minutes: 30
+        run: flutter test integration_test/v2_bughouse_first_run_test.dart -d windows
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: windows-build
+          path: dist
+
+      - name: clean — remove the machine's Visual C++ runtime
+        run: |
+          $keys = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
+                  'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
+          $redists = Get-ItemProperty $keys -ErrorAction SilentlyContinue |
+            Where-Object { $_.DisplayName -match 'Visual C\+\+ 20(15|17|19|22).*Redistributable \(x64\)' -and $_.BundleProviderKey }
+          foreach ($r in $redists) {
+            Write-Host "Uninstalling $($r.DisplayName)"
+            $cache = $r.BundleCachePath
+            if ($cache -and (Test-Path $cache)) {
+              Start-Process -FilePath $cache -ArgumentList '/uninstall','/quiet','/norestart' -Wait
+            }
+          }
+          $left = Get-ChildItem "$env:WINDIR\System32" -Filter 'msvcp140*.dll' -ErrorAction SilentlyContinue
+          if ($left) { Write-Host "Still in System32 (another product may own them): $($left.Name -join ', ')" }
+          else { Write-Host 'System32 has no MSVCP140*.dll now' }
+
+      - name: clean — portable zip runs the engine
+        timeout-minutes: 10
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'portable é 棋'
+          Expand-Archive dist\chess-auto-prep-v0.0.0-windows-check-windows.zip -DestinationPath $dir
+          ./tools/windows_self_test.ps1 -Exe (Join-Path $dir 'chess_auto_prep.exe') -Name portable
+
+      - name: setup — silent install into a folder with spaces
+        timeout-minutes: 10
+        run: |
+          $installDir = Join-Path $env:LOCALAPPDATA 'Programs\Chess Auto Prep check'
+          $log = Join-Path $env:RUNNER_TEMP 'installer.log'
+          $setup = Resolve-Path dist\chess-auto-prep-v0.0.0-windows-check-windows-setup.exe
+          $proc = Start-Process -FilePath $setup -Wait -PassThru -ArgumentList @(
+            '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART',
+            ('/DIR="{0}"' -f $installDir), ('/LOG="{0}"' -f $log)
+          )
+          if ($proc.ExitCode -ne 0) { Get-Content $log -Tail 80; exit $proc.ExitCode }
+          foreach ($f in @('chess_auto_prep.exe',
+                           'data\flutter_assets\assets\bughouse\hivemind-windows.exe.gz',
+                           'data\flutter_assets\assets\bughouse\hivemind_ort.dll.gz',
+                           'data\flutter_assets\assets\bughouse\hivemind.onnx.gz',
+                           'data\flutter_assets\assets\bughouse\manifest.json',
+                           'data\bughouse-runtime\manifest.json')) {
+            if (-not (Test-Path (Join-Path $installDir $f))) { throw "Setup did not install $f" }
+          }
+          "INSTALL_DIR=$installDir" | Out-File -Append $env:GITHUB_ENV
+
+      - name: setup — the installed app runs the engine, then repairs it
+        timeout-minutes: 15
+        run: |
+          $exe = Join-Path $env:INSTALL_DIR 'chess_auto_prep.exe'
+          ./tools/windows_self_test.ps1 -Exe $exe -Name installed -Fresh
+          ./tools/windows_self_test.ps1 -Exe $exe -Name repaired -Damage
+
+      - name: setup — the installed app boots to its window
+        timeout-minutes: 5
+        run: |
+          $exe = Join-Path $env:INSTALL_DIR 'chess_auto_prep.exe'
+          $p = Start-Process -FilePath $exe -PassThru
+          Start-Sleep -Seconds 20
+          if ($p.HasExited) { throw "The app exited with $($p.ExitCode) on its own" }
+          Stop-Process -Id $p.Id -Force
+          $log = Get-ChildItem $env:APPDATA -Recurse -Filter app.log -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($log) { Get-Content $log.FullName -Tail 40 }
+
+      - name: Reports
+        if: always()
+        run: |
+          Get-ChildItem $env:RUNNER_TEMP -Filter 'self-test-*.json' | ForEach-Object {
+            Write-Host "== $($_.Name)"; Get-Content $_.FullName
+          }
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: reports-${{ matrix.os }}
+          path: ${{ runner.temp }}/self-test-*.json

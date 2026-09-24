@@ -110,7 +110,11 @@ moves the match to
   Windows the build's VC++ DLLs under `data/bughouse-runtime/` are copied beside it the same way (a build
   without that folder copies the DLLs beside the app instead), the engine's PATH is cut to its own folder
   and System32, and an engine that exits before `uciok` is reported with what its exit code means
-  (`0xC0000135`, `0xC000007B`, `0xC000001D`). Hivemind
+  (`0xC0000135`, `0xC000007B`, `0xC000001D`).
+  `--self-test-bughouse=<report.json>` makes the app install and start the engine exactly as the lab does,
+  in the user's own support folder, ask for one search, write what happened and exit (0 when it answered).
+  `tools/windows_self_test.ps1` runs it on any Windows PC; `.github/workflows/windows-check.yml` runs it and
+  the rest of the Windows checks on Server 2022 and 2025 when the `windows-check` branch is pushed. Hivemind
   runs on half of the machine's cores, 256 MB hash, batch 8. MIT (aminwoo).
 - **Hivemind book** — read-only `hivemind_book.db` (`tools/bughouse_db/hivemind_book.py`), looked for under
   `$BUGHOUSE_DB_HOME` alone when set, else `~/.local/share/chess-prep/bughouse-db/`, then the support folder.
