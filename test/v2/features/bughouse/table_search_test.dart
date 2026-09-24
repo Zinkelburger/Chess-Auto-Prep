@@ -6,6 +6,7 @@ import 'package:chess_auto_prep/v2/engines/hivemind_engine.dart';
 import 'package:chess_auto_prep/v2/features/bughouse/bughouse_lab.dart';
 import 'package:chess_auto_prep/v2/features/bughouse/table_search.dart';
 import 'package:chess_auto_prep/v2/storage/bughouse_books.dart';
+import 'package:chess_auto_prep/v2/storage/pending_writes.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/scripted_bughouse.dart';
@@ -218,6 +219,97 @@ void main() {
     expect(trouble, isA<SearchFailed>());
     expect(trouble.reason, 'The bughouse engine stopped.');
   });
+
+  test(
+    'retry finishes a partial table without searching scored moves again',
+    () async {
+      var children = 0;
+      outside.engine.answer = (question) {
+        if (question.budget case NodeBudget(nodes: 20)) {
+          children++;
+          if (children == 4) return const HivemindFailed('interrupted');
+        }
+        return firstMoves(question);
+      };
+      search
+        ..open()
+        ..toggleEngine();
+      await pumpEventQueue();
+      expect((search.scores as ScoresSearched).done, 3);
+      expect(outside.book.saved, isEmpty);
+      expect(search.engineOn, isFalse);
+      search.toggleEngine();
+      await pumpEventQueue();
+      expect((search.scores as ScoresSearched).finished, isTrue);
+      expect(children, 41); // Forty moves and the one failed attempt.
+      expect(outside.book.saved.single.moves, hasLength(40));
+      expect(outside.starts, 2);
+    },
+  );
+
+  test(
+    'a failed save retains complete analysis and retries only the write',
+    () async {
+      final pending = PendingWrites();
+      search.dispose();
+      search = TableSearch(
+        lab: lab,
+        book: outside.book,
+        startEngine: () => outside.outside.launch(cores: 2),
+        pendingWrites: pending,
+        passes: const [Duration(seconds: 1)],
+      );
+      final write = Completer<HivemindSave>();
+      final attempted = <HivemindEntry>[];
+      outside.book.saving = (entry) {
+        attempted.add(entry);
+        return write.future;
+      };
+      search
+        ..open()
+        ..toggleEngine();
+      await pumpEventQueue();
+      expect((search.scores as ScoresSearched).finished, isTrue);
+      expect(search.analysisSave, isA<AnalysisSaving>());
+      write.complete(const HivemindSaveFailed('disk full'));
+      await pumpEventQueue();
+      expect((search.analysisSave as AnalysisSaveFailed).detail, 'disk full');
+      expect(await pending.settle(), contains('disk full'));
+      final questions = outside.engine.asked.length;
+      outside.book.saving = null;
+      await search.retrySave();
+      expect(search.analysisSave, isA<AnalysisSaved>());
+      expect(await pending.settle(), isNull);
+      expect(outside.engine.asked.length, questions);
+      expect(outside.book.saved.single, attempted.single);
+    },
+  );
+
+  test(
+    'save outcome belongs to the captured position after navigation',
+    () async {
+      final write = Completer<HivemindSave>();
+      outside.book.saving = (_) => write.future;
+      search
+        ..open()
+        ..toggleEngine();
+      await pumpEventQueue();
+      expect(search.analysisSave, isA<AnalysisSaving>());
+      search.toggleEngine();
+      lab.play(BoardNumber.one, 'e2e4');
+      await pumpEventQueue();
+      write.complete(const HivemindSaveFailed('disk full'));
+      await pumpEventQueue();
+      expect(search.analysisSave, isNull);
+      lab.go(BoardNumber.one, 0);
+      await pumpEventQueue();
+      expect(search.analysisSave, isA<AnalysisSaveFailed>());
+      expect((search.scores as ScoresSearched).finished, isTrue);
+      outside.book.saving = null;
+      await search.retrySave();
+      expect(outside.book.saved.single.position, TablePosition.initial);
+    },
+  );
 
   group('The engine switch', () {
     List<HivemindQuestion> passes() => [

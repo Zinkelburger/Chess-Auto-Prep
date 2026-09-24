@@ -72,6 +72,14 @@ final class GapHunt extends ChangeNotifier {
   /// The gap Next took the user to, until the cursor leaves it.
   Gap? get highlighted => _highlighted;
 
+  /// Committed sibling changes can add or remove answers without changing the
+  /// open chapter. Cancel the old walk and discard its navigation targets.
+  void refreshAnswers() {
+    _answers.forget();
+    _clear();
+    _follow();
+  }
+
   /// Takes the board to the next gap, most reached first, round and round.
   /// A missing reply lands on the position before it, with the reply's row
   /// marked in the table; a dead end lands where the chapter stops.
@@ -218,20 +226,25 @@ final class RepertoireAnswers {
   final PgnDocumentStore _documents;
 
   /// What each chapter answers, by chapter, as last read.
-  final _read = <ChapterRef, _Answered>{};
+  var _read = <ChapterRef, _Answered>{};
 
   /// Drops what was read; the next question reads the files again.
-  void forget() => _read.clear();
+  void forget() => _read = {};
 
   /// Drops what was read from the file at [path], every chapter of it; the
   /// other files stay as they were read.
-  void forgetFile(String path) =>
-      _read.removeWhere((chapter, _) => chapter.path == path);
+  void forgetFile(String path) => _read = {
+    for (final entry in _read.entries)
+      if (entry.key.path != path) entry.key: entry.value,
+  };
 
   /// The positions the chapters of [chapter]'s repertoire other than itself
   /// answer from [side], each naming the first chapter, in folder order,
   /// that answers it.
   Future<Map<String, String>> around(ChapterRef chapter, Side side) async {
+    // An invalidation replaces the cache. An older read may finish for its
+    // caller, but cannot refill the cache the next walk will use.
+    final read = _read;
     final listing = await _files.list();
     if (listing is! Repertoires) return const {};
     final folder = listing.folders
@@ -245,7 +258,7 @@ final class RepertoireAnswers {
       // By chapter, not by file: the other chapters of a course file are
       // other chapters.
       if (other == chapter || other.heading.draft) continue;
-      final answered = _read[other] ??= _answeredIn(
+      final answered = read[other] ??= _answeredIn(
         other,
         await (files[other.path] ??= _file(other)),
       );

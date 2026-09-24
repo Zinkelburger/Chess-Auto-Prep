@@ -149,10 +149,21 @@ class _StatusLine extends StatelessWidget {
 
   String get _said {
     if (lab.problem case final problem?) return _refused(problem);
+    if (search.analysisSave case AnalysisSaveFailed(:final detail)) {
+      return 'Analysis not saved: $detail';
+    }
     if (search.bookProblem case final problem?) {
       return 'The database could not be read: $problem';
     }
-    return '';
+    return switch (search.analysisSave) {
+      AnalysisSaving() => 'Saving analysis…',
+      AnalysisSaved() => 'Analysis saved',
+      _ => switch (search.scores) {
+        ScoresSearched(:final done, :final total) =>
+          'Scored $done of $total moves',
+        _ => '',
+      },
+    };
   }
 
   static String _refused(TableRefusal refusal) => switch (refusal) {
@@ -171,14 +182,29 @@ class _StatusLine extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return SizedBox(
       height: labStatusHeight,
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: Text(
-          _said,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(color: scheme.error),
-        ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              _said,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color:
+                    lab.problem != null ||
+                        search.bookProblem != null ||
+                        search.analysisSave is AnalysisSaveFailed
+                    ? scheme.error
+                    : scheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          if (search.analysisSave is AnalysisSaveFailed)
+            TextButton(
+              onPressed: search.retrySave,
+              child: const Text('Retry save'),
+            ),
+        ],
       ),
     );
   }

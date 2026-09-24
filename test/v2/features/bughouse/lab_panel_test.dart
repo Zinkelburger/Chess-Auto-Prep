@@ -32,13 +32,6 @@ void main() {
   setUp(() {
     lab = BughouseLab();
     outside = ScriptedBughouse();
-    search = TableSearch(
-      lab: lab,
-      book: outside.book,
-      startEngine: () => outside.outside.launch(cores: 2),
-      depth: (ownNodes: 50, childNodes: 20),
-      passes: const [Duration(seconds: 1)],
-    );
     archive = ArchiveMoves(lab: lab, book: outside.archive);
   });
 
@@ -49,6 +42,13 @@ void main() {
   });
 
   Future<void> pump(WidgetTester tester) async {
+    search = TableSearch(
+      lab: lab,
+      book: outside.book,
+      startEngine: () => outside.outside.launch(cores: 2),
+      depth: (ownNodes: 50, childNodes: 20),
+      passes: const [Duration(seconds: 1)],
+    );
     tester.view.physicalSize = const Size(700, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -99,6 +99,27 @@ void main() {
     await tester.tap(find.byType(Switch));
     await tester.pumpAndSettle();
     expect(lines, findsNothing);
+  });
+
+  testWidgets('a failed analysis save is visible and retry keeps its scores', (
+    tester,
+  ) async {
+    outside.book.saving = (_) async => const HivemindSaveFailed('disk full');
+    await pump(tester);
+    await tester.tap(find.byType(Switch));
+    await tester.pumpAndSettle();
+    expect(search.analysisSave, isA<AnalysisSaveFailed>());
+    expect(find.text('Analysis not saved: disk full'), findsOneWidget);
+    expect((search.scores as ScoresSearched).finished, isTrue);
+    expect(find.text('Analysis saved'), findsNothing);
+    final questions = outside.engine.asked.length;
+    outside.book.saving = null;
+    await tester.tap(find.text('Retry save'));
+    await tester.pumpAndSettle();
+    expect(find.text('Analysis saved'), findsOneWidget);
+    expect(find.text('Retry save'), findsNothing);
+    expect(outside.engine.asked.length, questions);
+    expect(outside.book.saved.single.moves, hasLength(40));
   });
 
   testWidgets('the FICS archive lists each board’s moves under its table', (

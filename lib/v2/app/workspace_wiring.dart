@@ -194,7 +194,7 @@ final class WorkspaceWiring {
   /// The repertoire files were listed anew: what the gaps and the explorer's Book
   /// read from them is read again.
   void _filesChanged() {
-    _answers.forget();
+    _gaps.refreshAnswers();
     _tree.forget();
   }
 

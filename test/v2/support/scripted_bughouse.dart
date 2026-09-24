@@ -105,7 +105,13 @@ final class ScriptedHivemindBook implements HivemindBook {
   final saved = <HivemindEntry>[];
 
   @override
-  Future<void> save(HivemindEntry entry) async => saved.add(entry);
+  Future<HivemindSave> save(HivemindEntry entry) async {
+    if (saving != null) return saving!(entry);
+    saved.add(entry);
+    return const HivemindSaved();
+  }
+
+  Future<HivemindSave> Function(HivemindEntry entry)? saving;
 }
 
 /// The FICS archive, from a map of positions by key; none by default.

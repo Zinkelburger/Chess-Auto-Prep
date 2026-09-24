@@ -70,7 +70,8 @@ final class PuzzleTrainer extends ChangeNotifier {
 
   PuzzleRun? _run;
   PuzzleUp? _up;
-  Timer? _timer;
+  Timer? _replyTimer;
+  Timer? _advanceTimer;
 
   /// Set by [putDown] and cleared by the next puzzle asked for, so walking
   /// the set's games in another mode does not put puzzles up behind it.
@@ -96,6 +97,10 @@ final class PuzzleTrainer extends ChangeNotifier {
   /// Keeps [on] in the settings, for this sitting and the next launch. The
   /// pane listens here, not to the settings, so this says it changed.
   void setAutoAdvance(bool on) {
+    if (!on) {
+      _advanceTimer?.cancel();
+      _advanceTimer = null;
+    }
     if (on == autoAdvance) return;
     unawaited(_settings.update(_settings.value.copyWith(autoAdvance: on)));
     notifyListeners();
@@ -135,7 +140,7 @@ final class PuzzleTrainer extends ChangeNotifier {
   void end() {
     final run = _run;
     if (run == null) return;
-    _cancelTimer();
+    _cancelTimers();
     _finished = run.recap;
     _run = null;
     if (_up != null) {
@@ -151,7 +156,7 @@ final class PuzzleTrainer extends ChangeNotifier {
   void putDown() {
     _parked = true;
     if (_up == null) return;
-    _cancelTimer();
+    _cancelTimers();
     _up = null;
     _session.showOnlyTo(null);
     notifyListeners();
@@ -190,7 +195,7 @@ final class PuzzleTrainer extends ChangeNotifier {
       waiting: true,
     );
     notifyListeners();
-    _timer = Timer(replyDelay, _reply);
+    _replyTimer = Timer(replyDelay, _reply);
   }
 
   /// The opponent's move of the answer, then the solver's turn again — or
@@ -212,7 +217,12 @@ final class PuzzleTrainer extends ChangeNotifier {
     _record(up, Outcome.solved);
     _session.showOnlyTo(null);
     notifyListeners();
-    if (autoAdvance) _timer = Timer(advanceDelay, () => unawaited(next()));
+    if (autoAdvance) {
+      _advanceTimer = Timer(advanceDelay, () {
+        _advanceTimer = null;
+        if (!_disposed && autoAdvance) unawaited(next());
+      });
+    }
   }
 
   void _missed(PuzzleUp up, String uci) {
@@ -230,7 +240,7 @@ final class PuzzleTrainer extends ChangeNotifier {
   void showSolution() {
     final up = _up;
     if (up == null || up.finished) return;
-    _cancelTimer();
+    _cancelTimers();
     _run = _run?.revealedAt(up.puzzle.fen);
     final rest =
         _session.tree?.lineTo(_session.tree!.endOfLineFrom(up.frontier)) ??
@@ -250,7 +260,7 @@ final class PuzzleTrainer extends ChangeNotifier {
   void reset() {
     final up = _up;
     if (up == null) return;
-    _cancelTimer();
+    _cancelTimers();
     _up = PuzzleUp.start(up.puzzle, at: _now(), decided: up.decided);
     _session.showOnlyTo(const NodePath.root());
     _session.goTo(const NodePath.root());
@@ -261,7 +271,7 @@ final class PuzzleTrainer extends ChangeNotifier {
   Future<void> next() async {
     final run = _run;
     if (run == null) return;
-    _cancelTimer();
+    _cancelTimers();
     final following = run.after(_up?.puzzle.fen);
     if (following == null) return end();
     await _bringUp(following);
@@ -283,7 +293,7 @@ final class PuzzleTrainer extends ChangeNotifier {
   Future<void> previous() async {
     final before = _before;
     if (before == null) return;
-    _cancelTimer();
+    _cancelTimers();
     await _bringUp(before);
   }
 
@@ -293,7 +303,7 @@ final class PuzzleTrainer extends ChangeNotifier {
   void rate(int stars) {
     final up = _up;
     if (up == null) return;
-    _cancelTimer();
+    _cancelTimers();
     final refusal = _session.apply(
       (set) => ratePuzzle(set, index: up.puzzle.index, stars: stars),
     );
@@ -333,13 +343,13 @@ final class PuzzleTrainer extends ChangeNotifier {
     final puzzle = _set.isOpen && game != null ? _set.at(game) : null;
     if (puzzle != null && _run != null && !_parked) return _putUp(puzzle);
     if (_up == null) return;
-    _cancelTimer();
+    _cancelTimers();
     _up = null;
     notifyListeners();
   }
 
   void _putUp(Puzzle puzzle) {
-    _cancelTimer();
+    _cancelTimers();
     _up = PuzzleUp.start(
       puzzle,
       at: _now(),
@@ -372,15 +382,17 @@ final class PuzzleTrainer extends ChangeNotifier {
     _up = (_up ?? up).copyWith(decided: outcome, saveProblem: refusal);
   }
 
-  void _cancelTimer() {
-    _timer?.cancel();
-    _timer = null;
+  void _cancelTimers() {
+    _replyTimer?.cancel();
+    _replyTimer = null;
+    _advanceTimer?.cancel();
+    _advanceTimer = null;
   }
 
   @override
   void dispose() {
     _disposed = true;
-    _cancelTimer();
+    _cancelTimers();
     _session.removeListener(_documentChanged);
     super.dispose();
   }
