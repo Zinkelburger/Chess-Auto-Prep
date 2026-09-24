@@ -330,7 +330,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
       _listShown && _positionsShown ? 'Back to the list' : 'Positions',
       _togglePositions,
       shortcut: 'Ctrl+P',
-      group: 'Window',
+      group: 'Panels',
     ),
     AppAction(
       widget.fullScreen.on ? 'Leave full screen' : 'Full screen',
@@ -484,8 +484,6 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         // A mode with a screen of its own has no list to show or hide.
         listShown: _listShown || screen != null,
         onToggleList: _toggleList,
-        positionsShown: screen != null ? null : _listShown && _positionsShown,
-        onTogglePositions: _togglePositions,
         actions: _actions,
         // What the entries' enabled states read, heard only while the
         // menu is open: the bar itself shows none of it.
