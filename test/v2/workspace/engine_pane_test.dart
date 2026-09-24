@@ -45,7 +45,7 @@ void main() {
   /// Switches the engine on and gives it the Sicilian as its best line.
   Future<void> analyse(WidgetTester tester) async {
     await pump(tester);
-    await tester.tap(find.byType(Switch));
+    await analysis.enable();
     await tester.pump();
     engine.current.emit(
       line(score: const Centipawns(-35), depth: 18, pv: ['c7c5', 'g1f3']),
@@ -53,12 +53,12 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
   }
 
-  testWidgets('the switch starts the engine and the lines fill in', (
+  testWidgets('starting the engine reveals the compact header and lines', (
     tester,
   ) async {
     await pump(tester);
-    expect(find.text('Engine'), findsOneWidget);
-    await tester.tap(find.byType(Switch));
+    expect(find.text('Engine'), findsNothing);
+    await analysis.enable();
     await tester.pump();
     expect(find.text('Scripted 1'), findsOneWidget);
     engine.current.emit(
@@ -78,11 +78,11 @@ void main() {
     expect(find.text('1... e5'), findsOneWidget);
   });
 
-  testWidgets('off, the pane is one row; on, every row keeps its height '
+  testWidgets('off, the pane collapses; on, every row keeps its height '
       'before and after it has a line', (tester) async {
     await pump(tester);
-    expect(tester.getSize(find.byType(EnginePane)).height, engineBarHeight);
-    await tester.tap(find.byType(Switch));
+    expect(tester.getSize(find.byType(EnginePane)).height, 0);
+    await analysis.enable();
     await tester.pump();
     final before = tester.getSize(find.byType(EnginePane));
     expect(before.height, engineBarHeight + engineRowHeight * 3);
@@ -91,13 +91,17 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 200));
     expect(tester.getSize(find.byType(EnginePane)), before);
+    await tester.tap(find.byTooltip('Turn engine off (E)'));
+    await tester.pump();
+    expect(tester.getSize(find.byType(EnginePane)).height, 0);
+    expect(analysis.enabled, isFalse);
   });
 
   testWidgets('a tick without the best line promotes no other line', (
     tester,
   ) async {
     await pump(tester);
-    await tester.tap(find.byType(Switch));
+    await analysis.enable();
     await tester.pump();
     engine.current.emit(
       line(multiPv: 2, score: const Centipawns(-35), depth: 18, pv: ['e7e5']),
@@ -178,9 +182,9 @@ void main() {
       () async => const StartFailed('No Stockfish in this build'),
     );
     await pump(tester);
-    await tester.tap(find.byType(Switch));
+    await analysis.enable();
     await tester.pump();
     expect(find.text('No Stockfish in this build'), findsOneWidget);
-    expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+    expect(find.byTooltip('Retry engine (E)'), findsOneWidget);
   });
 }

@@ -10,7 +10,7 @@ import 'setting_controls.dart';
 import 'setting_rows.dart';
 
 /// Opens the settings over the workspace. Every change has already
-/// happened by the time it closes; Esc is the only way out.
+/// happened by the time it closes; the close button, Esc or outside click dismisses it.
 Future<void> showSettingsDialog(
   BuildContext context, {
   required SettingsStore store,
@@ -23,9 +23,7 @@ Future<void> showSettingsDialog(
 );
 
 /// The settings: a list of places on the left, the rows of the chosen
-/// place on the right, one line each. Small and fixed, so it is one glance
-/// however many rows a place has; typing in the search shows the rows
-/// that match from every place.
+/// place on the right. Search spans both category names and individual rows.
 class SettingsDialog extends StatefulWidget {
   const SettingsDialog({
     super.key,
@@ -63,7 +61,13 @@ class _SettingsDialogState extends State<SettingsDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Dialog(
+      backgroundColor: theme.colorScheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(readingCardRadius),
+        side: BorderSide(color: theme.colorScheme.outline),
+      ),
       child: SizedBox(
         width: settingsDialogWidth,
         height: settingsDialogHeight,
@@ -75,6 +79,19 @@ class _SettingsDialogState extends State<SettingsDialog> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _TitleBar(onClose: () => Navigator.of(context).pop()),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    Space.l,
+                    0,
+                    Space.l,
+                    Space.m,
+                  ),
+                  child: SearchField(
+                    controller: _search,
+                    hint: 'Search settings',
+                    onChanged: _searched,
+                  ),
+                ),
                 const Divider(height: 1),
                 Expanded(
                   child: Row(
@@ -89,7 +106,20 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     ],
                   ),
                 ),
-                if (widget.store.problem case final problem?) _Problem(problem),
+                const Divider(height: 1),
+                if (widget.store.problem case final problem?)
+                  _Problem(problem)
+                else
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: Space.l,
+                      vertical: Space.s,
+                    ),
+                    child: Text(
+                      'Changes save automatically',
+                      style: theme.textTheme.labelSmall,
+                    ),
+                  ),
                 if (widget.store.canRetry && widget.store.problem != null)
                   TextButton(
                     onPressed: () => unawaited(widget.store.retry()),
@@ -103,17 +133,9 @@ class _SettingsDialogState extends State<SettingsDialog> {
     );
   }
 
-  Widget _places(List<SettingGroup> groups) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
+  Widget _places(List<SettingGroup> groups) => ListView(
+    padding: const EdgeInsets.all(Space.s),
     children: [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(Space.s, Space.s, Space.s, Space.xs),
-        child: SearchField(
-          controller: _search,
-          hint: 'Find',
-          onChanged: _searched,
-        ),
-      ),
       for (final (index, group) in groups.indexed)
         _Place(
           name: group.name,
@@ -133,21 +155,31 @@ class _SettingsDialogState extends State<SettingsDialog> {
   /// The chosen place's rows, or every row the search finds under the name
   /// of its place.
   Widget _rows(List<SettingGroup> groups) {
-    final shown = _query.isEmpty
+    final shown = groups.isEmpty
+        ? <SettingGroup>[]
+        : _query.isEmpty
         ? [groups[_selected.clamp(0, groups.length - 1)]]
         : [
             for (final group in groups)
-              if (group.rows.any((row) => row.matches(_query)))
+              if (group.name.toLowerCase().contains(_query) ||
+                  group.rows.any((row) => row.matches(_query)))
                 SettingGroup(group.name, [
                   for (final row in group.rows)
-                    if (row.matches(_query)) row,
+                    if (group.name.toLowerCase().contains(_query) ||
+                        row.matches(_query))
+                      row,
                 ]),
           ];
     final text = Theme.of(context).textTheme;
     if (shown.isEmpty) {
       return Padding(
         padding: const EdgeInsets.all(Space.l),
-        child: Text('Nothing matches "$_query".', style: text.bodySmall),
+        child: Text(
+          groups.isEmpty
+              ? 'No settings available.'
+              : 'Nothing matches "$_query".',
+          style: text.bodySmall,
+        ),
       );
     }
     return ListView(
@@ -156,7 +188,13 @@ class _SettingsDialogState extends State<SettingsDialog> {
         for (final group in shown) ...[
           Text(group.name.toUpperCase(), style: text.labelSmall),
           const SizedBox(height: Space.xs),
-          for (final row in group.rows) SettingRowView(row: row),
+          for (final (index, row) in group.rows.indexed) ...[
+            if (index > 0) const Divider(height: 1),
+            SettingRowView(
+              key: ValueKey('${group.name}/${row.label}'),
+              row: row,
+            ),
+          ],
           const SizedBox(height: Space.m),
         ],
       ],
@@ -205,16 +243,53 @@ class _Place extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Material(
-      color: selected ? scheme.surfaceContainerHighest : Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: Space.m,
-            vertical: Space.s,
+    final icon = switch (name) {
+      'Look' => Icons.palette_outlined,
+      'Engine' => Icons.memory_outlined,
+      'Repertoire' => Icons.menu_book_outlined,
+      'Files' => Icons.folder_outlined,
+      'Accounts' => Icons.person_outline,
+      'App' => Icons.settings_outlined,
+      _ => Icons.tune,
+    };
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Space.xs),
+      child: Semantics(
+        selected: selected,
+        button: true,
+        child: Material(
+          borderRadius: BorderRadius.circular(readingCardRadius),
+          color: selected
+              ? scheme.primary.withValues(alpha: 0.12)
+              : Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(readingCardRadius),
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: Space.m,
+                vertical: Space.m,
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    icon,
+                    size: IconSize.action,
+                    color: selected ? scheme.primary : scheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: Space.s),
+                  Expanded(
+                    child: Text(
+                      name,
+                      style: TextStyle(
+                        color: selected ? scheme.primary : scheme.onSurface,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
-          child: Text(name),
         ),
       ),
     );

@@ -158,11 +158,9 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
       if (editing) ...[
         Tooltip(
           message: withKey('Done editing', 'Ctrl+E'),
-          child: FilledButton.tonal(
+          child: FilledButton(
             onPressed: () => widget.editing.value = false,
-            style: secondaryButtonStyle.merge(
-              FilledButton.styleFrom(visualDensity: VisualDensity.compact),
-            ),
+            style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
             child: const Text('Done'),
           ),
         ),
@@ -197,11 +195,9 @@ class _EditStripState extends State<EditStrip> with ListeningState<EditStrip> {
         const SizedBox(width: Space.s),
         Tooltip(
           message: withKey('Save to the file', 'Ctrl+S'),
-          child: FilledButton.tonal(
+          child: FilledButton(
             onPressed: widget.session.keepHeld,
-            style: secondaryButtonStyle.merge(
-              FilledButton.styleFrom(visualDensity: VisualDensity.compact),
-            ),
+            style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
             child: const Text('Save'),
           ),
         ),

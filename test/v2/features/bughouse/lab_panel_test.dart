@@ -2,6 +2,8 @@ import 'package:chess_auto_prep/v2/chess/bughouse/table.dart';
 import 'package:chess_auto_prep/v2/features/bughouse/archive_moves.dart';
 import 'package:chess_auto_prep/v2/features/bughouse/bughouse_lab.dart';
 import 'package:chess_auto_prep/v2/features/bughouse/lab_panel.dart';
+import 'package:chess_auto_prep/v2/features/bughouse/table_boards.dart';
+import 'package:chessground/chessground.dart';
 import 'package:chess_auto_prep/v2/features/bughouse/table_search.dart';
 import 'package:chess_auto_prep/v2/storage/bughouse_books.dart';
 import 'package:chess_auto_prep/v2/ui/theme.dart';
@@ -122,7 +124,7 @@ void main() {
     expect(outside.book.saved.single.moves, hasLength(40));
   });
 
-  testWidgets('the FICS archive lists each board’s moves under its table', (
+  testWidgets('the FICS archive lists each board’s moves below its board', (
     tester,
   ) async {
     outside.archive
@@ -135,11 +137,25 @@ void main() {
         ],
       );
     await pump(tester);
+    expect(find.text('A e4'), findsNothing);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: darkTheme(),
+        home: Scaffold(
+          body: TableBoards(lab: lab, boardSize: 300, archive: archive),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
     final one = tester.getTopLeft(find.text('A e4'));
+    expect(
+      one.dy,
+      greaterThan(tester.getBottomLeft(find.byType(Chessboard).first).dy),
+    );
     final two = tester.getTopLeft(find.text('D d4'));
     // Side by side, each under its own board's column.
     expect(two.dx, greaterThan(one.dx + 200));
     expect(two.dy, one.dy);
-    expect(find.text('FICS archive · 900 games'), findsNWidgets(2));
+    expect(find.text('FICS games · 900'), findsNWidgets(2));
   });
 }

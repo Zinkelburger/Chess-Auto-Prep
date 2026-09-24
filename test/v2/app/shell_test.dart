@@ -281,14 +281,17 @@ void main() {
     expect(find.text('Replies'), findsOneWidget);
     await tester.tap(find.text('Actions'));
     await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(SubmenuButton, 'Panels'));
+    await tester.pumpAndSettle();
     expect(find.text('Next tab'), findsOneWidget);
     expect(find.text('Ctrl+Tab'), findsOneWidget);
-    // The menu is taller than this window; its last entries scroll in.
     await tester.ensureVisible(find.text('Close Replies'));
     await tester.tap(find.text('Close Replies'));
     await tester.pumpAndSettle();
     expect(find.text('Replies'), findsNothing);
     await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(SubmenuButton, 'Panels'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Show Replies'));
     await tester.tap(find.text('Show Replies'));
@@ -331,8 +334,70 @@ void main() {
     final mode = tester.getTopRight(find.text('Repertoire builder').first);
     final actions = tester.getTopLeft(find.text('Actions'));
     expect(actions.dx, greaterThan(mode.dx));
-    expect(actions.dx, lessThan(paneMinWidth * 2));
+    expect(actions.dx - mode.dx, lessThan(Space.xl * 2));
     expect(find.byTooltip('Actions (Ctrl+K)'), findsOneWidget);
+  });
+
+  testWidgets(
+    'history stays before the mode menu when empty and travels both ways',
+    (tester) async {
+      await pump(tester);
+      Finder back() => find.byWidgetPredicate(
+        (widget) =>
+            widget is IconButton &&
+            widget.tooltip?.startsWith('Back') == true &&
+            widget.tooltip!.contains('Alt+←'),
+      );
+      Finder forward() => find.byWidgetPredicate(
+        (widget) =>
+            widget is IconButton &&
+            widget.tooltip?.startsWith('Forward') == true &&
+            widget.tooltip!.contains('Alt+→'),
+      );
+      final actionsAt = tester.getTopLeft(find.text('Actions'));
+      final backAt = tester.getTopLeft(back());
+      expect(
+        tester.getTopRight(forward()).dx,
+        lessThan(tester.getTopLeft(find.text('Repertoire builder').first).dx),
+      );
+      expect(tester.widget<IconButton>(back()).onPressed, isNull);
+      expect(tester.widget<IconButton>(forward()).onPressed, isNull);
+
+      await w.requests.readInBuilder(kid, const ['e4', 'c5']);
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(find.text('Actions')), actionsAt);
+      expect(tester.getTopLeft(back()), backAt);
+      expect(tester.widget<IconButton>(back()).onPressed, isNotNull);
+      await tester.tap(back());
+      await tester.pumpAndSettle();
+      expect(w.session.isScratch, isTrue);
+      expect(tester.widget<IconButton>(forward()).onPressed, isNotNull);
+      await tester.tap(forward());
+      await tester.pumpAndSettle();
+      expect(w.session.source, kid);
+      expect(tester.widget<IconButton>(forward()).onPressed, isNull);
+    },
+  );
+
+  testWidgets('Actions opens chapter training even after its tab was closed', (
+    tester,
+  ) async {
+    await pump(tester);
+    await tester.tap(inLibrary(find.text('Main')).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Train'));
+    await tester.pumpAndSettle();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyW);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(find.text('Train'), findsNothing);
+    await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Train this chapter'));
+    await tester.pumpAndSettle();
+    expect(find.text('Train'), findsOneWidget);
+    expect(find.text('Actions'), findsOneWidget);
   });
 
   testWidgets('Close file in Study takes off the chapter its own list '

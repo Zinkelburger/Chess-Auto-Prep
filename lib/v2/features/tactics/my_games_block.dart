@@ -56,7 +56,6 @@ class MyGamesBlock extends StatelessWidget {
       ),
       const SizedBox(height: Space.s),
       FilledButton(
-        style: secondaryButtonStyle,
         onPressed: games.savingAccounts
             ? null
             : () => unawaited(editAccounts(context, games)),
@@ -169,7 +168,6 @@ class _Transport extends StatelessWidget {
     return Tooltip(
       message: tip,
       child: FilledButton.icon(
-        style: secondaryButtonStyle,
         onPressed: pausing
             ? null
             : games.running

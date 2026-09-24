@@ -33,6 +33,7 @@ import '../support/replies_fixture.dart';
 import '../support/scripted_explorer.dart';
 import '../support/scripted_files.dart';
 import '../support/scripted_store.dart';
+import '../support/scripted_engine.dart';
 import '../support/scripted_policy.dart';
 import '../support/session_fixture.dart';
 import '../support/viewer_fixture.dart';
@@ -195,7 +196,7 @@ void main() {
     expect(comment, findsNothing);
     expect(find.text('Saved'), findsNothing);
     expect(find.byTooltip('Undo (Ctrl+Z)'), findsNothing);
-    expect(find.text('Engine'), findsOneWidget, reason: 'off, one row');
+    expect(find.text('Engine'), findsNothing, reason: 'off takes no room');
   });
 
   testWidgets('Ctrl+E opens the edit strip and Done closes it', (tester) async {
@@ -246,6 +247,26 @@ void main() {
     expect(session.currentMove?.san, 'cxd4');
     await tester.sendKeyEvent(LogicalKeyboardKey.pageUp);
     expect(session.cursor.isRoot, isTrue);
+  });
+
+  testWidgets('engine off returns its entire space to the board column', (
+    tester,
+  ) async {
+    analysis.dispose();
+    final engine = ScriptedEngine();
+    analysis = EngineAnalysis(session, () async => Started(engine));
+    await pump(tester);
+    final field = find.byTooltip('Type a move (/)');
+    final offAt = tester.getTopLeft(field).dy;
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
+    await tester.pumpAndSettle();
+    expect(
+      tester.getTopLeft(field).dy - offAt,
+      engineBarHeight + engineRowHeight * analysis.multiPv,
+    );
+    await tester.tap(find.byTooltip('Turn engine off (E)'));
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(field).dy, offAt);
   });
 
   testWidgets('F turns the board over; E asks for the engine', (tester) async {

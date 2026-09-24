@@ -258,7 +258,6 @@ class _Actions extends StatelessWidget {
       children: [
         if (onMoment case final onMoment?)
           FilledButton.icon(
-            style: secondaryButtonStyle,
             onPressed: onMoment,
             icon: const Icon(Icons.my_location, size: IconSize.action),
             label: const Text('Show the move'),
@@ -266,7 +265,6 @@ class _Actions extends StatelessWidget {
         Tooltip(
           message: 'Open ${place.file.name} in the builder at this position',
           child: FilledButton.icon(
-            style: secondaryButtonStyle,
             onPressed: () => onReadBook(place),
             icon: const Icon(Icons.menu_book, size: IconSize.action),
             label: const Text('Open in builder'),

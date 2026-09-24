@@ -25,8 +25,6 @@ class TopBar extends StatelessWidget {
     required this.onSettings,
     required this.listShown,
     required this.onToggleList,
-    required this.positionsShown,
-    required this.onTogglePositions,
     required this.actions,
     required this.actionsChange,
   });
@@ -34,8 +32,8 @@ class TopBar extends StatelessWidget {
   final Mode mode;
   final ValueChanged<Mode> onMode;
 
-  /// Where Back and Forward go, named for their tooltips; null hides the
-  /// button, so the pair is there only once there is somewhere to go.
+  /// Where Back and Forward go. Empty history disables the controls while
+  /// keeping their places in the toolbar.
   final String? backTo;
   final String? forwardTo;
   final VoidCallback? onBack;
@@ -48,11 +46,6 @@ class TopBar extends StatelessWidget {
   final VoidCallback onSettings;
   final bool listShown;
   final VoidCallback onToggleList;
-
-  /// Whether the list column shows the Positions the searches found; null
-  /// in a mode with a screen of its own, which has no list column.
-  final bool? positionsShown;
-  final VoidCallback onTogglePositions;
 
   /// Everything the Actions menu offers, asked each time it opens rather
   /// than each time something it reads changes: the engine alone would ask
@@ -72,31 +65,28 @@ class TopBar extends StatelessWidget {
       child: Row(
         children: [
           if (!listShown) ListToggle(shown: false, onPressed: onToggleList),
-          if (backTo != null || forwardTo != null) ...[
-            IconButton(
-              icon: const Icon(Icons.arrow_back, size: IconSize.action),
-              tooltip: backTo == null
-                  ? null
-                  : withKey('Back to $backTo', 'Alt+←'),
-              onPressed: backTo == null ? null : onBack,
-              visualDensity: VisualDensity.compact,
+          IconButton(
+            icon: const Icon(Icons.arrow_back, size: IconSize.action),
+            tooltip: withKey(
+              backTo == null ? 'Back' : 'Back to $backTo',
+              'Alt+←',
             ),
-            IconButton(
-              icon: const Icon(Icons.arrow_forward, size: IconSize.action),
-              tooltip: forwardTo == null
-                  ? null
-                  : withKey('Forward to $forwardTo', 'Alt+→'),
-              onPressed: forwardTo == null ? null : onForward,
-              visualDensity: VisualDensity.compact,
+            onPressed: backTo == null ? null : onBack,
+            visualDensity: VisualDensity.compact,
+          ),
+          IconButton(
+            icon: const Icon(Icons.arrow_forward, size: IconSize.action),
+            tooltip: withKey(
+              forwardTo == null ? 'Forward' : 'Forward to $forwardTo',
+              'Alt+→',
             ),
-          ],
+            onPressed: forwardTo == null ? null : onForward,
+            visualDensity: VisualDensity.compact,
+          ),
           _ModeMenu(mode: mode, onMode: onMode, offered: offered),
           const SizedBox(width: Space.s),
           _ActionsMenu(actions: actions, changes: actionsChange),
-          if (positionsShown case final shown?) ...[
-            const SizedBox(width: Space.s),
-            _PositionsButton(shown: shown, onPressed: onTogglePositions),
-          ],
+          const SizedBox(width: Space.s),
           const Spacer(),
           IconButton(
             icon: const Icon(Icons.settings_outlined, size: IconSize.action),
@@ -179,7 +169,7 @@ class _ModeMenu extends StatelessWidget {
   }
 }
 
-/// Every action by name with its key after it, grouped by a thin line.
+/// Named sections for the work and submenus for secondary controls.
 /// Ctrl+K opens the same list as something to type into. The entries are
 /// made when the menu opens and kept up to date only while it is open.
 class _ActionsMenu extends StatefulWidget {
@@ -228,25 +218,69 @@ class _ActionsMenuState extends State<_ActionsMenu> {
   }
 
   List<Widget> _entries(TextTheme text) {
-    final children = <Widget>[];
-    String? group;
+    // Gather by name, including non-adjacent contributions from the mode
+    // and document. Each section is shown once.
+    final groups = <String, List<AppAction>>{};
     for (final action in widget.actions()) {
-      if (action.group != group && children.isNotEmpty) {
-        children.add(const Divider(height: 1));
-      }
-      group = action.group;
+      (groups[action.group ?? 'Actions'] ??= []).add(action);
+    }
+    Widget entry(AppAction action) => MenuItemButton(
+      onPressed: action.run,
+      trailingIcon: action.shortcut == null
+          ? null
+          : Text(action.shortcut!, style: text.labelSmall),
+      child: Text(action.label),
+    );
+
+    final children = <Widget>[];
+    for (final group in groups.entries.where(
+      (group) => !_secondary.containsKey(group.key),
+    )) {
+      if (children.isNotEmpty)
+        children.add(
+          const Divider(height: 1, indent: Space.l, endIndent: Space.l),
+        );
       children.add(
-        MenuItemButton(
-          onPressed: action.run,
-          trailingIcon: action.shortcut == null
-              ? null
-              : Text(action.shortcut!, style: text.labelSmall),
-          child: Text(action.label),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            Space.l,
+            Space.s,
+            Space.l,
+            Space.xs,
+          ),
+          child: Text(group.key, style: text.labelSmall),
+        ),
+      );
+      children.addAll(group.value.map(entry));
+    }
+    final secondary = groups.entries.where(
+      (group) => _secondary.containsKey(group.key),
+    );
+    if (secondary.isNotEmpty && children.isNotEmpty) {
+      children.add(
+        const Divider(height: 1, indent: Space.l, endIndent: Space.l),
+      );
+    }
+    for (final group in secondary) {
+      children.add(
+        SubmenuButton(
+          leadingIcon: Icon(_secondary[group.key], size: IconSize.menu),
+          menuChildren: group.value.map(entry).toList(),
+          child: Text(group.key),
         ),
       );
     }
     return children;
   }
+
+  /// Keep the document's work in view; secondary controls expand beside it.
+  static const _secondary = {
+    'Analysis board': Icons.analytics_outlined,
+    'Board': Icons.grid_view_outlined,
+    'Copy': Icons.content_copy,
+    'Panels': Icons.view_sidebar_outlined,
+    'Window': Icons.fullscreen,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -266,35 +300,6 @@ class _ActionsMenuState extends State<_ActionsMenu> {
           label: const Text('Actions'),
         ),
       ),
-    );
-  }
-}
-
-/// Puts the Positions in the list column, or the mode's own list back:
-/// the same column in every mode, so the switch sits with the menus rather
-/// than in each list's own corner. Pressed in while the Positions show.
-class _PositionsButton extends StatelessWidget {
-  const _PositionsButton({required this.shown, required this.onPressed});
-
-  final bool shown;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final label = const Text('Positions');
-    const icon = Icon(Icons.travel_explore, size: IconSize.action);
-    return Tooltip(
-      message: withKey(
-        shown ? 'Back to the list' : 'What the searches found',
-        'Ctrl+P',
-      ),
-      child: shown
-          ? FilledButton.tonalIcon(
-              onPressed: onPressed,
-              icon: icon,
-              label: label,
-            )
-          : TextButton.icon(onPressed: onPressed, icon: icon, label: label),
     );
   }
 }

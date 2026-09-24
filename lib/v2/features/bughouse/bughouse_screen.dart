@@ -8,14 +8,14 @@ import 'archive_moves.dart';
 import 'board_setup.dart';
 import 'bughouse_lab.dart';
 import 'lab_panel.dart';
-import 'match_panel.dart';
 import 'matches.dart';
+import 'match_panel.dart';
 import 'table_boards.dart';
 import 'table_search.dart';
 
-/// The Bughouse lab on one screen, as the BughouseDB page lays it out: the
-/// two boards and their setup boxes on the left, the question, the status
-/// and each board's scored moves on the right. The boards take what the
+/// The Bughouse lab: boards and FICS continuations on the left, compact engine
+/// tables on the right. Position editing is collapsed; Matches is in Actions.
+/// The boards take what the
 /// window leaves, between [labBoardMin] and [labBoardMax].
 ///
 /// ← → step the board last moved or stepped on, Home and End go to its
@@ -70,21 +70,39 @@ class BughouseScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      TableBoards(lab: lab, boardSize: size),
+                      TableBoards(lab: lab, boardSize: size, archive: archive),
                       const SizedBox(height: Space.s),
-                      BoardSetup(lab: lab, boardSize: size),
+                      SizedBox(
+                        width: size * 2 + labBoardGap,
+                        child: ExpansionTile(
+                          key: const ValueKey('bughouse-position-editor'),
+                          title: const Text('Edit position / FEN'),
+                          tilePadding: EdgeInsets.zero,
+                          children: [BoardSetup(lab: lab, boardSize: size)],
+                        ),
+                      ),
                     ],
                   ),
                 ),
                 const SizedBox(width: labColumnGap),
                 Expanded(
-                  child: _RightPanel(
-                    tables: LabPanel(
-                      lab: lab,
-                      search: search,
-                      archive: archive,
+                  child: Align(
+                    alignment: Alignment.topLeft,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        maxWidth: labPanelMaxWidth,
+                      ),
+                      child: ListenableBuilder(
+                        listenable: lab,
+                        builder: (context, _) => lab.showMatches
+                            ? MatchPanel(matches: matches, lab: lab)
+                            : LabPanel(
+                                lab: lab,
+                                search: search,
+                                archive: archive,
+                              ),
+                      ),
                     ),
-                    matches: MatchPanel(matches: matches, lab: lab),
                   ),
                 ),
               ],
@@ -94,41 +112,6 @@ class BughouseScreen extends StatelessWidget {
       ),
     );
   }
-}
-
-/// The right-hand side: the tables, or the matches in their place.
-class _RightPanel extends StatefulWidget {
-  const _RightPanel({required this.tables, required this.matches});
-
-  final Widget tables;
-  final Widget matches;
-
-  @override
-  State<_RightPanel> createState() => _RightPanelState();
-}
-
-class _RightPanelState extends State<_RightPanel> {
-  bool _matches = false;
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      SegmentedButton<bool>(
-        segments: const [
-          ButtonSegment(value: false, label: Text('Tables')),
-          ButtonSegment(value: true, label: Text('Matches')),
-        ],
-        selected: {_matches},
-        showSelectedIcon: false,
-        style: const ButtonStyle(visualDensity: VisualDensity.compact),
-        onSelectionChanged: (picked) =>
-            setState(() => _matches = picked.single),
-      ),
-      const SizedBox(height: Space.s),
-      Expanded(child: _matches ? widget.matches : widget.tables),
-    ],
-  );
 }
 
 /// The lab's keys, and the window's, wherever the focus is inside it —

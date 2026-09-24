@@ -43,19 +43,21 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
   expanding it to a six-row viewport, and empty slots keeping their height. Defaults: **cores 1**
   (max = logical cores), **memory 128 MB** (16–8192, step 16), **depth 15** (1–99), **lines 3**
   (1–10); evals are White-relative, one decimal (`+0.35`), mate `#5` / `-#5`.
-  (v2 has this bar: the 32px switch row with `Depth {d} · {engine}`, 54px gutters, hover floats a
+  (v2 uses a 24px power/status row with `Depth {d} · {engine}` at 12px, 54px gutters; hover floats a
   200px board under the move, a click plays the line up to it, the chevron opens six rows; no
   threat, gear, nodes or settings yet. The old app's large headline score was tried and dropped.
   Since 2026-09-23 it sits **under the board**, not above the card's tabs (owner: "ugly above all
-  the tabs"): the board shrinks to leave the switch row and one row per line, on or off, so it
-  never changes size. While a search runs the row reads `Paused while searching`.)
+  the tabs"). Since 2026-09-24 the dock collapses completely when off, including its reserved
+  layout space; the board and move field may move as it opens. E or Actions ▸ Board ▸ Engine on
+  restores it. Failures keep a compact retry row; a paused engine keeps just its status.
+  Training boards likewise reserve no empty engine area.)
 - **Tab strip and Replies** (v2, 2026-09-21; browser tabs 2026-09-22; big tabs 2026-09-23) —
   under the card's heading, `Moves | Train | Replies | Explorer | Search`. Since 2026-09-23
   the tabs share the strip's width, 40px tall, the one that is up filled (owner: the small
   underlined tabs were "ugly, small and hard to click"); no `×` is drawn and no control sits at
   the strip's end. Fixed identities: `Moves` is pinned, a middle click closes, a drag puts a tab
   in front of another, Ctrl+Tab / Ctrl+Shift+Tab walk them and
-  Ctrl+W closes the one that is up. A closed tab comes back from Actions ▸ `Show Replies`; the
+  Ctrl+W closes the one that is up. A closed tab comes back from Actions ▸ Panels ▸ `Show Replies`; the
   strip is left out while only one tab is open. Which tabs are open is window state, kept across
   modes and lost with the window. `Moves` starts up. `Next gap` is an outlined button at the end
   of the Replies tab's status line. Replies is the Maia-3 table described in `repertoires.md`: share
@@ -86,7 +88,7 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
   where the window starts. Moves, variations, comments, NAGs, delete / promote and Ctrl+Z
   (200 steps) work as on a chapter; the engine, Explorer, Replies and Search follow it, with
   the side at the bottom as ours. Opening a file sets it aside for the window's life:
-  Actions ▸ `Analysis board` goes back to it. `New analysis board from here` (Ctrl+N)
+  Actions ▸ Analysis board ▸ `Analysis board` goes back to it. `New analysis board from here` (Ctrl+N)
   replaces it with the line on the board up to the cursor, from any file, game or the board
   itself, facing the same way. On the board, Ctrl+V / `Paste PGN or FEN` replaces it with
   a pasted PGN (first game, variations and comments kept), bare moves or a FEN; `Save to
@@ -120,7 +122,7 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
 | Esc | Leave the innermost thing first; in a text field it only blurs (v2: out of the variation to where it branched, then the edit strip, then a Tactics sitting, then full screen; the move field clears and blurs) |
 | Space | Play/pause replay; show/hide solution in a trainer (v2: autoplay in the PGN Viewer, one move a second, any navigation stops it) |
 | F / E | Flip the board / toggle the engine |
-| F11 | Fullscreen (v2: the whole window, every mode; Actions ▸ `Full screen`) |
+| F11 | Fullscreen (v2: the whole window, every mode; Actions ▸ Window ▸ `Full screen`) |
 | Ctrl+V, Ctrl+Shift+V | Paste PGN, paste FEN (v2: a FEN as a new analysis board from anything open; Actions ▸ `Paste FEN`) |
 | Ctrl+Z | Undo the last repertoire add |
 | Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+W | Next / previous tab of the reading card; close the tab that is up (v2) |
@@ -261,11 +263,21 @@ Quirks worth a verdict:
   a token; signed out the tab says so and names the Settings row. `This file` (the open file's
   games merged by position, narrowed by the viewer's game filter) and `My games` (downloaded games
   plus the same accounts' games in the old app's `app_games.db`) were built 2026-09-23 in step 6c.
+- **The toolbar keeps Back / Forward → Mode → Actions in a fixed order.** History controls
+  remain visible and disabled when empty, with Alt+← / Alt+→ in their tooltips and the
+  destination named when available. Actions uses labelled sections (File, Repertoire,
+  Document) and compact submenus for Analysis board, Board, Copy, Panels and Window.
+  Sections gather contributions once even when their actions come from different owners.
+  Repertoire keeps Search from here, Train this chapter, Next gap and the playing side together.
+  Ctrl+K still searches the complete flat action list. Menus use 13px labels, 32px minimum
+  rows and a 260px minimum width. The accent is brighter cornflower blue (`80B4FF`),
+  with one shared blue for all filled action buttons (`2459C4`) and contrasting white labels;
+  Get games, Play, Skip and Show solution use the same fill.
 - **The settings gear sits at the right end of the top bar**, the old app's place, and is the one
   way in besides Ctrl+,; the mode menu lists modes only.
 - **The list column holds one of two lists**: the mode's own, or the `Positions` the searches
-  found (2026-09-23). The `Positions` button beside Actions, Ctrl+P or Actions ▸ `Positions`
-  swaps them in every mode with a list; the `«` still hides the column. Another result set that
+  found (2026-09-23). Ctrl+P or Actions ▸ Panels ▸ `Positions` swaps them in every mode
+  with a list; the `«` still hides the column. Another result set that
   wants the column should become a second list there, not a new mode or dialog
   (`generation.md`, last section).
 - **No eval bar** (question 1; the viewer's decision of 2026-09-21). **One move list** for reading

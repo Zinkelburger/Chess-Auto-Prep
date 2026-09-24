@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'dart:isolate';
 
 import 'package:dartchess/dartchess.dart' show Side;
@@ -56,7 +57,9 @@ sealed class HivemindLookup {
 
 /// The book has the position: its moves by board and UCI.
 final class HivemindFound extends HivemindLookup {
-  const HivemindFound(this.moves);
+  const HivemindFound(this.moves, {this.provenance = const {}});
+
+  final Map<ClockCase, Map<String, Object?>> provenance;
 
   final Map<(BoardNumber, String), BookMoveScores> moves;
 }
@@ -91,6 +94,7 @@ typedef HivemindEntry = ({
   int nodes,
   int childNodes,
   Duration took,
+  Map<String, Object?> provenance,
 });
 
 sealed class HivemindSave {
@@ -131,6 +135,12 @@ CREATE TABLE IF NOT EXISTS move(pos INTEGER NOT NULL, move TEXT NOT NULL,
   mate INTEGER, pv TEXT, child INTEGER NOT NULL,
   PRIMARY KEY(pos, move, clock)) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS analysis_history(
+  id TEXT PRIMARY KEY, pos INTEGER NOT NULL, clock TEXT NOT NULL,
+  provenance TEXT NOT NULL, picks TEXT NOT NULL, moves TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS current_analysis(
+  pos INTEGER NOT NULL, clock TEXT NOT NULL, id TEXT NOT NULL,
+  PRIMARY KEY(pos, clock)) WITHOUT ROWID;
 ''';
 
 final class SqliteHivemindBook implements HivemindBook {
@@ -190,7 +200,39 @@ final class SqliteHivemindBook implements HivemindBook {
         pv: relabel ? _swapBandC(pv) : pv,
       );
     }
-    return HivemindFound(moves);
+    final provenance = <ClockCase, Map<String, Object?>>{};
+    if (db
+        .select("SELECT 1 FROM sqlite_master WHERE name='current_analysis'")
+        .isNotEmpty) {
+      for (final row in db.select(
+        'SELECT c.clock, h.provenance FROM current_analysis c JOIN analysis_history h ON c.id=h.id WHERE c.pos=?',
+        [key],
+      )) {
+        final clock = _clockNamed(row['clock'] as String);
+        if (clock != null) {
+          provenance[clock] = (jsonDecode(row['provenance'] as String) as Map)
+              .cast<String, Object?>();
+        }
+      }
+    }
+    final legacy = db.select(
+      'SELECT nodes, child_nodes, done_at FROM position WHERE pos=?',
+      [key],
+    ).first;
+    for (final clock in moves.values.expand((scores) => scores.keys)) {
+      provenance.putIfAbsent(
+        clock,
+        () => {
+          'engine_name': 'Unknown (legacy analysis)',
+          'nodes': legacy['nodes'],
+          'child_nodes': legacy['child_nodes'],
+          'completed_at': legacy['done_at'],
+          'budget_note':
+              'Legacy position-level budget; individual clock budgets were not recorded.',
+        },
+      );
+    }
+    return HivemindFound(moves, provenance: provenance);
   }
 
   /// A book written before the seats were lettered A + B and C + D calls
@@ -237,13 +279,15 @@ final class SqliteHivemindBook implements HivemindBook {
       // book just to cache one position is unnecessary and would hold its
       // writer lock for the whole database. An empty book starts current.
       final empty = db.select('SELECT 1 FROM position LIMIT 1').isEmpty;
-      if (empty)
+      if (empty) {
         db.execute("INSERT OR IGNORE INTO meta VALUES('seats', 'AB/CD')");
+      }
       final legacy = db
           .select("SELECT 1 FROM meta WHERE key = 'seats'")
           .isEmpty;
-      String? stored(String? text) =>
-          text == null || !legacy ? text : _swapBandC(text);
+      _preserveLegacy(db, key);
+      db.execute('DELETE FROM pick WHERE pos=? AND clock=?', [key, clock]);
+      db.execute('DELETE FROM move WHERE pos=? AND clock=?', [key, clock]);
       db.execute(
         'INSERT INTO position(pos, fen, line, ply, priority, status, nodes, '
         "child_nodes, seconds, done_at) VALUES(?, ?, ?, ?, 0, 'done', ?, ?, ?, "
@@ -260,44 +304,119 @@ final class SqliteHivemindBook implements HivemindBook {
           entry.took.inMilliseconds / 1000,
         ],
       );
-      for (final MapEntry(key: team, value: pick) in entry.picks.entries) {
-        db.execute(
-          'INSERT OR REPLACE INTO pick VALUES(?, ?, ?, ?, ?, ?, ?, ?)',
-          [
-            key,
-            clock,
-            team == Team.ab ? (legacy ? 'AC' : 'AB') : (legacy ? 'BD' : 'CD'),
-            stored(pick.best),
-            pick.score.score,
-            pick.score.mate,
-            stored(pick.pv),
-            pick.offset,
-          ],
-        );
-      }
-      for (final MapEntry(key: (board, uci), :value) in entry.moves.entries) {
-        final played = position.play(board, uci);
-        if (played == null) continue;
-        db.execute(
-          'INSERT OR REPLACE INTO move VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          [
-            key,
-            '${board == BoardNumber.one ? 'A' : 'B'}:${played.move.san}',
-            stored(position.mover(board).letter),
-            uci,
-            clock,
-            value.score.score,
-            value.score.mate,
-            stored(value.pv),
-            played.after.bookKey,
-          ],
-        );
-      }
+      _writeScores(db, entry, legacy);
+      _snapshot(db, key, clock, {
+        ...entry.provenance,
+        'nodes': entry.nodes,
+        'child_nodes': entry.childNodes,
+        'seconds': entry.took.inMilliseconds / 1000,
+        'completed_at': DateTime.now().toUtc().toIso8601String(),
+        'score_method': 'calibrated-q-v1',
+        'writer': 'desktop-v2',
+      });
       db.execute('COMMIT');
     } on Object {
       db.execute('ROLLBACK');
       rethrow;
     }
+  }
+
+  static void _preserveLegacy(Database db, int key) {
+    // Snapshot any legacy clocks before position-level metadata changes.
+    for (final row in db.select('SELECT DISTINCT clock FROM move WHERE pos=?', [
+      key,
+    ])) {
+      final oldClock = row['clock'] as String;
+      if (db.select('SELECT 1 FROM current_analysis WHERE pos=? AND clock=?', [
+        key,
+        oldClock,
+      ]).isEmpty) {
+        final old = db.select(
+          'SELECT nodes, child_nodes, done_at FROM position WHERE pos=?',
+          [key],
+        ).first;
+        _snapshot(db, key, oldClock, {
+          'engine_name': 'Unknown (legacy analysis)',
+          'nodes': old['nodes'],
+          'child_nodes': old['child_nodes'],
+          'completed_at': old['done_at'],
+          'budget_note':
+              'Legacy position-level budget; individual clock budgets were not recorded.',
+        });
+      }
+    }
+  }
+
+  static void _writeScores(Database db, HivemindEntry entry, bool legacy) {
+    final position = entry.position;
+    final key = position.bookKey;
+    final clock = entry.clock.bookName;
+    String? stored(String? text) =>
+        text == null || !legacy ? text : _swapBandC(text);
+    for (final MapEntry(key: team, value: pick) in entry.picks.entries) {
+      db.execute('INSERT OR REPLACE INTO pick VALUES(?, ?, ?, ?, ?, ?, ?, ?)', [
+        key,
+        clock,
+        team == Team.ab ? (legacy ? 'AC' : 'AB') : (legacy ? 'BD' : 'CD'),
+        stored(pick.best),
+        pick.score.score,
+        pick.score.mate,
+        stored(pick.pv),
+        pick.offset,
+      ]);
+    }
+    for (final MapEntry(key: (board, uci), :value) in entry.moves.entries) {
+      final played = position.play(board, uci);
+      if (played == null) continue;
+      db.execute(
+        'INSERT OR REPLACE INTO move VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+          key,
+          '${board == BoardNumber.one ? 'A' : 'B'}:${played.move.san}',
+          stored(position.mover(board).letter),
+          uci,
+          clock,
+          value.score.score,
+          value.score.mate,
+          stored(value.pv),
+          played.after.bookKey,
+        ],
+      );
+    }
+  }
+
+  /// Append the exact stored scores and calibration; replacement never loses a run.
+  static void _snapshot(
+    Database db,
+    int key,
+    String clock,
+    Map<String, Object?> provenance,
+  ) {
+    final id = '${DateTime.now().microsecondsSinceEpoch}-$key-$clock';
+    String rows(String table) => jsonEncode([
+      for (final row in db.select(
+        'SELECT * FROM $table WHERE pos=? AND clock=?',
+        [key, clock],
+      ))
+        Map<String, Object?>.from(row),
+    ]);
+    final seats = db.select("SELECT value FROM meta WHERE key='seats'");
+    db.execute('INSERT INTO analysis_history VALUES(?, ?, ?, ?, ?, ?)', [
+      id,
+      key,
+      clock,
+      jsonEncode({
+        ...provenance,
+        'seats': seats.isEmpty ? 'AC/BD' : seats.first['value'],
+      }),
+      rows('pick'),
+      rows('move'),
+    ]);
+    db.execute('INSERT OR REPLACE INTO current_analysis VALUES(?, ?, ?)', [
+      key,
+      clock,
+      id,
+    ]);
   }
 
   static String? _existing(List<String> places) =>

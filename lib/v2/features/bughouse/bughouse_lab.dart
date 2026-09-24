@@ -18,6 +18,9 @@ final class BughouseLab extends ChangeNotifier {
   BoardNumber _focus = BoardNumber.one;
   ClockCase _clock = ClockCase.even;
   bool _flipped = false;
+  bool _showMatches = false;
+  bool get showMatches => _showMatches;
+  void toggleMatches() => _change(() => _showMatches = !_showMatches);
   TableRefusal? _problem;
   Map<BoardNumber, String> _setupProblems = const {};
 

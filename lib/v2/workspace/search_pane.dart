@@ -244,7 +244,7 @@ class _SearchPaneState extends State<SearchPane>
             ],
             Tooltip(
               message: 'Stop now and keep what it found',
-              child: FilledButton.tonal(
+              child: FilledButton(
                 onPressed: running.stopping ? null : fill.finish,
                 child: const Text('Stop'),
               ),

@@ -309,7 +309,7 @@ Supersedes the Search tab section where they differ.
   per kind, side and position: found again, replaced by the newer finding. Each keeps its line
   from the document's root, the ply of the position, the key move, the scores, the rating and
   when. Opened on first use.
-- **The Positions column.** `Positions` in the top bar (Ctrl+P, also in Actions) swaps the
+- **The Positions column.** `Positions` under Actions ▸ Panels (Ctrl+P) swaps the
   list column's content for the finds, in every mode with a list; pressed again it gives the
   mode's list back. `Top | Often | New` orders them, a typeable `Kind` field narrows to one
   kind. A row reads `4.d4 Bc5?  Trap` over `played 29%, loses 1.7 · 1 in 3 · as White`; hover

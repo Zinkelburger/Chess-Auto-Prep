@@ -4,6 +4,7 @@ import 'package:chess_auto_prep/v2/chess/generation/search_node.dart';
 import 'package:chess_auto_prep/v2/features/library/library_panel.dart';
 import 'package:chess_auto_prep/v2/workspace/finds_panel.dart';
 import 'package:dartchess/dartchess.dart' show Side;
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -75,15 +76,25 @@ void main() {
     expect(find.byType(LibraryPanel), findsOneWidget);
   });
 
-  testWidgets('the top bar button switches too, and says its key', (
+  testWidgets('Positions lives under Actions and keeps its keyboard shortcut', (
     tester,
   ) async {
     await w.pumpShell(tester);
-    await tester.tap(find.byTooltip('What the searches found (Ctrl+P)'));
+    expect(find.text('Positions'), findsNothing);
+    await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(SubmenuButton, 'Panels'));
+    await tester.pumpAndSettle();
+    expect(find.text('Ctrl+P'), findsOneWidget);
+    await tester.tap(find.widgetWithText(MenuItemButton, 'Positions'));
     await tester.pumpAndSettle();
     expect(find.byType(FindsPanel), findsOneWidget);
     expect(find.textContaining('Nothing found yet'), findsOneWidget);
-    await tester.tap(find.byTooltip('Back to the list (Ctrl+P)'));
+    await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(SubmenuButton, 'Panels'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Back to the list'));
     await tester.pumpAndSettle();
     expect(find.byType(LibraryPanel), findsOneWidget);
   });

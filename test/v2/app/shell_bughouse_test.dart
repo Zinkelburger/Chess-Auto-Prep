@@ -65,8 +65,8 @@ void main() {
       'switch the clock', (tester) async {
     startInBook();
     await toLab(tester);
-    expect(find.text('Player A'), findsOneWidget);
-    expect(find.text('Player D'), findsOneWidget);
+    expect(find.text('A'), findsOneWidget);
+    expect(find.text('D'), findsOneWidget);
     expect(find.text('+0.21'), findsOneWidget);
     // Board 2's mover is D, of C + D: A + B's −0.40 reads +0.40 for D.
     expect(find.text('+0.40'), findsOneWidget);
@@ -147,6 +147,27 @@ void main() {
     },
   );
 
+  testWidgets(
+    'reserve selection clears when the turn changes and does not return',
+    (tester) async {
+      await toLab(tester);
+      w.lab.loadDualFen(
+        '4k3/8/8/8/8/8/8/4K3[Nn] w - - 0 1 | 4k3/8/8/8/8/8/8/4K3[] w - - 0 1',
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey(('reserve', Seat.a, Role.knight))),
+      );
+      await tester.pumpAndSettle();
+      w.lab.play(BoardNumber.one, 'e1f1');
+      w.lab.play(BoardNumber.one, 'e8f8');
+      await tester.pumpAndSettle();
+      await tester.tapAt(squareCenter(tester, BoardNumber.one, Square.c3));
+      await tester.pumpAndSettle();
+      expect(w.lab.position.one.board.pieceAt(Square.c3), isNull);
+    },
+  );
+
   testWidgets('the engine switch shows both teams’ lines; a line plays', (
     tester,
   ) async {
@@ -201,7 +222,7 @@ void main() {
     );
     startInBook();
     await toLab(tester);
-    expect(find.textContaining('FICS archive · 1200 games'), findsNWidgets(2));
+    expect(find.textContaining('FICS games · 1,200'), findsNWidgets(2));
     expect(find.text('D d4'), findsOneWidget);
     // D's team, C + D, won 600 of the 1000.
     expect(find.text('60%'), findsOneWidget);
@@ -215,6 +236,8 @@ void main() {
   ) async {
     startInBook();
     await toLab(tester);
+    await tester.tap(find.byTooltip('Actions (Ctrl+K)'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Matches'));
     await tester.pumpAndSettle();
     expect(
@@ -241,6 +264,8 @@ void main() {
   testWidgets('a match directory that cannot be made is said', (tester) async {
     w.bughouse.matches.failCreate = 'Permission denied';
     await toLab(tester);
+    await tester.tap(find.byTooltip('Actions (Ctrl+K)'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Matches'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('New match'));
@@ -276,6 +301,11 @@ void main() {
     await toLab(tester);
     await tester.tap(row(BoardNumber.one, 'e4'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit position / FEN'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.byKey(const ValueKey(('fen', BoardNumber.one))),
+    );
     await tester.tap(find.byKey(const ValueKey(('fen', BoardNumber.one))));
     await tester.pumpAndSettle();
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
@@ -300,6 +330,11 @@ void main() {
     tester,
   ) async {
     await toLab(tester);
+    expect(find.text('Pieces outstanding: none'), findsNothing);
+    expect(find.text('Tables'), findsNothing);
+    expect(find.text('Matches'), findsNothing);
+    await tester.tap(find.text('Edit position / FEN'));
+    await tester.pumpAndSettle();
     expect(find.text('Pieces outstanding: none'), findsOneWidget);
     await tester.enterText(
       find.byKey(const ValueKey(('fen', BoardNumber.one))),
@@ -310,6 +345,7 @@ void main() {
       find.textContaining('Pieces outstanding: White: 8P'),
       findsOneWidget,
     );
+    await tester.ensureVisible(find.text('Set position'));
     await tester.tap(find.text('Set position'));
     await tester.pumpAndSettle();
     expect(w.lab.position.one.board.pieceAt(Square.e1)?.color, Side.white);

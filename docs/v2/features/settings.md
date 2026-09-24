@@ -70,7 +70,13 @@ The title bar reads `Settings` with a close button (`Close settings`, Escape). N
   downloads are not built yet.
 - **`Repertoire`** (v2, 2026-09-21) — `Opponent rating` (1100–2900, default 2200, step 100; what
   the Replies table, gaps and coverage are predicted for) and `Cover replies met once in` (5–1000
-  games, default 50). The dialog grew from 300 to 340 px for the sixth place.
+  games, default 50). The v2 dialog is 760×440 (2026-09-24): a full-width Search settings field,
+  a scrollable category list with icons and a blue selection highlight, and separated rows.
+  Search matches category names as well as row labels and hints; clearing it restores the selected
+  category. Controls move below their labels at narrow widths or large text sizes. Number steppers
+  name their setting in tooltips. The footer says Changes save automatically, replaced by the
+  store's error when a write fails. Category rows have stable keys so numeric/token editors do
+  not carry text into another setting.
 - **`Repertoires`** — `My repertoires`: `Compare your games with these books to see where you left your
   prep.` Owned by [repertoires.md](repertoires.md). **`Data & storage`** is the whole Databases page
   embedded; see [databases.md](databases.md).
