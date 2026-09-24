@@ -1,7 +1,13 @@
 # Architecture renewal: a fresh app in `lib/v2/`
 
-**Status: Not started (plan revised 2026-09-19).** This is the third version of
-the plan. The first (Sept 16, commit `6d980630`) migrated the app in place; its
+**Status: Partially implemented; correctness hardening planned (2026-09-24).**
+The [data correctness contracts](#data-correctness-contracts) and
+[hardening batches](#correctness-hardening-order) below are the next design and
+verification work, not claims about guarantees already implemented. Existing
+feature statuses record delivery; they do not certify the new contracts.
+
+This is the third version of the rewrite plan, with its correctness design
+revised on 2026-09-24. The first (Sept 16, commit `6d980630`) migrated the app in place; its
 work log is [the evidence record](ARCHITECTURE_RENEWAL_EVIDENCE.md) and its
 final text is at `449d5428`. The second (Sept 18, `58a8dfd8`) moved to a fresh
 app. This version keeps that decision and fixes how the work is cut. Read this
@@ -175,6 +181,308 @@ Failures and timeouts require an explicit close-without-saving choice. Books
 and settings use a directory lock plus a comparison with the loaded file before
 atomic replacement; another instance's edit is reported instead of overwritten.
 
+## Data correctness contracts
+
+**Target design; implementation is tracked in the hardening table.** Keep the
+shared workspace, pure chess code, concrete owners and existing storage formats.
+Make correctness a property of a complete operation, including its reads,
+dependent writes, recovery and publication. Directory boundaries alone cannot
+establish that property.
+
+### What DDIA contributes
+
+*Designing Data-Intensive Applications* explains transactions, derived data and
+end-to-end correctness; see the [first edition's final chapter](https://www.oreilly.com/library/view/designing-data-intensive-applications/9781491903063/ch12.html)
+or [second edition chapter 13](https://www.oreilly.com/library/view/designing-data-intensive-applications/9781098119058/ch13.html).
+The decisions below are our application of those ideas to this desktop app,
+not prescriptions attributed to the authors.
+
+| Idea | Decision for this app |
+|---|---|
+| Systems of record versus derived data | Identify which bytes cannot be reconstructed before defining caching or cleanup. |
+| Transaction isolation | Specify which competing operations and reads must behave as if performed in sequence; test those histories. |
+| The dual-write problem | A document change and its required reference changes have one recoverable operation boundary. |
+| Materialized views | Catalogs, gap walks and indexes name their inputs and can be rebuilt from authoritative state. |
+| Idempotence | Recovery and retry may execute again; their durable effects must not be duplicated. |
+| Integrity versus timeliness | Preserve correct source data; allow explicitly stale derived views where safe. |
+
+Kleppmann's [isolation tests](https://martin.kleppmann.com/2014/11/25/hermitage-testing-the-i-in-acid.html),
+[dual-write examples](https://martin.kleppmann.com/2015/05/27/logs-for-data-infrastructure.html)
+and [discussion of derived data](https://martin.kleppmann.com/2015/03/04/turning-the-database-inside-out.html)
+explain the relevant failure modes. His coauthored
+[local-first research](https://www.inkandswitch.com/essay/local-first/)
+also informs retaining user-owned files and offline operation.
+This design needs no distributed broker, global event store, new state framework
+or new source-of-truth database. Use SQLite transactions where the existing data
+already shares one database; use guarded file publication and recovery for the
+formats that must remain files.
+
+### Authority across the whole app
+
+Authority is assigned per data set, not per directory or file extension.
+Rebuildable does not mean cheap, and does not grant permission to delete.
+
+| Area | Authoritative state | Derived or temporary state | Durable unit |
+|---|---|---|---|
+| Workspace, viewer, library, study | PGN bytes, preserved versions, required references | Parsed tree, filter, cursor, selection; an unsaved draft is explicitly separate | Scoped edit; compound rename/move/delete/restore |
+| Books | Book definitions and membership | Expanded chapter set, counts | Membership edit; reference migration with its document operation |
+| Repertoire training | Existing schedule, streak, history and attempt files; do not assume one can reconstruct all the others | Due queues, scope lists, lesson board | One rating and its required records; reference migration |
+| Tactics | Puzzle PGN, review fields, analyzed-game markers; source games that have no other copy | Puzzle queue, current puzzle, mining computation | One analyzed game's puzzles and completion marker together |
+| My games | Saved corpus, account identity and download configuration | Opening index, book comparison, displayed freshness | Corpus publication; freshness advances only after publication |
+| Generation and checks | Accepted PGN edits, retained run artifacts, user choices | Search frontier, gaps, coverage, evaluations | Job-specific checkpoint; publish accepted output against its expected destination |
+| Players and prep | Player identities, corpus generations, prep notes and groups | Statistics, opening trees, opponent analysis | Corpus plus manifest; one saved prep edit |
+| Databases | Installed dataset identity and manifest; irreplaceable game rows in mixed databases | Position indexes, downloadable caches | Completed import unit or new dataset generation |
+| Engine tournaments | Run configuration, finished games and their outcomes | Live board, crosstable | One completed game and its outcome |
+| Bughouse | Saved matches and promised saved analysis, including provenance | Live search, partial move scores, archive queries | Completed analysis entry or match checkpoint |
+| Settings and accounts | Existing settings and credential stores | Form state, connection status | Settings update with conflict checks |
+| Navigation and layout | Persisted preferences only where the feature already saves them | Mode, focus, pane sizes, pending open request | No independent document writes |
+
+The player, database-management and tournament rows specify contracts for their
+future implementation. They do not authorize extra product features or change
+the owner's approved mode specs.
+
+### Consistency the user can observe
+
+| Operation or read | Required guarantee |
+|---|---|
+| An edit on the active board | Read the current draft. Show its save state separately; another mode does not imply a save. |
+| A successful durable command | Its required writes are complete. A dependent command waits for that result and reads a coherent source snapshot. |
+| Training after an accepted rating | Wait for all relevant preceding writes, even across multiple scope reloads; a failed rating remains recoverable. |
+| Rename, move or committed undo | Document and essential references form one operation; readers do not treat an intermediate state as complete. |
+| Catalog, gaps, explorer, book check | May refresh asynchronously. Keep old content only when safe and visibly stale; navigation validates references before using it. |
+| Engine or network response | Publish only into the request and input version it answers. |
+| Reopen after a crash | Recover affected operations before exposing writable state or training against it. |
+| External edit or sync conflict | Revalidate; preserve ambiguous versions and report a conflict. App locks do not control other programs. |
+
+An in-process notification is a wake-up hint, not durable evidence of a commit.
+A restart or newly mounted consumer must reconstruct current state without
+having heard earlier notifications. Freshness tokens local to one process are
+not global revisions and are never trusted across restarts.
+
+### Where the responsibilities live
+
+Extend existing owners as each batch needs them. These are responsibilities,
+not a request to create an interface or class for each row.
+
+| Existing area | Responsibility after hardening |
+|---|---|
+| `chess/` | Pure transformations, reference mappings, scheduling and validation; no I/O or notifications. |
+| Feature command owner, such as `Library` | Interpret intent and construct the complete operation, including required dependent changes. Never repair references in an optional UI listener. |
+| `storage/`, including relocation and guards | Check revisions, lock, stage, preserve, commit and recover; typed terminal outcomes. |
+| `DocumentRepository` | Announce committed outcomes with affected references and revisions; never announce a partially completed semantic command as complete. |
+| `DocumentSession` / saver / history | Own the active draft, edit policy and receipt-based undo; keep draft operations distinct from committed operations. |
+| Training persistence / `PendingWrites` | Own accepted writes, their barriers and retry material across presentation lifetimes. |
+| Catalog and derived owners | Observe explicit input versions, invalidate affected results and reject obsolete completions. |
+| `AppParts`, requests and exit guard | Compose owners; coordinate startup recovery, navigation and shutdown. No chess or file-format rules. |
+
+Keep the import table below. A shared storage operation takes concrete data
+describing references and writes, not a dependency on the Books or Trainer UI.
+Extract shared mechanics only when two concrete operations need the same rule.
+
+### Commit and recovery protocol
+
+A single scoped PGN edit remains one guarded replacement. A transaction already
+inside one SQLite database uses that database's transaction. The following
+protocol is for a command that must update multiple authoritative resources.
+
+1. **Plan.** Capture intent, affected resources, expected revisions and explicit
+   reference mappings. Keep expensive parsing, network calls and engine work
+   outside commit locks. Assign an operation ID before retryable durable work.
+2. **Validate under the shared guards.** Recheck the read set, destination
+   collisions and collection assumptions. A folder operation protects namespace
+   membership, not just the files found during an earlier scan. Overlapping
+   operations use one documented, acyclic lock order compatible with v1.
+3. **Prepare durably.** Preserve required before-content and stage after-content.
+   Record a versioned recovery manifest with the operation ID, allowed paths,
+   expected before/after identities or hashes and the required steps. Preparation
+   failure changes no authoritative content. Recovery data contains no secrets.
+4. **Apply.** Once durable commit intent is recorded, complete the operation or
+   leave a recoverable obligation. Do not abandon it because a widget was
+   disposed or a navigation ticket changed. Hold conflicting managed reads and
+   writes behind the operation boundary.
+5. **Finish.** Confirm the required steps have their intended outcomes and
+   persist completion before returning success. Produce a receipt with the
+   resulting revisions and inverse information. Release guards before invoking
+   UI listeners. Refresh derived data separately.
+
+One storage entry point acquires the operation's guards; the participating
+storage routines must not recursively acquire the same locks. Drain preceding
+accepted work before taking guards it needs. Never wait for the entire pending
+registry from inside one of its own tracked operations.
+
+The manifest is recovery metadata; the existing files remain authoritative.
+Multiple file replacements are not one atomic filesystem operation. Cooperating
+readers see a coherent boundary because they use the same guards and recovery
+gate. Arbitrary external programs may observe intermediate bytes; this design
+does not claim transactional isolation against them.
+
+For example, rename course section A to B while a book includes only A:
+
+| Point | Durable state | What the app may claim |
+|---|---|---|
+| Before preparation | PGN names A; book names A | A is committed. |
+| Prepared | Before/after versions and the A-to-B mapping are recoverable | Rename is pending; cancellation before commit intent can still leave A. |
+| Interrupted after PGN replacement | PGN names B; book still names A; intent remains | Recovery required; affected readers cannot treat this as a complete rename. |
+| Recovered and completed | PGN and book both name B; completion is durable | B is committed; views refresh from that result. |
+| Undo requested | Receipt expects the completed participants | Validate all participants, then apply B-to-A as a new operation. |
+
+Training rows stay unchanged for this section rename because their file path
+and line IDs stay unchanged. A file rename additionally includes the training
+path mapping. Each operation names only the participants it actually changes.
+
+Recovery reuses the operation ID. For each step it distinguishes: still at the
+expected before-state, already at the intended after-state, or changed by
+somebody else. Apply the first once, accept the second, and preserve/block the
+third. A lost acknowledgment is an unknown outcome, not permission to create a
+new operation and append another rating. Where legacy formats lack operation
+IDs, staged replacement plus expected hashes and retained receipts must prove
+whether a write landed; do not blindly replay append/increment instructions.
+
+Startup checks pending manifests before affected reads. The same gate is needed
+at later reads/mutations because another app process can fail after startup.
+Unrelated data can remain usable. Malformed/unknown-version manifests produce
+an explicit recovery-required state, never an empty pending list. Retain recovery
+material until completion is durable; backup retention cannot remove content
+still needed by a pending operation or valid undo receipt.
+
+Required application states are `queued`, `preparing`, `applying`, `committed`,
+`rejected` (nothing changed), and `recoveryRequired` (completion needs resolution).
+An ordinary typed rejection is different from an exception whose durable result
+is unknown. Cancellation before commit intent can reject the operation; after
+intent it stops the caller waiting, not the obligation to finish safely.
+
+### Identity and undo
+
+Keep the existing path/section references and persistent `LineID` format during
+coexistence with v1. A content hash identifies a version, not the enduring
+identity of a document: two copies can have identical bytes and independent
+histories. Use one implementation of descendant membership and reference
+rewriting for books, training and recovery.
+
+A supported rename/move produces an explicit old-to-new mapping. Copy creates
+a separate document; delete moves content into recovery; restore validates the
+destination before restoring references. Preserve line IDs when identity is
+preserved. Cross-file line migration must state whether progress follows and
+how collisions are handled before that feature's deferred scope is implemented.
+Do not infer an external rename solely from matching content or display names.
+
+Before relocating an actively trained file, stop accepting ratings against the
+old reference and drain already accepted ones, then capture the migration's
+read set. Resuming uses the new reference. Include a test where a first-ever
+rating has no existing row: row-conflict detection alone cannot stop an old
+path being recreated after a move. A reused path is not permission to attach an
+old session to a new document. Supported v1 writers must satisfy the same
+ordering contract before coexistence is certified.
+
+Draft undo changes only the draft. Committed undo is a new guarded inverse
+operation covering all required participants. If any expected participant has
+changed, reject before applying the inverse and keep the receipt. Redo, where
+supported, obeys the same rule. Undo does not silently discard training performed
+after a rename or restore a book definition over someone else's edits.
+
+### Durable work and job lifetimes
+
+`PendingWrites` becomes an app-lifetime registry of individual obligations,
+not just futures associated with disposable owners. Each entry retains its
+operation identity, affected resources, typed result and retry/recovery material.
+A successful unrelated write cannot clear its failure. Read barriers outlive
+all the view replacements that wait on them. Persistent recovery is the store's
+job; an in-memory registry alone does not survive a crash.
+
+Distinguish accepted in memory, durably prepared, and committed. Only committed
+is shown as saved. Preserve failed drafts/outcomes for retry or explicit discard;
+do not dispose their last copy when a scope or mode changes. Replacing unsent
+autosave drafts is allowed; coalescing distinct training ratings is not.
+
+Every background job captures immutable input versions and configuration.
+Generation publishes against its destination revision. Mining checkpoints one
+game with its completion marker. Downloads advance freshness only after corpus
+publication. Database importers publish completed units/generations. Tournaments
+save completed games before counting them as durable results. Bughouse separates
+partial scoring, complete scoring and saved scoring, and retries missing work.
+The concrete job owns its checkpoint format; shared code only manages lifetime,
+resource budgets and progress delivery.
+
+The engine supervisor owns each process through startup, active requests, stop
+and confirmed exit. Responses carry request identity; buffers and work queues
+are bounded. Finite operations have deadlines, while continuous analysis has an
+explicit stop. Retries release failed processes. Stop/dispose also accounts for
+an engine that has been requested but has not finished starting.
+
+Shutdown rejects new commands, stops/checkpoints producers, resolves drafts,
+drains accepted writes, and then releases engines and stores. A timeout is not
+success. Explicit close-without-saving may abandon uncommitted drafts, but it
+does not erase recovery information for a partially applied operation.
+
+### Derived views and coherent reads
+
+An index or analysis result names its complete inputs: relevant document
+revisions, corpus fingerprint, book membership version, settings and engine/model
+version where applicable. Capture a coherent source snapshot using existing
+guards/transactions, or validate the entire read set before publication. Checking
+each file once at unrelated times is insufficient for a multi-file invariant.
+
+Committed changes identify affected resources and reference mappings. Catalog
+batches retain the relevant changes while coalescing notifications. A projection
+publishes only if its captured inputs still match current inputs; cancellation
+also stops wasted work, but cannot replace that check. A missing event after a
+crash is repaired by rebuilding from source, not by assuming the view is current.
+
+The active editor provides a draft overlay where the product promises immediate
+feedback. Persisted views never mistake that overlay for a committed revision.
+After a required write, dependent actions wait for the appropriate barrier or
+read the committed source directly. They do not use a known-stale gap walk or
+membership expansion to authorize a mutation.
+
+Invalidate by affected inputs: a sibling deletion recomputes gaps, a membership
+change recomputes the book scope, a cursor move does neither. Keep pure reusable
+indexes keyed by source version; bound cache size. A failed rebuild may leave a
+labelled old view, but its unavailable source must not become an empty success.
+
+### Compatibility, diagnosis and acceptance
+
+The promise that v1 and v2 can share a profile remains. Match both lock identity
+and lock order, including v1's repertoire domain guard. Locks alone cannot teach
+v1 to recover a new v2 manifest. Before enabling a new compound-write protocol,
+prove that both supported applications recover or refuse affected access after
+either crashes. A narrowly scoped v1 data-safety fix is allowed by the existing
+freeze policy. Do not enable the protocol while this compatibility gate fails.
+An unsupported older binary or arbitrary external tool is outside that guarantee.
+
+Keep public formats and paths compatible. New private recovery metadata is
+versioned and validated; unknown versions are preserved. Tools/MCP writers must
+use the compatible guarded protocol or be handled as external writers with
+revision validation and refresh. A filesystem watcher is only an invalidation
+hint, never proof of a coherent snapshot.
+
+Log operation/job ID, affected resource, expected/resulting revision and phase,
+without credentials or unnecessary user content. Report the same failure in the
+UI with a usable retry/recovery action. A read-only integrity check should find
+unfinished operations, dangling references and mismatched derived versions;
+repair reconstructs only disposable derived state automatically.
+
+| Proof | Observable invariant |
+|---|---|
+| Rename section, then undo while its book is active | Name, membership and training scope agree at each completed boundary. |
+| Hold a rating write; trigger two scope reloads | Neither reload exposes progress predating the accepted write as current. |
+| Delete/import a sibling that answers a gap | Gap and Replies views converge to the committed repertoire without reopening the chapter. |
+| Select nested chapters, then remove their repertoire | No descendant remains included by a stale explicit selection. |
+| Kill a worker after each durable step; reopen twice | Required state is recovered or blocked; retry duplicates no records. |
+| Fail an analysis save; fail an engine midway and retry | Unsaved is visible; incomplete scores do not count as finished. |
+| Disable puzzle auto-advance during its delay | No scheduled advance occurs afterward. |
+| Compete v1, v2 and another isolate; inject an external edit | Managed operations serialize; incompatible changes are preserved and reported. |
+| Drop a notification; rebuild a view from source | The view reaches the same result as a fresh derivation. |
+| Repeatedly open/close modes and jobs | Process, subscription and queue counts return to their documented baseline. |
+
+Use real temporary profiles for storage/restart tests, controlled completions
+and fake time for concurrency tests, and production `AppParts` wiring for the
+user sequences. Add generated operation sequences against a simple reference
+model where interactions justify them. Domain algorithms use specification cases
+and deterministic v1 comparisons where v1 is a valid oracle. Measure representative
+large corpora and establish performance budgets before calling scale verified.
+State the supported filesystem/platform fault model; process-kill tests alone
+do not prove every device survives power loss.
+
 ## Layout
 
 ```text
@@ -339,9 +647,11 @@ decide it, and the reviewer answers each with a file and line, not an opinion.
   (Ousterhout: define errors out of existence).
 - Ids and units are types when confusion would be a bug: `Fen`, `Revision`,
   `ChapterId`, `Centipawns` (lila's opaque ids). Not every string.
-- Every `await` in an owner is followed by a check that the request is still
-  current. Every subscription, timer and process has a named owner and is
-  closed in `dispose`.
+- After an `await`, transient reads and computations check their input/request
+  identity before publishing. Accepted durable operations instead follow their
+  commit/recovery protocol even if the initiating view has gone. Every
+  subscription, timer and process has a named owner and an explicit end;
+  disposing a view does not dispose durable obligations it initiated.
 - No `dynamic`, no `late` for things that could be constructor arguments, no
   boolean parameters that switch behaviour, no nullable fields that mean
   "not loaded yet" when a sealed state would say it.
@@ -423,7 +733,9 @@ style.
 
 ## Data safety
 
-User data is the one thing the rewrite must never damage.
+User data is the one thing the rewrite must never damage. The target guarantees
+across multiple stores are defined in [Data correctness contracts](#data-correctness-contracts);
+the sections below specify document formats and individual storage operations.
 [DATA_INTEGRITY.md](DATA_INTEGRITY.md) lists every store, its format and its
 recovery files.
 
@@ -436,7 +748,7 @@ recovery files.
 | Games | Support `app_games.db`, collection-scoped with position indexes | Tactics source games that have no other copy |
 | Training | Review, progress and history CSVs and attempt JSONL, keyed by file path and line id | Scheduling and history across chapter rename, move, split and delete, and across edits that would change a derived line id |
 | Generation output | Versioned bundles via the artifact repository, plus legacy chapter-side files | Readability of old artifacts; user edits to companion PGNs |
-| Settings and accounts | SharedPreferences keys | Existing keys and values |
+| Settings and accounts | V2 Support `settings.json`; existing SharedPreferences account/credential keys | Existing keys and values; no implicit account migration |
 | Recovery | Atomic-write journals, quarantine, PGN recovery snapshots, SQL `game_trash`, schema-upgrade backups, the training records a relocation replaced in Documents `.cap-reference-history/<operation>/`, and the Support note naming a move whose training rows are not rewritten yet | Each keeps its purpose; none of them is the version history — see [Backups](#backups) |
 
 ### Course files
@@ -568,8 +880,9 @@ game-by-game comparison. Parsing a chapter into its tree happens on another
 isolate once the text is larger than a few tens of kilobytes. A large
 generated book opens and saves without the window pausing.
 
-A revision is the SHA-256 of the exact bytes on disk. The same bytes are the
-same document, whichever file they arrived in; different bytes are a conflict,
+A revision is the SHA-256 of the exact bytes on disk. The same bytes have the
+same revision, but two copies remain different documents with their own
+references and histories. Different bytes from those expected are a conflict,
 never permission to replace. (The native file identity the probe also returns
 is used by moves, which write it down so that a move interrupted half way can
 be finished by the file rather than by its name.)
@@ -765,7 +1078,51 @@ owner's public API and the theme alone.**
   scratch by someone who read only the owner's public API and the theme?
   If not, state or layout leaked into the wrong place.
 
+## Correctness hardening order
+
+These batches precede broad feature expansion. Each delivers a named user
+sequence and the smallest reusable mechanism needed for it. They are dependency
+groups, not a request to implement the whole design in one session. Split a
+batch into bounded operation-specific tasks when needed; keep one status cell
+per batch and use tests and commits as the implementation record.
+
+| Batch | Depends on | Scope and first places to change | Exit condition | Status |
+|---|---|---|---|---|
+| H1 | None | Direct fixes: recursive book selection, gap invalidation, analysis-save errors, partial engine retry, puzzle timer; `books`, workspace wiring, bughouse stores/search, puzzle trainer | Their acceptance sequences above pass through real wiring; failures are visible | Not started |
+| H2 | H1 | Accepted ratings and writes outlive reload/dispose; `PendingWrites`, training progress/owner, exit guard | Two overlapping reloads cannot bypass the same pending rating; failed outcomes remain retryable; shutdown is honest | Not started |
+| H3a | H2 | Existing relocation recovery before affected reads; document guards, training reads, startup; reconcile v1 domain locks/order | Kill during a move, reopen/train from either supported app; no missing or duplicate progress; incompatible access blocks safely | Not started |
+| H3b | H3a | One compound operation for course rename/book references and its inverse; Library, storage, session history | Rename and undo agree across PGN/book state, including crash and external-conflict cases | Not started |
+| H3c | H3b | Apply the proven operation boundary to supported file/folder moves, delete/restore and multi-file edits | Every existing command has an explicit required read/write set, recovery path and compatible undo behavior | Not started |
+| H4 | H2, H3c | Versioned input snapshots for catalog, shelf, gaps, book comparison and training; targeted invalidation | A late computation cannot replace a newer result; a fresh rebuild equals the displayed committed projection | Not started |
+| H5 | H2, H3c | Generation, mining, downloads, bughouse and engine lifetimes; job-specific checkpoints and truthful completion | Stop/retry/restart neither duplicates saved units nor loses promised results; resources return to baseline | Not started |
+| H6 | H4, H5 | All existing modes: focus/shortcuts/navigation/close, settings, credentials, diagnostics and integrity checks | The complete cross-mode sequence below passes with real disposable storage, offline/error cases and headless UI checks | Not started |
+| H7 | H6 | Remaining approved player/prep, database and tournament features, following their product rows | Each adds its own source/derived classification, durable unit and failure/restart tests while meeting the shared contracts | Not started |
+| H8 | H7 | Platform/scale/compatibility gates, data migration rehearsal and switch-over readiness | No untested supported-platform durability claim; recovery and parity gates pass before old code is retired | Not started |
+
+Compatibility and scale checks start in the batch that changes their boundary,
+not only at H8. Do not put a failing test on main to reserve a later batch;
+commit a regression with the fix that makes it pass. H1's smaller fixes do not
+substitute for the operation and lifetime work in H2-H5.
+
+The integration sequence is: edit and train a course chapter; start a rating;
+rename its section while a book is active; change training scope twice; remove
+an answering sibling; verify membership, progress and gaps; undo the rename;
+interrupt a durable move; restart; verify those same facts from disk and then
+from the UI. Check expected intermediate states, not just the final screen.
+
+Implementation tasks run relevant tests, analysis and lint. Visible changes
+also need a headless app check. Documentation-only planning runs lint and link
+checks; it does not require a screenshot or mark an implementation batch Done.
+Update the existing contract when the implementation changes it, without adding
+a parallel report or debt ledger. New public formats, dropped product behavior
+or weakened compatibility remain product decisions; internal implementation
+choices follow the contracts here.
+
 ## Order of work
+
+The feature-delivery history and remaining product scope follow. Start with the
+unfinished [hardening batches](#correctness-hardening-order) before expanding
+these rows. A feature's earlier Done status is not an H-batch completion.
 
 One row is one agent session. Each row ends with a headless screenshot the
 product owner looks at, tests passing, and the work integrated into local
@@ -860,7 +1217,8 @@ Rules:
 - No documents except the one status cell in docs/ARCHITECTURE_RENEWAL.md.
   No evidence logs, checkpoints, reports, ledgers or diaries.
 - No scaffolding for a later step. Build what this step's screenshot needs.
-- From step 2 on, every write goes through PgnDocumentStore.
+- From step 2 on, every PGN write goes through PgnDocumentStore; other stores
+  own their formats and join compound operations where the contracts require it.
 - Budget: stop after about three hours of work or when the goal is met. If not
   done, commit what runs, integrate it if checks pass, and report what is
   missing in three lines.
