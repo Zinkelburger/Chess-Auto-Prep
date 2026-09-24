@@ -222,7 +222,7 @@ void main() {
     );
     startInBook();
     await toLab(tester);
-    expect(find.textContaining('FICS games · 1200'), findsNWidgets(2));
+    expect(find.textContaining('FICS games · 1,200'), findsNWidgets(2));
     expect(find.text('D d4'), findsOneWidget);
     // D's team, C + D, won 600 of the 1000.
     expect(find.text('60%'), findsOneWidget);

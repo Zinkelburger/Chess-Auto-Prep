@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../../chess/bughouse/table.dart';
 import '../../storage/bughouse_books.dart';
@@ -9,8 +10,7 @@ import 'bughouse_lab.dart';
 import 'table_search.dart';
 
 /// Each board's legal moves with their scores for the chosen clock, a
-/// plain rule between the two, and under each what the FICS archive played
-/// on that board when this machine has it. A table is headed by who is on
+/// plain rule between the two. A table is headed by the board and who is on
 /// move there and reads its scores from that player's side, best first; a
 /// move not scored reads `—`. Pointing at a row draws the move on its
 /// board; clicking plays it.
@@ -266,7 +266,7 @@ class ArchiveBlock extends StatelessWidget {
         .where((move) => move.board == board)
         .take(labArchiveRows)
         .toList();
-    final heading = 'FICS games · ${position.games}';
+    final heading = 'FICS games · ${_gameCount(context, position.games)}';
     if (moves.isEmpty) {
       return _say(context, '$heading\n${_empty(archive, position)}');
     }
@@ -291,7 +291,7 @@ class ArchiveBlock extends StatelessWidget {
           children: [
             SizedBox(width: labLabelWidth, child: Text('Move')),
             SizedBox(
-              width: labScoreWidth,
+              width: labArchiveGamesWidth,
               child: Text('Games', textAlign: TextAlign.right),
             ),
             SizedBox(width: Space.m),
@@ -352,9 +352,9 @@ class _ArchiveRow extends StatelessWidget {
               child: Text('${seat.letter} ${move.san}', style: monoText),
             ),
             SizedBox(
-              width: labScoreWidth,
+              width: labArchiveGamesWidth,
               child: Text(
-                '${move.games}',
+                _gameCount(context, move.games),
                 style: monoText,
                 textAlign: TextAlign.right,
               ),
@@ -377,3 +377,8 @@ class _ArchiveRow extends StatelessWidget {
     );
   }
 }
+
+String _gameCount(BuildContext context, int count) =>
+    NumberFormat.decimalPattern(
+      Localizations.localeOf(context).toString(),
+    ).format(count);

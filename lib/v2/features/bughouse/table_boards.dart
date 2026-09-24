@@ -10,7 +10,7 @@ import 'archive_moves.dart';
 import 'move_tables.dart';
 
 /// Both boards side by side, each with its two players and their
-/// reserves, its own move list and its step buttons.
+/// reserves, its own move list, step buttons and FICS continuations.
 ///
 /// Board 1 has A (White) and C (Black), board 2 D (White) and B (Black); our
 /// team's colour is at the bottom of board 1 unless the boards are flipped.
@@ -225,11 +225,9 @@ class _BoardColumn extends StatelessWidget {
   }
 }
 
-/// One player beside a board: the turn dot, `Player A`, then their reserve
-/// tray, each piece they hold as large as a square of the board with its
-/// count. A reserve piece of the player on move is dragged onto the board,
-/// or clicked to pick it up; the other player's pieces are faint until it
-/// is their turn.
+/// A player's fixed reserve slots. Available pieces have a light board-colour
+/// background and an explicit count; empty slots stay in place. Only the player
+/// on move can drop, by click then square, or drag.
 class _SeatRow extends StatelessWidget {
   const _SeatRow({
     required this.position,

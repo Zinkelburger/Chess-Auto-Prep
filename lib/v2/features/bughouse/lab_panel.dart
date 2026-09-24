@@ -9,10 +9,8 @@ import 'bughouse_lab.dart';
 import 'move_tables.dart';
 import 'table_search.dart';
 
-/// The right-hand side of the lab: the clock, the engine (its switch and,
-/// while on, each seat's column of moves), a line for what was refused, and
-/// the database: each board's moves with their scores from the book, the
-/// FICS archive's continuations under each board's table.
+/// The compact engine panel: clock setting, live joint lines, saved-analysis
+/// provenance and each board's scored moves. The FICS archive is by the boards.
 class LabPanel extends StatelessWidget {
   const LabPanel({
     super.key,
@@ -217,8 +215,7 @@ String _trouble(EngineTrouble trouble) => switch (trouble) {
   SearchFailed(:final reason) => 'Analysis failed: $reason',
 };
 
-/// One line that never changes height: what was refused, or why the book
-/// could not be read; empty otherwise.
+/// A problem with the move or book; no reserved error row when all is well.
 class _StatusLine extends StatelessWidget {
   const _StatusLine({required this.lab, required this.search});
 
@@ -266,8 +263,7 @@ class _StatusLine extends StatelessWidget {
 /// While the engine is on: a column per seat, A and B then C and D, each
 /// team's three best joint actions across its two columns with the score
 /// beside them, the team's score in its header. A seat not on move has
-/// nothing in its column. The rows are there from the start and fill as a
-/// pass ends, so nothing below moves. Pointing at a row draws it on both
+/// nothing in its column. Only available lines take up rows. Pointing draws them on both
 /// boards; clicking plays it.
 class EngineLinesBlock extends StatelessWidget {
   const EngineLinesBlock({super.key, required this.lab, required this.on});

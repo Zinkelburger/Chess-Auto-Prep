@@ -13,9 +13,9 @@ import 'match_panel.dart';
 import 'table_boards.dart';
 import 'table_search.dart';
 
-/// The Bughouse lab on one screen, as the BughouseDB page lays it out: the
-/// two boards and their setup boxes on the left, the question, the status
-/// and each board's scored moves on the right. The boards take what the
+/// The Bughouse lab: boards and FICS continuations on the left, compact engine
+/// tables on the right. Position editing is collapsed; Matches is in Actions.
+/// The boards take what the
 /// window leaves, between [labBoardMin] and [labBoardMax].
 ///
 /// ← → step the board last moved or stepped on, Home and End go to its

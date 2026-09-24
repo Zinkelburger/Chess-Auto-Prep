@@ -98,7 +98,9 @@ void main() {
   }
 
   test('the handshake sets the options and waits for readyok', () async {
-    final (_, process) = await started();
+    final (engine, process) = await started();
+    expect(engine.provenance['engine_name'], 'hivemind');
+    expect(engine.provenance['options'], {'Hash': '256'});
     expect(process.sent, ['uci', 'setoption name Hash value 256', 'isready']);
   });
 
@@ -109,6 +111,8 @@ void main() {
     expect(answer.best, const JointMove('d2d4', null));
     expect(answer.lines.map((l) => l.rank), [1, 3, 2]);
     expect(answer.top!.cp, -228);
+    expect(answer.top!.depth, 3);
+    expect(answer.top!.nodes, 245);
     expect(answer.top!.pv.last, const JointMove('d7d5', 'd2d4'));
     // The root's unvisited prior never reads as a score.
     expect(answer.lines.any((l) => l.cp == -16671), isFalse);

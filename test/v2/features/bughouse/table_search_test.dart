@@ -114,6 +114,9 @@ void main() {
     expect(saved.moves.length, 40);
     expect(saved.picks.keys, {Team.ab, Team.cd});
     expect(saved.line, '');
+    expect(saved.provenance['engine_name'], 'Scripted Hivemind');
+    expect(saved.provenance['reported_searches'], hasLength(42));
+    expect(saved.provenance['require_move_on'], 'none');
   });
 
   test('a position in the book for the clock is not scored again', () async {
