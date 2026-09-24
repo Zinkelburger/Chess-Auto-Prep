@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../../chess/bughouse/table.dart';
 import '../../storage/bughouse_books.dart';
@@ -9,8 +10,7 @@ import 'bughouse_lab.dart';
 import 'table_search.dart';
 
 /// Each board's legal moves with their scores for the chosen clock, a
-/// plain rule between the two, and under each what the FICS archive played
-/// on that board when this machine has it. A table is headed by who is on
+/// plain rule between the two. A table is headed by the board and who is on
 /// move there and reads its scores from that player's side, best first; a
 /// move not scored reads `—`. Pointing at a row draws the move on its
 /// board; clicking plays it.
@@ -26,23 +26,11 @@ class MoveTables extends StatelessWidget {
   final TableScores scores;
   final ArchiveMoves archive;
 
-  Widget _board(BoardNumber board) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      Expanded(
-        child: _MoveTable(
-          key: ValueKey(('moves', board)),
-          lab: lab,
-          board: board,
-          scores: scores,
-        ),
-      ),
-      if (archive.available)
-        SizedBox(
-          height: labArchiveHeight,
-          child: ArchiveBlock(lab: lab, archive: archive, board: board),
-        ),
-    ],
+  Widget _board(BoardNumber board) => _MoveTable(
+    key: ValueKey(('moves', board)),
+    lab: lab,
+    board: board,
+    scores: scores,
   );
 
   @override
@@ -53,7 +41,7 @@ class MoveTables extends StatelessWidget {
       children: [
         Expanded(child: _board(BoardNumber.one)),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: Space.m),
+          padding: const EdgeInsets.symmetric(horizontal: Space.xs),
           child: VerticalDivider(width: 1, color: scheme.outline),
         ),
         Expanded(child: _board(BoardNumber.two)),
@@ -88,13 +76,14 @@ class _MoveTable extends StatelessWidget {
           height: labTableRowHeight,
           padding: const EdgeInsets.symmetric(horizontal: Space.xs),
           decoration: BoxDecoration(
+            color: scheme.surfaceContainerHighest,
             border: Border(bottom: BorderSide(color: scheme.outline)),
           ),
           child: Row(
             children: [
               Expanded(
                 child: Text(
-                  position.mover(board).letter,
+                  '${board.label} · ${position.mover(board).letter}',
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
               ),
@@ -114,8 +103,12 @@ class _MoveTable extends StatelessWidget {
           child: ListView.builder(
             itemCount: rows.length,
             itemExtent: labTableRowHeight,
-            itemBuilder: (context, i) =>
-                _MoveRow(lab: lab, row: rows[i], best: scored && i == 0),
+            itemBuilder: (context, i) => _MoveRow(
+              lab: lab,
+              row: rows[i],
+              best: scored && i == 0,
+              alternate: i.isOdd,
+            ),
           ),
         ),
       ],
@@ -124,41 +117,65 @@ class _MoveTable extends StatelessWidget {
 }
 
 class _MoveRow extends StatelessWidget {
-  const _MoveRow({required this.lab, required this.row, required this.best});
+  const _MoveRow({
+    required this.lab,
+    required this.row,
+    required this.best,
+    required this.alternate,
+  });
 
   final BughouseLab lab;
   final ScoredMove row;
   final bool best;
+  final bool alternate;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final move = row.move;
     final weight = best ? FontWeight.w600 : null;
-    return _Pointable(
-      lab: lab,
-      pointed: {move.board: move.uci},
-      onTap: () => lab.play(move.board, move.uci),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(move.san, style: monoText.copyWith(fontWeight: weight)),
-          ),
-          Tooltip(
-            message: row.pv,
-            waitDuration: previewDelay,
-            child: SizedBox(
-              width: labScoreWidth,
+    return ColoredBox(
+      color: best
+          ? scheme.primaryContainer
+          : alternate
+          ? scheme.onSurface.withValues(alpha: 0.045)
+          : scheme.surface,
+      child: _Pointable(
+        lab: lab,
+        pointed: {move.board: move.uci},
+        onTap: () => lab.play(move.board, move.uci),
+        child: Row(
+          children: [
+            Expanded(
               child: Text(
-                row.score.text,
-                textAlign: TextAlign.right,
+                move.san,
                 style: monoText.copyWith(
-                  color: row.score.isEmpty ? scheme.onSurfaceVariant : null,
+                  fontWeight: weight,
+                  color: best ? scheme.onPrimaryContainer : scheme.onSurface,
                 ),
               ),
             ),
-          ),
-        ],
+            Tooltip(
+              message: row.pv,
+              waitDuration: previewDelay,
+              child: SizedBox(
+                width: labScoreWidth,
+                child: Text(
+                  row.score.text,
+                  textAlign: TextAlign.right,
+                  style: monoText.copyWith(
+                    color: best
+                        ? scheme.onPrimaryContainer
+                        : row.score.isEmpty
+                        ? scheme.onSurfaceVariant
+                        : scheme.onSurface,
+                    fontWeight: weight,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -249,7 +266,7 @@ class ArchiveBlock extends StatelessWidget {
         .where((move) => move.board == board)
         .take(labArchiveRows)
         .toList();
-    final heading = 'FICS archive · ${position.games} games';
+    final heading = 'FICS games · ${_gameCount(context, position.games)}';
     if (moves.isEmpty) {
       return _say(context, '$heading\n${_empty(archive, position)}');
     }
@@ -259,7 +276,8 @@ class ArchiveBlock extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.symmetric(vertical: Space.xs),
           child: Tooltip(
-            message: archive.years,
+            message:
+                '${archive.years}. Recorded games, not engine analysis. Results are for the team playing the move.',
             waitDuration: previewDelay,
             child: Text(
               heading,
@@ -269,13 +287,22 @@ class ArchiveBlock extends StatelessWidget {
             ),
           ),
         ),
-        Expanded(
-          child: ListView.builder(
-            itemCount: moves.length,
-            itemExtent: labTableRowHeight,
-            itemBuilder: (context, i) => _ArchiveRow(lab: lab, move: moves[i]),
-          ),
+        const Row(
+          children: [
+            SizedBox(width: labLabelWidth, child: Text('Move')),
+            SizedBox(
+              width: labArchiveGamesWidth,
+              child: Text('Games', textAlign: TextAlign.right),
+            ),
+            SizedBox(width: Space.m),
+            Expanded(child: Text('Won / drawn / lost')),
+          ],
         ),
+        for (final move in moves)
+          SizedBox(
+            height: labTableRowHeight,
+            child: _ArchiveRow(lab: lab, move: move),
+          ),
       ],
     );
   }
@@ -325,9 +352,9 @@ class _ArchiveRow extends StatelessWidget {
               child: Text('${seat.letter} ${move.san}', style: monoText),
             ),
             SizedBox(
-              width: labScoreWidth,
+              width: labArchiveGamesWidth,
               child: Text(
-                '${move.games}',
+                _gameCount(context, move.games),
                 style: monoText,
                 textAlign: TextAlign.right,
               ),
@@ -350,3 +377,8 @@ class _ArchiveRow extends StatelessWidget {
     );
   }
 }
+
+String _gameCount(BuildContext context, int count) =>
+    NumberFormat.decimalPattern(
+      Localizations.localeOf(context).toString(),
+    ).format(count);

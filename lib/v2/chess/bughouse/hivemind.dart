@@ -120,6 +120,7 @@ final class JointLine {
     required this.rank,
     required this.pv,
     required this.nodes,
+    this.depth,
     this.cp,
     this.mate,
   });
@@ -131,6 +132,7 @@ final class JointLine {
   /// Plies to mate, + when the searched team mates.
   final int? mate;
   final int nodes;
+  final int? depth;
   final List<JointMove> pv;
 
   /// The raw value in Q, or null for a mate.

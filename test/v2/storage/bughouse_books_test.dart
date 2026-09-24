@@ -186,6 +186,11 @@ void main() {
       nodes: 1500,
       childNodes: 200,
       took: const Duration(seconds: 3),
+      provenance: const {
+        'engine_name': 'test-build',
+        'engine_sha256': 'binary-hash',
+        'network_sha256': 'network-hash',
+      },
     );
 
     test('a blocked destination reports a failed save', () async {
@@ -228,6 +233,51 @@ void main() {
           again.moves[(BoardNumber.one, 'e7e5')]![ClockCase.cdMaySit]!.pv,
           'C e5 · A Nf3',
         );
+        book.close();
+      },
+    );
+
+    test(
+      'replacing a clock retains its scores, identity and other clock budgets',
+      () async {
+        final path = hivemindBook(relabelled: true);
+        final book = SqliteHivemindBook([path]);
+        final table = afterLine('A:e4');
+        await book.save(entry(table, ClockCase.even));
+        await book.save(entry(table, ClockCase.even));
+        final found = await book.lookup(table) as HivemindFound;
+        expect(
+          found.provenance[ClockCase.even]!['engine_sha256'],
+          'binary-hash',
+        );
+        expect(
+          found.provenance[ClockCase.even]!['network_sha256'],
+          'network-hash',
+        );
+        expect(found.provenance[ClockCase.even]!['child_nodes'], 200);
+        expect(
+          found.provenance[ClockCase.abMaySit]!['engine_name'],
+          contains('Unknown'),
+        );
+        final db = sqlite3.open(path, mode: OpenMode.readOnly);
+        final history = db.select(
+          "SELECT * FROM analysis_history WHERE clock='even'",
+        );
+        expect(history, hasLength(3));
+        final legacy = history.firstWhere(
+          (row) =>
+              (jsonDecode(row['provenance'] as String) as Map)['engine_name']
+                  .toString()
+                  .contains('Unknown'),
+        );
+        final moves = (jsonDecode(legacy['moves'] as String) as List)
+            .cast<Map>();
+        expect(moves.firstWhere((row) => row['uci'] == 'e7e5')['score'], -0.12);
+        expect(
+          db.select("SELECT * FROM current_analysis WHERE clock='even'"),
+          hasLength(1),
+        );
+        db.close();
         book.close();
       },
     );

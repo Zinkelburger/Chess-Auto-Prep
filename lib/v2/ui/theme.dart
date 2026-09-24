@@ -519,42 +519,41 @@ const labBoardMin = 200.0;
 const labBoardMax = 480.0;
 
 /// What the left column needs under the boards besides the seat rows: the
-/// move list and its buttons, the setup boxes and the pieces line.
+/// move list, navigation and archive. Expanded setup can scroll.
 const labBoardChrome = 250.0;
 
 /// The narrowest the right-hand panel may become before the boards shrink.
-const labPanelMinWidth = 540.0;
+const labPanelMinWidth = 440.0;
+const labPanelMaxWidth = 480.0;
 
 /// The gap between the two boards, and between the boards and the panel.
 const labBoardGap = 20.0;
-const labColumnGap = 28.0;
+const labColumnGap = 16.0;
 
 /// A seat row beside a board: the turn dot, `Player A`, then the reserve
 /// tray, its pieces as large as the board's squares, and the room around
 /// them.
 const labSeatPadding = 8.0;
-const labSeatLabelWidth = 72.0;
 const labTurnDot = 11.0;
 
 /// Each board's own move list: a few moves tall, then it scrolls.
-const labMoveListHeight = 80.0;
+const labMoveListHeight = 48.0;
 const labMoveRowHeight = 22.0;
 const labMoveNumberWidth = 34.0;
 
 /// The label column of the right panel's rows (`Time`).
 const labLabelWidth = 64.0;
 
-/// The FICS archive under each board's table: its heading and this many
+/// The FICS archive under each board: its heading and this many
 /// continuations.
 const labArchiveRows = 6;
-const labArchiveHeight = 40.0 + labArchiveRows * labTableRowHeight;
+const labArchiveGamesWidth = 80.0;
 
 /// A row of a board's move table, and its score column.
 const labTableRowHeight = 28.0;
 const labScoreWidth = 60.0;
 
-/// The status line over the tables: one line tall whatever it says, so the
-/// tables never move.
+/// The status line over the tables, shown when there is a problem.
 const labStatusHeight = 30.0;
 
 /// The setup boxes' text: FENs and reserves in mono at the small size.

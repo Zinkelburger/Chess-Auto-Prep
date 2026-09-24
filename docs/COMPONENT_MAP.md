@@ -343,6 +343,15 @@ in the visitor's browser more cheaply: 200-node searches of the position, then
 200-node searches after only each board's four most-visited moves; every other
 legal move is stored unscored and shows "—".
 
+The v2 lab puts FICS continuations under the actual boards, keeps FEN/reserve editing collapsed,
+and opens Matches through Actions. Compact engine tables use board/seat headers, aligned scores,
+alternating row backgrounds and a highlighted best move. Its `Saved scores` details show engine
+identity and node budgets. Both the Python builder and v2 writer retain local per-clock score history
+with binary/network hashes, budgets, reported search nodes/depth and calibration; legacy versions
+remain unknown. Git snapshots of both local books and restore instructions are in
+[`data/bughouse-books/`](../data/bughouse-books/README.md). See the
+[v2 lab](v2/features/bughouse-lab.md) for its current screen and data contracts.
+
 Engine failures show the exit code and Windows NTSTATUS name without guessing
 which file caused it. **Copy full report** copies the diagnostic block through
 `END BUGHOUSE DIAGNOSTICS`, including OS/app/runtime, executable and arguments,
