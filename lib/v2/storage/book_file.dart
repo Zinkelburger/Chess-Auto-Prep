@@ -24,29 +24,52 @@ final class BookFile implements BookStore {
 
   final File _file;
   String? _baseline;
+  String? _attempted;
   bool _read = false;
+  int _revision = 0;
 
   @override
   Future<BookList> read() async {
-    _baseline = await _text();
-    _read = true;
-    return _baseline == null ? BookList.empty : BookList.decode(_baseline!);
+    final revision = ++_revision;
+    final text = await _text();
+    // An admitted writer keeps its original expected bytes. A late read
+    // must not rebase that write onto another process's changes.
+    if (revision == _revision) {
+      _baseline = text;
+      _attempted = null;
+      _read = true;
+    }
+    return text == null ? BookList.empty : BookList.decode(text);
   }
 
   @override
   Future<void> write(BookList books) async {
+    _revision++;
+    final baseline = _baseline;
+    final attempted = _attempted;
+    final read = _read;
     await _file.parent.create(recursive: true);
     await withDirectoryLock(_file.parent, () async {
       final current = await _text();
-      if ((!_read && current != null) || (_read && current != _baseline)) {
+      final next = books.encode();
+      final knownAfter =
+          current == next || (attempted != null && current == attempted);
+      if (!knownAfter &&
+          ((!read && current != null) || (read && current != baseline))) {
         throw StateError(
           'Books changed in another instance. Reload before editing.',
         );
       }
-      final next = books.encode();
+      // Keep both possible outcomes until publication is acknowledged. A
+      // coalesced successor can follow the verified prior attempt's bytes,
+      // while an unrelated version still conflicts. Republish to flush again.
+      _baseline = current;
+      _read = true;
+      _attempted = next;
       await replaceFile(_file.path, utf8.encode(next));
       _baseline = next;
-      _read = true;
+      _attempted = null;
+      _revision++;
     });
   }
 

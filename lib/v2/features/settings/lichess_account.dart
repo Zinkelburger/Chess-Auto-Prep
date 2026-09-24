@@ -13,14 +13,15 @@ import '../../storage/lichess_token.dart';
 final class LichessAccountState extends ChangeNotifier {
   LichessAccountState({
     required LichessLogin login,
-    this.pendingWrites,
+    PendingWrites? pendingWrites,
     required Future<LichessAccount?> Function() read,
     required Future<bool> Function(LichessAccount?) write,
-  }) : _login = login,
+  }) : pendingWrites = pendingWrites ?? PendingWrites(),
+       _login = login,
        _read = read,
        _write = write;
 
-  final PendingWrites? pendingWrites;
+  final PendingWrites pendingWrites;
   final LichessLogin _login;
   final Future<LichessAccount?> Function() _read;
   final Future<bool> Function(LichessAccount?) _write;
@@ -33,31 +34,50 @@ final class LichessAccountState extends ChangeNotifier {
   String? get problem => _problem;
 
   bool _disposed = false;
+  bool _working = false;
+  int _revision = 0;
+  final _requests = Object();
+  PendingObligation<bool>? _saving;
+  bool _removing = false;
+
+  bool get canRetrySave => _saving != null && !_saving!.committed && !_working;
 
   /// Reads the saved account. Called once when the app starts.
   Future<void> load() async {
+    if (_disposed) return;
+    final revision = _revision;
+    await pendingWrites.settleFor(this);
+    if (_disposed ||
+        revision != _revision ||
+        pendingWrites.unfinished(this).isNotEmpty)
+      return;
     final saved = await _read();
+    if (_disposed || revision != _revision) return;
     _set(saved == null ? const SignedOut() : SignedIn(saved), problem: null);
   }
 
   /// Runs the browser flow. Refused while one is already waiting.
-  Future<void> logIn() =>
-      pendingWrites?.track(
-        this,
-        _logIn(),
-        label: 'Lichess account',
-        problem: (_) => _problem,
-      ) ??
-      _logIn();
+  Future<void> logIn() {
+    if (_disposed || _working) return Future.value();
+    final work = _logIn();
+    pendingWrites.watch(_requests, work);
+    return work;
+  }
 
   Future<void> _logIn() async {
-    if (_status is Connecting) return;
-    _set(const Connecting(), problem: null);
-    final outcome = await _login.logIn(
-      waiting: (page, {required opened}) =>
-          _set(Connecting(page: page, browserOpened: opened)),
-    );
-    await _took(outcome);
+    _working = true;
+    _revision++;
+    try {
+      _set(const Connecting(), problem: null);
+      final outcome = await _login.logIn(
+        waiting: (page, {required opened}) =>
+            _set(Connecting(page: page, browserOpened: opened)),
+      );
+      await _took(outcome);
+    } finally {
+      _working = false;
+      if (!_disposed && canRetrySave) notifyListeners();
+    }
   }
 
   /// Ends a waiting browser flow; the row goes back to signed out.
@@ -65,49 +85,47 @@ final class LichessAccountState extends ChangeNotifier {
 
   /// Signs in with a personal access token typed into the row. Answers
   /// whether it was taken.
-  Future<bool> useToken(String token) =>
-      pendingWrites?.track(
-        this,
-        _useToken(token),
-        label: 'Lichess account',
-        problem: (_) => _problem,
-      ) ??
-      _useToken(token);
+  Future<bool> useToken(String token) {
+    if (_disposed || _working) return Future.value(false);
+    final work = _useToken(token);
+    pendingWrites.watch(_requests, work);
+    return work;
+  }
 
   Future<bool> _useToken(String token) async {
-    if (_status is Connecting) return false;
-    _set(const Checking(), problem: null);
-    return _took(await _login.withToken(token));
+    _working = true;
+    _revision++;
+    try {
+      _set(const Checking(), problem: null);
+      return await _took(await _login.withToken(token));
+    } finally {
+      _working = false;
+      if (!_disposed && canRetrySave) notifyListeners();
+    }
   }
 
   /// Signs out: the token is revoked at Lichess best effort and forgotten
   /// here whatever Lichess said. When this computer will not forget it,
   /// the row says so: the next launch would read it back as signed in.
-  Future<void> logOut() =>
-      pendingWrites?.track(
-        this,
-        _logOut(),
-        label: 'Lichess account',
-        problem: (_) => _problem,
-      ) ??
-      _logOut();
+  Future<void> logOut() {
+    if (_disposed || _working || _status is! SignedIn) return Future.value();
+    final work = _logOut();
+    pendingWrites.watch(_requests, work);
+    return work;
+  }
 
   Future<void> _logOut() async {
-    final signedIn = _status;
-    if (signedIn is! SignedIn) return;
-    _set(const SigningOut());
-    await _login.revoke(signedIn.account.token);
-    if (await _write(null)) {
-      _set(const SignedOut(), problem: null);
-      return;
+    final signedIn = _status as SignedIn;
+    _working = true;
+    _revision++;
+    try {
+      _set(const SigningOut());
+      await _login.revoke(signedIn.account.token);
+      await _persist(null);
+    } finally {
+      _working = false;
+      if (!_disposed && canRetrySave) notifyListeners();
     }
-    log.w('sign out of Lichess', 'the preferences kept the account');
-    _set(
-      const SignedOut(),
-      problem:
-          'Logged out, but the account could not be removed from this '
-          'computer; it may show as logged in next time.',
-    );
   }
 
   Future<bool> _took(LoginOutcome outcome) async {
@@ -119,17 +137,7 @@ final class LichessAccountState extends ChangeNotifier {
           until: grant.until,
           personal: grant.personal,
         );
-        if (!await _write(account)) {
-          _set(
-            const SignedOut(),
-            problem:
-                'Logged in, but the account could not be saved. '
-                'Try again.',
-          );
-          return false;
-        }
-        _set(SignedIn(account), problem: null);
-        return true;
+        return _persist(account);
       case LoginCancelled():
         _set(const SignedOut(), problem: null);
         return false;
@@ -138,6 +146,60 @@ final class LichessAccountState extends ChangeNotifier {
         return false;
     }
   }
+
+  Future<bool> _persist(LichessAccount? account) async {
+    final earlier = pendingWrites.unfinished(this).isNotEmpty;
+    _removing = account == null;
+    late final PendingObligation<bool> entry;
+    entry = pendingWrites.accept(
+      resource: this,
+      label: 'Lichess account',
+      blocked: () => false,
+      work: () async {
+        var saved = false;
+        try {
+          saved = await _write(account);
+        } on Object {
+          // The credential must never become part of an exception message.
+          log.w('save the Lichess account', 'the preferences write failed');
+        }
+        if (identical(_saving, entry) && saved) {
+          _set(
+            account == null ? const SignedOut() : SignedIn(account),
+            problem: null,
+          );
+        }
+        return saved;
+      },
+      problem: (saved) => saved ? null : 'The account could not be saved.',
+    );
+    _saving = entry;
+    if (!await entry.run() && earlier) await pendingWrites.retry(this);
+    if (!entry.committed) _saveFailed();
+    return entry.committed;
+  }
+
+  /// Retry only preferences persistence: no new token check or browser flow.
+  Future<void> retrySave() async {
+    if (_working || _saving == null) return;
+    _working = true;
+    if (!_disposed) notifyListeners();
+    try {
+      await pendingWrites.retry(this);
+      if (!_saving!.committed) _saveFailed();
+    } finally {
+      _working = false;
+      if (!_disposed) notifyListeners();
+    }
+  }
+
+  void _saveFailed() => _set(
+    const SignedOut(),
+    problem: _removing
+        ? 'Logged out, but the account could not be removed from this '
+              'computer; it may show as logged in next time.'
+        : 'Logged in, but the account could not be saved. Retry the save.',
+  );
 
   /// [problem] left out keeps the last one; null clears it.
   void _set(AccountStatus status, {Object? problem = _keep}) {

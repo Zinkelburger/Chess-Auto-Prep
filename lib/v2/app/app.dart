@@ -61,7 +61,9 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
 
   late final _quit = AppExit(
     guard: _parts.exit,
+    navigatorKey: _navigator,
     prepare: _parts.prepareToClose,
+    onCancelled: _parts.resumeAfterClose,
     stopEngines: _parts.env.stopEngines,
     closeLog: widget.closeLog,
   );
@@ -172,7 +174,9 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
 final class AppExit {
   AppExit({
     required ExitGuard guard,
+    this.navigatorKey,
     this.prepare,
+    this.onCancelled,
     required Future<void> Function() stopEngines,
     required Future<void> Function() closeLog,
   }) : _guard = guard,
@@ -180,6 +184,8 @@ final class AppExit {
        _closeLog = closeLog;
 
   final void Function()? prepare;
+  final void Function()? onCancelled;
+  final GlobalKey<NavigatorState>? navigatorKey;
   final closing = ValueNotifier(false);
   final ExitGuard _guard;
   final Future<void> Function() _stopEngines;
@@ -190,20 +196,62 @@ final class AppExit {
 
   /// Whether the window may close, with the engines and the log shut when
   /// it may.
-  Future<AppExitResponse> leave() => _leaving ??= _leaveOnce();
+  Future<AppExitResponse> leave() => _leaving ??= _leaveOnce().whenComplete(() {
+    if (!closing.value) _leaving = null;
+  });
 
   Future<AppExitResponse> _leaveOnce() async {
+    final focus = FocusManager.instance.primaryFocus;
+    focus?.unfocus();
     closing.value = true;
-    prepare?.call();
-    if (!await _draftIsSettled()) {
-      closing.value = false;
-      _leaving = null;
-      return AppExitResponse.cancel;
+    _guard.cancelNavigation();
+    final barrier = _blockInput();
+    var exited = false;
+    try {
+      prepare?.call();
+      if (!await _draftIsSettled()) return AppExitResponse.cancel;
+      await _stopEngines();
+      log.i('exit');
+      await _closeLog();
+      exited = true;
+      return AppExitResponse.exit;
+    } finally {
+      if (!exited) {
+        if (barrier?.isActive ?? false) {
+          barrier!.navigator?.removeRoute(barrier);
+        }
+        closing.value = false;
+        onCancelled?.call();
+        if (focus?.context != null && focus!.canRequestFocus) {
+          focus.requestFocus();
+        }
+      }
     }
-    await _stopEngines();
-    log.i('exit');
-    await _closeLog();
-    return AppExitResponse.exit;
+  }
+
+  /// Cover existing routes too, including an open settings or name dialog.
+  /// The exit decision is pushed above this route and remains interactive.
+  /// Removing this exact route on cancellation preserves the underlying draft.
+  RawDialogRoute<void>? _blockInput() {
+    final navigator = navigatorKey?.currentState;
+    if (navigator == null) return null;
+    final barrier = RawDialogRoute<void>(
+      barrierDismissible: false,
+      barrierColor: null,
+      transitionDuration: Duration.zero,
+      requestFocus: true,
+      traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop,
+      pageBuilder: (context, animation, secondaryAnimation) => PopScope(
+        canPop: false,
+        child: Focus(
+          autofocus: true,
+          onKeyEvent: (_, _) => KeyEventResult.handled,
+          child: const SizedBox.expand(),
+        ),
+      ),
+    );
+    unawaited(navigator.push(barrier));
+    return barrier;
   }
 
   /// Words in a field the user never left are committed the way clicking
@@ -212,7 +260,6 @@ final class AppExit {
   /// file is waited for, because the window closes next — but not for ever,
   /// which is [ExitGuard]'s job.
   Future<bool> _draftIsSettled() async {
-    FocusManager.instance.primaryFocus?.unfocus();
     await Future<void>.delayed(Duration.zero);
     return _guard.mayClose();
   }

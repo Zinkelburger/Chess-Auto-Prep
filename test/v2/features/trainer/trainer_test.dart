@@ -274,7 +274,7 @@ void main() {
     });
   });
 
-  test('a row another session changed stops every write until a reload', () {
+  test('a conflicting change stays retained across reload until retried', () {
     fakeAsync((async) {
       final trainer = ready(async);
       final progress = readyState(trainer).progress;
@@ -286,7 +286,11 @@ void main() {
       expect(trainer.lesson, isNull, reason: 'a stale scope is not trained');
       trainer.reload();
       async.flushMicrotasks();
+      expect(trainer.state, isA<TrainerUnsaved>());
+      trainer.retryPending();
+      async.flushMicrotasks();
       expect(readyState(trainer).progress.stale, isFalse);
+      expect(files.reviews.values.single.excluded, isTrue);
     });
   });
 
@@ -588,7 +592,7 @@ void main() {
     });
   });
 
-  test('a read that lands after the trainer is gone is let go', () {
+  test('disposing while the read barrier settles starts no later read', () {
     fakeAsync((async) {
       final trainer = Trainer(
         session: fixture.session,
@@ -600,7 +604,7 @@ void main() {
       )..show();
       trainer.dispose();
       async.flushMicrotasks();
-      expect(files.reads, 1);
+      expect(files.reads, 0);
     });
   });
 

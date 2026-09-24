@@ -17,12 +17,16 @@ import '../storage/pending_writes.dart';
 /// the newest carried by the next. A file that cannot be read is not taken
 /// for an empty one: [problem] says so and nothing is written over it.
 final class Books extends ChangeNotifier {
-  Books({required BookStore store, required String root, this.pendingWrites})
-    : _store = store,
-      _root = root;
+  Books({
+    required BookStore store,
+    required String root,
+    PendingWrites? pendingWrites,
+  }) : pendingWrites = pendingWrites ?? PendingWrites(),
+       _store = store,
+       _root = root;
 
   final BookStore _store;
-  final PendingWrites? pendingWrites;
+  final PendingWrites pendingWrites;
 
   /// The `repertoires` folder, absolute.
   final String _root;
@@ -35,8 +39,10 @@ final class Books extends ChangeNotifier {
   String? _problem;
   String? _editing;
   Future<void>? _writing;
+  PendingObligation<void>? _saveObligation;
   bool _dirty = false;
   bool _disposed = false;
+  int _revision = 0;
 
   List<Book> get books => _list.books;
 
@@ -54,11 +60,16 @@ final class Books extends ChangeNotifier {
       _list.byId(_editing) ?? active ?? _list.books.firstOrNull;
 
   Future<void> load() async {
+    if (_disposed || _dirty || canRetry) return;
+    final revision = ++_revision;
     try {
-      _list = await _store.read();
+      final list = await _store.read();
+      if (_disposed || revision != _revision || canRetry) return;
+      _list = list;
       _problem = null;
       _unreadable = false;
     } on Object catch (error) {
+      if (_disposed || revision != _revision || canRetry) return;
       log.w('read the books', error);
       _unreadable = true;
       _problem = 'Your books could not be read, so none are shown.';
@@ -255,7 +266,7 @@ final class Books extends ChangeNotifier {
     ),
   );
 
-  bool get _writable => _loaded && !_unreadable;
+  bool get _writable => !_disposed && _loaded && !_unreadable;
 
   /// Shows [list] at once and writes it. Nothing is written over a file
   /// that could not be read.
@@ -264,19 +275,32 @@ final class Books extends ChangeNotifier {
       _notify();
       return;
     }
+    _revision++;
     _list = list;
-    _notify();
     _dirty = true;
-    final writing = _writing ??= _writeNewest();
-    pendingWrites?.track(
-      this,
-      writing,
-      label: 'Books',
-      problem: (_) => _problem,
-    );
+    _notify();
+    unawaited(_persist());
+  }
+
+  /// A failed snapshot stays owned by the app, including after disposal.
+  bool get canRetry => _saveObligation?.committed == false;
+
+  Future<void> retry() => _disposed || !canRetry ? Future.value() : _persist();
+
+  Future<void> _persist() {
+    if (!canRetry) {
+      _saveObligation = pendingWrites.accept<void>(
+        resource: _store,
+        label: 'Books',
+        work: () => _writing ??= _writeNewest(),
+        problem: (_) => _problem,
+      );
+    }
+    return _saveObligation!.run();
   }
 
   Future<void> _writeNewest() async {
+    _dirty = true;
     try {
       while (_dirty) {
         _dirty = false;

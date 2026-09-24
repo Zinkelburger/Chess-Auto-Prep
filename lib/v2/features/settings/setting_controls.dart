@@ -76,6 +76,9 @@ class _Account extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
+    if (account.canRetrySave) {
+      return _button('Retry save', () => unawaited(account.retrySave()));
+    }
     return switch (account.status) {
       SignedOut() => _button('Log in', () => unawaited(account.logIn())),
       Connecting(:final page, :final browserOpened) => Row(

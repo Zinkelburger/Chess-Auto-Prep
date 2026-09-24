@@ -151,6 +151,11 @@ class _BookList extends StatelessWidget {
               ),
             ),
           ),
+        if (books.canRetry && books.problem != null)
+          TextButton(
+            onPressed: () => unawaited(books.retry()),
+            child: const Text('Retry save'),
+          ),
         Expanded(
           child: ListView(
             children: [

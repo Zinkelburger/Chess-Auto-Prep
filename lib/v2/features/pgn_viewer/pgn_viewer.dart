@@ -28,14 +28,15 @@ import '../../workspace/file_filter.dart';
 final class PgnViewer extends ChangeNotifier {
   PgnViewer({
     required RecentFiles recent,
-    this.pendingWrites,
+    PendingWrites? pendingWrites,
     required PgnFilePicker picker,
     required PgnFileImport import,
     required SettingsStore settings,
     required DocumentSession session,
     required FileFilter filter,
     required String collections,
-  }) : _recentFiles = recent,
+  }) : pendingWrites = pendingWrites ?? PendingWrites(),
+       _recentFiles = recent,
        _picker = picker,
        _import = import,
        _settings = settings,
@@ -49,7 +50,7 @@ final class PgnViewer extends ChangeNotifier {
   /// How many files the list remembers, which is the old app's number.
   static const maxRecent = 10;
 
-  final PendingWrites? pendingWrites;
+  final PendingWrites pendingWrites;
   final RecentFiles _recentFiles;
   final PgnFilePicker _picker;
   final PgnFileImport _import;
@@ -63,6 +64,7 @@ final class PgnViewer extends ChangeNotifier {
 
   List<String> _recent = const [];
   String? _recentProblem;
+  final _unsavedRecent = <Object, String>{};
 
   /// Reads and writes of the recent list take turns: the list is shared
   /// with the old app and kept by read, change, write, and two of those
@@ -155,19 +157,24 @@ final class PgnViewer extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Reads the recent list again, after any read or write already asked for.
-  Future<void> loadRecent() => _inTurn(() async {
-    final read = await _recentFiles.load();
-    if (_disposed) return;
-    switch (read) {
-      case RecentFilesListed(:final paths):
-        _recent = List.unmodifiable(paths);
-        _recentProblem = null;
-      case RecentFilesUnreadable():
-        _recentProblem = _unreadable;
-    }
-    notifyListeners();
-  });
+  /// Retries accepted additions before reading the list. Failed additions
+  /// remain owned by the registry even when this viewer has been replaced.
+  Future<void> loadRecent() async {
+    await pendingWrites.retry(_recentFiles);
+    await _inTurn(() async {
+      final read = await _recentFiles.load();
+      if (_disposed) return;
+      final unsaved = pendingWrites.unfinished(_recentFiles).firstOrNull;
+      switch (read) {
+        case RecentFilesListed(:final paths):
+          _showRecent(paths);
+          _recentProblem = unsaved?.detail;
+        case RecentFilesUnreadable():
+          _recentProblem = unsaved?.detail ?? _unreadable;
+      }
+      notifyListeners();
+    });
+  }
 
   /// Asks the desktop for a file, starting beside the open one, else beside
   /// the last one, else in the collections folder, and answers the file to
@@ -188,8 +195,7 @@ final class PgnViewer extends ChangeNotifier {
   /// With copying switched off in the settings the file opens where it is,
   /// to read.
   Future<ChapterRef?> fileFor(String path) =>
-      pendingWrites?.track(_import, _fileFor(path), label: 'PGN import') ??
-      _fileFor(path);
+      pendingWrites.track(_import, _fileFor(path), label: 'PGN import');
 
   Future<ChapterRef?> _fileFor(String path) async {
     if (!_settings.value.copyFilesIntoDocuments) return ChapterRef.at(path);
@@ -212,47 +218,59 @@ final class PgnViewer extends ChangeNotifier {
   Future<void> opened(ChapterRef ref) {
     _file = ref;
     _query = '';
+    final intent = Object();
+    _unsavedRecent[intent] = ref.path;
     _recent = _first(ref.path, _recent);
     notifyListeners();
-    return _inTurn(() => _remember(ref.path));
+    final accepted = pendingWrites.accept<String?>(
+      resource: _recentFiles,
+      label: 'Recent files',
+      work: () => _inTurn(() => _remember(intent, ref.path)),
+      problem: (detail) => detail,
+      blocked: () => _recentProblem ?? 'An earlier recent file was not saved.',
+    );
+    return accepted.run().then<void>((_) {});
   }
 
-  /// Puts [path] first in the list as it is kept now, not as this viewer
-  /// last read it: the viewer may not have read it at all — the list
-  /// column hidden, or its read still on the way — and writing what is on
-  /// screen would replace the old app's list with one file. A list that
-  /// cannot be read is left as it is.
-  Future<void> _remember(String path) async {
-    final read = await _recentFiles.load();
-    if (_disposed) return;
-    switch (read) {
-      case RecentFilesUnreadable():
-        _recentProblem = _unreadable;
-        notifyListeners();
-        return;
-      case RecentFilesListed(:final paths):
-        _recent = _first(path, paths);
-        notifyListeners();
+  /// Applies the accepted prepend to the latest persisted list. Disposal only
+  /// stops notifications: it cannot abandon the accepted write or its result.
+  /// Retrying a prepend is idempotent, including a lost save acknowledgement.
+  Future<String?> _remember(Object intent, String path) async {
+    try {
+      switch (await _recentFiles.load()) {
+        case RecentFilesUnreadable():
+          _recentProblem = _unreadable;
+        case RecentFilesListed(:final paths):
+          final next = _first(path, paths);
+          _showRecent(next);
+          if (await _recentFiles.save(next)) {
+            _unsavedRecent.remove(intent);
+            _recentProblem = null;
+          } else {
+            _recentProblem = 'The recent files list was not saved.';
+          }
+      }
+    } on Object catch (error) {
+      _recentProblem = 'The recent files list was not saved: $error';
     }
-    final kept = await _recentFiles.save(_recent);
-    if (_disposed) return;
-    _recentProblem = kept ? null : 'The recent files list was not saved.';
-    notifyListeners();
+    if (!_disposed) notifyListeners();
+    return _recentProblem;
   }
 
-  /// Runs [job] after every read and write of the recent list asked for
-  /// before it. A job that fails still answers its caller with the error
-  /// and leaves the turn to the next.
-  Future<void> _inTurn(Future<void> Function() job) {
+  /// Keep accepted, unsaved additions visible across ordinary list refreshes.
+  void _showRecent(List<String> paths) {
+    _recent = List.unmodifiable(paths);
+    for (final path in _unsavedRecent.values) {
+      _recent = _first(path, _recent);
+    }
+  }
+
+  /// Reads and writes take turns. Only accepted mutations enter PendingWrites;
+  /// a successful read must never acknowledge an earlier failed write.
+  Future<T> _inTurn<T>(Future<T> Function() job) {
     final run = _recentTurn.then((_) => job());
-    _recentTurn = run.then((_) {}, onError: (Object _) {});
-    return pendingWrites?.track(
-          _recentFiles,
-          run,
-          label: 'Recent files',
-          problem: (_) => _recentProblem,
-        ) ??
-        run;
+    _recentTurn = run.then<void>((_) {}, onError: (Object _) {});
+    return run;
   }
 
   static const _unreadable = 'The recent files could not be read.';

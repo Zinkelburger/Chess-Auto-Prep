@@ -177,8 +177,13 @@ undo. These helpers have no widget or persistence side effects.
 queued reviews, books and settings writes remain tracked after their screen or
 progress owner is disposed. Closing disables new window input, pauses producers,
 flushes the document and drains accepted persistence before stopping engines.
-Failures and timeouts require an explicit close-without-saving choice. Books
-and settings use a directory lock plus a comparison with the loaded file before
+Failures and timeouts require an explicit close-without-saving choice. Training
+commands remain ordered by their shared progress store across scope replacement;
+failed commands retain their original timing, rows and in-process retry token.
+Book and settings snapshots keep their latest unsaved value for retry, including
+after their presentation owner is disposed; loading cannot silently replace that
+value. Existing dialogs and puzzle delays pause during close and resume when it
+is cancelled. Books and settings use a directory lock plus a comparison with the loaded file before
 atomic replacement; another instance's edit is reported instead of overwritten.
 
 ## Data correctness contracts
@@ -1089,7 +1094,7 @@ per batch and use tests and commits as the implementation record.
 | Batch | Depends on | Scope and first places to change | Exit condition | Status |
 |---|---|---|---|---|
 | H1 | None | Direct fixes: recursive book selection, gap invalidation, analysis-save errors, partial engine retry, puzzle timer; `books`, workspace wiring, bughouse stores/search, puzzle trainer | Their acceptance sequences above pass through real wiring; failures are visible | Done 2026-09-24: recursive book removal, catalog-driven gap refresh, typed analysis-save failures with exact-entry retry, partial engine retry and puzzle timer cancellation; regression failures reproduced before fixes, independent review, v2 suite and analyze/lint; headless Linux save failure/retry verified against disposable SQLite. Unsaved analysis remains in memory (H2/H5). |
-| H2 | H1 | Accepted ratings and writes outlive reload/dispose; `PendingWrites`, training progress/owner, exit guard | Two overlapping reloads cannot bypass the same pending rating; failed outcomes remain retryable; shutdown is honest | Not started |
+| H2 | H1 | Accepted ratings and writes outlive reload/dispose; `PendingWrites`, training progress/owner, exit guard | Two overlapping reloads cannot bypass the same pending rating; failed outcomes remain retryable; shutdown is honest | In progress 2026-09-24: retained ordered training obligations and exact in-process retry; shutdown input/timer suspension, retained copies, recent files and snapshots. Regression failures reproduced; focused checks pass. Account retries and focused checks pass; final merged-tree verification and Linux preview pending. Persistent recovery remains H3. |
 | H3a | H2 | Existing relocation recovery before affected reads; document guards, training reads, startup; reconcile v1 domain locks/order | Kill during a move, reopen/train from either supported app; no missing or duplicate progress; incompatible access blocks safely | Not started |
 | H3b | H3a | One compound operation for course rename/book references and its inverse; Library, storage, session history | Rename and undo agree across PGN/book state, including crash and external-conflict cases | Not started |
 | H3c | H3b | Apply the proven operation boundary to supported file/folder moves, delete/restore and multi-file edits | Every existing command has an explicit required read/write set, recovery path and compatible undo behavior | Not started |

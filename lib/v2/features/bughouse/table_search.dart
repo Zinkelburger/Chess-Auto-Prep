@@ -466,6 +466,7 @@ final class TableSearch extends ChangeNotifier {
               (this, key),
               saving,
               label: 'Analysis book',
+              obligation: (this, key),
               problem: (outcome) =>
                   outcome is HivemindSaveFailed ? outcome.detail : null,
             ) ??

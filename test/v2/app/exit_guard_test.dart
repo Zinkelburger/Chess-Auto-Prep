@@ -165,6 +165,78 @@ void main() {
     fixture.store.releaseAll();
   });
 
+  test(
+    'two close requests share the background-write failure decision',
+    () async {
+      final question = _Question(answer: DraftChoice.keepWaiting);
+      var drains = 0;
+      final guard = ExitGuard(
+        saver: fixture.saver,
+        question: question,
+        settleFeatures: () async {
+          drains++;
+          return 'A rating was not saved';
+        },
+      );
+      final first = guard.mayClose();
+      final second = guard.mayClose();
+      expect(await first, isFalse);
+      expect(await second, isFalse);
+      expect(question.asked, hasLength(1));
+      expect(drains, 1);
+    },
+  );
+
+  test(
+    'closing cancels a navigation question before its input is covered',
+    () async {
+      diskFull();
+      edit('one');
+      await pumpEventQueue();
+      final question = _Question(waits: true);
+      final guard = guardWith(question);
+      final navigating = guard.mayLeaveDocument();
+      await question.first;
+      guard.cancelNavigation();
+      expect(await navigating, isA<Stay>());
+      expect(question.withdrawn, 1);
+      final closing = guard.mayClose();
+      await question.first;
+      question.answerNow(DraftChoice.keepWaiting);
+      expect(await closing, isFalse);
+      expect(question.asked, hasLength(2));
+    },
+  );
+
+  test(
+    'a pending copy dialog cannot hold closing behind its barrier',
+    () async {
+      diskFull();
+      edit('one');
+      await pumpEventQueue();
+      final question = _Question(waits: true);
+      final copying = Completer<String?>();
+      final guard = ExitGuard(
+        saver: fixture.saver,
+        question: question,
+        saveCopy: () => copying.future,
+        wait: moment,
+      );
+      final navigating = guard.mayLeaveDocument();
+      await question.first;
+      question.answerNow(DraftChoice.saveACopy);
+      await pumpEventQueue();
+      guard.cancelNavigation();
+      expect(await navigating, isA<Stay>());
+      final closing = guard.mayClose();
+      await question.first;
+      question.answerNow(DraftChoice.keepWaiting);
+      expect(await closing, isFalse);
+      copying.complete('Accepted copy.pgn');
+      await pumpEventQueue();
+    },
+  );
+
   test('the question comes down when the save lands', () async {
     fixture.store.hold = true;
     edit('one');

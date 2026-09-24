@@ -4,6 +4,7 @@ import 'package:chess_auto_prep/v2/chess/training/records.dart';
 import 'package:chess_auto_prep/v2/chess/training/schedule.dart';
 import 'package:chess_auto_prep/v2/features/trainer/trainer.dart';
 import 'package:chess_auto_prep/v2/features/trainer/train_pane.dart';
+import 'package:chess_auto_prep/v2/storage/training_store.dart';
 import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/v2/ui/theme.dart';
 import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
@@ -80,6 +81,34 @@ void main() {
     await tester.sendKeyEvent(key);
     await tester.pumpAndSettle();
   }
+
+  testWidgets(
+    'the replacement scope offers a working retry for retained progress',
+    (tester) async {
+      await pump(tester);
+      final ready = trainer.state as TrainerReady;
+      files.nextWrite = const ProgressFailed('disk full');
+      await ready.progress.finished(
+        ready.lines.first,
+        Rating.good,
+        clean: true,
+      );
+      await trainer.reload();
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Accepted training progress has not been saved'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Try again'));
+      await tester.pumpAndSettle();
+      expect(trainer.state, isA<TrainerReady>());
+      expect(files.history, hasLength(1));
+      expect(
+        find.textContaining('Accepted training progress has not been saved'),
+        findsNothing,
+      );
+    },
+  );
 
   /// Plays [uci] for the lesson, as the board would, and lets it settle.
   Future<void> play(WidgetTester tester, String uci) async {

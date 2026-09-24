@@ -107,13 +107,11 @@ Future<bool> writeLichessAccount(LichessAccount? account) async {
           ? prefs.remove(lichessExpiryKey)
           : prefs.setInt(lichessExpiryKey, until.millisecondsSinceEpoch),
     ];
-    var ok = true;
-    for (final write in writes) {
-      ok = await write && ok;
-    }
-    return ok;
-  } on Object catch (error) {
-    log.w('save the Lichess account', error);
+    // All accepted writes must settle before an error permits a retry.
+    final results = await Future.wait(writes);
+    return results.every((saved) => saved);
+  } on Object {
+    log.w('save the Lichess account', 'the preferences write failed');
     return false;
   }
 }

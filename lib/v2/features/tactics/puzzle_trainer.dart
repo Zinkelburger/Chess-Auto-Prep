@@ -72,6 +72,9 @@ final class PuzzleTrainer extends ChangeNotifier {
   PuzzleUp? _up;
   Timer? _replyTimer;
   Timer? _advanceTimer;
+  PuzzleUp? _replyDue;
+  PuzzleUp? _advanceDue;
+  bool _suspended = false;
 
   /// Set by [putDown] and cleared by the next puzzle asked for, so walking
   /// the set's games in another mode does not put puzzles up behind it.
@@ -100,14 +103,33 @@ final class PuzzleTrainer extends ChangeNotifier {
     if (!on) {
       _advanceTimer?.cancel();
       _advanceTimer = null;
+      _advanceDue = null;
     }
     if (on == autoAdvance) return;
     unawaited(_settings.update(_settings.value.copyWith(autoAdvance: on)));
     notifyListeners();
   }
 
+  /// Pauses delayed work while shutdown drains accepted writes. The current
+  /// puzzle, answer frontier and run stay intact if the close is cancelled.
+  void suspend() {
+    if (_disposed || _suspended) return;
+    _suspended = true;
+    _stopTimers();
+  }
+
+  /// Restarts a pending delay only for the exact puzzle state it belonged to.
+  /// The full delay runs again, so cancelling close never jumps immediately.
+  void resume() {
+    if (_disposed || !_suspended) return;
+    _suspended = false;
+    _armReply();
+    _armAdvance();
+  }
+
   /// Starts a run over the filtered queue, from [first] when given.
   Future<void> start({Puzzle? first}) async {
+    if (_disposed || _suspended) return;
     final queue = [for (final puzzle in _set.queue) puzzle.fen];
     if (first != null) {
       queue
@@ -120,12 +142,14 @@ final class PuzzleTrainer extends ChangeNotifier {
 
   /// Puts [puzzle] up now, in the run under way or in a new one from it.
   Future<void> show(Puzzle puzzle) async {
+    if (_disposed || _suspended) return;
     if (_run == null) return start(first: puzzle);
     await _bringUp(puzzle.fen);
   }
 
   /// Plays the failed and skipped puzzles of the last run again.
   Future<void> retryMistakes() async {
+    if (_disposed || _suspended) return;
     final retry = _finished?.retry ?? const [];
     if (retry.isNotEmpty) await _begin(PuzzleRun(queue: retry));
   }
@@ -165,6 +189,7 @@ final class PuzzleTrainer extends ChangeNotifier {
   /// A move made on the board. On a puzzle it is judged; anywhere else it
   /// goes into the document as usual.
   void play(String uci) {
+    if (_disposed || _suspended) return;
     final up = _up;
     if (up == null || !_set.isOpen) return _session.playMove(uci);
     if (up.waiting) return;
@@ -194,15 +219,16 @@ final class PuzzleTrainer extends ChangeNotifier {
       feedback: Correct(next.userMovesFound, next.puzzle.movesToFind),
       waiting: true,
     );
+    _replyDue = _up;
+    _armReply();
     notifyListeners();
-    _replyTimer = Timer(replyDelay, _reply);
   }
 
   /// The opponent's move of the answer, then the solver's turn again — or
   /// the end, for an answer that finishes on the opponent's move.
   void _reply() {
     final up = _up;
-    if (up == null || _disposed) return;
+    if (up == null || _disposed || _suspended) return;
     final path = up.frontier.mainChild;
     _session.showOnlyTo(path);
     _session.goTo(path);
@@ -216,13 +242,11 @@ final class PuzzleTrainer extends ChangeNotifier {
     _up = up.copyWith(feedback: const Solved(), waiting: false, finished: true);
     _record(up, Outcome.solved);
     _session.showOnlyTo(null);
-    notifyListeners();
     if (autoAdvance) {
-      _advanceTimer = Timer(advanceDelay, () {
-        _advanceTimer = null;
-        if (!_disposed && autoAdvance) unawaited(next());
-      });
+      _advanceDue = _up;
+      _armAdvance();
     }
+    notifyListeners();
   }
 
   void _missed(PuzzleUp up, String uci) {
@@ -238,6 +262,7 @@ final class PuzzleTrainer extends ChangeNotifier {
   /// step back: a revealed puzzle counts as skipped, as the old app counts
   /// it.
   void showSolution() {
+    if (_disposed || _suspended) return;
     final up = _up;
     if (up == null || up.finished) return;
     _cancelTimers();
@@ -258,6 +283,7 @@ final class PuzzleTrainer extends ChangeNotifier {
   /// Back to the puzzle's position with the answer hidden again. The
   /// attempt already made still stands.
   void reset() {
+    if (_disposed || _suspended) return;
     final up = _up;
     if (up == null) return;
     _cancelTimers();
@@ -269,6 +295,7 @@ final class PuzzleTrainer extends ChangeNotifier {
 
   /// The next puzzle of the run, or the recap after the last.
   Future<void> next() async {
+    if (_disposed || _suspended) return;
     final run = _run;
     if (run == null) return;
     _cancelTimers();
@@ -291,6 +318,7 @@ final class PuzzleTrainer extends ChangeNotifier {
   /// Back to the puzzle shown before this one. An attempt already made at
   /// it still stands, so trying it again writes nothing.
   Future<void> previous() async {
+    if (_disposed || _suspended) return;
     final before = _before;
     if (before == null) return;
     _cancelTimers();
@@ -301,6 +329,7 @@ final class PuzzleTrainer extends ChangeNotifier {
   /// star hides it from the queue from now on; a run never shows a puzzle
   /// twice, so the run under way is not changed.
   void rate(int stars) {
+    if (_disposed || _suspended) return;
     final up = _up;
     if (up == null) return;
     _cancelTimers();
@@ -322,6 +351,7 @@ final class PuzzleTrainer extends ChangeNotifier {
   /// the set is open, through the window's door when it is not. The session
   /// says when it got there, and [_documentChanged] takes it from there.
   Future<void> _bringUp(Fen fen) async {
+    if (_disposed || _suspended) return;
     _parked = false;
     final puzzle = _set.puzzles.where((p) => p.fen == fen).firstOrNull;
     if (puzzle == null) return;
@@ -382,7 +412,43 @@ final class PuzzleTrainer extends ChangeNotifier {
     _up = (_up ?? up).copyWith(decided: outcome, saveProblem: refusal);
   }
 
+  void _armReply() {
+    final target = _replyDue;
+    if (_disposed || _suspended || target == null) return;
+    if (!identical(_up, target)) {
+      _replyDue = null;
+      return;
+    }
+    _replyTimer = Timer(replyDelay, () {
+      _replyTimer = null;
+      _replyDue = null;
+      if (!_disposed && !_suspended && identical(_up, target)) _reply();
+    });
+  }
+
+  void _armAdvance() {
+    final target = _advanceDue;
+    if (_disposed || _suspended || target == null) return;
+    if (!autoAdvance || !identical(_up, target)) {
+      _advanceDue = null;
+      return;
+    }
+    _advanceTimer = Timer(advanceDelay, () {
+      _advanceTimer = null;
+      _advanceDue = null;
+      if (!_disposed && !_suspended && autoAdvance && identical(_up, target)) {
+        unawaited(next());
+      }
+    });
+  }
+
   void _cancelTimers() {
+    _stopTimers();
+    _replyDue = null;
+    _advanceDue = null;
+  }
+
+  void _stopTimers() {
     _replyTimer?.cancel();
     _replyTimer = null;
     _advanceTimer?.cancel();

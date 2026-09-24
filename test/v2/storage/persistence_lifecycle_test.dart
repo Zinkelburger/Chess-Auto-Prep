@@ -138,6 +138,7 @@ void main() {
         owner,
         Future.value(false),
         label: 'Training',
+        obligation: owner,
         problem: (saved) => saved ? null : 'Progress was not saved',
       );
       final session = await openSession(blackChapter);
@@ -151,7 +152,12 @@ void main() {
       );
       expect(await guard.mayClose(), isFalse);
       expect(question.asked.single, contains('Progress was not saved'));
-      await pending.track(owner, Future.value(true), label: 'Training');
+      await pending.track(
+        owner,
+        Future.value(true),
+        label: 'Training',
+        obligation: owner,
+      );
       expect(await guard.mayClose(), isTrue);
     },
   );
@@ -205,7 +211,14 @@ void main() {
       expect(disk.engineLines, Settings.defaults.engineLines);
       await b.load();
       await b.update(b.value.copyWith(engineLines: 7));
-      expect(b.problem, isNull);
+      expect(b.problem, contains('another instance'));
+      expect(b.value.engineLines, 7, reason: 'the failed choice is retained');
+      expect(
+        Settings.fromJson(
+          await File(p.join(root.path, 'settings.json')).readAsString(),
+        ).engineLines,
+        Settings.defaults.engineLines,
+      );
     },
   );
 }
@@ -228,15 +241,23 @@ final class _HeldProgress implements ProgressFiles {
   @override
   Future<ProgressRead> read(Set<String> sources) => delegate.read(sources);
   @override
-  Future<ProgressWrite> logAttempt(Attempt attempt) =>
-      delegate.logAttempt(attempt);
+  Future<ProgressWrite> logAttempt(
+    Attempt attempt, {
+    ProgressOperation? operation,
+  }) => delegate.logAttempt(attempt, operation: operation);
   @override
   Future<ProgressWrite> write({
     List<Change<Review>> reviews = const [],
     List<Change<MoveStreak>> streaks = const [],
     List<HistoryRow> history = const [],
+    ProgressOperation? operation,
   }) async {
     await release.future;
-    return delegate.write(reviews: reviews, streaks: streaks, history: history);
+    return delegate.write(
+      reviews: reviews,
+      streaks: streaks,
+      history: history,
+      operation: operation,
+    );
   }
 }

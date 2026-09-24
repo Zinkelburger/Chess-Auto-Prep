@@ -63,6 +63,14 @@ final class TrainerFailed extends TrainerState {
   final ProgressRead failure;
 }
 
+/// Accepted progress belongs to the app even when its former scope is gone.
+/// Do not publish a fresh scope over unresolved writes to the same files.
+final class TrainerUnsaved extends TrainerState {
+  const TrainerUnsaved(this.failure);
+
+  final ProgressWrite failure;
+}
+
 final class TrainerReady extends TrainerState {
   const TrainerReady({required this.chapters, required this.progress});
 
@@ -113,8 +121,9 @@ class Trainer extends ChangeNotifier {
     required TrainerTime time,
     required Books books,
     RepertoireCatalog? catalog,
-    this.pendingWrites,
-  }) : _catalog = catalog,
+    PendingWrites? pendingWrites,
+  }) : pendingWrites = pendingWrites ?? PendingWrites(),
+       _catalog = catalog,
        _books = books,
        _session = session,
        _chapters = chapters,
@@ -127,7 +136,7 @@ class Trainer extends ChangeNotifier {
   }
 
   final RepertoireCatalog? _catalog;
-  final PendingWrites? pendingWrites;
+  final PendingWrites pendingWrites;
   final Books _books;
 
   void _catalogChanged() {
@@ -230,6 +239,23 @@ class Trainer extends ChangeNotifier {
   /// Reads the progress again: after another session changed it, or to
   /// try a file that could not be read.
   Future<void> reload() => _load(force: true);
+
+  /// Replays the original accepted mutations, including their store tokens;
+  /// only after they land may a replacement scope read their result.
+  Future<void> retryPending() async {
+    final load = ++_loads;
+    leave();
+    _become(const TrainerLoading());
+    await pendingWrites.retry(_files);
+    if (load != _loads) return;
+    await _load(force: true);
+  }
+
+  /// Also visible after leaving a failed lesson without changing scope.
+  ProgressWrite? get unsavedProgress {
+    final result = pendingWrites.unfinished(_files).firstOrNull?.result;
+    return result is ProgressWrite ? result : null;
+  }
 
   /// A sitting of the lines never trained, [learnSitting] at a time.
   void learn() => _sit(SittingKind.learn, (lines, progress) {
@@ -362,11 +388,20 @@ class Trainer extends ChangeNotifier {
     final load = ++_loads;
     // The sitting was over the progress this replaces; it ends with it, so
     // nothing writes through a copy the files have moved past.
-    final previous = _state;
     leave();
     _become(const TrainerLoading());
-    if (previous is TrainerReady) await previous.progress.settle();
+    await pendingWrites.settleFor(_files);
     if (load != _loads) return;
+    final unsaved = pendingWrites.unfinished(_files).firstOrNull;
+    if (unsaved != null) {
+      return _become(
+        TrainerUnsaved(
+          unsaved.result is ProgressWrite
+              ? unsaved.result as ProgressWrite
+              : ProgressFailed(unsaved.detail),
+        ),
+      );
+    }
     if (_scope == TrainScope.book) return _loadBook(load, chapter, ref);
     if (chapter == null || ref == null) {
       return _become(const TrainerEmpty(NothingToTrain.noChapter));

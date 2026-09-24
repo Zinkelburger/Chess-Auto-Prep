@@ -58,6 +58,12 @@ class _TrainPaneState extends State<TrainPane> {
             moves: widget.moves,
           );
         }
+        if (trainer.state is TrainerReady && trainer.unsavedProgress != null) {
+          return _Failed(
+            sentence: unsavedProgressProblem(trainer.unsavedProgress!),
+            onRetry: trainer.retryPending,
+          );
+        }
         return switch (trainer.state) {
           TrainerIdle() ||
           TrainerLoading() => const _Sentence('Reading training progress…'),
@@ -83,6 +89,10 @@ class _TrainPaneState extends State<TrainPane> {
               doing: 'read the training progress',
             ),
             onRetry: trainer.reload,
+          ),
+          TrainerUnsaved(:final failure) => _Failed(
+            sentence: unsavedProgressProblem(failure),
+            onRetry: trainer.retryPending,
           ),
           final TrainerReady ready => LineList(
             trainer: trainer,

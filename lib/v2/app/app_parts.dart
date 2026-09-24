@@ -47,7 +47,11 @@ final class AppParts {
   final Future<CopyResult?> Function(DocumentSession session) _copyOnLeave;
 
   SettingsStore get settings => env.settings;
-  late final saver = DocumentSaver(env.store, delay: env.saveDelay);
+  late final saver = DocumentSaver(
+    env.store,
+    delay: env.saveDelay,
+    pendingWrites: env.pendingWrites,
+  );
   late final session = DocumentSession(env.store, saver);
   late final account = LichessAccountState(
     pendingWrites: env.pendingWrites,
@@ -161,9 +165,15 @@ final class AppParts {
     workspace.fill.cancel();
     training.myGames.pause();
     training.lines.leave();
+    training.puzzles.suspend();
     labs.search.close();
     labs.matches.stop();
     unawaited(account.cancel());
+  }
+
+  /// Restore the puzzle's delayed turn when the window stays open.
+  void resumeAfterClose() {
+    if (!_disposed) training.puzzles.resume();
   }
 
   /// The parts in the reverse of the order they are declared in, so each

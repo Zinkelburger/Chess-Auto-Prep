@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:chess_auto_prep/v2/features/settings/lichess_account.dart';
 import 'package:chess_auto_prep/v2/net/lichess_login.dart';
 import 'package:chess_auto_prep/v2/storage/lichess_token.dart';
+import 'package:chess_auto_prep/v2/storage/pending_writes.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/scripted_login.dart';
@@ -10,10 +13,12 @@ void main() {
   LichessAccount? saved;
   var writeFails = false;
   var notified = 0;
+  late PendingWrites pending;
 
   LichessAccountState owner() {
     final state = LichessAccountState(
       login: login,
+      pendingWrites: pending,
       read: () async => saved,
       write: (account) async {
         if (writeFails) return false;
@@ -31,6 +36,7 @@ void main() {
     saved = null;
     writeFails = false;
     notified = 0;
+    pending = PendingWrites();
   });
 
   test('starts signed out, and loads a saved account', () async {
@@ -120,7 +126,74 @@ void main() {
     expect(await state.useToken('bad'), isFalse);
     expect(state.status, isA<SignedOut>());
     expect(state.problem, LoginProblem.tokenRejected.sentence);
+    expect(
+      await pending.settle(),
+      isNull,
+      reason: 'authentication rejection is not an unsaved account',
+    );
   });
+
+  test(
+    'successful credential persistence clears its earlier failed snapshot',
+    () async {
+      login.tokenOutcome = loggedIn(personal: true);
+      final state = owner();
+      writeFails = true;
+      expect(await state.useToken('lip_secret'), isFalse);
+      writeFails = false;
+      expect(await state.useToken('lip_secret'), isTrue);
+      expect(await pending.settle(), isNull);
+    },
+  );
+
+  test(
+    'a write failing after disposal remains an unsaved obligation',
+    () async {
+      login.tokenOutcome = loggedIn(personal: true);
+      final writing = Completer<bool>();
+      final state = LichessAccountState(
+        login: login,
+        pendingWrites: pending,
+        read: () async => null,
+        write: (_) => writing.future,
+      );
+      final accepted = state.useToken('lip_secret');
+      await pumpEventQueue();
+      state.dispose();
+      writing.complete(false);
+      expect(await accepted, isFalse);
+      expect(await pending.settle(), contains('Lichess'));
+    },
+  );
+
+  test('retry saves the exact grant without asking Lichess again', () async {
+    login.tokenOutcome = loggedIn(personal: true);
+    writeFails = true;
+    final state = owner();
+    expect(await state.useToken('lip_secret'), isFalse);
+    expect(state.canRetrySave, isTrue);
+    writeFails = false;
+    await state.retrySave();
+    expect(login.tokensTried, ['lip_secret']);
+    expect(saved?.token, 'lip_secret');
+    expect(await pending.settle(), isNull);
+  });
+
+  test(
+    'failed removal retries local deletion without revoking twice',
+    () async {
+      saved = someone();
+      final state = owner();
+      await state.load();
+      writeFails = true;
+      await state.logOut();
+      writeFails = false;
+      await state.retrySave();
+      expect(login.revoked, ['lip_secret']);
+      expect(saved, isNull);
+      expect(await pending.settle(), isNull);
+    },
+  );
 
   test('logging out revokes the token and forgets the account', () async {
     saved = someone();

@@ -17,6 +17,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:collection/collection.dart';
 import 'package:path/path.dart' as p;
 
 import '../chess/training/records.dart';
@@ -34,6 +35,18 @@ typedef Change<T> = ({T? before, T after});
 /// Where one move's streak lives: its line and its ply.
 typedef StreakKey = ({LineKey line, int ply});
 
+/// Identifies one accepted write through retries in this process. Keep this
+/// token with the command until it succeeds or is explicitly discarded.
+/// It retains the exact file versions prepared under the Documents lock;
+/// it is not a persistent journal and does not recover after a restart.
+final class ProgressOperation {
+  ProgressOperation();
+
+  (String, String)? _identity;
+  List<_Planned>? _planned;
+  bool _complete = false;
+}
+
 /// The training files. The filesystem is a real boundary, so this is an
 /// interface: [TrainingStore] in the app, a scripted one in tests.
 abstract interface class ProgressFiles {
@@ -42,18 +55,39 @@ abstract interface class ProgressFiles {
 
   /// Writes a line's outcome, or a change to the schedule by hand: the
   /// [reviews] and [streaks] rows it changes and the [history] it adds.
+  /// Retain [operation] to retry this exact command after a failed outcome;
+  /// omitting it accepts a new operation, even when its rows are identical.
   Future<ProgressWrite> write({
     List<Change<Review>> reviews,
     List<Change<MoveStreak>> streaks,
     List<HistoryRow> history,
+    ProgressOperation? operation,
   });
 
-  /// Adds one answer to the log, as it is given.
-  Future<ProgressWrite> logAttempt(Attempt attempt);
+  /// Adds one answer to the log, as it is given. Reuse [operation] only
+  /// for a retry of this answer; distinct answers need distinct tokens.
+  Future<ProgressWrite> logAttempt(
+    Attempt attempt, {
+    ProgressOperation? operation,
+  });
 }
 
 final class TrainingStore implements ProgressFiles {
-  TrainingStore(this.documents);
+  TrainingStore(
+    this.documents, {
+    Future<void> Function(String, List<int>) publish = replaceFile,
+    Future<ProgressWrite> Function(Directory, Future<ProgressWrite> Function())
+        lock =
+        withDirectoryLock,
+  }) : _publish = publish,
+       _lock = lock;
+
+  final Future<void> Function(String, List<int>) _publish;
+  final Future<ProgressWrite> Function(
+    Directory,
+    Future<ProgressWrite> Function(),
+  )
+  _lock;
 
   /// The folder the four files sit in, beside `repertoires/`.
   final Directory documents;
@@ -97,48 +131,143 @@ final class TrainingStore implements ProgressFiles {
     List<Change<Review>> reviews = const [],
     List<Change<MoveStreak>> streaks = const [],
     List<HistoryRow> history = const [],
-  }) => _locked('write the training progress', () async {
-    final planned = <_Planned>[
-      if (reviews.isNotEmpty) await _merged(reviews, _reviewCodec),
-      if (streaks.isNotEmpty) await _merged(streaks, _streakCodec),
-      if (history.isNotEmpty)
-        await _appended(historyFile, [
-          for (final row in history) encodeCsvRecord(encodeHistory(row)),
-        ]),
-    ];
-    await removeStaleTemporaries(documents);
-    for (final file in planned) {
-      await _keepFirstVersion(file);
-    }
-    for (final file in planned) {
-      await replaceFile(_path(file.name), utf8.encode(file.text));
-    }
-    return const ProgressWritten();
-  });
+    ProgressOperation? operation,
+  }) {
+    // The caller may change its lists while this command waits for the lock.
+    final reviewChanges = List.of(reviews);
+    final streakChanges = List.of(streaks);
+    final historyRows = List.of(history);
+    final payload = jsonEncode([
+      'write',
+      [
+        for (final change in reviewChanges)
+          [
+            if (change.before case final before?)
+              _reviewCodec.row(before)
+            else
+              null,
+            _reviewCodec.row(change.after),
+          ],
+      ],
+      [
+        for (final change in streakChanges)
+          [
+            if (change.before case final before?)
+              _streakCodec.row(before)
+            else
+              null,
+            _streakCodec.row(change.after),
+          ],
+      ],
+      [for (final row in historyRows) encodeHistory(row)],
+    ]);
+    return _perform(
+      'write the training progress',
+      operation,
+      payload,
+      () async => [
+        if (reviewChanges.isNotEmpty)
+          await _merged(reviewChanges, _reviewCodec),
+        if (streakChanges.isNotEmpty)
+          await _merged(streakChanges, _streakCodec),
+        if (historyRows.isNotEmpty)
+          await _appended(historyFile, [
+            for (final row in historyRows) encodeCsvRecord(encodeHistory(row)),
+          ]),
+      ],
+    );
+  }
 
   /// The file is replaced whole rather than appended to in place: an
   /// append cut short leaves half a line, which the old app will not read
-  /// past. What it held is copied as bytes rather than decoded and encoded
-  /// again, so a line torn inside a character stays as it was and the new
-  /// answer is the only text encoded, however long the log has grown.
+  /// past. Existing bytes, including a torn character, are preserved.
   @override
-  Future<ProgressWrite> logAttempt(Attempt attempt) =>
-      _locked('log an answer', () async {
-        final file = File(_path(attemptsFile));
-        final before = await file.stat();
-        final was = await _bytes(attemptsFile) ?? Uint8List(0);
-        final line = encodeAttempt(attempt);
+  Future<ProgressWrite> logAttempt(
+    Attempt attempt, {
+    ProgressOperation? operation,
+  }) {
+    final line = encodeAttempt(attempt);
+    return _perform(
+      'log an answer',
+      operation,
+      jsonEncode(['attempt', line]),
+      () async {
+        final original = await _bytes(attemptsFile);
+        final was = original ?? Uint8List(0);
         final gap = was.isEmpty || was.last == _lineFeed ? '' : '\n';
-        await replaceFile(
-          file.path,
-          (BytesBuilder(copy: false)
-                ..add(was)
-                ..add(utf8.encode('$gap$line\n')))
-              .takeBytes(),
-        );
-        await _logged(before, line);
-        return const ProgressWritten();
-      });
+        return [
+          _Planned(
+            attemptsFile,
+            original,
+            (BytesBuilder(copy: false)
+                  ..add(was)
+                  ..add(utf8.encode('$gap$line\n')))
+                .takeBytes(),
+            attempt: line,
+          ),
+        ];
+      },
+    );
+  }
+
+  Future<ProgressWrite> _perform(
+    String action,
+    ProgressOperation? operation,
+    String payload,
+    Future<List<_Planned>> Function() prepare,
+  ) async {
+    final token = operation ?? ProgressOperation();
+    final String destination;
+    try {
+      destination = _destination();
+    } on FileSystemException catch (error) {
+      return ProgressFailed(_detail(error));
+    }
+    final identity = (destination, payload);
+    if (token._identity != null && token._identity != identity) {
+      return const ProgressConflict();
+    }
+    // Bind even if lock acquisition fails: the next call must still be this
+    // accepted command, not a replacement payload using its retry token.
+    token._identity = identity;
+    final result = await _locked(action, () async {
+      // The lock may have waited while a directory symlink was retargeted.
+      if (_destination() != destination) {
+        throw const _Changed('operation destination');
+      }
+      if (token._complete) return const ProgressWritten();
+      final planned = token._planned ??= await prepare();
+      final remaining = <_Planned>[];
+      // Preflight every participant before publishing any remaining file.
+      for (final file in planned) {
+        final current = await _bytes(file.name);
+        if (const ListEquality<int>().equals(current, file.bytes)) continue;
+        if (!const ListEquality<int>().equals(current, file.original)) {
+          throw _Changed(file.name);
+        }
+        remaining.add(file);
+      }
+      await removeStaleTemporaries(documents);
+      for (final file in remaining) {
+        if (file.attempt == null) await _keepFirstVersion(file);
+      }
+      for (final file in remaining) {
+        final before = file.attempt == null
+            ? null
+            : await File(_path(file.name)).stat();
+        await _publish(_path(file.name), file.bytes);
+        if (before != null) await _logged(before, file.attempt!);
+      }
+      return const ProgressWritten();
+    });
+    // A publisher or the lock's release can fail after replacing bytes.
+    // Retain the plan until the complete guarded operation is acknowledged.
+    if (result is ProgressWritten) {
+      token._complete = true;
+      token._planned = null;
+    }
+    return result;
+  }
 
   /// Keeps the wrong answers read before current once [line] is added, when
   /// they described the log as it was just before it; otherwise the next
@@ -167,7 +296,7 @@ final class TrainingStore implements ProgressFiles {
     Future<ProgressWrite> Function() write,
   ) async {
     try {
-      return await withDirectoryLock(documents, write);
+      return await _lock(documents, write);
     } on _Unreadable catch (unreadable) {
       return unreadable.result;
     } on _Changed catch (changed) {
@@ -178,6 +307,12 @@ final class TrainingStore implements ProgressFiles {
       return ProgressFailed(_detail(error));
     }
   }
+
+  String _destination() => p.normalize(
+    documents.existsSync()
+        ? documents.resolveSymbolicLinksSync()
+        : p.absolute(documents.path),
+  );
 
   String _path(String name) => p.join(documents.path, name);
 
@@ -193,6 +328,11 @@ final class TrainingStore implements ProgressFiles {
   /// the line that holds them instead of failing like a missing disk.
   Future<String?> _text(String name) async {
     final bytes = await _bytes(name);
+    if (bytes == null) return null;
+    return _decodeText(name, bytes);
+  }
+
+  String? _decodeText(String name, Uint8List? bytes) {
     if (bytes == null) return null;
     try {
       return utf8.decode(bytes);
@@ -268,8 +408,8 @@ final class TrainingStore implements ProgressFiles {
   ) async {
     final name = codec.file;
     final header = headerOf(name);
-    final original = await _text(name);
-    final records = await _records(name, original);
+    final original = await _bytes(name);
+    final records = await _records(name, _decodeText(name, original));
     final width = headerWidth(records);
     final wanted = {for (final c in changes) codec.key(c.after): c};
     final out = StringBuffer(records.isEmpty ? '$header\n' : '');
@@ -292,7 +432,7 @@ final class TrainingStore implements ProgressFiles {
       if (out.isNotEmpty && !out.toString().endsWith('\n')) out.write('\n');
       out.writeln(codec.row(change.after));
     }
-    return _Planned(name, original, out.toString());
+    return _Planned(name, original, utf8.encode(out.toString()));
   }
 
   String _replaced<T, K>(T? current, Change<T> change, _Codec<T, K> codec) {
@@ -307,13 +447,18 @@ final class TrainingStore implements ProgressFiles {
 
   Future<_Planned> _appended(String name, List<String> rows) async {
     final header = headerOf(name);
-    final original = await _text(name);
-    final was = original == null || original.trim().isEmpty
+    final original = await _bytes(name);
+    final text = _decodeText(name, original);
+    final was = text == null || text.trim().isEmpty
         ? '$header\n'
-        : original.endsWith('\n')
-        ? original
-        : '$original\n';
-    return _Planned(name, original, '$was${rows.map((r) => '$r\n').join()}');
+        : text.endsWith('\n')
+        ? text
+        : '$text\n';
+    return _Planned(
+      name,
+      original,
+      utf8.encode('$was${rows.map((r) => '$r\n').join()}'),
+    );
   }
 
   /// The old app keeps the bytes a file held before its first write in its
@@ -323,7 +468,7 @@ final class TrainingStore implements ProgressFiles {
     if (original == null) return;
     final kept = File(_path('${file.name}.pre-csv-v2.bak'));
     if (await kept.exists()) return;
-    await createFileExclusively(kept.path, utf8.encode(original));
+    await createFileExclusively(kept.path, original);
   }
 }
 
@@ -363,13 +508,16 @@ LineKey _reviewKey(Review review) => review.key;
 StreakKey _streakKey(MoveStreak streak) => (line: streak.key, ply: streak.ply);
 
 final class _Planned {
-  const _Planned(this.name, this.original, this.text);
+  const _Planned(this.name, this.original, this.bytes, {this.attempt});
 
   final String name;
 
   /// What the file held, or null when there was no file.
-  final String? original;
-  final String text;
+  final Uint8List? original;
+  final Uint8List bytes;
+
+  /// The new answer, when this plan appends to the attempts log.
+  final String? attempt;
 }
 
 final class _Unreadable implements Exception {
@@ -382,7 +530,7 @@ final class _Unreadable implements Exception {
 }
 
 final class _Changed implements Exception {
-  _Changed(this.row);
+  const _Changed(this.row);
 
   final String row;
 }

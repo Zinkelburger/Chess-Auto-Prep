@@ -102,6 +102,17 @@ final class ExitGuard {
   /// answer to a question about leaving the document grant a close nobody
   /// asked about.
   final _deciding = <_Away, Future<LeaveAnswer>>{};
+  Completer<void>? _navigationCancellation;
+  _Away? _activeQuestion;
+
+  /// A window close supersedes navigation, including its outstanding prompt.
+  /// It must not wait behind a question that closing will cover with a barrier.
+  void cancelNavigation() {
+    final cancellation = _navigationCancellation;
+    if (cancellation == null || cancellation.isCompleted) return;
+    cancellation.complete();
+    if (_activeQuestion == _Away.document) _question.withdraw();
+  }
 
   /// Whether the window may close now.
   ///
@@ -109,7 +120,9 @@ final class ExitGuard {
   /// click on the close button, or one made while the question is up — every
   /// caller gets that one answer rather than a second dialog and a second
   /// way out.
-  Future<bool> mayClose() async {
+  Future<bool> mayClose() async => await _mayGo(_Away.window) is Go;
+
+  Future<bool> _featuresSettled() async {
     // Stop the debounce now, but decide about the draft after feature
     // commands settle: a command already running may edit it while closing.
     unawaited(_saver.flush());
@@ -123,7 +136,7 @@ final class ExitGuard {
       }
       if (problem != null && !await _leaveWithPending(problem)) return false;
     }
-    return await _mayGo(_Away.window) is Go;
+    return true;
   }
 
   Future<bool> _leaveWithPending(String problem) async =>
@@ -148,26 +161,48 @@ final class ExitGuard {
     if (asked != null) return asked;
     // A question already on screen is answered first: two at once, and the
     // button pressed on one would decide the other.
-    final decided = _afterTheOthers(kind);
+    final cancellation = kind == _Away.document ? Completer<void>() : null;
+    if (cancellation != null) _navigationCancellation = cancellation;
+    final decided = _afterTheOthers(kind, cancellation);
     _deciding[kind] = decided;
-    return decided.whenComplete(() => _deciding.remove(kind));
+    return decided.whenComplete(() {
+      _deciding.remove(kind);
+      if (identical(_navigationCancellation, cancellation)) {
+        _navigationCancellation = null;
+      }
+    });
   }
 
-  Future<LeaveAnswer> _afterTheOthers(_Away kind) async {
+  Future<LeaveAnswer> _afterTheOthers(
+    _Away kind,
+    Completer<void>? cancellation,
+  ) async {
     for (final other in [..._deciding.values]) {
-      await other;
+      await Future.any<void>([
+        other.then((_) {}),
+        if (cancellation != null) cancellation.future,
+      ]);
+      if (cancellation?.isCompleted ?? false) return const Stay();
     }
-    return _decide(kind);
+    return _decide(kind, cancellation);
   }
 
-  Future<LeaveAnswer> _decide(_Away kind) async {
+  Future<LeaveAnswer> _decide(_Away kind, Completer<void>? cancellation) async {
+    if (cancellation?.isCompleted ?? false) return const Stay();
+    if (kind == _Away.window && !await _featuresSettled()) return const Stay();
     // Nothing to wait for and nothing to ask about, so no clock is started:
     // a timer left running is a timer a widget test waits on for nothing.
     if (_saver.settled) return const Go();
     final settling = _settle();
-    if (await Future.any([settling, _clock()])) return const Go();
+    final settled = await Future.any([
+      settling,
+      _clock(),
+      if (cancellation != null) cancellation.future.then((_) => false),
+    ]);
+    if (cancellation?.isCompleted ?? false) return const Stay();
+    if (settled) return const Go();
     log.w(kind.action, '${_saver.documentPath} is not saved yet');
-    return _answered(settling, kind);
+    return _answered(settling, kind, cancellation);
   }
 
   /// False when [wait] runs out. Losing that race is an outcome, not a
@@ -190,7 +225,11 @@ final class ExitGuard {
     return _saver.settled;
   }
 
-  Future<LeaveAnswer> _answered(Future<bool> settling, _Away kind) async {
+  Future<LeaveAnswer> _answered(
+    Future<bool> settling,
+    _Away kind,
+    Completer<void>? cancellation,
+  ) async {
     final saved = Completer<_Answer>();
     // _settle never fails, so this only ever completes with an answer.
     unawaited(
@@ -198,6 +237,7 @@ final class ExitGuard {
         if (landed && !saved.isCompleted) saved.complete(_Answer.saved);
       }),
     );
+    _activeQuestion = kind;
     final asked = _question
         .put((
           body: _body(kind),
@@ -205,14 +245,24 @@ final class ExitGuard {
           offerCopy: _saveCopy != null,
         ))
         .then((choice) => _answerFor(choice));
-    switch (await Future.any([asked, saved.future])) {
+    final answer = await Future.any([
+      asked,
+      saved.future,
+      if (cancellation != null) cancellation.future.then((_) => _Answer.stay),
+    ]);
+    _activeQuestion = null;
+    switch (answer) {
       case _Answer.saved:
         // The file caught up while the question was on screen, so there is
         // nothing left to ask about.
         _question.withdraw();
         return const Go();
       case _Answer.copy:
-        return _copied();
+        return Future.any([
+          _copied(),
+          if (cancellation != null)
+            cancellation.future.then((_) => const Stay()),
+        ]);
       case _Answer.close:
         log.w('${kind.action} with unsaved words', _saver.documentPath);
         return const Go();
@@ -292,7 +342,7 @@ final class DraftDialog implements DraftQuestion {
   DraftDialog(this._navigator);
 
   final GlobalKey<NavigatorState> _navigator;
-  bool _open = false;
+  DialogRoute<DraftChoice>? _route;
 
   @override
   Future<DraftChoice?> put(DraftPrompt prompt) async {
@@ -303,20 +353,22 @@ final class DraftDialog implements DraftQuestion {
       log.e('ask about the unsaved words', 'the window is not on screen');
       return null;
     }
-    _open = true;
+    final route = DialogRoute<DraftChoice>(
+      context: context,
+      builder: (context) => _UnsavedWordsDialog(prompt),
+    );
+    _route = route;
     try {
-      return await showDialog<DraftChoice>(
-        context: context,
-        builder: (context) => _UnsavedWordsDialog(prompt),
-      );
+      return await _navigator.currentState!.push(route);
     } finally {
-      _open = false;
+      if (identical(_route, route)) _route = null;
     }
   }
 
   @override
   void withdraw() {
-    if (_open) _navigator.currentState?.pop();
+    final route = _route;
+    if (route != null && route.isActive) route.navigator?.removeRoute(route);
   }
 }
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../storage/settings_store.dart';
@@ -88,6 +90,11 @@ class _SettingsDialogState extends State<SettingsDialog> {
                   ),
                 ),
                 if (widget.store.problem case final problem?) _Problem(problem),
+                if (widget.store.canRetry && widget.store.problem != null)
+                  TextButton(
+                    onPressed: () => unawaited(widget.store.retry()),
+                    child: const Text('Retry save'),
+                  ),
               ],
             );
           },

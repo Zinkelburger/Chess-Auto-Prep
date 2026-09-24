@@ -237,6 +237,7 @@ final class Matches extends ChangeNotifier {
               _store,
               write,
               label: 'Match results',
+              obligation: (_store, match.id),
               problem: (detail) => detail,
             ) ??
             write);

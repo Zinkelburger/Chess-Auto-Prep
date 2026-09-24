@@ -2,9 +2,25 @@ import 'package:chess_auto_prep/v2/chess/tactics/game_ids.dart';
 import 'package:chess_auto_prep/v2/storage/my_accounts.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 
 void main() {
   final accounts = PreferencesAccounts();
+
+  test(
+    'a cached failed username write still retries platform persistence',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final backend = _Backend();
+      SharedPreferencesStorePlatform.instance = backend;
+      addTearDown(() => SharedPreferences.setMockInitialValues({}));
+      expect(await accounts.setUsername(GameSite.lichess, 'Alice'), isFalse);
+      backend.reject = false;
+      expect(await accounts.setUsername(GameSite.lichess, 'Alice'), isTrue);
+      expect(backend.names, ['Alice', 'Alice']);
+      expect((await backend.getAll())['flutter.lichess_username'], 'Alice');
+    },
+  );
 
   test('reads the usernames and dates the old app saved', () async {
     SharedPreferences.setMockInitialValues({
@@ -42,4 +58,18 @@ void main() {
     expect(await accounts.setUsername(GameSite.chesscom, ''), isTrue);
     expect(prefs.containsKey('chesscom_username'), isFalse);
   });
+}
+
+class _Backend extends InMemorySharedPreferencesStore {
+  _Backend() : super.empty();
+  bool reject = true;
+  final names = <Object>[];
+  @override
+  Future<bool> setValue(String type, String key, Object value) async {
+    if (key == 'flutter.lichess_username') {
+      names.add(value);
+      if (reject) return false;
+    }
+    return super.setValue(type, key, value);
+  }
 }

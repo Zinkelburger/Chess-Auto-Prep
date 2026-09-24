@@ -232,7 +232,7 @@ class Lesson extends ChangeNotifier {
     _state = const SavingLine();
     notifyListeners();
     final result = again
-        ? await _progress.retry(line)
+        ? await _progress.retry()
         : await _progress.finished(line, rating, clean: clean);
     if (_disposed) return;
     if (result is! ProgressWritten) {

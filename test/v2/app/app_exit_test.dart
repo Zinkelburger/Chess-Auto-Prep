@@ -107,6 +107,27 @@ void main() {
     expect(events, ['engines', 'engines stopped', 'log']);
     fixture.store.releaseAll();
   });
+
+  test(
+    'a shutdown failure releases input and permits a new close request',
+    () async {
+      var attempts = 0;
+      final exit = AppExit(
+        guard: ExitGuard(saver: fixture.saver, question: question),
+        stopEngines: () async {
+          if (++attempts == 1) throw StateError('Engine shutdown failed');
+        },
+        closeLog: () async => events.add('log'),
+      );
+      addTearDown(exit.closing.dispose);
+      await expectLater(exit.leave(), throwsStateError);
+      expect(exit.closing.value, isFalse);
+      expect(events, isEmpty);
+      expect(await exit.leave(), AppExitResponse.exit);
+      expect(attempts, 2);
+      expect(events, ['log']);
+    },
+  );
 }
 
 /// The question on the way out: it records what it was asked and answers

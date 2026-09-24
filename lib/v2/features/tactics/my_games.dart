@@ -120,20 +120,21 @@ typedef _Queued = ({GameSite site, String username, String id, String text});
 final class MyGames extends ChangeNotifier {
   MyGames({
     required AccountStore accounts,
-    this.pendingWrites,
+    PendingWrites? pendingWrites,
     required List<RecentGames> sites,
     required GamesCache cache,
     required SetAdditions set,
     required ReviewEngine engine,
     DateTime Function() now = DateTime.now,
-  }) : _store = accounts,
+  }) : pendingWrites = pendingWrites ?? PendingWrites(),
+       _store = accounts,
        _sites = sites,
        _cache = cache,
        _set = set,
        _engine = engine,
        _now = now;
 
-  final PendingWrites? pendingWrites;
+  final PendingWrites pendingWrites;
   final AccountStore _store;
   final List<RecentGames> _sites;
   final GamesCache _cache;
@@ -150,6 +151,16 @@ final class MyGames extends ChangeNotifier {
   /// Quits the engine of the review under way; null between reviews.
   Future<void> Function()? _quit;
   bool _disposed = false;
+  int _accountRevision = 0;
+  int _accountSaves = 0;
+  final _accountRequests = Object();
+  PendingObligation<bool>? _accountWrite;
+  String? _accountProblem;
+
+  String? get accountProblem => _accountProblem;
+  bool get savingAccounts => _accountSaves > 0;
+  bool get accountsUnsettled =>
+      savingAccounts || (_accountWrite != null && !_accountWrite!.committed);
 
   /// The accounts with a username, and when each last downloaded.
   Map<GameSite, Account> get accounts => _accounts;
@@ -173,8 +184,15 @@ final class MyGames extends ChangeNotifier {
 
   /// Reads the saved usernames.
   Future<void> load() async {
-    final read = await _store.read();
     if (_disposed) return;
+    final revision = _accountRevision;
+    await pendingWrites.settleFor(_store);
+    if (_disposed ||
+        revision != _accountRevision ||
+        pendingWrites.unfinished(_store).isNotEmpty)
+      return;
+    final read = await _store.read();
+    if (_disposed || revision != _accountRevision) return;
     _accounts = read;
     notifyListeners();
   }
@@ -182,31 +200,102 @@ final class MyGames extends ChangeNotifier {
   /// Keeps both usernames; a blank one forgets that account. Nothing is
   /// downloaded, and games a paused review left queued are let go: they
   /// may be another account's. Answers whether both were kept.
-  Future<bool> saveUsernames({String? lichess, String? chesscom}) =>
-      pendingWrites?.track(
-        _store,
-        _saveUsernames(lichess, chesscom),
-        label: 'Accounts',
-        problem: (kept) => kept ? null : 'Usernames were not saved.',
-      ) ??
-      _saveUsernames(lichess, chesscom);
+  Future<bool> saveUsernames({String? lichess, String? chesscom}) {
+    if (_disposed || running) return Future.value(false);
+    _accountRevision++;
+    final work = _saveUsernames(lichess?.trim(), chesscom?.trim());
+    pendingWrites.watch(_accountRequests, work);
+    return work;
+  }
 
   Future<bool> _saveUsernames(String? lichess, String? chesscom) async {
-    final kept =
-        await _store.setUsername(GameSite.lichess, lichess) &
-        await _store.setUsername(GameSite.chesscom, chesscom);
+    final earlier = pendingWrites.unfinished(_store).isNotEmpty;
+    _accountSaves++;
+    _accountProblem = null;
+    late final PendingObligation<bool> entry;
+    entry = pendingWrites.accept(
+      resource: _store,
+      label: 'Accounts',
+      blocked: () => false,
+      work: () async {
+        final kept = await _writeUsernames(lichess, chesscom);
+        if (kept && identical(_accountWrite, entry) && !_disposed) {
+          _showUsernames(lichess, chesscom);
+        }
+        return kept;
+      },
+      problem: (kept) => kept ? null : 'Usernames were not saved.',
+    );
+    _accountWrite = entry;
+    if (!_disposed) notifyListeners();
+    try {
+      if (!await entry.run() && earlier) await pendingWrites.retry(_store);
+      if (identical(_accountWrite, entry)) {
+        _accountProblem = entry.committed
+            ? null
+            : 'Your account names could not be saved.';
+      }
+      return entry.committed;
+    } finally {
+      _accountSaves--;
+      if (!_disposed) notifyListeners();
+    }
+  }
+
+  Future<bool> _writeUsernames(String? lichess, String? chesscom) async {
+    try {
+      final first = await _store.setUsername(GameSite.lichess, lichess);
+      final second = await _store.setUsername(GameSite.chesscom, chesscom);
+      return first && second;
+    } on Object {
+      return false;
+    }
+  }
+
+  void _showUsernames(String? lichess, String? chesscom) {
+    _accounts = {
+      for (final (site, name) in [
+        (GameSite.lichess, lichess),
+        (GameSite.chesscom, chesscom),
+      ])
+        if (name != null && name.isNotEmpty)
+          site: Account(
+            name,
+            downloaded: _accounts[site]?.username == name
+                ? _accounts[site]?.downloaded
+                : null,
+          ),
+    };
+    _accountProblem = null;
     if (!running) {
       _queue = const [];
       _status = const MyGamesIdle();
     }
-    await load();
-    return kept;
+    notifyListeners();
+  }
+
+  /// The exact requested pair remains in the accepted operation after the
+  /// dialog or owner goes away; retrying does not ask for the names again.
+  Future<void> retryUsernames() async {
+    if (_accountWrite == null || savingAccounts) return;
+    _accountSaves++;
+    if (!_disposed) notifyListeners();
+    try {
+      await pendingWrites.retry(_store);
+      _accountProblem = _accountWrite!.committed
+          ? null
+          : 'Your account names could not be saved.';
+    } finally {
+      _accountSaves--;
+      if (!_disposed) notifyListeners();
+    }
   }
 
   /// Downloads and reviews, or carries on with the games a pause or a
   /// failure left queued.
-  Future<void> start() =>
-      pendingWrites?.track(this, _start(), label: 'Game review') ?? _start();
+  Future<void> start() => _disposed || accountsUnsettled
+      ? Future.value()
+      : pendingWrites.track(this, _start(), label: 'Game review');
 
   Future<void> _start() async {
     if (running) return;

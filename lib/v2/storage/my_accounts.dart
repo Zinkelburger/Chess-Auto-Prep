@@ -81,8 +81,14 @@ final class PreferencesAccounts implements AccountStore {
     try {
       final prefs = await _preferences();
       final key = _usernameKeys[site]!;
-      if ((prefs.getString(key)?.trim() ?? '') == name) return true;
-      final downloaded = await prefs.remove(_downloadedKeys[site]!);
+      final unchanged = (prefs.getString(key)?.trim() ?? '') == name;
+      // A failed platform write already changed the plugin cache. Reissue
+      // persistence even when its cached username matches this exact retry.
+      final dateKey = _downloadedKeys[site]!;
+      final date = unchanged ? prefs.getInt(dateKey) : null;
+      final downloaded = date == null
+          ? await prefs.remove(dateKey)
+          : await prefs.setInt(dateKey, date);
       final saved = name.isEmpty
           ? await prefs.remove(key)
           : await prefs.setString(key, name);

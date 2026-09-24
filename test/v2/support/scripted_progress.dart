@@ -50,6 +50,7 @@ final class ScriptedProgress implements ProgressFiles {
     List<Change<Review>> reviews = const [],
     List<Change<MoveStreak>> streaks = const [],
     List<HistoryRow> history = const [],
+    ProgressOperation? operation,
   }) async {
     final scripted = nextWrite;
     nextWrite = null;
@@ -67,7 +68,10 @@ final class ScriptedProgress implements ProgressFiles {
   }
 
   @override
-  Future<ProgressWrite> logAttempt(Attempt attempt) async {
+  Future<ProgressWrite> logAttempt(
+    Attempt attempt, {
+    ProgressOperation? operation,
+  }) async {
     if (logAs case final failure?) return failure;
     attempts.add(attempt);
     return const ProgressWritten();

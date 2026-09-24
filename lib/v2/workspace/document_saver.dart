@@ -9,6 +9,7 @@ import '../diagnostics/log.dart';
 import '../storage/document_ref.dart';
 import '../storage/edit_scope.dart';
 import '../storage/pgn_document_store.dart' as store;
+import '../storage/pending_writes.dart';
 import '../ui/file_names.dart';
 import 'session_results.dart';
 
@@ -23,8 +24,18 @@ typedef _Target = ({DocumentRef ref, Revision revision});
 /// own receipts played backwards; this owner never remembers a version
 /// itself.
 final class DocumentSaver extends ChangeNotifier {
-  DocumentSaver(this._store, {Duration delay = const Duration(seconds: 1)})
-    : _clock = SaveClock(delay: delay);
+  DocumentSaver(
+    this._store, {
+    Duration delay = const Duration(seconds: 1),
+    this.pendingWrites,
+  }) : _clock = SaveClock(delay: delay);
+
+  final PendingWrites? pendingWrites;
+  final _copies =
+      <
+        (DocumentRef, DocumentRef, String),
+        PendingObligation<store.CreateResult>
+      >{};
 
   final store.PgnDocumentStore _store;
 
@@ -421,7 +432,47 @@ final class DocumentSaver extends ChangeNotifier {
     final original = p.basenameWithoutExtension(beside.path);
     final file = '${importedName(base, fallback: '$original copy')}.pgn';
     final target = DocumentRef(p.join(p.dirname(beside.path), file));
-    return switch (await _store.create(target, writeChapter(chapter))) {
+    final text = writeChapter(chapter);
+    final pending = pendingWrites;
+    final store.CreateResult result;
+    if (pending == null) {
+      result = await _store.create(target, text);
+    } else {
+      // The name has been accepted: this publication now outlives its dialog
+      // or navigation request. A name dialog still awaiting input registers
+      // nothing. Only retrying this exact source snapshot and destination
+      // may clear its failed outcome; an unrelated successful copy may not.
+      final key = (beside, target, text);
+      final operation = _copies.putIfAbsent(key, () {
+        var uncertain = false;
+        return pending.accept(
+          resource: this,
+          label: 'Copy $file',
+          work: () async {
+            try {
+              final result = await _store.create(target, text);
+              if (result is store.IoFailure) uncertain = true;
+              return result;
+            } on Object {
+              uncertain = true;
+              rethrow;
+            }
+          },
+          problem: (value) => switch (value) {
+            store.Created() => null,
+            // A first collision confirms that this command wrote nothing.
+            // After an uncertain result, existence cannot prove our copy won.
+            store.Collision() when !uncertain => null,
+            store.Collision() =>
+              'A file named $file already exists; the copy was not confirmed.',
+            store.IoFailure(:final detail) => detail,
+          },
+        );
+      });
+      result = await operation.run();
+      if (operation.committed) _copies.remove(key);
+    }
+    return switch (result) {
       store.Created() => CopySaved(file),
       store.Collision() => const CopyNameTaken(),
       store.IoFailure(:final detail) => CopyFailed(detail),

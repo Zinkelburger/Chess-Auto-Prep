@@ -22,7 +22,26 @@ class MyGamesBlock extends StatelessWidget {
       listenable: games,
       builder: (context, _) => Padding(
         padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.m, 0),
-        child: games.accounts.isEmpty ? _setUp(context) : _ready(context),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (games.accountProblem case final problem?) ...[
+              Text(
+                problem,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.error,
+                ),
+              ),
+              TextButton(
+                onPressed: games.savingAccounts
+                    ? null
+                    : () => unawaited(games.retryUsernames()),
+                child: const Text('Retry save'),
+              ),
+            ],
+            games.accounts.isEmpty ? _setUp(context) : _ready(context),
+          ],
+        ),
       ),
     );
   }
@@ -38,7 +57,9 @@ class MyGamesBlock extends StatelessWidget {
       const SizedBox(height: Space.s),
       FilledButton(
         style: secondaryButtonStyle,
-        onPressed: () => unawaited(editAccounts(context, games)),
+        onPressed: games.savingAccounts
+            ? null
+            : () => unawaited(editAccounts(context, games)),
         child: const Text('Add accounts'),
       ),
       const SizedBox(height: Space.s),
@@ -104,7 +125,7 @@ class _Usernames extends StatelessWidget {
           ),
         ),
         TextButton(
-          onPressed: games.running
+          onPressed: games.running || games.savingAccounts
               ? null
               : () => unawaited(editAccounts(context, games)),
           child: const Text('Change'),
@@ -153,6 +174,8 @@ class _Transport extends StatelessWidget {
             ? null
             : games.running
             ? games.pause
+            : games.accountsUnsettled
+            ? null
             : () => unawaited(games.start()),
         icon: Icon(icon, size: IconSize.action),
         label: Text(label),
