@@ -120,6 +120,62 @@ void main() {
     expect(find.text('Nothing matches "zzz".'), findsOneWidget);
   });
 
+  testWidgets(
+    'searching a category shows all its settings and clear returns to Look',
+    (tester) async {
+      await pump(tester);
+      await tester.enterText(find.byType(TextField).first, 'engine');
+      await tester.pumpAndSettle();
+      for (final label in ['CPU cores', 'Memory', 'Lines shown']) {
+        expect(find.text(label), findsOneWidget);
+      }
+      await tester.tap(find.byTooltip('Clear search'));
+      await tester.pumpAndSettle();
+      expect(find.text('Board coordinates'), findsOneWidget);
+      expect(find.text('Changes save automatically'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'changing categories replaces number fields with their own values',
+    (tester) async {
+      await pump(tester);
+      await tester.tap(find.text('Engine'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Repertoire'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<TextField>(find.byType(TextField).at(1)).controller!.text,
+        '${store.value.opponentElo}',
+      );
+    },
+  );
+
+  testWidgets('large text keeps settings controls reachable', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: darkTheme(),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(2)),
+          child: child!,
+        ),
+        home: Scaffold(
+          body: SettingsDialog(store: store, groups: rows, also: account),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Engine'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.byTooltip('Increase CPU cores'));
+    await tester.pumpAndSettle();
+    expect(store.value.engineCores, 2);
+    expect(tester.takeException(), isNull);
+  });
+
   Future<void> accounts(WidgetTester tester) async {
     await pump(tester);
     await tester.tap(find.text('Accounts'));

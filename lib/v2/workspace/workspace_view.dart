@@ -9,6 +9,7 @@ import '../chess/fen.dart';
 import '../storage/chapter_files.dart';
 import '../storage/settings_store.dart';
 import '../ui/app_action.dart';
+import '../ui/listening_state.dart';
 import '../ui/pane_tabs.dart';
 import '../ui/theme.dart';
 import 'board_claim.dart';
@@ -16,6 +17,7 @@ import 'board_view.dart';
 import 'document_session.dart';
 import 'edit_strip.dart';
 import 'engine_pane.dart';
+import 'engine_analysis.dart';
 import 'explorer_pane.dart';
 import 'game_counter.dart';
 import 'move_field.dart';
@@ -143,6 +145,7 @@ class WorkspaceView extends StatelessWidget {
           ? _BoardAndCounter(
               session: workspace.session,
               settings: workspace.settings,
+              analysis: workspace.analysis,
               onMove: hooks.onBoardMove ?? workspace.session.playMove,
               counter: hooks.gameCounter,
               moves: moves,
@@ -344,20 +347,10 @@ class _UnlessHidden extends StatelessWidget {
   );
 }
 
-/// The room under the board the engine's lines and the row of the move
-/// field and the counter take: the engine's switch row and one row per
-/// line whether or not the engine is on, so the board keeps its size as it
-/// is turned on and off. A line opened out scrolls in its room.
-double _roomUnder(SettingsStore settings) =>
-    navRowHeight +
-    Space.s +
-    engineBarHeight +
-    settings.value.engineLines * engineRowHeight;
-
 /// The largest square board that fits above the engine's lines and the
 /// row with the move field and the counter, at the top, and the move's note
 /// in what they leave below, when that is enough to read a few lines in.
-class _BoardAndCounter extends StatelessWidget {
+class _BoardAndCounter extends StatefulWidget {
   const _BoardAndCounter({
     required this.session,
     required this.settings,
@@ -365,10 +358,12 @@ class _BoardAndCounter extends StatelessWidget {
     required this.counter,
     required this.moves,
     required this.engine,
+    required this.analysis,
   });
 
   final DocumentSession session;
   final SettingsStore settings;
+  final EngineAnalysis analysis;
 
   /// Where a move made on the board or typed into the field goes.
   final ValueChanged<String> onMove;
@@ -381,11 +376,43 @@ class _BoardAndCounter extends StatelessWidget {
   final Widget engine;
 
   @override
+  State<_BoardAndCounter> createState() => _BoardAndCounterState();
+}
+
+class _BoardAndCounterState extends State<_BoardAndCounter>
+    with ListeningState<_BoardAndCounter> {
+  double _engineRoom = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _engineRoom = _room();
+  }
+
+  double _room() =>
+      widget.session.shownTo == null ? enginePaneHeight(widget.analysis) : 0;
+
+  @override
+  Listenable listenableOf(_BoardAndCounter widget) =>
+      Listenable.merge([widget.session, widget.analysis]);
+
+  @override
+  void changed() {
+    final room = _room();
+    if (!mounted || room == _engineRoom) return;
+    setState(() => _engineRoom = room);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final session = widget.session;
+    final settings = widget.settings;
+    final onMove = widget.onMove;
+    final moves = widget.moves;
+    final counter = widget.counter;
     return LayoutBuilder(
       builder: (context, constraints) {
-        final room = _roomUnder(settings);
-        final engineRoom = room - Space.s - navRowHeight;
+        final room = navRowHeight + Space.s + _engineRoom;
         final side = min(constraints.maxWidth, constraints.maxHeight - room);
         final below = constraints.maxHeight - side - room - Space.s;
         return Align(
@@ -408,8 +435,8 @@ class _BoardAndCounter extends StatelessWidget {
                 ),
                 const SizedBox(height: Space.s),
                 SizedBox(
-                  height: engineRoom,
-                  child: SingleChildScrollView(child: engine),
+                  height: _engineRoom,
+                  child: SingleChildScrollView(child: widget.engine),
                 ),
                 SizedBox(
                   height: navRowHeight,
@@ -451,9 +478,7 @@ class _BoardAndCounter extends StatelessWidget {
 }
 
 /// The board while another owner holds it: its position and the move
-/// field alone, with the room the engine, the counter and the note would
-/// take left empty, so the board and the field do not move as a lesson
-/// starts and ends.
+/// field alone. No engine space is reserved while a lesson owns the board.
 class _ClaimedBoard extends StatelessWidget {
   const _ClaimedBoard({
     required this.claim,
@@ -469,7 +494,7 @@ class _ClaimedBoard extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final room = _roomUnder(settings);
+        const room = navRowHeight + Space.s;
         final side = min(constraints.maxWidth, constraints.maxHeight - room);
         return Align(
           alignment: Alignment.topCenter,

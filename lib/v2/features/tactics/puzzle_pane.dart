@@ -264,7 +264,6 @@ class _Buttons extends StatelessWidget {
             Icons.arrow_forward,
             next,
             tip: withKey('Next puzzle', '↓'),
-            filled: true,
             iconAfter: true,
           )
         else
@@ -279,18 +278,16 @@ class _Buttons extends StatelessWidget {
     );
   }
 
-  /// A labelled button with its icon; the secondary style unless [filled].
+  /// A labelled button with its icon, using the shared action color.
   static Widget _button(
     String label,
     IconData icon,
     VoidCallback? onPressed, {
     required String tip,
-    bool filled = false,
     bool iconAfter = false,
   }) => Tooltip(
     message: tip,
     child: FilledButton.icon(
-      style: filled ? null : secondaryButtonStyle,
       onPressed: onPressed,
       icon: Icon(icon, size: IconSize.action),
       iconAlignment: iconAfter ? IconAlignment.end : IconAlignment.start,
@@ -445,7 +442,6 @@ class _RecapView extends StatelessWidget {
                 child: Text('Retry mistakes (${recap.retry.length})'),
               ),
             FilledButton(
-              style: secondaryButtonStyle,
               onPressed: trainer.closeRecap,
               child: const Text('Done'),
             ),

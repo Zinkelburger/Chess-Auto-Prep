@@ -65,10 +65,6 @@ class TopBar extends StatelessWidget {
       child: Row(
         children: [
           if (!listShown) ListToggle(shown: false, onPressed: onToggleList),
-          _ModeMenu(mode: mode, onMode: onMode, offered: offered),
-          const SizedBox(width: Space.s),
-          _ActionsMenu(actions: actions, changes: actionsChange),
-          const SizedBox(width: Space.s),
           IconButton(
             icon: const Icon(Icons.arrow_back, size: IconSize.action),
             tooltip: withKey(
@@ -87,6 +83,10 @@ class TopBar extends StatelessWidget {
             onPressed: forwardTo == null ? null : onForward,
             visualDensity: VisualDensity.compact,
           ),
+          _ModeMenu(mode: mode, onMode: onMode, offered: offered),
+          const SizedBox(width: Space.s),
+          _ActionsMenu(actions: actions, changes: actionsChange),
+          const SizedBox(width: Space.s),
           const Spacer(),
           IconButton(
             icon: const Icon(Icons.settings_outlined, size: IconSize.action),

@@ -100,11 +100,11 @@ const variationIndent = 14.0;
 /// The row of first / back / forward / end buttons under the moves.
 const navRowHeight = 36.0;
 
-/// The engine bar, as the old app laid it out: a row this tall for the
-/// switch and the status, then one row per line, each with a gutter this
+/// The compact engine header: a power icon and status, then one row per
+/// line, each with a gutter this
 /// wide for the score and the moves after it. The score is read there and
 /// nowhere larger.
-const engineBarHeight = 32.0;
+const engineBarHeight = 24.0;
 const engineRowHeight = 28.0;
 const engineScoreWidth = 54.0;
 
@@ -313,10 +313,6 @@ const _accent = Color(0xFF80B4FF);
 /// A deeper blue under white words keeps the primary action readable.
 const _accentFill = Color(0xFF2459C4);
 
-/// A deep blue fill for secondary actions, with pale blue words.
-const _tonal = Color(0xFF223653);
-const _onTonal = Color(0xFFDAE7FF);
-
 /// A control that cannot be used now: legible at 4:1, plainly not on.
 const _disabledFill = Color(0xFF2C2C30);
 const _disabledText = Color(0xFF8A8A90);
@@ -344,8 +340,8 @@ ThemeData darkTheme() {
     surfaceContainerHighest: _panel,
     surfaceContainerLowest: _reading,
     onSurfaceVariant: _muted,
-    secondaryContainer: _tonal,
-    onSecondaryContainer: _onTonal,
+    secondaryContainer: _accentFill,
+    onSecondaryContainer: Colors.white,
   );
   final base = ThemeData(
     colorScheme: scheme,
@@ -401,14 +397,6 @@ final _filled = ButtonStyle(
   foregroundColor: _whenOn(Colors.white, _disabledText),
 );
 
-/// A second action beside a filled one — Show solution beside Next: the
-/// deep blue fill with pale words. Pass it to a [FilledButton]; the
-/// theme's filled style is the strong one.
-final secondaryButtonStyle = ButtonStyle(
-  backgroundColor: _whenOn(_tonal, _disabledFill),
-  foregroundColor: _whenOn(_onTonal, _disabledText),
-);
-
 WidgetStateProperty<Color> _whenOn(Color on, Color off) =>
     WidgetStateProperty.resolveWith(
       (states) => states.contains(WidgetState.disabled) ? off : on,
@@ -450,14 +438,13 @@ TextTheme _sized(TextTheme base) => base.copyWith(
   labelSmall: base.labelSmall?.copyWith(fontSize: 12, color: _muted),
 );
 
-/// The settings dialog: small and fixed, so it never grows into a page.
-/// A list of places on the left, at most a handful of rows on the right,
-/// each one line tall. Tall enough for six places; a seventh means a place
-/// has to go, not the dialog grow.
-const settingsDialogWidth = 640.0;
-const settingsDialogHeight = 340.0;
+/// The settings dialog: full-width search above categories and a scrollable
+/// settings list. Rows stack their controls when text needs more room.
+const settingsDialogWidth = 760.0;
+const settingsDialogHeight = 440.0;
 const settingsListWidth = 180.0;
-const settingRowHeight = 36.0;
+const settingRowHeight = 52.0;
+const settingInlineWidth = 420.0;
 const settingNumberWidth = 64.0;
 const settingSecretWidth = 200.0;
 

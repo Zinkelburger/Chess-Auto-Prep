@@ -61,10 +61,7 @@ void main() {
       contrast(colors.primary, colors.onPrimary),
       greaterThanOrEqualTo(4.5),
     );
-    for (final style in [
-      theme.filledButtonTheme.style!,
-      secondaryButtonStyle,
-    ]) {
+    for (final style in [theme.filledButtonTheme.style!]) {
       expect(
         contrast(
           style.foregroundColor!.resolve({})!,

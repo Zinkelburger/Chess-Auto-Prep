@@ -43,12 +43,14 @@ Planner. Wide: board centre, move list and comment above the Engine / Database d
   expanding it to a six-row viewport, and empty slots keeping their height. Defaults: **cores 1**
   (max = logical cores), **memory 128 MB** (16–8192, step 16), **depth 15** (1–99), **lines 3**
   (1–10); evals are White-relative, one decimal (`+0.35`), mate `#5` / `-#5`.
-  (v2 has this bar: the 32px switch row with `Depth {d} · {engine}`, 54px gutters, hover floats a
+  (v2 uses a 24px power/status row with `Depth {d} · {engine}` at 12px, 54px gutters; hover floats a
   200px board under the move, a click plays the line up to it, the chevron opens six rows; no
   threat, gear, nodes or settings yet. The old app's large headline score was tried and dropped.
   Since 2026-09-23 it sits **under the board**, not above the card's tabs (owner: "ugly above all
-  the tabs"): the board shrinks to leave the switch row and one row per line, on or off, so it
-  never changes size. While a search runs the row reads `Paused while searching`.)
+  the tabs"). Since 2026-09-24 the dock collapses completely when off, including its reserved
+  layout space; the board and move field may move as it opens. E or Actions ▸ Board ▸ Engine on
+  restores it. Failures keep a compact retry row; a paused engine keeps just its status.
+  Training boards likewise reserve no empty engine area.)
 - **Tab strip and Replies** (v2, 2026-09-21; browser tabs 2026-09-22; big tabs 2026-09-23) —
   under the card's heading, `Moves | Train | Replies | Explorer | Search`. Since 2026-09-23
   the tabs share the strip's width, 40px tall, the one that is up filled (owner: the small
@@ -261,7 +263,7 @@ Quirks worth a verdict:
   a token; signed out the tab says so and names the Settings row. `This file` (the open file's
   games merged by position, narrowed by the viewer's game filter) and `My games` (downloaded games
   plus the same accounts' games in the old app's `app_games.db`) were built 2026-09-23 in step 6c.
-- **The toolbar keeps Mode → Actions → Back / Forward in a fixed order.** History controls
+- **The toolbar keeps Back / Forward → Mode → Actions in a fixed order.** History controls
   remain visible and disabled when empty, with Alt+← / Alt+→ in their tooltips and the
   destination named when available. Actions uses labelled sections (File, Repertoire,
   Document) and compact submenus for Analysis board, Board, Copy, Panels and Window.
@@ -269,7 +271,8 @@ Quirks worth a verdict:
   Repertoire keeps Search from here, Train this chapter, Next gap and the playing side together.
   Ctrl+K still searches the complete flat action list. Menus use 13px labels, 32px minimum
   rows and a 260px minimum width. The accent is brighter cornflower blue (`80B4FF`),
-  with deeper blue filled controls (`2459C4`) and contrasting white labels.
+  with one shared blue for all filled action buttons (`2459C4`) and contrasting white labels;
+  Get games, Play, Skip and Show solution use the same fill.
 - **The settings gear sits at the right end of the top bar**, the old app's place, and is the one
   way in besides Ctrl+,; the mode menu lists modes only.
 - **The list column holds one of two lists**: the mode's own, or the `Positions` the searches

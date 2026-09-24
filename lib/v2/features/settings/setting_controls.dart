@@ -18,38 +18,59 @@ class SettingRowView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
+    final label = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(row.label, style: text.bodyMedium),
+        if (row.hint case final hint?) ...[
+          const SizedBox(height: Space.xs),
+          Text(
+            hint,
+            style: row.warn
+                ? text.labelSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.error,
+                  )
+                : text.labelSmall,
+          ),
+        ],
+      ],
+    );
+    final control = Semantics(label: row.label, child: _control(row.control));
     return ConstrainedBox(
       constraints: const BoxConstraints(minHeight: settingRowHeight),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: Space.s),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth <
+                settingInlineWidth *
+                    MediaQuery.textScalerOf(context).scale(1)) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  label,
+                  const SizedBox(height: Space.s),
+                  control,
+                ],
+              );
+            }
+            return Row(
               children: [
-                Text(row.label, style: text.bodyMedium),
-                if (row.hint case final hint?)
-                  Text(
-                    hint,
-                    style: row.warn
-                        ? text.labelSmall?.copyWith(
-                            color: Theme.of(context).colorScheme.error,
-                          )
-                        : text.labelSmall,
-                  ),
+                Expanded(child: label),
+                const SizedBox(width: Space.l),
+                control,
               ],
-            ),
-          ),
-          const SizedBox(width: Space.m),
-          _control(row.control),
-        ],
+            );
+          },
+        ),
       ),
     );
   }
 
   Widget _control(SettingControl control) => switch (control) {
     ChoiceSetting() => _Choice(control),
-    NumberSetting() => _Number(control),
+    NumberSetting() => _Number(control, label: row.label),
     ToggleSetting(:final value, :final onChanged) => Transform.scale(
       scale: 0.75,
       child: Switch(value: value, onChanged: onChanged),
@@ -121,7 +142,9 @@ class _Choice extends StatelessWidget {
 /// A number typed into a box, or stepped with − and +. Enter or leaving
 /// the box takes what was typed, kept inside the row's range.
 class _Number extends StatefulWidget {
-  const _Number(this.setting);
+  const _Number(this.setting, {required this.label});
+
+  final String label;
 
   final NumberSetting setting;
 
@@ -186,6 +209,7 @@ class _NumberState extends State<_Number> {
       children: [
         IconButton(
           icon: const Icon(Icons.remove, size: IconSize.menu),
+          tooltip: 'Decrease ${widget.label}',
           onPressed: setting.value > setting.min
               ? () => _step(-setting.step)
               : null,
@@ -217,6 +241,7 @@ class _NumberState extends State<_Number> {
         ],
         IconButton(
           icon: const Icon(Icons.add, size: IconSize.menu),
+          tooltip: 'Increase ${widget.label}',
           onPressed: setting.value < setting.max
               ? () => _step(setting.step)
               : null,
