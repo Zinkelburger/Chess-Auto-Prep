@@ -76,6 +76,39 @@ void main() {
     expect(books.includes(ref('Najdorf', 'Sidelines')), isFalse);
   });
 
+  test(
+    'removing a repertoire clears nested selections but preserves siblings',
+    () async {
+      final nested = ref('Najdorf/English Attack', 'Main');
+      final sibling = ref('Najdorf extra', 'Main');
+      final recursive = RepertoireFolder(
+        name: 'Najdorf',
+        path: '/repertoires/Najdorf',
+        modified: DateTime(2026),
+        chapters: [...najdorf.chapters, nested],
+      );
+      books.create('Spring');
+      books.setChapter(books.active!, recursive, nested, true);
+      books.setChapter(books.active!, recursive, sibling, true);
+      books.setRepertoire(
+        books.active!,
+        folder('Najdorf/Other', ['Main']),
+        true,
+      );
+      books.setRepertoire(books.active!, recursive, false);
+      expect(books.includes(nested), isFalse);
+      expect(books.includes(ref('Najdorf/Other', 'Main')), isFalse);
+      expect(books.includes(sibling), isTrue);
+      expect(books.shareOf(books.active!, recursive), BookShare.none);
+      await books.settled;
+      final reopened = Books(store: store, root: '/repertoires');
+      addTearDown(reopened.dispose);
+      await reopened.load();
+      expect(reopened.includes(nested), isFalse);
+      expect(reopened.includes(sibling), isTrue);
+    },
+  );
+
   test('a chapter of a course file counts by its name, and the whole file '
       'counts every chapter in it', () {
     const path = '/repertoires/Course/Course.pgn';

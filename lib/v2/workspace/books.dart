@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 
 import '../diagnostics/log.dart';
 import '../storage/book_file.dart';
@@ -137,19 +138,21 @@ final class Books extends ChangeNotifier {
   void setRepertoire(Book book, RepertoireFolder folder, bool inBook) {
     final path = bookPath(_root, folder.path);
     if (path == null) return;
-    // The chapters picked one by one go either way: the folder now says it.
+    // A folder selection covers all descendants, just as Book.includes does.
+    // Remove redundant nested selections when adding it, and every explicit
+    // descendant when removing it. A similarly named sibling stays untouched.
+    bool inside(String selection) =>
+        selection == path || p.posix.isWithin(path, selection);
+    final repertoires = {
+      for (final selected in book.repertoires)
+        if (!inside(selected)) selected,
+      if (inBook) path,
+    };
     final chapters = {
       for (final chapter in book.chapters)
-        if (folderOf(chapter.path) != path) chapter,
+        if (!inside(chapter.path)) chapter,
     };
-    _replace(
-      book.copyWith(
-        repertoires: inBook
-            ? {...book.repertoires, path}
-            : (book.repertoires.toSet()..remove(path)),
-        chapters: chapters,
-      ),
-    );
+    _replace(book.copyWith(repertoires: repertoires, chapters: chapters));
   }
 
   /// Puts [chapter] of [folder] in [book] or takes it out. Taking one out of

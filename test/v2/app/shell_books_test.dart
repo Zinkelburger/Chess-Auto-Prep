@@ -3,11 +3,13 @@ import 'dart:async';
 import 'package:chess_auto_prep/v2/app/mode.dart';
 import 'package:chess_auto_prep/v2/features/books/books_screen.dart';
 import 'package:chess_auto_prep/v2/features/library/library_panel.dart';
+import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/window_fixture.dart';
+import '../support/scripted_files.dart';
 
 /// Books in the window: the mode that edits them, the pencil beside the
 /// book wherever it is read, and Back to where the user came from.
@@ -49,6 +51,50 @@ void main() {
     expect(w.parts.books.includes(kidMain), isFalse);
     expect(w.parts.books.includes(benkoMain), isTrue);
   });
+
+  testWidgets(
+    'removing a repertoire unticks an explicitly selected nested chapter',
+    (tester) async {
+      final nested = ref('KID/Classical', 'Main');
+      final kid = RepertoireFolder(
+        name: 'KID',
+        path: '/repertoires/KID',
+        modified: DateTime(2026),
+        chapters: [nested],
+      );
+      w.chapterFiles.listing = Repertoires([
+        folder('benko', ['Main']),
+        kid,
+      ]);
+      await w.pumpShell(tester);
+      final books = w.parts.books;
+      books.setRepertoire(books.active!, kid, false);
+      books.setChapter(books.active!, kid, nested, true);
+      await toMode(tester, 'Books');
+      expect(books.includes(nested), isTrue);
+      final kidRow = find.ancestor(
+        of: find.text('KID'),
+        matching: find.byType(InkWell),
+      );
+      await tester.tap(
+        find.descendant(of: kidRow.first, matching: find.byType(Checkbox)),
+      );
+      await tester.pumpAndSettle();
+      expect(books.includes(nested), isFalse);
+      expect(books.includes(benkoMain), isTrue);
+      expect(
+        tester
+            .widget<Checkbox>(
+              find.descendant(
+                of: kidRow.first,
+                matching: find.byType(Checkbox),
+              ),
+            )
+            .value,
+        isFalse,
+      );
+    },
+  );
 
   testWidgets('the explorer\'s Book shows the book in use, and its pencil '
       'goes to Books; Back comes back', (tester) async {

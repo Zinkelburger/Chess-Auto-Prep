@@ -7,6 +7,7 @@ import 'package:chess_auto_prep/v2/app/shell.dart';
 import 'package:chess_auto_prep/v2/app/window_input.dart';
 import 'package:chess_auto_prep/v2/app/workspace_requests.dart';
 import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
+import 'package:chess_auto_prep/v2/engines/maia/move_policy.dart';
 import 'package:chess_auto_prep/v2/features/bughouse/archive_moves.dart';
 import 'package:chess_auto_prep/v2/features/bughouse/bughouse_lab.dart';
 import 'package:chess_auto_prep/v2/features/bughouse/table_search.dart';
@@ -74,13 +75,16 @@ final class WindowFixture {
     WindowInput? input,
     SettingsStore? settings,
     EngineLauncher? launchEngine,
+    MovePolicy maia = const NoOpinion(),
   }) : _input = input,
        _settings = settings,
-       _launchEngine = launchEngine;
+       _launchEngine = launchEngine,
+       _maia = maia;
 
   final WindowInput? _input;
   final SettingsStore? _settings;
   final EngineLauncher? _launchEngine;
+  final MovePolicy _maia;
   final navigator = GlobalKey<NavigatorState>();
 
   /// The question before a document is left, answering what the test sets
@@ -160,7 +164,7 @@ final class WindowFixture {
       ),
       progressFiles: ScriptedProgress(),
       olderAnalyzed: () async => {},
-      maia: const NoOpinion(),
+      maia: _maia,
       launchEngine:
           _launchEngine ??
           ({required cores, required memoryMb}) async =>

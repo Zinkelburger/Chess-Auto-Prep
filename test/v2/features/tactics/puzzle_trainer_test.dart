@@ -125,6 +125,39 @@ void main() {
   );
 
   test(
+    'disabling auto-advance cancels the pending advance even if enabled again',
+    () => sitting((async) {
+      begin(async);
+      w.trainer.play('e7e5');
+      async.elapse(replyDelay);
+      w.trainer.play('b8c6');
+      async.elapse(const Duration(seconds: 1));
+      w.trainer.setAutoAdvance(false);
+      async.elapse(advanceDelay);
+      expect(w.session.game, 1);
+      expect(w.trainer.up?.feedback, isA<Solved>());
+      w.trainer.setAutoAdvance(true);
+      async.elapse(advanceDelay);
+      expect(w.session.game, 1);
+    }),
+  );
+
+  test(
+    'disabling auto-advance during a reply still plays the reply',
+    () => sitting((async) {
+      begin(async);
+      w.trainer.play('e7e5');
+      w.trainer.setAutoAdvance(false);
+      async.elapse(replyDelay);
+      expect(w.session.cursor, NodePath.of([0, 0]));
+      expect(w.trainer.up?.waiting, isFalse);
+      w.trainer.play('b8c6');
+      async.elapse(advanceDelay);
+      expect(w.session.game, 1);
+    }),
+  );
+
+  test(
     'show solution steps to the answer and writes nothing',
     () => sitting((async) {
       unawaited(

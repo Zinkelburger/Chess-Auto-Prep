@@ -40,7 +40,9 @@ The board column scrolls when the archive or expanded editor needs more height.
   it sits, empty where it is not on move) with the score beside them, the team's score in its header.
   Compact striped rows show available lines without reserving three empty rows. The score’s tooltip
   explains calibration. `Saved scores` opens the saved engine identity, node budgets and date.
-- **Status line** — shown only for a refusal or database error, in the error colour.
+- **Status line** — shown when reporting progress, save status or a problem: `Scored n of total moves`,
+  `Saving analysis…`, or `Analysis saved`. A refused action, unreadable database or `Analysis not saved: …`
+  uses the error colour; a failed save offers `Retry save`.
 - **Move tables** — one per board side by side, a plain rule between them: shaded header names the board, mover (`D`) and `Score`, then
   every legal move on that board, drops included, with its score for the chosen `Time`, read from the
   mover's side, best first and bold; unscored moves `—` below by SAN. The score's tooltip is the line after
@@ -76,7 +78,10 @@ does — each team with a move searched (1500 nodes) for the zero and to order i
 move of both boards played, the likeliest first, and the answering team searched (200 nodes) — the table
 filling as it goes, and adds the finished position to the book for that clock (the builder's rows,
 status `done`). About two minutes for an opening position on half of an eight-core desktop. Searches are
-remembered for the session.
+remembered for the session. After an engine failure, switching it on again starts a fresh engine and
+finishes the missing scores. A failed book save keeps the completed entry for `Retry save`, including
+after changing positions or leaving and returning to the mode. It is only labelled saved after the
+database confirms the write. Unsaved entries remain in memory; crash recovery is not yet implemented.
 **Read the score** — Hivemind's own scale (`180·tan(1.56·Q)`), re-centred: each team's search of the
 position gives the offset, `(q_A+B + q_C+D) / 2`, taken off in Q; when a team has no move the level-table
 offset stands in. 0.00 is level. The book stores the same scale.
@@ -160,7 +165,8 @@ settings block; `A line` start dropped — play it on the boards; stop drops the
 Keep — Run a match, Read a run
 
 ## Decisions (2026-09-23, made without the owner)
-- The lab stays a scratchpad; nothing is saved but match games.
+- The board remains a scratchpad; completed analysis is saved in the Hivemind book, and match games
+  in their match folders.
 - Matches stay inside the lab, on a Hivemind of their own so the tables keep theirs; same folders and
   format as the old app. `Stop` drops the game in flight rather than keeping it unfinished, so `Resume`
   (new) replays it; seeds are per game so a resumed match samples as it would have.

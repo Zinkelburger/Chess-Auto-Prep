@@ -55,6 +55,25 @@ final class ScoresSearched extends TableScores {
   bool get finished => done >= total;
 }
 
+/// A complete table is saved only once the book confirms its commit.
+sealed class AnalysisSave {
+  const AnalysisSave();
+}
+
+final class AnalysisSaving extends AnalysisSave {
+  const AnalysisSaving();
+}
+
+final class AnalysisSaved extends AnalysisSave {
+  const AnalysisSaved();
+}
+
+final class AnalysisSaveFailed extends AnalysisSave {
+  const AnalysisSaveFailed(this.detail);
+
+  final String detail;
+}
+
 /// Why the engine could not answer, in the engine's own words.
 sealed class EngineTrouble {
   const EngineTrouble(this.reason);
@@ -205,6 +224,19 @@ final class TableSearch extends ChangeNotifier {
   final _filled = <(int, ClockCase), ScoresSearched>{};
   final _searches = <(int, Team, bool, int, int), HivemindSearched>{};
 
+  final _entries = <(int, ClockCase), HivemindEntry>{};
+  final _saves = <(int, ClockCase), AnalysisSave>{};
+
+  AnalysisSave? get analysisSave => _saves[(lab.position.bookKey, lab.clock)];
+
+  /// Retries the exact completed entry, without rerunning the engine.
+  Future<void> retrySave() async {
+    final key = (lab.position.bookKey, lab.clock);
+    if (_saves[key] is! AnalysisSaveFailed) return;
+    final entry = _entries[key];
+    if (entry != null) await _save(entry);
+  }
+
   TableScores get scores => _scores;
   EngineLines get lines => _lines;
 
@@ -335,7 +367,10 @@ final class TableSearch extends ChangeNotifier {
     final clock = lab.clock;
     for (final (i, time) in _passes.indexed) {
       if (!await _pass(position, clock, i, time, wanted)) return;
-      if (i == 0 && _scores is! ScoresFromBook && _scores is! ScoresSearched) {
+      final complete =
+          _scores is ScoresFromBook ||
+          (_scores is ScoresSearched && (_scores as ScoresSearched).finished);
+      if (i == 0 && !complete) {
         if (!await _fill(position, clock, wanted)) return;
       }
     }
@@ -351,6 +386,8 @@ final class TableSearch extends ChangeNotifier {
     bool Function() wanted,
   ) async {
     final watch = Stopwatch()..start();
+    final applied = lab.line.applied;
+    final fromStart = identical(lab.line.root, TablePosition.initial);
     final teams = Team.values.where(position.hasMove).toList();
     final own = <Team, HivemindSearched>{};
     final ranking = (nodes: _depth.ownNodes, lines: 8);
@@ -396,9 +433,7 @@ final class TableSearch extends ChangeNotifier {
       _set(scores: progress());
     }
     _filled[(position.bookKey, clock)] = progress();
-    final applied = lab.line.applied;
-    final fromStart = identical(lab.line.root, TablePosition.initial);
-    final saving = _book.save((
+    final HivemindEntry entry = (
       position: position,
       line: fromStart
           ? applied
@@ -437,19 +472,35 @@ final class TableSearch extends ChangeNotifier {
         'child_multipv': 1,
         'reported_searches': reported,
       },
-    ));
-    try {
-      await (pendingWrites?.track(_book, saving, label: 'Analysis book') ??
-          saving);
-    } on Object catch (error) {
-      if (wanted()) {
-        _bookProblem = 'Could not save analysis: $error';
-        notifyListeners();
-      }
-      return false;
+    );
+    _entries[(position.bookKey, clock)] = entry;
+    await _save(entry);
+    return wanted();
+  }
+
+  Future<void> _save(HivemindEntry entry) async {
+    final key = (entry.position.bookKey, entry.clock);
+    _saves[key] = const AnalysisSaving();
+    _set();
+    final saving = _book.save(entry);
+    final result =
+        await (pendingWrites?.track(
+              (this, key),
+              saving,
+              label: 'Analysis book',
+              problem: (outcome) =>
+                  outcome is HivemindSaveFailed ? outcome.detail : null,
+            ) ??
+            saving);
+    _saves[key] = switch (result) {
+      HivemindSaved() => const AnalysisSaved(),
+      HivemindSaveFailed(:final detail) => AnalysisSaveFailed(detail),
+    };
+    if (result is HivemindSaved) {
+      _entries.remove(key);
+      _bookAnswers.remove(entry.position.bookKey);
     }
-    _bookAnswers.remove(position.bookKey);
-    return true;
+    _set();
   }
 
   /// Every legal move of both boards, the moves the engine's own lines
@@ -583,6 +634,9 @@ final class TableSearch extends ChangeNotifier {
   /// The engine could not answer: the switch goes off and says why.
   void _stopped(EngineTrouble trouble) {
     _engineOn = false;
+    final engine = _engine;
+    _engine = null;
+    if (engine != null) _busy = engine.quit();
     _set(lines: LinesStopped(trouble));
   }
 

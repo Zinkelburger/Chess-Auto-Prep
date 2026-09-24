@@ -97,13 +97,27 @@ typedef HivemindEntry = ({
   Map<String, Object?> provenance,
 });
 
+sealed class HivemindSave {
+  const HivemindSave();
+}
+
+final class HivemindSaved extends HivemindSave {
+  const HivemindSaved();
+}
+
+final class HivemindSaveFailed extends HivemindSave {
+  const HivemindSaveFailed(this.detail);
+
+  final String detail;
+}
+
 /// SQLite is a real boundary: [SqliteHivemindBook] in the app, a scripted
 /// book in tests.
 abstract interface class HivemindBook {
   Future<HivemindLookup> lookup(TablePosition position);
 
   /// Adds [entry], replacing what the book had for its position and clock.
-  Future<void> save(HivemindEntry entry);
+  Future<HivemindSave> save(HivemindEntry entry);
 }
 
 /// `tools/bughouse_db/hivemind_book.py`'s tables, for a book the lab starts.
@@ -228,13 +242,14 @@ final class SqliteHivemindBook implements HivemindBook {
       db.select("SELECT 1 FROM meta WHERE key = 'seats'").isNotEmpty;
 
   @override
-  Future<void> save(HivemindEntry entry) async {
+  Future<HivemindSave> save(HivemindEntry entry) async {
     final path = _file.path ?? _existing(places) ?? places.first;
     try {
       await _saveBook(path, entry);
+      return const HivemindSaved();
     } on Object catch (error) {
       log.w('save to the Hivemind book at $path', error);
-      rethrow;
+      return HivemindSaveFailed('$error');
     }
   }
 

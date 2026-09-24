@@ -193,6 +193,15 @@ void main() {
       },
     );
 
+    test('a blocked destination reports a failed save', () async {
+      final blocked = p.join(dir.path, 'blocked');
+      await File(blocked).writeAsString('not a directory');
+      final book = SqliteHivemindBook([p.join(blocked, 'book.db')]);
+      final outcome = await book.save(entry(afterLine('A:e4'), ClockCase.even));
+      expect(outcome, isA<HivemindSaveFailed>());
+      book.close();
+    });
+
     test('takes a clock the engine scored, beside the builder’s', () async {
       final book = SqliteHivemindBook([hivemindBook(relabelled: true)]);
       await book.lookup(afterLine('A:e4'));

@@ -30,6 +30,9 @@ const outlineRootText = TextStyle(fontFamily: 'SourceCodePro', fontSize: 12);
 /// long chapter name, narrow enough not to fill the window.
 const nameDialogWidth = 360.0;
 
+/// Room for action labels with shortcuts in a separate right-hand gutter.
+const actionMenuWidth = 260.0;
+
 /// How tall a dialog that asks the user to pick from a list is. Fixed, so the
 /// list does not grow and shrink under the pointer as the search narrows it.
 const choiceDialogHeight = 280.0;
@@ -295,7 +298,7 @@ MultiSplitViewThemeData paneTheme(ColorScheme scheme) =>
       ),
     );
 
-/// Neutral greys, one muted blue accent, colour kept for meaning.
+/// Charcoal surfaces with a bright cornflower blue accent, colour kept for meaning.
 const _surface = Color(0xFF1B1B1D);
 const _panel = Color(0xFF242427);
 
@@ -305,18 +308,14 @@ const _reading = Color(0xFF0C0C0E);
 const _outline = Color(0xFF3A3A3E);
 const _text = Color(0xFFE6E6E8);
 const _muted = Color(0xFF9A9AA0);
-const _accent = Color(0xFF5F93CC);
+const _accent = Color(0xFF80B4FF);
 
-/// The accent a step darker, under white words: the filled button, the one
-/// strongest action on a screen. White on [_accent] is 3.2:1 and reads as
-/// faded; on this it is 5.3:1 and the button still stands off the card.
-const _accentFill = Color(0xFF3A6EA8);
+/// A deeper blue under white words keeps the primary action readable.
+const _accentFill = Color(0xFF2459C4);
 
-/// A second action: a dark blue-grey button with pale words, 9.6:1, so it
-/// reads as a button and not as a disabled chip, without competing with
-/// the filled one.
-const _tonal = Color(0xFF26354A);
-const _onTonal = Color(0xFFD6E4F5);
+/// A deep blue fill for secondary actions, with pale blue words.
+const _tonal = Color(0xFF223653);
+const _onTonal = Color(0xFFDAE7FF);
 
 /// A control that cannot be used now: legible at 4:1, plainly not on.
 const _disabledFill = Color(0xFF2C2C30);
@@ -338,9 +337,10 @@ ThemeData darkTheme() {
     surface: _surface,
     onSurface: _text,
     primary: _accent,
-    onPrimary: Colors.white,
+    onPrimary: _surface,
     secondary: _accent,
     outline: _outline,
+    outlineVariant: _outline,
     surfaceContainerHighest: _panel,
     surfaceContainerLowest: _reading,
     onSurfaceVariant: _muted,
@@ -359,6 +359,32 @@ ThemeData darkTheme() {
     filledButtonTheme: FilledButtonThemeData(style: _filled),
     outlinedButtonTheme: OutlinedButtonThemeData(style: _outlined),
     textButtonTheme: TextButtonThemeData(style: _textButton),
+    menuTheme: MenuThemeData(
+      style: MenuStyle(
+        backgroundColor: const WidgetStatePropertyAll(_panel),
+        surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+        padding: const WidgetStatePropertyAll(
+          EdgeInsets.symmetric(vertical: Space.xs),
+        ),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(readingCardRadius),
+            side: const BorderSide(color: _outline),
+          ),
+        ),
+      ),
+    ),
+    menuButtonTheme: MenuButtonThemeData(
+      style: ButtonStyle(
+        minimumSize: const WidgetStatePropertyAll(Size(actionMenuWidth, 32)),
+        padding: const WidgetStatePropertyAll(
+          EdgeInsets.symmetric(horizontal: Space.l),
+        ),
+        textStyle: WidgetStatePropertyAll(_sized(base.textTheme).bodySmall),
+        visualDensity: VisualDensity.standard,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+    ),
     // The snackbar is pale, and the default action colour is paler still.
     extensions: const [_board],
   );
@@ -376,7 +402,7 @@ final _filled = ButtonStyle(
 );
 
 /// A second action beside a filled one — Show solution beside Next: the
-/// dark blue-grey fill with pale words. Pass it to a [FilledButton]; the
+/// deep blue fill with pale words. Pass it to a [FilledButton]; the
 /// theme's filled style is the strong one.
 final secondaryButtonStyle = ButtonStyle(
   backgroundColor: _whenOn(_tonal, _disabledFill),

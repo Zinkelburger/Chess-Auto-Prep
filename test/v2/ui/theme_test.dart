@@ -44,6 +44,37 @@ void main() {
     expect(text.labelSmall?.color, text.bodySmall?.color);
   });
 
+  test('accent and button labels contrast with their backgrounds', () {
+    double contrast(Color a, Color b) {
+      final first = a.computeLuminance();
+      final second = b.computeLuminance();
+      return first > second
+          ? (first + 0.05) / (second + 0.05)
+          : (second + 0.05) / (first + 0.05);
+    }
+
+    final colors = theme.colorScheme;
+    for (final surface in [colors.surface, colors.surfaceContainerHighest]) {
+      expect(contrast(colors.primary, surface), greaterThanOrEqualTo(4.5));
+    }
+    expect(
+      contrast(colors.primary, colors.onPrimary),
+      greaterThanOrEqualTo(4.5),
+    );
+    for (final style in [
+      theme.filledButtonTheme.style!,
+      secondaryButtonStyle,
+    ]) {
+      expect(
+        contrast(
+          style.foregroundColor!.resolve({})!,
+          style.backgroundColor!.resolve({})!,
+        ),
+        greaterThanOrEqualTo(4.5),
+      );
+    }
+  });
+
   test('moves and evaluations stay monospaced', () {
     expect(monoText.fontFamily, 'SourceCodePro');
   });

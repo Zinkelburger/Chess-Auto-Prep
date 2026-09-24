@@ -157,11 +157,12 @@ abstract base class _DocumentModeView extends ModeView {
       'Open PGN file…',
       () => unawaited(requests.openPgnFile()),
       shortcut: 'Ctrl+O',
+      group: 'File',
     ),
     fileEntry,
-    ...menu.board(),
-    ...documentEntries(menu),
     ..._repertoire(menu.dialogs),
+    ...documentEntries(menu),
+    ...menu.board(),
     ...tabActions(tabs),
   ];
 
@@ -170,6 +171,17 @@ abstract base class _DocumentModeView extends ModeView {
   List<AppAction> _repertoire(ShellDialogs dialogs) {
     final session = workspace.session;
     return [
+      AppAction(
+        'Search from here',
+        workspace.fill.canStart ? dialogs.search : null,
+        shortcut: 'Ctrl+G',
+        group: 'Repertoire',
+      ),
+      AppAction(
+        'Train this chapter',
+        session.chapter == null ? null : () => tabs.show(WorkspaceTab.train),
+        group: 'Repertoire',
+      ),
       AppAction(
         'Next gap',
         (workspace.gaps.walk?.gaps ?? const []).isEmpty
@@ -183,12 +195,6 @@ abstract base class _DocumentModeView extends ModeView {
           () => setSide(session, chapter.side.opposite),
           group: 'Repertoire',
         ),
-      AppAction(
-        'Search from here',
-        workspace.fill.canStart ? dialogs.search : null,
-        shortcut: 'Ctrl+G',
-        group: session.isScratch ? 'Analysis' : 'Repertoire',
-      ),
     ];
   }
 }
@@ -220,6 +226,7 @@ final class RepertoiresView extends _DocumentModeView {
     () => unawaited(requests.pasteRepertoire()),
     // On the analysis board Ctrl+V pastes onto the board instead.
     shortcut: workspace.session.isScratch ? null : 'Ctrl+V',
+    group: 'File',
   );
 }
 
@@ -276,6 +283,7 @@ final class ViewerView extends _DocumentModeView {
   AppAction get fileEntry => AppAction(
     'Close file',
     _modes.viewer.file == null ? null : () => unawaited(requests.closeFile()),
+    group: 'File',
   );
 }
 
@@ -312,6 +320,7 @@ final class StudyView extends _DocumentModeView {
     workspace.session.source == null
         ? null
         : () => unawaited(requests.closeFile()),
+    group: 'File',
   );
 }
 
@@ -621,11 +630,13 @@ List<AppAction> boardActions(
     AppAction(
       'Analysis board',
       scratch ? null : () => unawaited(requests.analysisBoard()),
+      group: 'Analysis board',
     ),
     AppAction(
       'New analysis board from here',
       () => unawaited(requests.newAnalysisBoard()),
       shortcut: 'Ctrl+N',
+      group: 'Analysis board',
     ),
     // On the board, Paste PGN or FEN below takes a FEN too.
     if (!scratch)
@@ -633,12 +644,14 @@ List<AppAction> boardActions(
         'Paste FEN',
         () => unawaited(requests.pasteFen()),
         shortcut: 'Ctrl+Shift+V',
+        group: 'File',
       ),
     if (scratch) ...[
       AppAction(
         'Paste PGN or FEN',
         () => unawaited(requests.pasteOntoBoard()),
         shortcut: 'Ctrl+V',
+        group: 'File',
       ),
       AppAction(
         'Save to repertoire…',
