@@ -13,6 +13,10 @@ import 'package:chess_auto_prep/v2/storage/bughouse_matches.dart';
 /// few lines of the searched team's first legal moves — at once, or when
 /// the test calls [release] while [hold] is on.
 final class ScriptedHivemind implements Hivemind {
+  @override
+  Map<String, Object?> get provenance => const {
+    'engine_name': 'Scripted Hivemind',
+  };
   final asked = <HivemindQuestion>[];
   HivemindAnswer Function(HivemindQuestion question) answer = firstMoves;
   bool hold = false;

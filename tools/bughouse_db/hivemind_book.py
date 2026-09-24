@@ -60,6 +60,7 @@ when all of its moves are done.
 from __future__ import annotations
 
 import argparse
+import datetime
 import math
 import re
 import signal
@@ -80,6 +81,7 @@ from bughouse.board import BOARD_NAMES, DualBoard, san  # noqa: E402
 from bughouse.calibration import assumed_offset, to_q, to_score  # noqa: E402
 from bughouse.engine import HivemindEngine, SearchResult  # noqa: E402
 from bughouse_db.book import explore, open_book  # noqa: E402
+from bughouse_db import provenance
 from bughouse_db.paths import data_home  # noqa: E402
 from bughouse_db.poskey import dual_key_fen, position_key  # noqa: E402
 
@@ -246,6 +248,7 @@ def team_bits(clock: str) -> dict[chess.Color, bool]:
 
 def analyse_position(engine: HivemindEngine, dual: DualBoard, nodes: int,
                      child_nodes: int, clocks: Sequence[str] = DEFAULT_CLOCKS,
+                     reported: dict | None = None,
                      ) -> tuple[list[tuple], list[tuple], dict]:
     """Returns (pick rows, move rows, per-move A+B score by clock for expansion)."""
     pos = key_of(dual)
@@ -256,6 +259,11 @@ def analyse_position(engine: HivemindEngine, dual: DualBoard, nodes: int,
     wanted = {(team, team_bits(clock)[team]) for clock in clocks for team in TEAMS}
     own = {(team, bit): search(engine, dual, team, bit, nodes, multipv=1)
            for team, bit in sorted(wanted)}
+    def report(result):
+        top = result.top
+        return {"nodes": top.nodes if top else None, "depth": top.depth if top else None}
+    if reported is not None:
+        reported.update({f"root_{team}_{bit}": report(result) for (team, bit), result in own.items()})
     offsets = {}
     for clock in clocks:
         bits = team_bits(clock)
@@ -290,6 +298,9 @@ def analyse_position(engine: HivemindEngine, dual: DualBoard, nodes: int,
         bits = {team_bits(clock)[answers] for clock in clocks}
         found = {bit: [search(engine, after, answers, bit, child_nodes) for _, after, _ in children]
                  for bit in sorted(bits)}
+        if reported is not None:
+            reported.update({f"{name}:{move.uci()}:{bit}": report(found[bit][i])
+                             for i, (move, _, _) in enumerate(children) for bit in found})
         for i, (move, after, ply) in enumerate(children):
             tag = f"{name}:{ply.san}"
             child = key_of(after)
@@ -322,7 +333,7 @@ def mover_value(entry: tuple, seat: str) -> float:
 def open_db(path: Path) -> sqlite3.Connection:
     path.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(path, timeout=60)  # several workers share the file
-    con.executescript(SCHEMA)
+    con.executescript(SCHEMA + provenance.SCHEMA)
     con.execute("PRAGMA journal_mode=WAL")
     relabel_seats(con)
     return con
@@ -431,6 +442,7 @@ def run(args: argparse.Namespace) -> int:
     engine = HivemindEngine()
     started, done_here = time.time(), 0
     try:
+        identity = provenance.engine_identity(engine)
         while not stop["now"]:
             row = claim(con)
             if row is None:
@@ -439,15 +451,27 @@ def run(args: argparse.Namespace) -> int:
             pos, fen, line, ply = row
             dual = DualBoard.from_dual_fen(fen)
             t0 = time.time()
+            reported = {}
             picks, moves, scores = analyse_position(engine, dual, args.nodes, args.child_nodes,
-                                                    clocks=clocks_of(args))
+                                                    clocks=clocks_of(args), reported=reported)
             with con:
+                provenance.preserve_legacy(con, pos)
+                for clock in clocks_of(args):
+                    con.execute("DELETE FROM pick WHERE pos=? AND clock=?", (pos, clock))
+                    con.execute("DELETE FROM move WHERE pos=? AND clock=?", (pos, clock))
                 con.executemany("INSERT OR REPLACE INTO pick VALUES(?,?,?,?,?,?,?,?)", picks)
                 con.executemany("INSERT OR REPLACE INTO move VALUES(?,?,?,?,?,?,?,?,?)", moves)
                 con.execute(
                     "UPDATE position SET status='done', nodes=?, child_nodes=?, seconds=?, "
                     "done_at=datetime('now') WHERE pos=?",
                     (args.nodes, args.child_nodes, round(time.time() - t0, 1), pos))
+                for clock in clocks_of(args):
+                    provenance.snapshot(con, pos, clock, {
+                        **identity, "nodes": args.nodes, "child_nodes": args.child_nodes,
+                        "seconds": round(time.time() - t0, 1),
+                        "completed_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                        "reported_searches": reported,
+                    })
                 if ply < args.max_ply:
                     if fics is not None:
                         expand_fics(con, fics, dual, line, ply, args.width)

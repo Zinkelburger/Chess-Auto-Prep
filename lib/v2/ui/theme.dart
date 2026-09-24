@@ -510,11 +510,12 @@ const labBoardMax = 480.0;
 const labBoardChrome = 250.0;
 
 /// The narrowest the right-hand panel may become before the boards shrink.
-const labPanelMinWidth = 540.0;
+const labPanelMinWidth = 440.0;
+const labPanelMaxWidth = 480.0;
 
 /// The gap between the two boards, and between the boards and the panel.
 const labBoardGap = 20.0;
-const labColumnGap = 28.0;
+const labColumnGap = 16.0;
 
 /// A seat row beside a board: the turn dot, `Player A`, then the reserve
 /// tray, its pieces as large as the board's squares, and the room around

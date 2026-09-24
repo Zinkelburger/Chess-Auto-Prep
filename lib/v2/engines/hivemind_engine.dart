@@ -95,6 +95,9 @@ final class HivemindStartFailed extends HivemindStart {
 
 /// Hivemind as the lab and the matches use it; a scripted engine in tests.
 abstract interface class Hivemind {
+  /// Identity of the actual binary/network and effective startup options.
+  Map<String, Object?> get provenance;
+
   /// Searches [question]. Questions are answered one at a time, in the
   /// order asked.
   Future<HivemindAnswer> search(HivemindQuestion question);
@@ -128,9 +131,11 @@ final class HivemindProcess implements Hivemind, EngineProcess {
   static Future<HivemindProcess?> start(
     UciProcess process, {
     Map<String, String> options = const {},
+    Map<String, Object?> provenance = const {},
     Duration patience = const Duration(seconds: 90),
   }) async {
     final engine = HivemindProcess._(process);
+    engine._provenance.addAll({...provenance, 'options': options});
     try {
       engine._send('uci');
       await engine._expect('uciok').timeout(patience);
@@ -147,6 +152,10 @@ final class HivemindProcess implements Hivemind, EngineProcess {
       return null;
     }
   }
+
+  final _provenance = <String, Object?>{};
+  @override
+  Map<String, Object?> get provenance => Map.unmodifiable(_provenance);
 
   final UciProcess _process;
   final _exited = Completer<EngineExit>();
@@ -262,6 +271,9 @@ final class HivemindProcess implements Hivemind, EngineProcess {
   void _send(String line) => _process.send(line);
 
   void _onLine(String raw) {
+    if (raw.startsWith('id name ')) {
+      _provenance['engine_name'] = raw.substring(8).trim();
+    }
     final line = raw.trim();
     final awaited = _awaited;
     if (awaited != null && line == awaited.token) {
@@ -342,6 +354,7 @@ JointLine? parseHivemindInfo(String line) {
     cp: kind == 'cp' ? value : null,
     mate: kind == 'mate' ? value : null,
     nodes: nodes,
+    depth: number('depth'),
     pv: [
       if (pv >= 0)
         for (final token in tokens.skip(pv + 1)) ?JointMove.parse(token),

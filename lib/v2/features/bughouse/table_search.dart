@@ -33,7 +33,9 @@ final class ScoresNone extends TableScores {
 
 /// The precomputed book has the position: every move scored at once.
 final class ScoresFromBook extends TableScores {
-  const ScoresFromBook(this.scores);
+  const ScoresFromBook(this.scores, {this.provenance = const {}});
+
+  final Map<String, Object?> provenance;
 
   @override
   final ScoreMap scores;
@@ -303,7 +305,11 @@ final class TableSearch extends ChangeNotifier {
         : null;
     _set(
       scores: fromBook != null
-          ? ScoresFromBook(fromBook)
+          ? ScoresFromBook(
+              fromBook,
+              provenance:
+                  (answer as HivemindFound).provenance[clock] ?? const {},
+            )
           : _filled[(key, clock)] ?? const ScoresNone(),
     );
   }
@@ -353,6 +359,14 @@ final class TableSearch extends ChangeNotifier {
       if (found == null) return false;
       own[team] = found;
     }
+    final reported = <String, Object?>{};
+    Map<String, Object?> report(HivemindSearched found) => {
+      'nodes': found.top?.nodes,
+      'depth': found.top?.depth,
+    };
+    for (final team in own.keys) {
+      reported['root_${team.name}'] = report(own[team]!);
+    }
     final offset = _offset(own, clock).offset;
     final order = _moveOrder(position, own);
     final scores = <(BoardNumber, String), ({TableScore score, String pv})>{};
@@ -368,6 +382,7 @@ final class TableSearch extends ChangeNotifier {
       final answers = answering(position, board);
       final found = await _ask(played.after, answers, clock, answer, wanted);
       if (found == null) return false;
+      reported['${board.name}:$uci'] = report(found);
       final top = found.top;
       scores[(board, uci)] = (
         score: top == null
@@ -415,9 +430,24 @@ final class TableSearch extends ChangeNotifier {
       nodes: _depth.ownNodes,
       childNodes: _depth.childNodes,
       took: watch.elapsed,
+      provenance: {
+        ...?_engine?.provenance,
+        'require_move_on': 'none',
+        'root_multipv': 8,
+        'child_multipv': 1,
+        'reported_searches': reported,
+      },
     ));
-    await (pendingWrites?.track(_book, saving, label: 'Analysis book') ??
-        saving);
+    try {
+      await (pendingWrites?.track(_book, saving, label: 'Analysis book') ??
+          saving);
+    } on Object catch (error) {
+      if (wanted()) {
+        _bookProblem = 'Could not save analysis: $error';
+        notifyListeners();
+      }
+      return false;
+    }
     _bookAnswers.remove(position.bookKey);
     return true;
   }

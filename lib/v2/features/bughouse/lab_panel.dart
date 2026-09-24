@@ -34,6 +34,8 @@ class LabPanel extends StatelessWidget {
         children: [
           _TimeChips(lab: lab),
           _EngineBar(search: search),
+          if (search.scores case ScoresFromBook(:final provenance))
+            _SavedAnalysis(provenance: provenance, clock: lab.clock),
           if (search.lines case final LinesOn on)
             EngineLinesBlock(lab: lab, on: on),
           _StatusLine(lab: lab, search: search),
@@ -48,6 +50,82 @@ class LabPanel extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Identity and budgets for the saved numbers, separate from the live lines.
+class _SavedAnalysis extends StatelessWidget {
+  const _SavedAnalysis({required this.provenance, required this.clock});
+  final Map<String, Object?> provenance;
+  final ClockCase clock;
+
+  @override
+  Widget build(BuildContext context) => Align(
+    alignment: Alignment.centerLeft,
+    child: TextButton.icon(
+      icon: const Icon(Icons.info_outline),
+      label: Text(
+        'Saved scores · ${provenance['nodes'] ?? '?'} / ${provenance['child_nodes'] ?? '?'} nodes',
+      ),
+      onPressed: () => showDialog<void>(context: context, builder: _dialog),
+    ),
+  );
+
+  Widget _dialog(BuildContext context) => AlertDialog(
+    title: const Text('Saved analysis'),
+    content: SizedBox(
+      width: labPanelMaxWidth,
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final (label, value) in [
+              (
+                'Engine',
+                provenance['engine_name'] ?? 'Unknown (legacy analysis)',
+              ),
+              ('Position search', '${provenance['nodes'] ?? '?'} nodes'),
+              (
+                'Reply search',
+                '${provenance['child_nodes'] ?? '?'} nodes per move',
+              ),
+              ('Clock', clock.label),
+              ('Completed', provenance['completed_at'] ?? 'Unknown'),
+              ('Engine SHA-256', provenance['engine_sha256'] ?? 'Not recorded'),
+              (
+                'Network SHA-256',
+                provenance['network_sha256'] ?? 'Not recorded',
+              ),
+            ])
+              Padding(
+                padding: const EdgeInsets.only(bottom: Space.s),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    SelectableText('$value'),
+                  ],
+                ),
+              ),
+            if (provenance['budget_note'] case final String note) Text(note),
+            const Text(
+              'Scores are calibrated to 0 = level, on Hivemind’s scale. Previous scores and search details are retained in the local database.',
+            ),
+          ],
+        ),
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Close'),
+      ),
+    ],
+  );
 }
 
 /// The engine's switch and what it is doing, as the engine bar reads in
@@ -169,6 +247,7 @@ class _StatusLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    if (_said.isEmpty) return const SizedBox(height: Space.s);
     return SizedBox(
       height: labStatusHeight,
       child: Align(
@@ -205,7 +284,7 @@ class EngineLinesBlock extends StatelessWidget {
           child: _TeamLines(lab: lab, on: on, team: Team.ab),
         ),
         // The board tables' gutter, so the halves line up with them.
-        const SizedBox(width: Space.m * 2 + 1),
+        const SizedBox(width: Space.s + 1),
         Expanded(
           child: _TeamLines(lab: lab, on: on, team: Team.cd),
         ),
@@ -239,6 +318,7 @@ class _TeamLines extends StatelessWidget {
           height: labTableRowHeight,
           padding: const EdgeInsets.symmetric(horizontal: Space.xs),
           decoration: BoxDecoration(
+            color: scheme.surfaceContainerHighest,
             border: Border(bottom: BorderSide(color: scheme.outline)),
           ),
           child: Row(
@@ -265,18 +345,26 @@ class _TeamLines extends StatelessWidget {
             ],
           ),
         ),
-        for (var i = 0; i < 3; i++)
-          SizedBox(
-            height: labTableRowHeight,
-            child: i < rows.length
-                ? _JointRow(
-                    lab: lab,
-                    position: on.position,
-                    team: team,
-                    move: rows[i].move,
-                    score: rows[i].score.forTeam(team),
-                  )
-                : null,
+        for (var i = 0; i < (rows.isEmpty ? 1 : rows.length); i++)
+          ColoredBox(
+            color: i.isOdd
+                ? scheme.onSurface.withValues(alpha: 0.045)
+                : scheme.surface,
+            child: SizedBox(
+              height: labTableRowHeight,
+              child: i < rows.length
+                  ? _JointRow(
+                      lab: lab,
+                      position: on.position,
+                      team: team,
+                      move: rows[i].move,
+                      score: rows[i].score.forTeam(team),
+                    )
+                  : Text(
+                      hasMove ? 'Thinking…' : 'Waiting for turn',
+                      style: TextStyle(color: scheme.onSurfaceVariant),
+                    ),
+            ),
           ),
       ],
     );

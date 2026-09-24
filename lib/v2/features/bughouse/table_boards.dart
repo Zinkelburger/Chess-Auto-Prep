@@ -6,6 +6,8 @@ import '../../chess/bughouse/table.dart';
 import '../../chess/bughouse/table_line.dart';
 import '../../ui/theme.dart';
 import 'bughouse_lab.dart';
+import 'archive_moves.dart';
+import 'move_tables.dart';
 
 /// Both boards side by side, each with its two players and their
 /// reserves, its own move list and its step buttons.
@@ -15,30 +17,66 @@ import 'bughouse_lab.dart';
 /// A piece moves by click or drag; a reserve piece is dragged onto a square,
 /// or clicked and then its square clicked, the squares it may go to ringed.
 class TableBoards extends StatefulWidget {
-  const TableBoards({super.key, required this.lab, required this.boardSize});
+  const TableBoards({
+    super.key,
+    required this.lab,
+    required this.boardSize,
+    this.archive,
+  });
 
   final BughouseLab lab;
   final double boardSize;
+  final ArchiveMoves? archive;
 
   @override
   State<TableBoards> createState() => _TableBoardsState();
 }
 
 /// A reserve piece picked up by a click, for the next square clicked.
-typedef _Picked = ({BoardNumber board, Role role});
+typedef _Picked = ({BoardNumber board, Side side, Role role});
 
 class _TableBoardsState extends State<TableBoards> {
   _Picked? _picked;
 
   BughouseLab get _lab => widget.lab;
 
+  @override
+  void initState() {
+    super.initState();
+    _lab.addListener(_tableChanged);
+  }
+
+  @override
+  void didUpdateWidget(TableBoards oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.lab != _lab) {
+      oldWidget.lab.removeListener(_tableChanged);
+      _lab.addListener(_tableChanged);
+      _picked = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _lab.removeListener(_tableChanged);
+    super.dispose();
+  }
+
+  void _tableChanged() {
+    if (!mounted || _picked == null || _stillPicked(_lab.position) != null)
+      return;
+    setState(() => _picked = null);
+  }
+
   void _pick(BoardNumber board, Role role) {
-    final picked = (board: board, role: role);
+    if (!mounted) return;
+    final picked = (board: board, side: _lab.position.turn(board), role: role);
     setState(() => _picked = _picked == picked ? null : picked);
   }
 
   void _touched(BoardNumber board, Square square) {
-    final picked = _picked;
+    if (!mounted) return;
+    final picked = _stillPicked(_lab.position);
     if (picked == null) return;
     setState(() => _picked = null);
     if (picked.board == board) {
@@ -47,6 +85,7 @@ class _TableBoardsState extends State<TableBoards> {
   }
 
   void _moved(BoardNumber board, Move move) {
+    if (!mounted) return;
     setState(() => _picked = null);
     _lab.play(board, move.uci);
   }
@@ -58,13 +97,13 @@ class _TableBoardsState extends State<TableBoards> {
     if (picked == null) return null;
     final board = position.board(picked.board);
     final has = board.pockets!.of(board.turn, picked.role) > 0;
-    return has ? picked : null;
+    return has && board.turn == picked.side ? picked : null;
   }
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: _lab,
+      listenable: Listenable.merge([_lab, ?widget.archive]),
       builder: (context, _) {
         final picked = _stillPicked(_lab.position);
         return Row(
@@ -76,6 +115,7 @@ class _TableBoardsState extends State<TableBoards> {
                 lab: _lab,
                 board: board,
                 size: widget.boardSize,
+                archive: widget.archive,
                 picked: picked?.board == board ? picked!.role : null,
                 onPick: (role) => _pick(board, role),
                 onTouched: (square) => _touched(board, square),
@@ -98,9 +138,11 @@ class _BoardColumn extends StatelessWidget {
     required this.onPick,
     required this.onTouched,
     required this.onMove,
+    this.archive,
   });
 
   final BughouseLab lab;
+  final ArchiveMoves? archive;
   final BoardNumber board;
   final double size;
   final Role? picked;
@@ -126,6 +168,10 @@ class _BoardColumn extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            Text(
+              board.label,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
             seat(bottom.opposite),
             ValueListenableBuilder(
               valueListenable: lab.preview,
@@ -142,6 +188,8 @@ class _BoardColumn extends StatelessWidget {
             ),
             seat(bottom),
             BoardMoves(lab: lab, board: board),
+            if (archive case final archive? when archive.available)
+              ArchiveBlock(lab: lab, archive: archive, board: board),
           ],
         ),
       ),
@@ -214,9 +262,9 @@ class _SeatRow extends StatelessWidget {
           _TurnDot(side: side, shown: toMove),
           const SizedBox(width: Space.s),
           SizedBox(
-            width: labSeatLabelWidth,
+            width: Space.l,
             child: Text(
-              'Player ${seat.letter}',
+              seat.letter,
               style: TextStyle(
                 color: toMove ? scheme.onSurface : scheme.onSurfaceVariant,
               ),
@@ -232,17 +280,18 @@ class _SeatRow extends StatelessWidget {
               child: Row(
                 children: [
                   for (final role in reserveRoles)
-                    if (pockets.of(side, role) case final count when count > 0)
-                      _ReservePiece(
+                    Expanded(
+                      child: _ReservePiece(
                         key: ValueKey(('reserve', seat, role)),
                         piece: Piece(color: side, role: role),
-                        count: count,
+                        count: pockets.of(side, role),
                         seat: seat,
                         size: square,
-                        live: toMove,
+                        live: toMove && pockets.of(side, role) > 0,
                         picked: toMove && picked == role,
                         onPick: () => onPick(role),
                       ),
+                    ),
                 ],
               ),
             ),
@@ -313,13 +362,19 @@ class _ReservePiece extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        border: Border.all(color: picked ? scheme.primary : Colors.transparent),
+        color: count > 0 ? BoardTheme.of(context).lightSquare : null,
+        border: Border.all(
+          color: picked ? scheme.primary : Colors.transparent,
+          width: picked ? 2 : 1,
+        ),
         borderRadius: BorderRadius.circular(Space.xs),
       ),
       child: Stack(
         children: [
-          Opacity(opacity: live ? 1 : 0.45, child: image()),
-          if (count > 1)
+          Center(
+            child: Opacity(opacity: count == 0 ? 0.2 : 1, child: image()),
+          ),
+          if (count > 0)
             Positioned(
               right: 0,
               bottom: 0,
@@ -336,20 +391,32 @@ class _ReservePiece extends StatelessWidget {
       ),
     );
     final label = 'Player ${seat.letter}: $count ${piece.role.name} in reserve';
-    if (!live) return Semantics(label: label, child: face);
-    return Semantics(
-      label: label,
-      button: true,
-      child: Draggable<Piece>(
-        data: piece,
-        // Held under the pointer by its middle, as a piece on the board is.
-        dragAnchorStrategy: (draggable, context, position) =>
-            Offset(size / 2, size / 2),
-        feedback: image(),
-        childWhenDragging: Opacity(opacity: 0.3, child: face),
-        child: MouseRegion(
-          cursor: SystemMouseCursors.grab,
-          child: GestureDetector(onTap: onPick, child: face),
+    if (!live) {
+      return Tooltip(
+        message: count == 0
+            ? 'No ${piece.role.name} in reserve'
+            : '$label · waiting for turn',
+        child: Semantics(label: label, child: face),
+      );
+    }
+    return Tooltip(
+      message:
+          '$label · click, then click a highlighted square, or drag onto the board',
+      child: Semantics(
+        label: label,
+        selected: picked,
+        button: true,
+        child: Draggable<Piece>(
+          data: piece,
+          // Held under the pointer by its middle, as a piece on the board is.
+          dragAnchorStrategy: (draggable, context, position) =>
+              Offset(size / 2, size / 2),
+          feedback: image(),
+          childWhenDragging: Opacity(opacity: 0.3, child: face),
+          child: MouseRegion(
+            cursor: SystemMouseCursors.grab,
+            child: InkWell(onTap: onPick, child: face),
+          ),
         ),
       ),
     );

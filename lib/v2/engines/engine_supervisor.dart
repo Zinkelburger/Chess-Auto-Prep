@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
+import 'package:crypto/crypto.dart';
 
 import '../diagnostics/log.dart';
 import 'engine.dart';
@@ -82,7 +83,16 @@ final class EngineSupervisor {
     Duration patience = const Duration(seconds: 90),
   }) async {
     final SpawnedProcess process;
+    final Map<String, Object?> identity;
     try {
+      identity = {
+        'engine_sha256':
+            (await sha256.bind(File(files.executable).openRead()).first)
+                .toString(),
+        'network_sha256':
+            (await sha256.bind(File(files.model).openRead()).first).toString(),
+        'cores': cores,
+      };
       process = await SpawnedProcess.start(
         files.executable,
         // Named from the engine's own folder: on Windows the support folder
@@ -91,15 +101,14 @@ final class EngineSupervisor {
         workingDirectory: files.directory,
         environment: hivemindEnvironment(files.directory, Platform.environment),
       );
-    } on ProcessException catch (e) {
-      log.e('start the bughouse engine', e.message);
-      return HivemindStartFailed(
-        'Could not start the bughouse engine: ${e.message}',
-      );
+    } on Object catch (e) {
+      log.e('start the bughouse engine', '$e');
+      return HivemindStartFailed('Could not start the bughouse engine: $e');
     }
     final engine = await HivemindProcess.start(
       process,
       options: const {'Hash': '256', 'BatchSize': '8'},
+      provenance: identity,
       patience: patience,
     );
     if (engine == null) {

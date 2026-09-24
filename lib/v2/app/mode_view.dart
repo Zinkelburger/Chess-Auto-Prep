@@ -564,6 +564,11 @@ final class BughouseView extends ModeView {
       AppAction('New game', lab.newGame, group: 'Bughouse'),
       AppAction('Flip boards', lab.flip, group: 'Bughouse'),
       AppAction(
+        lab.showMatches ? 'Back to analysis' : 'Matches',
+        lab.toggleMatches,
+        group: 'Bughouse',
+      ),
+      AppAction(
         'Copy dual FEN',
         () => unawaited(
           Clipboard.setData(ClipboardData(text: lab.position.dualFen)),
