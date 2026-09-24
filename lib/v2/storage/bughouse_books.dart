@@ -4,17 +4,22 @@ import 'package:dartchess/dartchess.dart' show Side;
 import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart';
 
+import '../chess/bughouse/hivemind.dart';
 import '../chess/bughouse/table.dart';
 import '../diagnostics/log.dart';
 
-/// The FICS archive the Python tools build under
+/// The two bughouse books the Python tools build under
 /// `~/.local/share/chess-prep/bughouse-db/`, read only and never written:
-/// `bughouse_book.db` (`tools/bughouse_db/index.py`), what 21 years of FICS
-/// games played from a position, with team results.
 ///
-/// It keys a position by [TablePosition.bookKey], so every order of moves
-/// that reaches a table finds it. A machine without it is the usual case:
-/// the lab hides the archive.
+/// - `hivemind_book.db` (`tools/bughouse_db/hivemind_book.py`): every legal
+///   move of a position on both boards, scored by Hivemind for each clock
+///   case, with its principal variation.
+/// - `bughouse_book.db` (`tools/bughouse_db/index.py`): what 21 years of
+///   FICS games played from a position, with team results.
+///
+/// Both key a position by [TablePosition.bookKey], so every order of moves
+/// that reaches a table finds it. A machine without them is the usual case:
+/// the lab searches instead, and hides the archive.
 
 /// Where a book named [fileName] is looked for: `$BUGHOUSE_DB_HOME` alone
 /// when it is set — a test profile must never fall through to the user's
@@ -38,6 +43,122 @@ List<String> bughouseBookPlaces(
     p.join(support, fileName),
   ];
 }
+
+/// A move's scores in the book: per clock case, A + B's score and the line
+/// that follows, seat-lettered (`A e4 · B d5 D d4`).
+typedef BookMoveScores = Map<ClockCase, ({TableScore score, String pv})>;
+
+sealed class HivemindLookup {
+  const HivemindLookup();
+}
+
+/// The book has the position: its moves by board and UCI.
+final class HivemindFound extends HivemindLookup {
+  const HivemindFound(this.moves);
+
+  final Map<(BoardNumber, String), BookMoveScores> moves;
+}
+
+/// The book is there but has not scored this position.
+final class HivemindNotFound extends HivemindLookup {
+  const HivemindNotFound();
+}
+
+/// No book on this machine.
+final class HivemindAbsent extends HivemindLookup {
+  const HivemindAbsent();
+}
+
+final class HivemindUnreadable extends HivemindLookup {
+  const HivemindUnreadable(this.detail);
+
+  final String detail;
+}
+
+/// SQLite is a real boundary: [SqliteHivemindBook] in the app, a scripted
+/// book in tests.
+abstract interface class HivemindBook {
+  Future<HivemindLookup> lookup(TablePosition position);
+}
+
+final class SqliteHivemindBook implements HivemindBook {
+  SqliteHivemindBook(this.places);
+
+  /// Where the file may be, first found wins.
+  final List<String> places;
+  final _file = _ReadOnlyFile();
+
+  @override
+  Future<HivemindLookup> lookup(TablePosition position) async {
+    final db = _file.open(places);
+    switch (db) {
+      case null:
+        return const HivemindAbsent();
+      case _Unopened(:final detail):
+        return HivemindUnreadable(detail);
+      case _Opened(:final db):
+        try {
+          return _read(db, position.bookKey);
+        } on Object catch (error) {
+          // Not a database, or rows not of the builder's shape. Closed, so a
+          // book half-written by a running build is opened afresh next time.
+          log.w('read the Hivemind book at ${_file.path}', error);
+          _file.close();
+          return HivemindUnreadable('$error');
+        }
+    }
+  }
+
+  HivemindLookup _read(Database db, int key) {
+    final status = db.select('SELECT status FROM position WHERE pos = ?', [
+      key,
+    ]);
+    if (status.isEmpty || status.first['status'] != 'done') {
+      return const HivemindNotFound();
+    }
+    final relabel = !_seatsRelabelled(db);
+    final moves = <(BoardNumber, String), BookMoveScores>{};
+    final rows = db.select(
+      'SELECT move, uci, clock, score, mate, pv FROM move WHERE pos = ?',
+      [key],
+    );
+    for (final row in rows) {
+      final clock = _clockNamed(row['clock'] as String);
+      if (clock == null) continue;
+      final board = (row['move'] as String).startsWith('B')
+          ? BoardNumber.two
+          : BoardNumber.one;
+      final pv = row['pv'] as String? ?? '';
+      final scores = moves.putIfAbsent((board, row['uci'] as String), () => {});
+      scores[clock] = (
+        score: TableScore(
+          score: (row['score'] as num?)?.toDouble(),
+          mate: row['mate'] as int?,
+        ),
+        pv: relabel ? _swapBandC(pv) : pv,
+      );
+    }
+    return HivemindFound(moves);
+  }
+
+  /// A book written before the seats were lettered A + B and C + D calls
+  /// board 1's Black `B` and board 2's `C`; the builder records the new
+  /// lettering in `meta` when it rewrites one.
+  bool _seatsRelabelled(Database db) =>
+      db.select("SELECT 1 FROM meta WHERE key = 'seats'").isNotEmpty;
+
+  void close() => _file.close();
+}
+
+ClockCase? _clockNamed(String name) =>
+    ClockCase.values.where((clock) => clock.bookName == name).firstOrNull;
+
+/// Swaps the seat letters of an old book's line. A seat letter is always
+/// followed by a space (`B e5`); the `B` of a bishop drop (`B@c4`) is not.
+String _swapBandC(String text) => text.replaceAllMapped(
+  RegExp(r'\b[BC](?= |$)'),
+  (match) => match[0] == 'B' ? 'C' : 'B',
+);
 
 /// One continuation the archive recorded from a position.
 typedef FicsMove = ({

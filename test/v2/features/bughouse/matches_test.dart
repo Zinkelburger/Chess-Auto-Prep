@@ -13,7 +13,7 @@ import '../../support/scripted_bughouse.dart';
 void main() {
   late BughouseLab lab;
 
-  /// The tables' engine, and the matches' own engine and store.
+  /// The tables' engine and book, and the matches' own engine and store.
   late ScriptedBughouse forTables;
   late ScriptedBughouse forMatches;
   late TableSearch tables;
@@ -33,6 +33,7 @@ void main() {
     forMatches = ScriptedBughouse();
     tables = TableSearch(
       lab: lab,
+      book: forTables.book,
       startEngine: () => forTables.outside.launch(cores: 2),
     );
     matches = matchesOver(() => forMatches.outside.launch(cores: 2));

@@ -54,11 +54,12 @@ typedef AppFolders = ({
 });
 
 /// What the Bughouse lab reaches outside the app: whether this build has
-/// the engine at all, how to start it on so many cores, the FICS archive
-/// the Python tools build, and the matches under `Documents/bughouse_matches`.
+/// the engine at all, how to start it on so many cores, the two books the
+/// Python tools build, and the matches under `Documents/bughouse_matches`.
 typedef BughouseOutside = ({
   Future<bool> Function() bundled,
   Future<HivemindStart> Function({required int cores}) launch,
+  HivemindBook hivemindBook,
   FicsBook ficsBook,
   MatchStore matches,
 });
@@ -129,6 +130,13 @@ final class AppEnvironment {
     final studies = p.join(documents.path, 'studies');
     final collections = p.join(documents.path, 'pgn_collections');
     final dice = Random();
+    final hivemindBook = SqliteHivemindBook(
+      bughouseBookPlaces(
+        'hivemind_book.db',
+        environment: Platform.environment,
+        support: support.path,
+      ),
+    );
     final ficsBook = SqliteFicsBook(
       bughouseBookPlaces(
         'bughouse_book.db',
@@ -188,6 +196,7 @@ final class AppEnvironment {
         bundled: _bughouseBundled,
         launch: ({required cores}) =>
             launchHivemind(support: support, engines: engines, cores: cores),
+        hivemindBook: hivemindBook,
         ficsBook: ficsBook,
         matches: MatchFolder(p.join(documents.path, 'bughouse_matches')),
       ),
@@ -196,6 +205,7 @@ final class AppEnvironment {
         evalCache.close();
         finds.close();
         book.close();
+        hivemindBook.close();
         ficsBook.close();
         maia.dispose();
         client.close();
@@ -269,7 +279,7 @@ final class AppEnvironment {
   /// Puts the window in or out of full screen.
   final Future<void> Function(bool on) setFullScreen;
 
-  /// The Bughouse lab's engine, FICS archive and matches.
+  /// The Bughouse lab's engine and books.
   final BughouseOutside bughouse;
 
   /// The clock the tactics set and the trainer schedule by.

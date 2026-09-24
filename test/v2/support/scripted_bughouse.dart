@@ -90,6 +90,18 @@ HivemindAnswer firstMoves(HivemindQuestion question) {
   return HivemindSearched(best: lines.firstOrNull?.pv.first, lines: lines);
 }
 
+/// The precomputed book, from a map of positions by key.
+final class ScriptedHivemindBook implements HivemindBook {
+  final positions = <int, HivemindLookup>{};
+  int lookups = 0;
+
+  @override
+  Future<HivemindLookup> lookup(TablePosition position) async {
+    lookups++;
+    return positions[position.bookKey] ?? const HivemindNotFound();
+  }
+}
+
 /// The FICS archive, from a map of positions by key; none by default.
 final class ScriptedFicsBook implements FicsBook {
   bool present = false;
@@ -149,11 +161,12 @@ final class ScriptedMatchStore implements MatchStore {
 }
 
 /// The lab's outside world for a window test: the engine bundled, one
-/// scripted engine and an archive the test fills.
+/// scripted engine, a book and an archive the test fills.
 final class ScriptedBughouse {
   /// The engine the last start handed out; a start after it went away
   /// hands out a new one that answers the same way.
   ScriptedHivemind engine = ScriptedHivemind();
+  final book = ScriptedHivemindBook();
   final archive = ScriptedFicsBook();
   final matches = ScriptedMatchStore();
   bool bundled = true;
@@ -171,6 +184,7 @@ final class ScriptedBughouse {
       }
       return HivemindStarted(engine);
     },
+    hivemindBook: book,
     ficsBook: archive,
     matches: matches,
   );

@@ -1,4 +1,6 @@
+import 'package:chess_auto_prep/v2/chess/bughouse/hivemind.dart';
 import 'package:chess_auto_prep/v2/chess/bughouse/table.dart';
+import 'package:chess_auto_prep/v2/storage/bughouse_books.dart';
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart' show Role, Side, Square;
 import 'package:flutter/gestures.dart';
@@ -9,11 +11,28 @@ import 'package:flutter_test/flutter_test.dart';
 import '../support/window_fixture.dart';
 
 /// The Bughouse lab in the window: two boards, the chips and each board's
-/// scored moves, over a scripted engine and archive.
+/// scored moves, over a scripted engine, book and archive.
 void main() {
   late WindowFixture w;
   setUp(() => w = WindowFixture());
   tearDown(() => w.dispose());
+
+  /// The start in the book: e4 and d4 on board 1, e4 on board 2, for
+  /// `even`; e4 on board 1 also for `ahead`.
+  void startInBook() =>
+      w.bughouse.book.positions[TablePosition.initial.bookKey] =
+          const HivemindFound({
+            (BoardNumber.one, 'e2e4'): {
+              ClockCase.even: (score: TableScore(score: 0.21), pv: 'A e4'),
+              ClockCase.abMaySit: (score: TableScore(score: 2.47), pv: 'A e4'),
+            },
+            (BoardNumber.one, 'd2d4'): {
+              ClockCase.even: (score: TableScore(score: 0.13), pv: 'A d4'),
+            },
+            (BoardNumber.two, 'e2e4'): {
+              ClockCase.even: (score: TableScore(score: -0.40), pv: 'D e4'),
+            },
+          });
 
   Future<void> toLab(WidgetTester tester) async {
     await w.pumpShell(tester);
@@ -41,24 +60,40 @@ void main() {
     },
   );
 
-  testWidgets('the tables are scored live by the engine; the Time chips '
-      'search the other clock', (tester) async {
+  testWidgets('a position in the book is scored at once; the Time chips '
+      'switch the clock', (tester) async {
+    startInBook();
     await toLab(tester);
     expect(find.text('Player A'), findsOneWidget);
     expect(find.text('Player D'), findsOneWidget);
     expect(find.text('Move: Player A'), findsOneWidget);
     expect(find.text('Move: Player D'), findsOneWidget);
-    expect(find.text('Hivemind scored the likeliest moves.'), findsOneWidget);
-    expect(w.bughouse.engine.asked, isNotEmpty);
-    expect(w.bughouse.engine.asked.any((q) => q.maySit), isFalse);
+    expect(find.text('From the Hivemind book.'), findsOneWidget);
+    expect(find.text('+0.21'), findsOneWidget);
+    // Board 2's mover is D, of C + D: A + B's −0.40 reads +0.40 for D.
+    expect(find.text('+0.40'), findsOneWidget);
     await tester.tap(find.text('A + B may sit'));
     await tester.pumpAndSettle();
-    expect(w.bughouse.engine.asked.any((q) => q.maySit), isTrue);
+    expect(find.text('+2.47'), findsOneWidget);
+    expect(find.text('+0.21'), findsNothing);
+    expect(w.bughouse.starts, 0);
+  });
+
+  testWidgets('a position the book lacks is searched by the engine', (
+    tester,
+  ) async {
+    await toLab(tester);
+    expect(
+      find.text('Not in the book · Hivemind scored the likeliest moves.'),
+      findsOneWidget,
+    );
+    expect(w.bughouse.engine.asked, isNotEmpty);
   });
 
   testWidgets('a table row plays its move; a reserve piece drops on a square', (
     tester,
   ) async {
+    startInBook();
     await toLab(tester);
     await tester.tap(row(BoardNumber.one, 'e4'));
     await tester.pumpAndSettle();
@@ -101,6 +136,7 @@ void main() {
   testWidgets(
     'pointing at a row draws it on its board; leaving takes it away',
     (tester) async {
+      startInBook();
       await toLab(tester);
       final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
       await mouse.addPointer(location: Offset.zero);
@@ -117,6 +153,7 @@ void main() {
   testWidgets('the engine switch shows both teams’ lines; a line plays', (
     tester,
   ) async {
+    startInBook();
     await toLab(tester);
     await tester.tap(find.byTooltip('Toggle engine (E)'));
     await tester.pumpAndSettle();
@@ -161,6 +198,7 @@ void main() {
         ),
       ],
     );
+    startInBook();
     await toLab(tester);
     expect(find.textContaining('FICS archive · 1200 games'), findsNWidgets(2));
     expect(find.text('D d4'), findsOneWidget);
@@ -174,6 +212,7 @@ void main() {
   testWidgets('a match is asked for, played, and its games opened', (
     tester,
   ) async {
+    startInBook();
     await toLab(tester);
     await tester.tap(find.text('Matches'));
     await tester.pumpAndSettle();
@@ -230,6 +269,7 @@ void main() {
   testWidgets('a setup box keeps the arrow keys while it is typed in', (
     tester,
   ) async {
+    startInBook();
     await toLab(tester);
     await tester.tap(row(BoardNumber.one, 'e4'));
     await tester.pumpAndSettle();
@@ -241,6 +281,7 @@ void main() {
   });
 
   testWidgets('the arrow keys step the board last played on', (tester) async {
+    startInBook();
     await toLab(tester);
     await tester.tap(row(BoardNumber.one, 'e4'));
     await tester.pumpAndSettle();

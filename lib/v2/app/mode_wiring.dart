@@ -161,10 +161,14 @@ final class TrainingWiring {
   }
 }
 
-/// The Bughouse lab over the environment's engine and FICS archive.
+/// The Bughouse lab over the environment's engine and books.
 LabModes wireLabModes(AppEnvironment env) {
   final lab = BughouseLab();
-  final search = TableSearch(lab: lab, startEngine: env.startHivemind);
+  final search = TableSearch(
+    lab: lab,
+    book: env.bughouse.hivemindBook,
+    startEngine: env.startHivemind,
+  );
   return LabModes(
     lab: lab,
     search: search,

@@ -5,9 +5,22 @@ import 'package:chess_auto_prep/v2/chess/bughouse/table.dart';
 import 'package:chess_auto_prep/v2/engines/hivemind_engine.dart';
 import 'package:chess_auto_prep/v2/features/bughouse/bughouse_lab.dart';
 import 'package:chess_auto_prep/v2/features/bughouse/table_search.dart';
+import 'package:chess_auto_prep/v2/storage/bughouse_books.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/scripted_bughouse.dart';
+
+/// The book's answer for the start: e4 and d4 on board 1 scored for
+/// `even` and `ahead`, A + B's side.
+HivemindFound startInBook() => const HivemindFound({
+  (BoardNumber.one, 'e2e4'): {
+    ClockCase.even: (score: TableScore(score: 0.20), pv: 'A e4 · C e5'),
+    ClockCase.abMaySit: (score: TableScore(score: 2.40), pv: 'A e4 · sit'),
+  },
+  (BoardNumber.one, 'd2d4'): {
+    ClockCase.even: (score: TableScore(score: 0.30), pv: 'A d4 · C d5'),
+  },
+});
 
 void main() {
   late BughouseLab lab;
@@ -19,6 +32,7 @@ void main() {
     outside = ScriptedBughouse();
     search = TableSearch(
       lab: lab,
+      book: outside.book,
       startEngine: () => outside.outside.launch(cores: 2),
       depth: (ownNodes: 50, childNodes: 20, topMoves: 2),
       passes: const [Duration(seconds: 1), Duration(seconds: 2)],
@@ -30,7 +44,39 @@ void main() {
     lab.dispose();
   });
 
-  test('the tables are scored by the engine', () async {
+  test(
+    'a position in the book is scored at once, and nothing is searched',
+    () async {
+      outside.book.positions[TablePosition.initial.bookKey] = startInBook();
+      search.open();
+      await pumpEventQueue();
+      expect(search.scores, isA<ScoresFromBook>());
+      final rows = tableRows(
+        lab.position,
+        BoardNumber.one,
+        search.scores.scores,
+      );
+      // Board 1 is A's (A + B), so the book's numbers read as they are.
+      expect(rows.first.move.san, 'd4');
+      expect(rows.first.score.text, '+0.30');
+      expect(rows[1].move.san, 'e4');
+      expect(rows[2].score.text, '—');
+      expect(outside.starts, 0);
+    },
+  );
+
+  test('the Time chip reads the book’s other clock without a search', () async {
+    outside.book.positions[TablePosition.initial.bookKey] = startInBook();
+    search.open();
+    await pumpEventQueue();
+    lab.setClock(ClockCase.abMaySit);
+    await pumpEventQueue();
+    final rows = tableRows(lab.position, BoardNumber.one, search.scores.scores);
+    expect(rows.first.score.text, '+2.40');
+    expect(outside.starts, 0);
+  });
+
+  test('a position the book lacks is scored by the engine', () async {
     search.open();
     await pumpEventQueue();
     final scores = search.scores as ScoresSearched;
@@ -47,7 +93,8 @@ void main() {
     expect(two.first.pv, startsWith('D '));
   });
 
-  test('a clock case is searched with its team’s bit', () async {
+  test('a clock the book lacks is searched, not shown empty', () async {
+    outside.book.positions[TablePosition.initial.bookKey] = startInBook();
     lab.setClock(ClockCase.cdMaySit);
     search.open();
     await pumpEventQueue();
@@ -236,8 +283,11 @@ void main() {
     'an engine that finishes starting after the lab is gone is quit',
     () async {
       final starting = Completer<HivemindStart>();
-      final late = TableSearch(lab: lab, startEngine: () => starting.future)
-        ..open();
+      final late = TableSearch(
+        lab: lab,
+        book: outside.book,
+        startEngine: () => starting.future,
+      )..open();
       await pumpEventQueue();
       late.dispose();
       final engine = ScriptedHivemind();
