@@ -7,6 +7,8 @@ import '../chess/pgn/chapter_heading.dart';
 import '../chess/pgn/chapter_sections.dart';
 import '../diagnostics/log.dart';
 import 'document_ref.dart';
+import 'recovery_gate.dart';
+import 'relocation_notes.dart';
 import 'pgn_document_store.dart' as store;
 import 'document_relocation.dart' show recoveryFolder;
 
@@ -171,8 +173,14 @@ const stagingPrefix = '.import-';
 /// One folder per repertoire, one `.pgn` per chapter, plus index files and
 /// sidecars the app ignores.
 final class ChapterDirectory implements ChapterFiles {
-  ChapterDirectory(this.root, {store.PgnDocumentStore? documents})
-    : _documents = documents;
+  ChapterDirectory(
+    this.root, {
+    required RecoveryGate recovery,
+    store.PgnDocumentStore? documents,
+  }) : _recovery = recovery,
+       _documents = documents;
+
+  final RecoveryGate _recovery;
 
   final store.PgnDocumentStore? _documents;
 
@@ -187,26 +195,43 @@ final class ChapterDirectory implements ChapterFiles {
 
   @override
   Future<RepertoireListing> list() async {
-    if (!await root.exists()) return const Repertoires([]);
-    final skipped = <UnreadableFolder>[];
     try {
+      // Migration calls the public store between scans, never while holding
+      // its non-reentrant recovery domain. Both scans observe a settled tree.
       await _migrateFlat();
-      final folders = await _scan(skipped);
-      folders.sort(_byName);
-      return Repertoires(
-        List.unmodifiable(folders),
-        unreadable: List.unmodifiable(skipped),
-      );
-    } on FileSystemException catch (e) {
-      return RepertoiresUnreadable(_detail(e));
+      return await _recovery.run(() async {
+        if (!await root.exists()) return const Repertoires([]);
+        final skipped = <UnreadableFolder>[];
+        final folders = await _scan(skipped);
+        folders.sort(_byName);
+        return Repertoires(
+          List.unmodifiable(folders),
+          unreadable: List.unmodifiable(skipped),
+        );
+      });
+    } on RecoveryRequired catch (error) {
+      return RepertoiresUnreadable(error.detail);
+    } on FileSystemException catch (error) {
+      return RepertoiresUnreadable(_detail(error));
     }
   }
 
   @override
-  Future<DeletedListing> deleted() => listDeleted(root);
+  Future<DeletedListing> deleted() async {
+    try {
+      return await _recovery.run(() => listDeleted(root));
+    } on RecoveryRequired catch (error) {
+      return DeletedUnreadable(error.detail);
+    } on FileSystemException catch (error) {
+      return DeletedUnreadable(_detail(error));
+    }
+  }
 
   @override
-  Future<void> removeIfEmpty(String folder) async {
+  Future<void> removeIfEmpty(String folder) =>
+      _cleanup(folder, () => _removeIfEmpty(folder));
+
+  Future<void> _removeIfEmpty(String folder) async {
     final directory = Directory(folder);
     try {
       if (await directory.list().isEmpty) await directory.delete();
@@ -216,7 +241,22 @@ final class ChapterDirectory implements ChapterFiles {
   }
 
   @override
-  Future<void> removeStaging(String folder) async {
+  Future<void> removeStaging(String folder) =>
+      _cleanup(folder, () => _removeStaging(folder));
+
+  // Cleanup is optional. Preserve the directory when recovery is blocked,
+  // without replacing the command's original typed failure with an exception.
+  Future<void> _cleanup(String folder, Future<void> Function() action) async {
+    try {
+      await _recovery.run(action);
+    } on RecoveryRequired catch (error) {
+      log.w('clean up $folder', error);
+    } on FileSystemException catch (error) {
+      log.w('clean up $folder', error);
+    }
+  }
+
+  Future<void> _removeStaging(String folder) async {
     if (!p.equals(p.dirname(folder), root.path) ||
         !p.basename(folder).startsWith(stagingPrefix)) {
       log.w('remove the staging folder $folder', 'it is not a staging folder');
@@ -233,7 +273,12 @@ final class ChapterDirectory implements ChapterFiles {
   Future<void> _migrateFlat() async {
     final documents = _documents;
     if (documents == null) return;
-    await for (final entry in root.list(followLinks: false)) {
+    final entries = await _recovery.run(
+      () async => await root.exists()
+          ? await root.list(followLinks: false).toList()
+          : <FileSystemEntity>[],
+    );
+    for (final entry in entries) {
       if (entry is! File ||
           p.basename(entry.path).startsWith('.') ||
           !_isChapter(entry.path))

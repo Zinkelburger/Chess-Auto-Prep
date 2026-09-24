@@ -63,7 +63,7 @@ class IOStorageService implements StorageService {
         testHook: repertoirePublicationHook,
       );
   Future<T> _guardLibrary<T>(Future<T> Function() action) async =>
-      (await _moves()).guard(action);
+      Platform.isLinux ? (await _moves()).guard(action) : action();
 
   Future<RepertoireCreationResult> publishRepertoire(
     CreateRepertoire request, {
@@ -110,24 +110,83 @@ class IOStorageService implements StorageService {
           books: repertoireBooks,
         ).repoint,
         testHook: repertoireMoveHook,
+        foreignRecoveryNotes: Directory(
+          p.join((await _supportRoot()).path, 'unfinished-moves'),
+        ),
         recoverAdditional: () async => (await _publications()).recover(),
       );
 
-  /// Shared by the native document store and transitional storage writers.
-  /// Only managed repertoire paths participate in the directory domain lock.
+  /// Shared by document access and training files. The domain remains held
+  /// through the complete operation, so reads cannot see a partially moved set.
   Future<T> guardDocumentOperation<T>(
     String path,
     Future<T> Function() action,
   ) async {
-    if (Platform.isLinux) {
-      final root = await _repertoiresRoot(create: false);
-      if (_isInside(root, path) ||
-          (await root.exists() &&
-              _isInside(Directory(await root.resolveSymbolicLinks()), path))) {
-        return (await _moves()).guard(action);
-      }
+    if (Platform.isLinux && await _needsRecoveryGuard(path)) {
+      return (await _moves()).guard(action);
     }
     return action();
+  }
+
+  Future<bool> _needsRecoveryGuard(String path) async {
+    // v2 relocation notes can name studies and tactics as well as repertoires.
+    // Conservatively guard all supported file operations inside Documents;
+    // unrelated external files and Support bookkeeping keep their own scopes.
+    final roots = [
+      await _documentsRoot(),
+      await _repertoiresRoot(create: false),
+    ];
+    for (final root in roots) {
+      if (_contains(root.path, path)) return true;
+    }
+    // An external spelling can reach managed data through any existing
+    // ancestor, including when create's final directories do not exist yet.
+    // Keep the raw spelling too: `alias/..` follows the link's physical parent
+    // in generic IO, while the native document adapter normalizes it first.
+    final absolute = p.absolute(path);
+    final normalized = p.normalize(absolute);
+    final candidates = {
+      await _recoveryMembershipPath(absolute),
+      if (normalized != absolute) await _recoveryMembershipPath(normalized),
+    };
+    for (final root in roots) {
+      final canonical = await _recoveryMembershipPath(p.absolute(root.path));
+      if (candidates.any((candidate) => _contains(canonical, candidate))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Resolve the closest existing ancestor, retaining the missing suffix.
+  /// This is only used by the Linux guard. ENOENT permits walking upwards;
+  /// denied access, dangling links and other failures cannot prove that a
+  /// candidate is unrelated, so they stop the operation before its action.
+  static Future<String> _recoveryMembershipPath(String path) async {
+    var ancestor = path;
+    final missing = <String>[];
+    while (true) {
+      try {
+        final resolved = await File(ancestor).resolveSymbolicLinks();
+        return p.normalize(p.joinAll([resolved, ...missing.reversed]));
+      } on FileSystemException catch (error) {
+        if (error.osError?.errorCode != 2 ||
+            await FileSystemEntity.type(ancestor, followLinks: false) !=
+                FileSystemEntityType.notFound) {
+          rethrow;
+        }
+        final parent = p.dirname(ancestor);
+        if (parent == ancestor) rethrow;
+        missing.add(p.basename(ancestor));
+        ancestor = parent;
+      }
+    }
+  }
+
+  static bool _contains(String root, String path) {
+    final base = p.normalize(p.absolute(root));
+    final candidate = p.normalize(p.absolute(path));
+    return p.equals(base, candidate) || p.isWithin(base, candidate);
   }
 
   final Directory? _documentsRootOverride;
@@ -352,8 +411,12 @@ class IOStorageService implements StorageService {
 
   @override
   Future<({int size, DateTime modified})?> fileStat(String path) async {
+    final file = await _resolveFile(path);
+    return guardDocumentOperation(file.path, () => _fileStat(file));
+  }
+
+  Future<({int size, DateTime modified})?> _fileStat(File file) async {
     try {
-      final file = await _resolveFile(path);
       final stat = await file.stat();
       if (stat.type == FileSystemEntityType.notFound) return null;
       return (size: stat.size, modified: stat.modified);
@@ -367,14 +430,29 @@ class IOStorageService implements StorageService {
   Future<void> renameFile(String oldPath, String newPath) async {
     final source = await _resolveFile(oldPath);
     final destination = await _resolveFile(newPath);
+    // Even an external PGN can have attempts in Documents. Its namespace
+    // change and the managed reference rewrite share the recovery domain.
+    await _guardLibrary(() => _renameResolvedFile(source, destination));
+  }
+
+  /// The caller already owns the domain, including for external paths. These
+  /// helpers acquire only namespace/file locks, never the public storage guard.
+  Future<void> _renameResolvedFile(File source, File destination) async {
     await _mutations.moveFileNoReplace(
       source,
       destination,
       allowedRoot: await _rootForMove(source.path, destination.path),
     );
-    await MoveAttemptStore(
-      this,
-    ).repoint(from: source.path, to: destination.path);
+    final attempts = await _getFile(MoveAttemptStore.fileName);
+    if (await readTextFileSafely(attempts) == null) return;
+    await updateTextFileAtomically(
+      attempts,
+      (raw) => MoveAttemptStore.repointText(
+        raw,
+        from: source.path,
+        to: destination.path,
+      ),
+    );
   }
 
   @override
@@ -383,10 +461,11 @@ class IOStorageService implements StorageService {
   // ── Repertoire file management ────────────────────────────────────────────
 
   @override
-  Future<List<RepertoireMetadata>> listRepertoireFiles() async =>
-      _describeFiles(
-        await _pgnFiles(await _repertoiresRoot(), accept: _isChapterFile),
-      );
+  Future<List<RepertoireMetadata>> listRepertoireFiles() async => _guardLibrary(
+    () async => _describeFiles(
+      await _pgnFiles(await _repertoiresRoot(), accept: _isChapterFile),
+    ),
+  );
 
   @override
   Future<String> repertoireFilePath(String name) async {
@@ -416,9 +495,11 @@ class IOStorageService implements StorageService {
   }
 
   @override
-  Future<List<RepertoireMetadata>> listRepertoires() async {
+  Future<List<RepertoireMetadata>> listRepertoires() =>
+      _guardLibrary(_listRepertoires);
+
+  Future<List<RepertoireMetadata>> _listRepertoires() async {
     final dir = await _repertoiresRoot();
-    if (Platform.isLinux) await (await _moves()).recover();
     await _migrateFlatRepertoires(dir);
 
     final folders = <Directory>[
@@ -457,9 +538,11 @@ class IOStorageService implements StorageService {
   Future<List<RepertoireMetadata>> listChapters(
     String repertoireDirPath,
   ) async {
-    final dir = Directory(repertoireDirPath);
-    if (!await dir.exists()) return [];
-    return _describeFilesByName(await _pgnFiles(dir, accept: _isChapterFile));
+    return guardDocumentOperation(repertoireDirPath, () async {
+      final dir = Directory(repertoireDirPath);
+      if (!await dir.exists()) return [];
+      return _describeFilesByName(await _pgnFiles(dir, accept: _isChapterFile));
+    });
   }
 
   @override
@@ -525,7 +608,10 @@ class IOStorageService implements StorageService {
   }
 
   @override
-  Future<List<String>> listSubdirectories(String dirPath) async {
+  Future<List<String>> listSubdirectories(String dirPath) =>
+      guardDocumentOperation(dirPath, () => _listSubdirectories(dirPath));
+
+  Future<List<String>> _listSubdirectories(String dirPath) async {
     final dir = Directory(dirPath);
     if (!await dir.exists()) return [];
     final out = <String>[
@@ -573,8 +659,9 @@ class IOStorageService implements StorageService {
   // ── Study file management ────────────────────────────────────────────────
 
   @override
-  Future<List<RepertoireMetadata>> listStudyFiles() async =>
-      _describeFilesByName(await _pgnFiles(await _studiesRoot()));
+  Future<List<RepertoireMetadata>> listStudyFiles() => _guardLibrary(
+    () async => _describeFilesByName(await _pgnFiles(await _studiesRoot())),
+  );
 
   @override
   Future<String> studyFilePath(String name) async {
@@ -585,7 +672,10 @@ class IOStorageService implements StorageService {
   // ── Tactics set management ───────────────────────────────────────────────
 
   @override
-  Future<List<TacticsSetMetadata>> listTacticsSets() async {
+  Future<List<TacticsSetMetadata>> listTacticsSets() =>
+      _guardLibrary(_listTacticsSets);
+
+  Future<List<TacticsSetMetadata>> _listTacticsSets() async {
     final sets = await _describeFilesByName(
       await _pgnFiles(await _tacticsSetsRoot()),
     );
@@ -612,7 +702,10 @@ class IOStorageService implements StorageService {
   }
 
   @override
-  Future<List<({String name, String path})>> listLegacyTacticsCsvSets() async {
+  Future<List<({String name, String path})>> listLegacyTacticsCsvSets() =>
+      _guardLibrary(_listLegacyTacticsCsvSets);
+
+  Future<List<({String name, String path})>> _listLegacyTacticsCsvSets() async {
     final dir = await _tacticsSetsRoot();
     return [
       await for (final entity in dir.list())
@@ -622,10 +715,13 @@ class IOStorageService implements StorageService {
   }
 
   @override
-  Future<bool> migrateLegacyTacticsCsv(String defaultSetName) async {
+  Future<bool> migrateLegacyTacticsCsv(String defaultSetName) =>
+      _guardLibrary(() => _migrateLegacyTacticsCsv(defaultSetName));
+
+  Future<bool> _migrateLegacyTacticsCsv(String defaultSetName) async {
     try {
-      if ((await listTacticsSets()).isNotEmpty) return false;
-      if ((await listLegacyTacticsCsvSets()).isNotEmpty) return false;
+      if ((await _listTacticsSets()).isNotEmpty) return false;
+      if ((await _listLegacyTacticsCsvSets()).isNotEmpty) return false;
 
       final legacyFile = await _getFile(_tacticsCsvFileName);
       if (!await legacyFile.exists()) return false;
@@ -635,8 +731,8 @@ class IOStorageService implements StorageService {
 
       // Land it as a .csv set; the database's CSV→PGN migration converts it.
       final dir = await _tacticsSetsRoot();
-      await writeFile(
-        p.join(dir.path, '$defaultSetName.csv'),
+      await writeTextFileAtomically(
+        File(p.join(dir.path, '$defaultSetName.csv')),
         content,
         createOnly: true,
       );

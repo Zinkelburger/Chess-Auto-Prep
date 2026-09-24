@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import '../diagnostics/log.dart';
 import 'atomic_write.dart';
 import 'file_lock.dart';
+import 'recovery_gate.dart';
 
 /// Where a file the user browsed to is opened from.
 ///
@@ -44,7 +45,13 @@ final class ImportFailed extends ImportResult {
 }
 
 final class NativePgnFileImport implements PgnFileImport {
-  const NativePgnFileImport({required this.documents, required this.into});
+  const NativePgnFileImport({
+    required this.documents,
+    required this.into,
+    required RecoveryGate recovery,
+  }) : _recovery = recovery;
+
+  final RecoveryGate _recovery;
 
   /// The user's Documents folder, absolute.
   final String documents;
@@ -54,6 +61,15 @@ final class NativePgnFileImport implements PgnFileImport {
 
   @override
   Future<ImportResult> insideDocuments(String path) async {
+    try {
+      return await _recovery.run(() => _insideDocuments(path));
+    } on Object catch (error) {
+      log.e('copy $path into $into', error);
+      return ImportFailed('$error');
+    }
+  }
+
+  Future<ImportResult> _insideDocuments(String path) async {
     if (p.isWithin(documents, path) || p.equals(documents, path)) {
       return FileToOpen(path, copied: false);
     }

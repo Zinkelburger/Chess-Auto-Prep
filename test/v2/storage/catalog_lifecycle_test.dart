@@ -101,7 +101,11 @@ void main() {
       final nested = disk.ref('repertoires/KID/Week 1/Main.pgn');
       final revision = await disk.put(nested, '[Event "Nested"]\n\n1. d4 *\n');
       await disk.edit(nested, '[Event "Nested"]\n\n1. d4 d5 *\n', revision);
-      final files = ChapterDirectory(root, documents: disk.store);
+      final files = ChapterDirectory(
+        root,
+        documents: disk.store,
+        recovery: disk.store.recovery,
+      );
       final listing = await files.list() as Repertoires;
       expect(listing.folders.map((f) => f.name), ['KID', 'Legacy']);
       expect(listing.folders.first.chapters.single.repertoire, 'KID');

@@ -60,9 +60,9 @@ Future<T> lockedForRelocation<T>(
   Future<T> Function() action,
   T Function(String detail) failed,
 ) {
-  final root = p.normalize(p.absolute(documents.path));
+  final root = _lockPath(documents);
   final ordered = <String>{
-    for (final folder in folders) p.normalize(p.absolute(folder.path)),
+    for (final folder in folders) _lockPath(folder),
   }.where((folder) => folder != root).toList()..sort();
   return lockedForDocument(
     documents,
@@ -71,6 +71,14 @@ Future<T> lockedForRelocation<T>(
     failed,
   );
 }
+
+// Match file_lock.dart's identity before deduplicating: two spellings of
+// Documents must not recursively acquire the same SQLite transaction.
+String _lockPath(Directory directory) => p.normalize(
+  directory.existsSync()
+      ? directory.resolveSymbolicLinksSync()
+      : p.absolute(directory.path),
+);
 
 Future<T> _nested<T>(
   List<String> folders,

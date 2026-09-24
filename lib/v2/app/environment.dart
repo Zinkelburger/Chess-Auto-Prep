@@ -166,12 +166,17 @@ final class AppEnvironment {
       chapterFiles: ChapterDirectory(
         Directory(repertoires),
         documents: documentsStore,
+        recovery: documentsStore.recovery,
       ),
-      studyFiles: StudyDirectory(Directory(studies)),
+      studyFiles: StudyDirectory(
+        Directory(studies),
+        recovery: documentsStore.recovery,
+      ),
       libraryPicker: const NativePgnFilePicker(),
       viewerPicker: const NativePgnFilePicker(),
       recentFiles: PreferencesRecentFiles(),
       fileImport: NativePgnFileImport(
+        recovery: documentsStore.recovery,
         documents: documents.path,
         into: collections,
       ),
@@ -187,7 +192,7 @@ final class AppEnvironment {
         ChesscomGamesApi(client),
       ],
       accounts: PreferencesAccounts(),
-      progressFiles: TrainingStore(documents),
+      progressFiles: TrainingStore(documents, support: support),
       olderAnalyzed: () => readOlderAnalyzed(documents),
       maia: maia,
       launchEngine: ({required cores, required memoryMb}) => launchStockfish(

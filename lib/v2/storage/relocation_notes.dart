@@ -6,8 +6,8 @@
 /// streaks and answers for that chapter would look like another chapter's.
 ///
 /// So a note is written down before the rename and taken away after the rows
-/// are rewritten, and whichever relocation comes next finishes the notes it
-/// finds before starting its own. One file per move, because two moves can be
+/// are rewritten, and the next guarded access finishes the notes it finds
+/// before reading or changing this domain. One file per move, because moves can be
 /// owed at once and neither may write over the other's note.
 ///
 /// A note carries the native identity of the thing being moved, not just the
@@ -28,7 +28,6 @@ import 'dart:math';
 import 'package:document_file_io/document_file_io.dart';
 import 'package:path/path.dart' as p;
 
-import '../diagnostics/log.dart';
 import 'atomic_write.dart';
 import 'document_ref.dart';
 import 'training_records.dart';
@@ -38,7 +37,7 @@ import 'training_records.dart';
 /// One owner for the pair, so the note and the rewrite cannot drift apart:
 /// the caller mints a name for the move, records the note before the rename,
 /// and asks for the rewrite afterwards; the note goes away only once the rows
-/// owe nothing. [finishOwed] is what the next relocation calls to make good
+/// owe nothing. [finishOwed] is what the access guard calls to make good
 /// on the notes an earlier one left.
 final class RelocationNotes {
   const RelocationNotes({
@@ -102,12 +101,15 @@ final class RelocationNotes {
           DocumentRef(move.to),
         );
         if (!_settled(result)) {
-          log.w('finish the training rows left behind by moving ${move.from}');
+          throw RecoveryRequired(
+            'Training rows for ${move.from} could not be recovered: '
+            '${_repointProblem(result)}',
+          );
         }
       case MoveNeverHappened():
         await _notes.discard(move.id);
       case MoveUnclear(:final detail):
-        log.e('finish the move of ${move.from}', detail);
+        throw RecoveryRequired(detail);
     }
   }
 }
@@ -115,6 +117,12 @@ final class RelocationNotes {
 /// Whether the training rows still owe this move anything.
 bool _settled(RepointResult result) =>
     result is Repointed || result is NothingToRepoint;
+
+String _repointProblem(RepointResult result) => switch (result) {
+  Malformed(:final file, :final line) => '$file at line $line',
+  IoFailure(:final detail) => detail,
+  _ => 'repoint was not confirmed',
+};
 
 /// A move that has happened, or was about to, and whose training rows may not
 /// have been rewritten yet.
@@ -156,10 +164,11 @@ String newMoveNote() =>
     '${Random.secure().nextInt(1 << 32).toRadixString(16)}';
 
 final class PendingRepoints {
-  const PendingRepoints(this.support);
+  const PendingRepoints(this.support, {required this.documents});
 
   /// The Support folder itself; the notes are one folder inside it.
   final Directory support;
+  final Directory documents;
 
   Directory get _folder => Directory(p.join(support.path, _folderName));
 
@@ -172,8 +181,7 @@ final class PendingRepoints {
     required String to,
     required String identity,
     required bool folder,
-  }) async {
-    await _folder.create(recursive: true);
+  }) => _checked('Record relocation $id', () async {
     final move = UnfinishedMove(
       id: id,
       from: from,
@@ -181,101 +189,195 @@ final class PendingRepoints {
       identity: identity,
       folder: folder,
     );
-    await replaceFile(_pathOf(id), utf8.encode(jsonEncode(move.toJson())));
-  }
+    await _validate(move);
+    await _checkFolder(create: true);
+    final path = _pathOf(id);
+    if (await _type(path) != FileSystemEntityType.notFound ||
+        await _type(temporaryPathFor(path)) != FileSystemEntityType.notFound) {
+      throw RecoveryRequired('Relocation metadata already exists for $id.');
+    }
+    await createFileExclusively(path, utf8.encode(jsonEncode(move.toJson())));
+  });
 
   /// Takes away the one note [id] names, the rows it describes now naming
   /// what they should. A note that is not there is nothing to take away.
-  Future<void> discard(String id) async {
-    try {
-      final file = File(_pathOf(id));
-      if (await file.exists()) await file.delete();
-    } on FileSystemException catch (error) {
-      log.w('take away the note at ${_pathOf(id)}', error);
-    }
-  }
-
-  /// Every move whose training rows are still owed, oldest first. A note
-  /// nothing can read is left where it is and left out: it is a file this app
-  /// wrote, so a reader that cannot make sense of it has no business
-  /// rewriting a schedule on its word.
-  Future<List<UnfinishedMove>> read() async {
-    if (!await _folder.exists()) return const [];
-    final names = <String>[];
-    try {
-      await for (final entry in _folder.list()) {
-        if (entry is File && p.extension(entry.path) == '.json') {
-          names.add(p.basenameWithoutExtension(entry.path));
+  Future<void> discard(String id) =>
+      _checked('Remove relocation $id', () async {
+        _validateId(id);
+        if (!await _checkFolder()) return;
+        final path = _pathOf(id);
+        final observed = await observeFile(path);
+        if (observed.status == _missing) return;
+        if (observed.status != _present) {
+          throw RecoveryRequired(
+            'Relocation note $path cannot be read as a regular file.',
+          );
         }
-      }
-    } on FileSystemException catch (error) {
-      log.e('list the unfinished moves in ${_folder.path}', error);
-      return const [];
+        await _readOne(id);
+        await File(path).delete();
+        if (!Platform.isWindows) await syncDirectory(_folder.path);
+      });
+
+  /// Every owed move, oldest first. Unknown metadata is preserved and stops
+  /// recovery; ignoring it would let later work obscure an unfinished move.
+  Future<List<UnfinishedMove>> read() =>
+      _checked('Read relocation notes', () async {
+        if (!await _checkFolder()) return const [];
+        final names = <String>[];
+        await for (final entry in _folder.list(followLinks: false)) {
+          if (entry is! File || p.extension(entry.path) != '.json') {
+            throw RecoveryRequired(
+              'Unsupported relocation metadata at ${entry.path}.',
+            );
+          }
+          final id = p.basenameWithoutExtension(entry.path);
+          _validateId(id);
+          names.add(id);
+        }
+        names.sort();
+        final moves = <UnfinishedMove>[];
+        for (final name in names) {
+          moves.add(await _readOne(name));
+        }
+        return moves;
+      });
+
+  Future<UnfinishedMove> _readOne(String id) async {
+    final observed = await observeFile(_pathOf(id));
+    if (observed.status != _present) {
+      throw RecoveryRequired(
+        'Relocation note $id cannot be read as a regular file.',
+      );
     }
-    names.sort();
-    final moves = <UnfinishedMove>[];
-    for (final name in names) {
-      final move = await _readOne(name);
-      if (move != null) moves.add(move);
+    final json = jsonDecode(utf8.decode(observed.bytes!));
+    if (json is! Map<String, Object?> ||
+        json.length != 4 ||
+        !json.keys.every(const {'from', 'to', 'identity', 'folder'}.contains)) {
+      throw RecoveryRequired('Unsupported relocation schema in $id.');
     }
-    return moves;
+    final from = json['from'];
+    final to = json['to'];
+    final identity = json['identity'];
+    final folder = json['folder'];
+    if (from is! String ||
+        to is! String ||
+        identity is! String ||
+        folder is! bool) {
+      throw RecoveryRequired('Malformed relocation note $id.');
+    }
+    final move = UnfinishedMove(
+      id: id,
+      from: from,
+      to: to,
+      identity: identity,
+      folder: folder,
+    );
+    await _validate(move);
+    return move;
   }
 
-  Future<UnfinishedMove?> _readOne(String id) async {
-    try {
-      final json = jsonDecode(await File(_pathOf(id)).readAsString());
-      if (json is! Map<String, Object?>) return null;
-      final from = json['from'];
-      final to = json['to'];
-      final identity = json['identity'];
-      final folder = json['folder'];
-      if (from is! String ||
-          to is! String ||
-          identity is! String ||
-          folder is! bool) {
-        return null;
-      }
-      return UnfinishedMove(
-        id: id,
-        from: from,
-        to: to,
-        identity: identity,
-        folder: folder,
+  Future<void> _validate(UnfinishedMove move) async {
+    _validateId(move.id);
+    if (move.identity.trim().isEmpty || move.from == move.to) {
+      throw RecoveryRequired(
+        'Invalid relocation identity or paths in ${move.id}.',
       );
-    } on Object catch (error) {
-      log.e('read the note at ${_pathOf(id)}', error);
-      return null;
     }
+    await _validatePath(move.from);
+    await _validatePath(move.to);
+  }
+
+  Future<void> _validatePath(String path) async {
+    final root = p.normalize(p.absolute(documents.path));
+    if (!p.isAbsolute(path) ||
+        p.normalize(path) != path ||
+        !p.isWithin(root, path)) {
+      throw RecoveryRequired(
+        'Relocation path is outside managed Documents: $path.',
+      );
+    }
+    var at = root;
+    for (final part in p.split(p.relative(path, from: root))) {
+      at = p.join(at, part);
+      if (await _type(at) == FileSystemEntityType.link) {
+        throw RecoveryRequired('Relocation path follows a symbolic link: $at.');
+      }
+    }
+  }
+
+  Future<bool> _checkFolder({bool create = false}) async {
+    for (final directory in [support, _folder]) {
+      var observed = await observeDirectory(directory.path);
+      if (observed.status == _missing) {
+        if (!create) return false;
+        await directory.create(recursive: true);
+        observed = await observeDirectory(directory.path);
+      }
+      if (observed.status != _present) {
+        throw RecoveryRequired(
+          'Relocation metadata directory is unreadable or unsupported: ${directory.path}.',
+        );
+      }
+    }
+    return true;
   }
 
   String _pathOf(String id) => p.join(_folder.path, '$id.json');
 }
+
+/// Recovery cannot safely finish, so the caller must not read or mutate this
+/// Documents domain until the retained metadata is reconciled.
+final class RecoveryRequired implements Exception {
+  const RecoveryRequired(this.detail);
+  final String detail;
+
+  @override
+  String toString() => 'Recovery required: $detail';
+}
+
+Future<T> _checked<T>(String action, Future<T> Function() work) async {
+  try {
+    return await work();
+  } on RecoveryRequired {
+    rethrow;
+  } on Object catch (error) {
+    throw RecoveryRequired('$action: $error');
+  }
+}
+
+void _validateId(String id) {
+  if (!RegExp(r'^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$').hasMatch(id)) {
+    throw RecoveryRequired('Unsupported relocation note id: $id.');
+  }
+}
+
+Future<FileSystemEntityType> _type(String path) =>
+    FileSystemEntity.type(path, followLinks: false);
 
 const _folderName = 'unfinished-moves';
 
 /// What the disk says happened to [move], which decides what its training
 /// rows should name.
 ///
-/// A document is decided by which of its two paths holds a file, and by
-/// identity only when both or neither do: every save publishes a new file
-/// under the name, so after the first autosave the identity the note
-/// carries names nothing, and a move that landed would stay unclear for
-/// good. A folder keeps its identity through the saves inside it.
+/// Only the original native identity proves which endpoint holds the move.
+/// A later publication or unrelated replacement cannot stand in for it.
 Future<MoveVerdict> observeMove(UnfinishedMove move) async {
   try {
     final from = await _identityOf(move.from, move.folder);
     final to = await _identityOf(move.to, move.folder);
-    final seen = _decided(from.status) && _decided(to.status);
-    if (!move.folder && seen && from.status != to.status) {
-      return from.status == _missing
-          ? const MoveLanded()
-          : const MoveNeverHappened();
-    }
-    if (to.identity == move.identity && from.status == _missing) {
+    if (to.status == _present &&
+        to.identity == move.identity &&
+        from.status == _missing) {
       return const MoveLanded();
     }
-    if (from.identity == move.identity) return const MoveNeverHappened();
-    return MoveUnclear('neither ${move.from} nor ${move.to} is it any more');
+    if (from.status == _present &&
+        from.identity == move.identity &&
+        to.status == _missing) {
+      return const MoveNeverHappened();
+    }
+    return MoveUnclear(
+      'The original move from ${move.from} to ${move.to} cannot be identified.',
+    );
   } on Object catch (error) {
     return MoveUnclear('${move.to} could not be looked at: $error');
   }
@@ -285,16 +387,12 @@ sealed class MoveVerdict {
   const MoveVerdict();
 }
 
-/// The old path is empty and the new one holds the thing moved — for a
-/// document, whatever file is there now, since a save since the rename
-/// replaced the file: the rename happened, so the rows follow it.
+/// The old path is empty and the new one holds the original thing moved.
 final class MoveLanded extends MoveVerdict {
   const MoveLanded();
 }
 
-/// The thing is still at the old path — for a document, a file is there and
-/// none at the new one — so the rename never happened and the rows are
-/// already naming the right file.
+/// The original thing is still at the old path and the new path is empty.
 final class MoveNeverHappened extends MoveVerdict {
   const MoveNeverHappened();
 }
@@ -304,7 +402,7 @@ final class MoveNeverHappened extends MoveVerdict {
 final class MoveUnclear extends MoveVerdict {
   const MoveUnclear(this.detail);
 
-  /// For the log; nothing is shown to the user for a note.
+  /// Why recovery must stop before later reads or mutations.
   final String detail;
 }
 
@@ -321,7 +419,3 @@ Future<({int status, String? identity})> _identityOf(
 /// asked for, and for a path with nothing at it.
 const _present = 0;
 const _missing = 1;
-
-/// Whether [status] says a thing is there or that nothing is. Any other
-/// status is a path that could not be looked at, which says neither.
-bool _decided(int status) => status == _present || status == _missing;

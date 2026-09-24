@@ -92,19 +92,24 @@ void main() {
     );
   });
 
-  testWidgets('a folder that cannot be read offers Retry', (tester) async {
+  const recoveryReason =
+      'Reopen v1 to recover the unfinished repertoire move, then retry. '
+      'Your recovery files have been preserved.';
+
+  testWidgets('a failed library shows the recovery reason and Retry reloads', (
+    tester,
+  ) async {
     await show(tester, []);
-    fixture.files.listing = const RepertoiresUnreadable('Permission denied');
+    fixture.files.listing = const RepertoiresUnreadable(recoveryReason);
     await fixture.library.refresh();
     await tester.pumpAndSettle();
-    expect(
-      find.text('Could not load repertoires. Please try again.'),
-      findsOneWidget,
-    );
+    expect(find.text(recoveryReason), findsOneWidget);
+    expect(find.text('Could not load repertoires.'), findsOneWidget);
     fixture.files.listing = Repertoires([kid]);
     await tester.tap(find.text('Retry'));
     await tester.pumpAndSettle();
     expect(find.text('KID'), findsOneWidget);
+    expect(find.text(recoveryReason), findsNothing);
   });
 
   testWidgets('a repertoire that cannot be read is named, not dropped', (
@@ -361,4 +366,20 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('Nothing deleted'), findsOneWidget);
   });
+
+  testWidgets(
+    'a failed deleted listing shows the recovery reason and Retry reloads',
+    (tester) async {
+      await show(tester, [kid]);
+      fixture.files.deletedListing = const DeletedUnreadable(recoveryReason);
+      await tester.tap(find.text('Deleted chapters'));
+      await tester.pumpAndSettle();
+      expect(find.text(recoveryReason), findsOneWidget);
+      fixture.files.deletedListing = const DeletedChapters([]);
+      await tester.tap(find.text('Retry'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Nothing deleted'), findsOneWidget);
+      expect(find.text(recoveryReason), findsNothing);
+    },
+  );
 }

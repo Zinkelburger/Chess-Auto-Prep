@@ -25,7 +25,8 @@ import 'pgn_document_store.dart';
 
 /// The rename, move and delete half of [PgnDocumentStore], over the same
 /// documents root, kept versions and training records the store was built
-/// with.
+/// with. Its caller must already hold `RecoveryGate` for this profile;
+/// this adapter takes only the inner Documents and leaf locks.
 final class DocumentRelocation {
   DocumentRelocation({
     required this.documents,
@@ -75,7 +76,6 @@ final class DocumentRelocation {
     DocumentRef destination,
     Revision expected,
   ) async {
-    await _notes.finishOwed();
     // Minted here, so this call can take its own note away again whether the
     // move lands, is refused, or never gets as far as writing one.
     final note = newMoveNote();
@@ -169,7 +169,6 @@ final class DocumentRelocation {
   /// `repoint` rewrites every row inside a folder that moved, not just the
   /// rows that name it exactly.
   Future<FolderMoveResult> _moveFolderAndRepoint(String from, String to) async {
-    await _notes.finishOwed();
     final note = newMoveNote();
     final result = await _moveFolder(note, from, to);
     if (result is FolderMoved) {
@@ -267,7 +266,6 @@ final class DocumentRelocation {
     DocumentRef ref,
     Revision expected,
   ) async {
-    await _notes.finishOwed();
     final note = newMoveNote();
     final result = await _delete(note, ref, expected);
     if (result case Deleted(:final recoveredTo)) {

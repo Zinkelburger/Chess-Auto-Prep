@@ -24,6 +24,7 @@ class RepertoireDirectoryMutations {
     required this.repoint,
     this.testHook,
     this.recoverAdditional,
+    this.foreignRecoveryNotes,
     this.trash,
     this.trashAllowedRoot,
     FileMutationService? mutations,
@@ -33,6 +34,9 @@ class RepertoireDirectoryMutations {
   final Future<void> Function()? recoverAdditional;
   final Directory root;
   final Directory journals;
+
+  /// Existing v2 notes have no completed state: any entry requires v2 recovery.
+  final Directory? foreignRecoveryNotes;
   final Directory? trash;
   final Directory? trashAllowedRoot;
   final Future<void> Function(String from, String to, String operationId)
@@ -46,11 +50,49 @@ class RepertoireDirectoryMutations {
     return withFileOperationLock(
       p.join(canonicalRoot, '.cap-directory-domain'),
       () async {
+        await _refuseForeignRecovery();
         await _recover();
         await recoverAdditional?.call();
         return action();
       },
     );
+  }
+
+  Future<void> _refuseForeignRecovery() async {
+    final notes = foreignRecoveryNotes;
+    if (notes == null) return;
+    try {
+      final type = await FileSystemEntity.type(notes.path, followLinks: false);
+      if (type == FileSystemEntityType.notFound) return;
+      if (type != FileSystemEntityType.directory) {
+        throw const FormatException(
+          'Unfinished move storage is not a directory',
+        );
+      }
+      await for (final entry in notes.list(followLinks: false)) {
+        // Unknown names, partial files and links are evidence too. Never follow
+        // or remove them, and never mistake an unreadable note for no note.
+        throw RepertoireRecoveryRequired(
+          p.basename(entry.path),
+          'Unfinished v2 move',
+          message:
+              'Reopen v2 to recover the unfinished move '
+              '${p.basename(entry.path)} before accessing documents or training. '
+              'Its recovery files have been preserved.',
+        );
+      }
+    } on RepertoireRecoveryRequired {
+      rethrow;
+    } on Object catch (error) {
+      throw RepertoireRecoveryRequired(
+        notes.path,
+        error,
+        message:
+            'The unfinished v2 moves could not be checked. Reopen v2 '
+            'to resolve recovery before accessing documents or training. '
+            'Its recovery files have been preserved.',
+      );
+    }
   }
 
   Future<void> recover() => guard(() async {});

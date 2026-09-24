@@ -52,7 +52,7 @@ void main() {
     final store = PgnFileStore(documents: documents, support: support);
     saver = DocumentSaver(store, delay: const Duration(seconds: 1));
     session = DocumentSession(store, saver);
-    final files = ChapterDirectory(Directory(root));
+    final files = ChapterDirectory(Directory(root), recovery: store.recovery);
     library = libraryOver(files, store, session, saver, root: root);
     await library.refresh();
     await session.open(chapter('Sicilian'));

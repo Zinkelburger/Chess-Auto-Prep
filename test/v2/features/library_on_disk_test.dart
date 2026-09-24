@@ -56,7 +56,7 @@ void main() {
     final store = PgnFileStore(documents: documents, support: support);
     saver = DocumentSaver(store, delay: Duration.zero);
     session = DocumentSession(store, saver);
-    final files = ChapterDirectory(Directory(root));
+    final files = ChapterDirectory(Directory(root), recovery: store.recovery);
     library = libraryOver(files, store, session, saver, root: root);
     await library.refresh();
   });
@@ -68,6 +68,22 @@ void main() {
     await documents.delete(recursive: true);
     await support.delete(recursive: true);
   });
+
+  test(
+    'blocked recovery returns import failure without deleting retained staging',
+    () async {
+      final note = File(p.join(support.path, 'unfinished-moves', 'bad.json'));
+      await note.parent.create(recursive: true);
+      await note.writeAsString('{');
+      final result = await library.importText(
+        '[Event "Study"]\n\n1. e4 *\n',
+        name: 'Study',
+      );
+      expect(result, isA<LibraryFailure>());
+      expect(await note.readAsString(), '{');
+      expect(exists('repertoires/Study/Study.pgn'), isFalse);
+    },
+  );
 
   test('a new repertoire is a folder with one chapter in it', () async {
     expect(

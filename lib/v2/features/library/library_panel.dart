@@ -117,7 +117,10 @@ class _LibraryPanelState extends State<LibraryPanel> {
     final library = widget.library;
     return switch (library.state) {
       LibraryLoading() => const Center(child: CircularProgressIndicator()),
-      LibraryLoadFailed() => _Failure(onRetry: library.refresh),
+      LibraryLoadFailed(:final detail) => _Failure(
+        detail: detail,
+        onRetry: library.refresh,
+      ),
       LibraryLoaded() => _loaded(library),
     };
   }
@@ -240,22 +243,24 @@ class _DeletedLink extends StatelessWidget {
 }
 
 class _Failure extends StatelessWidget {
-  const _Failure({required this.onRetry});
+  const _Failure({required this.detail, required this.onRetry});
 
+  final String detail;
   final Future<void> Function() onRetry;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(Space.l),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Could not load repertoires. Please try again.',
-            style: Theme.of(context).textTheme.bodySmall,
+            'Could not load repertoires.',
+            style: Theme.of(context).textTheme.bodyMedium,
           ),
+          const SizedBox(height: Space.s),
+          Text(detail, style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(height: Space.s),
           FilledButton(onPressed: onRetry, child: const Text('Retry')),
         ],

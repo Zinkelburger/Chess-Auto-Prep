@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:chess_auto_prep/v2/chess/pgn/chapter_sections.dart';
 import 'package:chess_auto_prep/v2/features/library/library_state.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
+import 'package:chess_auto_prep/v2/storage/recovery_gate.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:chess_auto_prep/v2/workspace/document_saver.dart' as saver;
 import 'package:flutter_test/flutter_test.dart';
@@ -246,12 +247,21 @@ void main() {
   test('the listing names a course file\'s chapters in file order', () async {
     final dir = await Directory.systemTemp.createTemp('course');
     addTearDown(() => dir.delete(recursive: true));
-    final folder = Directory(p.join(dir.path, 'Course'))..createSync();
+    final root = Directory(p.join(dir.path, 'repertoires'))..createSync();
+    final folder = Directory(p.join(root.path, 'Course'))..createSync();
     File(p.join(folder.path, 'Course.pgn')).writeAsStringSync(_course);
     File(p.join(folder.path, 'Alone.pgn')).writeAsStringSync(
       '// Color: White\n\n[Event "a"]\n[ChapterName "KID"]\n\n1. d4 *\n',
     );
-    final listing = await ChapterDirectory(dir).list() as Repertoires;
+    final listing =
+        await ChapterDirectory(
+              root,
+              recovery: RecoveryGate(
+                documents: dir,
+                support: Directory(p.join(dir.path, 'Support')),
+              ),
+            ).list()
+            as Repertoires;
     final chapters = listing.folders.single.chapters;
     expect(chapters.map((c) => c.name), ['KID', 'Open games', 'Sicilian']);
     expect(chapters.map((c) => c.section), ['KID', 'Open games', 'Sicilian']);

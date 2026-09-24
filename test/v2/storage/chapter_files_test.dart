@@ -2,17 +2,25 @@ import 'dart:io';
 
 import 'package:chess_auto_prep/v2/chess/pgn/chapter_heading.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
+import 'package:chess_auto_prep/v2/storage/recovery_gate.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 void main() {
   late Directory root;
+  late Directory profile;
+  late RecoveryGate recovery;
 
   setUp(() async {
-    root = await Directory.systemTemp.createTemp('v2-chapters-');
+    profile = await Directory.systemTemp.createTemp('v2-chapters-');
+    root = await Directory(p.join(profile.path, 'repertoires')).create();
+    recovery = RecoveryGate(
+      documents: profile,
+      support: Directory(p.join(profile.path, 'Support')),
+    );
   });
 
-  tearDown(() => root.delete(recursive: true));
+  tearDown(() => profile.delete(recursive: true));
 
   Future<void> put(String relative, String text) async {
     final file = File(p.join(root.path, relative));
@@ -21,7 +29,8 @@ void main() {
   }
 
   Future<List<RepertoireFolder>> list() async =>
-      ((await ChapterDirectory(root).list()) as Repertoires).folders;
+      ((await ChapterDirectory(root, recovery: recovery).list()) as Repertoires)
+          .folders;
 
   test('one folder per repertoire, chapters by name', () async {
     await put('KID/Main.pgn', '*');
@@ -80,7 +89,10 @@ void main() {
   );
 
   test('a missing repertoires folder is an empty library', () async {
-    final files = ChapterDirectory(Directory(p.join(root.path, 'none')));
+    final files = ChapterDirectory(
+      Directory(p.join(root.path, 'none')),
+      recovery: recovery,
+    );
     expect(((await files.list()) as Repertoires).folders, isEmpty);
   });
 
@@ -92,7 +104,9 @@ void main() {
       final closed = p.join(root.path, 'Benko');
       await Process.run('chmod', ['000', closed]);
       addTearDown(() => Process.run('chmod', ['u+rwx', closed]));
-      final listing = (await ChapterDirectory(root).list()) as Repertoires;
+      final listing =
+          (await ChapterDirectory(root, recovery: recovery).list())
+              as Repertoires;
       expect(listing.folders.map((f) => f.name), ['KID']);
       expect(listing.unreadable.single.name, 'Benko');
       expect(listing.unreadable.single.path, closed);
@@ -105,7 +119,7 @@ void main() {
     await put('Gone/.cap-pgn-history/1-2-Main.pgn', '*');
     final empty = Directory(p.join(root.path, 'Empty'));
     await empty.create();
-    final files = ChapterDirectory(root);
+    final files = ChapterDirectory(root, recovery: recovery);
     await files.removeIfEmpty(empty.path);
     await files.removeIfEmpty(p.join(root.path, 'Gone'));
     expect(empty.existsSync(), isFalse);
@@ -113,7 +127,9 @@ void main() {
   });
 
   Future<List<DeletedChapter>> deleted() async =>
-      ((await ChapterDirectory(root).deleted()) as DeletedChapters).chapters;
+      ((await ChapterDirectory(root, recovery: recovery).deleted())
+              as DeletedChapters)
+          .chapters;
 
   test(
     'deleted chapters are read off their recovery names, newest first',
@@ -145,7 +161,10 @@ void main() {
   );
 
   test('no repertoires folder means nothing deleted', () async {
-    final files = ChapterDirectory(Directory(p.join(root.path, 'none')));
+    final files = ChapterDirectory(
+      Directory(p.join(root.path, 'none')),
+      recovery: recovery,
+    );
     expect(((await files.deleted()) as DeletedChapters).chapters, isEmpty);
   });
 }

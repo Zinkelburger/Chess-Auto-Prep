@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import 'chapter_files.dart';
+import 'recovery_gate.dart';
+import 'relocation_notes.dart';
 
 /// The study files under `Documents/studies/`: one `.pgn` per study, one
 /// game in it per chapter.
@@ -38,25 +40,32 @@ final class StudiesUnreadable extends StudyListing {
 
 /// One flat folder of `.pgn` files.
 final class StudyDirectory implements StudyFiles {
-  StudyDirectory(this.root);
+  StudyDirectory(this.root, {required RecoveryGate recovery})
+    : _recovery = recovery;
+
+  final RecoveryGate _recovery;
 
   /// The `studies` directory itself.
   final Directory root;
 
   @override
   Future<StudyListing> list() async {
-    if (!await root.exists()) return const StudiesListed([]);
     try {
-      final studies = <ChapterRef>[];
-      await for (final file in root.list()) {
-        if (file is! File || p.extension(file.path) != '.pgn') continue;
-        if (p.basename(file.path).startsWith('.')) continue;
-        studies.add(ChapterRef.at(file.path));
-      }
-      studies.sort(
-        (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-      );
-      return StudiesListed(List.unmodifiable(studies));
+      return await _recovery.run(() async {
+        if (!await root.exists()) return const StudiesListed([]);
+        final studies = <ChapterRef>[];
+        await for (final file in root.list()) {
+          if (file is! File || p.extension(file.path) != '.pgn') continue;
+          if (p.basename(file.path).startsWith('.')) continue;
+          studies.add(ChapterRef.at(file.path));
+        }
+        studies.sort(
+          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+        );
+        return StudiesListed(List.unmodifiable(studies));
+      });
+    } on RecoveryRequired catch (error) {
+      return StudiesUnreadable(error.detail);
     } on FileSystemException catch (error) {
       return StudiesUnreadable(error.osError?.message ?? error.message);
     }

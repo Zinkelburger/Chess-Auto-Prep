@@ -34,6 +34,7 @@ void main() {
     publications = 0;
     store = TrainingStore(
       documents,
+      support: Directory(p.join(documents.path, 'Support')),
       publish: (path, bytes) async {
         if (!failing || publications == 0) {
           await replaceFile(path, bytes);

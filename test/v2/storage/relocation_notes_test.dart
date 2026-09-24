@@ -1,7 +1,10 @@
 // A move is two writes: the rename, and the training rows that name the file.
 // These are the cases where a machine stops between them, against real files
 // in a disposable Documents folder.
+import 'dart:convert';
 import 'dart:io';
+
+import 'package:chess_auto_prep/v2/storage/atomic_write.dart';
 
 import 'package:chess_auto_prep/v2/storage/document_probe.dart';
 import 'package:chess_auto_prep/v2/storage/document_ref.dart';
@@ -24,7 +27,7 @@ void main() {
 
   setUp(() async {
     fixture = await StoreFixture.create();
-    notes = PendingRepoints(fixture.support);
+    notes = PendingRepoints(fixture.support, documents: fixture.documents);
   });
   tearDown(() => fixture.dispose());
 
@@ -91,7 +94,10 @@ void main() {
         folder: false,
       );
 
-      await fixture.store.rename(slav, 'Other.pgn', expected: other);
+      expect(
+        await fixture.store.rename(slav, 'Other.pgn', expected: other),
+        isA<IoFailure>(),
+      );
 
       expect(read(), contains(_row(kid.path)));
       expect(await notes.read(), hasLength(1));
@@ -127,73 +133,75 @@ void main() {
     },
   );
 
-  test('a move that landed is finished though a save replaced the file '
-      'since', () async {
-    final kid = fixture.ref('repertoires/KID/Main.pgn');
-    final slav = fixture.ref('repertoires/Slav/Main.pgn');
-    await chapter(kid);
-    final identity = await identityOf(kid);
-    final other = await chapter(slav);
-    final renamed = fixture.ref('repertoires/KID/Renamed.pgn');
-    writeRows([kid]);
-    await File(kid.path).rename(renamed.path);
-    await notes.record(
-      'landed',
-      from: kid.path,
-      to: renamed.path,
-      identity: identity,
-      folder: false,
-    );
-    // The first autosave after the move publishes a new file under the
-    // new name.
-    final saved = await fixture.edit(
-      renamed,
-      '[Event "x"]\n\n1. d4 d5 *\n',
-      await fixture.revisionOf(renamed),
-    );
-    expect(saved, isA<Saved>());
-    expect(await identityOf(renamed), isNot(identity));
+  test(
+    'a landed move stays blocked when an external save replaced its identity',
+    () async {
+      final kid = fixture.ref('repertoires/KID/Main.pgn');
+      final slav = fixture.ref('repertoires/Slav/Main.pgn');
+      await chapter(kid);
+      final identity = await identityOf(kid);
+      final other = await chapter(slav);
+      final renamed = fixture.ref('repertoires/KID/Renamed.pgn');
+      writeRows([kid]);
+      await File(kid.path).rename(renamed.path);
+      await notes.record(
+        'landed',
+        from: kid.path,
+        to: renamed.path,
+        identity: identity,
+        folder: false,
+      );
+      // The first autosave after the move publishes a new file under the
+      // new name.
+      await replaceFile(
+        renamed.path,
+        utf8.encode('[Event "x"]\n\n1. d4 d5 *\n'),
+      );
+      expect(await identityOf(renamed), isNot(identity));
 
-    await fixture.store.rename(slav, 'Other.pgn', expected: other);
+      expect(
+        await fixture.store.rename(slav, 'Other.pgn', expected: other),
+        isA<IoFailure>(),
+      );
 
-    expect(read(), contains(_row(renamed.path)));
-    expect(read(), isNot(contains(_row(kid.path))));
-    expect(await notes.read(), isEmpty);
-  });
-
-  test('a move that never happened is dropped though a save replaced the '
-      'file since', () async {
-    final kid = fixture.ref('repertoires/KID/Main.pgn');
-    final slav = fixture.ref('repertoires/Slav/Main.pgn');
-    final revision = await chapter(kid);
-    final identity = await identityOf(kid);
-    final other = await chapter(slav);
-    writeRows([kid]);
-    // The machine stopped after the note, before the rename; the chapter
-    // was saved where it still is.
-    await notes.record(
-      'stopped-early',
-      from: kid.path,
-      to: fixture.ref('repertoires/KID/Renamed.pgn').path,
-      identity: identity,
-      folder: false,
-    );
-    final saved = await fixture.edit(
-      kid,
-      '[Event "x"]\n\n1. d4 d5 *\n',
-      revision,
-    );
-    expect(saved, isA<Saved>());
-    expect(await identityOf(kid), isNot(identity));
-
-    await fixture.store.rename(slav, 'Other.pgn', expected: other);
-
-    expect(read(), contains(_row(kid.path)));
-    expect(await notes.read(), isEmpty, reason: 'nothing is owed');
-  });
+      expect(read(), contains(_row(kid.path)));
+      expect(await notes.read(), hasLength(1));
+    },
+  );
 
   test(
-    'two moves that could not rewrite their rows are both finished later',
+    'an unperformed move stays blocked after external identity replacement',
+    () async {
+      final kid = fixture.ref('repertoires/KID/Main.pgn');
+      final slav = fixture.ref('repertoires/Slav/Main.pgn');
+      await chapter(kid);
+      final identity = await identityOf(kid);
+      final other = await chapter(slav);
+      writeRows([kid]);
+      // The machine stopped after the note, before the rename; the chapter
+      // was saved where it still is.
+      await notes.record(
+        'stopped-early',
+        from: kid.path,
+        to: fixture.ref('repertoires/KID/Renamed.pgn').path,
+        identity: identity,
+        folder: false,
+      );
+      await replaceFile(kid.path, utf8.encode('[Event "x"]\n\n1. d4 d5 *\n'));
+      expect(await identityOf(kid), isNot(identity));
+
+      expect(
+        await fixture.store.rename(slav, 'Other.pgn', expected: other),
+        isA<IoFailure>(),
+      );
+
+      expect(read(), contains(_row(kid.path)));
+      expect(await notes.read(), hasLength(1));
+    },
+  );
+
+  test(
+    'an unresolved move blocks the next move until its rows recover',
     () async {
       final kid = fixture.ref('repertoires/KID/Main.pgn');
       final benko = fixture.ref('repertoires/Benko/Main.pgn');
@@ -209,14 +217,18 @@ void main() {
       await Process.run('chmod', ['u+w', fixture.documents.path]);
 
       expect(one, isA<Moved>());
-      expect(two, isA<Moved>());
-      expect(await notes.read(), hasLength(2), reason: 'neither is forgotten');
+      expect(two, isA<IoFailure>());
+      expect(
+        await notes.read(),
+        hasLength(1),
+        reason: 'the first is still owed',
+      );
 
       await fixture.store.rename(slav, 'C.pgn', expected: third);
 
       final rows = read();
       expect(rows, contains(_row(fixture.ref('repertoires/KID/A.pgn').path)));
-      expect(rows, contains(_row(fixture.ref('repertoires/Benko/B.pgn').path)));
+      expect(rows, contains(_row(benko.path)));
       expect(rows, contains(_row(fixture.ref('repertoires/Slav/C.pgn').path)));
       expect(await notes.read(), isEmpty);
     },

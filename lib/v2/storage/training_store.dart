@@ -26,6 +26,8 @@ import '../diagnostics/log.dart';
 import 'atomic_write.dart';
 import 'csv_records.dart';
 import 'file_lock.dart';
+import 'recovery_gate.dart';
+import 'relocation_notes.dart';
 import 'training_rows.dart';
 
 /// A row as read and as it is to be written; `before` is null for a row the
@@ -75,12 +77,16 @@ abstract interface class ProgressFiles {
 final class TrainingStore implements ProgressFiles {
   TrainingStore(
     this.documents, {
+    required Directory support,
     Future<void> Function(String, List<int>) publish = replaceFile,
     Future<ProgressWrite> Function(Directory, Future<ProgressWrite> Function())
         lock =
         withDirectoryLock,
   }) : _publish = publish,
-       _lock = lock;
+       _lock = lock,
+       _recovery = RecoveryGate(documents: documents, support: support);
+
+  final RecoveryGate _recovery;
 
   final Future<void> Function(String, List<int>) _publish;
   final Future<ProgressWrite> Function(
@@ -100,30 +106,40 @@ final class TrainingStore implements ProgressFiles {
   @override
   Future<ProgressRead> read(Set<String> sources) async {
     try {
-      final reviews = await _rows(_reviewCodec);
-      final streaks = await _rows(_streakCodec);
-      // A key written twice is read as its first row, the one a write
-      // replaces.
-      final byLine = <LineKey, Review>{};
-      for (final r in reviews) {
-        if (sources.contains(r.key.source)) byLine.putIfAbsent(r.key, () => r);
-      }
-      final byMove = <StreakKey, MoveStreak>{};
-      for (final s in streaks) {
-        if (!sources.contains(s.key.source)) continue;
-        byMove.putIfAbsent((line: s.key, ply: s.ply), () => s);
-      }
-      return ProgressLoaded(
-        reviews: byLine,
-        streaks: byMove,
-        mistakes: await _mistakes(sources),
+      return await _recovery.run(
+        () => withDirectoryLock(documents, () => _read(sources)),
       );
+    } on RecoveryRequired catch (error) {
+      return ProgressFailed(error.detail);
     } on _Unreadable catch (unreadable) {
       return unreadable.result;
     } on FileSystemException catch (error) {
       log.e('read the training progress in ${documents.path}', error);
       return ProgressFailed(_detail(error));
     }
+  }
+
+  Future<ProgressLoaded> _read(Set<String> sources) async {
+    final reviews = await _rows(_reviewCodec);
+    final streaks = await _rows(_streakCodec);
+    // A key written twice is read as its first row, the one a write
+    // replaces.
+    final byLine = <LineKey, Review>{};
+    for (final r in reviews) {
+      if (sources.contains(r.key.source)) {
+        byLine.putIfAbsent(r.key, () => r);
+      }
+    }
+    final byMove = <StreakKey, MoveStreak>{};
+    for (final s in streaks) {
+      if (!sources.contains(s.key.source)) continue;
+      byMove.putIfAbsent((line: s.key, ply: s.ply), () => s);
+    }
+    return ProgressLoaded(
+      reviews: byLine,
+      streaks: byMove,
+      mistakes: await _mistakes(sources),
+    );
   }
 
   @override
@@ -296,7 +312,7 @@ final class TrainingStore implements ProgressFiles {
     Future<ProgressWrite> Function() write,
   ) async {
     try {
-      return await _lock(documents, write);
+      return await _recovery.run(() => _lock(documents, write));
     } on _Unreadable catch (unreadable) {
       return unreadable.result;
     } on _Changed catch (changed) {

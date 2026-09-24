@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:chess_auto_prep/v2/storage/pgn_file_import.dart';
+import 'package:chess_auto_prep/v2/storage/recovery_gate.dart';
 import 'package:path/path.dart' as p;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
@@ -17,6 +18,10 @@ void main() {
     documents = Directory(p.join(root.path, 'Documents'));
     await documents.create();
     import = NativePgnFileImport(
+      recovery: RecoveryGate(
+        documents: documents,
+        support: Directory(p.join(root.path, 'Support')),
+      ),
       documents: documents.path,
       into: p.join(documents.path, 'pgn_collections'),
     );

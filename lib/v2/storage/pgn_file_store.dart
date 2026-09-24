@@ -18,16 +18,15 @@ import 'edit_scope.dart';
 import 'mutation_guards.dart';
 import 'pgn_document_store.dart';
 import 'relocation_notes.dart';
-import 'training_records.dart' as training;
+import 'recovery_gate.dart';
 
 /// The documents root as files on disk.
 ///
 /// Every mutation runs under the directory lock the old app also takes, so the
 /// two apps cannot write one folder at once, and publishes through the atomic
-/// writer, so a reader never sees half a document. Reads take no lock: the
-/// native probe takes bytes and hash from one open handle, and a publication
-/// is one rename, so a reader gets the whole old file or the whole new one
-/// either way.
+/// writer, so a reader never sees half a document. Every access first holds
+/// the shared recovery domain and settles known relocation notes or refuses.
+/// The native probe takes bytes and hash from one open handle.
 ///
 /// What that does and does not promise. Against the old app and against
 /// another copy of this one, which take the same lock, a mutation is
@@ -55,21 +54,28 @@ final class PgnFileStore implements PgnDocumentStore {
     required Directory support,
   }) {
     final backups = BackupArchive(Directory(p.join(support.path, 'backups')));
+    final recovery = RecoveryGate(documents: documents, support: support);
     return PgnFileStore._(
       documents,
       backups,
+      recovery,
       DocumentRelocation(
         documents: documents,
         backups: backups,
-        notes: RelocationNotes(
-          notes: PendingRepoints(support),
-          records: training.TrainingRecords(documents),
-        ),
+        notes: recovery.notes,
       ),
     );
   }
 
-  PgnFileStore._(this.documents, this._backups, this._relocation);
+  PgnFileStore._(
+    this.documents,
+    this._backups,
+    this.recovery,
+    this._relocation,
+  );
+
+  /// Shared with native listings and progress access for this profile.
+  final RecoveryGate recovery;
 
   /// The folder every document lives under; a ref outside it is refused.
   final Directory documents;
@@ -78,7 +84,23 @@ final class PgnFileStore implements PgnDocumentStore {
   final DocumentRelocation _relocation;
 
   @override
-  Future<DocumentRead> open(DocumentRef ref) async {
+  Future<DocumentRead> open(DocumentRef ref) =>
+      _guard(() => _open(ref), Unreadable.new);
+
+  Future<T> _guard<T>(
+    Future<T> Function() action,
+    T Function(String) failed,
+  ) async {
+    try {
+      return await recovery.run(action);
+    } on RecoveryRequired catch (error) {
+      return failed(error.detail);
+    } on FileSystemException catch (error) {
+      return failed(failureDetail(error));
+    }
+  }
+
+  Future<DocumentRead> _open(DocumentRef ref) async {
     switch (await probeDocument(ref.path)) {
       case FileMissing():
         return const Absent();
@@ -121,10 +143,13 @@ final class PgnFileStore implements PgnDocumentStore {
     if (documentBackupIdFor(documents, ref) == null) {
       return const IoFailure(outsideRoot);
     }
-    return lockedForRelocation(documents, ref, [folderOf(ref)], () async {
-      await folderOf(ref).create(recursive: true);
-      return _create(ref, text);
-    }, IoFailure.new);
+    return _guard(
+      () => lockedForRelocation(documents, ref, [folderOf(ref)], () async {
+        await folderOf(ref).create(recursive: true);
+        return _create(ref, text);
+      }, IoFailure.new),
+      IoFailure.new,
+    );
   }
 
   Future<CreateResult> _create(DocumentRef ref, String text) async {
@@ -147,11 +172,14 @@ final class PgnFileStore implements PgnDocumentStore {
     String text, {
     required Revision expected,
     required EditScope scope,
-  }) => lockedForRelocation(
-    documents,
-    ref,
-    [folderOf(ref)],
-    () => _save(ref, text, expected, scope),
+  }) => _guard(
+    () => lockedForRelocation(
+      documents,
+      ref,
+      [folderOf(ref)],
+      () => _save(ref, text, expected, scope),
+      IoFailure.new,
+    ),
     IoFailure.new,
   );
 
@@ -244,22 +272,28 @@ final class PgnFileStore implements PgnDocumentStore {
     DocumentRef ref,
     String name, {
     required Revision expected,
-  }) => _relocation.rename(ref, name, expected: expected);
+  }) => _guard(
+    () => _relocation.rename(ref, name, expected: expected),
+    IoFailure.new,
+  );
 
   @override
   Future<MoveResult> move(
     DocumentRef ref,
     DocumentRef destination, {
     required Revision expected,
-  }) => _relocation.move(ref, destination, expected: expected);
+  }) => _guard(
+    () => _relocation.move(ref, destination, expected: expected),
+    IoFailure.new,
+  );
 
   @override
   Future<FolderMoveResult> moveFolder(String from, String to) =>
-      _relocation.moveFolder(from, to);
+      _guard(() => _relocation.moveFolder(from, to), FolderMoveFailed.new);
 
   @override
   Future<DeleteResult> delete(DocumentRef ref, {required Revision expected}) =>
-      _relocation.delete(ref, expected: expected);
+      _guard(() => _relocation.delete(ref, expected: expected), IoFailure.new);
 
   Receipt _receipt(String before, Revision was, Revision committed) =>
       Receipt(committed: committed, before: before, beforeRevision: was);

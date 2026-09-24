@@ -55,6 +55,7 @@ void main() {
         var publications = 0;
         final store = TrainingStore(
           documents,
+          support: Directory(p.join(documents.path, 'Support')),
           publish: (path, bytes) async {
             await replaceFile(path, bytes);
             if (++publications == boundary) {
@@ -82,6 +83,7 @@ void main() {
         var loseAcknowledgement = true;
         final store = TrainingStore(
           documents,
+          support: Directory(p.join(documents.path, 'Support')),
           lock: (directory, action) async {
             final result = await withDirectoryLock(directory, action);
             if (loseAcknowledgement) {
@@ -114,6 +116,7 @@ void main() {
       var publications = 0;
       final store = TrainingStore(
         documents,
+        support: Directory(p.join(documents.path, 'Support')),
         publish: (path, bytes) async {
           await replaceFile(path, bytes);
           if (++publications == 1)
@@ -148,6 +151,7 @@ void main() {
       var publications = 0;
       final store = TrainingStore(
         documents,
+        support: Directory(p.join(documents.path, 'Support')),
         publish: (path, bytes) async {
           await replaceFile(path, bytes);
           if (++publications == 1)
@@ -168,6 +172,7 @@ void main() {
     var publications = 0;
     final store = TrainingStore(
       documents,
+      support: Directory(p.join(documents.path, 'Support')),
       publish: (path, bytes) async {
         await replaceFile(path, bytes);
         if (++publications == 1)
@@ -182,7 +187,10 @@ void main() {
     );
     final other = await Directory(p.join(documents.path, 'other')).create();
     expect(
-      await _rate(TrainingStore(other), operation),
+      await _rate(
+        TrainingStore(other, support: Directory(p.join(other.path, 'Support'))),
+        operation,
+      ),
       isA<ProgressConflict>(),
     );
     expect(await other.list().isEmpty, isTrue);
@@ -192,7 +200,10 @@ void main() {
   test(
     'separate identical operations remain separate accepted answers',
     () async {
-      final store = TrainingStore(documents);
+      final store = TrainingStore(
+        documents,
+        support: Directory(p.join(documents.path, 'Support')),
+      );
       for (var i = 0; i < 2; i++) {
         expect(await _rate(store, ProgressOperation()), isA<ProgressWritten>());
         expect(
@@ -206,7 +217,10 @@ void main() {
   );
 
   test('confirmed operation remains acknowledged after later edits', () async {
-    final store = TrainingStore(documents);
+    final store = TrainingStore(
+      documents,
+      support: Directory(p.join(documents.path, 'Support')),
+    );
     final operation = ProgressOperation();
     expect(await _rate(store, operation), isA<ProgressWritten>());
     await file(historyFile).writeAsString('a later edit\n');

@@ -59,22 +59,34 @@ class MoveAttemptStore {
   }) async {
     if (to == null && movedLinePaths.isEmpty) return;
     if (await storage.readFile(fileName) == null) return;
-    await storage.updateFile(fileName, (raw) {
-      final rows = _decode(raw);
-      var changed = false;
-      for (final row in rows) {
-        final source = row['repertoireId'] as String;
-        final target = p.equals(source, from)
-            ? movedLinePaths[row['lineId']] ?? to
-            : to != null && p.isWithin(from, source)
-            ? p.join(to, p.relative(source, from: from))
-            : null;
-        if (target != null && !p.equals(target, source)) {
-          row['repertoireId'] = target;
-          changed = true;
-        }
+    await storage.updateFile(
+      fileName,
+      (raw) =>
+          repointText(raw, from: from, to: to, movedLinePaths: movedLinePaths),
+    );
+  }
+
+  /// Pure rewrite shared with storage operations already holding the domain.
+  static String repointText(
+    String? raw, {
+    required String from,
+    String? to,
+    Map<String, String> movedLinePaths = const {},
+  }) {
+    final rows = _decode(raw);
+    var changed = false;
+    for (final row in rows) {
+      final source = row['repertoireId'] as String;
+      final target = p.equals(source, from)
+          ? movedLinePaths[row['lineId']] ?? to
+          : to != null && p.isWithin(from, source)
+          ? p.join(to, p.relative(source, from: from))
+          : null;
+      if (target != null && !p.equals(target, source)) {
+        row['repertoireId'] = target;
+        changed = true;
       }
-      return changed ? '${rows.map(jsonEncode).join('\n')}\n' : raw ?? '';
-    });
+    }
+    return changed ? '${rows.map(jsonEncode).join('\n')}\n' : raw ?? '';
   }
 }

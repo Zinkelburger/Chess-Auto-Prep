@@ -94,6 +94,172 @@ void main() {
     );
   }
 
+  for (final write in [false, true]) {
+    test(
+      'training ${write ? 'update' : 'read'} recovers before library reload',
+      () async {
+        await seedTraining();
+        await expectLater(
+          storage(
+            failAt: RepertoireMoveStep.moved,
+          ).renameRepertoireDirectory(source.path, 'New'),
+          throwsA(isA<RepertoireRecoveryRequired>()),
+        );
+        final restarted = storage();
+        final next = p.join(root.path, 'New', 'Main.pgn');
+        final read = write
+            ? await restarted.updateFile('repertoire_reviews.csv', (raw) {
+                expect(raw, contains(next));
+                expect(raw, isNot(contains(chapter)));
+                return raw!;
+              })
+            : await restarted.readRepertoireReviewsCsv();
+        expect(read, contains(next));
+        expect((await journals()).single['state'], 'completed');
+      },
+      skip: !Platform.isLinux,
+    );
+  }
+
+  test(
+    'foreign unfinished metadata refuses training, documents and library',
+    () async {
+      await seedTraining();
+      final pending = await Directory(
+        p.join(profile.path, 'unfinished-moves'),
+      ).create();
+      final note = File(p.join(pending.path, 'unknown.json'));
+      await note.writeAsString('{unknown');
+      final io = storage();
+      final before = await File(
+        p.join(profile.path, 'repertoire_reviews.csv'),
+      ).readAsString();
+      for (final action in <Future<Object?> Function()>[
+        () => io.readRepertoireReviewsCsv(),
+        () => io.updateFile('repertoire_reviews.csv', (_) => 'overwritten'),
+        () => io.readFile(chapter),
+        () => io.fileStat(chapter),
+        () => io.listChapters(source.path),
+        () => io.listRepertoires(),
+        () => io.renameFile(chapter, p.join(source.path, 'Other.pgn')),
+      ]) {
+        await expectLater(action(), throwsA(isA<RepertoireRecoveryRequired>()));
+      }
+      expect(await note.readAsString(), '{unknown');
+      expect(
+        await File(
+          p.join(profile.path, 'repertoire_reviews.csv'),
+        ).readAsString(),
+        before,
+      );
+    },
+    skip: !Platform.isLinux,
+  );
+
+  test(
+    'training read waits behind the complete native move without reentry',
+    () async {
+      await seedTraining();
+      final moved = Completer<void>();
+      final release = Completer<void>();
+      final io = IOStorageService(
+        documentsRoot: profile,
+        supportRoot: profile,
+        repertoiresRoot: root,
+        repertoireBooks: settings.repertoireBooks,
+        repertoireMoveHook: (step) async {
+          if (step == RepertoireMoveStep.moved) {
+            moved.complete();
+            await release.future;
+          }
+        },
+      );
+      final renaming = io.renameRepertoireDirectory(source.path, 'New');
+      await moved.future;
+      var readDone = false;
+      final reading = storage().readRepertoireReviewsCsv().then((text) {
+        readDone = true;
+        return text;
+      });
+      try {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        expect(readDone, isFalse);
+      } finally {
+        release.complete();
+      }
+      await renaming.timeout(const Duration(seconds: 5));
+      expect(
+        await reading.timeout(const Duration(seconds: 5)),
+        contains(p.join(root.path, 'New', 'Main.pgn')),
+      );
+    },
+    skip: !Platform.isLinux,
+  );
+
+  test(
+    'linked foreign recovery storage blocks without following or changing it',
+    () async {
+      final elsewhere = await Directory(p.join(profile.path, 'other')).create();
+      final link = Link(p.join(profile.path, 'unfinished-moves'));
+      await link.create(elsewhere.path);
+      await expectLater(
+        storage().readFile(chapter),
+        throwsA(isA<RepertoireRecoveryRequired>()),
+      );
+      expect(await link.target(), elsewhere.path);
+      expect(await elsewhere.list().toList(), isEmpty);
+    },
+    skip: !Platform.isLinux,
+  );
+
+  test(
+    'guarded file rename rewrites attempts without acquiring the domain twice',
+    () async {
+      await seedTraining();
+      final next = p.join(source.path, 'Renamed.pgn');
+      await storage()
+          .renameFile(chapter, next)
+          .timeout(const Duration(seconds: 5));
+      final attempts = await storage().readFile(
+        'repertoire_move_attempts.jsonl',
+      );
+      expect(attempts, contains(next));
+      expect(await File(chapter).exists(), isFalse);
+    },
+    skip: !Platform.isLinux,
+  );
+
+  test(
+    'foreign note blocks study PGN reads, writes and complete listings',
+    () async {
+      final study = File(await storage().studyFilePath('Example'));
+      await study.writeAsString('1. e4 *');
+      final pending = await Directory(
+        p.join(profile.path, 'unfinished-moves'),
+      ).create();
+      await File(p.join(pending.path, 'move.json')).writeAsString('{}');
+      final io = storage();
+      await expectLater(
+        io.readFile(study.path),
+        throwsA(isA<RepertoireRecoveryRequired>()),
+      );
+      await expectLater(
+        io.writeFile(study.path, 'replacement'),
+        throwsA(isA<RepertoireRecoveryRequired>()),
+      );
+      await expectLater(
+        io.listStudyFiles(),
+        throwsA(isA<RepertoireRecoveryRequired>()),
+      );
+      await expectLater(
+        io.listTacticsSets(),
+        throwsA(isA<RepertoireRecoveryRequired>()),
+      );
+      expect(await study.readAsString(), '1. e4 *');
+    },
+    skip: !Platform.isLinux,
+  );
+
   test(
     'delete and restore retain bytes, history and parked book selections',
     () async {

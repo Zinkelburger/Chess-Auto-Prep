@@ -771,8 +771,17 @@ entering hidden recovery/staging folders. Native startup/listing moves legacy
 root-level PGNs to `<name>/Main.pgn` through the guarded document store, carrying
 training references and backups; a collision leaves the original visible.
 Nested backup histories follow folder moves, and nested recovery files can be
-listed and restored. All v2 document mutations take the Documents root before
-leaf locks, so a folder move cannot race a save in a descendant folder.
+listed and restored. Native affected access first takes the canonical repertoire
+recovery domain shared with supported v1 on Linux, then the Documents namespace
+and distinct leaf locks. V2 PGN access, training reads/writes, library/deleted/
+study scans and PGN imports recover its existing relocation notes before access.
+Malformed, unsupported, unreadable or ambiguous notes remain intact and block
+access; a matching native identity must prove whether a move landed. V1 refuses
+unfinished v2 notes, and v2 refuses pending/unknown v1 move and publication
+receipts with an instruction to reopen v1. Valid completed v1 history remains
+readable. V1 conservatively guards supported Documents accesses, including the
+four training files. No foreign journal is replayed and no metadata format is
+introduced by this gate. Non-Linux v1 recovery remains unverified.
 
 - **One file, one write path.** A chapter of a course file opens as a
   `SectionView`: its games in file order as an ordinary `Chapter`, so every
@@ -1093,7 +1102,7 @@ per batch and use tests and commits as the implementation record.
 |---|---|---|---|---|
 | H1 | None | Direct fixes: recursive book selection, gap invalidation, analysis-save errors, partial engine retry, puzzle timer; `books`, workspace wiring, bughouse stores/search, puzzle trainer | Their acceptance sequences above pass through real wiring; failures are visible | Done 2026-09-24: recursive book removal, catalog-driven gap refresh, typed analysis-save failures with exact-entry retry, partial engine retry and puzzle timer cancellation; regression failures reproduced before fixes, independent review, v2 suite and analyze/lint; headless Linux save failure/retry verified against disposable SQLite. Unsaved analysis remains in memory (H2/H5). |
 | H2 | H1 | Accepted ratings and writes outlive reload/dispose; `PendingWrites`, training progress/owner, exit guard | Two overlapping reloads cannot bypass the same pending rating; failed outcomes remain retryable; shutdown is honest | Done 2026-09-24: app-owned training obligations, ordered barriers and exact in-process retry survive reload/dispose; retained book/settings/account/recent-file/copy outcomes; shutdown covers existing dialogs and suspends puzzle timers. Failure-first regressions, independent reviews, 2,155 v2 tests and analyze/lint passed after merging current main. Headless Linux partial training publication survived scope replacement and retried with three history rows exactly once. Persistent crash recovery remains H3; Windows/macOS durability unverified. |
-| H3a | H2 | Existing relocation recovery before affected reads; document guards, training reads, startup; reconcile v1 domain locks/order | Kill during a move, reopen/train from either supported app; no missing or duplicate progress; incompatible access blocks safely | Not started |
+| H3a | H2 | Existing relocation recovery before affected reads; document guards, training reads, startup; reconcile v1 domain locks/order | Kill during a move, reopen/train from either supported app; no missing or duplicate progress; incompatible access blocks safely | Done 2026-09-24 on Linux: canonical shared domain before affected Documents access; strict v2 notes recover before PGN/training reads and complete scans, foreign receipts refuse without mutation, and UI shows the recovery reason with Retry. Regression-first tests, independent reviews, 2,232 v2 tests, final focused storage/legacy checks and analyze/lint passed. Six real-process tests cover cross-app exclusion, SIGKILL and all four training files recovering once; headless refusal/retry verified. No new metadata format. Windows/macOS recovery guarantees remain unverified; v1 native recovery is still Linux-only. |
 | H3b | H3a | One compound operation for course rename/book references and its inverse; Library, storage, session history | Rename and undo agree across PGN/book state, including crash and external-conflict cases | Not started |
 | H3c | H3b | Apply the proven operation boundary to supported file/folder moves, delete/restore and multi-file edits | Every existing command has an explicit required read/write set, recovery path and compatible undo behavior | Not started |
 | H4 | H2, H3c | Versioned input snapshots for catalog, shelf, gaps, book comparison and training; targeted invalidation | A late computation cannot replace a newer result; a fresh rebuild equals the displayed committed projection | Not started |

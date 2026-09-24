@@ -31,7 +31,10 @@ void main() {
 
   setUp(() async {
     documents = await Directory.systemTemp.createTemp('v2-training-');
-    store = TrainingStore(documents);
+    store = TrainingStore(
+      documents,
+      support: Directory(p.join(documents.path, 'Support')),
+    );
   });
   tearDown(() => documents.delete(recursive: true));
 
