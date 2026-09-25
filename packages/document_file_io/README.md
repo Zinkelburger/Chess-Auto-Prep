@@ -40,17 +40,30 @@ destination only; captured-source validation and reference migration remain
 the responsibility of their owning workflows.
 The repertoire journal verifies the identity before replaying reference updates.
 
-Linux x64 is tested. macOS and Windows source paths are not native-host verified.
-Full document-protocol adoption is Linux only until macOS full-sync and Windows replacement,
-ACL/backup, transient-sharing and namespace-durability gates are satisfied.
-The package does not implement ReplaceFileW, macOS F_FULLFSYNC or sync-provider
-hydration APIs, and makes no blanket power-loss guarantee.
+Windows paths are normalized to extended-length UTF-16 paths, including UNC,
+before native calls; the runner also declares long-path awareness.
+`replaceFileContents` uses `ReplaceFileW` with a recovery copy and preserves
+the destination's ACL and named streams. It retries sharing/lock violations
+for up to two seconds, rechecking native identity and content between attempts;
+an external change stops the retry. A failed partial namespace move retains
+its recovery copy rather than deleting the old bytes. Staged files are flushed
+with `FlushFileBuffers` on Windows, `F_FULLFSYNC` on macOS and fsync on Linux.
+
+The native desktop contract workflow tests Windows Server 2022/2025, macOS and
+Linux, including the actual v2 store on long Unicode paths. Windows-only cases
+exercise denied sharing, external edits during retry, ACLs and named streams.
+The packaged release self-test also exercises documents and native engines.
+These checks do not simulate sudden power loss or every network/cloud provider:
+Windows directory-entry durability and sync-provider hydration guarantees remain
+outside the contract. No blanket power-loss guarantee is made.
 
 Checks from repository root:
 
 ```
 scripts/ci.sh test test/infrastructure/documents/native_pgn_document_store_test.dart test/utils/atomic_file_safety_test.dart
 scripts/ci.sh integration integration_test/repertoire_catalog_test.dart
+scripts/ci.sh test test/v2/storage/platform_documents_test.dart
+scripts/ci.sh integration integration_test/v2_desktop_test.dart
 ```
 
 The app-level typed contract is in `lib/features/documents/`; native/platform

@@ -999,6 +999,30 @@ writing. Tests never touch the user's real profile.
   rename, fsync the directory. Windows: `ReplaceFileW`, sharing violations
   retried with a capped backoff and a fresh revision check.
 
+V2 desktop compatibility (2026-09-25): the native file adapter normalizes
+Windows long/UNC paths, preserves ACLs and alternate streams on replacement,
+retains a recovery copy for partial replacement failures, and rechecks content
+and identity between bounded sharing retries. macOS stages use `F_FULLFSYNC`.
+Names have both a character cap and a UTF-8 byte budget, leaving room for
+staging and recovery names. macOS retains App Sandbox with outgoing network,
+OAuth loopback-server and user-selected file permissions; Finder PGNs enter
+the same guarded import route as Windows and Linux. External files are copied
+into the app's Documents folder, so recent imported files do not require
+persisting grants to their external originals.
+
+`.github/workflows/desktop-contracts.yml` runs native v2 document, locking,
+login, exit and desktop integration checks on Windows 2022/2025, macOS and
+Linux as a release gate. The non-publishing `windows-check` branch runs its
+Windows cases too. `--self-test-desktop` in the release executable uses a
+disposable temporary profile to check long Unicode document paths, save on
+exit, reopen, rename/recoverable delete, bundled Stockfish, Maia and actual
+login callback sockets. `tools/test_desktop_bundle.py EXE --report REPORT`
+runs that check, preserves its JSON result, and fails on a missing report,
+timeout or failed step. Windows checks exercise both portable and installed
+builds, including the portable build with the machine's VC++ runtime removed.
+These are host/file-operation gates, not sudden-power-loss or cloud-provider
+certification; Windows directory-entry durability remains unpromised.
+
 ## Settings
 
 - One writer per key. A failed read is different from an absent key and never

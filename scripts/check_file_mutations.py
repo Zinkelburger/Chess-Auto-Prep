@@ -32,6 +32,7 @@ APPROVED: dict[str, tuple[int, str]] = {
     "lib/services/storage/sqlite_recovery.dart": (1, "SQLite recovery adapter"),
     "lib/services/game_store/game_store_service.dart": (1, "one-time database migration"),
     "lib/debug/agent_driver.dart": (1, "debug screenshot output"),
+    "lib/debug/desktop_self_test.dart": (4, "explicit packaged-app check: optional diagnostic report and disposal of its own temporary profile; rename/delete calls exercise the guarded v2 store"),
     "lib/infrastructure/diagnostics/app_log_file.dart": (
         3,
         "append-only rotating diagnostic log; disposable and never user data",
@@ -64,7 +65,7 @@ APPROVED: dict[str, tuple[int, str]] = {
         "through atomic_write",
     ),
     "lib/v2/storage/compound_write.dart": (1, "v2 guarded compound inverse: remove only the verified books snapshot when restoring its recorded absence; retained intent and directory flush make recovery retryable"),
-    "lib/v2/storage/atomic_write.dart": (4, "v2 atomic publication: staged temporary, rename into place, sweep of interrupted writes"),
+    "lib/v2/storage/atomic_write.dart": (3, "v2 atomic publication: staged temporary and sweep; replacement/flush use document_file_io"),
     "lib/v2/storage/document_relocation.dart": (1, "v2 rename, move and quarantine-delete: revision-checked and backed up; the one direct mutation takes back an empty folder a refused move created"),
     "lib/v2/storage/pgn_file_store.dart": (2, "no filesystem mutation of its own: two calls into DocumentRelocation that the pattern above matches by method name"),
     "lib/v2/storage/chapter_files.dart": (2, "v2 repertoire listing: one mutation takes away a repertoire folder whose chapters have all been deleted, and only when nothing is left in it; the other takes away an import's own dot-prefixed staging folder directly under the root, which the listing never shows, when the import could not finish"),

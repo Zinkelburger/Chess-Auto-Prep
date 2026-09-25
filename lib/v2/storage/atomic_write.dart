@@ -13,21 +13,28 @@
 /// files beside a document rather than a document: kept versions and their
 /// index, training rows, the note a move leaves behind.
 ///
-/// Linux is the tested host; Windows replacement needs `ReplaceFileW` and
-/// retried sharing violations, which this does not do yet, and has no
-/// directory handle to flush, so the final step is skipped there.
+/// Windows uses ReplaceFileW with bounded sharing retries and preserves the
+/// existing file's metadata. macOS flushes staged bytes with F_FULLFSYNC.
+/// Windows has no equivalent directory-entry flush, so that step is skipped;
+/// this is not a blanket power-loss guarantee on every filesystem.
 library;
 
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:document_file_io/document_file_io.dart';
 import 'package:path/path.dart' as p;
 
 import '../diagnostics/log.dart';
 
 /// Where the staged copy of [path] lives while it is being written.
-String temporaryPathFor(String path) =>
-    p.join(p.dirname(path), '.${p.basename(path)}$_temporarySuffix');
+String temporaryPathFor(String path) {
+  final name = p.basename(path);
+  final bytes = utf8.encode(name);
+  final short = bytes.length > 180 ? sha256.convert(bytes).toString() : name;
+  return p.join(p.dirname(path), '.$short$_temporarySuffix');
+}
 
 const _temporarySuffix = '.v2-tmp';
 
@@ -51,9 +58,13 @@ Future<void> createFileExclusively(String path, List<int> bytes) async {
 Future<void> replaceFile(String path, List<int> bytes) async {
   final staged = await _stage(path, bytes);
   try {
-    await staged.rename(path);
-  } on Object {
-    await _discard(staged);
+    await replaceFileContents(staged.path, path);
+  } on FileSystemException catch (error) {
+    // ReplaceFileW can report a partial namespace move. Keep both the staged
+    // draft and its native recovery copy if restoring the old name failed.
+    if (!const [1176, 1177].contains(error.osError?.errorCode)) {
+      await _discard(staged);
+    }
     rethrow;
   }
   await _syncDirectoryEntry(path);
@@ -89,13 +100,18 @@ Future<File> _stage(String path, List<int> bytes) async {
   final handle = await staged.open(mode: FileMode.writeOnly);
   try {
     await handle.writeFrom(bytes);
-    await handle.flush();
   } on Object {
     await handle.close();
     await _discard(staged);
     rethrow;
   }
   await handle.close();
+  try {
+    await syncFile(staged.path);
+  } on Object {
+    await _discard(staged);
+    rethrow;
+  }
   return staged;
 }
 

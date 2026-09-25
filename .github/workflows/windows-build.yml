@@ -233,6 +233,15 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Move-Item "dist\chess-auto-prep-$version-windows-setup.exe" "chess-auto-prep-${{ inputs.version }}-windows-setup.exe"
 
+      - name: Packaged v2 documents, Stockfish, Maia and login sockets
+        run: python tools/test_desktop_bundle.py build/windows/x64/runner/Release/chess_auto_prep.exe --report desktop-release.json
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: windows-desktop-release-report
+          path: desktop-release.json
+
       - uses: actions/upload-artifact@v7
         with:
           name: windows-build
