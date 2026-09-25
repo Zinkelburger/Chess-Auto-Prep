@@ -65,6 +65,10 @@ final class AnalysisSaving extends AnalysisSave {
   const AnalysisSaving();
 }
 
+final class AnalysisSaveDiscarded extends AnalysisSave {
+  const AnalysisSaveDiscarded();
+}
+
 final class AnalysisSaved extends AnalysisSave {
   const AnalysisSaved();
 }
@@ -241,6 +245,22 @@ final class TableSearch extends ChangeNotifier {
       await pendingWrites.retry(_book);
       await _save(entry);
     }
+  }
+
+  /// The user explicitly gives up all failed analysis writes, including older
+  /// snapshots no longer displayed after reanalysis. Never discard active work.
+  Future<void> discardFailedSaves() async {
+    await pendingWrites.settleFor(_book);
+    for (final write in pendingWrites.unfinished(_book)) {
+      write.discard();
+    }
+    for (final item in _writes.entries.toList()) {
+      if (!item.value.discarded) continue;
+      _writes.remove(item.key);
+      _entries.remove(item.key);
+      _saves[item.key] = const AnalysisSaveDiscarded();
+    }
+    _set();
   }
 
   TableScores get scores => _scores;

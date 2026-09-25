@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:path/path.dart' as p;
 import 'package:document_file_io/document_file_io.dart';
@@ -91,6 +92,19 @@ final class MatchFolder implements MatchStore {
   /// `Documents/bughouse_matches`.
   final String root;
 
+  // Only immutable move strings proven by replay are reused. Keep the cache
+  // bounded across histories; changed starts/moves must be replayed again.
+  final _validated = <String, _ValidatedMoves>{};
+
+  Future<_DecodedCheckpoint> _decode(String folder, String text) async {
+    final previous = _validated[folder];
+    final decoded = await _decodeOffThread(text, previous);
+    _validated.remove(folder);
+    _validated[folder] = decoded.validated;
+    if (_validated.length > 8) _validated.remove(_validated.keys.first);
+    return decoded;
+  }
+
   static const _metadata = 'match.json';
   static const _bpgn = 'games.bpgn';
 
@@ -121,11 +135,13 @@ final class MatchFolder implements MatchStore {
     String folder,
   ) => withDirectoryLock(Directory(folder), () async {
     _checkRoot();
+    late final _DecodedCheckpoint decoded;
     StoredMatch match;
     try {
       final text = await _text(p.join(folder, _metadata));
       if (text == null) return null;
-      match = decodeMatchCheckpoint(text);
+      decoded = await _decode(folder, text);
+      match = decoded.match;
     } on Object catch (error) {
       // Invalid/newer metadata cannot authorize repair or an empty history.
       final detail = error is FileSystemException
@@ -141,7 +157,7 @@ final class MatchFolder implements MatchStore {
       throw FileSystemException('Match directory is unreadable', folder);
     }
     await requireUnusedRecoveryStage(p.join(folder, _metadata));
-    await _export(folder, match);
+    await _export(folder, decoded.bpgn);
     return StoredMatch(
       id: p.basename(folder),
       config: match.config,
@@ -153,9 +169,8 @@ final class MatchFolder implements MatchStore {
     );
   });
 
-  Future<void> _export(String folder, StoredMatch match) async {
+  Future<void> _export(String folder, String expected) async {
     final path = p.join(folder, _bpgn);
-    final expected = matchBpgn(match);
     final current = await _text(path);
     await requireUnusedRecoveryStage(path);
     if (current != expected) await publish(path, utf8.encode(expected));
@@ -181,7 +196,7 @@ final class MatchFolder implements MatchStore {
           status: MatchStatus.pending,
         );
         final encoded = _encoded(match);
-        decodeMatchCheckpoint(encoded);
+        await _decode(folder.path, encoded);
         await createFileExclusively(
           p.join(folder.path, _metadata),
           utf8.encode(encoded),
@@ -210,8 +225,8 @@ final class MatchFolder implements MatchStore {
       _checkRoot();
       final folder = _folder(match.id);
       final path = p.join(folder, _metadata);
-      final after = _encoded(match);
-      decodeMatchCheckpoint(after);
+      final after = await _encodeOffThread(match);
+      final decoded = await _decode(folder, after);
       if (token._path != null &&
           (token._path != path || token._after != after)) {
         throw const FormatException('The accepted match checkpoint changed.');
@@ -235,7 +250,7 @@ final class MatchFolder implements MatchStore {
           if (current == null) {
             throw const FormatException('The match checkpoint is missing.');
           }
-          decodeMatchCheckpoint(current);
+          await _decode(folder, current);
           token._before = current;
           token._admitted = true;
         }
@@ -250,8 +265,9 @@ final class MatchFolder implements MatchStore {
           await requireUnusedRecoveryStage(file);
         }
         await publish(path, utf8.encode(after));
-        await publish(p.join(folder, _bpgn), utf8.encode(matchBpgn(match)));
+        await publish(p.join(folder, _bpgn), utf8.encode(decoded.bpgn));
       });
+      _validated[folder] = decoded.validated;
       token._complete = true;
       return null;
     } on Object catch (error) {
@@ -322,6 +338,17 @@ final class MatchFolder implements MatchStore {
       const JsonEncoder.withIndent('  ').convert(match.toJson());
 }
 
+// Keep isolate closures outside instance methods: sibling closures in those
+// methods can otherwise capture publication callbacks and native resources.
+Future<String> _encodeOffThread(StoredMatch match) => Isolate.run(
+  () => const JsonEncoder.withIndent('  ').convert(match.toJson()),
+);
+
+Future<_DecodedCheckpoint> _decodeOffThread(
+  String text,
+  _ValidatedMoves? previous,
+) => Isolate.run(() => _decodeCheckpoint(text, previous));
+
 Future<String?> _text(String path) async {
   final observed = await observeFile(path);
   if (observed.status == 1) return null;
@@ -338,7 +365,55 @@ Future<String?> _text(String path) async {
 
 /// Strict read-only authority decoding. Inspection may compare [matchBpgn]
 /// with the export without invoking the repairing [MatchFolder.list].
-StoredMatch decodeMatchCheckpoint(String text) {
+StoredMatch decodeMatchCheckpoint(String text) => _decodeMatch(text, null);
+
+final class _ValidatedMoves {
+  _ValidatedMoves(
+    this.start,
+    Iterable<String> games,
+    this.config,
+    Map<String, String> exports,
+  ) : games = Set.unmodifiable(games),
+      exports = Map.unmodifiable(exports);
+  final String start;
+  final Set<String> games;
+  final String config;
+  final Map<String, String> exports;
+}
+
+final class _DecodedCheckpoint {
+  _DecodedCheckpoint(this.match, this.bpgn, this.validated);
+  final StoredMatch match;
+  final String bpgn;
+  final _ValidatedMoves validated;
+}
+
+_DecodedCheckpoint _decodeCheckpoint(String text, _ValidatedMoves? previous) {
+  final match = _decodeMatch(text, previous);
+  final config = jsonEncode(match.config.toJson());
+  final games = match.toJson()['games'] as List;
+  final exports = <String, String>{};
+  final bpgn = StringBuffer();
+  for (var i = 0; i < games.length; i++) {
+    final key = jsonEncode(games[i]);
+    final cached = previous?.config == config ? previous?.exports[key] : null;
+    final text = cached ?? gameBpgn(match.config, match.games[i]);
+    exports[key] = text;
+    bpgn.writeln(text);
+  }
+  return _DecodedCheckpoint(
+    match,
+    bpgn.toString(),
+    _ValidatedMoves(
+      match.config.startDualFen,
+      match.games.map((game) => jsonEncode(game.moves)),
+      config,
+      exports,
+    ),
+  );
+}
+
+StoredMatch _decodeMatch(String text, _ValidatedMoves? previous) {
   final Object? decoded;
   try {
     decoded = jsonDecode(text.startsWith('\ufeff') ? text.substring(1) : text);
@@ -382,6 +457,8 @@ StoredMatch decodeMatchCheckpoint(String text) {
   if (start == null ||
       match.games.any(
         (game) =>
+            !(previous?.start == match.config.startDualFen &&
+                previous!.games.contains(jsonEncode(game.moves))) &&
             replayGame(start, game.moves).moves.length != game.moves.length,
       )) {
     throw const FormatException('Invalid match position or moves.');

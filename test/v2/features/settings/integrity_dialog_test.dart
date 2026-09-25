@@ -58,7 +58,7 @@ final class _Reader implements IntegrityReader {
   Completer<IntegrityReport> pending = Completer<IntegrityReport>();
   int reads = 0;
   @override
-  Future<IntegrityReport> read() {
+  Future<IntegrityReport> read({bool Function()? isCancelled}) {
     reads++;
     return pending.future;
   }

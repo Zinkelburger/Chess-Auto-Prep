@@ -16,8 +16,9 @@ import 'integrity_report.dart';
 /// paths and tagged sections, rather than a catalog that hides deleted files.
 Future<List<IntegrityFinding>> inspectBookReferences(
   Directory documents,
-  Directory support,
-) async {
+  Directory support, {
+  bool Function()? isCancelled,
+}) async {
   final findings = <IntegrityFinding>[];
   final path = p.join(support.path, 'books.json');
   try {
@@ -56,6 +57,7 @@ Future<List<IntegrityFinding>> inspectBookReferences(
     final ids = <String>{};
     final root = p.join(documents.path, 'repertoires');
     for (final book in books.books) {
+      if (isCancelled?.call() ?? false) return findings;
       if (!ids.add(book.id))
         findings.add(
           IntegrityFinding(
@@ -65,11 +67,13 @@ Future<List<IntegrityFinding>> inspectBookReferences(
           ),
         );
       for (final folder in book.repertoires) {
+        if (isCancelled?.call() ?? false) return findings;
         findings.addAll(
           await _selector(root, folder, null, book.name, folder: true),
         );
       }
       for (final chapter in book.chapters) {
+        if (isCancelled?.call() ?? false) return findings;
         findings.addAll(
           await _selector(root, chapter.path, chapter.section, book.name),
         );

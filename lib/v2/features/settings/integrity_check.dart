@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../../storage/integrity_report.dart';
 
 /// The report is explicitly a past check, never live authorization to mutate.
-/// Closing its dialog ignores late delivery; the reader only releases locks.
+/// Closing its dialog cancels remaining work and ignores late delivery.
 final class IntegrityCheck extends ChangeNotifier {
   IntegrityCheck(this.reader);
   final IntegrityReader reader;
@@ -18,7 +18,7 @@ final class IntegrityCheck extends ChangeNotifier {
     problem = null;
     notifyListeners();
     try {
-      final next = await reader.read();
+      final next = await reader.read(isCancelled: () => _disposed);
       if (!_disposed) report = next;
     } on Object {
       if (!_disposed)

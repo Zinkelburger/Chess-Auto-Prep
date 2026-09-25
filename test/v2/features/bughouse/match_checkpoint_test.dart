@@ -44,6 +44,9 @@ void main() {
       expect(matches.problem, isA<CannotSave>());
       expect(matches.selected!.status, isNot(MatchStatus.completed));
       expect(await pending.settle(), contains('exit unconfirmed'));
+      expect(matches.canDiscard, isFalse);
+      await matches.discardSave();
+      expect(matches.writable, isFalse);
       await matches.start(config);
       expect(outside.starts, 1);
       outside.engine.quitting = null;
@@ -51,6 +54,48 @@ void main() {
       expect(await pending.settle(), isNull);
       expect(outside.engine.gone, isTrue);
       expect(matches.writable, isTrue);
+    },
+  );
+
+  test(
+    'discarding a failed checkpoint frees new matches without restart',
+    () async {
+      final outside = ScriptedBughouse();
+      final store = _FailingStore(1);
+      final pending = PendingWrites();
+      final lab = BughouseLab();
+      final tables = TableSearch(
+        lab: lab,
+        book: outside.book,
+        startEngine: () => outside.outside.launch(cores: 2),
+      );
+      final matches = Matches(
+        store: store,
+        pendingWrites: pending,
+        lab: lab,
+        tables: tables,
+        startEngine: () => outside.outside.launch(cores: 2),
+      );
+      addTearDown(matches.dispose);
+      addTearDown(tables.dispose);
+      addTearDown(lab.dispose);
+      final config = MatchConfig(
+        name: 'Discard',
+        startDualFen: TablePosition.initial.dualFen,
+        seed: 42,
+        games: 1,
+        maxPlies: 2,
+      );
+      await matches.start(config);
+      expect(matches.writable, isFalse);
+      expect(matches.canDiscard, isTrue);
+      await matches.discardSave();
+      expect(matches.writable, isTrue);
+      expect(await pending.settle(), isNull);
+      store.blocked = false;
+      await matches.start(config);
+      expect(matches.problem, isNull);
+      expect(matches.selected!.status, MatchStatus.completed);
     },
   );
 

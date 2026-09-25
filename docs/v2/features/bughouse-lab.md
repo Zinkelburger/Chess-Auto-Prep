@@ -42,7 +42,8 @@ The board column scrolls when the archive or expanded editor needs more height.
   explains calibration. `Saved scores` opens the saved engine identity, node budgets and date.
 - **Status line** — shown when reporting progress, save status or a problem: `Scored n of total moves`,
   `Saving analysis…`, or `Analysis saved`. A refused action, unreadable database or `Analysis not saved: …`
-  uses the error colour; a failed save offers `Retry save`.
+  uses the error colour; a failed save offers `Retry save` and a confirmed `Discard saves`
+  action that releases all failed analysis writes, including earlier positions.
 - **Move tables** — one per board side by side, a plain rule between them: shaded header names the board, mover (`D`) and `Score`, then
   every legal move on that board, drops included, with its score for the chosen `Time`, read from the
   mover's side, best first and bold; unscored moves `—` below by SAN. The score's tooltip is the line after
@@ -81,7 +82,9 @@ status `done`). About two minutes for an opening position on half of an eight-co
 remembered for the session. After an engine failure, switching it on again starts a fresh engine and
 finishes the missing scores. A failed book save keeps the completed entry for `Retry save`, including
 after changing positions, leaving the mode, or disposal of its original owner: the app's pending-write
-registry retains the frozen analysis and its retry. It is only labelled saved after the database confirms
+registry retains the frozen analysis and its retry. Confirmed `Discard saves` releases all
+failed analysis writes, including earlier positions and superseded table results. It leaves
+existing database rows untouched. It is only labelled saved after the database confirms
 the write. An accepted write keeps one history ID across retries; an acknowledged historical retry never
 replaces a newer current analysis. Unsaved entries remain in memory until SQLite commits; a process crash
 before commit still loses that unsaved analysis.
@@ -105,9 +108,13 @@ game. A game ends when a team on move has no legal joint action (Hivemind's own 
 Each game is written as it ends → `That is not a position yet — check the moves or the FEN.`, `Could not
 create the match directory: …`, `Could not save the match: …`, or the engine's reason. A failed
 checkpoint stops further games and retains the exact accepted snapshot for `Retry save`. New match,
-Resume and Delete wait for that obligation. Retry saves the checkpoint without replaying games; continuing
+Resume and Delete wait for that obligation. `Discard save` explicitly abandons the failed
+checkpoint and reloads saved results, without removing retained recovery files; an unconfirmed engine exit must still be retried. Retry saves the checkpoint without replaying games; continuing
 a stopped run requires Resume. Final completion waits for confirmed engine exit and final publication.
 Accepted saves, including final engine shutdown, remain owned by the app after the panel is disposed.
+Match storage validates checkpoints and generates BPGN in a worker isolate. A bounded
+cache reuses proven move histories and game exports only for matching starts, moves
+and export inputs; modified files still undergo structural and move validation.
 **Read a run** — click a history row; `Show` puts the opening on the boards, a game row puts that game on
 them at its end, `Follow the game being played` makes the boards follow the live game while the tables
 rest; `Stop` drops the game in flight so `Resume` plays it again (as does a last game the engine failed

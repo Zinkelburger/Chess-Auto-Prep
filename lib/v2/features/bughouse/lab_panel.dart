@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../chess/bughouse/hivemind.dart';
 import '../../chess/bughouse/table.dart';
 import '../../ui/app_action.dart';
+import '../../ui/confirm_dialog.dart';
 import '../../ui/theme.dart';
 import 'archive_moves.dart';
 import 'bughouse_lab.dart';
@@ -233,6 +234,7 @@ class _StatusLine extends StatelessWidget {
     return switch (search.analysisSave) {
       AnalysisSaving() => 'Saving analysis…',
       AnalysisSaved() => 'Analysis saved',
+      AnalysisSaveDiscarded() => 'Analysis save discarded',
       _ => switch (search.scores) {
         ScoresSearched(:final done, :final total) =>
           'Scored $done of $total moves',
@@ -279,6 +281,21 @@ class _StatusLine extends StatelessWidget {
             TextButton(
               onPressed: search.retrySave,
               child: const Text('Retry save'),
+            ),
+          if (search.analysisSave is AnalysisSaveFailed)
+            TextButton(
+              onPressed: () async {
+                final confirmed = await confirmAction(
+                  context,
+                  title: 'Discard failed analysis saves?',
+                  message:
+                      'Stop retrying all failed analysis saves, including earlier positions. Unsaved analysis may be lost. Existing saved data stays on disk.',
+                  confirm: 'Discard saves',
+                );
+                if (!context.mounted || !confirmed) return;
+                await search.discardFailedSaves();
+              },
+              child: const Text('Discard saves'),
             ),
         ],
       ),

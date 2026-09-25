@@ -53,7 +53,7 @@ class _IntegrityDialogState extends State<IntegrityDialog> {
               ),
               const SizedBox(height: Space.s),
               const Text(
-                'Read-only report. No recovery or repair is performed.',
+                'Read-only report. Files are checked individually; saves during the check may affect findings.',
               ),
               const SizedBox(height: Space.m),
               if (_check.reading) const LinearProgressIndicator(),

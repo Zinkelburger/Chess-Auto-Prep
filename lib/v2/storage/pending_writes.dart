@@ -3,7 +3,8 @@ import 'dart:async';
 /// Tracks accepted durable work across feature lifetimes. A feature may go
 /// away while its write remains pending; application shutdown still owns the
 /// obligation. Only the same obligation's retry or an explicitly superseding
-/// snapshot can clear a failure; another successful command cannot.
+/// snapshot or explicit user discard can clear a failure; another successful
+/// command cannot.
 final class PendingWrites {
   final _pending = <Future<void>, Object>{};
   final _failures = <Object, String>{};
@@ -149,6 +150,19 @@ final class PendingObligation<T> {
   T? _result;
   String? _detail;
   bool _committed = false;
+  bool _discarded = false;
+
+  bool get discarded => _discarded;
+
+  /// Explicitly abandon a failed, idle save. This never undoes disk writes,
+  /// claims a commit, or releases ownership of an in-flight operation.
+  bool discard() {
+    if (_running != null || _detail == null || committed || discarded)
+      return false;
+    _discarded = true;
+    _registry._obligations.remove(this);
+    return true;
+  }
 
   T? get result => _result;
 
@@ -159,6 +173,7 @@ final class PendingObligation<T> {
   String get detail => _detail ?? 'Not saved yet.';
 
   Future<T> run() {
+    if (discarded) return Future.error(StateError('This save was discarded.'));
     if (committed) return Future.value(result as T);
     if (_running case final running?) return running;
     final running = _perform();

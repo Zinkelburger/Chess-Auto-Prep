@@ -60,6 +60,33 @@ void main() {
     },
   );
 
+  test(
+    'cached replay and export never authorize changed moves or headers',
+    () async {
+      final raw = await File(
+        'test/fixtures/v2_bughouse/old_match.json',
+      ).readAsString();
+      final match = decodeMatchCheckpoint(raw);
+      final folder = Directory(p.join(root, match.id));
+      await folder.create(recursive: true);
+      final file = File(p.join(folder.path, 'match.json'));
+      await file.writeAsString(raw);
+      await store.list();
+      final changed = jsonDecode(raw) as Map<String, Object?>;
+      final first = (changed['games'] as List).first as Map<String, Object?>;
+      first['whiteName'] = 'Changed player';
+      await file.writeAsString(jsonEncode(changed));
+      final updated = (await store.list()).single;
+      expect(
+        await File(p.join(folder.path, 'games.bpgn')).readAsString(),
+        matchBpgn(updated),
+      );
+      first['moves'] = ['1e2e5'];
+      await file.writeAsString(jsonEncode(changed));
+      await expectLater(store.list(), throwsA(isA<FileSystemException>()));
+    },
+  );
+
   test('a new match is a folder named after it, never over another', () async {
     final first = await store.create(config, DateTime(2026, 9, 23));
     final second = await store.create(config, DateTime(2026, 9, 24));

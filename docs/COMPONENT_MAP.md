@@ -522,13 +522,15 @@ swallowed, because a broken log must not break the app reporting through it.
 call sites are listed as a cleanup in [FUTURE_FEATURES](FUTURE_FEATURES.md).
 
 The v2 saved-data diagnostic is `storage/profile_integrity.dart`, injected by
-`AppEnvironment`. It takes the existing domain/Documents/Support locks and calls
-concrete recovery owners' read-only `inspect` methods; it never runs recovery.
+`AppEnvironment`. It reads without mutation locks and calls concrete recovery owners' read-only
+`inspect` methods; it never runs recovery or delays saves. Files are observed
+individually, so concurrent writes can affect findings.
 `book_integrity.dart` shares the strict book-reference decoder, while
 `saved_artifact_checks.dart` validates generated formats and compares bughouse
-BPGN to the pure authoritative JSON decoder under per-match locks. The
+BPGN to the authoritative JSON decoder in a worker. Unrelated links and
+unreadable discovery folders are ignored; known artifact paths are diagnosed. The
 foundation-only `features/settings/integrity_check.dart` owns report lifetime;
-`integrity_dialog.dart` presents dated findings and skipped checks from Settings
+`integrity_dialog.dart` cancels remaining scan work on close and presents dated findings and skipped checks from Settings
 and the unavailable-settings startup screen. No repair or source write occurs.
 See [v2 Settings](v2/features/settings.md#read-only-saved-data-check-v2) for scope.
 

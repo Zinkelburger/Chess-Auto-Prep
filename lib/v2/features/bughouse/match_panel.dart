@@ -48,6 +48,24 @@ class MatchPanel extends StatelessWidget {
                   child: const Text('Retry save'),
                 ),
               ),
+            if (matches.canDiscard)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: () async {
+                    final confirmed = await confirmAction(
+                      context,
+                      title: 'Discard unsaved match results?',
+                      message:
+                          'Stop retrying this checkpoint and reload saved results. Unsaved games may be lost. Existing files, including unfinished saves, stay on disk.',
+                      confirm: 'Discard save',
+                    );
+                    if (!context.mounted || !confirmed) return;
+                    await matches.discardSave();
+                  },
+                  child: const Text('Discard save'),
+                ),
+              ),
             if (matches.problem is CannotLoad)
               Align(
                 alignment: Alignment.centerLeft,

@@ -11,20 +11,15 @@ import '../chess/pgn/chapter.dart' show readOffThreadFrom;
 import 'atomic_write.dart';
 import 'bughouse_matches.dart';
 import 'directory_entries.dart';
-import 'file_lock.dart';
 import 'integrity_report.dart';
-import 'recovery_files.dart';
 
 /// These reads never enter a storage loader: match loading can rebuild BPGN.
 /// The JSON checkpoint is authoritative; the export is compared, never repaired.
 final class SavedArtifactChecks {
-  SavedArtifactChecks(this.documents, {Set<String> heldDirectories = const {}})
-    : _heldDirectories = Set.unmodifiable(heldDirectories);
+  SavedArtifactChecks(this.documents, {this.isCancelled});
   final Directory documents;
-
-  /// Canonical directories the enclosing profile inspection already holds.
-  /// Support may itself be a match directory; reacquiring it would self-wait.
-  final Set<String> _heldDirectories;
+  final bool Function()? isCancelled;
+  bool get cancelled => isCancelled?.call() ?? false;
 
   Future<List<IntegrityFinding>> generation() async {
     final findings = <IntegrityFinding>[];
@@ -37,12 +32,14 @@ final class SavedArtifactChecks {
     List<IntegrityFinding> findings, {
     bool artifacts = false,
   }) async {
+    if (cancelled) return;
     try {
       final observed = await observeDirectory(folder.path);
       if (observed.status == 1) return;
       if (observed.status != 0)
         throw const FormatException('The folder is linked or unreadable.');
       await for (final entry in directoryEntries(folder, followLinks: false)) {
+        if (cancelled) return;
         final name = p.basename(entry.path);
         if (entry is Directory &&
             (!name.startsWith('.') || name == '.cap-generation')) {
@@ -70,8 +67,7 @@ final class SavedArtifactChecks {
               'A staged generated tree remains; no repair was attempted.',
             ),
           );
-        } else if (entry is Link &&
-            (!name.startsWith('.') || artifacts || name == '.cap-generation')) {
+        } else if (entry is Link && artifacts) {
           findings.add(
             IntegrityFinding(
               IntegrityKind.unavailable,
@@ -82,6 +78,7 @@ final class SavedArtifactChecks {
         }
       }
     } on Object {
+      if (!artifacts) return;
       findings.add(
         IntegrityFinding(
           IntegrityKind.unavailable,
@@ -117,6 +114,7 @@ final class SavedArtifactChecks {
 
   Future<List<IntegrityFinding>> matches() async {
     final findings = <IntegrityFinding>[];
+    if (cancelled) return findings;
     final root = Directory(p.join(documents.path, 'bughouse_matches'));
     try {
       final observed = await observeDirectory(root.path);
@@ -126,15 +124,10 @@ final class SavedArtifactChecks {
           'The match directory is linked or unreadable.',
         );
       await for (final entry in directoryEntries(root, followLinks: false)) {
+        if (cancelled) return findings;
         if (p.basename(entry.path).startsWith('.')) continue;
         if (entry is Directory) {
-          final held = _heldDirectories.contains(
-            canonicalRecoveryRoot(entry).path,
-          );
-          final checked = held
-              ? await _match(entry.path)
-              : await withDirectoryLock(entry, () => _match(entry.path));
-          findings.addAll(checked);
+          findings.addAll(await _match(entry.path));
         } else {
           findings.add(
             IntegrityFinding(
@@ -186,8 +179,10 @@ final class SavedArtifactChecks {
       final json = await observeFile(path);
       if (json.status != 0 || json.bytes == null)
         throw const FormatException('The match checkpoint is unavailable.');
-      final match = decodeMatchCheckpoint(utf8.decode(json.bytes!));
-      final expected = matchBpgn(match);
+      final bytes = json.bytes!;
+      final expected = await Isolate.run(
+        () => matchBpgn(decodeMatchCheckpoint(utf8.decode(bytes))),
+      );
       final exportPath = p.join(folder, 'games.bpgn');
       final export = await observeFile(exportPath);
       if (export.status == 1 && expected.isEmpty) return [];

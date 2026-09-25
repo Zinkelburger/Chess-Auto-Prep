@@ -289,6 +289,33 @@ void main() {
   );
 
   test(
+    'discard frees earlier failures absent from the current table',
+    () async {
+      final earlier = search.pendingWrites.accept<HivemindSave>(
+        resource: outside.book,
+        label: 'Earlier analysis',
+        work: () async => const HivemindSaveFailed('history changed'),
+        problem: (outcome) =>
+            outcome is HivemindSaveFailed ? outcome.detail : null,
+      );
+      await earlier.run();
+      search
+        ..open()
+        ..toggleEngine();
+      await pumpEventQueue();
+      expect(search.analysisSave, isA<AnalysisSaveFailed>());
+      expect(search.pendingWrites.unfinished(outside.book), hasLength(2));
+      await search.discardFailedSaves();
+      expect(await search.pendingWrites.settle(), isNull);
+      expect(search.analysisSave, isA<AnalysisSaveDiscarded>());
+      outside.book.saving = null;
+      lab.play(BoardNumber.one, 'e2e4');
+      await pumpEventQueue();
+      expect(search.analysisSave, isA<AnalysisSaved>());
+    },
+  );
+
+  test(
     'accepted analysis save remains retryable after owner disposal',
     () async {
       final pending = PendingWrites();

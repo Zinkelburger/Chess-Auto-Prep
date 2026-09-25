@@ -279,10 +279,11 @@ final class ScriptedDraftQuestion implements DraftQuestion {
 
 final class _FixtureIntegrity implements IntegrityReader {
   @override
-  Future<IntegrityReport> read() async => IntegrityReport(
-    checkedAt: DateTime(2026),
-    findings: const [],
-    checked: const ['Scripted fixture'],
-    skipped: const [],
-  );
+  Future<IntegrityReport> read({bool Function()? isCancelled}) async =>
+      IntegrityReport(
+        checkedAt: DateTime(2026),
+        findings: const [],
+        checked: const ['Scripted fixture'],
+        skipped: const [],
+      );
 }

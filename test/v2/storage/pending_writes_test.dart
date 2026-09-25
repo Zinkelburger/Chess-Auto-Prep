@@ -5,6 +5,38 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test(
+    'explicit discard cannot abandon active work and unblocks successors',
+    () async {
+      final writes = PendingWrites();
+      final resource = Object();
+      final finish = Completer<bool>();
+      final first = writes.accept<bool>(
+        resource: resource,
+        label: 'First',
+        work: () => finish.future,
+        problem: (ok) => ok ? null : 'permanent failure',
+      );
+      final running = first.run();
+      expect(first.discard(), isFalse);
+      finish.complete(false);
+      await running;
+      final second = writes.accept<bool>(
+        resource: resource,
+        label: 'Second',
+        work: () async => true,
+        problem: (ok) => ok ? null : 'blocked',
+        blocked: () => false,
+      );
+      expect(await second.run(), isFalse);
+      expect(first.discard(), isTrue);
+      expect(first.committed, isFalse);
+      expect(await second.run(), isTrue);
+      expect(await writes.settle(), isNull);
+      await expectLater(first.run(), throwsStateError);
+    },
+  );
+
+  test(
     'an old snapshot completion cannot clear a newer snapshot failure',
     () async {
       final writes = PendingWrites();

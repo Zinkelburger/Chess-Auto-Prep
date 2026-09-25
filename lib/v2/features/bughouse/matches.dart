@@ -90,6 +90,23 @@ final class Matches extends ChangeNotifier {
     );
   }
 
+  bool get canDiscard =>
+      _run == null &&
+      !_starting &&
+      _checkpoint != null &&
+      !_checkpoint!.committed &&
+      (_exit == null || _exit!.committed);
+
+  /// Abandons only the failed save, never an unconfirmed engine exit. Reload
+  /// the authoritative files; any retained staging file stays visible on disk.
+  Future<void> discardSave() async {
+    if (!canDiscard || !_checkpoint!.discard()) return;
+    _checkpoint = null;
+    _accepted = null;
+    _problem = null;
+    await load();
+  }
+
   /// Newest first.
   List<StoredMatch> get matches => _matches;
 
@@ -162,6 +179,7 @@ final class Matches extends ChangeNotifier {
       _fail(CannotCreate('$error'));
     } finally {
       _starting = false;
+      if (!_disposed) notifyListeners();
     }
   }
 
@@ -189,6 +207,7 @@ final class Matches extends ChangeNotifier {
       _fail(CannotLoad('$error'));
     } finally {
       _starting = false;
+      if (!_disposed) notifyListeners();
     }
   }
 

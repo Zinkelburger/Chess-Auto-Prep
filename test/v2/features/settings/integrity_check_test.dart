@@ -17,6 +17,7 @@ void main() {
       expect(reader.reads, 1);
       expect(owner.reading, isTrue);
       owner.dispose();
+      expect(reader.isCancelled!(), isTrue);
       reader.pending.complete(_report());
       await reading;
       expect(owner.report, isNull);
@@ -60,8 +61,10 @@ IntegrityReport _report({List<String> skipped = const []}) => IntegrityReport(
 final class _Reader implements IntegrityReader {
   Completer<IntegrityReport> pending = Completer<IntegrityReport>();
   int reads = 0;
+  bool Function()? isCancelled;
   @override
-  Future<IntegrityReport> read() {
+  Future<IntegrityReport> read({bool Function()? isCancelled}) {
+    this.isCancelled = isCancelled;
     reads++;
     return pending.future;
   }

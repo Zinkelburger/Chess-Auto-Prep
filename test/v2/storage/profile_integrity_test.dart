@@ -135,6 +135,49 @@ void main() {
     skip: Platform.isWindows,
   );
 
+  test('cancelled inspection stops without scanning artifacts', () async {
+    final report = await ProfileIntegrity(
+      documents: documents,
+      support: support,
+    ).read(isCancelled: () => true);
+    expect(report.checked, isEmpty);
+    expect(report.skipped.single, contains('cancelled'));
+  });
+
+  test(
+    'unrelated links are ignored but artifact links are diagnosed',
+    () async {
+      await Link(
+        p.join(documents.path, 'personal-link'),
+      ).create('/unavailable');
+      expect((await inspect()).clean, isTrue);
+      final link = Link(p.join(course.parent.path, '.cap-generation'));
+      await link.create('/unavailable');
+      expect((await inspect()).findings.single.path, link.path);
+    },
+    skip: Platform.isWindows,
+  );
+
+  test(
+    'unrelated unreadable folders do not create artifact findings',
+    () async {
+      final unrelated = await Directory(
+        p.join(documents.path, 'private'),
+      ).create();
+      await Process.run('chmod', ['000', unrelated.path]);
+      try {
+        final report = await ProfileIntegrity(
+          documents: documents,
+          support: support,
+        ).read();
+        expect(report.clean, isTrue);
+      } finally {
+        await Process.run('chmod', ['700', unrelated.path]);
+      }
+    },
+    skip: Platform.isWindows,
+  );
+
   test('native BOM book and settings files remain valid', () async {
     await File(p.join(support.path, 'settings.json')).writeAsString('\ufeff{}');
     await File(
@@ -507,28 +550,34 @@ void main() {
   }
 
   test(
-    'inspection waits for the shared mutation domain and does not recover',
+    'inspection completes while all shared mutation locks are held',
     () async {
       final entered = Completer<void>();
       final release = Completer<void>();
       final domain = Directory(
         p.join(documents.path, 'repertoires', '.cap-directory-domain'),
       );
-      final holding = withDirectoryLock(domain, () async {
-        entered.complete();
-        await release.future;
-      });
+      final holding = withDirectoryLock(
+        domain,
+        () => withDirectoryLock(
+          documents,
+          () => withDirectoryLock(support, () async {
+            entered.complete();
+            await release.future;
+          }),
+        ),
+      );
+
       await entered.future;
-      var finished = false;
-      final checking = inspect().then((value) {
-        finished = true;
-        return value;
-      });
-      await pumpEventQueue();
-      expect(finished, isFalse);
-      release.complete();
-      await holding;
-      expect((await checking).clean, isTrue);
+      try {
+        expect(
+          (await inspect().timeout(const Duration(seconds: 2))).clean,
+          isTrue,
+        );
+      } finally {
+        release.complete();
+        await holding;
+      }
     },
   );
 

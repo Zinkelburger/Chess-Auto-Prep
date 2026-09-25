@@ -169,13 +169,14 @@ differ from their authoritative match JSON. `Check again` rereads; closing the
 dialog ignores late delivery. Findings include a resource path and safe reason,
 never raw parser exceptions or document bodies.
 
-This action performs no recovery, repair or source writes. It holds the shared
-mutation domain and Documents/Support locks, inspecting existing concrete
-protocols. Pending or unknown recovery metadata skips dependent reference and
+This action performs no recovery, repair or source writes. It reads files individually without mutation locks, inspecting existing concrete
+protocols. Concurrent saves may affect findings; check again after saves finish.
+Closing the dialog cancels the remaining scan. Pending or unknown recovery metadata skips dependent reference and
 artifact checks. Generated trees are scanned in visible Documents folders,
 including `.cap-generation`; hidden/quarantine ancestry is excluded. V4 files
 lack source revisions, so validation proves format only. Bughouse checkpoints
-are checked under individual match locks, not as an atomic whole-root inventory.
+are replayed in a worker, without locking saves. Unrelated links and unreadable
+discovery folders are ignored; known artifact paths still report problems.
 Credentials and unrelated databases are outside the report. Native tests compare
 all profile bytes and directory membership before and after each inspection.
 

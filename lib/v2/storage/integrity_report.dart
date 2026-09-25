@@ -1,4 +1,4 @@
-/// A read-only, point-in-time diagnosis. No finding authorizes a repair.
+/// A read-only, best-effort diagnosis of individually observed files. No finding authorizes a repair.
 enum IntegrityKind { unfinished, unavailable, unsupported, dangling, derived }
 
 final class IntegrityFinding {
@@ -25,5 +25,5 @@ final class IntegrityReport {
 }
 
 abstract interface class IntegrityReader {
-  Future<IntegrityReport> read();
+  Future<IntegrityReport> read({bool Function()? isCancelled});
 }
