@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:chess_auto_prep/v2/features/library/library.dart';
 import 'package:chess_auto_prep/v2/features/library/library_state.dart';
 import 'package:chess_auto_prep/v2/storage/book_file.dart';
+import 'package:chess_auto_prep/v2/storage/book_snapshot.dart';
 import 'package:chess_auto_prep/v2/storage/book_list.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/document_ref.dart';
@@ -548,13 +549,16 @@ final class _HeldBooks implements BookStore {
   @override
   Future<BookList> read() => inner.read();
   @override
-  Future<void> write(BookList value) async {
+  Future<BookSnapshot> snapshot() => inner.snapshot();
+
+  @override
+  Future<BookSnapshot> write(BookList value) async {
     if (hold) {
       entered.complete();
       await release.future;
       hold = false;
     }
-    await inner.write(value);
+    return inner.write(value);
   }
 }
 

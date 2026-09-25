@@ -30,6 +30,7 @@ import 'file_lock.dart';
 import 'recovery_gate.dart';
 import 'relocation_notes.dart';
 import 'training_rows.dart';
+import 'training_snapshot.dart';
 import 'reference_change.dart';
 import 'training_intent.dart';
 import 'training_payload.dart';
@@ -136,10 +137,8 @@ final class TrainingStore implements ProgressFiles {
   /// The folder the four files sit in, beside `repertoires/`.
   final Directory documents;
 
-  /// The wrong answers of the whole log as last read, with the size and
-  /// time the file had then. The log only grows, and every chapter opened
-  /// reads it, so it is read again only when the file changed.
-  ({int size, DateTime modified, List<Attempt> wrong})? _log;
+  /// Decoded mistakes are reusable only for the exact bytes just observed.
+  ({String hash, List<Attempt> wrong})? _log;
 
   @override
   Future<ProgressRead> read(
@@ -175,8 +174,18 @@ final class TrainingStore implements ProgressFiles {
     Set<String> sources,
     Map<String, Revision> versions,
   ) async {
-    final reviews = await _rows(_reviewCodec);
-    final streaks = await _rows(_streakCodec);
+    final participants = <String, Revision?>{};
+    final reviews = _rows(
+      _reviewCodec,
+      await _observed(reviewsFile, participants),
+    );
+    final streaks = _rows(
+      _streakCodec,
+      await _observed(streaksFile, participants),
+    );
+    await _observed(historyFile, participants);
+    final attempts = await _observed(attemptsFile, participants);
+    final wrong = _wrongAnswers(attempts, participants[attemptsFile]);
     // A key written twice is read as its first row, the one a write
     // replaces.
     final byLine = <LineKey, Review>{};
@@ -192,9 +201,16 @@ final class TrainingStore implements ProgressFiles {
     }
     return ProgressLoaded(
       sources: Map.unmodifiable(versions),
-      reviews: byLine,
-      streaks: byMove,
-      mistakes: await _mistakes(sources),
+      reviews: Map.unmodifiable(byLine),
+      streaks: Map.unmodifiable(byMove),
+      mistakes: List.unmodifiable(
+        wrong.where((a) => sources.contains(a.key.source)),
+      ),
+      snapshot: TrainingReadSet(
+        documentsPath: p.normalize(documents.absolute.path),
+        canonicalDocuments: _writes.documents.path,
+        files: participants,
+      ),
     );
   }
 
@@ -376,20 +392,21 @@ final class TrainingStore implements ProgressFiles {
 
   String _path(String name) => p.join(documents.path, name);
 
-  /// What the file [name] holds, or null when there is no such file.
-  Future<Uint8List?> _bytes(String name) async {
-    final file = File(_path(name));
-    if (!await file.exists()) return null;
-    return file.readAsBytes();
-  }
-
-  /// Decoded here rather than by `readAsString`, which reports bytes that
-  /// are not UTF-8 as a [FileSystemException], so the file is unreadable at
-  /// the line that holds them instead of failing like a missing disk.
-  Future<String?> _text(String name) async {
-    final bytes = await _bytes(name);
-    if (bytes == null) return null;
-    return _decodeText(name, bytes);
+  /// Records a participant's proof and returns only the bytes it proves.
+  Future<Uint8List?> _observed(
+    String name,
+    Map<String, Revision?> versions,
+  ) async {
+    switch (await probeDocument(p.join(_writes.documents.path, name))) {
+      case FileFound(:final bytes, :final revision):
+        versions[name] = revision;
+        return bytes;
+      case FileMissing():
+        versions[name] = null;
+        return null;
+      case FileUnreadable(:final detail):
+        throw FileSystemException(detail, _path(name));
+    }
   }
 
   String? _decodeText(String name, Uint8List? bytes) {
@@ -401,19 +418,16 @@ final class TrainingStore implements ProgressFiles {
     }
   }
 
-  Future<List<CsvRecord>> _records(String name, String? text) async {
-    if (text == null || text.trim().isEmpty) return const [];
-    return switch (readCsvRecords(text)) {
-      CsvParsed(:final records) => records,
-      CsvUnreadable(:final line) => throw _Unreadable(name, line),
-    };
-  }
-
-  /// Every row of the CSV [name]; a row that is not one makes the whole file
-  /// unreadable rather than silently missing.
-  Future<List<T>> _rows<T, K>(_Codec<T, K> codec) async {
+  /// A malformed CSV row invalidates its whole required participant.
+  List<T> _rows<T, K>(_Codec<T, K> codec, Uint8List? bytes) {
     final name = codec.file;
-    final records = await _records(name, await _text(name));
+    final text = _decodeText(name, bytes);
+    final records = text == null || text.trim().isEmpty
+        ? const <CsvRecord>[]
+        : switch (readCsvRecords(text)) {
+            CsvParsed(:final records) => records,
+            CsvUnreadable(:final line) => throw _Unreadable(name, line),
+          };
     final header = headerWidth(records);
     return [
       for (final record in records)
@@ -422,36 +436,17 @@ final class TrainingStore implements ProgressFiles {
     ];
   }
 
-  /// The wrong answers given in [sources], oldest first. A line the log
-  /// cannot read is passed over: the log is the old app's too, and one torn
-  /// line must not hide the rest.
-  Future<List<Attempt>> _mistakes(Set<String> sources) async {
-    final wrong = await _wrongAnswers();
-    return [
-      for (final a in wrong)
-        if (sources.contains(a.key.source)) a,
-    ];
-  }
-
-  Future<List<Attempt>> _wrongAnswers() async {
-    final file = File(_path(attemptsFile));
-    final stat = await file.stat();
-    if (stat.type == FileSystemEntityType.notFound) return const [];
-    final log = _log;
-    if (log != null && log.size == stat.size && log.modified == stat.modified) {
-      return log.wrong;
-    }
-    // Stamped with the size and time from before the read: a write in
-    // between makes the next read look again rather than miss it. Bytes
-    // that are not UTF-8 spoil only the line they are on, which is then
-    // passed over like any other line the log cannot read.
-    final bytes = await _bytes(attemptsFile);
-    final text = bytes == null ? '' : utf8.decode(bytes, allowMalformed: true);
-    final wrong = [
+  /// Preserve the legacy log's tolerance of individual torn/malformed lines.
+  List<Attempt> _wrongAnswers(Uint8List? bytes, Revision? revision) {
+    if (bytes == null || revision == null) return const [];
+    final cached = _log;
+    if (cached?.hash == revision.contentHash) return cached!.wrong;
+    final text = utf8.decode(bytes, allowMalformed: true);
+    final wrong = List<Attempt>.unmodifiable([
       for (final line in const LineSplitter().convert(text))
         if (decodeAttempt(line) case final a? when !a.correct) a,
-    ];
-    _log = (size: stat.size, modified: stat.modified, wrong: wrong);
+    ]);
+    _log = (hash: revision.contentHash, wrong: wrong);
     return wrong;
   }
 }
@@ -516,8 +511,10 @@ final class ProgressLoaded extends ProgressRead {
     required this.streaks,
     required this.mistakes,
     this.sources = const {},
+    this.snapshot,
   });
 
+  final TrainingReadSet? snapshot;
   final Map<String, Revision> sources;
   final Map<LineKey, Review> reviews;
   final Map<StreakKey, MoveStreak> streaks;

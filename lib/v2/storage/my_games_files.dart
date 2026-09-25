@@ -26,7 +26,7 @@ const bookCheckWindow = 200;
 /// A saved game and where it is in its file, counting from zero.
 typedef CachedGame = ({int index, String text});
 
-/// A bounded corpus read and the exact file version it came from. An absent
+/// A corpus read and the exact file version it came from. An absent
 /// file is a successful empty input whose absence must still be validated.
 sealed class CachedGamesRead {
   const CachedGamesRead();
@@ -88,6 +88,17 @@ final class GamesCache {
     GameSite site,
     String username, {
     required int max,
+  }) => _snapshot(site, username, max: max);
+
+  /// Every saved game, in file order, with the same exact native proof used
+  /// by the bounded book check. Absence remains distinct from an unreadable file.
+  Future<CachedGamesRead> snapshotAll(GameSite site, String username) =>
+      _snapshot(site, username);
+
+  Future<CachedGamesRead> _snapshot(
+    GameSite site,
+    String username, {
+    int? max,
   }) async {
     final ref = refFor(site, username);
     try {
@@ -96,7 +107,12 @@ final class GamesCache {
           return CachedGamesSnapshot(
             ref: ref,
             revision: revision,
-            games: await _newestOf(text, max),
+            games: max == null
+                ? [
+                    for (final (index, game) in (await _gamesOf(text)).indexed)
+                      (index: index, text: game),
+                  ]
+                : await _newestOf(text, max),
           );
         case Absent():
           return CachedGamesSnapshot(ref: ref, revision: null, games: const []);

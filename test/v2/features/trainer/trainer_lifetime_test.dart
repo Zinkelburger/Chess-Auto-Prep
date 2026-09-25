@@ -5,6 +5,7 @@ import 'package:chess_auto_prep/v2/chess/training/records.dart';
 import 'package:chess_auto_prep/v2/chess/training/schedule.dart';
 import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/v2/features/trainer/trainer.dart';
+import 'package:chess_auto_prep/v2/features/trainer/training_scope.dart';
 import 'package:chess_auto_prep/v2/storage/book_file.dart';
 import 'package:chess_auto_prep/v2/storage/document_ref.dart';
 import 'package:chess_auto_prep/v2/storage/pending_writes.dart';
@@ -45,6 +46,7 @@ void main() {
       () async => const StartFailed('unused'),
     );
     books = Books(store: MemoryBooks(), root: '/repertoires');
+    await books.load();
     files = _HeldProgress();
     pending = PendingWrites();
     now = DateTime.utc(2026, 9, 24);

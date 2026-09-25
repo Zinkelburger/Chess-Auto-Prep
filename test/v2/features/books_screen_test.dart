@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:chess_auto_prep/v2/features/books/books_screen.dart';
 import 'package:chess_auto_prep/v2/storage/book_file.dart';
+import 'package:chess_auto_prep/v2/storage/book_snapshot.dart';
 import 'package:chess_auto_prep/v2/storage/book_list.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/document_ref.dart';
@@ -151,7 +152,7 @@ void main() {
         Book(
           id: 'b',
           name: 'Event',
-          chapters: {BookChapter('Course/Main.pgn', 'New section')},
+          chapters: {const BookChapter('Course/Main.pgn', 'New section')},
         ),
       ],
     );
@@ -256,5 +257,11 @@ class _BooksFile implements BookStore {
   }
 
   @override
-  Future<void> write(BookList books) async => this.books = books;
+  Future<BookSnapshot> snapshot() async => BookSnapshot(value: await read());
+
+  @override
+  Future<BookSnapshot> write(BookList books) async {
+    this.books = books;
+    return BookSnapshot(value: books);
+  }
 }

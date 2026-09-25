@@ -133,7 +133,7 @@ class _TreePaneState extends State<TreePane> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _Sentence(detail),
-        TextButton(onPressed: widget.tree.forget, child: const Text('Retry')),
+        TextButton(onPressed: widget.tree.retry, child: const Text('Retry')),
       ],
     ),
     TreeNothing(:final sentence) => _Sentence(sentence),

@@ -4,18 +4,15 @@ import 'dart:math' show Random;
 import 'package:flutter/foundation.dart';
 
 import '../../chess/pgn/chapter.dart';
-import '../../chess/pgn/chapter_sections.dart';
 import '../../chess/training/line_order.dart';
 import '../../chess/training/schedule.dart';
 import '../../chess/training/sitting.dart';
 import '../../chess/training/training_line.dart';
 import '../../chess/training/training_options.dart';
 import '../../storage/settings_store.dart';
-import '../../diagnostics/log.dart';
 import '../../storage/chapter_files.dart';
 import '../../storage/document_ref.dart';
 import '../../storage/document_repository.dart';
-import '../../storage/pgn_document_store.dart';
 import '../../storage/training_store.dart';
 import '../../storage/pending_writes.dart';
 import '../../workspace/board_claim.dart';
@@ -26,6 +23,8 @@ import '../../workspace/document_saver.dart' show DocumentWriteGuard;
 import '../../workspace/engine_analysis.dart';
 import 'lesson.dart';
 import 'progress.dart';
+import 'training_scope.dart';
+import '../../storage/book_snapshot.dart';
 
 /// How much the trainer takes in: the chapter on the board, every chapter
 /// of its repertoire, or every chapter of the book in use.
@@ -226,7 +225,7 @@ class Trainer extends ChangeNotifier implements DocumentWriteGuard {
   }
 
   /// The book in use as the last load saw it.
-  Object? _bookSeen;
+  (int, bool)? _bookSeen;
 
   final DocumentSession _session;
   Revision? _savedRevision;
@@ -361,7 +360,39 @@ class Trainer extends ChangeNotifier implements DocumentWriteGuard {
 
   /// Reads the progress again: after another session changed it, or to
   /// try a file that could not be read.
-  Future<void> reload() => _load(force: true);
+  Future<void> reload() {
+    if (_scope != TrainScope.book ||
+        _disposed ||
+        _relocating ||
+        documentWriting) {
+      return _load(force: true);
+    }
+    return _bookReload ??= _refreshBook().whenComplete(
+      () => _bookReload = null,
+    );
+  }
+
+  Future<void>? _bookReload;
+  bool _refreshingBook = false;
+
+  Future<void> _refreshBook() async {
+    _refreshingBook = true;
+    _loads++;
+    leave();
+    _become(const TrainerLoading());
+    try {
+      if (_books.canRetry) {
+        await _books.retry();
+      } else {
+        await _books.load();
+      }
+    } finally {
+      _refreshingBook = false;
+    }
+    // Book notifications invalidate the old load but do not recursively start
+    // another read while this explicit refresh owns the replacement.
+    await _load(force: true);
+  }
 
   /// Replays the original accepted mutations, including their store tokens;
   /// only after they land may a replacement scope read their result.
@@ -522,8 +553,10 @@ class Trainer extends ChangeNotifier implements DocumentWriteGuard {
   /// Another book is in use, or the one in use was edited: a book being
   /// trained is read again.
   void _bookChanged() {
-    if (identical(_books.active, _bookSeen)) return;
-    _bookSeen = _books.active;
+    final seen = (_books.revision, _books.current);
+    if (seen == _bookSeen) return;
+    _bookSeen = seen;
+    if (_refreshingBook) return;
     if (_scope == TrainScope.book && _state is! TrainerIdle) {
       unawaited(_load(force: true));
     }
@@ -563,7 +596,7 @@ class Trainer extends ChangeNotifier implements DocumentWriteGuard {
   }
 
   Future<void> _load({bool force = false}) async {
-    if (_disposed) return;
+    if (_disposed || _refreshingBook) return;
     if (documentWriting) {
       _reloadAfterWrite = true;
       return;
@@ -603,62 +636,99 @@ class Trainer extends ChangeNotifier implements DocumentWriteGuard {
       return _become(const TrainerEmpty(NothingToTrain.studyChapter));
     }
     _become(const TrainerLoading());
-    final open = trainingLines(chapter, source: ref.path);
-    final chapters = _scope == TrainScope.chapter
-        ? [(ref: ref, lines: open, revision: revision)]
-        : await _chapters.repertoireOf(ref, open, revision: revision);
+    final open = (
+      ref: ref,
+      lines: trainingLines(chapter, source: ref.path),
+      revision: revision,
+    );
+    final captured = _scope == TrainScope.chapter
+        ? TrainingScopeReady([open])
+        : await _chapters.repertoireOf(open);
     if (load != _loads) return;
-    await _loaded(load, chapters);
+    await _loaded(load, captured, sourceRevision: revision);
   }
 
-  /// The chapters of the book in use, the one on the board as it stands
-  /// when it is one of them.
+  /// Freeze the acknowledged book before reading any of its chapters.
   Future<void> _loadBook(int load, Chapter? chapter, ChapterRef? ref) async {
-    _bookSeen = _books.active;
-    if (_books.active == null) {
-      return _become(const TrainerEmpty(NothingToTrain.noBook));
+    final book = _books.active;
+    final bookRevision = _books.revision;
+    final source = _books.source;
+    final revision = _session.trainingSourceRevision;
+    _bookSeen = (bookRevision, _books.current);
+    if (!_books.current) {
+      return _become(
+        const TrainerFailed(
+          ProgressFailed(
+            'Book membership is not saved or could not be read. Retry after saving it.',
+          ),
+        ),
+      );
     }
-    _become(const TrainerLoading());
+    if (book == null) {
+      return _loaded(
+        load,
+        TrainingScopeReady(const []),
+        sourceRevision: revision,
+        bookRevision: bookRevision,
+        bookSource: source,
+        empty: NothingToTrain.noBook,
+      );
+    }
     final open = chapter != null && ref != null && chapter.game == null
         ? (
             ref: ref,
             lines: trainingLines(chapter, source: ref.path),
-            revision: _session.trainingSourceRevision,
+            revision: revision,
           )
         : null;
-    final chapters = await _chapters.chaptersWhere(_books.includes, open);
+    final captured = await _chapters.chaptersWhere(
+      (ref) => _books.contains(book, ref),
+      open,
+    );
     if (load != _loads) return;
-    if (chapters.isEmpty) {
-      return _become(const TrainerEmpty(NothingToTrain.emptyBook));
-    }
-    await _loaded(load, chapters);
+    await _loaded(
+      load,
+      captured,
+      sourceRevision: revision,
+      bookRevision: bookRevision,
+      bookSource: source,
+    );
   }
 
-  /// The progress of [chapters], read for the load counted as [load].
-  Future<void> _loaded(int load, List<ChapterLines> chapters) async {
-    final versions = <String, Revision>{};
-    for (final chapter in chapters) {
-      final path = chapter.ref.path;
-      final revision = chapter.revision ?? const Revision('');
-      final previous = versions[path];
-      if (previous != null &&
-          (previous != revision ||
-              previous.nativeIdentity != revision.nativeIdentity)) {
-        return _become(
-          const TrainerFailed(
-            ProgressFailed(
-              'The course changed while its chapters were loading. Reload it.',
-            ),
-          ),
-        );
-      }
-      versions[path] = revision;
+  /// The last await is one storage fence over membership, PGNs, books and
+  /// progress. Synchronous owner checks then decide whether to publish.
+  Future<void> _loaded(
+    int load,
+    TrainingScopeRead captured, {
+    required Revision? sourceRevision,
+    int? bookRevision,
+    BookSource? bookSource,
+    NothingToTrain empty = NothingToTrain.emptyBook,
+  }) async {
+    if (captured is TrainingScopeFailed) {
+      return _become(TrainerFailed(ProgressFailed(captured.detail)));
     }
-    final read = await _files.read(versions.keys.toSet(), observed: versions);
+    final scope = captured as TrainingScopeReady;
+    final read = await _files.read(
+      scope.observed.keys.toSet(),
+      observed: scope.observed,
+    );
     if (load != _loads) return;
-    _become(switch (read) {
-      ProgressLoaded() => TrainerReady(
-        chapters: chapters,
+    if (read is! ProgressLoaded) return _become(TrainerFailed(read));
+    final checked = await _chapters.validate(
+      scope,
+      book: bookSource,
+      training: read.snapshot,
+    );
+    if (load != _loads || _disposed || _relocating || documentWriting) return;
+    final refusal = _scopeRefusal(sourceRevision, bookRevision, checked);
+    if (refusal != null) return _become(refusal);
+    if (bookRevision != null && scope.chapters.isEmpty) {
+      return _become(TrainerEmpty(empty));
+    }
+    _become(
+      TrainerReady(
+        chapters: scope.chapters,
         progress: TrainingProgress(
           files: _files,
           loaded: read,
@@ -666,10 +736,40 @@ class Trainer extends ChangeNotifier implements DocumentWriteGuard {
           pendingWrites: pendingWrites,
         ),
       ),
-      _ => TrainerFailed(read),
-    });
-    // An edit made while the files were read is in the lines too.
-    _follow();
+    );
+  }
+
+  TrainerState? _scopeRefusal(
+    Revision? sourceRevision,
+    int? bookRevision,
+    RepertoireValidation checked,
+  ) {
+    if (_session.source != _read?.ref ||
+        !identical(_session.chapter, _read?.chapter) ||
+        _session.trainingSourceRevision != sourceRevision ||
+        _session.trainingSourceRevision?.nativeIdentity !=
+            sourceRevision?.nativeIdentity ||
+        (bookRevision != null &&
+            (!_books.current || _books.revision != bookRevision))) {
+      return const TrainerFailed(
+        ProgressFailed(
+          'Training inputs changed while loading. Reload to retry.',
+        ),
+      );
+    }
+    final unsaved = pendingWrites.unfinished(_files).firstOrNull;
+    if (unsaved != null) return TrainerUnsaved(ProgressFailed(unsaved.detail));
+    return switch (checked) {
+      RepertoireCurrent() => null,
+      RepertoireValidationFailed(:final detail) => TrainerFailed(
+        ProgressFailed(detail),
+      ),
+      RepertoireChanged() => const TrainerFailed(
+        ProgressFailed(
+          'Training inputs changed while loading. Reload to retry.',
+        ),
+      ),
+    };
   }
 
   void _become(TrainerState state) {
@@ -695,107 +795,5 @@ class Trainer extends ChangeNotifier implements DocumentWriteGuard {
     if (state is TrainerReady) state.progress.dispose();
     board.dispose();
     super.dispose();
-  }
-}
-
-/// One chapter's lines, under the chapter they come from.
-typedef ChapterLines = ({
-  ChapterRef ref,
-  List<TrainingLine> lines,
-  Revision? revision,
-});
-
-/// Reads the other chapters of a repertoire, for training it whole.
-final class ScopeReader {
-  const ScopeReader({
-    required ChapterFiles files,
-    required PgnDocumentStore documents,
-    RepertoireCatalog? catalog,
-  }) : _catalog = catalog,
-       _files = files,
-       _documents = documents;
-
-  final RepertoireCatalog? _catalog;
-  final ChapterFiles _files;
-  final PgnDocumentStore _documents;
-
-  /// The chapters of the repertoire [open] is in, in the folder's order,
-  /// with [open] itself taken from [openLines] rather than read again: the
-  /// board has it, edits and all. A proposed chapter is left out, being
-  /// nobody's repertoire yet, and so is one that cannot be read, which is
-  /// logged: one bad file does not stop the rest being trained.
-  Future<List<ChapterLines>> repertoireOf(
-    ChapterRef open,
-    List<TrainingLine> openLines, {
-    Revision? revision,
-  }) async {
-    final listing = _catalog?.listing ?? await _files.list();
-    final folder = listing is Repertoires
-        ? listing.folders
-              .where((f) => f.chapters.any((c) => c.path == open.path))
-              .firstOrNull
-        : null;
-    if (folder == null)
-      return [(ref: open, lines: openLines, revision: revision)];
-    // A file of several chapters is read once for all of them.
-    final files = <String, Future<({Chapter chapter, Revision revision})?>>{};
-    return [
-      for (final ref in folder.chapters)
-        if (ref == open)
-          (ref: open, lines: openLines, revision: revision)
-        else if (!ref.heading.draft)
-          if (await (files[ref.path] ??= _read(ref)) case final file?)
-            (
-              ref: ref,
-              revision: file.revision,
-              lines: trainingLines(
-                sectionView(file.chapter, ref.section).chapter,
-                source: ref.path,
-              ),
-            ),
-    ];
-  }
-
-  /// Every chapter of every repertoire that [wanted] takes, in the
-  /// folders' order, with [open] taken as it is on the board rather than
-  /// read again. Drafts and chapters that cannot be read are left out.
-  Future<List<ChapterLines>> chaptersWhere(
-    bool Function(ChapterRef ref) wanted,
-    ChapterLines? open,
-  ) async {
-    final listing = _catalog?.listing ?? await _files.list();
-    if (listing is! Repertoires) return const [];
-    final files = <String, Future<({Chapter chapter, Revision revision})?>>{};
-    return [
-      for (final folder in listing.folders)
-        for (final ref in folder.chapters)
-          if (!ref.heading.draft && wanted(ref))
-            if (open != null && ref == open.ref)
-              open
-            else if (await (files[ref.path] ??= _read(ref)) case final file?)
-              (
-                ref: ref,
-                revision: file.revision,
-                lines: trainingLines(
-                  sectionView(file.chapter, ref.section).chapter,
-                  source: ref.path,
-                ),
-              ),
-    ];
-  }
-
-  Future<({Chapter chapter, Revision revision})?> _read(ChapterRef ref) async {
-    switch (await _documents.open(ref)) {
-      case Opened(:final text, :final revision):
-        return (
-          chapter: await readChapter(name: ref.fileName, text: text),
-          revision: revision,
-        );
-      case Absent():
-        return null;
-      case Unreadable(:final detail):
-        log.w('read ${ref.path} to train its repertoire', detail);
-        return null;
-    }
   }
 }

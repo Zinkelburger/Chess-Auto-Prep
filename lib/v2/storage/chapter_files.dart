@@ -5,6 +5,9 @@ import 'dart:isolate';
 import 'package:path/path.dart' as p;
 
 import 'directory_entries.dart';
+import 'book_snapshot.dart';
+import 'training_snapshot.dart';
+import 'recovery_files.dart';
 import '../chess/pgn/chapter_heading.dart';
 import '../chess/pgn/chapter.dart' show readOffThreadFrom;
 import 'document_probe.dart';
@@ -161,11 +164,16 @@ abstract interface class ChapterFiles {
   /// recovery domain. [observed] names additional reads used by a projection;
   /// each must describe the same file as the listing. [additional] captures
   /// related managed PGNs, such as downloaded games; null means absent. All
-  /// are validated under the same domain. Never nest guarded store calls.
+  /// are validated under the same domain. A null snapshot validates the used
+  /// PGNs without whole-repertoire membership (a single-chapter scope). Book
+  /// and training proofs address only their fixed configured profile files.
+  /// Never nest guarded store calls.
   Future<RepertoireValidation> validate(
-    Repertoires snapshot, {
+    Repertoires? snapshot, {
     required Map<String, Revision> observed,
     Map<String, Revision?> additional = const {},
+    BookSource? book,
+    TrainingReadSet? training,
   });
 
   /// The chapters deleted from every repertoire and still in recovery,
@@ -257,54 +265,129 @@ final class ChapterDirectory implements ChapterFiles {
 
   @override
   Future<RepertoireValidation> validate(
-    Repertoires snapshot, {
+    Repertoires? snapshot, {
     required Map<String, Revision> observed,
     Map<String, Revision?> additional = const {},
+    BookSource? book,
+    TrainingReadSet? training,
   }) async {
-    if (snapshot.unreadable.isNotEmpty) {
+    if (snapshot != null && snapshot.unreadable.isNotEmpty) {
       return RepertoireValidationFailed(snapshot.unreadable.first.detail);
     }
     final reads = Map<String, Revision>.unmodifiable(observed);
     final related = Map<String, Revision?>.unmodifiable(additional);
     try {
       return await _recovery.run(() async {
-        final inventory = await _inventory();
-        if (inventory.unreadable.isNotEmpty) {
-          return RepertoireValidationFailed(inventory.unreadable.first.detail);
-        }
-        final paths = [for (final folder in inventory.folders) ...folder.files];
-        if (paths.length != snapshot.revisions.length ||
-            paths.any((file) => !snapshot.revisions.containsKey(file.path))) {
-          return const RepertoireChanged();
-        }
-        for (final entry in reads.entries) {
-          final captured = snapshot.revisions[entry.key];
-          if (captured == null || !sameChapterRevision(captured, entry.value)) {
+        if (snapshot != null) {
+          final inventory = await _inventory();
+          if (inventory.unreadable.isNotEmpty) {
+            return RepertoireValidationFailed(
+              inventory.unreadable.first.detail,
+            );
+          }
+          final paths = [
+            for (final folder in inventory.folders) ...folder.files,
+          ];
+          if (paths.length != snapshot.revisions.length ||
+              paths.any((file) => !snapshot.revisions.containsKey(file.path))) {
             return const RepertoireChanged();
           }
-        }
-        for (final file in paths) {
-          switch (await probeDocument(file.path)) {
-            case FileFound(:final revision):
-              if (!sameChapterRevision(
-                snapshot.revisions[file.path]!,
-                revision,
-              )) {
-                return const RepertoireChanged();
-              }
-            case FileMissing():
+          for (final entry in reads.entries) {
+            final captured = snapshot.revisions[entry.key];
+            if (captured == null ||
+                !sameChapterRevision(captured, entry.value)) {
               return const RepertoireChanged();
-            case FileUnreadable(:final detail):
-              return RepertoireValidationFailed('${file.path}: $detail');
+            }
           }
+          for (final file in paths) {
+            switch (await probeDocument(file.path)) {
+              case FileFound(:final revision):
+                if (!sameChapterRevision(
+                  snapshot.revisions[file.path]!,
+                  revision,
+                )) {
+                  return const RepertoireChanged();
+                }
+              case FileMissing():
+                return const RepertoireChanged();
+              case FileUnreadable(:final detail):
+                return RepertoireValidationFailed('${file.path}: $detail');
+            }
+          }
+        } else {
+          final used = await _validateAdditional(reads);
+          if (used is! RepertoireCurrent) return used;
         }
-        return _validateAdditional(related);
+        final other = await _validateAdditional(related);
+        if (other is! RepertoireCurrent) return other;
+        return _validateProfile(book, training);
       });
     } on RecoveryRequired catch (error) {
       return RepertoireValidationFailed(error.detail);
     } on FileSystemException catch (error) {
       return RepertoireValidationFailed(_detail(error));
     }
+  }
+
+  /// Fixed profile participants join the PGNs under this same recovery gate.
+  /// These are observations only: never call another guarded public store here.
+  Future<RepertoireValidation> _validateProfile(
+    BookSource? book,
+    TrainingReadSet? training,
+  ) async {
+    if (!_profileBound(book, training)) return const RepertoireChanged();
+    final reads = <String, Revision?>{
+      if (book != null)
+        p.join(book.canonicalSupport, 'books.json'): book.revision,
+      if (training != null)
+        for (final name in trainingParticipants)
+          p.join(training.canonicalDocuments, name): training.files[name],
+    };
+    for (final entry in reads.entries) {
+      final expected = entry.value;
+      switch (await probeDocument(entry.key)) {
+        case FileFound(:final revision):
+          if (expected == null || !sameChapterRevision(expected, revision)) {
+            return const RepertoireChanged();
+          }
+        case FileMissing():
+          if (expected != null) return const RepertoireChanged();
+        case FileUnreadable(:final detail):
+          return RepertoireValidationFailed('${entry.key}: $detail');
+      }
+    }
+    // A configured alias may change while an off-thread probe is running.
+    // Certify the same profile binding after the last asynchronous observation.
+    return _profileBound(book, training)
+        ? const RepertoireCurrent()
+        : const RepertoireChanged();
+  }
+
+  bool _profileBound(BookSource? book, TrainingReadSet? training) {
+    // PGN-only consumers also depend on the configured Documents binding.
+    if (canonicalRecoveryRoot(_recovery.documents).path !=
+        _recovery.training.documents.path)
+      return false;
+    if (book != null &&
+        (book.supportPath != p.normalize(_recovery.support.absolute.path) ||
+            book.canonicalSupport != _recovery.compounds.support.path ||
+            canonicalRecoveryRoot(_recovery.support).path !=
+                book.canonicalSupport)) {
+      return false;
+    }
+    if (training != null &&
+        (training.documentsPath !=
+                p.normalize(_recovery.documents.absolute.path) ||
+            training.canonicalDocuments != _recovery.training.documents.path ||
+            canonicalRecoveryRoot(_recovery.documents).path !=
+                training.canonicalDocuments ||
+            training.files.length != trainingParticipants.length ||
+            trainingParticipants.any(
+              (name) => !training.files.containsKey(name),
+            ))) {
+      return false;
+    }
+    return true;
   }
 
   Future<RepertoireValidation> _validateAdditional(
