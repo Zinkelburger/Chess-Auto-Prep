@@ -166,12 +166,6 @@ final class CompoundWrites {
     return command;
   }
 
-  /// Whether an edit a stopped process began is still waiting to finish.
-  Future<bool> inspect() => _checked(() async {
-    _checkRoots();
-    return (await _readAll()).any((note) => note.$2.pending);
-  });
-
   /// Finishes the edits a stopped process began. One that can never be
   /// finished — a file changed since, or the record is damaged — is set aside
   /// and logged; the rest still run.

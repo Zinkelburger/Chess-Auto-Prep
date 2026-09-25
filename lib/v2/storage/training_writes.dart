@@ -41,7 +41,7 @@ final class TrainingWriter {
   final Future<void> Function(TrainingWriteStep)? testHook;
 
   /// Applies [payload], after checking that every PGN it names is still the
-  /// file it was read from ([sources]).
+  /// file it was read from ([sources]), though perhaps edited since.
   ///
   /// [attempted] carries the bytes an earlier attempt of the same change set
   /// out to publish. A file that already holds them was written, even if that
@@ -92,10 +92,14 @@ final class TrainingWriter {
       final canonical = p.isWithin(documents.path, path)
           ? path
           : p.join(documents.path, p.relative(path, from: trainingRoot));
+      // An edit saved to the chapter since (an autosave, say) keeps its rows
+      // meaningful: they name the file and a stable line id. Only a file that
+      // is gone or was replaced by another at that path refuses the change.
       final observed = await probeDocument(canonical);
       if (observed is! FileFound ||
-          observed.revision != expected ||
-          observed.identity != expected.nativeIdentity) {
+          (expected.nativeIdentity != null &&
+              observed.identity != expected.nativeIdentity) ||
+          (expected.nativeIdentity == null && observed.revision != expected)) {
         throw TrainingChanged('Training source $path');
       }
     }
@@ -148,13 +152,11 @@ final class TrainingQueueMigration {
   final Directory support;
   Directory get _folder => Directory(p.join(support.path, 'training-writes'));
 
-  /// Whether the old queue folder is still there to be cleared.
-  Future<bool> inspect() async =>
-      await FileSystemEntity.type(_folder.path, followLinks: false) !=
-      FileSystemEntityType.notFound;
-
   Future<void> recover() async {
-    if (!await inspect()) return;
+    if (await FileSystemEntity.type(_folder.path, followLinks: false) ==
+        FileSystemEntityType.notFound) {
+      return;
+    }
     final records = await readJournal(
       _folder,
       decode: (value, id) =>

@@ -89,9 +89,6 @@ final class RelocationNotes {
     return result;
   }
 
-  /// Validate every retained note without changing its namespace or rows.
-  Future<bool> inspect() async => (await _notes.read()).isNotEmpty;
-
   /// Finishes the rows every move that stopped half way still owes. A note
   /// that cannot be finished is set aside and logged; the others still run.
   Future<void> finishOwed() async {

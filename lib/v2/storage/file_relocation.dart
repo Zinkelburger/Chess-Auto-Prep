@@ -419,14 +419,6 @@ final class FileRelocations {
     await testHook?.call(FileRelocationStep.intent);
   }
 
-  /// Whether a move a stopped process began is still waiting to finish.
-  Future<bool> inspect() async {
-    _checkRoots();
-    return (await _readAll()).any(
-      (note) => note.$2.state == RelocationState.committing,
-    );
-  }
-
   /// Finishes the moves a stopped process began. One that can never be
   /// finished — its file is gone or replaced, or the record is damaged — is
   /// set aside and logged; the rest still run.

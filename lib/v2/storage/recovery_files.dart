@@ -86,16 +86,6 @@ Future<bool> recoveryDirectory(
   return true;
 }
 
-/// Refuses while a staged copy remains beside [path]. Only the settings and
-/// generation-tree writers still use it, and their owner is replacing it with
-/// [discardLeftoverStage]; remove it once they have.
-Future<void> requireUnusedRecoveryStage(String path) async {
-  final stage = await observeFile(temporaryPathFor(path));
-  if (stage.status != 1) {
-    throw RecoveryRequired('An unverified staged file remains for $path.');
-  }
-}
-
 /// Removes the staged copy a killed write left beside [path]. A staged copy is
 /// never the file itself: it holds bytes whose publication was not confirmed,
 /// and every writer here restages from its own input.
