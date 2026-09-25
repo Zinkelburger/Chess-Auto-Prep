@@ -30,8 +30,6 @@ on:
 jobs:
   v2-contracts:
     uses: ./.github/workflows/desktop-contracts.yml
-    with:
-      targets: '[{"os":"windows-2022","device":"windows"},{"os":"windows-2025","device":"windows"}]'
 
   build:
     uses: ./.github/workflows/windows-build.yml
