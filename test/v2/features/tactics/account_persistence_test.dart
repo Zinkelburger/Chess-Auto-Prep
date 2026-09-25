@@ -168,6 +168,11 @@ final class _Accounts implements AccountStore {
   final requested = <(GameSite, String?)>[];
 
   @override
+  int get revision => saved.revision;
+  @override
+  Future<AccountsRead> snapshot() => saved.snapshot();
+
+  @override
   Future<Map<GameSite, Account>> read() => saved.read();
 
   @override

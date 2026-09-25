@@ -94,11 +94,13 @@ class _TreePaneState extends State<TreePane> {
   }
 
   void _play(TreeRow row) {
+    if (!widget.tree.current) return;
     _leave();
     widget.tree.play(row.uci);
   }
 
   void _open(TreePlace place) {
+    if (!widget.tree.current) return;
     _leave();
     widget.onOpen?.call(place);
   }
@@ -127,6 +129,13 @@ class _TreePaneState extends State<TreePane> {
 
   Widget _body() => switch (widget.tree.state) {
     TreeReading() => const _Sentence('Reading your book…'),
+    TreeUnavailable(:final detail) => Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _Sentence(detail),
+        TextButton(onPressed: widget.tree.forget, child: const Text('Retry')),
+      ],
+    ),
     TreeNothing(:final sentence) => _Sentence(sentence),
     TreeShown(:final rows) => ListView.builder(
       itemCount: rows.length + 1,
@@ -162,7 +171,7 @@ class _Summary extends StatelessWidget {
     final files = tree.fileCount;
     final words = off.isNotEmpty
         ? 'Off the file: ${numberedMoves(off)}'
-        : tree.state is TreeReading
+        : tree.state is TreeReading || tree.state is TreeUnavailable
         ? side
         : '$side · $files ${files == 1 ? 'chapter' : 'chapters'}';
     return SizedBox(

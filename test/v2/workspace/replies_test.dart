@@ -67,6 +67,11 @@ void main() {
   setUp(() async {
     fixture = await openSession(chapter);
     policy = ScriptedPolicy();
+    const emptySibling = '// Color: White\n';
+    fixture.store.documents[ref('KID', 'Sicilian')] = Opened(
+      emptySibling,
+      scriptedRevision(emptySibling),
+    );
     settings = SettingsStore(
       initial: const Settings(opponentElo: 2000, coverOnceIn: 5),
     );

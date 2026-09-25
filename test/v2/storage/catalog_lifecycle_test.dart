@@ -59,11 +59,19 @@ void main() {
       addTearDown(catalog.dispose);
       await catalog.refresh();
       var notifications = 0;
-      catalog.addListener(() => notifications++);
+      catalog.addListener(() {
+        notifications++;
+        if (catalog.stale) {
+          expect(catalog.changes, isEmpty);
+          expect(catalog.reloaded, isFalse);
+        }
+      });
       const a = DocumentRef('/repertoires/A/Main.pgn');
       const b = DocumentRef('/repertoires/B/Main.pgn');
       files.hold = true;
       await repo.create(a, '*');
+      expect(notifications, 1);
+      expect(catalog.stale, isTrue);
       await repo.create(b, '*');
       final done = catalog.synchronize();
       files.releaseNext();
@@ -71,11 +79,11 @@ void main() {
       files.hold = false;
       files.releaseNext();
       await done;
-      expect(notifications, 1);
+      expect(notifications, 2);
       expect(catalog.changes.map((change) => change.path), [a.path, b.path]);
       expect(await repo.create(a, '*'), isA<Collision>());
       await pumpEventQueue();
-      expect(notifications, 1);
+      expect(notifications, 2);
     },
   );
 

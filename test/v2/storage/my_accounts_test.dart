@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:chess_auto_prep/v2/chess/tactics/game_ids.dart';
 import 'package:chess_auto_prep/v2/storage/my_accounts.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -58,6 +60,141 @@ void main() {
     expect(await accounts.setUsername(GameSite.chesscom, ''), isTrue);
     expect(prefs.containsKey('chesscom_username'), isFalse);
   });
+  test(
+    'typed snapshot reports platform read failure instead of empty names',
+    () async {
+      final unavailable = PreferencesAccounts(
+        preferences: () async => throw StateError('preferences unavailable'),
+      );
+      expect(await unavailable.snapshot(), isA<AccountsUnavailable>());
+      expect(await unavailable.read(), isEmpty);
+    },
+  );
+
+  test('username admission changes revision before its first await', () async {
+    SharedPreferences.setMockInitialValues({'lichess_username': 'Old'});
+    final prefs = await SharedPreferences.getInstance();
+    final gate = Completer<SharedPreferences>();
+    var held = false;
+    final source = PreferencesAccounts(
+      preferences: () => held ? gate.future : Future.value(prefs),
+    );
+    final old = await source.snapshot() as AccountsSnapshot;
+    held = true;
+    final write = source.setUsername(GameSite.lichess, 'New');
+    expect(source.revision, isNot(old.revision));
+    expect(await source.snapshot(), isA<AccountsUnavailable>());
+    gate.complete(prefs);
+    expect(await write, isTrue);
+    expect(
+      (await source.snapshot() as AccountsSnapshot)
+          .accounts[GameSite.lichess]!
+          .username,
+      'New',
+    );
+  });
+
+  test(
+    'failed cached username publication is unavailable until confirmed retry',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final backend = _Backend();
+      SharedPreferencesStorePlatform.instance = backend;
+      addTearDown(() => SharedPreferences.setMockInitialValues({}));
+      final source = PreferencesAccounts();
+      expect(await source.setUsername(GameSite.lichess, 'Alice'), isFalse);
+      expect(await source.snapshot(), isA<AccountsUnavailable>());
+      backend.reject = false;
+      expect(await source.setUsername(GameSite.lichess, 'Alice'), isTrue);
+      expect(
+        (await source.snapshot() as AccountsSnapshot)
+            .accounts[GameSite.lichess]!
+            .username,
+        'Alice',
+      );
+    },
+  );
+
+  test(
+    'captured names are immutable and later observations advance revision',
+    () async {
+      SharedPreferences.setMockInitialValues({'lichess_username': 'Old'});
+      final source = PreferencesAccounts();
+      final old = await source.snapshot() as AccountsSnapshot;
+      expect(() => old.accounts.clear(), throwsUnsupportedError);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('lichess_username', 'New');
+      final current = await source.snapshot() as AccountsSnapshot;
+      expect(current.revision, isNot(old.revision));
+      expect(old.accounts[GameSite.lichess]!.username, 'Old');
+      expect(current.accounts[GameSite.lichess]!.username, 'New');
+    },
+  );
+
+  test(
+    'a read begun before username admission cannot publish afterward',
+    () async {
+      SharedPreferences.setMockInitialValues({'lichess_username': 'Old'});
+      final prefs = await SharedPreferences.getInstance();
+      final oldRead = Completer<SharedPreferences>();
+      var calls = 0;
+      final source = PreferencesAccounts(
+        preferences: () => ++calls == 1 ? oldRead.future : Future.value(prefs),
+      );
+      final pending = source.snapshot();
+      expect(await source.setUsername(GameSite.lichess, 'New'), isTrue);
+      final current = await source.snapshot() as AccountsSnapshot;
+      oldRead.complete(prefs);
+      expect(await pending, isA<AccountsUnavailable>());
+      expect(source.revision, current.revision);
+      expect(
+        (await source.snapshot() as AccountsSnapshot)
+            .accounts[GameSite.lichess]!
+            .username,
+        'New',
+      );
+    },
+  );
+
+  test('another site succeeding does not confirm a failed username', () async {
+    SharedPreferences.setMockInitialValues({});
+    final backend = _Backend();
+    SharedPreferencesStorePlatform.instance = backend;
+    addTearDown(() => SharedPreferences.setMockInitialValues({}));
+    final source = PreferencesAccounts();
+    expect(await source.setUsername(GameSite.lichess, 'Alice'), isFalse);
+    expect(await source.setUsername(GameSite.chesscom, 'Bob'), isTrue);
+    expect(await source.snapshot(), isA<AccountsUnavailable>());
+    backend.reject = false;
+    expect(await source.setUsername(GameSite.lichess, 'Alice'), isTrue);
+    final current = await source.snapshot() as AccountsSnapshot;
+    expect(current.accounts.keys, containsAll(GameSite.values));
+  });
+
+  test(
+    'observed read failure invalidates the last successful revision',
+    () async {
+      SharedPreferences.setMockInitialValues({'lichess_username': 'Old'});
+      var fail = false;
+      final source = PreferencesAccounts(
+        preferences: () async {
+          if (fail) throw StateError('unavailable');
+          return SharedPreferences.getInstance();
+        },
+      );
+      final good = await source.snapshot() as AccountsSnapshot;
+      fail = true;
+      expect(await source.snapshot(), isA<AccountsUnavailable>());
+      expect(source.revision, isNot(good.revision));
+      final failedRevision = source.revision;
+      expect(await source.snapshot(), isA<AccountsUnavailable>());
+      expect(source.revision, failedRevision);
+      fail = false;
+      final restored = await source.snapshot() as AccountsSnapshot;
+      expect(restored.revision, greaterThan(failedRevision));
+      expect(restored.accounts[GameSite.lichess]!.username, 'Old');
+    },
+  );
 }
 
 class _Backend extends InMemorySharedPreferencesStore {

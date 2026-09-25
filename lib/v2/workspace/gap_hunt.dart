@@ -6,8 +6,8 @@ import 'package:flutter/foundation.dart';
 import '../chess/pgn/chapter.dart';
 import '../chess/pgn/chapter_sections.dart';
 import '../chess/pgn/game_tree.dart';
-import '../diagnostics/log.dart';
 import '../storage/chapter_files.dart';
+import '../storage/document_ref.dart';
 import '../storage/pgn_document_store.dart';
 import '../storage/settings_store.dart';
 import 'document_session.dart';
@@ -30,14 +30,11 @@ const hereLabel = 'this chapter';
 /// when the marked gap changes, not for every cursor move.
 final class GapHunt extends ChangeNotifier {
   GapHunt({
-    required DocumentSession session,
-    required ReplyModel model,
-    required SettingsStore settings,
-    required RepertoireAnswers answers,
-  }) : _session = session,
-       _model = model,
-       _settings = settings,
-       _answers = answers {
+    required this._session,
+    required this._model,
+    required this._settings,
+    required this._answers,
+  }) {
     _session.anyChange.addListener(_follow);
     _settings.addListener(_follow);
     _follow();
@@ -53,9 +50,13 @@ final class GapHunt extends ChangeNotifier {
   bool _walking = false;
   Gap? _highlighted;
   int _gapIndex = -1;
+  String? _problem;
+  RepertoireAnswerSnapshot? _snapshot;
+  bool _navigating = false;
 
   /// The chapter value and the settings the current walk is for.
-  ({Object chapter, int elo, int onceIn})? _walkedFor;
+  ({Object chapter, int elo, int onceIn, (String, String?)? source})?
+  _walkedFor;
 
   /// Bumped for every walk and on dispose: a walk that finds it moved on
   /// was overtaken.
@@ -68,6 +69,10 @@ final class GapHunt extends ChangeNotifier {
   GapWalk? get walk => _walk;
 
   bool get walking => _walking;
+  String? get problem => _problem;
+  GapWalk? get currentWalk => !_walking && _problem == null ? _walk : null;
+  bool get canNextGap =>
+      !_navigating && (currentWalk?.gaps.isNotEmpty ?? false);
 
   /// The gap Next took the user to, until the cursor leaves it.
   Gap? get highlighted => _highlighted;
@@ -83,13 +88,49 @@ final class GapHunt extends ChangeNotifier {
   /// Takes the board to the next gap, most reached first, round and round.
   /// A missing reply lands on the position before it, with the reply's row
   /// marked in the table; a dead end lands where the chapter stops.
-  void nextGap() {
-    final gaps = _walk?.gaps ?? const [];
-    if (gaps.isEmpty) return;
-    _gapIndex = (_gapIndex + 1) % gaps.length;
-    final gap = gaps[_gapIndex];
-    _highlighted = gap;
-    _session.goTo(gap.at);
+  Future<void> nextGap() async {
+    if (!canNextGap) return;
+    final walk = currentWalk!;
+    final index = (_gapIndex + 1) % walk.gaps.length;
+    final gap = walk.gaps[index];
+    final ticket = _ticket;
+    _navigating = true;
+    notifyListeners();
+    try {
+      if (!await validateCurrent() ||
+          ticket != _ticket ||
+          !identical(walk, currentWalk)) {
+        return;
+      }
+      _gapIndex = index;
+      _highlighted = gap;
+      _session.goTo(gap.at);
+    } finally {
+      _navigating = false;
+      if (ticket == _ticket) notifyListeners();
+    }
+  }
+
+  /// Revalidate the captured membership and sources before using gap authority.
+  Future<bool> validateCurrent() async {
+    final ticket = _ticket;
+    if (currentWalk == null) return false;
+    try {
+      await _snapshot?.validate();
+      return ticket == _ticket && currentWalk != null;
+    } on Object catch (error) {
+      if (ticket == _ticket) _failed(error);
+      return false;
+    }
+  }
+
+  void retry() => refreshAnswers();
+
+  void _failed(Object error) {
+    _problem = '$error';
+    _walking = false;
+    _highlighted = null;
+    _gapIndex = -1;
     notifyListeners();
   }
 
@@ -120,14 +161,20 @@ final class GapHunt extends ChangeNotifier {
     }
     final s = _settings.value;
     final seen = _walkedFor;
+    final revision = _session.persistedRevision;
+    final sourceProof = revision == null
+        ? null
+        : (revision.contentHash, revision.nativeIdentity);
     if (seen == null ||
         !identical(seen.chapter, chapter) ||
         seen.elo != s.opponentElo ||
-        seen.onceIn != s.coverOnceIn) {
+        seen.onceIn != s.coverOnceIn ||
+        seen.source != sourceProof) {
       _walkedFor = (
         chapter: chapter,
         elo: s.opponentElo,
         onceIn: s.coverOnceIn,
+        source: sourceProof,
       );
       _rewalk();
       changed = true;
@@ -141,6 +188,8 @@ final class GapHunt extends ChangeNotifier {
     _highlighted = null;
     _gapIndex = -1;
     _walkedFor = null;
+    _problem = null;
+    _snapshot = null;
     _ticket++;
     notifyListeners();
   }
@@ -156,6 +205,9 @@ final class GapHunt extends ChangeNotifier {
       return;
     }
     _walking = true;
+    _problem = null;
+    _highlighted = null;
+    _gapIndex = -1;
     unawaited(
       _walked(
         ticket,
@@ -163,6 +215,7 @@ final class GapHunt extends ChangeNotifier {
         chapter.side,
         source: _session.source,
         floor: 1 / _settings.value.coverOnceIn,
+        revision: _session.persistedRevision,
       ),
     );
   }
@@ -173,26 +226,42 @@ final class GapHunt extends ChangeNotifier {
     Side side, {
     required ChapterRef? source,
     required double floor,
+    required Revision? revision,
   }) async {
     bool overtaken() => ticket != _ticket;
-    final elsewhere = {
-      if (source != null) ...await _answers.around(source, side),
-      for (final position in answeredPositions(tree, side)) position: hereLabel,
-    };
-    if (overtaken()) return;
-    final walk = await walkGaps(
-      tree: tree,
-      side: side,
-      floor: floor,
-      shares: _model.sharesAt,
-      overtaken: overtaken,
-      elsewhere: elsewhere,
-    );
-    if (overtaken() || walk == null) return;
-    _walk = walk;
-    _walking = false;
-    _gapIndex = -1;
-    notifyListeners();
+    try {
+      final snapshot = source == null
+          ? null
+          : await _answers.capture(
+              source,
+              side,
+              observed: {source.path: ?revision},
+            );
+      if (overtaken()) return;
+      final elsewhere = Map<String, String>.unmodifiable({
+        ...?snapshot?.positions,
+        for (final position in answeredPositions(tree, side))
+          position: hereLabel,
+      });
+      final walk = await walkGaps(
+        tree: tree,
+        side: side,
+        floor: floor,
+        shares: _model.sharesAt,
+        overtaken: overtaken,
+        elsewhere: elsewhere,
+      );
+      if (overtaken() || walk == null) return;
+      await snapshot?.validate();
+      if (overtaken()) return;
+      _walk = walk;
+      _snapshot = snapshot;
+      _walking = false;
+      _gapIndex = -1;
+      notifyListeners();
+    } on Object catch (error) {
+      if (!overtaken()) _failed(error);
+    }
   }
 
   @override
@@ -204,101 +273,177 @@ final class GapHunt extends ChangeNotifier {
   }
 }
 
-/// What the other chapters of a repertoire answer: for each position at
-/// which one of them has a move of ours, the name of that chapter.
-///
-/// A gap is a position the opponent reaches often and the repertoire has
-/// no answer for — the repertoire, not the page. A reply the Petroff
-/// chapter answers is not a gap in the Italian one, whatever the Italian
-/// file says. The other chapters are read from disk and their positions
-/// kept until [forget]: the library says when its files change, and the
-/// chapter that was just open may have been edited, so a change of chapter
-/// forgets that chapter's file ([forgetFile]). Draft chapters do not count;
-/// a proposal is not an answer.
+/// An immutable answer projection and the complete native read set that
+/// authorized it. Revalidation never interprets a failed read as empty.
+final class RepertoireAnswerSnapshot {
+  RepertoireAnswerSnapshot._(
+    this._owner,
+    this._generation,
+    this.listing,
+    Map<String, Revision> observed,
+    Map<String, String> positions,
+  ) : observed = Map.unmodifiable(observed),
+      positions = Map.unmodifiable(positions);
+
+  final RepertoireAnswers _owner;
+  final int _generation;
+  final Repertoires listing;
+  final Map<String, Revision> observed;
+  final Map<String, String> positions;
+
+  Future<void> validate() => _owner._validate(this);
+}
+
+final class RepertoireAnswersUnavailable implements Exception {
+  const RepertoireAnswersUnavailable(this.detail);
+  final String detail;
+  @override
+  String toString() => detail;
+}
+
+/// Revision-keyed answering positions, bounded to the latest membership.
+/// Every query observes source files again; only successful parsing is cached.
 final class RepertoireAnswers {
-  RepertoireAnswers({
-    required ChapterFiles files,
-    required PgnDocumentStore documents,
-  }) : _files = files,
-       _documents = documents;
+  RepertoireAnswers({required this._files, required this._documents});
 
   final ChapterFiles _files;
   final PgnDocumentStore _documents;
+  var _read = <ChapterRef, ({Revision revision, _Answered answer})>{};
+  int _generation = 0;
 
-  /// What each chapter answers, by chapter, as last read.
-  var _read = <ChapterRef, _Answered>{};
+  void forget() {
+    _generation++;
+    _read = {};
+  }
 
-  /// Drops what was read; the next question reads the files again.
-  void forget() => _read = {};
+  void forgetFile(String path) {
+    _generation++;
+    _read = {
+      for (final entry in _read.entries)
+        if (entry.key.path != path) entry.key: entry.value,
+    };
+  }
 
-  /// Drops what was read from the file at [path], every chapter of it; the
-  /// other files stay as they were read.
-  void forgetFile(String path) => _read = {
-    for (final entry in _read.entries)
-      if (entry.key.path != path) entry.key: entry.value,
-  };
+  Future<Map<String, String>> around(ChapterRef chapter, Side side) async =>
+      (await capture(chapter, side)).positions;
 
-  /// The positions the chapters of [chapter]'s repertoire other than itself
-  /// answer from [side], each naming the first chapter, in folder order,
-  /// that answers it.
-  Future<Map<String, String>> around(ChapterRef chapter, Side side) async {
-    // An invalidation replaces the cache. An older read may finish for its
-    // caller, but cannot refill the cache the next walk will use.
-    final read = _read;
+  Future<RepertoireAnswerSnapshot> capture(
+    ChapterRef chapter,
+    Side side, {
+    Map<String, Revision> observed = const {},
+  }) async {
+    final generation = _generation;
+    final revisions = Map<String, Revision>.of(observed);
     final listing = await _files.list();
-    if (listing is! Repertoires) return const {};
-    final folder = listing.folders
-        .where((f) => f.chapters.any((c) => c.path == chapter.path))
-        .firstOrNull;
-    if (folder == null) return const {};
-    final answers = <String, String>{};
-    // A course file holds many chapters; it is read once for all of them.
-    final files = <String, Future<Chapter?>>{};
-    for (final other in folder.chapters) {
-      // By chapter, not by file: the other chapters of a course file are
-      // other chapters.
-      if (other == chapter || other.heading.draft) continue;
-      final answered = read[other] ??= _answeredIn(
-        other,
-        await (files[other.path] ??= _file(other)),
+    if (listing is! Repertoires) {
+      throw RepertoireAnswersUnavailable(
+        (listing as RepertoiresUnreadable).detail,
       );
-      if (answered.side != side) continue;
-      for (final position in answered.positions) {
-        answers.putIfAbsent(position, () => other.name);
+    }
+    if (listing.unreadable.isNotEmpty) {
+      throw RepertoireAnswersUnavailable(listing.unreadable.first.detail);
+    }
+    final folder = listing.folders
+        .where(
+          (folder) => folder.chapters.any((ref) => ref.path == chapter.path),
+        )
+        .firstOrNull;
+    final members = {for (final folder in listing.folders) ...folder.chapters};
+    final next = {
+      for (final entry in _read.entries)
+        if (members.contains(entry.key)) entry.key: entry.value,
+    };
+    final positions = <String, String>{};
+    final byFile = <String, List<ChapterRef>>{};
+    for (final other in List<ChapterRef>.of(folder?.chapters ?? const [])) {
+      if (other != chapter && !other.heading.draft) {
+        (byFile[other.path] ??= []).add(other);
       }
     }
-    return answers;
-  }
-
-  _Answered _answeredIn(ChapterRef ref, Chapter? file) {
-    if (file == null) return _Answered.none;
-    final chapter = sectionView(file, ref.section).chapter;
-    return _Answered(
-      chapter.side,
-      answeredPositions(chapter.tree, chapter.side),
+    // Materialize one PGN at a time, retaining only its answering positions.
+    for (final siblings in byFile.values) {
+      final answered = await _answeredFile(
+        siblings,
+        revisions[siblings.first.path],
+      );
+      revisions[siblings.first.path] = answered.values.first.revision;
+      next.addAll(answered);
+      for (final entry in answered.entries) {
+        if (entry.value.answer.side != side) continue;
+        for (final position in entry.value.answer.positions) {
+          positions.putIfAbsent(position, () => entry.key.name);
+        }
+      }
+    }
+    final snapshot = RepertoireAnswerSnapshot._(
+      this,
+      generation,
+      listing,
+      revisions,
+      positions,
     );
+    await snapshot.validate();
+    _read = next;
+    return snapshot;
   }
 
-  Future<Chapter?> _file(ChapterRef ref) async {
-    switch (await _documents.open(ref)) {
-      case Opened(:final text):
-        return readChapter(name: ref.fileName, text: text);
-      case Absent():
-        return null;
-      case Unreadable(:final detail):
-        log.w('read what ${ref.path} answers', detail);
-        return null;
+  Future<Map<ChapterRef, ({Revision revision, _Answered answer})>>
+  _answeredFile(List<ChapterRef> siblings, Revision? expected) async {
+    final first = siblings.first;
+    final read = await _documents.open(first);
+    if (read is! Opened) {
+      throw RepertoireAnswersUnavailable(
+        read is Unreadable ? read.detail : '${first.name} is missing.',
+      );
+    }
+    if (expected != null && !sameChapterRevision(expected, read.revision)) {
+      throw const RepertoireAnswersUnavailable(
+        'The open chapter changed on disk. Reload it and retry.',
+      );
+    }
+    Chapter? parsed;
+    final result = <ChapterRef, ({Revision revision, _Answered answer})>{};
+    for (final ref in siblings) {
+      final cached = _read[ref];
+      final _Answered answer;
+      if (cached != null && cached.revision == read.revision) {
+        answer = cached.answer;
+      } else {
+        parsed ??= await readChapter(name: first.fileName, text: read.text);
+        final section = sectionView(parsed, ref.section).chapter;
+        answer = _Answered(
+          section.side,
+          Set.unmodifiable(answeredPositions(section.tree, section.side)),
+        );
+      }
+      result[ref] = (revision: read.revision, answer: answer);
+    }
+    return result;
+  }
+
+  Future<void> _validate(RepertoireAnswerSnapshot snapshot) async {
+    if (snapshot._generation != _generation) {
+      throw const RepertoireAnswersUnavailable(
+        'The repertoire changed. Retry finding gaps.',
+      );
+    }
+    final result = await _files.validate(
+      snapshot.listing,
+      observed: snapshot.observed,
+    );
+    if (snapshot._generation != _generation || result is RepertoireChanged) {
+      throw const RepertoireAnswersUnavailable(
+        'The repertoire changed. Retry finding gaps.',
+      );
+    }
+    if (result is RepertoireValidationFailed) {
+      throw RepertoireAnswersUnavailable(result.detail);
     }
   }
 }
 
 final class _Answered {
   const _Answered(this.side, this.positions);
-
-  static const none = _Answered(null, <String>{});
-
-  /// Null for a chapter that could not be read, which answers nothing.
-  final Side? side;
-
+  final Side side;
   final Set<String> positions;
 }

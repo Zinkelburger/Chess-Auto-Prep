@@ -506,6 +506,23 @@ change recomputes the book scope, a cursor move does neither. Keep pure reusable
 indexes keyed by source version; bound cache size. A failed rebuild may leave a
 labelled old view, but its unavailable source must not become an empty success.
 
+The first H4 increment captures complete repertoire membership and native PGN
+revisions under the recovery domain, parses one file at a time, then validates
+the entire set before publishing. Catalog and shelf retain their last complete
+snapshot on failure. Gap navigation validates its captured answers again before
+using them. The book comparison includes present or absent downloaded PGNs in
+the same final file fence and checks synchronous account and committed-selection
+revisions afterward. Unreadable accounts and corpus files are explicit failures;
+book selection drafts remain editable but cannot certify a committed comparison.
+Library, reply, repertoire-tree and game-comparison views expose unavailable
+inputs and Retry; stale derived actions cannot be activated by mouse or keyboard.
+
+H4 remains incomplete: training scope reads still need complete membership
+snapshots, native `books.json` changes need to join the final comparison fence,
+and invalidation needs to target affected inputs across the remaining consumers.
+An owner revision proves an observed or accepted local selection, not an
+unobserved external edit to its backing file.
+
 ### Compatibility, diagnosis and acceptance
 
 The promise that v1 and v2 can share a profile remains. Match both lock identity
@@ -1297,7 +1314,7 @@ per batch and use tests and commits as the implementation record.
 | H3a | H2 | Existing relocation recovery before affected reads; document guards, training reads, startup; reconcile v1 domain locks/order | Kill during a move, reopen/train from either supported app; no missing or duplicate progress; incompatible access blocks safely | Done 2026-09-24 on Linux: canonical shared domain before affected Documents access; strict v2 notes recover before PGN/training reads and complete scans, foreign receipts refuse without mutation, and UI shows the recovery reason with Retry. Regression-first tests, independent reviews, 2,232 v2 tests, final focused storage/legacy checks and analyze/lint passed. Six real-process tests cover cross-app exclusion, SIGKILL and all four training files recovering once; headless refusal/retry verified. No new metadata format. Windows/macOS recovery guarantees remain unverified; v1 native recovery is still Linux-only. |
 | H3b | H3a | One compound operation for course rename/book references and its inverse; Library, storage, session history | Rename and undo agree across PGN/book state, including crash and external-conflict cases | Done 2026-09-24 on Linux: explicit section intent follows held/coalesced drafts; one guarded private receipt commits PGN and books, preserves unknown fields and validates the complete inverse. Exact retry, external conflicts, navigation admission and v1 refusal have regression tests; 2,381 v2 tests, focused legacy/process checks and analyze/lint pass. Real SIGKILL preparation/publication tests and headless partial book-write failure, Retry and undo verified both participants. Complete receipts remain retained with growing scan/storage cost; Windows/macOS durability unverified. |
 | H3c | H3b | Apply the proven operation boundary to supported file/folder moves, delete/restore and multi-file edits | Every existing command has an explicit required read/write set, recovery path and compatible undo behavior | In progress: source admission, file/folder relocation, delete/restore, retained import placement and durable accepted training verified 2026-09-25 on Linux. Relocation preserves four training files, books, backup ownership and complete folder inventories; prior 2,722 v2/264 legacy tests and headless interrupted rename/delete/restore proofs passed. Training freezes accepted commands in an ordered persistent queue, validates all participants before replay, and compacts completion receipts. Latest full v2 suite: 2,773 passed, four Windows-only skips; final focused native/storage/legacy/frontend suite: 903 passed, four Windows-only skips; analyze/lint and independent review passed. Three actual SIGKILL boundaries recover distinct commands exactly once. Headless interrupted mark-known plus queued exclusion survived restart, blocked access until Retry, then recovered the original timestamp and one history row; a second reopen left all four training files byte-identical. Native receipt batching improved measured scan cost, which still grows with history. Two-PGN commit/inverse and workspace preparation/adoption are now verified foundations: 1,463 focused storage/workspace/Library/legacy tests passed with four Windows-only skips, including three real process-kill boundaries and historical-retry conflicts. Library cross-file moves remain unfinished pending the training-progress policy decision; Windows/macOS durability remains unverified. |
-| H4 | H2, H3c | Versioned input snapshots for catalog, shelf, gaps, book comparison and training; targeted invalidation | A late computation cannot replace a newer result; a fresh rebuild equals the displayed committed projection | Not started |
+| H4 | H2, H3c | Versioned input snapshots for catalog, shelf, gaps, book comparison and training; targeted invalidation | A late computation cannot replace a newer result; a fresh rebuild equals the displayed committed projection | In progress: complete native repertoire snapshots and final read-set validation; explicit failed/stale catalog, shelf, gap, tree and game-comparison reads; committed book/account owner revisions and keyboard guards. Training membership, native book-file proof and remaining targeted invalidation are outstanding. |
 | H5 | H2, H3c | Generation, mining, downloads, bughouse and engine lifetimes; job-specific checkpoints and truthful completion | Stop/retry/restart neither duplicates saved units nor loses promised results; resources return to baseline | Not started |
 | H6 | H4, H5 | All existing modes: focus/shortcuts/navigation/close, settings, credentials, diagnostics and integrity checks | The complete cross-mode sequence below passes with real disposable storage, offline/error cases and headless UI checks | Not started |
 | H7 | H6 | Remaining approved player/prep, database and tournament features, following their product rows | Each adds its own source/derived classification, durable unit and failure/restart tests while meeting the shared contracts | Not started |

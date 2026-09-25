@@ -78,6 +78,7 @@ void main() {
   test('a search typed into the library reads no repertoire file again; a '
       'new listing does', () async {
     w.accounts.accounts[GameSite.lichess] = const Account('me');
+    await w.parts.books.load();
     await w.library.refresh();
     w.tree.watch();
     w.book.watch();

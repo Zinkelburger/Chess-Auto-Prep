@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:chess_auto_prep/v2/storage/book_file.dart';
 import 'package:chess_auto_prep/v2/storage/book_list.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
@@ -29,6 +31,168 @@ void main() {
     await books.load();
   });
   tearDown(() => books.dispose());
+
+  test(
+    'listeners hear successful persistence after its obligation commits',
+    () async {
+      final held = _HeldBooks();
+      final owner = Books(store: held, root: '/repertoires');
+      addTearDown(owner.dispose);
+      await owner.load();
+      final gate = held.writeGate = Completer<void>();
+      final acknowledgements = <bool>[];
+      owner.addListener(() => acknowledgements.add(!owner.canRetry));
+      owner.create('Pending');
+      gate.complete();
+      await owner.settled;
+      await pumpEventQueue();
+      expect(acknowledgements.length, greaterThanOrEqualTo(2));
+      expect(acknowledgements.last, isTrue);
+    },
+  );
+
+  test(
+    'membership remains noncurrent until the entire coalesced save acknowledges',
+    () async {
+      final held = _HeldBooks();
+      final owner = Books(store: held, root: '/repertoires');
+      addTearDown(owner.dispose);
+      await owner.load();
+      final states = <bool>[];
+      owner.addListener(() => states.add(owner.current));
+      final before = owner.revision;
+      final first = held.writeGate = Completer<void>();
+      owner.create('First');
+      expect(owner.revision, greaterThan(before));
+      expect(owner.current, isFalse);
+      final second = held.writeGate = Completer<void>();
+      owner.create('Second');
+      first.complete();
+      await pumpEventQueue();
+      expect(held.writes, 2);
+      expect(owner.current, isFalse);
+      expect(states, everyElement(isFalse));
+      second.complete();
+      await owner.settled;
+      expect(owner.current, isTrue);
+      expect(states.last, isTrue);
+      expect(owner.canRetry, isFalse);
+      expect(held.value.books.map((book) => book.name), ['First', 'Second']);
+    },
+  );
+
+  test(
+    'failed membership remains noncurrent and retry publishes readiness',
+    () async {
+      final held = _HeldBooks()..fail = true;
+      final owner = Books(store: held, root: '/repertoires');
+      addTearDown(owner.dispose);
+      await owner.load();
+      owner.create('Unconfirmed');
+      await owner.settled;
+      expect(owner.active?.name, 'Unconfirmed');
+      expect(owner.current, isFalse);
+      expect(owner.problem, isNotNull);
+      held.fail = false;
+      var ready = false;
+      owner.addListener(() => ready |= owner.current);
+      await owner.retry();
+      expect(owner.current, isTrue);
+      expect(owner.problem, isNull);
+      expect(ready, isTrue);
+    },
+  );
+
+  test(
+    'refresh admission and failure retain the prior membership as noncurrent',
+    () async {
+      final held = _HeldBooks();
+      final owner = Books(store: held, root: '/repertoires');
+      addTearDown(owner.dispose);
+      expect(owner.current, isFalse);
+      await owner.load();
+      owner.create('Retained');
+      await owner.settled;
+      final active = owner.active;
+      final before = owner.revision;
+      final gate = held.readGate = Completer<void>();
+      final refresh = owner.load();
+      expect(owner.revision, greaterThan(before));
+      expect(owner.current, isFalse);
+      expect(owner.active, same(active));
+      held.failRead = true;
+      gate.complete();
+      await refresh;
+      expect(owner.active, same(active));
+      expect(owner.current, isFalse);
+      expect(owner.problem, contains('retained'));
+      held.failRead = false;
+      await owner.load();
+      expect(owner.current, isTrue);
+    },
+  );
+
+  test(
+    'an accepted edit retires a held refresh instead of waiting for it',
+    () async {
+      final held = _HeldBooks();
+      final owner = Books(store: held, root: '/repertoires');
+      addTearDown(owner.dispose);
+      await owner.load();
+      final gate = held.readGate = Completer<void>();
+      final oldRead = owner.load();
+      owner.create('Newer');
+      await owner.settled;
+      expect(owner.current, isTrue);
+      gate.complete();
+      await oldRead;
+      expect(owner.active?.name, 'Newer');
+      expect(owner.current, isTrue);
+    },
+  );
+
+  test(
+    'structural reference publication is not current before reread completes',
+    () async {
+      final held = _HeldBooks();
+      final owner = Books(store: held, root: '/repertoires');
+      addTearDown(owner.dispose);
+      await owner.load();
+      final entered = Completer<void>();
+      final release = Completer<void>();
+      final changing = owner.changeReferences(() async {
+        entered.complete();
+        await release.future;
+        return true;
+      }, failed: (_) => false);
+      expect(owner.current, isFalse);
+      await entered.future;
+      final read = held.readGate = Completer<void>();
+      release.complete();
+      await pumpEventQueue();
+      expect(owner.current, isFalse);
+      read.complete();
+      expect(await changing, isTrue);
+      expect(owner.current, isTrue);
+    },
+  );
+
+  test('published membership cannot mutate behind its revision', () async {
+    final names = <String>{'First'};
+    final list = <Book>[Book(id: 'one', name: 'One', repertoires: names)];
+    final held = _HeldBooks()..value = BookList(books: list, active: 'one');
+    final owner = Books(store: held, root: '/repertoires');
+    addTearDown(owner.dispose);
+    await owner.load();
+    names.add('Unobserved');
+    list.clear();
+    expect(owner.active!.repertoires, {'First'});
+    expect(() => owner.books.clear(), throwsUnsupportedError);
+    expect(() => owner.active!.repertoires.clear(), throwsUnsupportedError);
+    owner.setRepertoire(owner.active!, najdorf, true);
+    expect(() => owner.active!.repertoires.clear(), throwsUnsupportedError);
+    await owner.settled;
+  });
 
   test('no book is in use until one is made; the first one made is', () async {
     expect(books.active, isNull);
@@ -178,4 +342,28 @@ void main() {
     });
     expect(() => BookList.decode('{}'), throwsFormatException);
   });
+}
+
+final class _HeldBooks implements BookStore {
+  BookList value = BookList.empty;
+  Completer<void>? writeGate;
+  Completer<void>? readGate;
+  bool fail = false;
+  bool failRead = false;
+  int writes = 0;
+
+  @override
+  Future<BookList> read() async {
+    await readGate?.future;
+    if (failRead) throw StateError('read unavailable');
+    return value;
+  }
+
+  @override
+  Future<void> write(BookList books) async {
+    writes++;
+    await writeGate?.future;
+    if (fail) throw StateError('write unavailable');
+    value = books;
+  }
 }

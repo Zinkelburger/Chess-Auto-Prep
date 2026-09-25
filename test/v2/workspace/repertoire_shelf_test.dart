@@ -89,6 +89,22 @@ void main() {
     };
   }
 
+  test('disposal revokes a validation already in flight', () async {
+    await shelf.read(gone: () => false);
+    final entered = Completer<void>();
+    final release = Completer<RepertoireValidation>();
+    files.validateWith = (_, _) {
+      entered.complete();
+      return release.future;
+    };
+    final validating = shelf.validate(version: shelf.version);
+    await entered.future;
+    shelf.dispose();
+    release.complete(const RepertoireCurrent());
+    expect(await validating, isA<RepertoireChanged>());
+    expect(shelf.stale, isTrue);
+  });
+
   test('failure retains the last complete index as stale', () async {
     await shelf.read(gone: () => false);
     final previous = shelf.indexOf(italian);

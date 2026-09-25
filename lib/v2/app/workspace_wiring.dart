@@ -211,6 +211,7 @@ final class WorkspaceWiring {
     _fileTree.dispose();
     _myGamesTree.dispose();
     _tree.dispose();
+    _shelf.dispose();
     _games.dispose();
   }
 }

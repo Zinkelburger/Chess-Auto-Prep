@@ -161,13 +161,17 @@ final class TrainingWiring {
 
   /// The accounts as the book last heard of them.
   Map<GameSite, Account>? _accountsSeen;
+  bool? _accountsUnsettledSeen;
 
   void _gamesMayHaveChanged() {
     final accounts = modes.myGames.accounts;
-    if (identical(accounts, _accountsSeen)) return;
+    final changed = !identical(accounts, _accountsSeen);
+    final unsettled = modes.myGames.accountsUnsettled;
+    if (!changed && unsettled == _accountsUnsettledSeen) return;
     _accountsSeen = accounts;
+    _accountsUnsettledSeen = unsettled;
     modes.book.recheck();
-    _myGamesTree.forget();
+    if (changed) _myGamesTree.forget();
   }
 
   void dispose() {

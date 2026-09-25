@@ -184,9 +184,7 @@ abstract base class _DocumentModeView extends ModeView {
       ),
       AppAction(
         'Next gap',
-        (workspace.gaps.walk?.gaps ?? const []).isEmpty
-            ? null
-            : workspace.gaps.nextGap,
+        workspace.gaps.canNextGap ? workspace.gaps.nextGap : null,
         group: 'Repertoire',
       ),
       if (session.chapter case final chapter? when chapter.game == null)

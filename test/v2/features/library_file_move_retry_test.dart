@@ -73,6 +73,40 @@ void main() {
   );
 
   test(
+    'accepted move Retry remains available when the catalog is stale',
+    () async {
+      final f = await _Fixture.create();
+      addTearDown(f.dispose);
+      f.library.dispose();
+      f.libraryDisposed = true;
+      final files = ScriptedFiles();
+      final library = Library(
+        files: files,
+        documents: f.store,
+        saver: f.saver,
+        session: f.session,
+        pendingWrites: f.pending,
+        picker: ScriptedPicker(),
+        root: p.dirname(p.dirname(f.from.path)),
+        books: f.books,
+      );
+      addTearDown(library.dispose);
+      await library.refresh();
+      f.store.failAfterMove = true;
+      final failure =
+          await library.renameChapter(f.from, 'Moved') as LibraryFailure;
+      files.listing = const RepertoiresUnreadable('Catalog needs recovery');
+      await library.refresh();
+      expect(library.stale, isTrue);
+      expect(library.busy, isFalse);
+      expect(await failure.retry!(), isA<LibraryDone>());
+      expect(f.store.ids, hasLength(2));
+      expect(f.store.ids.last, f.store.ids.first);
+      expect(await f.pending.settle(), isNull);
+    },
+  );
+
+  test(
     'registry retry holds training through shared catalog refresh after Library disposal',
     () async {
       final f = await _Fixture.create();
@@ -137,8 +171,17 @@ void main() {
         f.bookStore.hold = true;
         f.books.rename(f.books.active!, 'Updated');
         await f.bookStore.entered.future;
+        final draining = Completer<void>();
+        void referencesChanged() {
+          if (f.books.changingReferences && !draining.isCompleted) {
+            draining.complete();
+          }
+        }
+
+        f.books.addListener(referencesChanged);
         final moving = f.library.renameChapter(f.from, 'Moved');
-        await Future<void>.delayed(const Duration(milliseconds: 20));
+        await draining.future;
+        f.books.removeListener(referencesChanged);
         expect(f.store.ids, isEmpty);
         expect(f.books.changingReferences, isTrue);
         var opened = false;
@@ -393,6 +436,7 @@ final class _Fixture {
       root: root,
       books: books,
     );
+    await library.refresh();
     if (open) await session.open(from);
     return _Fixture(
       disk,

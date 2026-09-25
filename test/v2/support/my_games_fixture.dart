@@ -160,6 +160,13 @@ final class MemoryAccounts implements AccountStore {
 
   final Map<GameSite, Account> accounts;
 
+  int _revision = 0;
+  @override
+  int get revision => _revision;
+  @override
+  Future<AccountsRead> snapshot() async =>
+      AccountsSnapshot(accounts: accounts, revision: revision);
+
   @override
   Future<Map<GameSite, Account>> read() async => {...accounts};
 
@@ -174,6 +181,7 @@ final class MemoryAccounts implements AccountStore {
 
   @override
   Future<bool> setUsername(GameSite site, String? username) async {
+    _revision++;
     final name = username?.trim() ?? '';
     if (name.isEmpty) {
       accounts.remove(site);

@@ -129,9 +129,13 @@ class _RepertoireRow extends StatelessWidget {
   /// What can be done to the repertoire itself, off while a catalog change
   /// is in flight.
   List<Widget> _actions(BuildContext context) => [
-    rowAction('Rename…', () => _rename(context), busy: library.busy),
-    rowAction('New chapter…', () => _newChapter(context), busy: library.busy),
-    rowAction('Delete…', () => _delete(context), busy: library.busy),
+    rowAction('Rename…', () => _rename(context), busy: !library.canChange),
+    rowAction(
+      'New chapter…',
+      () => _newChapter(context),
+      busy: !library.canChange,
+    ),
+    rowAction('Delete…', () => _delete(context), busy: !library.canChange),
   ];
 
   @override
@@ -258,7 +262,7 @@ class _ChapterRow extends StatelessWidget {
     return Material(
       color: open ? scheme.surfaceContainerHighest : Colors.transparent,
       child: InkWell(
-        onTap: onOpen,
+        onTap: library.canChange ? onOpen : null,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(
             Space.l + Space.m,
@@ -276,17 +280,17 @@ class _ChapterRow extends StatelessWidget {
                   rowAction(
                     'Rename…',
                     () => _rename(context),
-                    busy: library.busy,
+                    busy: !library.canChange,
                   ),
                   rowAction(
                     'Move to…',
                     () => _move(context),
-                    busy: library.busy,
+                    busy: !library.canChange,
                   ),
                   rowAction(
                     'Delete…',
                     () => _delete(context),
-                    busy: library.busy,
+                    busy: !library.canChange,
                   ),
                 ],
               ),

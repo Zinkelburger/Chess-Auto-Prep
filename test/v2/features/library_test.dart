@@ -55,10 +55,9 @@ void main() {
     await start();
     fixture.files.listing = const RepertoiresUnreadable('Permission denied');
     await fixture.library.refresh();
-    expect(
-      (fixture.library.state as LibraryLoadFailed).detail,
-      'Permission denied',
-    );
+    expect(fixture.library.state, isA<LibraryLoaded>());
+    expect(fixture.library.stale, isTrue);
+    expect(fixture.library.problem, 'Permission denied');
   });
 
   test('search filters the list by name', () async {
@@ -69,6 +68,51 @@ void main() {
     fixture.library.search('');
     expect(fixture.library.visible, hasLength(2));
   });
+
+  test(
+    'stale catalog refuses fresh writes while retaining its previous rows',
+    () async {
+      await start([kid]);
+      fixture.files.listing = const RepertoiresUnreadable('Permission denied');
+      await fixture.library.refresh();
+      expect(fixture.library.repertoires, [kid]);
+      final before = Map.of(fixture.store.documents);
+      expect(
+        await fixture.library.createRepertoire('New'),
+        isA<LibraryFailure>(),
+      );
+      expect(
+        await fixture.library.renameChapter(kid.chapters.first, 'Changed'),
+        isA<LibraryFailure>(),
+      );
+      expect(fixture.store.documents, before);
+      fixture.files.listing = Repertoires([kid]);
+      await fixture.library.refresh();
+      expect(
+        await fixture.library.createRepertoire('New'),
+        isA<LibraryAdded>(),
+      );
+    },
+  );
+
+  test(
+    'stale catalog blocks admission before a held refresh completes',
+    () async {
+      await start([kid]);
+      fixture.files.hold = true;
+      final refreshing = fixture.library.catalog.refresh();
+      final creating = fixture.library.createChapter(kid, 'New');
+      try {
+        await pumpEventQueue();
+        expect(fixture.textAt('/repertoires/KID/New.pgn'), isNull);
+      } finally {
+        fixture.files.hold = false;
+        fixture.files.releaseAll();
+        await refreshing;
+      }
+      expect(await creating, isA<LibraryFailure>());
+    },
+  );
 
   test('a new repertoire is a folder with one empty chapter', () async {
     await start([kid]);

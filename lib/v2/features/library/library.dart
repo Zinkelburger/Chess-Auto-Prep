@@ -106,6 +106,11 @@ final class Library extends ChangeNotifier {
   /// A change to the catalog is in flight, so the row actions are off.
   bool get busy => _busy;
 
+  /// Retained rows are useful for display, but cannot authorize a new change.
+  bool get stale => catalog.stale;
+  String? get problem => catalog.problem;
+  bool get canChange => !busy && !stale;
+
   /// Every repertoire that was listed, whatever the search says: what a
   /// chapter can be moved into.
   List<RepertoireFolder> get repertoires => switch (_state) {
@@ -145,7 +150,10 @@ final class Library extends ChangeNotifier {
 
   void _catalogChanged() {
     final listing = catalog.listing;
-    if (listing == null) return;
+    if (listing == null) {
+      if (!_disposed) notifyListeners();
+      return;
+    }
     _set(switch (listing) {
       Repertoires(:final folders, :final unreadable) => LibraryLoaded(
         folders,
@@ -360,23 +368,28 @@ final class Library extends ChangeNotifier {
     String action,
     Future<LibraryResult> Function() body, {
     bool retiresTraining = false,
+    bool accepted = false,
   }) =>
       pendingWrites?.track(
         this,
-        _perform(action, body, retiresTraining),
+        _perform(action, body, retiresTraining, accepted),
         label: 'Library',
       ) ??
-      _perform(action, body, retiresTraining);
+      _perform(action, body, retiresTraining, accepted);
 
   Future<LibraryResult> _perform(
     String action,
     Future<LibraryResult> Function() body,
     bool retiresTraining,
+    bool accepted,
   ) async {
     if (_busy) return const LibraryBusy();
+    if (!accepted && stale && catalog.listing != null) return _catalogRefusal;
     _busy = true;
     if (!_disposed) notifyListeners();
     Future<LibraryResult> operation() async {
+      if (!accepted && catalog.listing == null) await catalog.refresh();
+      if (!accepted && stale) return _catalogRefusal;
       final result = await body();
       if (!_disposed) await catalog.synchronize();
       return result;
@@ -394,6 +407,10 @@ final class Library extends ChangeNotifier {
       if (!_disposed) notifyListeners();
     }
   }
+
+  LibraryFailure get _catalogRefusal => LibraryFailure(
+    problem ?? 'Refresh the repertoire list before making changes.',
+  );
 
   /// The repertoire called [name], compared without case because a user who
   /// has `KID` did not mean to make a second `kid`. [except] is the folder
@@ -545,8 +562,12 @@ final class Library extends ChangeNotifier {
       _fileChanges.move(ref, to);
 
   late final _fileChanges = AcceptedFileChanges(
-    runRetry: (body) =>
-        _run('retry the file change', body, retiresTraining: true),
+    runRetry: (body) => _run(
+      'retry the file change',
+      body,
+      retiresTraining: true,
+      accepted: true,
+    ),
     documents: _store,
     saver: _saver,
     session: _session,
@@ -776,8 +797,12 @@ final class Library extends ChangeNotifier {
           if (result is! store.IoFailure) _referenceRetries.remove(key);
           return _savedResult(
             result,
-            retry: () =>
-                _run('retry rename ${ref.path}', retry, retiresTraining: true),
+            retry: () => _run(
+              'retry rename ${ref.path}',
+              retry,
+              retiresTraining: true,
+              accepted: true,
+            ),
           );
         }
         _referenceRetries[key] = retry;

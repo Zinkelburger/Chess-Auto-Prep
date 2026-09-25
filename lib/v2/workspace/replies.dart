@@ -112,14 +112,11 @@ typedef _TableKey = ({
 /// tree or the cursor.
 final class Replies extends ChangeNotifier {
   Replies({
-    required DocumentSession session,
-    required ReplyModel model,
-    required SettingsStore settings,
-    required GapHunt gaps,
-  }) : _session = session,
-       _model = model,
-       _settings = settings,
-       _gaps = gaps {
+    required this._session,
+    required this._model,
+    required this._settings,
+    required this._gaps,
+  }) {
     _session.anyChange.addListener(_follow);
     _settings.addListener(_follow);
     _gaps.addListener(_follow);
@@ -168,7 +165,7 @@ final class Replies extends ChangeNotifier {
       fen: _session.fen,
       elo: s.opponentElo,
       onceIn: s.coverOnceIn,
-      walk: _gaps.walk,
+      walk: _gaps.currentWalk,
       tree: _session.tree,
     );
     if (wanted == _tableFor) return;
@@ -184,6 +181,8 @@ final class Replies extends ChangeNotifier {
     notifyListeners();
     final answer = await _model.answerAt(wanted.fen);
     if (ticket != _ticket) return;
+    if (wanted.walk != null && !await _gaps.validateCurrent()) return;
+    if (ticket != _ticket) return;
     _table = switch (answer) {
       MaiaPolicy(:final shares) => _rowsOf(wanted.fen, shares),
       MaiaFailed(:final reason) => RepliesFailed(reason),
@@ -196,7 +195,7 @@ final class Replies extends ChangeNotifier {
     final cursor = _session.cursor;
     final siblings = tree.nodeAt(cursor)?.children ?? tree.children;
     final ourMove = fen.whiteToMove == (_session.chapter!.side == Side.white);
-    final walk = _gaps.walk;
+    final walk = _gaps.currentWalk;
     final reach = walk?.reach[cursor];
     final answered = walk?.elsewhere ?? const {};
     final floor = 1 / _settings.value.coverOnceIn;
@@ -252,9 +251,7 @@ final class Replies extends ChangeNotifier {
 /// are not part of the key. Answers stay for the session; a failure is not
 /// kept, so the next ask tries again.
 final class ReplyModel {
-  ReplyModel({required MovePolicy policy, required SettingsStore settings})
-    : _policy = policy,
-      _settings = settings;
+  ReplyModel({required this._policy, required this._settings});
 
   final MovePolicy _policy;
   final SettingsStore _settings;

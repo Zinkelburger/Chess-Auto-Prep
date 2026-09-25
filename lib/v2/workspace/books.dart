@@ -19,12 +19,10 @@ import '../storage/pgn_document_store.dart' as documents;
 /// for an empty one: [problem] says so and nothing is written over it.
 final class Books extends ChangeNotifier {
   Books({
-    required BookStore store,
-    required String root,
+    required this._store,
+    required this._root,
     PendingWrites? pendingWrites,
-  }) : pendingWrites = pendingWrites ?? PendingWrites(),
-       _store = store,
-       _root = root;
+  }) : pendingWrites = pendingWrites ?? PendingWrites();
 
   final BookStore _store;
   final PendingWrites pendingWrites;
@@ -40,12 +38,30 @@ final class Books extends ChangeNotifier {
   String? _problem;
   String? _editing;
   Future<void>? _writing;
+  Future<void>? _settling;
+  int? _loading;
   PendingObligation<void>? _saveObligation;
   bool _dirty = false;
   bool _disposed = false;
   int _revision = 0;
   bool _changingReferences = false;
   Completer<void>? _referenceWrite;
+
+  /// Admission token for the exact membership used by derived views.
+  int get revision => _revision;
+
+  /// Optimistic edits remain visible in the Books editor, but projections may
+  /// only certify this list after its complete persistence obligation settles.
+  bool get current =>
+      !_disposed &&
+      _loaded &&
+      _loading == null &&
+      !_unreadable &&
+      _problem == null &&
+      !_dirty &&
+      _writing == null &&
+      !canRetry &&
+      !_changingReferences;
 
   Future<void> get referencesSettled async {
     while (_referenceWrite != null) {
@@ -74,20 +90,28 @@ final class Books extends ChangeNotifier {
   Future<void> load() async {
     if (_disposed || _dirty || canRetry || _changingReferences) return;
     final revision = ++_revision;
+    _loading = revision;
+    _notify();
     try {
       final list = await _store.read();
       if (_disposed || revision != _revision || canRetry) return;
-      _list = list;
+      _list = _frozen(list);
       _problem = null;
       _unreadable = false;
+      _loaded = true;
     } on Object catch (error) {
       if (_disposed || revision != _revision || canRetry) return;
       log.w('read the books', error);
       _unreadable = true;
-      _problem = 'Your books could not be read, so none are shown.';
+      _problem =
+          'Your books could not be read, so the previous view is retained.';
+      _loaded = true;
+    } finally {
+      if (_loading == revision) {
+        _loading = null;
+        _notify();
+      }
     }
-    _loaded = true;
-    _notify();
   }
 
   /// Whether [ref] is in the active book.
@@ -292,7 +316,8 @@ final class Books extends ChangeNotifier {
       return;
     }
     _revision++;
-    _list = list;
+    _loading = null;
+    _list = _frozen(list);
     _dirty = true;
     _notify();
     unawaited(_persist());
@@ -315,6 +340,7 @@ final class Books extends ChangeNotifier {
       return failed('A book reference change is still pending.');
     }
     _changingReferences = true;
+    _loading = null;
     final completion = _referenceWrite = Completer<void>();
     _revision++;
     _notify();
@@ -346,7 +372,7 @@ final class Books extends ChangeNotifier {
   Future<void> _readReferences() async {
     _loaded = true;
     try {
-      _list = await _store.read();
+      _list = _frozen(await _store.read());
       _problem = null;
       _unreadable = false;
     } on Object catch (error) {
@@ -361,16 +387,28 @@ final class Books extends ChangeNotifier {
 
   Future<void> retry() => _disposed || !canRetry ? Future.value() : _persist();
 
-  Future<void> _persist() {
-    if (!canRetry) {
-      _saveObligation = pendingWrites.accept<void>(
-        resource: _store,
-        label: 'Books',
-        work: () => _writing ??= _writeNewest(),
-        problem: (_) => _problem,
-      );
+  Future<void> _persist() => _settling ??= _settleNewest();
+
+  Future<void> _settleNewest() async {
+    try {
+      do {
+        if (!canRetry) {
+          _saveObligation = pendingWrites.accept<void>(
+            resource: _store,
+            label: 'Books',
+            work: () => _writing ??= _writeNewest(),
+            problem: (_) => _problem,
+          );
+        }
+        await _saveObligation!.run();
+        // A listener may accept another snapshot after the writer returns but
+        // before its obligation acknowledges. Keep that snapshot in this drain.
+      } while (_dirty && !canRetry);
+    } finally {
+      _settling = null;
+      // Only the completed obligation may make the optimistic list current.
+      _notify();
     }
-    return _saveObligation!.run();
   }
 
   Future<void> _writeNewest() async {
@@ -394,7 +432,21 @@ final class Books extends ChangeNotifier {
   }
 
   /// Waits for the write in flight, for a test.
-  Future<void> get settled => _writing ?? Future.value();
+  Future<void> get settled => _settling ?? Future.value();
+
+  /// Membership passed to projections cannot be edited behind its token.
+  static BookList _frozen(BookList list) => BookList(
+    active: list.active,
+    books: List.unmodifiable([
+      for (final book in list.books)
+        Book(
+          id: book.id,
+          name: book.name,
+          repertoires: Set.unmodifiable(book.repertoires),
+          chapters: Set.unmodifiable(book.chapters),
+        ),
+    ]),
+  );
 
   static int _made = 0;
 

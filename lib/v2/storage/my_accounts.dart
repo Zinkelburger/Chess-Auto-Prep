@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../chess/tactics/game_ids.dart';
@@ -33,7 +35,31 @@ final class Account {
   final DateTime? downloaded;
 }
 
+sealed class AccountsRead {
+  const AccountsRead();
+}
+
+/// Names and one owner's admission revision, captured as an immutable value.
+final class AccountsSnapshot extends AccountsRead {
+  AccountsSnapshot({
+    required Map<GameSite, Account> accounts,
+    required this.revision,
+  }) : accounts = Map.unmodifiable(accounts);
+  final Map<GameSite, Account> accounts;
+  final int revision;
+}
+
+final class AccountsUnavailable extends AccountsRead {
+  const AccountsUnavailable(this.detail);
+  final String detail;
+}
+
 abstract interface class AccountStore {
+  /// Changes synchronously on username admission and observed names/validity
+  /// changes. Download timestamps do not determine comparison membership.
+  int get revision;
+  Future<AccountsRead> snapshot();
+
   /// The accounts that have a username. Unreadable preferences read as
   /// none, and the log says why.
   Future<Map<GameSite, Account>> read();
@@ -47,28 +73,91 @@ abstract interface class AccountStore {
 }
 
 final class PreferencesAccounts implements AccountStore {
-  PreferencesAccounts({
-    Future<SharedPreferences> Function() preferences =
-        SharedPreferences.getInstance,
-  }) : _preferences = preferences;
+  PreferencesAccounts({this._preferences = SharedPreferences.getInstance});
 
   final Future<SharedPreferences> Function() _preferences;
 
+  int _revision = 0;
+  int _pendingUsernames = 0;
+  final _unconfirmed = <GameSite>{};
+  Map<GameSite, String>? _names;
+  bool? _readable;
+  Future<void> _usernameTail = Future.value();
+  Future<AccountsRead>? _reading;
+
   @override
-  Future<Map<GameSite, Account>> read() async {
+  int get revision => _revision;
+
+  @override
+  Future<AccountsRead> snapshot() {
+    if (_pendingUsernames != 0 || _unconfirmed.isNotEmpty) {
+      return Future.value(
+        _unavailable(
+          'Account changes have not been confirmed. Retry saving the usernames.',
+        ),
+      );
+    }
+    final reading = _reading;
+    if (reading != null) return reading;
+    final next = _capture();
+    _reading = next;
+    unawaited(
+      next.whenComplete(() {
+        if (identical(_reading, next)) _reading = null;
+      }),
+    );
+    return next;
+  }
+
+  Future<AccountsRead> _capture() async {
+    final started = _revision;
     try {
       final prefs = await _preferences();
-      return {
+      if (started != _revision) {
+        return const AccountsUnavailable(
+          'Accounts changed during the read. Retry.',
+        );
+      }
+      final accounts = {
         for (final site in GameSite.values)
           if (prefs.getString(_usernameKeys[site]!)?.trim() case final name?
               when name.isNotEmpty)
             site: Account(name, downloaded: _date(prefs, site)),
       };
+      final changed =
+          _names == null ||
+          _names!.length != accounts.length ||
+          accounts.entries.any(
+            (entry) => _names![entry.key] != entry.value.username,
+          );
+      if (changed || _readable != true) _revision++;
+      _readable = true;
+      _names = {
+        for (final entry in accounts.entries) entry.key: entry.value.username,
+      };
+      return AccountsSnapshot(accounts: accounts, revision: _revision);
     } on Object catch (error) {
       log.w('read the game accounts', error);
-      return const {};
+      if (started != _revision) {
+        return const AccountsUnavailable(
+          'Accounts changed during the read. Retry.',
+        );
+      }
+      return _unavailable('The saved accounts could not be read.');
     }
   }
+
+  AccountsUnavailable _unavailable(String detail) {
+    if (_readable != false) _revision++;
+    _readable = false;
+    return AccountsUnavailable(detail);
+  }
+
+  @override
+  Future<Map<GameSite, Account>> read() async => switch (await snapshot()) {
+    AccountsSnapshot(:final accounts) => accounts,
+    AccountsUnavailable() => const {},
+  };
 
   static DateTime? _date(SharedPreferences prefs, GameSite site) {
     final ms = prefs.getInt(_downloadedKeys[site]!);
@@ -76,8 +165,27 @@ final class PreferencesAccounts implements AccountStore {
   }
 
   @override
-  Future<bool> setUsername(GameSite site, String? username) async {
+  Future<bool> setUsername(GameSite site, String? username) {
+    // Admission invalidates a captured comparison before any platform await.
+    _revision++;
+    _pendingUsernames++;
+    _unconfirmed.add(site);
+    _reading = null;
     final name = username?.trim() ?? '';
+    final written = _usernameTail.then((_) async {
+      final success = await _writeUsername(site, name);
+      if (success) {
+        _unconfirmed.remove(site);
+      } else {
+        _unconfirmed.add(site);
+      }
+      return success;
+    });
+    _usernameTail = written.then((_) {});
+    return written.whenComplete(() => _pendingUsernames--);
+  }
+
+  Future<bool> _writeUsername(GameSite site, String name) async {
     try {
       final prefs = await _preferences();
       final key = _usernameKeys[site]!;

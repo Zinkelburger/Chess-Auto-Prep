@@ -63,7 +63,7 @@ void main() {
       expect(c5().elsewhere, isNull);
       expect(c5().gap, isTrue);
 
-      workspace.gaps.nextGap();
+      await workspace.gaps.nextGap();
       expect(workspace.gaps.highlighted, isNotNull);
       fixture.chapterFiles.listing = Repertoires([
         folder('benko', ['Main', 'Sicilian']),

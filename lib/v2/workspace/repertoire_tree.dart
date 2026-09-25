@@ -83,6 +83,12 @@ final class TreeNothing extends TreeState {
   final String sentence;
 }
 
+/// A required input could not be read or has not finished saving.
+final class TreeUnavailable extends TreeState {
+  const TreeUnavailable(this.detail);
+  final String detail;
+}
+
 /// Every line of the user's repertoires, looked up by position: what they play
 /// from the position on the board, in whichever file, however the board
 /// got there.
@@ -113,6 +119,7 @@ final class RepertoireTree extends ChangeNotifier {
        _books = books {
     _session.anyChange.addListener(_followTheBoard);
     _books.addListener(_refresh);
+    _shelf.addListener(_shelfChanged);
   }
 
   /// Plies of a line's continuation a row shows.
@@ -142,6 +149,14 @@ final class RepertoireTree extends ChangeNotifier {
   final _off = <MoveNode>[];
 
   TreeState get state => _state;
+
+  int? _shownShelf;
+  int? _shownBook;
+  bool get current =>
+      _inputsCurrent &&
+      _shownShelf == _shelf.version &&
+      _shownBook == _books.revision;
+  bool get _inputsCurrent => _books.current && !_shelf.stale;
 
   /// Whether a pane showing the tree is up, and the board is its.
   bool get watching => _watching > 0;
@@ -265,15 +280,31 @@ final class RepertoireTree extends ChangeNotifier {
   /// stale, and then it is read again first.
   void _refresh() {
     if (_disposed || _watching == 0) return;
-    if (_shelf.stale) {
+    if (!_books.current) {
+      _show(
+        TreeUnavailable(
+          _books.problem ?? 'The book selection is being saved or read.',
+        ),
+      );
+    } else if (_shelf.stale) {
+      _show(const TreeReading());
       unawaited(_readThenShow());
     } else {
       _showHere();
     }
   }
 
+  void _shelfChanged() {
+    if (_disposed || _watching == 0) return;
+    if (_shelf.problem != null) {
+      _showHere();
+    } else {
+      _refresh();
+    }
+  }
+
   Future<void> _readThenShow() async {
-    await _shelf.read(gone: () => _disposed);
+    await _shelf.read(gone: () => _disposed || _watching == 0);
     if (_disposed || _watching == 0) return;
     _showHere();
   }
@@ -298,6 +329,14 @@ final class RepertoireTree extends ChangeNotifier {
   }
 
   void _showHere() {
+    if (!_inputsCurrent) {
+      _show(
+        TreeUnavailable(
+          _books.problem ?? _shelf.problem ?? 'The book inputs changed. Retry.',
+        ),
+      );
+      return;
+    }
     final fen = this.fen;
     final key = fen.position;
     final side = this.side;
@@ -364,6 +403,13 @@ final class RepertoireTree extends ChangeNotifier {
   void _show(TreeState state) {
     if (_disposed) return;
     _state = state;
+    if (state is TreeShown || state is TreeNothing) {
+      _shownShelf = _shelf.version;
+      _shownBook = _books.revision;
+    } else {
+      _shownShelf = null;
+      _shownBook = null;
+    }
     notifyListeners();
   }
 
@@ -372,6 +418,7 @@ final class RepertoireTree extends ChangeNotifier {
     _disposed = true;
     _session.anyChange.removeListener(_followTheBoard);
     _books.removeListener(_refresh);
+    _shelf.removeListener(_shelfChanged);
     board.dispose();
     super.dispose();
   }

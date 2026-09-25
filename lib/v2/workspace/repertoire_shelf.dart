@@ -1,5 +1,7 @@
 import 'dart:isolate';
 
+import 'package:flutter/foundation.dart';
+
 import '../chess/pgn/chapter.dart';
 import '../chess/pgn/chapter_sections.dart';
 import '../chess/repertoire_index.dart';
@@ -18,7 +20,7 @@ import '../storage/pgn_document_store.dart';
 /// ([ChapterRef.section]): it is read once, and each of its chapters is
 /// indexed from that chapter's own games, so a line counts once, in the
 /// chapter it belongs to.
-final class RepertoireShelf {
+final class RepertoireShelf extends ChangeNotifier {
   RepertoireShelf({required this._files, required this._documents});
 
   final ChapterFiles _files;
@@ -35,6 +37,7 @@ final class RepertoireShelf {
 
   List<ChapterRef> _refs = const [];
   bool _stale = true;
+  bool _disposed = false;
   Future<_ReadResult>? _reading;
   var _generation = 0;
   var _version = 0;
@@ -51,7 +54,7 @@ final class RepertoireShelf {
 
   /// Whether the files must be read again before they are believed: they
   /// changed, or a read of them has not finished.
-  bool get stale => _stale || _reading != null;
+  bool get stale => _disposed || _stale || _reading != null;
 
   /// Validate the same committed shelf a consumer actually used, together
   /// with related PGNs (null means absent). A newer shelf cannot certify work
@@ -80,24 +83,35 @@ final class RepertoireShelf {
   void forget() {
     _generation++;
     _stale = true;
+    _problem = null;
+    if (!_disposed) notifyListeners();
   }
 
   /// Reads until nothing is stale, so a change that lands while the files
   /// are being read is read too. [gone] stops it early.
   Future<void> read({required bool Function() gone}) async {
-    while (!gone()) {
+    bool cancelled() => _disposed || gone();
+    while (!cancelled()) {
       final reading = _reading;
       if (reading != null) {
         if (await reading == _ReadResult.failed) return;
       } else if (_stale) {
-        final result = await (_reading = _readOnce(
-          gone,
-        ).whenComplete(() => _reading = null));
+        final result = await (_reading = _readOnce(cancelled).whenComplete(() {
+          _reading = null;
+          if (!_disposed) notifyListeners();
+        }));
         if (result == _ReadResult.failed) return;
       } else {
         return;
       }
     }
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _generation++;
+    super.dispose();
   }
 
   Future<_ReadResult> _readOnce(bool Function() gone) async {

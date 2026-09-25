@@ -25,6 +25,28 @@ const bookCheckWindow = 200;
 /// A saved game and where it is in its file, counting from zero.
 typedef CachedGame = ({int index, String text});
 
+/// A bounded corpus read and the exact file version it came from. An absent
+/// file is a successful empty input whose absence must still be validated.
+sealed class CachedGamesRead {
+  const CachedGamesRead();
+}
+
+final class CachedGamesSnapshot extends CachedGamesRead {
+  CachedGamesSnapshot({
+    required this.ref,
+    required this.revision,
+    required List<CachedGame> games,
+  }) : games = List.unmodifiable(games);
+  final DocumentRef ref;
+  final Revision? revision;
+  final List<CachedGame> games;
+}
+
+final class CachedGamesUnavailable extends CachedGamesRead {
+  const CachedGamesUnavailable(this.detail);
+  final String detail;
+}
+
 /// The user's downloaded games, one PGN per site and username under
 /// `Documents/games_library/` — `lichess_bob.pgn`, `chesscom_bob.pgn` —
 /// with a `.fetched` file beside it saying when they came down. The old
@@ -44,6 +66,31 @@ final class GamesCache {
       '_',
     );
     return DocumentRef(p.join(folder, '${site.name}_$key.pgn'));
+  }
+
+  /// Reads a frozen corpus input without conflating unavailable and absent.
+  Future<CachedGamesRead> snapshotNewest(
+    GameSite site,
+    String username, {
+    required int max,
+  }) async {
+    final ref = refFor(site, username);
+    try {
+      switch (await _store.open(ref)) {
+        case Opened(:final text, :final revision):
+          return CachedGamesSnapshot(
+            ref: ref,
+            revision: revision,
+            games: await _newestOf(text, max),
+          );
+        case Absent():
+          return CachedGamesSnapshot(ref: ref, revision: null, games: const []);
+        case Unreadable(:final detail):
+          return CachedGamesUnavailable(detail);
+      }
+    } on Object catch (error) {
+      return CachedGamesUnavailable('$error');
+    }
   }
 
   /// The newest [max] games saved for [username], newest first, or null

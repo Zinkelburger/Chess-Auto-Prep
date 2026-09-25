@@ -100,7 +100,7 @@ class _LibraryPanelState extends State<LibraryPanel> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _Toolbar(
-            busy: widget.library.busy,
+            busy: !widget.library.canChange,
             onCreate: _newRepertoire,
             search: _search,
             onSearch: widget.library.search,
@@ -131,6 +131,21 @@ class _LibraryPanelState extends State<LibraryPanel> {
   Widget _loaded(Library library) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
+      if (library.stale)
+        Padding(
+          padding: const EdgeInsets.all(Space.m),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Previous repertoire list'),
+              Text(library.problem ?? 'Updating repertoires…'),
+              TextButton(
+                onPressed: library.busy ? null : library.refresh,
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
       for (final folder in library.unreadable) _Unreadable(folder: folder),
       Expanded(child: _listed(library)),
     ],
@@ -138,6 +153,7 @@ class _LibraryPanelState extends State<LibraryPanel> {
 
   Widget _listed(Library library) {
     if (library.repertoires.isEmpty) {
+      if (library.stale) return const SizedBox.shrink();
       return const _Message(
         'No repertoires yet\nCreate a repertoire to get started.',
       );
@@ -158,7 +174,9 @@ class _LibraryPanelState extends State<LibraryPanel> {
         expanded: _expanded.contains(folder.path),
         onToggle: () => _toggle(folder),
         selected: widget.selected,
-        onOpen: widget.onOpen,
+        onOpen: (chapter) {
+          if (mounted && library.canChange) widget.onOpen(chapter);
+        },
       );
     },
   );

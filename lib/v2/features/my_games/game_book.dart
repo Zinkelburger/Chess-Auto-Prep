@@ -8,6 +8,9 @@ import '../../chess/book/played_game.dart';
 import '../../chess/pgn/chapter.dart' show readOffThreadFrom;
 import '../../chess/tactics/game_ids.dart';
 import '../../storage/chapter_files.dart';
+import '../../storage/document_ref.dart';
+import '../../diagnostics/log.dart';
+import '../../storage/book_list.dart' show Book;
 import '../../storage/my_accounts.dart';
 import '../../storage/my_games_files.dart';
 import '../../workspace/books.dart';
@@ -115,14 +118,32 @@ final class GameBook extends ChangeNotifier {
   final RepertoireShelf _shelf;
   final Books _books;
 
-  /// The book whose chapters the games were last read against.
-  Object? _bookSeen;
+  /// Selection admission and settlement both invalidate the comparison.
+  ({int revision, bool current, String? problem})? _bookSeen;
+  ({int revision, bool current, String? problem}) get _bookInput => (
+    revision: _books.revision,
+    current: _books.current,
+    problem: _books.problem,
+  );
 
   BookState _state = const BookReading();
   String _query = '';
   int _reads = 0;
   int _watching = 0;
   bool _disposed = false;
+  bool _checking = false;
+  bool _stale = true;
+  String? _problem;
+
+  bool get checking => _checking;
+  int? _comparedAccounts;
+  int? _comparedBook;
+  bool get stale =>
+      _stale ||
+      !_books.current ||
+      (_comparedBook != null && _comparedBook != _books.revision) ||
+      (_comparedAccounts != null && _comparedAccounts != _accounts.revision);
+  String? get problem => _problem;
 
   BookState get state => _state;
 
@@ -163,6 +184,7 @@ final class GameBook extends ChangeNotifier {
   /// sits in the list even when the search hides it; null past either end
   /// or when that is not a checked game.
   CheckedGame? step(ChapterRef? file, int? game, int by) {
+    if (stale) return null;
     final state = _state;
     final here = find(file, game);
     if (state is! BookChecked || here == null) return null;
@@ -187,55 +209,139 @@ final class GameBook extends ChangeNotifier {
   }
 
   void unwatch() {
-    if (_watching > 0) _watching--;
+    if (_watching > 0 && --_watching == 0) {
+      _reads++;
+      _checking = false;
+      _stale = true;
+    }
   }
 
   /// New games were saved, the usernames changed or a repertoire file was
   /// written: read again now if a pane is up, else when one comes up.
   void recheck() {
+    _stale = true;
     if (_watching > 0) unawaited(_read());
   }
 
   /// Another book is in use, or the one in use was edited.
   void _bookChanged() {
-    final book = _books.active;
-    if (identical(book, _bookSeen)) return;
-    _bookSeen = book;
+    final inputs = _bookInput;
+    if (inputs == _bookSeen) return;
+    _bookSeen = inputs;
     recheck();
   }
 
   Future<void> _read() async {
     final ticket = ++_reads;
-    bool overtaken() => _disposed || ticket != _reads;
-    _bookSeen = _books.active;
-    if (_books.active == null) return _become(const BookNotSet());
-    final accounts = await _accounts.read();
-    if (overtaken()) return;
-    if (accounts.isEmpty) return _become(const BookNoAccounts());
+    bool overtaken() => _disposed || ticket != _reads || _watching == 0;
+    final book = _books.active;
+    final bookRevision = _books.revision;
+    _bookSeen = _bookInput;
+    final wasChecking = _checking;
+    _checking = true;
+    _stale = true;
+    _problem = null;
+    if (!wasChecking && _state is BookChecked) notifyListeners();
+    try {
+      if (!_books.current) {
+        throw StateError(
+          _books.problem ?? 'The book selection is being saved or read.',
+        );
+      }
+      if (book == null) return _become(const BookNotSet());
+      final accountRead = await _accounts.snapshot();
+      if (overtaken()) return;
+      if (accountRead is AccountsUnavailable)
+        throw StateError(accountRead.detail);
+      final accountSnapshot = accountRead as AccountsSnapshot;
+      final accounts = accountSnapshot.accounts;
+      if (accounts.isEmpty)
+        return _become(
+          const BookNoAccounts(),
+          accountRevision: accountSnapshot.revision,
+        );
+      final corpus = await _readCorpus(accounts, overtaken);
+      if (corpus == null || overtaken()) return;
+      _shelf.forget();
+      await _shelf.read(gone: overtaken);
+      if (overtaken()) return;
+      if (_shelf.stale)
+        throw StateError(_shelf.problem ?? 'The repertoire snapshot changed.');
+      final version = _shelf.version;
+      final checked = _checked(corpus.played, book);
+      final validation = await _shelf.validate(
+        version: version,
+        additional: corpus.sources,
+      );
+      if (overtaken()) return;
+      switch (validation) {
+        case RepertoireChanged():
+          throw StateError(
+            'The games or repertoires changed during comparison. Retry.',
+          );
+        case RepertoireValidationFailed(:final detail):
+          throw StateError(detail);
+        case RepertoireCurrent():
+          break;
+      }
+      // No asynchronous work follows the native whole-input fence. Account
+      // mutation admission increments its owner token synchronously.
+      if (_books.revision != bookRevision ||
+          !_books.current ||
+          _shelf.stale ||
+          _shelf.version != version ||
+          _accounts.revision != accountSnapshot.revision) {
+        throw StateError('The comparison inputs changed. Retry.');
+      }
+      _become(checked, accountRevision: accountSnapshot.revision);
+    } on Object catch (error) {
+      if (overtaken()) return;
+      _checking = false;
+      _stale = true;
+      _problem = '$error';
+      log.w('compare downloaded games with the repertoire', error);
+      notifyListeners();
+    }
+  }
+
+  Future<
+    ({
+      List<(ChapterRef, GameSite, PlayedGame)> played,
+      Map<String, Revision?> sources,
+    })?
+  >
+  _readCorpus(
+    Map<GameSite, Account> accounts,
+    bool Function() overtaken,
+  ) async {
     final played = <(ChapterRef, GameSite, PlayedGame)>[];
+    final sources = <String, Revision?>{};
     for (final MapEntry(key: site, value: account) in accounts.entries) {
-      final saved = await _cache.newest(
+      final saved = await _cache.snapshotNewest(
         site,
         account.username,
         max: bookCheckWindow,
       );
-      if (overtaken()) return;
-      final file = ChapterRef.at(_cache.refFor(site, account.username).path);
-      for (final game in await _readGames(saved ?? [], account.username)) {
+      if (overtaken()) return null;
+      if (saved is CachedGamesUnavailable) throw StateError(saved.detail);
+      final snapshot = saved as CachedGamesSnapshot;
+      sources[snapshot.ref.path] = snapshot.revision;
+      final file = ChapterRef.at(snapshot.ref.path);
+      for (final game in await _readGames(snapshot.games, account.username)) {
         played.add((file, site, game));
       }
-      if (overtaken()) return;
+      if (overtaken()) return null;
     }
-    _shelf.forget();
-    await _shelf.read(gone: overtaken);
-    if (overtaken()) return;
-    _become(_checked(played));
+    return (played: played, sources: sources);
   }
 
-  BookChecked _checked(List<(ChapterRef, GameSite, PlayedGame)> played) {
+  BookChecked _checked(
+    List<(ChapterRef, GameSite, PlayedGame)> played,
+    Book selected,
+  ) {
     final books = [
       for (final ref in _shelf.refs)
-        if (_books.includes(ref))
+        if (_books.contains(selected, ref))
           if (_shelf.indexOf(ref) case final index?)
             BookFile(
               path: ref.path,
@@ -271,9 +377,14 @@ final class GameBook extends ChangeNotifier {
     return List.unmodifiable(ways);
   }
 
-  void _become(BookState state) {
+  void _become(BookState state, {int? accountRevision}) {
     if (_disposed) return;
     _state = state;
+    _comparedAccounts = accountRevision;
+    _comparedBook = _books.revision;
+    _checking = false;
+    _stale = false;
+    _problem = null;
     notifyListeners();
   }
 

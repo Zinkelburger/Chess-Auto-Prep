@@ -61,9 +61,16 @@ final class RepertoireCatalog extends ChangeNotifier {
 
   Future<void> _refresh() {
     if (_disposed) return Future<void>.value();
+    final wasStale = _stale;
     _dirty = true;
     _stale = true;
-    return _reading ??= _read().whenComplete(() => _reading = null);
+    final reading = _reading ??= _read().whenComplete(() => _reading = null);
+    if (!wasStale) {
+      changes = const [];
+      reloaded = false;
+      notifyListeners();
+    }
+    return reading;
   }
 
   Future<void> _read() async {

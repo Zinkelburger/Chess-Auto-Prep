@@ -153,6 +153,41 @@ void main() {
     }
   }
 
+  test(
+    'another consumer rebuilding the shared shelf refreshes visible rows',
+    () async {
+      walk(['e4', 'e5', 'Nf3', 'Nc6']);
+      expect(rows().any((row) => row.san == 'Bb5'), isTrue);
+      fixture.store.documents[chapterRef('e4', 'Ruy')] = Opened(
+        italian,
+        scriptedRevision(italian),
+      );
+      shelf.forget();
+      await shelf.read(gone: () => false);
+      await pumpEventQueue();
+      expect(rows().any((row) => row.san == 'Bb5'), isFalse);
+      expect(rows().singleWhere((row) => row.san == 'Bc4').lines, 4);
+    },
+  );
+
+  test(
+    'failed shelf refresh cannot publish retained indexes as current',
+    () async {
+      expect(tree.state, isA<TreeShown>());
+      final original = fixture.store.documents[chapterRef('e4', 'Ruy')]!;
+      fixture.store.documents[chapterRef('e4', 'Ruy')] = const Unreadable(
+        'unreadable sibling',
+      );
+      tree.forget();
+      await pumpEventQueue();
+      expect(tree.state, isNot(isA<TreeShown>()));
+      fixture.store.documents[chapterRef('e4', 'Ruy')] = original;
+      tree.forget();
+      await pumpEventQueue();
+      expect(tree.state, isA<TreeShown>());
+    },
+  );
+
   test('lists every file of the side, most lines first', () async {
     walk(['e4', 'e5', 'Nf3', 'Nc6']);
     await pumpEventQueue();

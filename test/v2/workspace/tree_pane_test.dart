@@ -38,17 +38,17 @@ void main() {
 
   /// The tree is made inside the test body, so the reads it starts run
   /// while the test pumps.
+  late RepertoireTree shownTree;
+  late ScriptedFiles shownFiles;
   Future<void> show(WidgetTester tester) async {
-    final tree = RepertoireTree(
+    shownFiles = ScriptedFiles(
+      listing: Repertoires([
+        folder('e4', ['Italian']),
+      ]),
+    );
+    final tree = shownTree = RepertoireTree(
       session: fixture.session,
-      shelf: RepertoireShelf(
-        files: ScriptedFiles(
-          listing: Repertoires([
-            folder('e4', ['Italian']),
-          ]),
-        ),
-        documents: fixture.store,
-      ),
+      shelf: RepertoireShelf(files: shownFiles, documents: fixture.store),
       books: booksWith({'e4'}),
     );
     addTearDown(tree.dispose);
@@ -66,6 +66,28 @@ void main() {
     );
     await tester.pumpAndSettle();
   }
+
+  testWidgets('failed book read offers Retry and restores its move rows', (
+    tester,
+  ) async {
+    await show(tester);
+    final listing = shownFiles.listing;
+    shownFiles.listing = const RepertoiresUnreadable(
+      'Cannot read repertoire folder',
+    );
+    shownTree.forget();
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('Cannot read repertoire folder'),
+      findsOneWidget,
+    );
+    expect(shownTree.state, isA<TreeUnavailable>());
+    shownFiles.listing = listing;
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Cannot read repertoire folder'), findsNothing);
+    expect(shownTree.state, isA<TreeShown>());
+  });
 
   testWidgets('leaving the tab with moves on the free board gives the board '
       'back to the file once the frame is done', (tester) async {
