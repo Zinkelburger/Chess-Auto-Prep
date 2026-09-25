@@ -177,6 +177,20 @@ final class Explorer extends ChangeNotifier {
   /// machine: `40 games`, `12 of 40 games`. Null for the other databases.
   String? get summary => _databases.local(_choiceNow.source)?.summary;
 
+  /// A retained widget must recheck local provenance at activation, including
+  /// account admission that happened before the next listener notification.
+  bool canPlay(ExplorerRow row) {
+    if (_disposed || _state is! ExplorerShown) return false;
+    if (!(_state as ExplorerShown).rows.contains(row)) return false;
+    final local = _databases.local(_choiceNow.source);
+    return local == null ||
+        (local
+                .answerAt(_session.fen)
+                ?.moves
+                .any((move) => move.uci == row.uci) ??
+            false);
+  }
+
   /// How many plies deep the position on the board is.
   int get ply => plyOf(_session.fen);
 

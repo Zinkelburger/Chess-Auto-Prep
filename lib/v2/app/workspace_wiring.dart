@@ -77,6 +77,7 @@ final class WorkspaceWiring {
 
   late final _fileTree = FileTree(filter: _filter);
   late final _myGamesTree = MyGamesTree(
+    files: _env.chapterFiles,
     accounts: _env.accounts,
     cache: _gamesCache,
     store: _env.gameStore,

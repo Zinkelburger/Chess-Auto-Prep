@@ -13,6 +13,7 @@ import '../chess/tactics/game_ids.dart';
 import '../diagnostics/log.dart';
 import '../storage/chapter_files.dart';
 import '../storage/game_store.dart';
+import '../storage/document_ref.dart';
 import '../storage/my_accounts.dart';
 import '../storage/my_games_files.dart';
 import 'file_filter.dart';
@@ -233,49 +234,61 @@ final class MyGamesTree extends ChangeNotifier implements SavedGames {
     required AccountStore accounts,
     required GamesCache cache,
     required GameStore store,
+    required ChapterFiles files,
   }) : _accounts = accounts,
        _cache = cache,
-       _store = store;
+       _store = store,
+       _files = files;
 
   final AccountStore _accounts;
   final GamesCache _cache;
   final GameStore _store;
+  final ChapterFiles _files;
 
   TreeState _state = const TreeUnbuilt();
   OpeningIndex? _index;
   IndexBuild? _build;
   Map<String, String> _texts = const {};
   List<String> _from = const [];
+  int? _accountRevision;
   int _reads = 0;
   bool _disposed = false;
 
+  bool get _current => !_disposed && _accountRevision == _accounts.revision;
+
   @override
-  TreeState get state => _state;
+  TreeState get state =>
+      !_current && (_state is TreeBuilt || _state is TreeEmpty)
+      ? const TreeUnbuilt()
+      : _state;
 
   @override
   String? get summary {
     final index = _index;
-    if (index == null) return null;
+    if (!_current || _state is! TreeBuilt || index == null) return null;
     final games = index.gameCount == 1 ? '1 game' : '${index.gameCount} games';
     return _from.isEmpty ? games : '$games · ${_from.join(', ')}';
   }
 
   @override
-  ExplorerAnswer? answerAt(Fen fen) => _index?.answer(fen);
+  ExplorerAnswer? answerAt(Fen fen) =>
+      _current && _state is TreeBuilt ? _index?.answer(fen) : null;
 
   @override
-  String? gamePgn(String id) => _texts[id];
+  String? gamePgn(String id) =>
+      _current && _state is TreeBuilt ? _texts[id] : null;
 
   @override
   void want() {
-    if (_state is! TreeUnbuilt) return;
+    if (_disposed || state is! TreeUnbuilt) return;
     unawaited(_read());
   }
 
-  /// The games changed: a download landed or a username changed. The
-  /// tree answers as it was until the new one is built.
+  /// Retains the previous index for replacement, but cannot authorize its
+  /// answers until a complete, current replacement has been validated.
   @override
   void forget() {
+    if (_disposed) return;
     _reads++;
     _stop();
     _state = const TreeUnbuilt();
@@ -287,33 +300,54 @@ final class MyGamesTree extends ChangeNotifier implements SavedGames {
     _state = const TreeReading(0, 0);
     notifyListeners();
     bool gone() => _disposed || ticket != _reads;
-    final MyGamesCorpus? corpus;
     try {
-      corpus = await _gather(gone);
+      final read = await _gather(gone);
+      if (read == null || gone()) return;
+      final corpus = read.corpus;
+      final index = corpus.texts.isEmpty
+          ? null
+          : await _indexCorpus(corpus, ticket);
+      if (gone() || (index == null && corpus.texts.isNotEmpty)) return;
+      final valid = await _files.validate(
+        null,
+        observed: const {},
+        additional: read.observed,
+      );
+      if (gone()) return;
+      if (valid is! RepertoireCurrent ||
+          read.accountRevision != _accounts.revision) {
+        _state = valid is RepertoireValidationFailed
+            ? const TreeFailed('Could not validate your games. Try again.')
+            : const TreeFailed(
+                'Your games changed while they were read. Try again.',
+              );
+        notifyListeners();
+        return;
+      }
+      _accountRevision = read.accountRevision;
+      _index = index;
+      _texts = Map.unmodifiable({
+        for (final (i, id) in corpus.ids.indexed) id: corpus.texts[i],
+      });
+      _from = List.unmodifiable(corpus.from);
+      _state = index == null
+          ? _empty(corpus.notice)
+          : TreeBuilt(notice: corpus.notice);
     } on Object catch (error) {
       if (gone()) return;
-      log.w('gather your games', error);
-      _state = const TreeFailed('Could not read your games.');
-      notifyListeners();
-      return;
+      log.w('read your games', error);
+      _state = const TreeFailed('Could not read your games. Try again.');
     }
-    if (corpus == null || gone()) return;
-    if (corpus.texts.isEmpty) {
-      _index = null;
-      _texts = const {};
-      _state = corpus.notice == null
-          ? const TreeEmpty(
-              'No games of yours are saved yet. Get games in Tactics or '
-              'My games.',
-            )
-          : const TreeFailed('Your games database could not be read.');
-      notifyListeners();
-      return;
-    }
-    await _indexCorpus(corpus, ticket);
+    notifyListeners();
   }
 
-  Future<void> _indexCorpus(MyGamesCorpus corpus, int ticket) async {
+  static TreeState _empty(String? notice) => notice == null
+      ? const TreeEmpty(
+          'No games of yours are saved yet. Get games in Tactics or My games.',
+        )
+      : const TreeFailed('Your games database could not be read.');
+
+  Future<OpeningIndex?> _indexCorpus(MyGamesCorpus corpus, int ticket) async {
     final total = corpus.texts.length;
     late final IndexBuild build;
     build = _build = IndexBuild.start(
@@ -327,35 +361,31 @@ final class MyGamesTree extends ChangeNotifier implements SavedGames {
     );
     _state = TreeReading(0, total);
     notifyListeners();
-    final OpeningIndex? index;
     try {
-      index = await build.result;
-    } on Object catch (error) {
-      if (_disposed || ticket != _reads) return;
-      log.w('index your games', error);
-      _state = const TreeFailed('Could not read your games.');
-      notifyListeners();
-      return;
+      final index = await build.result;
+      return _disposed || ticket != _reads ? null : index;
+    } finally {
+      if (identical(_build, build)) _build = null;
     }
-    if (_disposed || ticket != _reads || index == null) return;
-    _build = null;
-    _index = index;
-    _texts = {for (final (i, id) in corpus.ids.indexed) id: corpus.texts[i]};
-    _from = corpus.from;
-    _state = TreeBuilt(notice: corpus.notice);
-    notifyListeners();
   }
 
-  /// Every saved game of the accounts, and the database's; null once
-  /// [gone] says the read was overtaken or the tree disposed.
-  Future<MyGamesCorpus?> _gather(bool Function() gone) async {
-    final accounts = await _accounts.read();
+  Future<_MyGamesRead?> _gather(bool Function() gone) async {
+    final accountRead = await _accounts.snapshot();
     if (gone()) return null;
+    if (accountRead is! AccountsSnapshot) {
+      throw StateError('Your saved accounts could not be read.');
+    }
+    final accounts = accountRead.accounts;
     final files = <(GameSite, List<String>)>[];
+    final observed = <String, Revision?>{};
     for (final MapEntry(key: site, value: account) in accounts.entries) {
-      final games = await _cache.all(site, account.username);
+      final read = await _cache.snapshotAll(site, account.username);
       if (gone()) return null;
-      if (games != null) files.add((site, games));
+      if (read is! CachedGamesSnapshot) {
+        throw StateError('Your ${site.label} games could not be read.');
+      }
+      observed[read.ref.path] = read.revision;
+      files.add((site, [for (final game in read.games) game.text]));
     }
     final stored = await _readStore({
       GameCollections.tactics,
@@ -379,7 +409,13 @@ final class MyGamesTree extends ChangeNotifier implements SavedGames {
             'Your games database could not be read, so only your '
             'downloaded games are here.';
     }
-    return myGamesCorpus(files: files, stored: rows, notice: notice);
+    // The optional SQLite archive has no source proof yet. Its read is not
+    // covered by the native downloaded-PGN snapshot fence.
+    return (
+      corpus: myGamesCorpus(files: files, stored: rows, notice: notice),
+      accountRevision: accountRead.revision,
+      observed: Map<String, Revision?>.unmodifiable(observed),
+    );
   }
 
   /// The database's answer; one that throws is one that could not be
@@ -404,6 +440,12 @@ final class MyGamesTree extends ChangeNotifier implements SavedGames {
     super.dispose();
   }
 }
+
+typedef _MyGamesRead = ({
+  MyGamesCorpus corpus,
+  int accountRevision,
+  Map<String, Revision?> observed,
+});
 
 /// The user's games gathered from everywhere they are kept, each once,
 /// newest first, with the id the games list names each by.
