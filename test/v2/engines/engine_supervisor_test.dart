@@ -52,4 +52,18 @@ void main() {
     skip: Platform.isWindows ? 'needs a shell script' : false,
     timeout: const Timeout(Duration(seconds: 30)),
   );
+
+  test('engine hashes are worked out once per file version and a missing '
+      'file is no hash, not a failed start', () async {
+    final dir = await Directory.systemTemp.createTemp('hash-');
+    addTearDown(() => dir.delete(recursive: true));
+    final file = File(p.join(dir.path, 'engine'));
+    await file.writeAsString('one');
+    final first = await fileSha256(file.path);
+    expect(first, hasLength(64));
+    expect(await fileSha256(file.path), first);
+    await file.writeAsString('two, longer');
+    expect(await fileSha256(file.path), isNot(first));
+    expect(await fileSha256(p.join(dir.path, 'missing')), isNull);
+  });
 }
