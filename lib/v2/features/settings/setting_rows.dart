@@ -119,7 +119,6 @@ List<SettingGroup> settingGroups({
   required int coresAvailable,
   required LichessAccountState account,
   required VoidCallback openLogFolder,
-  VoidCallback? checkSavedData,
 }) {
   final s = store.value;
   void change(Settings Function(Settings now) edit) =>
@@ -273,8 +272,7 @@ List<SettingGroup> settingGroups({
         hint: account.problem ?? _accountHint(account.status),
         warn: account.problem != null,
       ),
-      if (account.available)
-        if (account.status case SignedOut() || Checking())
+      if (account.status case SignedOut() || Checking())
           SettingRow(
             'Personal access token',
             SecretSetting(load: () async => null, save: account.useToken),
@@ -282,12 +280,6 @@ List<SettingGroup> settingGroups({
           ),
     ]),
     SettingGroup('App', [
-      if (checkSavedData != null)
-        SettingRow(
-          'Saved data',
-          ActionSetting('Check', checkSavedData),
-          hint: 'Read-only checks for unfinished operations and derived files',
-        ),
       SettingRow(
         'Log folder',
         ActionSetting('Open', openLogFolder),

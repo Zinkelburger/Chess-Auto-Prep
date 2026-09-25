@@ -1,4 +1,3 @@
-import 'dart:async';
 
 import 'package:flutter/material.dart';
 
@@ -103,13 +102,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                       ),
                       const VerticalDivider(width: 1),
                       Expanded(
-                        child: AbsorbPointer(
-                          absorbing: !widget.store.ready,
-                          child: ExcludeFocus(
-                            excluding: !widget.store.ready,
-                            child: _rows(groups),
-                          ),
-                        ),
+                        child: _rows(groups),
                       ),
                     ],
                   ),
@@ -137,16 +130,6 @@ class _SettingsDialogState extends State<SettingsDialog> {
           'Changes save automatically',
           style: theme.textTheme.labelSmall,
         ),
-      ),
-    if (widget.store.canRetry && widget.store.problem != null)
-      TextButton(
-        onPressed: () => unawaited(widget.store.retry()),
-        child: const Text('Retry save'),
-      ),
-    if (widget.store.readProblem != null)
-      TextButton(
-        onPressed: () => unawaited(widget.store.load()),
-        child: const Text('Retry read'),
       ),
   ];
 

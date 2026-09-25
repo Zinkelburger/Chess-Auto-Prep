@@ -8,17 +8,17 @@ import '../diagnostics/log.dart';
 import 'atomic_write.dart';
 import 'file_lock.dart';
 import 'pending_writes.dart';
-import 'recovery_files.dart';
 import 'settings.dart';
 
 /// The settings as one value, read once from `settings.json` in the app's
 /// support folder and written whole on every change.
 ///
-/// One writer for every key. A file that cannot be read does not quietly
-/// become the defaults: [problem] says so and [ready] prevents starting
-/// work or editing settings until a read succeeds. A write that fails
-/// keeps the value on screen and says so too. A store made with no folder
-/// keeps everything in memory, which is what a test wants.
+/// Preferences never stop the app. A file that cannot be understood is moved
+/// aside into `recovery-quarantine/` — kept, not deleted — and the app starts
+/// on the defaults. A symlinked `settings.json` (dotfiles) is followed for
+/// reading and writing. A write that fails keeps the value on screen, says so,
+/// and the next change writes again. A store made with no folder keeps
+/// everything in memory, which is what a test wants.
 final class SettingsStore extends ChangeNotifier {
   SettingsStore({
     Directory? support,
@@ -31,66 +31,47 @@ final class SettingsStore extends ChangeNotifier {
 
   final File? _file;
 
-  /// Native publication boundary, including failures after replacement lands.
+  /// Puts the bytes in place; replaceable so a test can fail a write.
   final Future<void> Function(String, List<int>) publish;
   PendingWrites? pendingWrites;
-  String? _baseline;
-  String? _attempted;
-  bool _loaded = false;
   Future<void>? _loading;
   Settings _value;
   String? _problem;
-  String? _readProblem;
   bool _disposed = false;
-  int _revision = 0;
 
   /// The write in flight, and whether [_value] changed since it started.
-  /// Two writes at once would share the staged copy's name, and the file
-  /// published could be torn or the older of the two.
+  /// Two writes at once would share the staged copy's name.
   Future<void>? _writing;
-  PendingObligation<void>? _saveObligation;
   bool _dirty = false;
 
   Settings get value => _value;
 
-  /// Why the file could not be read or written, or null. One sentence, for
-  /// the settings page to show beside the rows.
-  String? get problem => _readProblem ?? _problem;
-  String? get readProblem => _readProblem;
-  bool get ready => _file == null || (_loaded && _readProblem == null);
+  /// Why the last write failed, or null. One sentence, for the settings page.
+  String? get problem => _problem;
 
   /// Reads the file. Nothing on disk is the first run and not a problem.
   Future<void> load() =>
       _loading ??= _load().whenComplete(() => _loading = null);
 
   Future<void> _load() async {
-    if (_disposed || _dirty || canRetry) return;
     final file = _file;
-    if (file == null) return;
-    final revision = ++_revision;
+    if (_disposed || _dirty || file == null) return;
+    Settings value;
     try {
-      final baseline = await recoveryText(file.path);
-      final value = baseline == null
-          ? Settings.defaults
-          : Settings.fromJson(
-              baseline.startsWith('\ufeff') ? baseline.substring(1) : baseline,
-            );
-      if (_disposed || revision != _revision || canRetry) return;
-      _baseline = baseline;
-      _attempted = null;
-      _loaded = true;
-      _value = value;
-      _readProblem = null;
-      _problem = null;
+      final text = await _target(file).readAsString();
+      value = Settings.fromJson(
+        text.startsWith('﻿') ? text.substring(1) : text,
+      );
+    } on PathNotFoundException {
+      value = Settings.defaults;
     } on Object catch (error) {
-      if (_disposed || revision != _revision || canRetry) return;
-      // A FormatException can include the input text. Settings diagnostics
-      // name the failure without exporting the user's saved values.
+      // A FormatException can include the input text; name only the kind.
       log.w('read ${file.path}', error.runtimeType);
-      _readProblem =
-          'Your settings could not be read. Restore ${file.path} and retry. '
-          'The saved file has not been changed.';
+      await _moveAside(file);
+      value = Settings.defaults;
     }
+    if (_disposed || _dirty) return;
+    _value = value;
     _notify();
   }
 
@@ -102,48 +83,24 @@ final class SettingsStore extends ChangeNotifier {
   /// follows it carries the newest value, and every caller's future
   /// completes once that is on disk.
   Future<void> update(Settings next) async {
-    if (_disposed) return;
-    if (next == _value) {
-      if (canRetry) await retry();
-      return;
-    }
-    if (!ready) {
-      // `next` was derived before any read here could replace `_value`.
-      // Only an explicit successful load lets a caller edit that baseline.
-      _readProblem ??= 'Read your saved settings before editing them.';
-      _notify();
-      return;
-    }
-    _revision++;
+    if (_disposed || next == _value) return;
     _value = next;
-    final file = _file;
-    _dirty = file != null;
     _notify();
-    if (file == null) return;
-    await _persist(file);
-  }
-
-  bool get canRetry => _saveObligation?.committed == false;
-
-  Future<void> retry() async {
     final file = _file;
-    if (!_disposed && file != null && canRetry) await _persist(file);
-  }
-
-  Future<void> _persist(File file) {
-    if (!canRetry) {
-      _saveObligation = (pendingWrites ??= PendingWrites()).accept<void>(
-        resource: this,
-        label: 'Settings',
-        work: () => _writing ??= _writeNewest(file),
-        problem: (_) => _problem,
-      );
-    }
-    return _saveObligation!.run();
+    if (file == null) return;
+    _dirty = true;
+    final writing = _writing ??= _writeNewest(file);
+    await (pendingWrites?.track(
+          this,
+          writing,
+          label: 'Settings',
+          problem: (_) => _problem,
+          obligation: this,
+        ) ??
+        writing);
   }
 
   Future<void> _writeNewest(File file) async {
-    _dirty = true;
     try {
       while (_dirty) {
         _dirty = false;
@@ -155,34 +112,15 @@ final class SettingsStore extends ChangeNotifier {
   }
 
   /// One write; its outcome decides [problem], so the last write says it.
+  /// A staged copy left by a crash is simply overwritten.
   Future<void> _write(File file, Settings value) async {
-    final baseline = _baseline;
-    final attempted = _attempted;
-    final loaded = _loaded;
     try {
-      await file.parent.create(recursive: true);
-      await withDirectoryLock(file.parent, () async {
-        final current = await recoveryText(file.path);
-        final next = value.toJson();
-        final knownAfter =
-            current == next || (attempted != null && current == attempted);
-        if (!knownAfter &&
-            ((!loaded && current != null) || (loaded && current != baseline))) {
-          throw StateError(
-            'Settings changed in another instance. Reload before editing.',
-          );
-        }
-        // A failed acknowledgement may still have published the attempted
-        // snapshot. Preserve its exact before/after bytes through retries,
-        // including when a newer accepted snapshot supersedes it.
-        _baseline = current;
-        _loaded = true;
-        await requireUnusedRecoveryStage(file.path);
-        _attempted = next;
-        await publish(file.path, utf8.encode(next));
-        _baseline = next;
-        _attempted = null;
-      });
+      final target = _target(file);
+      await target.parent.create(recursive: true);
+      await withDirectoryLock(
+        target.parent,
+        () => publish(target.path, utf8.encode(value.toJson())),
+      );
       if (_problem != null) {
         _problem = null;
         _notify();
@@ -191,6 +129,40 @@ final class SettingsStore extends ChangeNotifier {
       log.e('write ${file.path}', error);
       _problem = 'Your settings could not be saved: $error';
       _notify();
+    }
+  }
+
+  /// The file a symlinked `settings.json` points at, so a write replaces the
+  /// target and leaves the link in place.
+  File _target(File file) {
+    if (!FileSystemEntity.isLinkSync(file.path)) return file;
+    try {
+      return File(file.resolveSymbolicLinksSync());
+    } on FileSystemException {
+      return file; // A dangling link: the write replaces it with a file.
+    }
+  }
+
+  /// Keeps a file that could not be read under
+  /// `recovery-quarantine/<time>/` in the support folder, then carries on.
+  Future<void> _moveAside(File file) async {
+    final stamp = DateTime.now().toUtc().toIso8601String().replaceAll(
+      ':',
+      '-',
+    );
+    final folder = Directory(
+      p.join(file.parent.path, 'recovery-quarantine', stamp),
+    );
+    try {
+      await folder.create(recursive: true);
+      final aside = p.join(folder.path, 'settings.json');
+      await FileSystemEntity.type(file.path, followLinks: false) ==
+              FileSystemEntityType.directory
+          ? await Directory(file.path).rename(aside)
+          : await file.rename(aside);
+      log.w('settings moved aside to $aside');
+    } on Object catch (error) {
+      log.w('move ${file.path} aside', error);
     }
   }
 

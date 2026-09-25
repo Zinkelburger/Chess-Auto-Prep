@@ -168,7 +168,7 @@ void main() {
   );
 
   test(
-    'a settings snapshot already published can be republished on retry',
+    'a settings write with a lost acknowledgement is cleared by the next change',
     () async {
       final root = await Directory.systemTemp.createTemp(
         'settings-acknowledgement-',
@@ -193,13 +193,12 @@ void main() {
       expect(store.problem, isNotNull);
       expect(await File(target).readAsString(), accepted.toJson());
       expect(await pending.settle(), contains('Settings'));
-      final obligation = pending.unfinished(store).single;
       failAcknowledgement = false;
-      await store.retry();
+      final latest = accepted.copyWith(engineLines: 3);
+      await store.update(latest);
       expect(store.problem, isNull);
-      expect(obligation.committed, isTrue);
       expect(await pending.settle(), isNull);
-      expect(await File(target).readAsString(), accepted.toJson());
+      expect(await File(target).readAsString(), latest.toJson());
     },
   );
 

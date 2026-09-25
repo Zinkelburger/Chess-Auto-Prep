@@ -48,17 +48,12 @@ void main() {
     expect(w.analysis.multiPv, 2);
   });
 
-  test('unreadable settings block startup until a successful retry', () async {
+  test('unreadable settings start the app on the defaults', () async {
     final file = File(p.join(support.path, 'settings.json'));
     await file.writeAsString('not json');
     await w.parts.start();
-    expect(launched, isEmpty);
-    expect(w.settings.problem, contains('could not be read'));
-    await file.writeAsString(const Settings(engineCores: 6).toJson());
-    await w.parts.start();
-    expect(launched, [(cores: 6, memoryMb: 128)]);
-    await w.parts.start();
-    expect(launched, hasLength(1));
+    expect(launched, [(cores: Settings.defaults.engineCores, memoryMb: 128)]);
+    expect(w.settings.problem, isNull);
   });
 
   test('new cores or a new table start another engine; more lines do '
