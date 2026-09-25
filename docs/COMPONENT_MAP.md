@@ -1657,8 +1657,11 @@ Training session, phases, chapter scope and review progress have canonical
 owners under `features/training/`; the old `services/training/` libraries and
 `models/training_settings.dart` are removed. Models no longer persist themselves.
 Epoch guards reject stale source, layout, settings and rating completions.
-Line-completion persistence resumes failed stages without repeating confirmed history
-appends or tallying twice. The existing error panel retries the pending action;
+Line-completion persistence resumes failed stages without tallying twice.
+`TrainingHistoryOperation` retains exact before/after CSV contents in the adapter:
+a retry recognizes a previously installed append, writes only the expected
+before-state, and refuses intervening history changes. Identical newly accepted
+ratings have distinct operation identities. The existing error panel retries the pending action;
 failed header mirrors remain queued. This retry state is in memory; crash-resume
 remains a separate requirement.
 

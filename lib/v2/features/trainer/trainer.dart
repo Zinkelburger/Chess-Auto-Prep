@@ -424,14 +424,19 @@ class Trainer extends ChangeNotifier implements DocumentWriteGuard {
             .toList();
       });
 
-  /// A sitting of [line] alone, whatever its status.
-  void trainLine(TrainingLine line) => _sit(
-    SittingKind.line,
-    (_, progress) =>
-        line.modelGame || progress.status(line) == LineStatus.excluded
-        ? const []
-        : [line],
-  );
+  /// A retained row action selects its key in the current scope, never the
+  /// old moves captured before a reload or document replacement.
+  void trainLine(TrainingLine line) =>
+      _sit(SittingKind.line, (lines, progress) {
+        final current = lines
+            .where((candidate) => candidate.key == line.key)
+            .firstOrNull;
+        return current == null ||
+                current.modelGame ||
+                progress.status(current) == LineStatus.excluded
+            ? const []
+            : [current];
+      });
 
   /// Ends the sitting. A line not yet rated is left as it was.
   void leave() {
