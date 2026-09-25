@@ -28,6 +28,7 @@ import 'infrastructure/settings/fresh_desktop_preferences_store.dart';
 import 'infrastructure/settings/shared_preferences_app_settings_repository.dart';
 
 import 'app/app_dependencies.dart';
+import 'app/document_dependencies.dart';
 import 'app/study_dependencies.dart';
 import 'app/desktop_application.dart';
 import 'features/documents/repositories/desktop_close_port.dart';

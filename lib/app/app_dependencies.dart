@@ -1,3 +1,4 @@
+import 'document_dependencies.dart';
 import '../features/settings/controllers/eval_database_settings.dart';
 import '../services/eval/cdb_snapshot_download.dart';
 import '../services/eval/lichess_eval_controller.dart';
@@ -14,7 +15,6 @@ import '../features/settings/controllers/bulk_analysis_settings.dart';
 import '../features/settings/controllers/board_display_settings.dart';
 import '../features/settings/models/app_appearance.dart';
 import '../features/settings/models/settings_state.dart';
-import 'dart:io';
 import 'package:provider/provider.dart';
 import 'training_dependencies.dart';
 import '../features/training/controllers/training_settings_controller.dart';
@@ -35,10 +35,8 @@ import '../features/repertoires/repositories/repertoire_catalog_repository.dart'
 import '../features/settings/repositories/app_settings_repository.dart';
 import '../infrastructure/desktop/window_fullscreen_adapter.dart';
 import '../infrastructure/documents/archive_stored_game_repository.dart';
-import '../infrastructure/documents/legacy_pgn_document_store.dart';
 import '../infrastructure/documents/isolate_pgn_collection_decoder.dart';
 import '../infrastructure/documents/isolate_pgn_collection_filter.dart';
-import '../infrastructure/documents/native_pgn_document_store.dart';
 import '../infrastructure/documents/shared_preferences_viewer_repository.dart';
 import '../infrastructure/documents/storage_pgn_collection_repository.dart';
 import '../infrastructure/documents/storage_pgn_library_repository.dart';
@@ -46,7 +44,6 @@ import '../infrastructure/repertoires/legacy_repertoire_catalog_repository.dart'
 import '../infrastructure/settings/shared_preferences_app_settings_repository.dart';
 import '../services/default_pgn_service.dart';
 import '../services/game_store/game_store_service.dart';
-import '../services/storage/io_storage_service.dart';
 import '../services/storage/storage_factory.dart';
 
 /// App-owned dependencies use constructors and one Provider tree.
@@ -191,18 +188,6 @@ class _AppDependenciesState extends State<AppDependencies> {
       ),
     ],
     child: widget.child,
-  );
-}
-
-/// Adopt only on the verified host; the remaining native commit protocols
-/// keep their documented legacy adapter until their platform gates pass.
-PgnDocumentStore createPlatformDocumentStore() {
-  final storage = StorageFactory.instance;
-  if (!Platform.isLinux) return LegacyPgnDocumentStore(storage);
-  return NativePgnDocumentStore(
-    guardOperation: storage is IOStorageService
-        ? storage.guardDocumentOperation
-        : null,
   );
 }
 
