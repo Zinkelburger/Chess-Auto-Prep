@@ -631,10 +631,11 @@ retaining the complete batch for final listing publication. Scoped native fences
 include directory membership and absence, so unrelated repertoire changes do
 not restart gaps, training, tree or book comparisons. Nested chapters use their
 top-level repertoire boundary. Cursor movement projects an already-validated tree
-without rereading native inputs. A whole-file save may preserve a live lesson only
-while its write guard is held and only when the editor adopts that event's exact
-committed native revision before resuming; an outside writer or failed adoption
-forces reload. Committed downloaded-corpus edits also invalidate MyGamesTree at
+without rereading native inputs. Document saves never wait on training: the
+trainer moves its progress's source version on with each of the workspace's own
+saves, and reloads a scope whose files changed any other way. The repertoire
+index, gaps, the Book tree and the My games comparison leave an unreadable
+chapter or folder out rather than refusing the whole book. Committed downloaded-corpus edits also invalidate MyGamesTree at
 the repository boundary, before download timestamps or later UI notifications.
 
 H4 remains in progress pending combined verification and independent review.
@@ -1024,9 +1025,10 @@ selectors, and transferring backup ownership. Occupied destination history moves
 to a deterministic preserved aside; a chapter with no incoming history cannot
 inherit it. Namespace flush failures retain intent, and replay flushes both
 endpoints and their ancestors. `Moved` is returned only after completion.
-`AcceptedFileChanges` retains the original id and revision through UI and registry
-retry, coordinates books and open drafts, and follows or closes only the
-matching accepted file observation. V1 refuses pending, malformed or unknown
+The Library's `FileChanges` read the revision they act on when they run and keep
+nothing between attempts: a failed change is simply asked for again against the
+disk as it is then. They let the books settle and re-read around the change and
+follow or close the open file. V1 refuses pending, malformed or unknown
 relocation records before its own recovery/access; validated complete/cancelled
 records remain readable. Native Windows replacement can leave an old copy
 beside a journal if cleanup is interrupted. Recovery retains that copy and
@@ -1046,18 +1048,16 @@ nodes, metadata-root overlap and cross-filesystem moves are refused before
 intent. The original note decoder still recovers older moves; its writer is
 retired.
 
-Folder commands retain their accepted id and use prefix admission for both
-names, so a late child load cannot cross the move. The editor follows only a
-matching native revision from the committed inventory. Imports retain their
-staging folder, destination and command through uncertain placement and return
-the original import result after retry. A confirmed destination collision alone
-advances to another name.
+Folder renames hold navigation under both names while they run, so a late child
+load cannot cross the move, and the open chapter follows its folder. An import
+whose placement fails removes its staging folder and can simply be made again;
+a destination collision advances to the next free name.
 
 A quarantine delete keeps the current PGN version before preparation and moves
 its backup ownership with the file; restore brings that history back. Deletion
-ids follow the existing recovery filename grammar. Repertoire deletion retains
-its accepted ordered file list and failed command, leaving sidecars and prior
-quarantine contents in place. It resumes without repeating completed files.
+ids follow the existing recovery filename grammar. Repertoire deletion stops at a
+chapter that refuses, leaving sidecars and prior quarantine contents in place;
+asking again deletes what the re-read list still holds.
 Pre-journal quarantines lack proof tying a former path's backup history to the
 restored file: occupied history is preserved separately rather than merged by
 guesswork. Those historical ownership links remain unverified.

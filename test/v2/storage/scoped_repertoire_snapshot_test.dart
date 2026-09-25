@@ -37,17 +37,8 @@ void main() {
     'nested chapters include answers from the whole top-level repertoire',
     () async {
       final answers = RepertoireAnswers(files: files, documents: disk.store);
-      final snapshot = await answers.capture(
-        nested,
-        Side.white,
-        observed: {nested.path: await disk.revisionOf(nested)},
-      );
-      expect(snapshot.positions[Fen.initial.position], 'B');
-      await File(sibling.path).delete();
-      await expectLater(
-        snapshot.validate(),
-        throwsA(isA<RepertoireAnswersUnavailable>()),
-      );
+      final positions = await answers.around(nested, Side.white);
+      expect(positions[Fen.initial.position], 'B');
     },
   );
   test(

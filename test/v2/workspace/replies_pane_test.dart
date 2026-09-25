@@ -1,8 +1,3 @@
-import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
-import 'package:chess_auto_prep/v2/workspace/gap_hunt.dart';
-
-import '../support/scripted_files.dart';
-import '../support/scripted_store.dart';
 import 'package:chess_auto_prep/v2/chess/fen.dart';
 import 'package:chess_auto_prep/v2/engines/maia/move_policy.dart';
 import 'package:chess_auto_prep/v2/storage/settings.dart';
@@ -66,7 +61,6 @@ const filledChapter = '''
 void main() {
   late SessionFixture fixture;
   late SettingsStore settings;
-  late RepliesFixture shownOwners;
 
   setUp(() async {
     fixture = await openSession(chapter);
@@ -81,18 +75,12 @@ void main() {
   /// The owner is made inside the test body: its walk is a chain of futures,
   /// and one started in `setUp` lives outside the test's fake clock and
   /// never runs while the test pumps.
-  Future<void> show(
-    WidgetTester tester, {
-    MovePolicy? policy,
-    RepertoireAnswers? answers,
-  }) async {
+  Future<void> show(WidgetTester tester, {MovePolicy? policy}) async {
     final owners = RepliesFixture(
       fixture.session,
       policy: policy ?? OneOpinion(),
-      answers: answers,
       settings: settings,
     );
-    shownOwners = owners;
     addTearDown(owners.dispose);
     await tester.pumpWidget(
       MaterialApp(
@@ -187,34 +175,4 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('not in tree'), findsNothing, reason: 'their move');
   });
-  testWidgets(
-    'failed gap refresh hides current marks and Retry restores navigation',
-    (tester) async {
-      final files = ScriptedFiles();
-      fixture.session.forward();
-      await show(
-        tester,
-        answers: RepertoireAnswers(
-          files: files,
-          documents: ScriptedDocumentStore(),
-        ),
-      );
-      expect(shownOwners.gaps.canNextGap, isTrue);
-      files.validateWith = (_, _) async =>
-          const RepertoireValidationFailed('source unavailable');
-      shownOwners.gaps.refreshAnswers();
-      await tester.pumpAndSettle();
-      expect(find.textContaining('Gap results unavailable'), findsOneWidget);
-      expect(find.text('gap'), findsNothing);
-      final next = tester.widget<OutlinedButton>(
-        find.widgetWithText(OutlinedButton, 'Next gap'),
-      );
-      expect(next.onPressed, isNull);
-      files.validateWith = null;
-      await tester.tap(find.text('Retry'));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('Gap results unavailable'), findsNothing);
-      expect(shownOwners.gaps.canNextGap, isTrue);
-    },
-  );
 }

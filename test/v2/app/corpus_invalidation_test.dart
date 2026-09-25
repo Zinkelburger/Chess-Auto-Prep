@@ -14,7 +14,7 @@ const _first = '[Event "First"]\n\n1. e4 e5 *';
 const _second = '[Event "Second"]\n\n1. d4 d5 *';
 
 void main() {
-  test('committed corpus edits revoke answers before a new read', () async {
+  test('committed corpus edits read the tree again', () async {
     final window = WindowFixture();
     addTearDown(window.dispose);
     window.accounts.accounts[GameSite.lichess] = const Account('Me');
@@ -39,7 +39,7 @@ void main() {
       expected: scriptedRevision(_first),
       scope: const WholeDocument(),
     );
-    expect(tree.answerAt(Fen.initial), isNull);
+    expect(tree.state, isA<TreeUnbuilt>());
     tree.want();
     await pumpEventQueue();
     expect(tree.answerAt(Fen.initial)!.moves.single.uci, 'd2d4');
@@ -48,7 +48,7 @@ void main() {
       ref,
       expected: scriptedRevision(_second),
     );
-    expect(tree.answerAt(Fen.initial), isNull);
+    expect(tree.state, isA<TreeUnbuilt>());
     tree.want();
     await pumpEventQueue();
     expect(tree.state, isA<TreeEmpty>());

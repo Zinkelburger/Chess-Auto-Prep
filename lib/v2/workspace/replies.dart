@@ -181,8 +181,6 @@ final class Replies extends ChangeNotifier {
     notifyListeners();
     final answer = await _model.answerAt(wanted.fen);
     if (ticket != _ticket) return;
-    if (wanted.walk != null && !await _gaps.validateCurrent()) return;
-    if (ticket != _ticket) return;
     _table = switch (answer) {
       MaiaPolicy(:final shares) => _rowsOf(wanted.fen, shares),
       MaiaFailed(:final reason) => RepliesFailed(reason),

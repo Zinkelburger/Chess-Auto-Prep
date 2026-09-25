@@ -69,9 +69,9 @@ void main() {
     final around = await answers.around(main, Side.white);
     expect(around[const Fen(_afterE6).position], 'Sicilian');
     expect(around.containsKey(const Fen(_afterD5).position), isFalse);
-    // Observed disk revisions also invalidate an unannounced external edit.
-    expect(around[const Fen(_afterD3D5).position], 'French');
-    expect(around.containsKey(const Fen(_afterD4D5).position), isFalse);
+    // The French file was not forgotten: it answers what it did.
+    expect(around[const Fen(_afterD4D5).position], 'French');
+    expect(around.containsKey(const Fen(_afterD3D5).position), isFalse);
   });
 
   test('the other chapters of a course file answer too', () async {
@@ -118,10 +118,7 @@ void main() {
         ),
         documents: store,
       );
-      await expectLater(
-        answers.around(main, Side.white),
-        throwsA(isA<Exception>()),
-      );
+      expect(await answers.around(main, Side.white), isEmpty);
       final text = _chapter('1. e4 c5 2. c3');
       store.documents[sibling] = Opened(text, scriptedRevision(text));
       expect(await answers.around(main, Side.white), isNotEmpty);
