@@ -26,6 +26,7 @@ import 'package:crypto/crypto.dart';
 import 'package:document_file_io/document_file_io.dart';
 import 'package:path/path.dart' as p;
 
+import 'directory_entries.dart';
 import '../diagnostics/log.dart';
 
 /// Where the staged copy of [path] lives while it is being written.
@@ -74,7 +75,7 @@ Future<void> replaceFile(String path, List<int> bytes) async {
 /// document: the document is only ever the name the caller asked for.
 Future<void> removeStaleTemporaries(Directory directory) async {
   if (!await directory.exists()) return;
-  await for (final entry in directory.list(followLinks: false)) {
+  await for (final entry in directoryEntries(directory, followLinks: false)) {
     final name = p.basename(entry.path);
     if (entry is File &&
         name.startsWith('.') &&

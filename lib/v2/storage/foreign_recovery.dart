@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import 'directory_entries.dart';
 import 'relocation_notes.dart';
 
 /// Recognizes the retained v1 directory-move and publication receipts without
@@ -51,7 +52,7 @@ Future<Map<String, Object?>> _read(File file) async {
 Future<void> _moves(Directory directory) async {
   if (!await _directory(directory)) return;
   final records = <String, Map<String, Object?>>{};
-  await for (final entry in directory.list(followLinks: false)) {
+  await for (final entry in directoryEntries(directory, followLinks: false)) {
     final id = p.basenameWithoutExtension(entry.path);
     if (entry is! File ||
         p.extension(entry.path) != '.json' ||
@@ -98,11 +99,11 @@ Future<void> _moves(Directory directory) async {
 
 Future<void> _publications(Directory directory) async {
   if (!await _directory(directory)) return;
-  await for (final entry in directory.list(followLinks: false)) {
+  await for (final entry in directoryEntries(directory, followLinks: false)) {
     final id = p.basename(entry.path);
     if (entry is! Directory || !_id.hasMatch(id)) _invalid(entry.path);
     File? manifest;
-    await for (final child in entry.list(followLinks: false)) {
+    await for (final child in directoryEntries(entry, followLinks: false)) {
       switch (p.basename(child.path)) {
         case 'publication.json' when child is File:
           manifest = child;
@@ -140,7 +141,8 @@ Future<void> _publications(Directory directory) async {
 }
 
 Future<void> _privatePayload(Directory directory) async {
-  await for (final entry in directory.list(
+  await for (final entry in directoryEntries(
+    directory,
     recursive: true,
     followLinks: false,
   )) {

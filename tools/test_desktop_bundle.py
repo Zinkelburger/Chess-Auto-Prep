@@ -5,10 +5,13 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 
 
 def main():
+    # Windows redirected stdout otherwise defaults to the legacy code page.
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('executable', type=Path)
     parser.add_argument('--report', type=Path, required=True)

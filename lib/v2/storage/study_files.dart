@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import 'directory_entries.dart';
 import 'chapter_files.dart';
 import 'recovery_gate.dart';
 import 'relocation_notes.dart';
@@ -54,7 +55,7 @@ final class StudyDirectory implements StudyFiles {
       return await _recovery.run(() async {
         if (!await root.exists()) return const StudiesListed([]);
         final studies = <ChapterRef>[];
-        await for (final file in root.list()) {
+        await for (final file in directoryEntries(root)) {
           if (file is! File || p.extension(file.path) != '.pgn') continue;
           if (p.basename(file.path).startsWith('.')) continue;
           studies.add(ChapterRef.at(file.path));

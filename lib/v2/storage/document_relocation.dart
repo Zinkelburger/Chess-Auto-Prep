@@ -15,6 +15,7 @@ import 'dart:math';
 import 'package:document_file_io/document_file_io.dart';
 import 'package:path/path.dart' as p;
 
+import 'directory_entries.dart';
 import '../diagnostics/log.dart';
 import 'backups.dart';
 import 'document_probe.dart';
@@ -236,9 +237,11 @@ final class DocumentRelocation {
   Future<List<String>?> _documentsIn(String folder) async {
     final names = <String>[];
     try {
-      await for (final entry in Directory(
-        folder,
-      ).list(recursive: true, followLinks: false)) {
+      await for (final entry in directoryEntries(
+        Directory(folder),
+        recursive: true,
+        followLinks: false,
+      )) {
         if (entry is File && p.extension(entry.path) == '.pgn') {
           names.add(p.relative(entry.path, from: folder));
         }
@@ -344,13 +347,14 @@ final class DocumentRelocation {
   Future<void> _removeIfMade(Directory target, bool made) async {
     if (!made) return;
     try {
-      if (await target.list().isEmpty) await target.delete();
+      if (await directoryEntries(target).isEmpty) await target.delete();
     } on FileSystemException catch (error) {
       log.w('remove the empty folder ${target.path}', error);
     }
   }
 
   Future<void> _sync(Directory directory) async {
+    if (Platform.isWindows) return;
     try {
       await syncDirectory(directory.path);
     } on FileSystemException catch (error) {

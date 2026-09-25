@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:document_file_io/document_file_io.dart';
 import 'package:path/path.dart' as p;
 
+import 'directory_entries.dart';
 import 'atomic_write.dart';
 import 'compound_commit.dart';
 import 'relocation_notes.dart' show RecoveryRequired;
@@ -215,7 +216,10 @@ final class CompoundWrites {
 
   Future<List<_Note>> _readAll() async {
     if (!await _directory(support) || !await _directory(_folder)) return [];
-    final entries = await _folder.list(followLinks: false).toList();
+    final entries = await directoryEntries(
+      _folder,
+      followLinks: false,
+    ).toList();
     entries.sort((a, b) => a.path.compareTo(b.path));
     final notes = <_Note>[];
     for (final entry in entries) {

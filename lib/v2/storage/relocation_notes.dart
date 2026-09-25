@@ -28,6 +28,7 @@ import 'dart:math';
 import 'package:document_file_io/document_file_io.dart';
 import 'package:path/path.dart' as p;
 
+import 'directory_entries.dart';
 import 'atomic_write.dart';
 import 'document_ref.dart';
 import 'training_records.dart';
@@ -224,27 +225,29 @@ final class PendingRepoints {
 
   /// Every owed move, oldest first. Unknown metadata is preserved and stops
   /// recovery; ignoring it would let later work obscure an unfinished move.
-  Future<List<UnfinishedMove>> read() =>
-      _checked('Read relocation notes', () async {
-        if (!await _checkFolder()) return const [];
-        final names = <String>[];
-        await for (final entry in _folder.list(followLinks: false)) {
-          if (entry is! File || p.extension(entry.path) != '.json') {
-            throw RecoveryRequired(
-              'Unsupported relocation metadata at ${entry.path}.',
-            );
-          }
-          final id = p.basenameWithoutExtension(entry.path);
-          _validateId(id);
-          names.add(id);
+  Future<List<UnfinishedMove>> read() => _checked(
+    'Read relocation notes',
+    () async {
+      if (!await _checkFolder()) return const [];
+      final names = <String>[];
+      await for (final entry in directoryEntries(_folder, followLinks: false)) {
+        if (entry is! File || p.extension(entry.path) != '.json') {
+          throw RecoveryRequired(
+            'Unsupported relocation metadata at ${entry.path}.',
+          );
         }
-        names.sort();
-        final moves = <UnfinishedMove>[];
-        for (final name in names) {
-          moves.add(await _readOne(name));
-        }
-        return moves;
-      });
+        final id = p.basenameWithoutExtension(entry.path);
+        _validateId(id);
+        names.add(id);
+      }
+      names.sort();
+      final moves = <UnfinishedMove>[];
+      for (final name in names) {
+        moves.add(await _readOne(name));
+      }
+      return moves;
+    },
+  );
 
   Future<UnfinishedMove> _readOne(String id) async {
     final observed = await observeFile(_pathOf(id));

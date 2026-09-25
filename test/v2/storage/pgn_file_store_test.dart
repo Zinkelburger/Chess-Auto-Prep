@@ -11,6 +11,7 @@ import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+import '../support/windows_file_handle.dart';
 import 'store_fixture.dart';
 
 void main() {
@@ -270,9 +271,13 @@ void main() {
   test('a move that cannot be made leaves no empty folder behind', () async {
     final ref = fixture.ref('KID/Main.pgn');
     final revision = await fixture.put(ref, 'moves *\n');
-    // Nothing can leave a folder nobody may write to, so the move fails
-    // after its destination folder has been made.
-    await Process.run('chmod', ['a-w', p.dirname(ref.path)]);
+    // Deny deletion with a real handle on Windows, directory permissions on
+    // POSIX. chmod on Windows only changes a read-only attribute, not ACLs.
+    final reader = Platform.isWindows ? WindowsFileHandle(ref.path) : null;
+    if (reader != null) addTearDown(reader.close);
+    if (!Platform.isWindows) {
+      await Process.run('chmod', ['a-w', p.dirname(ref.path)]);
+    }
     final destination = fixture.ref('Benko/Main.pgn');
     expect(
       await fixture.store.move(ref, destination, expected: revision),
