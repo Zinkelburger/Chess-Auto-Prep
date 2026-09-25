@@ -6,7 +6,7 @@
 |----------|---------|
 | **This file** | Current implementation — screens, services, widgets, tests |
 | [`FUTURE_FEATURES.md`](FUTURE_FEATURES.md) | Backlog only — not yet built or incomplete |
-| [`ARCHITECTURE_RENEWAL.md`](ARCHITECTURE_RENEWAL.md) | Planned fresh app in `lib/v2/`: rules, data-safety contracts and order of work; not current implementation |
+| [`ARCHITECTURE_RENEWAL.md`](ARCHITECTURE_RENEWAL.md) | Renewal app in `lib/v2/`: rules, data-safety contracts, implementation status and remaining work |
 | [`ALGORITHM.md`](ALGORITHM.md) | Flutter expectimax / tree-generation pipeline |
 | [`../tree_builder/ALGORITHM.md`](../tree_builder/ALGORITHM.md) | C `tree_builder` CLI pipeline (incl. db-explorer) |
 | [`tree-display-architecture.md`](tree-display-architecture.md) | Eval-tree graph performance principles |
@@ -1421,6 +1421,36 @@ Actions menu groups view operations; the trailing gear opens `screens/settings_s
 ---
 
 ## Major data flows
+
+### V2 downloaded games
+
+The renewal app's download path lives under `lib/v2/`; the legacy tactics
+import path remains separate.
+
+| Component | Implemented boundary / API |
+|---|---|
+| `features/tactics/my_games.dart` — `MyGames` | Captures account names for a run, fetches each site independently and queues only persisted corpus rows for review. `load()` consumes `AccountsSnapshot` / `AccountsUnavailable`, retaining prior names and blocking new downloads on read failure or any owner's unresolved account-write obligation. `downloadProblems`, `corpusProblems`, `accountsUnavailable`, `retryDownloads()` and `retryUsernames()` drive explicit save/read retries. |
+| `features/tactics/download_saves.dart` — `DownloadSaves` | Freezes returned games, site, username and time into per-corpus `PendingWrites` obligations. `accept()` and `retry()` retain failed outcomes across owner disposal and retry without HTTP; successors wait behind unresolved writes to the same corpus. |
+| `storage/my_games_files.dart` — `GamesCache` | `keep()` returns `GamesKept` / `GamesNotKept`, publishing deduplicated PGN bytes before the `.fetched` note. Dedup uses site ID or trimmed PGN text when metadata has no ID. Typed `snapshotNewest()` separates absent input from an unreadable corpus. Unverified stamp staging files are refused and preserved. |
+| `storage/my_accounts.dart` — `AccountStore` / `PreferencesAccounts` | Immutable `AccountsSnapshot` plus owner `revision`, or `AccountsUnavailable`. `setDownloaded(..., expectedUsername:)` serializes with username writes and refuses a changed account; failed optimistic preference timestamps stay masked until acknowledged. The legacy `read()` compatibility wrapper still maps unavailable to empty, but `MyGames` uses `snapshot()`. |
+| `features/tactics/my_games_block.dart` — `MyGamesBlock` | Shows separate account, download-save and saved-corpus-read errors. Retry uses the retained operation or rereads saved inputs; unresolved errors cannot display an overall completed result or authorize a new download. |
+
+The accepted HTTP response is retained in memory, not in a persistent queue.
+It survives screen disposal; a crash before corpus publication can lose it.
+Published corpus bytes are the restart checkpoint and remain readable offline
+when a later freshness write fails. A restart may refetch using the old
+freshness; deduplication preserves an already published batch. No persistent
+HTTP spool is implied. Native publication/lost-ack retry tests
+cover both create and append without duplicate games. Freshness is a subsequent
+write, not part of an atomic corpus transaction. Mining checkpoints and the
+remaining H5 jobs are tracked in the
+[renewal contract](ARCHITECTURE_RENEWAL.md#durable-work-and-job-lifetimes).
+
+Behavioral coverage: `test/v2/features/tactics/download_saves_test.dart`,
+`my_games_test.dart`, `account_persistence_test.dart`, and
+`test/v2/storage/my_games_files_test.dart` / `my_accounts_test.dart`. Native checks
+run on Linux; no Windows/macOS durability claim follows from them.
+
 
 ### Repertoire load & edit
 

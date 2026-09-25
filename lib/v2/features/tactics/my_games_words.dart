@@ -21,6 +21,10 @@ String myGamesLine(MyGamesStatus status) => switch (status) {
       _notFetched(site, failed),
   ].join(' '),
   MyGamesFailed(problem: MyGamesProblem.noAccounts) => 'Set a username first.',
+  MyGamesFailed(problem: MyGamesProblem.accountsUnreadable, :final detail) =>
+    detail,
+  MyGamesFailed(problem: MyGamesProblem.gamesUnreadable) =>
+    'Saved games could not be read. Retry when the files are available.',
   MyGamesFailed(problem: MyGamesProblem.setUnreadable) =>
     'Analysis failed: the tactics set could not be read.',
   MyGamesFailed(:final detail) => 'Analysis failed: $detail.',

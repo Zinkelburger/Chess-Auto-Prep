@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'directory_entries.dart';
 import 'book_snapshot.dart';
 import 'training_snapshot.dart';
+import 'game_store.dart';
 import 'recovery_files.dart';
 import '../chess/pgn/chapter_heading.dart';
 import '../chess/pgn/chapter.dart' show readOffThreadFrom;
@@ -111,7 +112,55 @@ final class Repertoires extends RepertoireListing {
     this.folders, {
     this.unreadable = const [],
     this.revisions = const {},
+    this.boundaries,
   });
+
+  /// Null captures the whole catalog. Otherwise membership is complete only
+  /// under these absolute directories or individual PGNs, including absence.
+  final Set<String>? boundaries;
+
+  bool includesPath(String path) =>
+      boundaries == null ||
+      boundaries!.any((root) => root == path || p.isWithin(root, path));
+
+  bool intersectsPath(String path) =>
+      includesPath(path) ||
+      (boundaries?.any((root) => p.isWithin(path, root)) ?? false);
+
+  /// Keeps exactly the membership a projection depends on. The final storage
+  /// fence still discovers newly created/deleted files under these boundaries.
+  Repertoires within(Set<String> paths) {
+    final bounds = Set<String>.unmodifiable(paths);
+    bool includes(String path) =>
+        bounds.any((root) => path == root || p.isWithin(root, path));
+    return Repertoires(
+      List.unmodifiable([
+        for (final folder in folders)
+          if (includes(folder.path) ||
+              folder.chapters.any((ref) => includes(ref.path)))
+            RepertoireFolder(
+              name: folder.name,
+              path: folder.path,
+              modified: folder.modified,
+              chapters: List.unmodifiable(
+                folder.chapters.where((ref) => includes(ref.path)),
+              ),
+            ),
+      ]),
+      unreadable: List.unmodifiable(
+        unreadable.where(
+          (entry) =>
+              includes(entry.path) ||
+              bounds.any((root) => p.isWithin(entry.path, root)),
+        ),
+      ),
+      revisions: Map.unmodifiable({
+        for (final entry in revisions.entries)
+          if (includes(entry.key)) entry.key: entry.value,
+      }),
+      boundaries: bounds,
+    );
+  }
 
   /// Complete native read set, including draft chapters. Successful native
   /// listings own an immutable map; no PGN text survives metadata parsing.
@@ -168,12 +217,15 @@ abstract interface class ChapterFiles {
   /// PGNs without whole-repertoire membership (a single-chapter scope). Book
   /// and training proofs address only their fixed configured profile files.
   /// Never nest guarded store calls.
+  /// [archive] adds the optional SQLite selected-corpus transaction to this
+  /// same final guard; it is a logical row proof, not a database-file hash.
   Future<RepertoireValidation> validate(
     Repertoires? snapshot, {
     required Map<String, Revision> observed,
     Map<String, Revision?> additional = const {},
     BookSource? book,
     TrainingReadSet? training,
+    StoredGamesSource? archive,
   });
 
   /// The chapters deleted from every repertoire and still in recovery,
@@ -270,6 +322,7 @@ final class ChapterDirectory implements ChapterFiles {
     Map<String, Revision?> additional = const {},
     BookSource? book,
     TrainingReadSet? training,
+    StoredGamesSource? archive,
   }) async {
     if (snapshot != null && snapshot.unreadable.isNotEmpty) {
       return RepertoireValidationFailed(snapshot.unreadable.first.detail);
@@ -279,14 +332,25 @@ final class ChapterDirectory implements ChapterFiles {
     try {
       return await _recovery.run(() async {
         if (snapshot != null) {
-          final inventory = await _inventory();
-          if (inventory.unreadable.isNotEmpty) {
-            return RepertoireValidationFailed(
-              inventory.unreadable.first.detail,
+          if (snapshot.boundaries?.any(
+                (path) => path != root.path && !p.isWithin(root.path, path),
+              ) ??
+              false) {
+            return const RepertoireValidationFailed(
+              'Snapshot boundaries must be managed repertoire paths.',
             );
           }
+          final inventory = await _inventory();
+          final unavailable = inventory.unreadable.where(
+            (entry) => snapshot.intersectsPath(entry.path),
+          );
+          if (unavailable.isNotEmpty) {
+            return RepertoireValidationFailed(unavailable.first.detail);
+          }
           final paths = [
-            for (final folder in inventory.folders) ...folder.files,
+            for (final folder in inventory.folders)
+              for (final file in folder.files)
+                if (snapshot.includesPath(file.path)) file,
           ];
           if (paths.length != snapshot.revisions.length ||
               paths.any((file) => !snapshot.revisions.containsKey(file.path))) {
@@ -320,7 +384,7 @@ final class ChapterDirectory implements ChapterFiles {
         }
         final other = await _validateAdditional(related);
         if (other is! RepertoireCurrent) return other;
-        return _validateProfile(book, training);
+        return _validateProfile(book, training, archive);
       });
     } on RecoveryRequired catch (error) {
       return RepertoireValidationFailed(error.detail);
@@ -334,6 +398,7 @@ final class ChapterDirectory implements ChapterFiles {
   Future<RepertoireValidation> _validateProfile(
     BookSource? book,
     TrainingReadSet? training,
+    StoredGamesSource? archive,
   ) async {
     if (!_profileBound(book, training)) return const RepertoireChanged();
     final reads = <String, Revision?>{
@@ -355,6 +420,9 @@ final class ChapterDirectory implements ChapterFiles {
         case FileUnreadable(:final detail):
           return RepertoireValidationFailed('${entry.key}: $detail');
       }
+    }
+    if (archive != null && !await archive.isCurrent()) {
+      return const RepertoireChanged();
     }
     // A configured alias may change while an off-thread probe is running.
     // Certify the same profile binding after the last asynchronous observation.

@@ -40,6 +40,7 @@ final class WorkspaceWiring {
        _filter = filter,
        _gamesCache = games {
     _catalog.addListener(_filesChanged);
+    _env.store.addListener(_corpusChanged);
   }
 
   final AppEnvironment _env;
@@ -195,13 +196,37 @@ final class WorkspaceWiring {
 
   /// The repertoire files were listed anew: what the gaps and the explorer's Book
   /// read from them is read again.
+  int _catalogInputs = -1;
   void _filesChanged() {
-    _gaps.refreshAnswers();
-    _tree.forget();
+    if (_catalogInputs == _catalog.inputsRevision) return;
+    _catalogInputs = _catalog.inputsRevision;
+    final change = _catalog.admittedChange;
+    final all = change == null;
+    final source = _session.source;
+    final repertoire = source == null
+        ? null
+        : _catalog.repertoireOf(source.path);
+    if (all || (repertoire != null && change.touches(repertoire))) {
+      _gaps.refreshAnswers();
+    }
+    final inputs = _books.inputs(_books.active);
+    if (all || inputs.any(change.touches)) {
+      _tree.forget();
+    }
+  }
+
+  /// Download timestamps are not the source: revoke the corpus at its actual
+  /// committed PGN boundary, including creations and folder relocations.
+  void _corpusChanged() {
+    final change = _env.store.lastChange;
+    if (change != null && change.touches(_gamesCache.folder)) {
+      _myGamesTree.forget();
+    }
   }
 
   void dispose() {
     _disposed = true;
+    _env.store.removeListener(_corpusChanged);
     _env.settings.removeListener(_engineSettings);
     _catalog.removeListener(_filesChanged);
     _fill.dispose();

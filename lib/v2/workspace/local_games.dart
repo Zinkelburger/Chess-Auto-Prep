@@ -312,6 +312,7 @@ final class MyGamesTree extends ChangeNotifier implements SavedGames {
         null,
         observed: const {},
         additional: read.observed,
+        archive: read.archive,
       );
       if (gone()) return;
       if (valid is! RepertoireCurrent ||
@@ -409,11 +410,10 @@ final class MyGamesTree extends ChangeNotifier implements SavedGames {
             'Your games database could not be read, so only your '
             'downloaded games are here.';
     }
-    // The optional SQLite archive has no source proof yet. Its read is not
-    // covered by the native downloaded-PGN snapshot fence.
     return (
       corpus: myGamesCorpus(files: files, stored: rows, notice: notice),
       accountRevision: accountRead.revision,
+      archive: stored.source,
       observed: Map<String, Revision?>.unmodifiable(observed),
     );
   }
@@ -444,6 +444,7 @@ final class MyGamesTree extends ChangeNotifier implements SavedGames {
 typedef _MyGamesRead = ({
   MyGamesCorpus corpus,
   int accountRevision,
+  StoredGamesSource? archive,
   Map<String, Revision?> observed,
 });
 
