@@ -8,6 +8,7 @@ import '../../diagnostics/log.dart';
 import '../../engines/hivemind_engine.dart';
 import '../../storage/pending_writes.dart';
 import '../../storage/bughouse_books.dart';
+import '../../storage/hivemind_write.dart';
 import 'bughouse_lab.dart';
 
 /// Scores by board and move, A + B's side, with the line after each.
@@ -168,19 +169,20 @@ const labFillDepth = (ownNodes: 1500, childNodes: 200);
 final class TableSearch extends ChangeNotifier {
   TableSearch({
     required this.lab,
-    this.pendingWrites,
+    PendingWrites? pendingWrites,
     required HivemindBook book,
     required Future<HivemindStart> Function() startEngine,
     FillDepth depth = labFillDepth,
     List<Duration> passes = enginePasses,
-  }) : _book = book,
+  }) : pendingWrites = pendingWrites ?? PendingWrites(),
+       _book = book,
        _startEngine = startEngine,
        _depth = depth,
        _passes = passes {
     lab.addListener(_labChanged);
   }
 
-  final PendingWrites? pendingWrites;
+  final PendingWrites pendingWrites;
   final BughouseLab lab;
   final HivemindBook _book;
   final Future<HivemindStart> Function() _startEngine;
@@ -225,6 +227,7 @@ final class TableSearch extends ChangeNotifier {
   final _searches = <(int, Team, bool, int, int), HivemindSearched>{};
 
   final _entries = <(int, ClockCase), HivemindEntry>{};
+  final _writes = <(int, ClockCase), PendingObligation<HivemindSave>>{};
   final _saves = <(int, ClockCase), AnalysisSave>{};
 
   AnalysisSave? get analysisSave => _saves[(lab.position.bookKey, lab.clock)];
@@ -234,7 +237,10 @@ final class TableSearch extends ChangeNotifier {
     final key = (lab.position.bookKey, lab.clock);
     if (_saves[key] is! AnalysisSaveFailed) return;
     final entry = _entries[key];
-    if (entry != null) await _save(entry);
+    if (entry != null) {
+      await pendingWrites.retry(_book);
+      await _save(entry);
+    }
   }
 
   TableScores get scores => _scores;
@@ -473,7 +479,9 @@ final class TableSearch extends ChangeNotifier {
         'reported_searches': reported,
       },
     );
-    _entries[(position.bookKey, clock)] = entry;
+    final key = (position.bookKey, clock);
+    _entries[key] = entry;
+    _writes.remove(key);
     await _save(entry);
     return wanted();
   }
@@ -482,17 +490,27 @@ final class TableSearch extends ChangeNotifier {
     final key = (entry.position.bookKey, entry.clock);
     _saves[key] = const AnalysisSaving();
     _set();
-    final saving = _book.save(entry);
-    final result =
-        await (pendingWrites?.track(
-              (this, key),
-              saving,
-              label: 'Analysis book',
-              obligation: (this, key),
-              problem: (outcome) =>
-                  outcome is HivemindSaveFailed ? outcome.detail : null,
-            ) ??
-            saving);
+    final obligation = _writes.putIfAbsent(key, () {
+      final write = HivemindWrite(entry);
+      final book = _book;
+      return pendingWrites.accept<HivemindSave>(
+        resource: book,
+        label: 'Analysis book',
+        work: () async {
+          try {
+            return await book.save(write.entry, write: write);
+          } on Object catch (error) {
+            log.w('save accepted bughouse analysis', error);
+            return HivemindSaveFailed('$error');
+          }
+        },
+        problem: (outcome) =>
+            outcome is HivemindSaveFailed ? outcome.detail : null,
+        blocked: () =>
+            const HivemindSaveFailed('Retry the earlier analysis save first.'),
+      );
+    });
+    final result = await obligation.run();
     _saves[key] = switch (result) {
       HivemindSaved() => const AnalysisSaved(),
       HivemindSaveFailed(:final detail) => AnalysisSaveFailed(detail),

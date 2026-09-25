@@ -57,6 +57,22 @@ void main() {
 
   StoredMatch only() => forMatches.matches.saved.values.single;
 
+  test(
+    'an unreadable match listing retains the previous visible history',
+    () async {
+      await matches.start(twoGames());
+      final before = matches.matches;
+      forMatches.matches.failList = 'checkpoint unavailable';
+      await matches.load();
+      expect(matches.problem, isA<CannotLoad>());
+      expect(matches.matches, before);
+      forMatches.matches.failList = null;
+      await matches.load();
+      expect(matches.problem, isNull);
+      expect(matches.matches.single.games, hasLength(2));
+    },
+  );
+
   test('a match plays every game, each written as it ends', () async {
     await matches.start(twoGames());
     final match = only();
