@@ -58,8 +58,7 @@ void main() {
 }
 
 class _Backend extends InMemorySharedPreferencesStore {
-  _Backend({this.failRemovals = false, this.failToken = false})
-    : super.empty();
+  _Backend({this.failRemovals = false, this.failToken = false}) : super.empty();
   bool failRemovals;
   bool failToken;
 

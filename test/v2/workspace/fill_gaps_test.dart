@@ -338,19 +338,22 @@ void main() {
     await running;
   });
 
-  test('a draft whose write failed is made again under the next name', () async {
-    final documents = _LostCreate(fixture.store);
-    final fill = fillWith(
-      ScriptedEvaluator(scores: e4Best()),
-      documents: documents,
-    );
-    await fill.start(request);
-    await fill.makeLines();
-    expect(fill.lines, isA<LinesFailed>());
-    expect(fill.canMakeLines, isTrue);
-    await fill.makeLines();
-    expect((fill.lines as LinesWritten).draft, draft('Main (draft 2)'));
-  });
+  test(
+    'a draft whose write failed is made again under the next name',
+    () async {
+      final documents = _LostCreate(fixture.store);
+      final fill = fillWith(
+        ScriptedEvaluator(scores: e4Best()),
+        documents: documents,
+      );
+      await fill.start(request);
+      await fill.makeLines();
+      expect(fill.lines, isA<LinesFailed>());
+      expect(fill.canMakeLines, isTrue);
+      await fill.makeLines();
+      expect((fill.lines as LinesWritten).draft, draft('Main (draft 2)'));
+    },
+  );
 
   test('lines are written only when asked: a draft chapter beside the one '
       'the search started on, its moves carrying their values', () async {

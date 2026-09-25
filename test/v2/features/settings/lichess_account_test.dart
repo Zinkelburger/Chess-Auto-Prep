@@ -39,23 +39,26 @@ void main() {
     pending = PendingWrites();
   });
 
-  test('an account that cannot be read is signed out and login works', () async {
-    final state = LichessAccountState(
-      login: login,
-      read: () async => throw StateError('private-test-token'),
-      write: (account) async {
-        saved = account;
-        return true;
-      },
-    );
-    addTearDown(state.dispose);
-    await state.load();
-    expect(state.status, isA<SignedOut>());
-    expect(state.problem, isNull);
-    login.tokenOutcome = loggedIn(personal: true);
-    expect(await state.useToken('lip_secret'), isTrue);
-    expect(saved?.token, 'lip_secret');
-  });
+  test(
+    'an account that cannot be read is signed out and login works',
+    () async {
+      final state = LichessAccountState(
+        login: login,
+        read: () async => throw StateError('private-test-token'),
+        write: (account) async {
+          saved = account;
+          return true;
+        },
+      );
+      addTearDown(state.dispose);
+      await state.load();
+      expect(state.status, isA<SignedOut>());
+      expect(state.problem, isNull);
+      login.tokenOutcome = loggedIn(personal: true);
+      expect(await state.useToken('lip_secret'), isTrue);
+      expect(saved?.token, 'lip_secret');
+    },
+  );
 
   test('starts signed out, and loads a saved account', () async {
     final state = owner();

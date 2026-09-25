@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-
 import 'package:chess_auto_prep/v2/chess/pgn/chapter.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/chapter_edit.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/games_written.dart';
@@ -172,20 +171,23 @@ void main() {
     expect(r.lichess.asked, hasLength(2), reason: 'the next start downloads');
   });
 
-  test('a failed download date is logged and the next download dates it', () async {
-    final when = DateTime(2026, 9, 24);
-    r = _Review(
-      accounts: {GameSite.lichess: const Account('Me')},
-      now: () => when,
-    );
-    r.accounts.rejectDownloaded = true;
-    await r.start();
-    expect(r.games.accounts[GameSite.lichess]!.downloaded, isNull);
-    expect(await r.cache.all(GameSite.lichess, 'Me'), [scholarsMate]);
-    r.accounts.rejectDownloaded = false;
-    await r.games.start();
-    expect(r.games.accounts[GameSite.lichess]!.downloaded, when);
-  });
+  test(
+    'a failed download date is logged and the next download dates it',
+    () async {
+      final when = DateTime(2026, 9, 24);
+      r = _Review(
+        accounts: {GameSite.lichess: const Account('Me')},
+        now: () => when,
+      );
+      r.accounts.rejectDownloaded = true;
+      await r.start();
+      expect(r.games.accounts[GameSite.lichess]!.downloaded, isNull);
+      expect(await r.cache.all(GameSite.lichess, 'Me'), [scholarsMate]);
+      r.accounts.rejectDownloaded = false;
+      await r.games.start();
+      expect(r.games.accounts[GameSite.lichess]!.downloaded, when);
+    },
+  );
 
   test(
     'thrown fetch keeps offline corpus and the other site independent',

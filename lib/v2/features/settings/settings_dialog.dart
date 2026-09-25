@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 
 import '../../storage/settings_store.dart';
@@ -101,9 +100,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                         child: _places(groups),
                       ),
                       const VerticalDivider(width: 1),
-                      Expanded(
-                        child: _rows(groups),
-                      ),
+                      Expanded(child: _rows(groups)),
                     ],
                   ),
                 ),

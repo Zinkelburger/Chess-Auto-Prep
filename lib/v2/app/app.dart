@@ -167,9 +167,8 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     );
   }
 
-  Widget _startup() => const Scaffold(
-    body: Center(child: CircularProgressIndicator()),
-  );
+  Widget _startup() =>
+      const Scaffold(body: Center(child: CircularProgressIndicator()));
 }
 
 /// The way out of the app: what the user typed reaches the disk — or they

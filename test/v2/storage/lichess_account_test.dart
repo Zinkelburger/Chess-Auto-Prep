@@ -18,7 +18,9 @@ void main() {
     expect(prefs.get(lichessTokenKey), isNull);
     expect(prefs.get(lichessUsernameKey), isNull);
     expect(
-      await writeLichessAccount(const LichessAccount(token: 't', username: 'A')),
+      await writeLichessAccount(
+        const LichessAccount(token: 't', username: 'A'),
+      ),
       isTrue,
       reason: 'signing in again works',
     );

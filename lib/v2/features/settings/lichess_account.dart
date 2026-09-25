@@ -115,7 +115,8 @@ final class LichessAccountState extends ChangeNotifier {
         if (!await _save(account)) {
           _set(
             const SignedOut(),
-            problem: 'Logged in, but the account could not be saved. '
+            problem:
+                'Logged in, but the account could not be saved. '
                 'Try again.',
           );
           return false;

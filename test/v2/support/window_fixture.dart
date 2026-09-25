@@ -1,6 +1,5 @@
 import 'dart:async';
 
-
 import 'package:chess_auto_prep/v2/app/environment.dart';
 import 'package:chess_auto_prep/v2/app/app_parts.dart';
 import 'package:chess_auto_prep/v2/app/exit_guard.dart';

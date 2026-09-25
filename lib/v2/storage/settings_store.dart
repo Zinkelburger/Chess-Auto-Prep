@@ -151,10 +151,7 @@ final class SettingsStore extends ChangeNotifier {
   /// Keeps a file that could not be read under
   /// `recovery-quarantine/<time>/` in the support folder, then carries on.
   Future<void> _moveAside(File file) async {
-    final stamp = DateTime.now().toUtc().toIso8601String().replaceAll(
-      ':',
-      '-',
-    );
+    final stamp = DateTime.now().toUtc().toIso8601String().replaceAll(':', '-');
     final folder = Directory(
       p.join(file.parent.path, 'recovery-quarantine', stamp),
     );

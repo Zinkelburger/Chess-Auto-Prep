@@ -273,11 +273,11 @@ List<SettingGroup> settingGroups({
         warn: account.problem != null,
       ),
       if (account.status case SignedOut() || Checking())
-          SettingRow(
-            'Personal access token',
-            SecretSetting(load: () async => null, save: account.useToken),
-            hint: 'instead of logging in; from lichess.org/account/oauth/token',
-          ),
+        SettingRow(
+          'Personal access token',
+          SecretSetting(load: () async => null, save: account.useToken),
+          hint: 'instead of logging in; from lichess.org/account/oauth/token',
+        ),
     ]),
     SettingGroup('App', [
       SettingRow(

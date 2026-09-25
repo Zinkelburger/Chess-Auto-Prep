@@ -80,40 +80,39 @@ void main() {
     ),
   );
 
-  testWidgets(
-    'a tree that cannot be saved does not hold the tab back',
-    (tester) async {
-      fill.dispose();
-      fixture.externalEdit(
-        '// Color: White\n[Event "Main"]\n[Result "*"]\n[FEN "$kingAndPawn"]\n[SetUp "1"]\n\n1. e4 *',
-      );
-      await fixture.session.open(fixture.ref);
-      final published = <String>[];
-      fill = FillGaps(
-        session: fixture.session,
-        analysis: analysis,
-        documents: fixture.store,
-        tools: (_) async => FillReady(
-          evaluator: ScriptedEvaluator(),
-          policy: const ScriptedPolicy({'e8d8': 1}),
-          release: () async {},
-        ),
-        keepTree: (_, text, {required runId}) async {
-          published.add(runId);
-          throw StateError('test storage unavailable');
-        },
-      );
-      await pump(tester);
-      await tester.runAsync(
-        () => fill.start(const FillRequest(elo: 2200, depthPlies: 2)),
-      );
-      await tester.pump();
-      expect(fill.state, isA<FillDone>());
-      expect(fill.canMakeLines, isTrue);
-      expect(find.textContaining('Retry'), findsNothing);
-      expect(published, hasLength(1));
-    },
-  );
+  testWidgets('a tree that cannot be saved does not hold the tab back', (
+    tester,
+  ) async {
+    fill.dispose();
+    fixture.externalEdit(
+      '// Color: White\n[Event "Main"]\n[Result "*"]\n[FEN "$kingAndPawn"]\n[SetUp "1"]\n\n1. e4 *',
+    );
+    await fixture.session.open(fixture.ref);
+    final published = <String>[];
+    fill = FillGaps(
+      session: fixture.session,
+      analysis: analysis,
+      documents: fixture.store,
+      tools: (_) async => FillReady(
+        evaluator: ScriptedEvaluator(),
+        policy: const ScriptedPolicy({'e8d8': 1}),
+        release: () async {},
+      ),
+      keepTree: (_, text, {required runId}) async {
+        published.add(runId);
+        throw StateError('test storage unavailable');
+      },
+    );
+    await pump(tester);
+    await tester.runAsync(
+      () => fill.start(const FillRequest(elo: 2200, depthPlies: 2)),
+    );
+    await tester.pump();
+    expect(fill.state, isA<FillDone>());
+    expect(fill.canMakeLines, isTrue);
+    expect(find.textContaining('Retry'), findsNothing);
+    expect(published, hasLength(1));
+  });
 
   testWidgets('before a search: its two numbers and one button', (
     tester,
