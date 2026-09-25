@@ -1378,3 +1378,8 @@ because the previous one "mostly" works.
   and [WAL](https://www.sqlite.org/wal.html).
 - [Windows Job Objects](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects)
   and [ReplaceFileW](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-replacefilew).
+- macOS runs Stockfish from `Contents/Helpers`, signed at build time with
+  sandbox inheritance after verifying the pinned archive. Extracting the
+  upstream signed binary at runtime was rejected by the macOS sandbox. The
+  packaged release check exercises the helper under the release entitlements.
+  [Apple's helper sandbox requirements](https://developer.apple.com/library/archive/qa/qa1773/_index.html).
