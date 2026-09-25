@@ -22,6 +22,12 @@ void main() {
   late DocumentRelocation relocation;
   late List<String> flushed;
   String? failAt;
+  String canonical(String path) => p.normalize(
+    p.join(
+      fixture.root.resolveSymbolicLinksSync(),
+      p.relative(path, from: fixture.root.path),
+    ),
+  );
 
   setUp(() async {
     fixture = await StoreFixture.create();
@@ -72,11 +78,11 @@ void main() {
           _ => p.dirname(to.path),
         };
         if (operation == 'folder') await Directory(destinationParent).create();
-        failAt = switch (endpoint) {
+        failAt = canonical(switch (endpoint) {
           'source' => sourceParent,
           'destination' => destinationParent,
           _ => fixture.documents.path,
-        };
+        });
         final Object result = switch (operation) {
           'folder' => await relocation.moveFolder(
             p.dirname(from.path),
@@ -108,9 +114,9 @@ void main() {
         expect(
           flushed,
           containsAll([
-            sourceParent,
-            destinationParent,
-            fixture.documents.path,
+            canonical(sourceParent),
+            canonical(destinationParent),
+            canonical(fixture.documents.path),
           ]),
         );
         expect(await pending.read(), isEmpty);
@@ -162,7 +168,7 @@ void main() {
       documents: fixture.documents,
       synchronize: (path) async {
         flushed.add(path);
-        if (blocked && path == fixture.root.path) {
+        if (blocked && path == canonical(fixture.root.path)) {
           throw FileSystemException('injected metadata flush failure', path);
         }
         await syncDirectory(path);
@@ -189,13 +195,45 @@ void main() {
     expect(
       flushed,
       containsAllInOrder([
-        p.join(support.path, 'unfinished-moves'),
-        support.path,
-        p.dirname(support.path),
-        p.join(fixture.root.path, 'new'),
-        fixture.root.path,
+        canonical(p.join(support.path, 'unfinished-moves')),
+        canonical(support.path),
+        canonical(p.dirname(support.path)),
+        canonical(p.join(fixture.root.path, 'new')),
+        canonical(fixture.root.path),
       ]),
     );
+  });
+
+  test('metadata does not flush above its pre-existing parent', () async {
+    final from = fixture.ref('repertoires/Before/Main.pgn');
+    final to = fixture.ref('repertoires/Before/After.pgn');
+    await fixture.put(from, oneGame('1. d4'));
+    final flushed = <String>[];
+    final pending = PendingRepoints(
+      fixture.support,
+      documents: fixture.documents,
+      synchronize: (path) async {
+        if (!p.equals(path, canonical(fixture.root.path)) &&
+            !p.isWithin(canonical(fixture.root.path), path)) {
+          throw FileSystemException('outside the sandbox', path);
+        }
+        flushed.add(path);
+        await syncDirectory(path);
+      },
+    );
+    await pending.record(
+      'bounded',
+      from: from.path,
+      to: to.path,
+      identity: (await observeFile(from.path)).identity!,
+      folder: false,
+    );
+    expect(flushed, [
+      canonical(p.join(fixture.support.path, 'unfinished-moves')),
+      canonical(fixture.support.path),
+      canonical(fixture.root.path),
+    ]);
+    expect(await pending.read(), hasLength(1));
   });
 
   test('a cancelled move flush failure retains its recovery note', () async {
@@ -210,13 +248,13 @@ void main() {
       identity: identity,
       folder: false,
     );
-    failAt = p.dirname(from.path);
+    failAt = canonical(p.dirname(from.path));
     await expectLater(notes.finishOwed(), throwsA(isA<FileSystemException>()));
     expect(await pending.read(), hasLength(1));
     failAt = null;
     await notes.finishOwed();
     expect(await pending.read(), isEmpty);
     expect(await File(from.path).exists(), isTrue);
-    expect(flushed, contains(fixture.documents.path));
+    expect(flushed, contains(canonical(fixture.documents.path)));
   });
 }
