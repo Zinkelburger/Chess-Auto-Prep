@@ -8,6 +8,7 @@ import 'package:chess_auto_prep/v2/engines/maia/move_policy.dart';
 import 'package:chess_auto_prep/v2/net/lichess_studies.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_file_store.dart';
+import 'package:chess_auto_prep/v2/storage/profile_integrity.dart';
 import 'package:chess_auto_prep/v2/storage/settings_store.dart';
 import 'package:chess_auto_prep/v2/storage/training_store.dart';
 import 'package:flutter/material.dart';
@@ -47,6 +48,10 @@ final class NativeWindowFixture {
         ),
       ),
       store: store,
+      integrity: ProfileIntegrity(
+        documents: disk.documents,
+        support: disk.support,
+      ),
       settings: SettingsStore(support: disk.support),
       chapterFiles: ChapterDirectory(Directory(root), recovery: store.recovery),
       studyFiles: ScriptedStudyFiles(),

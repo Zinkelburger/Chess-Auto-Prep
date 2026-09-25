@@ -57,6 +57,8 @@ void main() {
       for (final mode in Mode.values) {
         app.requests.switchTo(mode);
         await tester.pumpAndSettle();
+        expect(app.requests.mode, mode);
+        expect(find.text(mode.label), findsWidgets);
         expect(app.session.source, kidMain);
         expect(app.session.commentAt(node), contains('A note across modes'));
         expect(app.lineTrainer.lesson, isNull);

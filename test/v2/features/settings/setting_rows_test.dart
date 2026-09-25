@@ -6,6 +6,30 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/scripted_login.dart';
 
 void main() {
+  test('App exposes the injected read-only saved-data action', () {
+    final store = SettingsStore();
+    final account = LichessAccountState(
+      login: ScriptedLogin(),
+      read: () async => null,
+      write: (_) async => true,
+    );
+    addTearDown(store.dispose);
+    addTearDown(account.dispose);
+    var checks = 0;
+    final app = settingGroups(
+      store: store,
+      coresAvailable: 2,
+      account: account,
+      openLogFolder: () {},
+      checkSavedData: () => checks++,
+    ).firstWhere((group) => group.name == 'App');
+    final control =
+        app.rows.firstWhere((row) => row.label == 'Saved data').control
+            as ActionSetting;
+    control.run();
+    expect(checks, 1);
+  });
+
   test('two changes that land before the rows are built again both stay', () {
     // A number typed into one row is taken when the field loses focus to a
     // click on another row: both land on the rows built before either.

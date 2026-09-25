@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../diagnostics/log.dart';
 import '../features/settings/setting_rows.dart';
+import '../features/settings/integrity_dialog.dart';
 import '../ui/theme.dart';
 import '../workspace/copy_name_dialog.dart';
 import '../workspace/document_session.dart';
@@ -100,7 +101,15 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     coresAvailable: Platform.numberOfProcessors,
     account: _parts.account,
     openLogFolder: () => unawaited(openFolder(widget.logFolder)),
+    checkSavedData: _checkSavedData,
   );
+
+  void _checkSavedData() {
+    if (!mounted) return;
+    final context = _navigator.currentContext;
+    if (context != null)
+      unawaited(showIntegrityDialog(context, _parts.env.integrity));
+  }
 
   @override
   void initState() {
@@ -187,6 +196,10 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
                   FilledButton(
                     onPressed: () => unawaited(_start()),
                     child: const Text('Retry settings'),
+                  ),
+                  TextButton(
+                    onPressed: _checkSavedData,
+                    child: const Text('Check saved data'),
                   ),
                 ],
               ),
