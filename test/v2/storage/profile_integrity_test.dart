@@ -57,6 +57,55 @@ void main() {
   }
 
   test(
+    'Support equal to a match directory does not reenter its held lock',
+    () async {
+      final match = _match();
+      final shared = Directory(
+        p.join(documents.path, 'bughouse_matches', match.id),
+      );
+      await shared.create(recursive: true);
+      await File(
+        p.join(shared.path, 'match.json'),
+      ).writeAsString(jsonEncode(match.toJson()));
+      await File(
+        p.join(shared.path, 'games.bpgn'),
+      ).writeAsString(matchBpgn(match));
+      final report = await inspect(
+        metadata: shared,
+      ).timeout(const Duration(seconds: 2));
+      expect(report.clean, isTrue);
+    },
+  );
+
+  test(
+    'Support equal to the domain is refused before nested acquisition',
+    () async {
+      final domain = Directory(
+        p.join(documents.path, 'repertoires', '.cap-directory-domain'),
+      );
+      await domain.create();
+      final report = await inspect(
+        metadata: domain,
+      ).timeout(const Duration(seconds: 2));
+      expect(report.clean, isFalse);
+      expect(report.findings.single.kind, IntegrityKind.unavailable);
+    },
+  );
+
+  test(
+    'domain linked to Documents is refused before nested acquisition',
+    () async {
+      await Link(
+        p.join(documents.path, 'repertoires', '.cap-directory-domain'),
+      ).create(documents.path);
+      final report = await inspect().timeout(const Duration(seconds: 2));
+      expect(report.clean, isFalse);
+      expect(report.findings.single.kind, IntegrityKind.unavailable);
+    },
+    skip: Platform.isWindows,
+  );
+
+  test(
     'absent Support and repertoire roots are not created by inspection',
     () async {
       await course.parent.delete(recursive: true);

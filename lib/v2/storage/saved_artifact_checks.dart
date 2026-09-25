@@ -13,12 +13,18 @@ import 'bughouse_matches.dart';
 import 'directory_entries.dart';
 import 'file_lock.dart';
 import 'integrity_report.dart';
+import 'recovery_files.dart';
 
 /// These reads never enter a storage loader: match loading can rebuild BPGN.
 /// The JSON checkpoint is authoritative; the export is compared, never repaired.
 final class SavedArtifactChecks {
-  SavedArtifactChecks(this.documents);
+  SavedArtifactChecks(this.documents, {Set<String> heldDirectories = const {}})
+    : _heldDirectories = Set.unmodifiable(heldDirectories);
   final Directory documents;
+
+  /// Canonical directories the enclosing profile inspection already holds.
+  /// Support may itself be a match directory; reacquiring it would self-wait.
+  final Set<String> _heldDirectories;
 
   Future<List<IntegrityFinding>> generation() async {
     final findings = <IntegrityFinding>[];
@@ -122,9 +128,13 @@ final class SavedArtifactChecks {
       await for (final entry in directoryEntries(root, followLinks: false)) {
         if (p.basename(entry.path).startsWith('.')) continue;
         if (entry is Directory) {
-          findings.addAll(
-            await withDirectoryLock(entry, () => _match(entry.path)),
+          final held = _heldDirectories.contains(
+            canonicalRecoveryRoot(entry).path,
           );
+          final checked = held
+              ? await _match(entry.path)
+              : await withDirectoryLock(entry, () => _match(entry.path));
+          findings.addAll(checked);
         } else {
           findings.add(
             IntegrityFinding(
