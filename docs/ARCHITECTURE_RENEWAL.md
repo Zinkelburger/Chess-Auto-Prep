@@ -674,7 +674,10 @@ There is no automatic repair, credential check or general database audit in this
 tranche. Native inventory and owner/widget checks, independent review, analyze/lint
 and headless Linux startup-failure/report/recheck plus normal Settings entry
 checks passed. Both retained match-stage false-clean cases were reproduced
-before the fix. Windows/macOS integrity behavior remains unverified locally.
+before the fix. Three lock-overlap timeouts were also reproduced and fixed:
+canonical domain/root overlaps refuse before acquisition, and already-held
+match locks are not reacquired. Final merged focused checks: 77 passed;
+analyze/lint passed. Windows/macOS integrity behavior remains unverified locally.
 
 The H6 credential tranche distinguishes an unavailable read from signed out and
 blocks authentication changes until a successful read retry. Malformed cached

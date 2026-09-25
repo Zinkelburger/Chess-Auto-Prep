@@ -34,6 +34,12 @@ final class ProfileIntegrity implements IntegrityReader {
       final domain = Directory(
         p.join(root.path, 'repertoires', '.cap-directory-domain'),
       );
+      final domainPath = canonicalRecoveryRoot(domain).path;
+      // The normal nested helper always acquires Documents. Refuse these
+      // malformed boundaries before the outer acquisition can self-block.
+      if (domainPath == root.path || domainPath == metadata.path) {
+        throw const FileSystemException('Profile lock boundaries overlap.');
+      }
       await withDirectoryLock(
         domain,
         () => lockedForRelocation(
@@ -48,7 +54,10 @@ final class ProfileIntegrity implements IntegrityReader {
             if (ready) {
               findings.addAll(await inspectBookReferences(root, metadata));
               checked.add('Book references');
-              final artifacts = SavedArtifactChecks(root);
+              final artifacts = SavedArtifactChecks(
+                root,
+                heldDirectories: {root.path, metadata.path, domainPath},
+              );
               findings.addAll(await artifacts.generation());
               checked.add(
                 'Generated tree formats in visible Documents folders (source freshness is not recorded)',
@@ -72,7 +81,7 @@ final class ProfileIntegrity implements IntegrityReader {
         IntegrityFinding(
           IntegrityKind.unavailable,
           documents.path,
-          'The profile could not be checked: a root is unavailable, linked or changed.',
+          'The profile could not be checked: its roots or lock boundaries are unavailable, changed or overlap.',
         ),
       );
       skipped.add(
