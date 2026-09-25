@@ -196,12 +196,16 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
   /// a chapter that is a whole file is open. A study chapter is one game of
   /// its file, its chapters are already in its own left column, and the line
   /// operations do not mean the same thing there — so it has no outline,
-  /// whichever mode the user switches to.
+  /// whichever mode the user switches to. Hide it during a lesson too: its
+  /// line previews would reveal the moves the user is being asked to recall.
   bool get _wantsOutline =>
-      _ws.session.source != null && _ws.session.game == null;
+      _ws.session.source != null &&
+      _ws.session.game == null &&
+      _train.lines.board.value == null;
 
   @override
-  Listenable listenableOf(Shell widget) => widget.workspace.session;
+  Listenable listenableOf(Shell widget) =>
+      Listenable.merge([widget.workspace.session, widget.training.lines.board]);
 
   /// Puts the outline column in or takes it out when the open chapter
   /// changes what is wanted. The other two panes are left alone, so the

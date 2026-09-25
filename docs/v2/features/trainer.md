@@ -39,7 +39,9 @@ Sittings fix their set when started. Play on the board or type SAN/UCI in the
 move field. The board faces your side and engine analysis pauses while the
 sitting holds it. Incorrect moves show the expected move, then play the
 correction. Missed quiz moves are replayed at the end unless disabled.
-Nothing beyond the shown moves is printed in the lesson move list.
+Nothing beyond the shown moves is printed in the lesson move list. The chapter
+outline is hidden while the lesson owns the board, so its previews cannot
+reveal answers; it returns when the lesson finishes or is left.
 
 **Space** advances a learning step, **1–4** rate, **↓** skips, **Escape** returns
 to the list. Skip and Restart line are available during the lesson. The recap
