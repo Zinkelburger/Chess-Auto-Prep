@@ -116,9 +116,19 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
     unawaited(_start());
   }
 
+  bool _starting = false;
+  bool _ready = false;
+
   Future<void> _start() async {
+    if (_starting || _ready) return;
+    setState(() => _starting = true);
     await _parts.start();
-    if (mounted) await _desktopFiles.start();
+    if (!mounted) return;
+    setState(() {
+      _starting = false;
+      _ready = _parts.settings.ready;
+    });
+    if (_ready) await _desktopFiles.start();
   }
 
   void _flushDraft() => unawaited(_parts.saver.flush());
@@ -145,19 +155,44 @@ class _ChessAutoPrepV2State extends State<ChessAutoPrepV2> {
           absorbing: closing,
           child: ExcludeFocus(excluding: closing, child: child!),
         ),
-        child: Shell(
-          requests: _parts.requests,
-          workspace: _parts.workspace,
-          documents: _parts.documents,
-          training: _parts.training,
-          labs: _parts.labs,
-          fullScreen: _parts.fullScreen,
-          settingRows: _settingRows,
-          settingsAlso: _parts.account,
-        ),
+        child: !_ready
+            ? _startup()
+            : Shell(
+                requests: _parts.requests,
+                workspace: _parts.workspace,
+                documents: _parts.documents,
+                training: _parts.training,
+                labs: _parts.labs,
+                fullScreen: _parts.fullScreen,
+                settingRows: _settingRows,
+                settingsAlso: _parts.account,
+              ),
       ),
     );
   }
+
+  Widget _startup() => Scaffold(
+    body: Center(
+      child: Padding(
+        padding: const EdgeInsets.all(Space.l),
+        child: _starting
+            ? const CircularProgressIndicator()
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SelectableText(
+                    _parts.settings.problem ?? 'Settings are not available.',
+                  ),
+                  const SizedBox(height: Space.m),
+                  FilledButton(
+                    onPressed: () => unawaited(_start()),
+                    child: const Text('Retry settings'),
+                  ),
+                ],
+              ),
+      ),
+    ),
+  );
 }
 
 /// The way out of the app: what the user typed reaches the disk — or they

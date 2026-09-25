@@ -315,10 +315,16 @@ final class AppEnvironment {
   final void Function() close;
 
   /// A Stockfish with the threads and the table the settings give it now.
-  Future<EngineStart> startEngine() => launchEngine(
-    cores: settings.value.engineCores,
-    memoryMb: settings.value.engineMemoryMb,
-  );
+  Future<EngineStart> startEngine() => settings.ready
+      ? launchEngine(
+          cores: settings.value.engineCores,
+          memoryMb: settings.value.engineMemoryMb,
+        )
+      : Future.value(
+          const StartFailed(
+            'Saved settings must be read before starting an engine.',
+          ),
+        );
 
   /// Hivemind on half of this machine's cores, as BughouseDB runs it. Not
   /// the Stockfish setting: that defaults to one core, and a network engine
