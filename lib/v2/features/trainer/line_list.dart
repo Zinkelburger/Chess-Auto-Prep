@@ -91,51 +91,59 @@ class _LineListState extends State<LineList> {
           readingCardInset,
           0,
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _Header(
-              trainer: widget.trainer,
-              ready: widget.ready,
-              bookChip: widget.bookChip,
-              onImport: widget.onImport,
-              onSettings: widget.onSettings,
-              onChange: (write, doing) =>
-                  unawaited(_change(write, doing: doing)),
-            ),
-            if (progress.stale)
-              _Problem(
-                progressProblem(
-                  const ProgressConflict(),
-                  doing: 'save training progress',
-                ),
-                action: ('Reload', () => unawaited(widget.trainer.reload())),
-              )
-            else if (_problem case final problem?)
-              _Problem(
-                problem,
-                action: (
-                  'Retry save',
-                  () => unawaited(widget.trainer.retryPending()),
-                ),
+        // A short card — the edit strip open under it — scrolls rather
+        // than squeezing the list to nothing.
+        child: _AtLeast(
+          height: _shortest,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _Header(
+                trainer: widget.trainer,
+                ready: widget.ready,
+                bookChip: widget.bookChip,
+                onImport: widget.onImport,
+                onSettings: widget.onSettings,
+                onChange: (write, doing) =>
+                    unawaited(_change(write, doing: doing)),
               ),
-            const SizedBox(height: Space.m),
-            _toolbar(progress),
-            if (_showing == _Showing.lines && _orders.length > 1) ...[
+              if (progress.stale)
+                _Problem(
+                  progressProblem(
+                    const ProgressConflict(),
+                    doing: 'save training progress',
+                  ),
+                  action: ('Reload', () => unawaited(widget.trainer.reload())),
+                )
+              else if (_problem case final problem?)
+                _Problem(
+                  problem,
+                  action: (
+                    'Retry save',
+                    () => unawaited(widget.trainer.retryPending()),
+                  ),
+                ),
+              const SizedBox(height: Space.m),
+              _toolbar(progress),
+              if (_showing == _Showing.lines && _orders.length > 1) ...[
+                const SizedBox(height: Space.s),
+                _orderPicker(),
+              ],
               const SizedBox(height: Space.s),
-              _orderPicker(),
+              Expanded(
+                child: _showing == _Showing.lines
+                    ? _lines(progress)
+                    : _mistakes(progress),
+              ),
             ],
-            const SizedBox(height: Space.s),
-            Expanded(
-              child: _showing == _Showing.lines
-                  ? _lines(progress)
-                  : _mistakes(progress),
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
+
+  /// The height the header, the toolbar and a few rows of lines need.
+  static const _shortest = 360.0;
 
   Widget _toolbar(TrainingProgress progress) => Row(
     children: [
@@ -628,5 +636,23 @@ class TrainScopeButtons extends StatelessWidget {
     showSelectedIcon: false,
     style: const ButtonStyle(visualDensity: VisualDensity.compact),
     onSelectionChanged: (s) => trainer.setScope(s.single),
+  );
+}
+
+/// [child] at the height it is given, or at [height] in a scroll view when
+/// it is given less.
+class _AtLeast extends StatelessWidget {
+  const _AtLeast({required this.height, required this.child});
+
+  final double height;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) => constraints.maxHeight >= height
+        ? child
+        : SingleChildScrollView(
+            child: SizedBox(height: height, child: child),
+          ),
   );
 }

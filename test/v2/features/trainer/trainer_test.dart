@@ -87,9 +87,18 @@ void main() {
     return trainer;
   }
 
-  /// A trainer that has read the open chapter.
-  Trainer ready(FakeAsync async, {ScriptedFiles? listing}) {
-    final trainer = trainerOver(listing: listing)..show();
+  /// A trainer that has read the open chapter. Reviews wait for the user's
+  /// rating unless [rateReviews] is false: the default grades them.
+  Trainer ready(
+    FakeAsync async, {
+    ScriptedFiles? listing,
+    bool rateReviews = true,
+  }) {
+    final settings = SettingsStore(
+      initial: Settings(training: TrainingOptions(rateReviews: rateReviews)),
+    );
+    addTearDown(settings.dispose);
+    final trainer = trainerOver(listing: listing, settings: settings)..show();
     async.flushMicrotasks();
     expect(trainer.state, isA<TrainerReady>());
     return trainer;
@@ -192,7 +201,7 @@ void main() {
       async.flushMicrotasks();
       expect(trainer.state, isA<TrainerFailed>());
       files.readAs = null;
-      trainer.reload();
+      unawaited(trainer.reload());
       async.flushMicrotasks();
       expect(trainer.state, isA<TrainerReady>());
     });
@@ -284,6 +293,72 @@ void main() {
     });
   });
 
+  test('by default a reviewed line is graded from its mistakes', () {
+    fakeAsync((async) {
+      final ruy = (source: source(), id: 'line_ZTQgZTUgTmYzIE5jNiBCYj');
+      Review due() => Review(
+        key: ruy,
+        lineName: 'Ruy',
+        intervalDays: 4,
+        lastRating: 'good',
+        due: _now.subtract(const Duration(hours: 1)),
+      );
+      files.reviews[ruy] = due();
+      final trainer = ready(async, rateReviews: false);
+      trainer.review();
+      var lesson = trainer.lesson!;
+      for (final uci in ['e2e4', 'g1f3', 'f1b5']) {
+        play(async, lesson, uci);
+      }
+      async.flushMicrotasks();
+      expect(files.reviews[ruy]!.lastRating, 'good', reason: 'clean is Good');
+      expect(files.reviews[ruy]!.intervalDays, 10);
+      expect(lesson.state, isA<SittingOver>());
+
+      trainer.leave();
+      files.reviews[ruy] = due();
+      unawaited(trainer.reload());
+      async.flushMicrotasks();
+      trainer.review();
+      lesson = trainer.lesson!;
+      play(async, lesson, 'e2e4');
+      play(async, lesson, 'b1c3'); // wrong: Nf3
+      play(async, lesson, 'f1b5');
+      play(async, lesson, 'g1f3'); // the replay
+      async.flushMicrotasks();
+      final review = files.reviews[ruy]!;
+      expect((review.lastRating, review.fails), ('again', 1));
+      expect(lesson.state, isNot(isA<AwaitingRating>()));
+      expect(lesson.left, 0);
+      expect(lesson.line.key, ruy, reason: 'Again brings it round once more');
+    });
+  });
+
+  test('rating myself offers the mistakes\' grade, which Space takes', () {
+    fakeAsync((async) {
+      final ruy = (source: source(), id: 'line_ZTQgZTUgTmYzIE5jNiBCYj');
+      files.reviews[ruy] = Review(
+        key: ruy,
+        lineName: 'Ruy',
+        intervalDays: 4,
+        lastRating: 'good',
+        due: _now,
+      );
+      final trainer = ready(async);
+      trainer.review();
+      final lesson = trainer.lesson!;
+      for (final uci in ['e2e4', 'g1f3', 'f1b5']) {
+        play(async, lesson, uci);
+      }
+      final waiting = lesson.state as AwaitingRating;
+      expect(waiting.graded, Rating.good);
+      lesson.proceed();
+      async.flushMicrotasks();
+      expect(files.reviews[ruy]!.lastRating, 'good');
+      expect(lesson.state, isA<SittingOver>());
+    });
+  });
+
   test('a line rated Again comes round once more in the same sitting', () {
     fakeAsync((async) {
       final trainer = ready(async);
@@ -306,6 +381,19 @@ void main() {
       expect(files.reviews.values.single.lastRating, 'again');
       expect(lesson.line.name, 'Italian');
       expect(lesson.left, 1, reason: 'the Ruy is back at the end');
+
+      // Back round, the Ruy is quizzed and still graded for the user, even
+      // with the user rating reviews: it came into the sitting new.
+      lesson.skip();
+      expect(lesson.learning, isFalse);
+      for (final uci in ['e2e4', 'g1f3', 'f1b5']) {
+        play(async, lesson, uci);
+      }
+      async.flushMicrotasks();
+      expect(lesson.state, isA<SittingOver>());
+      expect(files.reviews.values.single.lastRating, 'good');
+      expect(lesson.tally.lines, 1, reason: 'one line, however often');
+      expect(lesson.tally.wrong, 1, reason: 'the replay is not a second miss');
     });
   });
 
@@ -347,7 +435,7 @@ void main() {
       expect(progress.stale, isTrue);
       trainer.learn();
       expect(trainer.lesson, isNull, reason: 'a stale scope is not trained');
-      trainer.reload();
+      unawaited(trainer.reload());
       async.flushMicrotasks();
       expect(trainer.state, isA<TrainerUnsaved>());
       trainer.retryPending();
@@ -675,7 +763,7 @@ void main() {
     fakeAsync((async) {
       final trainer = ready(async)..learn();
       expect(trainer.lesson, isNotNull);
-      trainer.reload();
+      unawaited(trainer.reload());
       async.flushMicrotasks();
       expect(trainer.lesson, isNull);
       expect(trainer.board.value, isNull);

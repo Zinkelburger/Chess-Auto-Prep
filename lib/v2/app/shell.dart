@@ -573,6 +573,7 @@ class _ShellState extends State<Shell> with ListeningState<Shell> {
         moveMenu: _view.moveMenu,
         tabBody: _tabBody,
         boardClaim: _claim,
+        lesson: _train.lines.board,
         onBoardMove: _boardMove,
         onEngineMove: _engineMove,
         onExplorerGame: (game) => unawaited(

@@ -1,6 +1,10 @@
 # Repertoire trainer
 
-Status: implemented in v2 as the **Train** tab on the workspace reading card.
+Status: implemented in v2 as the **Repertoire trainer** mode and as the
+**Train** tab on the Repertoire builder's reading card. The mode lists the
+repertoires on the left and pins Train first on the card, with Moves and
+Explorer beside it; the builder's Train tab is the same trainer. A PGN
+opened or pasted in the trainer becomes a repertoire and stays there.
 Owners: `lib/v2/features/trainer/`, `lib/v2/chess/training/`,
 `lib/v2/storage/training_store.dart`.
 
@@ -27,8 +31,13 @@ history and stay out of queues until included again.
   taken back for you to play; the whole line follows as a quiz. New lines are
   rated automatically: Good after a clean quiz, Again after mistakes.
 - **Review** takes due lines, oldest due first (all by default). Play from
-  memory, then rate Again, Hard, Good or Easy. Again returns the line to the
-  end of the Learn/Review sitting.
+  memory. The line is graded from its mistakes, as Chessable grades it: Good
+  when every move was right, Again when any was missed (a forgotten move
+  must come back soon; Hard would still lengthen the interval). With
+  **Rate reviews myself** on, the line instead waits for Again, Hard, Good
+  or Easy, Anki's way, each showing its interval; the mistakes' grade is the
+  filled button and Space takes it. Again returns the line to the end of the
+  Learn/Review sitting.
 
 Sittings fix their set when started. Play on the board or type SAN/UCI in the
 move field. The board faces your side and engine analysis pauses while the
@@ -36,10 +45,12 @@ sitting holds it. Incorrect moves show the expected move, then play the
 correction. Missed quiz moves are replayed at the end unless disabled.
 Nothing beyond the shown moves is printed in the lesson move list. The chapter
 outline is hidden while the lesson owns the board, so its previews cannot
-reveal answers; it returns when the lesson finishes or is left.
+reveal answers; it returns when the lesson finishes or is left. For the same
+reason every other card tab (Moves, Replies, Explorer, Search) reads
+`Hidden while training` until then.
 
-**Space** advances a learning step, **1–4** rate, **↓** skips, **Escape** returns
-to the list. Skip and Restart line are available during the lesson. The recap
+**Space** advances a learning step or takes the offered grade, **1–4** rate,
+**↓** skips, **Escape** returns to the list. Skip and Restart line are available during the lesson. The recap
 shows completed lines and right/wrong answers. Leaving before rating leaves
 the line's schedule unchanged; accepted writes remain owned by the app.
 
@@ -47,7 +58,8 @@ the line's schedule unchanged; accepted writes remain owned by the app.
 
 **Training actions → Training settings…** opens the Training settings group.
 The app settings also contain it. New-line and review limits accept
-0 for all lines; reply delay is 200–2000 ms. Replay missed moves is optional. Preferences persist in the existing settings file and
+0 for all lines; reply delay is 200–2000 ms. Replay missed moves and Rate
+reviews myself are optional. Preferences persist in the existing settings file and
 are captured for a sitting, so changing them does not alter an active lesson.
 
 The list shows learned/due/untrained/excluded counts. Per-line actions read a

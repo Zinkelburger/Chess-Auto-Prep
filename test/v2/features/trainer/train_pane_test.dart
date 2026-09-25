@@ -6,6 +6,9 @@ import 'package:chess_auto_prep/v2/features/trainer/trainer.dart';
 import 'package:chess_auto_prep/v2/features/trainer/training_scope.dart';
 import 'package:chess_auto_prep/v2/features/trainer/lesson_view.dart';
 import 'package:chess_auto_prep/v2/features/trainer/train_pane.dart';
+import 'package:chess_auto_prep/v2/chess/training/training_options.dart';
+import 'package:chess_auto_prep/v2/storage/settings.dart';
+import 'package:chess_auto_prep/v2/storage/settings_store.dart';
 import 'package:chess_auto_prep/v2/storage/training_store.dart';
 import 'package:chess_auto_prep/v2/engines/engine_supervisor.dart';
 import 'package:chess_auto_prep/v2/ui/theme.dart';
@@ -57,10 +60,15 @@ void main() {
     fixture.dispose();
   });
 
-  Future<void> pump(WidgetTester tester) async {
+  Future<void> pump(WidgetTester tester, {bool rateReviews = false}) async {
     reads = [];
+    final settings = SettingsStore(
+      initial: Settings(training: TrainingOptions(rateReviews: rateReviews)),
+    );
+    addTearDown(settings.dispose);
     trainer = Trainer(
       session: fixture.session,
+      settings: settings,
       chapters: ScopeReader(files: ScriptedFiles(), documents: fixture.store),
       files: files,
       analysis: analysis,
@@ -203,21 +211,22 @@ void main() {
     expect(find.text('Your move'), findsOneWidget, reason: 'asked again');
   });
 
-  testWidgets('a review ends in the four ratings, and a key picks one', (
-    tester,
-  ) async {
+  Review dueItalian(LineKey italian) => Review(
+    key: italian,
+    lineName: 'Italian',
+    intervalDays: 4,
+    lastRating: 'good',
+    due: DateTime.now().subtract(const Duration(hours: 1)),
+  );
+
+  testWidgets('rating myself, a review ends in the four ratings with the '
+      "mistakes' grade filled, and a key picks one", (tester) async {
     final italian = (
       source: fixture.ref.path,
       id: 'line_ZTQgZTUgTmYzIE5jNiBCYz',
     );
-    files.reviews[italian] = Review(
-      key: italian,
-      lineName: 'Italian',
-      intervalDays: 4,
-      lastRating: 'good',
-      due: DateTime.now().subtract(const Duration(hours: 1)),
-    );
-    await pump(tester);
+    files.reviews[italian] = dueItalian(italian);
+    await pump(tester, rateReviews: true);
     expect(find.text('Due now'), findsOneWidget);
     await tester.tap(find.text('Review 1'));
     await tester.pumpAndSettle();
@@ -226,8 +235,12 @@ void main() {
     }
     expect(find.text('Line complete!'), findsOneWidget);
     expect(find.text('The Italian.'), findsOneWidget, reason: 'the note');
-    expect(find.text('Good · 10d'), findsOneWidget);
-    expect(find.text('Again · now'), findsOneWidget);
+    expect(
+      find.widgetWithText(FilledButton, 'Good · 10d'),
+      findsOneWidget,
+      reason: 'a clean line earns Good, which Space would take',
+    );
+    expect(find.widgetWithText(OutlinedButton, 'Again · now'), findsOneWidget);
     await key(tester, LogicalKeyboardKey.digit3);
     expect(files.reviews[italian]!.intervalDays, 10);
     expect(find.text('Review session done.'), findsOneWidget);
@@ -235,6 +248,23 @@ void main() {
     await tester.tap(find.text('Back to lines'));
     await tester.pumpAndSettle();
     expect(find.text('Learned · in 10d'), findsOneWidget);
+  });
+
+  testWidgets('by default a review is graded without asking', (tester) async {
+    final italian = (
+      source: fixture.ref.path,
+      id: 'line_ZTQgZTUgTmYzIE5jNiBCYz',
+    );
+    files.reviews[italian] = dueItalian(italian);
+    await pump(tester);
+    await tester.tap(find.text('Review 1'));
+    await tester.pumpAndSettle();
+    for (final uci in ['e2e4', 'g1f3', 'f1c4']) {
+      await play(tester, uci);
+    }
+    expect(find.textContaining('Good ·'), findsNothing);
+    expect(files.reviews[italian]!.lastRating, 'good');
+    expect(find.text('Review session done.'), findsOneWidget);
   });
 
   testWidgets('a line is left out of training from its menu', (tester) async {

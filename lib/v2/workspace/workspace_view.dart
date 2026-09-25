@@ -41,6 +41,7 @@ final class WorkspaceHooks {
     this.moveMenu,
     this.tabBody,
     this.boardClaim,
+    this.lesson,
     this.onBoardMove,
     this.onEngineMove,
     this.onExplorerGame,
@@ -66,6 +67,10 @@ final class WorkspaceHooks {
   /// A position another owner is showing on the board instead of the
   /// document's, while it holds one: a lesson.
   final ValueListenable<BoardClaim?>? boardClaim;
+
+  /// The lesson's hold on the board, while one runs: every tab but Train
+  /// would read out the moves it asks for, so they wait until it ends.
+  final ValueListenable<BoardClaim?>? lesson;
 
   /// Opens a chapter in the builder: the draft a search's lines went to.
   final ValueChanged<ChapterRef>? onOpenChapter;
@@ -305,6 +310,15 @@ class _Tabbed extends StatelessWidget {
     WorkspaceTab.book => _supplied(context, tab),
   };
 
+  /// The tabs that show the document's moves or what follows them.
+  static bool _tellsAnswers(WorkspaceTab tab) => switch (tab) {
+    WorkspaceTab.moves ||
+    WorkspaceTab.replies ||
+    WorkspaceTab.explorer ||
+    WorkspaceTab.search => true,
+    WorkspaceTab.train || WorkspaceTab.puzzle || WorkspaceTab.book => false,
+  };
+
   Widget _supplied(BuildContext context, WorkspaceTab tab) =>
       hooks.tabBody?.call(context, tab) ?? const SizedBox.shrink();
 
@@ -324,7 +338,21 @@ class _Tabbed extends StatelessWidget {
             ),
             child: PaneTabStrip(tabs: tabs),
           ),
-          Expanded(child: _body(context, tabs.selected)),
+          Expanded(
+            child: ValueListenableBuilder<BoardClaim?>(
+              valueListenable: hooks.lesson ?? const _NoClaim(),
+              builder: (context, lesson, _) =>
+                  lesson != null && _tellsAnswers(tabs.selected)
+                  ? Padding(
+                      padding: const EdgeInsets.all(readingCardInset),
+                      child: Text(
+                        'Hidden while training',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    )
+                  : _body(context, tabs.selected),
+            ),
+          ),
         ],
       ),
     );
