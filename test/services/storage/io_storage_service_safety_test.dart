@@ -117,4 +117,13 @@ void main() {
       expect(File(p.join(temp.path, 'escape')).existsSync(), isFalse);
     },
   );
+
+  test('a deleted repertoires folder does not block other files', () async {
+    await storage.writeFile('settings.json', 'first');
+    repertoires.deleteSync(recursive: true);
+
+    await storage.writeFile('settings.json', 'second');
+
+    expect(await storage.readFile('settings.json'), 'second');
+  });
 }

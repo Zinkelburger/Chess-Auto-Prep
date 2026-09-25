@@ -47,6 +47,7 @@ class IOStorageService implements StorageService {
   repertoirePublicationHook;
   Future<NativeRepertoirePublicationStore>? _publicationStore;
   Future<NativeRepertoirePublicationStore> _publications() async {
+    await _forgetStaleLibraryGuards();
     final result = _publicationStore ??= _createPublications();
     try {
       return await result;
@@ -87,7 +88,25 @@ class IOStorageService implements StorageService {
   final Future<void> Function(RepertoireMoveStep)? repertoireMoveHook;
   Future<RepertoireDirectoryMutations>? _directoryMutations;
 
+  /// The folders [_directoryMutations] and [_publicationStore] were built for.
+  String? _libraryFolders;
+
+  /// Rebuilds the cached library guards when the configured folders change,
+  /// so they never keep pointing at a folder that has gone away.
+  Future<void> _forgetStaleLibraryGuards() async {
+    final folders = [
+      (await _documentsRoot()).path,
+      (await _supportRoot()).path,
+      (await _repertoiresRoot(create: false)).path,
+    ].join('\n');
+    if (folders == _libraryFolders) return;
+    _libraryFolders = folders;
+    _directoryMutations = null;
+    _publicationStore = null;
+  }
+
   Future<RepertoireDirectoryMutations> _moves() async {
+    await _forgetStaleLibraryGuards();
     final result = _directoryMutations ??= _createMoves();
     try {
       return await result;

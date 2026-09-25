@@ -12,6 +12,10 @@ const _before = '[Event "Opening"]\n[ChapterName "Before"]\n\n1. e4 e5 *\n';
 const _after = '[Event "Opening"]\n[ChapterName "After"]\n\n1. e4 e5 *\n';
 const _booksBefore = '{"version":1,"books":[],"unknown":"preserve before"}';
 const _booksAfter = '{"version":1,"books":[],"unknown":"preserve after"}';
+
+/// [json] cut off halfway, as a kill mid-write leaves it.
+String _cutOff(String json) => json.substring(0, json.length ~/ 2);
+
 const _training = [
   'repertoire_reviews.csv',
   'repertoire_move_progress.csv',
@@ -300,7 +304,7 @@ void main() {
           'extension' => changed(path: p.join(documents.path, 'training.csv')),
           'utf8' => changed(after: '\uD800'),
           'nul' => changed(after: 'pgn\u0000'),
-          _ => changed(afterBooks: '{'),
+          _ => changed(afterBooks: _cutOff(_booksAfter)),
         };
         await expectLater(
           engine().commit(value),
@@ -330,7 +334,9 @@ void main() {
           case 'id':
             data['id'] = 'another-id';
         }
-        final text = invalid == 'json' ? '{' : jsonEncode(data);
+        final text = invalid == 'json'
+            ? _cutOff(jsonEncode(data))
+            : jsonEncode(data);
         await note().writeAsString(text);
         await engine().recover();
         await expectPair(_before, _booksBefore);
@@ -351,7 +357,7 @@ void main() {
 
   test('the gate opens despite a damaged record', () async {
     await note().parent.create();
-    await note().writeAsString('{');
+    await note().writeAsString(_cutOff(_booksBefore));
     final gate = RecoveryGate(documents: documents, support: support);
     expect(await gate.run(() async => 'opened'), 'opened');
     expect(await quarantined(), ['compound-writes-rename-1.json']);
@@ -360,7 +366,7 @@ void main() {
   test('a leftover staged journal from a kill is removed', () async {
     await note().parent.create();
     final stage = File(p.join(note().parent.path, '.rename-1.json.v2-tmp'));
-    await stage.writeAsString('{"half":');
+    await stage.writeAsString(_cutOff(_booksBefore));
     await engine().recover();
     expect(await stage.exists(), isFalse);
     expect(await quarantined(), isEmpty);

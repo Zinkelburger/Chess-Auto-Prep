@@ -43,6 +43,9 @@ class RepertoireDirectoryMutations {
 
   /// Distinct from each file lock; the lock order is domain, namespace, file.
   Future<T> guard<T>(Future<T> Function() action) async {
+    // A deleted library folder must not block every Documents read and write
+    // behind this guard; the app recreates it on demand anyway.
+    if (!await root.exists()) await root.create(recursive: true);
     final canonicalRoot = await root.resolveSymbolicLinks();
     return withFileOperationLock(
       p.join(canonicalRoot, '.cap-directory-domain'),

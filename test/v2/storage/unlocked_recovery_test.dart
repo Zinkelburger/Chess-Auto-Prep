@@ -21,6 +21,9 @@ import 'package:path/path.dart' as p;
 
 import 'store_fixture.dart';
 
+/// [json] cut off halfway, as a kill mid-write leaves it.
+String _cutOff(String json) => json.substring(0, json.length ~/ 2);
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late StoreFixture fixture;
@@ -78,7 +81,7 @@ void main() {
     final stage = await leave(
       'compound-writes',
       '.1-abc.json.v2-tmp',
-      '{"version": 1, "id": "1-a',
+      _cutOff('{"version": 1, "id": "1-abc", "state": "committing"}'),
     );
     final store = restart();
     expect(await store.open(chapter), isA<Opened>());
