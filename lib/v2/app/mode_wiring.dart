@@ -34,13 +34,11 @@ DocumentModes wireDocumentModes(
   DocumentSession session,
   DocumentSaver saver,
   Books books,
-  RepertoireCatalog catalog, {
-  LibraryTrainingGuard? withTrainingRetired,
-}) {
+  RepertoireCatalog catalog,
+) {
   final library = Library(
     files: env.chapterFiles,
     pendingWrites: env.pendingWrites,
-    withTrainingRetired: withTrainingRetired,
     catalog: catalog,
     documents: env.store,
     saver: saver,

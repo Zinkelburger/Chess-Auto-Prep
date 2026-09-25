@@ -70,9 +70,13 @@ The four existing Documents files remain the source of truth:
 `repertoire_reviews.csv`, `repertoire_review_history.csv`,
 `repertoire_move_progress.csv`, `repertoire_move_attempts.jsonl`.
 SM-2 scheduling and stable line IDs remain compatible with the older app.
-Writes are serialized and conflict checked; unresolved accepted writes offer
-retry and block replacing their scope. Chapter/line moves retain progress
-through the shared document mutation workflow. The PGN header schedule mirror
+Writes are serialized and conflict checked; a rating that did not save offers
+Retry on the lesson and never holds up the next sitting, a reload or a save of
+the chapter being trained. Saving, renaming or deleting a chapter never waits
+on training: the trainer follows the workspace's own saves and reads the scope
+again after anything else. A chapter that cannot be read is left out of a
+repertoire or book scope. Chapter/line moves retain progress through the
+shared document mutation workflow. The PGN header schedule mirror
 is not used.
 
 ## Remaining scope

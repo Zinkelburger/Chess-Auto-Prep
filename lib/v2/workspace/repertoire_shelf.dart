@@ -1,14 +1,12 @@
 import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
-import 'package:path/path.dart' as p;
 
 import '../chess/pgn/chapter.dart';
 import '../chess/pgn/chapter_sections.dart';
 import '../chess/repertoire_index.dart';
 import '../diagnostics/log.dart';
 import '../storage/chapter_files.dart';
-import '../storage/book_snapshot.dart';
 import '../storage/document_ref.dart';
 import '../storage/pgn_document_store.dart';
 
@@ -44,9 +42,8 @@ final class RepertoireShelf extends ChangeNotifier {
   var _generation = 0;
   var _version = 0;
   String? _problem;
-  Repertoires? _snapshot;
 
-  /// Why the previous complete view remains stale, if rebuilding failed.
+  /// Why the last read failed, when it did; the previous index stays.
   String? get problem => _problem;
   int get version => _version;
 
@@ -57,40 +54,6 @@ final class RepertoireShelf extends ChangeNotifier {
   /// Whether the files must be read again before they are believed: they
   /// changed, or a read of them has not finished.
   bool get stale => _disposed || _stale || _reading != null;
-
-  /// Validate the same committed shelf a consumer actually used, together
-  /// with related PGNs (null means absent). A newer shelf cannot certify work
-  /// computed from older indexes, even if its own files are now current.
-  Future<RepertoireValidation> validate({
-    required int version,
-    Map<String, Revision?> additional = const {},
-    BookSource? book,
-    Set<String>? boundaries,
-  }) async {
-    final snapshot = _snapshot;
-    if (snapshot == null || stale || version != _version) {
-      return const RepertoireChanged();
-    }
-    final result = await _files.validate(
-      boundaries == null ? snapshot : snapshot.within(boundaries),
-      observed: {
-        for (final entry in _revisions.entries)
-          if (boundaries == null ||
-              boundaries.any(
-                (root) => root == entry.key || p.isWithin(root, entry.key),
-              ))
-            entry.key: entry.value,
-      },
-      additional: additional,
-      book: book,
-    );
-    return stale || version != _version ? const RepertoireChanged() : result;
-  }
-
-  /// Empty comparisons use only the persisted book selection, without claiming
-  /// to have read repertoire membership or indexes.
-  Future<RepertoireValidation> validateBook(BookSource? source) =>
-      _files.validate(null, observed: const {}, book: source);
 
   /// [ref]'s index in the last complete snapshot, or null if it was absent.
   RepertoireIndex? indexOf(ChapterRef ref) => _indexed[ref];
@@ -139,8 +102,10 @@ final class RepertoireShelf extends ChangeNotifier {
       if (listing is! Repertoires) {
         throw StateError((listing as RepertoiresUnreadable).detail);
       }
-      if (listing.unreadable.isNotEmpty) {
-        throw StateError(listing.unreadable.first.detail);
+      // A folder that cannot be read is left out, as the list leaves it
+      // out; the rest of the book is still worth reading.
+      for (final folder in listing.unreadable) {
+        log.w('read ${folder.path} for the index', folder.detail);
       }
       final listed = [
         for (final folder in listing.folders)
@@ -157,25 +122,18 @@ final class RepertoireShelf extends ChangeNotifier {
         await _index(chapters, indexed, revisions);
         if (gone() || generation != _generation) return _ReadResult.superseded;
       }
-      final validation = await _files.validate(listing, observed: revisions);
-      if (gone() || generation != _generation) return _ReadResult.superseded;
-      switch (validation) {
-        case RepertoireChanged():
-          throw StateError(
-            'The repertoire files changed while indexing. Refresh to retry.',
-          );
-        case RepertoireValidationFailed(:final detail):
-          throw StateError(detail);
-        case RepertoireCurrent():
-          _snapshot = listing;
-          _indexed = indexed;
-          _revisions = revisions;
-          _refs = List.unmodifiable(listed);
-          _stale = false;
-          _problem = null;
-          _version++;
-          return _ReadResult.committed;
-      }
+      // A file changed while this read went on is told to [forget], which
+      // reads again; there is nothing to check here first.
+      _indexed = indexed;
+      _revisions = revisions;
+      _refs = List.unmodifiable([
+        for (final ref in listed)
+          if (indexed.containsKey(ref)) ref,
+      ]);
+      _stale = false;
+      _problem = null;
+      _version++;
+      return _ReadResult.committed;
     } on Object catch (error) {
       if (gone() || generation != _generation) return _ReadResult.superseded;
       log.w('read the repertoire index', error);
@@ -203,19 +161,25 @@ final class RepertoireShelf extends ChangeNotifier {
           revisions[file.path] = revision;
           return;
         }
-        final indexes = await _indexesIn(
-          text,
-          name: file.fileName,
-          sections: [for (final chapter in chapters) chapter.section],
-        );
-        for (final (at, chapter) in chapters.indexed) {
-          indexed[chapter] = indexes[at];
+        try {
+          final indexes = await _indexesIn(
+            text,
+            name: file.fileName,
+            sections: [for (final chapter in chapters) chapter.section],
+          );
+          for (final (at, chapter) in chapters.indexed) {
+            indexed[chapter] = indexes[at];
+          }
+          revisions[file.path] = revision;
+        } on Object catch (error) {
+          log.w('index ${file.path}', error);
         }
-        revisions[file.path] = revision;
+      // A chapter gone or unreadable is left out of the book, not the
+      // reason there is no book.
       case Absent():
-        throw StateError('${file.path} is missing.');
+        return;
       case Unreadable(:final detail):
-        throw StateError('${file.path}: $detail');
+        log.w('read ${file.path} for the index', detail);
     }
   }
 }

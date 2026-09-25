@@ -120,18 +120,6 @@ class Lesson extends ChangeNotifier {
   ProgressWrite? _unlogged;
   Timer? _timer;
   bool _disposed = false;
-  bool _suspended = false;
-
-  void suspend() {
-    _suspended = true;
-    _timer?.cancel();
-  }
-
-  void resume() {
-    if (_disposed || !_suspended) return;
-    _suspended = false;
-    if (_state is Drilling) _arm();
-  }
 
   TrainingLine get line => _drill.line;
   Drill get drill => _drill;
@@ -156,14 +144,11 @@ class Lesson extends ChangeNotifier {
     fen: _drill.fen,
     orientation: line.side,
     lastMove: _drill.lastMove,
-    onMove: !_suspended && _state is Drilling && _drill.stage is Asking
-        ? play
-        : null,
+    onMove: _state is Drilling && _drill.stage is Asking ? play : null,
   );
 
   /// The user's move on the board.
   void play(String uci) {
-    if (_disposed || _suspended) return;
     if (_state is! Drilling) return;
     final answered = _drill.answer(uci);
     if (answered == null) return;
@@ -180,7 +165,6 @@ class Lesson extends ChangeNotifier {
 
   /// Goes on from a move being shown.
   void next() {
-    if (_disposed || _suspended) return;
     if (_state is Drilling && _drill.stage is Showing) _changed(_drill.next());
   }
 
@@ -193,7 +177,6 @@ class Lesson extends ChangeNotifier {
 
   /// The user's rating of the line just reviewed.
   void rate(Rating rating) {
-    if (_disposed || _suspended) return;
     if (_state case AwaitingRating(:final clean)) {
       unawaited(_save(rating, clean: clean));
     }
@@ -201,7 +184,6 @@ class Lesson extends ChangeNotifier {
 
   /// The rating that could not be written, again.
   void retry() {
-    if (_disposed || _suspended) return;
     if (_state case LineNotSaved(:final rating, :final clean)) {
       unawaited(_save(rating, clean: clean, again: true));
     }
@@ -209,7 +191,6 @@ class Lesson extends ChangeNotifier {
 
   /// Drops the line from the sitting, unrated and unwritten.
   void skip() {
-    if (_disposed || _suspended) return;
     if (_state is SavingLine || _state is SittingOver) return;
     _nextLine();
     notifyListeners();
@@ -217,7 +198,6 @@ class Lesson extends ChangeNotifier {
 
   /// The line again from its start, walkthrough and all if it is still new.
   void restart() {
-    if (_disposed || _suspended) return;
     if (_state is SavingLine || _state is SittingOver) return;
     _state = const Drilling();
     _changed(
@@ -258,7 +238,6 @@ class Lesson extends ChangeNotifier {
 
   void _arm() {
     _timer?.cancel();
-    if (_disposed || _suspended) return;
     final wait = switch (_drill.stage) {
       Finished() => _graded && _state is Drilling ? finishedPause : null,
       Missed() => correctionDelay,
@@ -298,7 +277,7 @@ class Lesson extends ChangeNotifier {
     _state = const SavingLine();
     notifyListeners();
     final result = again
-        ? await _progress.retry()
+        ? await _progress.retry(line)
         : await _progress.finished(line, rating, clean: clean);
     if (_disposed) return;
     if (result is! ProgressWritten) {

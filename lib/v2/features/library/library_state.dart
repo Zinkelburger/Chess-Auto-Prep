@@ -44,13 +44,7 @@ sealed class LibraryResult {
 
 /// The change was made.
 final class LibraryDone extends LibraryResult {
-  const LibraryDone({
-    this.training = const records.NothingToRepoint(),
-    this.draft = false,
-  });
-
-  /// The change is held in the current draft and has not been committed.
-  final bool draft;
+  const LibraryDone({this.training = const records.NothingToRepoint()});
 
   /// Whether the training rows that named the old path followed it. A
   /// repertoire's chapters are folded into one answer: any problem wins over
@@ -107,9 +101,7 @@ final class LibraryConflicted extends LibraryResult {
 
 /// The change could not be carried out. The library is as it was.
 final class LibraryFailure extends LibraryResult {
-  const LibraryFailure(this.detail, {this.retry});
-
-  final Future<LibraryResult> Function()? retry;
+  const LibraryFailure(this.detail);
 
   /// For the log; the widget writes the sentence.
   final String detail;

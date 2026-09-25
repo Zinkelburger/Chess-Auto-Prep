@@ -641,24 +641,12 @@ final class DocumentSession extends ChangeNotifier {
     if (ref == null || _opening != null || _restoring) {
       return const UndoRefused();
     }
-    final guard = _saver.writeGuard?.call();
     final ticket = _opens;
-    try {
-      final problem = await guard?.pauseForWrite();
-      if (problem != null) return UndoRefused(problem);
-      if (ticket != _opens || ref != _source) {
-        return const UndoRefused('The open document changed before undo.');
-      }
-      final result = await _saver.undo();
-      if (result case Restored(:final text) when _stillOn(ref, ticket)) {
-        await _showRestored(_source!, ticket, text);
-      }
-      return result;
-    } on Object catch (error) {
-      return UndoRefused(error.toString());
-    } finally {
-      guard?.resumeAfterWrite();
+    final result = await _saver.undo();
+    if (result case Restored(:final text) when _stillOn(ref, ticket)) {
+      await _showRestored(_source!, ticket, text);
     }
+    return result;
   }
 
   /// Retries a failed publication, including restoring the displayed chapter

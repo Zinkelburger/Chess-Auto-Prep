@@ -56,17 +56,33 @@ void main() {
     files.listing = const RepertoiresUnreadable('blocked');
     await catalog.refresh();
     expect(catalog.repertoires.single.name, 'A');
-    expect(catalog.stale, isTrue);
-    expect(catalog.problem, 'blocked');
-    expect(catalog.version, 1);
     files.listing = Repertoires([
       folder('B', ['Main']),
     ]);
     await catalog.refresh();
     expect(catalog.repertoires.single.name, 'B');
-    expect(catalog.stale, isFalse);
-    expect(catalog.problem, isNull);
-    expect(catalog.version, 2);
+  });
+
+  test('one unreadable folder leaves the readable ones listed', () async {
+    final files = ScriptedFiles(
+      listing: Repertoires([
+        folder('A', ['Main']),
+      ]),
+    );
+    final catalog = RepertoireCatalog(files: files, root: '/repertoires');
+    addTearDown(catalog.dispose);
+    await catalog.refresh();
+    files.listing = Repertoires(
+      [
+        folder('A', ['Main']),
+        folder('C', ['Main']),
+      ],
+      unreadable: const [
+        UnreadableFolder(name: 'B', path: '/repertoires/B', detail: 'denied'),
+      ],
+    );
+    await catalog.refresh();
+    expect(catalog.repertoires.map((f) => f.name), ['A', 'C']);
   });
 
   test(
@@ -86,17 +102,14 @@ void main() {
       var notifications = 0;
       catalog.addListener(() {
         notifications++;
-        if (catalog.stale) {
-          expect(catalog.changes, isNotEmpty);
-          expect(catalog.reloaded, isFalse);
-        }
+        expect(catalog.changes, isNotEmpty);
+        expect(catalog.reloaded, isFalse);
       });
       const a = DocumentRef('/repertoires/A/Main.pgn');
       const b = DocumentRef('/repertoires/B/Main.pgn');
       files.hold = true;
       await repo.create(a, '*');
       expect(notifications, 1);
-      expect(catalog.stale, isTrue);
       await repo.create(b, '*');
       final done = catalog.synchronize();
       files.releaseNext();

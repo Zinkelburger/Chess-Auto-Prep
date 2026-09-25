@@ -65,7 +65,6 @@ void main() {
         folder('KID', ['Main']),
       ]);
       await fixture.parts.env.store.create(ref('benko', 'Sibling'), sicilian);
-      expect(fixture.parts.catalog.stale, isTrue);
       expect(trainer.lesson, isNull);
       expect(workspace.gaps.currentWalk, isNull);
       expect(workspace.gaps.canNextGap, isFalse);
@@ -136,7 +135,7 @@ void main() {
       expect(c5().elsewhere, isNull);
       expect(c5().gap, isTrue);
 
-      await workspace.gaps.nextGap();
+      workspace.gaps.nextGap();
       expect(workspace.gaps.highlighted, isNotNull);
       fixture.chapterFiles.listing = Repertoires([
         folder('benko', ['Main', 'Sicilian']),

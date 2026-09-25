@@ -77,6 +77,37 @@ void main() {
     expect(fixture.textAt(kid.chapters.last.path), isNotNull);
   });
 
+  test(
+    'a repertoire whose chapter went outside the app deletes on the next try',
+    () async {
+      final library = await start();
+      final gone = kid.chapters.first;
+      fixture.store.documents.remove(gone);
+      expect(await library.deleteRepertoire(kid), isA<LibraryStoppedAt>());
+      // The list read again no longer has the chapter; nothing of the first
+      // attempt is kept to get in the way of the second.
+      fixture.files.listing = Repertoires([
+        folder('KID', ['Main']),
+      ]);
+      await library.refresh();
+      final result = await library.deleteRepertoire(library.repertoires.single);
+      expect(result, isA<LibraryDone>());
+      expect(fixture.textAt(kid.chapters.last.path), isNull);
+    },
+  );
+
+  test('a move that failed can simply be asked for again', () async {
+    final library = await start();
+    final chapter = kid.chapters.last;
+    fixture.store.moves.add(const IoFailure('disk full'));
+    expect(
+      await library.renameChapter(chapter, 'Renamed'),
+      isA<LibraryFailure>(),
+    );
+    expect(await library.renameChapter(chapter, 'Renamed'), isA<LibraryDone>());
+    expect(fixture.textAt('/repertoires/KID/Renamed.pgn'), isNotNull);
+  });
+
   test('an import lands whole under the folder it is given', () async {
     final library = await start();
     final result = await library.importText(

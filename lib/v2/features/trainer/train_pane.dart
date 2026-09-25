@@ -53,24 +53,7 @@ class _TrainPaneState extends State<TrainPane> {
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: widget.trainer,
-      builder: (context, _) {
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            AbsorbPointer(
-              absorbing: widget.trainer.documentWriting,
-              child: _content(context),
-            ),
-            if (widget.trainer.documentWriting)
-              ColoredBox(
-                color: Theme.of(
-                  context,
-                ).colorScheme.surface.withValues(alpha: 0.9),
-                child: const _Sentence('Saving the training source…'),
-              ),
-          ],
-        );
-      },
+      builder: (context, _) => _content(context),
     );
   }
 
@@ -78,12 +61,6 @@ class _TrainPaneState extends State<TrainPane> {
     final trainer = widget.trainer;
     if (trainer.lesson case final lesson?) {
       return LessonView(lesson: lesson, trainer: trainer, moves: widget.moves);
-    }
-    if (trainer.state is TrainerReady && trainer.unsavedProgress != null) {
-      return _Failed(
-        sentence: unsavedProgressProblem(trainer.unsavedProgress!),
-        onRetry: trainer.retryPending,
-      );
     }
     return switch (trainer.state) {
       TrainerIdle() ||
@@ -119,10 +96,6 @@ class _TrainPaneState extends State<TrainPane> {
       TrainerFailed(:final failure) => _Failed(
         sentence: progressProblem(failure, doing: 'read the training progress'),
         onRetry: trainer.reload,
-      ),
-      TrainerUnsaved(:final failure) => _Failed(
-        sentence: unsavedProgressProblem(failure),
-        onRetry: trainer.retryPending,
       ),
       final TrainerReady ready => LineList(
         trainer: trainer,

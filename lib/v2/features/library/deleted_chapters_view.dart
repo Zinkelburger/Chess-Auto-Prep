@@ -98,10 +98,7 @@ class _DeletedChaptersViewState extends State<DeletedChaptersView> {
 
   Widget _body(BuildContext context) => switch (_listing) {
     null => const Center(child: CircularProgressIndicator()),
-    DeletedUnreadable(:final detail) => _Unreadable(
-      detail: detail,
-      onRetry: _reload,
-    ),
+    DeletedUnreadable() => _Unreadable(onRetry: _reload),
     DeletedChapters(:final chapters) when chapters.isEmpty => const _Message(
       'Nothing deleted\nChapters you delete can be restored here.',
     ),
@@ -233,24 +230,21 @@ class _DeletedRow extends StatelessWidget {
 }
 
 class _Unreadable extends StatelessWidget {
-  const _Unreadable({required this.detail, required this.onRetry});
+  const _Unreadable({required this.onRetry});
 
-  final String detail;
   final Future<void> Function() onRetry;
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
+    return Padding(
       padding: const EdgeInsets.all(Space.l),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Could not read deleted chapters.',
-            style: Theme.of(context).textTheme.bodyMedium,
+            'Could not read the deleted chapters. Please try again.',
+            style: Theme.of(context).textTheme.bodySmall,
           ),
-          const SizedBox(height: Space.s),
-          Text(detail, style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(height: Space.s),
           FilledButton(onPressed: onRetry, child: const Text('Retry')),
         ],

@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:chess_auto_prep/v2/chess/fen.dart';
 import 'package:chess_auto_prep/v2/chess/pgn/game_tree.dart';
 import 'package:chess_auto_prep/v2/engines/maia/move_policy.dart';
@@ -114,7 +112,7 @@ void main() {
   test('Next gap takes the board to the gap and marks it; moving on clears '
       'the mark', () async {
     await pumpEventQueue();
-    await gaps.nextGap();
+    gaps.nextGap();
     expect(fixture.session.cursor, NodePath.of([0]));
     expect((gaps.highlighted as MissingReply).san, 'c5');
     fixture.session.back();
@@ -163,7 +161,7 @@ void main() {
 
   test('another chapter never shows the walk of the one before', () async {
     await pumpEventQueue();
-    await gaps.nextGap();
+    gaps.nextGap();
     expect(gaps.walk, isNotNull);
     final ref = chapterRef('KID', 'Other');
     fixture.store.documents[ref] = Opened(other, scriptedRevision(other));
@@ -173,7 +171,7 @@ void main() {
     expect(gaps.walk, isNull);
     expect(gaps.walking, isTrue);
     expect(gaps.highlighted, isNull);
-    await gaps.nextGap();
+    gaps.nextGap();
     expect(fixture.session.cursor, const NodePath.root());
     files
       ..hold = false
@@ -212,102 +210,21 @@ void main() {
     await pumpEventQueue();
     expect(gaps.walk, isNot(same(walked)));
   });
-  test('a pending rebuild cannot navigate using the previous walk', () async {
-    await pumpEventQueue();
-    expect(gaps.walk, isNotNull);
-    files.hold = true;
-    await settings.update(settings.value.copyWith(opponentElo: 1500));
-    await gaps.nextGap();
-    await pumpEventQueue();
-    expect(fixture.session.cursor, const NodePath.root());
-    expect(gaps.highlighted, isNull);
-    files
-      ..hold = false
-      ..releaseAll();
-    await pumpEventQueue();
-  });
 
   test(
-    'a changed complete read set cannot publish a current gap walk',
+    'a walk still on its way cannot be navigated with the last one',
     () async {
       await pumpEventQueue();
-      files.validateWith = (_, _) async => const RepertoireChanged();
-      gaps.refreshAnswers();
-      await pumpEventQueue();
-      expect(gaps.walk, isNull);
-      expect(gaps.walking, isFalse);
-    },
-  );
-  test(
-    'navigation validation cannot adopt a gap after settings changed',
-    () async {
-      await pumpEventQueue();
-      final checked = Completer<RepertoireValidation>();
-      var first = true;
-      files.validateWith = (_, _) async {
-        if (first) {
-          first = false;
-          return checked.future;
-        }
-        return const RepertoireCurrent();
-      };
-      final navigating = gaps.nextGap();
-      await pumpEventQueue();
-      await settings.update(settings.value.copyWith(coverOnceIn: 20));
-      checked.complete(const RepertoireCurrent());
-      await navigating;
-      await pumpEventQueue();
+      expect(gaps.walk, isNotNull);
+      files.hold = true;
+      await settings.update(settings.value.copyWith(opponentElo: 1500));
+      gaps.nextGap();
       expect(fixture.session.cursor, const NodePath.root());
       expect(gaps.highlighted, isNull);
-    },
-  );
-
-  test(
-    'late failed validation cannot replace a newer successful walk',
-    () async {
+      files
+        ..hold = false
+        ..releaseAll();
       await pumpEventQueue();
-      final checked = Completer<RepertoireValidation>();
-      var first = true;
-      files.validateWith = (_, _) async {
-        if (first) {
-          first = false;
-          return checked.future;
-        }
-        return const RepertoireCurrent();
-      };
-      gaps.refreshAnswers();
-      await pumpEventQueue();
-      await settings.update(settings.value.copyWith(coverOnceIn: 20));
-      await pumpEventQueue();
-      final current = gaps.currentWalk;
-      expect(current, isNotNull);
-      checked.complete(const RepertoireValidationFailed('old failure'));
-      await pumpEventQueue();
-      expect(gaps.currentWalk, same(current));
-      expect(gaps.problem, isNull);
-    },
-  );
-
-  test(
-    'failure after last good walk removes marks and retry restores authority',
-    () async {
-      await pumpEventQueue();
-      await gaps.nextGap();
-      final prior = gaps.walk;
-      files.validateWith = (_, _) async =>
-          const RepertoireValidationFailed('cannot read sibling');
-      await settings.update(settings.value.copyWith(coverOnceIn: 20));
-      await pumpEventQueue();
-      expect(gaps.walk, same(prior));
-      expect(gaps.currentWalk, isNull);
-      expect(gaps.canNextGap, isFalse);
-      expect(gaps.highlighted, isNull);
-      expect(gaps.problem, contains('cannot read sibling'));
-      files.validateWith = null;
-      gaps.retry();
-      await pumpEventQueue();
-      expect(gaps.currentWalk, isNotNull);
-      expect(gaps.problem, isNull);
     },
   );
 }

@@ -340,22 +340,27 @@ final class Books extends ChangeNotifier {
     unawaited(_persist());
   }
 
-  /// Serializes an essential reference change with accepted book edits before
-  /// the storage domain is acquired. New book edits wait for the committed
-  /// snapshot; failures preserve the document command for its owner's retry.
+  /// Saves a document whose book references change with it.
   Future<documents.SaveResult> saveReferences(
     Future<documents.SaveResult> Function() save,
   ) => changeReferences(save, failed: documents.IoFailure.new);
 
-  /// File relocation and structural saves share the same book admission:
-  /// settle accepted snapshots before entering storage, then reload recovery.
+  /// Runs [operation], which moves, deletes or renames a chapter the books
+  /// may name. The store rewrites those names in the books file as part of
+  /// the same change, so this settles the books' own last edit first and
+  /// reads the file again afterwards: neither write then undoes the other.
+  /// Books that could not be read or saved do not stop the change; they are
+  /// read again with it. [failed] answers an operation that threw.
   Future<T> changeReferences<T>(
     Future<T> Function() operation, {
     required T Function(String detail) failed,
   }) async {
-    if (_changingReferences || _disposed) {
-      return failed('A book reference change is still pending.');
+    // One reference change at a time: the next waits for this one's reread.
+    for (var earlier = _referenceWrite; earlier != null;) {
+      await earlier.future;
+      earlier = _referenceWrite;
     }
+    if (_disposed) return operation();
     _changingReferences = true;
     _loading = null;
     final completion = _referenceWrite = Completer<void>();
@@ -363,21 +368,21 @@ final class Books extends ChangeNotifier {
     _notify();
     try {
       await pendingWrites.settleFor(_store);
-      if (!canRetry && (!_loaded || _unreadable)) await _readReferences();
-      if (_unreadable || canRetry) {
-        return failed(
-          'Save or recover your books before changing this document.',
-        );
-      }
-      final T result;
+      if (canRetry) await retry();
       try {
-        result = await operation();
+        return await operation();
+      } on Object catch (error) {
+        return failed('$error');
       } finally {
-        // A lost acknowledgement may leave intent. Read through recovery
-        // before allowing the book snapshot to be edited again.
+        // An edit the books file never took is overtaken by what is on disk
+        // now; it is in the log, and the books show what they hold.
+        if (canRetry && (_saveObligation?.discard() ?? false)) {
+          log.w('change book references', 'dropped an unsaved book edit');
+          _saveObligation = null;
+          _dirty = false;
+        }
         await _readReferences();
       }
-      return result;
     } finally {
       _changingReferences = false;
       _referenceWrite = null;
@@ -396,7 +401,7 @@ final class Books extends ChangeNotifier {
       _unreadable = false;
     } on Object catch (error) {
       _unreadable = true;
-      _problem = 'Your book references need recovery: $error';
+      _problem = 'Your books could not be read.';
       log.w('read committed book references', error);
     }
   }

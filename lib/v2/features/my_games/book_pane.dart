@@ -7,7 +7,6 @@ import '../../ui/theme.dart';
 import '../../workspace/document_session.dart';
 import 'book_words.dart';
 import 'game_book.dart';
-import 'book_comparison_status.dart';
 
 /// Plies of a book line's continuation a row shows.
 const bookLinePlies = 6;
@@ -57,15 +56,8 @@ class _BookPaneState extends State<BookPane> {
     super.dispose();
   }
 
-  void _toMoment(CheckedGame checked) {
-    if (widget.book.stale) return;
-    widget.session.goTo(NodePath.of(List.filled(checked.moment, 0)));
-  }
-
-  void _readBook(BookPlace place) {
-    if (widget.book.stale) return;
-    widget.onReadBook(place);
-  }
+  void _toMoment(CheckedGame checked) =>
+      widget.session.goTo(NodePath.of(List.filled(checked.moment, 0)));
 
   @override
   Widget build(BuildContext context) {
@@ -74,34 +66,22 @@ class _BookPaneState extends State<BookPane> {
       builder: (context, _) {
         final session = widget.session;
         final checked = widget.book.find(session.source, session.game);
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        if (checked == null) {
+          return _Sentence(switch (widget.book) {
+            GameBook(problem: _?) => 'Could not compare your games.',
+            GameBook(state: BookReading()) =>
+              'Reading your games and repertoires…',
+            _ =>
+              'Open one of your games from the list to compare it with '
+                  'your book.',
+          });
+        }
+        return ListView(
+          padding: const EdgeInsets.all(Space.m),
           children: [
-            BookComparisonStatus(book: widget.book),
-            Expanded(
-              child: checked == null
-                  ? (widget.book.problem != null
-                        ? const SizedBox.shrink()
-                        : _Sentence(
-                            widget.book.state is BookReading
-                                ? 'Reading your games and repertoires…'
-                                : 'Open one of your games from the list to compare it with your book.',
-                          ))
-                  : IgnorePointer(
-                      ignoring: widget.book.stale,
-                      child: ExcludeFocus(
-                        excluding: widget.book.stale,
-                        child: ListView(
-                          padding: const EdgeInsets.all(Space.m),
-                          children: [
-                            _Headline(checked: checked),
-                            const SizedBox(height: Space.m),
-                            ..._body(checked),
-                          ],
-                        ),
-                      ),
-                    ),
-            ),
+            _Headline(checked: checked),
+            const SizedBox(height: Space.m),
+            ..._body(checked),
           ],
         );
       },
@@ -126,14 +106,14 @@ class _BookPaneState extends State<BookPane> {
     ],
     InBookThroughout(:final place) => [
       _Sentence('Every move is in ${place.file.name}.', inset: false),
-      _Actions(place: place, onReadBook: _readBook),
+      _Actions(place: place, onReadBook: widget.onReadBook),
     ],
     final LeftBook left => [
-      _Moves(left: left, onReadBook: _readBook),
+      _Moves(left: left, onReadBook: widget.onReadBook),
       const SizedBox(height: Space.m),
       _Actions(
         place: left.place,
-        onReadBook: _readBook,
+        onReadBook: widget.onReadBook,
         onMoment: () => _toMoment(checked),
       ),
     ],

@@ -166,7 +166,7 @@ class _Status extends StatelessWidget {
   final Replies replies;
   final GapHunt gaps;
 
-  String _words(BuildContext context) {
+  String get _words {
     final table = replies.table;
     final who = switch (table) {
       RepliesShown(ourMove: true) => 'Our candidates',
@@ -174,9 +174,6 @@ class _Status extends StatelessWidget {
     };
     final rating = '$who · ${replies.elo}';
     final walk = gaps.walk;
-    if (gaps.problem != null) return '$rating · Gap results unavailable';
-    if (gaps.walking && walk != null)
-      return '$rating · Previous gap results · updating…';
     if (gaps.walking && walk == null) return '$rating · finding gaps…';
     // Where the model could not answer, the replies are unknown rather than
     // covered: a model that answered nothing found nothing, and one that
@@ -204,16 +201,16 @@ class _Status extends StatelessWidget {
           children: [
             Expanded(
               child: Text(
-                _words(context),
+                _words,
                 style: text.bodySmall,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            if (gaps.problem != null)
-              TextButton(onPressed: gaps.retry, child: const Text('Retry')),
             OutlinedButton.icon(
-              onPressed: gaps.canNextGap ? gaps.nextGap : null,
+              onPressed: (gaps.walk?.gaps ?? const []).isEmpty
+                  ? null
+                  : gaps.nextGap,
               icon: const Icon(Icons.skip_next, size: IconSize.action),
               label: const Text('Next gap'),
             ),

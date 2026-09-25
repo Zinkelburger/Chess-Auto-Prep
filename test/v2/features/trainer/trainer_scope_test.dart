@@ -8,10 +8,7 @@ import 'package:chess_auto_prep/v2/storage/book_list.dart';
 import 'package:chess_auto_prep/v2/storage/book_snapshot.dart';
 import 'package:chess_auto_prep/v2/storage/chapter_files.dart';
 import 'package:chess_auto_prep/v2/storage/pgn_document_store.dart';
-import 'package:chess_auto_prep/v2/storage/training_store.dart';
-import 'package:chess_auto_prep/v2/storage/training_snapshot.dart';
 import 'package:chess_auto_prep/v2/workspace/books.dart';
-import 'package:chess_auto_prep/v2/workspace/repertoire_catalog.dart';
 import 'package:chess_auto_prep/v2/workspace/engine_analysis.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -68,180 +65,54 @@ void main() {
     session.dispose();
   });
 
-  test('an unreadable included chapter refuses the whole repertoire', () {
+  test('an unreadable chapter is left out and the rest are trained', () {
     fakeAsync((clock) {
       session.store.documents[ref('KID', 'Other')] = const Unreadable(
         'disk denied',
       );
       trainer.setScope(TrainScope.repertoire);
       clock.flushMicrotasks();
-      expect(trainer.state, isA<TrainerFailed>());
-      expect(progress.reads, 0);
+      final ready = trainer.state as TrainerReady;
+      expect(ready.chapters.map((c) => c.ref.name), ['Main']);
     });
   });
 
-  test('failed membership listing never falls back to the open chapter', () {
+  test('a repertoire list that cannot be read trains the open chapter', () {
     fakeAsync((clock) {
       chapters.listing = const RepertoiresUnreadable('folder denied');
       trainer.setScope(TrainScope.repertoire);
       clock.flushMicrotasks();
-      expect(trainer.state, isA<TrainerFailed>());
-      expect(progress.reads, 0);
+      final ready = trainer.state as TrainerReady;
+      expect(ready.chapters.map((c) => c.ref.name), ['Main']);
     });
   });
 
-  for (final names in [
-    ['Main'],
-    ['Main', 'Other', 'Added'],
-  ]) {
-    test('membership changed during chapter reads refuses $names', () {
-      fakeAsync((clock) {
-        session.store.hold = true;
-        trainer.setScope(TrainScope.repertoire);
-        clock.flushMicrotasks();
-        expect(session.store.waiting, 1);
-        chapters.listing = Repertoires([folder('KID', names)]);
-        session.store.hold = false;
-        session.store.releaseAll();
-        clock.flushMicrotasks();
-        expect(trainer.state, isA<TrainerFailed>());
-      });
-    });
-  }
-
-  test(
-    'explicit reload reads changed membership beyond the cached catalog',
-    () async {
-      final catalog = RepertoireCatalog(files: chapters, root: '/repertoires');
-      await catalog.refresh();
-      trainer.dispose();
-      trainer = Trainer(
-        session: session.session,
-        chapters: ScopeReader(files: chapters, documents: session.store),
-        files: progress,
-        analysis: analysis,
-        time: (now: () => DateTime.utc(2026), jitter: () => 0),
-        books: books,
-        catalog: catalog,
-      );
-      chapters.listing = Repertoires([
-        folder('KID', ['Main', 'Other', 'Added']),
-      ]);
-      session.store.documents[ref('KID', 'Added')] = Opened(
-        _text,
-        scriptedRevision(_text),
-      );
-      trainer.setScope(TrainScope.repertoire);
-      await trainer.reload();
-      expect(trainer.state, isA<TrainerReady>());
-      expect((trainer.state as TrainerReady).chapters, hasLength(3));
-      catalog.dispose();
-    },
-  );
-
-  test('the final fence follows progress reading and cancellation wins', () {
+  test('a book whose last edit did not save is still trained', () {
     fakeAsync((clock) {
-      final fence = Completer<RepertoireValidation>();
-      chapters.validateWith = (_, observed) {
-        expect(progress.reads, 1);
-        expect(observed.keys, contains(session.ref.path));
-        return fence.future;
-      };
-      trainer.show();
+      bookStore.fail = true;
+      books.rename(books.active!, 'Retained name');
+      trainer.setScope(TrainScope.book);
       clock.flushMicrotasks();
-      expect(trainer.state, isA<TrainerLoading>());
-      trainer.dispose();
-      // The fixture teardown must not dispose this owner twice.
-      trainer = Trainer(
-        session: session.session,
-        chapters: ScopeReader(files: chapters, documents: session.store),
-        files: progress,
-        analysis: analysis,
-        time: (now: () => DateTime.utc(2026), jitter: () => 0),
-        books: books,
-      );
-      fence.complete(const RepertoireCurrent());
+      expect(books.canRetry, isTrue);
+      final ready = trainer.state as TrainerReady;
+      expect(ready.chapters.map((c) => c.ref.name), ['Main', 'Other']);
+      bookStore.fail = false;
+      unawaited(trainer.reload());
       clock.flushMicrotasks();
-      expect(trainer.state, isA<TrainerIdle>());
+      expect(books.canRetry, isFalse);
+      expect(bookStore.value.activeBook!.name, 'Retained name');
+      expect(trainer.state, isA<TrainerReady>());
     });
   });
 
-  test(
-    'the fence receives the exact progress snapshot decoded by the read',
-    () {
-      fakeAsync((clock) {
-        final snapshot = TrainingReadSet(
-          documentsPath: '/profile',
-          canonicalDocuments: '/profile',
-          files: const {},
-        );
-        progress.readAs = ProgressLoaded(
-          reviews: const {},
-          streaks: const {},
-          mistakes: const [],
-          snapshot: snapshot,
-        );
-        trainer.show();
-        clock.flushMicrotasks();
-        expect(trainer.state, isA<TrainerReady>());
-        expect(chapters.profileValidations.single.training, same(snapshot));
-      });
-    },
-  );
-
-  test(
-    'an accepted write during final validation prevents new progress publication',
-    () {
-      fakeAsync((clock) {
-        final fence = Completer<RepertoireValidation>();
-        chapters.validateWith = (_, _) => fence.future;
-        trainer.show();
-        clock.flushMicrotasks();
-        trainer.pendingWrites.accept(
-          resource: progress,
-          label: 'accepted elsewhere',
-          work: () async => const ProgressWritten(),
-          problem: (_) => null,
-        );
-        fence.complete(const RepertoireCurrent());
-        clock.flushMicrotasks();
-        expect(trainer.state, isA<TrainerUnsaved>());
-      });
-    },
-  );
-
-  test(
-    'explicit retry settles retained book edits before reading the scope',
-    () {
-      fakeAsync((clock) {
-        bookStore.fail = true;
-        books.rename(books.active!, 'Retained name');
-        trainer.setScope(TrainScope.book);
-        clock.flushMicrotasks();
-        expect(books.canRetry, isTrue);
-        expect(trainer.state, isA<TrainerFailed>());
-        bookStore.fail = false;
-        unawaited(trainer.reload());
-        clock.flushMicrotasks();
-        expect(books.canRetry, isFalse);
-        expect(bookStore.value.activeBook!.name, 'Retained name');
-        expect(trainer.state, isA<TrainerReady>());
-      });
-    },
-  );
-
-  test('held optimistic book membership cannot authorize a scope', () {
+  test('a book edit still being written does not hold training up', () {
     fakeAsync((clock) {
       bookStore.hold = Completer<void>();
       books.rename(books.active!, 'Uncommitted');
       trainer.setScope(TrainScope.book);
       clock.flushMicrotasks();
-      expect(books.current, isFalse);
-      expect(trainer.state, isA<TrainerFailed>());
+      expect(trainer.state, isA<TrainerReady>());
       bookStore.hold!.complete();
-      clock.flushMicrotasks();
-      expect(books.current, isTrue);
-      unawaited(trainer.reload());
       clock.flushMicrotasks();
       expect(trainer.state, isA<TrainerReady>());
     });
